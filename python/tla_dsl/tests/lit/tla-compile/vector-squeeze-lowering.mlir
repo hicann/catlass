@@ -8,8 +8,14 @@ module {
   func.func @vector_squeeze_f32(
       %src_memref: memref<64xf32, #hivm.address_space<ub>>,
       %dst_memref: memref<64xf32, #hivm.address_space<ub>>) {
-    %src = builtin.unrealized_conversion_cast %src_memref : memref<64xf32, #hivm.address_space<ub>> to !fvec
-    %dst = builtin.unrealized_conversion_cast %dst_memref : memref<64xf32, #hivm.address_space<ub>> to !fvec
+    %src_c0 = arith.constant 0 : index
+    %src_c1 = arith.constant 1 : index
+    %src_c64 = arith.constant 64 : index
+    %src = tla.tensor_desc %src_memref[%src_c0, %src_c0, %src_c64, %src_c1, %src_c1, %src_c64, %src_c1, %src_c64] : (memref<64xf32, #hivm.address_space<ub>>, index, index, index, index, index, index, index, index) -> !fvec
+    %dst_c0 = arith.constant 0 : index
+    %dst_c1 = arith.constant 1 : index
+    %dst_c64 = arith.constant 64 : index
+    %dst = tla.tensor_desc %dst_memref[%dst_c0, %dst_c0, %dst_c64, %dst_c1, %dst_c1, %dst_c64, %dst_c1, %dst_c64] : (memref<64xf32, #hivm.address_space<ub>>, index, index, index, index, index, index, index, index) -> !fvec
     "tla.vec.func"() ({
       %shape = "tla.make_shape"() : () -> !tla.shape<64>
       %coord = "tla.make_coord"() : () -> !tla.coord<0>
@@ -26,8 +32,14 @@ module {
   func.func @vector_squeeze_f16(
       %src_memref: memref<128xf16, #hivm.address_space<ub>>,
       %dst_memref: memref<128xf16, #hivm.address_space<ub>>) {
-    %src = builtin.unrealized_conversion_cast %src_memref : memref<128xf16, #hivm.address_space<ub>> to !hvec
-    %dst = builtin.unrealized_conversion_cast %dst_memref : memref<128xf16, #hivm.address_space<ub>> to !hvec
+    %src_c0 = arith.constant 0 : index
+    %src_c1 = arith.constant 1 : index
+    %src_c128 = arith.constant 128 : index
+    %src = tla.tensor_desc %src_memref[%src_c0, %src_c0, %src_c128, %src_c1, %src_c1, %src_c128, %src_c1, %src_c128] : (memref<128xf16, #hivm.address_space<ub>>, index, index, index, index, index, index, index, index) -> !hvec
+    %dst_c0 = arith.constant 0 : index
+    %dst_c1 = arith.constant 1 : index
+    %dst_c128 = arith.constant 128 : index
+    %dst = tla.tensor_desc %dst_memref[%dst_c0, %dst_c0, %dst_c128, %dst_c1, %dst_c1, %dst_c128, %dst_c1, %dst_c128] : (memref<128xf16, #hivm.address_space<ub>>, index, index, index, index, index, index, index, index) -> !hvec
     "tla.vec.func"() ({
       %shape = "tla.make_shape"() : () -> !tla.shape<128>
       %coord = "tla.make_coord"() : () -> !tla.coord<0>
@@ -44,8 +56,14 @@ module {
   func.func @vector_squeeze_i32(
       %src_memref: memref<64xi32, #hivm.address_space<ub>>,
       %dst_memref: memref<64xi32, #hivm.address_space<ub>>) {
-    %src = builtin.unrealized_conversion_cast %src_memref : memref<64xi32, #hivm.address_space<ub>> to !ivec
-    %dst = builtin.unrealized_conversion_cast %dst_memref : memref<64xi32, #hivm.address_space<ub>> to !ivec
+    %src_c0 = arith.constant 0 : index
+    %src_c1 = arith.constant 1 : index
+    %src_c64 = arith.constant 64 : index
+    %src = tla.tensor_desc %src_memref[%src_c0, %src_c0, %src_c64, %src_c1, %src_c1, %src_c64, %src_c1, %src_c64] : (memref<64xi32, #hivm.address_space<ub>>, index, index, index, index, index, index, index, index) -> !ivec
+    %dst_c0 = arith.constant 0 : index
+    %dst_c1 = arith.constant 1 : index
+    %dst_c64 = arith.constant 64 : index
+    %dst = tla.tensor_desc %dst_memref[%dst_c0, %dst_c0, %dst_c64, %dst_c1, %dst_c1, %dst_c64, %dst_c1, %dst_c64] : (memref<64xi32, #hivm.address_space<ub>>, index, index, index, index, index, index, index, index) -> !ivec
     "tla.vec.func"() ({
       %shape = "tla.make_shape"() : () -> !tla.shape<64>
       %coord = "tla.make_coord"() : () -> !tla.coord<0>

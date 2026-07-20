@@ -499,28 +499,20 @@ void FuncOp::print(mlir::OpAsmPrinter &printer) {
 }
 
 mlir::LogicalResult ScalarLoadOp::verify() {
-  if (!mlir::isa<TlaTensorType, mlir::MemRefType>(getSource().getType()))
-    return emitOpError("source must be !tla.tensor or builtin memref");
-
-  mlir::Type expected;
-  size_t rank = 0;
-  if (auto srcTy = mlir::dyn_cast<TlaTensorType>(getSource().getType())) {
-    if (srcTy.getPtr().getAddrspace() != AddressSpace::gm)
-      return emitOpError("source !tla.tensor must be in gm address space");
-    auto layoutTag = srcTy.getLayout().getLayoutTag();
-    if (layoutTag != LayoutTag::row_major && layoutTag != LayoutTag::column_major)
-      return emitOpError("source !tla.tensor layout must be row_major or column_major");
-    expected = srcTy.getPtr().getPointee();
-    llvm::SmallVector<int64_t, 4> shapeLeaves;
-    if (failed(getIndexTreeLeavesForVerify(getOperation(), srcTy.getLayout().getShape(),
-                                           shapeLeaves, "shape")))
-      return mlir::failure();
-    rank = shapeLeaves.size();
-  } else {
-    auto memrefTy = mlir::cast<mlir::MemRefType>(getSource().getType());
-    expected = memrefTy.getElementType();
-    rank = static_cast<size_t>(memrefTy.getRank());
-  }
+  auto srcTy = mlir::dyn_cast<TlaTensorType>(getSource().getType());
+  if (!srcTy)
+    return emitOpError("source must be !tla.tensor");
+  if (srcTy.getPtr().getAddrspace() != AddressSpace::gm)
+    return emitOpError("source !tla.tensor must be in gm address space");
+  auto layoutTag = srcTy.getLayout().getLayoutTag();
+  if (layoutTag != LayoutTag::row_major && layoutTag != LayoutTag::column_major)
+    return emitOpError("source !tla.tensor layout must be row_major or column_major");
+  mlir::Type expected = srcTy.getPtr().getPointee();
+  llvm::SmallVector<int64_t, 4> shapeLeaves;
+  if (failed(getIndexTreeLeavesForVerify(getOperation(), srcTy.getLayout().getShape(), shapeLeaves,
+                                         "shape")))
+    return mlir::failure();
+  size_t rank = shapeLeaves.size();
 
   if (getResult().getType() != expected)
     return emitOpError("result type must match tensor element type, expected ")
@@ -539,28 +531,20 @@ mlir::LogicalResult ScalarLoadOp::verify() {
 }
 
 mlir::LogicalResult ScalarStoreOp::verify() {
-  if (!mlir::isa<TlaTensorType, mlir::MemRefType>(getDest().getType()))
-    return emitOpError("dest must be !tla.tensor or builtin memref");
-
-  mlir::Type expected;
-  size_t rank = 0;
-  if (auto destTy = mlir::dyn_cast<TlaTensorType>(getDest().getType())) {
-    if (destTy.getPtr().getAddrspace() != AddressSpace::gm)
-      return emitOpError("dest !tla.tensor must be in gm address space");
-    auto layoutTag = destTy.getLayout().getLayoutTag();
-    if (layoutTag != LayoutTag::row_major && layoutTag != LayoutTag::column_major)
-      return emitOpError("dest !tla.tensor layout must be row_major or column_major");
-    expected = destTy.getPtr().getPointee();
-    llvm::SmallVector<int64_t, 4> shapeLeaves;
-    if (failed(getIndexTreeLeavesForVerify(getOperation(), destTy.getLayout().getShape(),
-                                           shapeLeaves, "shape")))
-      return mlir::failure();
-    rank = shapeLeaves.size();
-  } else {
-    auto memrefTy = mlir::cast<mlir::MemRefType>(getDest().getType());
-    expected = memrefTy.getElementType();
-    rank = static_cast<size_t>(memrefTy.getRank());
-  }
+  auto destTy = mlir::dyn_cast<TlaTensorType>(getDest().getType());
+  if (!destTy)
+    return emitOpError("dest must be !tla.tensor");
+  if (destTy.getPtr().getAddrspace() != AddressSpace::gm)
+    return emitOpError("dest !tla.tensor must be in gm address space");
+  auto layoutTag = destTy.getLayout().getLayoutTag();
+  if (layoutTag != LayoutTag::row_major && layoutTag != LayoutTag::column_major)
+    return emitOpError("dest !tla.tensor layout must be row_major or column_major");
+  mlir::Type expected = destTy.getPtr().getPointee();
+  llvm::SmallVector<int64_t, 4> shapeLeaves;
+  if (failed(getIndexTreeLeavesForVerify(getOperation(), destTy.getLayout().getShape(), shapeLeaves,
+                                         "shape")))
+    return mlir::failure();
+  size_t rank = shapeLeaves.size();
 
   if (getValue().getType() != expected)
     return emitOpError("value type must match tensor element type, expected ")

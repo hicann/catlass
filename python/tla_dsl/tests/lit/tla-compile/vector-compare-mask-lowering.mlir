@@ -7,9 +7,18 @@ module {
       %lhs_memref: memref<64xf32, #hivm.address_space<ub>>,
       %rhs_memref: memref<64xf32, #hivm.address_space<ub>>,
       %dst_memref: memref<64xf32, #hivm.address_space<ub>>) {
-    %lhs = builtin.unrealized_conversion_cast %lhs_memref : memref<64xf32, #hivm.address_space<ub>> to !vec
-    %rhs = builtin.unrealized_conversion_cast %rhs_memref : memref<64xf32, #hivm.address_space<ub>> to !vec
-    %dst = builtin.unrealized_conversion_cast %dst_memref : memref<64xf32, #hivm.address_space<ub>> to !vec
+    %lhs_c0 = arith.constant 0 : index
+    %lhs_c1 = arith.constant 1 : index
+    %lhs_c64 = arith.constant 64 : index
+    %lhs = tla.tensor_desc %lhs_memref[%lhs_c0, %lhs_c0, %lhs_c64, %lhs_c1, %lhs_c1, %lhs_c64, %lhs_c1, %lhs_c64] : (memref<64xf32, #hivm.address_space<ub>>, index, index, index, index, index, index, index, index) -> !vec
+    %rhs_c0 = arith.constant 0 : index
+    %rhs_c1 = arith.constant 1 : index
+    %rhs_c64 = arith.constant 64 : index
+    %rhs = tla.tensor_desc %rhs_memref[%rhs_c0, %rhs_c0, %rhs_c64, %rhs_c1, %rhs_c1, %rhs_c64, %rhs_c1, %rhs_c64] : (memref<64xf32, #hivm.address_space<ub>>, index, index, index, index, index, index, index, index) -> !vec
+    %dst_c0 = arith.constant 0 : index
+    %dst_c1 = arith.constant 1 : index
+    %dst_c64 = arith.constant 64 : index
+    %dst = tla.tensor_desc %dst_memref[%dst_c0, %dst_c0, %dst_c64, %dst_c1, %dst_c1, %dst_c64, %dst_c1, %dst_c64] : (memref<64xf32, #hivm.address_space<ub>>, index, index, index, index, index, index, index, index) -> !vec
     "tla.vec.func"() ({
       %shape = "tla.make_shape"() : () -> !tla.shape<64>
       %coord = "tla.make_coord"() : () -> !tla.coord<0>

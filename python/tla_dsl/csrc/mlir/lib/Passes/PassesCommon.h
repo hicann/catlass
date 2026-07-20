@@ -278,7 +278,7 @@ inline FailureOr<MemRefType> buildHivmMemrefType(MLIRContext *ctx, ArrayRef<int6
   return MemRefType::get(shape, elementType, AffineMap(), *memorySpaceOr);
 }
 
-inline FailureOr<MemRefType> bridgeTlaFuncTensorType(Type tlaTensorType) {
+inline FailureOr<MemRefType> bridgeTlaTensorStorageType(Type tlaTensorType) {
   SmallVector<int64_t, 4> shape;
   SmallVector<int64_t, 4> strides;
   SmallVector<int64_t, 4> coords;
@@ -368,21 +368,10 @@ struct LowerTlaFuncToFuncPattern : public OpRewritePattern<::tla::FuncOp> {
       return failure();
     }
 
-    SmallVector<Type, 8> bridgedInputs;
-    bridgedInputs.reserve(funcType.getNumInputs());
-    for (Type input : funcType.getInputs()) {
-      FailureOr<MemRefType> bridged = bridgeTlaFuncTensorType(input);
-      bridgedInputs.push_back(succeeded(bridged) ? *bridged : input);
-    }
-    SmallVector<Type, 4> bridgedResults;
-    bridgedResults.reserve(funcType.getNumResults());
-    for (Type result : funcType.getResults()) {
-      FailureOr<MemRefType> bridged = bridgeTlaFuncTensorType(result);
-      bridgedResults.push_back(succeeded(bridged) ? *bridged : result);
-    }
-
-    auto bridgedFuncType = rewriter.getFunctionType(bridgedInputs, bridgedResults);
-    auto func = rewriter.create<func::FuncOp>(op.getLoc(), symNameAttr.getValue(), bridgedFuncType);
+    // Container lowering preserves the TLA signature. TlaLowerFuncPass owns
+    // device-entry ABI conversion and root descriptor materialization after
+    // validating every function in the module.
+    auto func = rewriter.create<func::FuncOp>(op.getLoc(), symNameAttr.getValue(), funcType);
     if constexpr (AttrPolicy == LowerTlaFuncToFuncAttrPolicy::CopyNonSignatureAttrs) {
       for (NamedAttribute attr : op->getAttrs()) {
         StringRef name = attr.getName().getValue();
@@ -392,9 +381,6 @@ struct LowerTlaFuncToFuncPattern : public OpRewritePattern<::tla::FuncOp> {
       }
     }
     func.getBody().takeBody(op.getRegion());
-    for (auto [arg, type] : llvm::zip_equal(func.getArguments(), bridgedFuncType.getInputs())) {
-      arg.setType(type);
-    }
     rewriter.eraseOp(op);
     return success();
   }

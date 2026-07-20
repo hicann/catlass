@@ -442,13 +442,10 @@ def Tla_RecastPtrOp : Tla_Op<"recast_ptr", [Pure]> {
 def Tla_TensorPtrOp : Tla_Op<"tensor_ptr", [Pure]> {
   let summary = "Extract the backing pointer from a tla.tensor";
   let description = [{
-    Yields the ``!tla.ptr`` SSA value backing a ``!tla.tensor``. The source may also be a
-    builtin ``memref`` (e.g. a kernel argument already bridged to memref during lowering),
-    mirroring ``tla.tile_view``'s source handling. The result pointer type is the tensor's
-    embedded pointer type (pointee, address space, alignment); it is built client-side and
-    verified to match.
+    Yields the ``!tla.ptr`` SSA value backing a ``!tla.tensor``. Kernel arguments
+    are represented inside the function by a root ``tla.tensor_desc``.
   }];
-  let arguments = (ins AnyTypeOf<[Tla_TensorType, AnyMemRef]>:$src);
+  let arguments = (ins Tla_TensorType:$src);
   let results = (outs Tla_PtrType:$ptr);
   let assemblyFormat = [{
     $src attr-dict `:` qualified(type($src)) `->` qualified(type($ptr))
@@ -997,10 +994,10 @@ def Tla_CmpOp : Tla_Op<"cmp", [Pure]> {
 def Tla_TileViewOp : Tla_Op<"tile_view", []> {
   let summary = "Tile view";
   let description = [{
-    Create a tensor view over either a builtin memref buffer or an existing tla.tensor
-    using packed ``!tla.shape`` and ``!tla.coord`` values.
+    Create a tensor view over an existing ``!tla.tensor`` using packed
+    ``!tla.shape`` and ``!tla.coord`` values.
   }];
-  let arguments = (ins AnyTypeOf<[Tla_TensorType, AnyMemRef]>:$source, Tla_ShapeType:$shape, Tla_CoordType:$coord, OptionalAttr<StrAttr>:$layouttag);
+  let arguments = (ins Tla_TensorType:$source, Tla_ShapeType:$shape, Tla_CoordType:$coord, OptionalAttr<StrAttr>:$layouttag);
   let results = (outs Tla_TensorType:$view);
   let assemblyFormat = [{
     $source `,` $shape `,` $coord attr-dict `:` qualified(type($source)) `,` qualified(type($shape)) `,` qualified(type($coord)) `->` qualified(type($view))
@@ -1010,12 +1007,10 @@ def Tla_TileViewOp : Tla_Op<"tile_view", []> {
 def Tla_ScalarLoadOp : Tla_Op<"scalar_load", []> {
   let summary = "Scalar tensor element read (GM)";
   let description = [{
-    Read one GM scalar from ``!tla.tensor`` or bridged ``memref``. Distinct from
-    ``tla.load`` (vector tile). Lowered by ``tla-lower-scalar-access`` to
-    ``memref.load``. Phase-1: GM ``row_major`` / ``column_major``; index count
-    must equal the logical rank (1 or 2).
+    Read one GM scalar from ``!tla.tensor``. Lowered from a materialized tensor
+    descriptor by ``tla-lower-scalar-access``; indices match logical rank 1 or 2.
   }];
-  let arguments = (ins AnyTypeOf<[Tla_TensorType, AnyMemRef]>:$source, Variadic<Index>:$indices);
+  let arguments = (ins Tla_TensorType:$source, Variadic<Index>:$indices);
   let results = (outs AnyType:$result);
   let hasVerifier = 1;
   let assemblyFormat = [{
@@ -1026,12 +1021,10 @@ def Tla_ScalarLoadOp : Tla_Op<"scalar_load", []> {
 def Tla_ScalarStoreOp : Tla_Op<"scalar_store", []> {
   let summary = "Scalar tensor element write (GM)";
   let description = [{
-    Write one GM scalar to ``!tla.tensor`` or bridged ``memref``. Distinct from
-    ``tla.store`` (vector tile). Lowered by ``tla-lower-scalar-access`` to
-    ``memref.store``. Phase-1: GM ``row_major`` / ``column_major``; index count
-    must equal the logical rank (1 or 2).
+    Write one GM scalar to ``!tla.tensor``. Lowered from a materialized tensor
+    descriptor by ``tla-lower-scalar-access``; indices match logical rank 1 or 2.
   }];
-  let arguments = (ins AnyTypeOf<[Tla_TensorType, AnyMemRef]>:$dest, Variadic<Index>:$indices, AnyType:$value);
+  let arguments = (ins Tla_TensorType:$dest, Variadic<Index>:$indices, AnyType:$value);
   let hasVerifier = 1;
   let assemblyFormat = [{
     $dest `[` $indices `]` `,` $value attr-dict `:` type($dest) `,` type($value)

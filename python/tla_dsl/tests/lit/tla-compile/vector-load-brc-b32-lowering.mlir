@@ -6,8 +6,12 @@ module {
   func.func @vector_load_brc_b32(
       %src_memref: memref<1xf32, #hivm.address_space<ub>>,
       %dst_memref: memref<1xf32, #hivm.address_space<ub>>) {
-    %src = builtin.unrealized_conversion_cast %src_memref : memref<1xf32, #hivm.address_space<ub>> to !fvec
-    %dst = builtin.unrealized_conversion_cast %dst_memref : memref<1xf32, #hivm.address_space<ub>> to !fvec
+    %src_c0 = arith.constant 0 : index
+    %src_c1 = arith.constant 1 : index
+    %src = tla.tensor_desc %src_memref[%src_c0, %src_c0, %src_c1, %src_c1, %src_c1, %src_c1, %src_c1, %src_c1] : (memref<1xf32, #hivm.address_space<ub>>, index, index, index, index, index, index, index, index) -> !fvec
+    %dst_c0 = arith.constant 0 : index
+    %dst_c1 = arith.constant 1 : index
+    %dst = tla.tensor_desc %dst_memref[%dst_c0, %dst_c0, %dst_c1, %dst_c1, %dst_c1, %dst_c1, %dst_c1, %dst_c1] : (memref<1xf32, #hivm.address_space<ub>>, index, index, index, index, index, index, index, index) -> !fvec
     "tla.vec.func"() ({
       %shape = "tla.make_shape"() : () -> !tla.shape<1>
       %coord = "tla.make_coord"() : () -> !tla.coord<0>

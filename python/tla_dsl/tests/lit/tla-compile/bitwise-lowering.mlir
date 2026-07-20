@@ -35,16 +35,46 @@ module {
       %dst_reg_and_memref: memref<64xi32, #hivm.address_space<ub>>,
       %dst_reg_or_memref: memref<64xi32, #hivm.address_space<ub>>,
       %dst_reg_xor_memref: memref<64xi32, #hivm.address_space<ub>>) {
-    %src0 = builtin.unrealized_conversion_cast %src0_memref : memref<64xi32, #hivm.address_space<ub>> to !vec
-    %src1 = builtin.unrealized_conversion_cast %src1_memref : memref<64xi32, #hivm.address_space<ub>> to !vec
-    %dst_mask_not = builtin.unrealized_conversion_cast %dst_mask_not_memref : memref<64xi32, #hivm.address_space<ub>> to !vec
-    %dst_mask_and = builtin.unrealized_conversion_cast %dst_mask_and_memref : memref<64xi32, #hivm.address_space<ub>> to !vec
-    %dst_mask_or = builtin.unrealized_conversion_cast %dst_mask_or_memref : memref<64xi32, #hivm.address_space<ub>> to !vec
-    %dst_mask_xor = builtin.unrealized_conversion_cast %dst_mask_xor_memref : memref<64xi32, #hivm.address_space<ub>> to !vec
-    %dst_reg_not = builtin.unrealized_conversion_cast %dst_reg_not_memref : memref<64xi32, #hivm.address_space<ub>> to !vec
-    %dst_reg_and = builtin.unrealized_conversion_cast %dst_reg_and_memref : memref<64xi32, #hivm.address_space<ub>> to !vec
-    %dst_reg_or = builtin.unrealized_conversion_cast %dst_reg_or_memref : memref<64xi32, #hivm.address_space<ub>> to !vec
-    %dst_reg_xor = builtin.unrealized_conversion_cast %dst_reg_xor_memref : memref<64xi32, #hivm.address_space<ub>> to !vec
+    %src0_c0 = arith.constant 0 : index
+    %src0_c1 = arith.constant 1 : index
+    %src0_c64 = arith.constant 64 : index
+    %src0 = tla.tensor_desc %src0_memref[%src0_c0, %src0_c0, %src0_c64, %src0_c1, %src0_c1, %src0_c64, %src0_c1, %src0_c64] : (memref<64xi32, #hivm.address_space<ub>>, index, index, index, index, index, index, index, index) -> !vec
+    %src1_c0 = arith.constant 0 : index
+    %src1_c1 = arith.constant 1 : index
+    %src1_c64 = arith.constant 64 : index
+    %src1 = tla.tensor_desc %src1_memref[%src1_c0, %src1_c0, %src1_c64, %src1_c1, %src1_c1, %src1_c64, %src1_c1, %src1_c64] : (memref<64xi32, #hivm.address_space<ub>>, index, index, index, index, index, index, index, index) -> !vec
+    %dst_mask_not_c0 = arith.constant 0 : index
+    %dst_mask_not_c1 = arith.constant 1 : index
+    %dst_mask_not_c64 = arith.constant 64 : index
+    %dst_mask_not = tla.tensor_desc %dst_mask_not_memref[%dst_mask_not_c0, %dst_mask_not_c0, %dst_mask_not_c64, %dst_mask_not_c1, %dst_mask_not_c1, %dst_mask_not_c64, %dst_mask_not_c1, %dst_mask_not_c64] : (memref<64xi32, #hivm.address_space<ub>>, index, index, index, index, index, index, index, index) -> !vec
+    %dst_mask_and_c0 = arith.constant 0 : index
+    %dst_mask_and_c1 = arith.constant 1 : index
+    %dst_mask_and_c64 = arith.constant 64 : index
+    %dst_mask_and = tla.tensor_desc %dst_mask_and_memref[%dst_mask_and_c0, %dst_mask_and_c0, %dst_mask_and_c64, %dst_mask_and_c1, %dst_mask_and_c1, %dst_mask_and_c64, %dst_mask_and_c1, %dst_mask_and_c64] : (memref<64xi32, #hivm.address_space<ub>>, index, index, index, index, index, index, index, index) -> !vec
+    %dst_mask_or_c0 = arith.constant 0 : index
+    %dst_mask_or_c1 = arith.constant 1 : index
+    %dst_mask_or_c64 = arith.constant 64 : index
+    %dst_mask_or = tla.tensor_desc %dst_mask_or_memref[%dst_mask_or_c0, %dst_mask_or_c0, %dst_mask_or_c64, %dst_mask_or_c1, %dst_mask_or_c1, %dst_mask_or_c64, %dst_mask_or_c1, %dst_mask_or_c64] : (memref<64xi32, #hivm.address_space<ub>>, index, index, index, index, index, index, index, index) -> !vec
+    %dst_mask_xor_c0 = arith.constant 0 : index
+    %dst_mask_xor_c1 = arith.constant 1 : index
+    %dst_mask_xor_c64 = arith.constant 64 : index
+    %dst_mask_xor = tla.tensor_desc %dst_mask_xor_memref[%dst_mask_xor_c0, %dst_mask_xor_c0, %dst_mask_xor_c64, %dst_mask_xor_c1, %dst_mask_xor_c1, %dst_mask_xor_c64, %dst_mask_xor_c1, %dst_mask_xor_c64] : (memref<64xi32, #hivm.address_space<ub>>, index, index, index, index, index, index, index, index) -> !vec
+    %dst_reg_not_c0 = arith.constant 0 : index
+    %dst_reg_not_c1 = arith.constant 1 : index
+    %dst_reg_not_c64 = arith.constant 64 : index
+    %dst_reg_not = tla.tensor_desc %dst_reg_not_memref[%dst_reg_not_c0, %dst_reg_not_c0, %dst_reg_not_c64, %dst_reg_not_c1, %dst_reg_not_c1, %dst_reg_not_c64, %dst_reg_not_c1, %dst_reg_not_c64] : (memref<64xi32, #hivm.address_space<ub>>, index, index, index, index, index, index, index, index) -> !vec
+    %dst_reg_and_c0 = arith.constant 0 : index
+    %dst_reg_and_c1 = arith.constant 1 : index
+    %dst_reg_and_c64 = arith.constant 64 : index
+    %dst_reg_and = tla.tensor_desc %dst_reg_and_memref[%dst_reg_and_c0, %dst_reg_and_c0, %dst_reg_and_c64, %dst_reg_and_c1, %dst_reg_and_c1, %dst_reg_and_c64, %dst_reg_and_c1, %dst_reg_and_c64] : (memref<64xi32, #hivm.address_space<ub>>, index, index, index, index, index, index, index, index) -> !vec
+    %dst_reg_or_c0 = arith.constant 0 : index
+    %dst_reg_or_c1 = arith.constant 1 : index
+    %dst_reg_or_c64 = arith.constant 64 : index
+    %dst_reg_or = tla.tensor_desc %dst_reg_or_memref[%dst_reg_or_c0, %dst_reg_or_c0, %dst_reg_or_c64, %dst_reg_or_c1, %dst_reg_or_c1, %dst_reg_or_c64, %dst_reg_or_c1, %dst_reg_or_c64] : (memref<64xi32, #hivm.address_space<ub>>, index, index, index, index, index, index, index, index) -> !vec
+    %dst_reg_xor_c0 = arith.constant 0 : index
+    %dst_reg_xor_c1 = arith.constant 1 : index
+    %dst_reg_xor_c64 = arith.constant 64 : index
+    %dst_reg_xor = tla.tensor_desc %dst_reg_xor_memref[%dst_reg_xor_c0, %dst_reg_xor_c0, %dst_reg_xor_c64, %dst_reg_xor_c1, %dst_reg_xor_c1, %dst_reg_xor_c64, %dst_reg_xor_c1, %dst_reg_xor_c64] : (memref<64xi32, #hivm.address_space<ub>>, index, index, index, index, index, index, index, index) -> !vec
     "tla.vector"() ({
       "tla.vec.func"() ({
         %shape = "tla.make_shape"() : () -> !tla.shape<64>

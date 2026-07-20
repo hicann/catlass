@@ -8,10 +8,22 @@ module {
       %src1_memref: memref<64xf32, #hivm.address_space<ub>>,
       %dst0_memref: memref<64xf32, #hivm.address_space<ub>>,
       %dst1_memref: memref<64xf32, #hivm.address_space<ub>>) {
-    %src0 = builtin.unrealized_conversion_cast %src0_memref : memref<64xf32, #hivm.address_space<ub>> to !fvec
-    %src1 = builtin.unrealized_conversion_cast %src1_memref : memref<64xf32, #hivm.address_space<ub>> to !fvec
-    %dst0 = builtin.unrealized_conversion_cast %dst0_memref : memref<64xf32, #hivm.address_space<ub>> to !fvec
-    %dst1 = builtin.unrealized_conversion_cast %dst1_memref : memref<64xf32, #hivm.address_space<ub>> to !fvec
+    %src0_c0 = arith.constant 0 : index
+    %src0_c1 = arith.constant 1 : index
+    %src0_c64 = arith.constant 64 : index
+    %src0 = tla.tensor_desc %src0_memref[%src0_c0, %src0_c0, %src0_c64, %src0_c1, %src0_c1, %src0_c64, %src0_c1, %src0_c64] : (memref<64xf32, #hivm.address_space<ub>>, index, index, index, index, index, index, index, index) -> !fvec
+    %src1_c0 = arith.constant 0 : index
+    %src1_c1 = arith.constant 1 : index
+    %src1_c64 = arith.constant 64 : index
+    %src1 = tla.tensor_desc %src1_memref[%src1_c0, %src1_c0, %src1_c64, %src1_c1, %src1_c1, %src1_c64, %src1_c1, %src1_c64] : (memref<64xf32, #hivm.address_space<ub>>, index, index, index, index, index, index, index, index) -> !fvec
+    %dst0_c0 = arith.constant 0 : index
+    %dst0_c1 = arith.constant 1 : index
+    %dst0_c64 = arith.constant 64 : index
+    %dst0 = tla.tensor_desc %dst0_memref[%dst0_c0, %dst0_c0, %dst0_c64, %dst0_c1, %dst0_c1, %dst0_c64, %dst0_c1, %dst0_c64] : (memref<64xf32, #hivm.address_space<ub>>, index, index, index, index, index, index, index, index) -> !fvec
+    %dst1_c0 = arith.constant 0 : index
+    %dst1_c1 = arith.constant 1 : index
+    %dst1_c64 = arith.constant 64 : index
+    %dst1 = tla.tensor_desc %dst1_memref[%dst1_c0, %dst1_c0, %dst1_c64, %dst1_c1, %dst1_c1, %dst1_c64, %dst1_c1, %dst1_c64] : (memref<64xf32, #hivm.address_space<ub>>, index, index, index, index, index, index, index, index) -> !fvec
     "tla.vec.func"() ({
       %shape = "tla.make_shape"() : () -> !tla.shape<64>
       %coord = "tla.make_coord"() : () -> !tla.coord<0>

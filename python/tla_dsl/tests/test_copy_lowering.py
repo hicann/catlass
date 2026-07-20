@@ -1,4 +1,5 @@
 import pathlib
+import re
 import subprocess
 
 import pytest
@@ -23,6 +24,20 @@ def copy_gm_to_cbuf_kernel(mem_in: tla.Tensor) -> None:
     local = tla.make_tensor_like(ptr, tile, tla.arch.zN)
     with tla.cube():
         tla.copy(local, tile)
+
+
+@tla.kernel
+def copy_kernel_arg_directly_to_ub_kernel(mem_in: tla.Tensor) -> None:
+    ub_ptr = tla.allocate((16, 16), tla.Float32, tla.AddressSpace.ub, 256)
+    ub = tla.make_tensor(
+        ub_ptr,
+        tla.make_layout(
+            tla.make_shape(16, 16),
+            tla.make_stride(16, 1),
+        ),
+    )
+    with tla.vector():
+        tla.copy(ub, mem_in)
 
 
 def test_frontend_copy_gm_to_cbuf_lowers_to_runtime_call(tmp_path) -> None:
@@ -67,6 +82,54 @@ def test_frontend_copy_gm_to_cbuf_lowers_to_runtime_call(tmp_path) -> None:
     assert '"tla.copy"' not in lowered
     assert '"tla.alloc_ptr"' not in lowered
     assert '"tla.recast_ptr"' not in lowered
+
+
+def test_kernel_gm_arg_copies_directly_to_ub(tmp_path) -> None:
+    tla_compile = _require_hivm_tla_compile()
+    with runtime_mod._eager_capture():
+        mem_in = tla.Tensor(
+            tla.make_shape(16, 16),
+            tla.Float32,
+            origin_shape=tla.make_shape(16, 16),
+            coord=tla.make_coord(0, 0),
+            stride=tla.make_stride(16, 1),
+            layout_tag=tla.arch.RowMajor,
+        )
+
+    mlir = copy_kernel_arg_directly_to_ub_kernel.dump_mlir(type_args=(mem_in,))
+    assert "tla.tile_view" not in mlir
+    assert "tla.make_tensor_like" not in mlir
+    assert mlir.count("tla.make_tensor ") == 1
+    source_copy = next(line for line in mlir.splitlines() if "tla.copy" in line)
+    assert "%arg0" in source_copy
+
+    input_path = tmp_path / "copy_kernel_arg_directly_to_ub.mlir"
+    input_path.write_text(mlir)
+    result = subprocess.run(
+        [
+            str(tla_compile),
+            str(input_path),
+            "-o",
+            "-",
+            "--mlir-print-ir-after=tla-lower-func",
+        ],
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+
+    descriptor_match = re.search(
+        r"(?P<descriptor>%[A-Za-z0-9_]+) = tla\.tensor_desc %arg0\[",
+        result.stderr,
+    )
+    assert descriptor_match is not None, result.stderr
+    lowered_copy = next(
+        line for line in result.stderr.splitlines() if "tla.copy" in line
+    )
+    assert descriptor_match.group("descriptor") in lowered_copy
+    assert "%arg0" not in lowered_copy
+    assert "copy_gm_row_major_to_ub_row_major_float" in result.stdout
+    assert "tla.copy" not in result.stdout
 
 
 @tla.kernel

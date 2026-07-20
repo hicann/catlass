@@ -2,198 +2,31 @@
 #include "PassesInternal.h"
 #include "Passes/TlaTensorToMemref.h"
 
-// tla-finalize-memref: finalize the tla.tensor -> memref lowering. Bridges the
-// function ABI (func signatures + func.call surfaces tla.tensor -> memref,
-// redirecting the tensor->memref arg casts from the region passes), then DCEs the
-// dead scaffolding + unrealized casts left by the region passes. Last pass in the
-// memref-lowering sequence.
+// tla-finalize-memref: assert ABI/tensor lowering invariants and DCE dead
+// scaffolding left by the region passes.
 
 namespace tla {
 namespace {
 
-  static bool isTlaTensorType(Type type) { return llvm::isa<::tla::TlaTensorType>(type); }
-
-  static bool hasTlaTensorCallSurface(func::CallOp callOp) {
-    return llvm::any_of(callOp.getOperandTypes(), isTlaTensorType) ||
-           llvm::any_of(callOp.getResultTypes(), isTlaTensorType);
+static LogicalResult validateNoTensorFunctionAbi(ModuleOp module) {
+  for (func::FuncOp funcOp : module.getOps<func::FuncOp>()) {
+    FunctionType type = funcOp.getFunctionType();
+    if (llvm::any_of(type.getInputs(), [](Type t) { return isa<::tla::TlaTensorType>(t); }) ||
+        llvm::any_of(type.getResults(), [](Type t) { return isa<::tla::TlaTensorType>(t); }))
+      return funcOp.emitError("tla.tensor remained on func.func ABI after lower-func");
   }
-
-  static LogicalResult bridgeFuncTensorEntryAbi(ModuleOp module) {
-    for (func::FuncOp funcOp : module.getOps<func::FuncOp>()) {
-      FunctionType funcType = funcOp.getFunctionType();
-
-      if (funcOp.empty()) {
-        bool changed = false;
-        SmallVector<Type, 8> bridgedInputs;
-        bridgedInputs.reserve(funcType.getNumInputs());
-        for (Type input : funcType.getInputs()) {
-          FailureOr<MemRefType> bridged = bridgeTlaTensorType(input);
-          if (failed(bridged)) {
-            bridgedInputs.push_back(input);
-            continue;
-          }
-          bridgedInputs.push_back(*bridged);
-          changed = true;
-        }
-
-        SmallVector<Type, 4> bridgedResults;
-        bridgedResults.reserve(funcType.getNumResults());
-        for (Type result : funcType.getResults()) {
-          FailureOr<MemRefType> bridged = bridgeTlaTensorType(result);
-          if (failed(bridged)) {
-            bridgedResults.push_back(result);
-            continue;
-          }
-          bridgedResults.push_back(*bridged);
-          changed = true;
-        }
-
-        if (changed)
-          funcOp.setType(FunctionType::get(funcOp.getContext(), bridgedInputs, bridgedResults));
-        continue;
-      }
-
-      SmallVector<Type, 8> bridgedInputs;
-      bridgedInputs.reserve(funcType.getNumInputs());
-      SmallVector<std::pair<BlockArgument, Type>, 8> argsToBridge;
-
-      for (BlockArgument arg : funcOp.getArguments()) {
-        Type argType = arg.getType();
-        FailureOr<MemRefType> bridged = bridgeTlaTensorType(argType);
-        if (failed(bridged)) {
-          bridgedInputs.push_back(argType);
-          continue;
-        }
-        bridgedInputs.push_back(*bridged);
-        argsToBridge.push_back({arg, *bridged});
-      }
-
-      if (argsToBridge.empty())
-        continue;
-
-      funcOp.setType(FunctionType::get(funcOp.getContext(), bridgedInputs, funcType.getResults()));
-
-      for (auto [arg, bridgedType] : argsToBridge) {
-        arg.setType(bridgedType);
-        SmallVector<UnrealizedConversionCastOp, 4> castsToErase;
-        for (Operation *user : llvm::make_early_inc_range(arg.getUsers())) {
-          auto castOp = llvm::dyn_cast<UnrealizedConversionCastOp>(user);
-          if (!castOp || castOp->getNumOperands() != 1 || castOp->getNumResults() != 1 ||
-              castOp.getResult(0).getType() != bridgedType)
-            continue;
-          castOp.getResult(0).replaceAllUsesWith(arg);
-          castsToErase.push_back(castOp);
-        }
-        for (UnrealizedConversionCastOp castOp : castsToErase)
-          castOp.erase();
-      }
+  LogicalResult result = success();
+  module.walk([&](func::CallOp callOp) {
+    if (llvm::any_of(callOp.getOperandTypes(),
+                     [](Type t) { return isa<::tla::TlaTensorType>(t); }) ||
+        llvm::any_of(callOp.getResultTypes(),
+                     [](Type t) { return isa<::tla::TlaTensorType>(t); })) {
+      callOp.emitError("tensor-typed func.call remained after lowering");
+      result = failure();
     }
-    return success();
-  }
-
-  static FailureOr<Value> materializeCallOperandAsType(PatternRewriter &rewriter,
-                                                       func::CallOp callOp, Value operand,
-                                                       Type expectedType) {
-    if (operand.getType() == expectedType)
-      return operand;
-
-    auto expectedMemrefType = dyn_cast<MemRefType>(expectedType);
-    if (!expectedMemrefType)
-      return failure();
-
-    if (isa<MemRefType>(operand.getType()))
-      return castMemrefToType(rewriter, callOp.getLoc(), operand, expectedMemrefType);
-
-    auto castOp = operand.getDefiningOp<UnrealizedConversionCastOp>();
-    if (!castOp || castOp.getNumOperands() != 1 || castOp.getNumResults() != 1 ||
-        !isTlaTensorType(operand.getType()))
-      return failure();
-
-    Value source = castOp.getOperand(0);
-    if (source.getType() == expectedType)
-      return source;
-    if (isa<MemRefType>(source.getType()))
-      return castMemrefToType(rewriter, callOp.getLoc(), source, expectedMemrefType);
-    return failure();
-  }
-
-  static LogicalResult rewriteTensorTypedFuncCalls(ModuleOp module) {
-    SmallVector<func::CallOp, 16> calls;
-    module.walk([&](func::CallOp callOp) { calls.push_back(callOp); });
-
-    for (func::CallOp callOp : calls) {
-      if (!callOp || !callOp->getBlock())
-        continue;
-
-      auto callee = module.lookupSymbol<func::FuncOp>(callOp.getCallee());
-      if (!callee) {
-        if (!hasTlaTensorCallSurface(callOp))
-          continue;
-        callOp.emitError() << "cannot lower tla.tensor call @" << callOp.getCallee()
-                           << "; callee symbol was not found";
-        return failure();
-      }
-
-      FunctionType calleeType = callee.getFunctionType();
-      if (calleeType.getNumInputs() != callOp.getNumOperands() ||
-          calleeType.getNumResults() != callOp.getNumResults()) {
-        callOp.emitError() << "cannot lower tla.tensor call @" << callOp.getCallee()
-                           << "; callee signature arity does not match call";
-        return failure();
-      }
-
-      bool needsRewrite = hasTlaTensorCallSurface(callOp);
-      for (auto [operand, expectedType] :
-           llvm::zip_equal(callOp.getOperands(), calleeType.getInputs())) {
-        if (operand.getType() != expectedType)
-          needsRewrite = true;
-      }
-      for (auto [result, expectedType] :
-           llvm::zip_equal(callOp.getResults(), calleeType.getResults())) {
-        if (result.getType() != expectedType)
-          needsRewrite = true;
-      }
-      if (!needsRewrite)
-        continue;
-
-      PatternRewriter rewriter(callOp.getContext());
-      rewriter.setInsertionPoint(callOp);
-      SmallVector<Value, 8> newOperands;
-      newOperands.reserve(callOp.getNumOperands());
-      for (auto [operand, expectedType] :
-           llvm::zip_equal(callOp.getOperands(), calleeType.getInputs())) {
-        FailureOr<Value> bridged =
-            materializeCallOperandAsType(rewriter, callOp, operand, expectedType);
-        if (failed(bridged)) {
-          callOp.emitError() << "cannot lower tla.tensor operand for call @" << callOp.getCallee()
-                             << "; expected a materialized memref bridge";
-          return failure();
-        }
-        newOperands.push_back(*bridged);
-      }
-
-      auto newCall = rewriter.create<func::CallOp>(callOp.getLoc(), callOp.getCallee(),
-                                                   calleeType.getResults(), newOperands);
-      for (auto [oldResult, newResult] :
-           llvm::zip_equal(callOp.getResults(), newCall.getResults())) {
-        if (oldResult.getType() == newResult.getType()) {
-          oldResult.replaceAllUsesWith(newResult);
-          continue;
-        }
-        if (!isTlaTensorType(oldResult.getType())) {
-          callOp.emitError() << "cannot lower non-tensor result type mismatch for call @"
-                             << callOp.getCallee();
-          return failure();
-        }
-        auto bridge = rewriter.create<UnrealizedConversionCastOp>(
-            callOp.getLoc(), TypeRange{oldResult.getType()}, ValueRange{newResult});
-        oldResult.replaceAllUsesWith(bridge.getResult(0));
-      }
-      rewriter.eraseOp(callOp);
-    }
-
-    return success();
-  }
+  });
+  return result;
+}
 
   static bool hasNoResultUses(Operation *op) {
     return llvm::all_of(op->getResults(), [](Value result) { return result.use_empty(); });
@@ -274,12 +107,7 @@ public:
   void runOnOperation() override {
     ModuleOp module = getOperation();
 
-    // Bridge the tla.tensor function ABI to memref (signatures + call surfaces).
-    if (failed(bridgeFuncTensorEntryAbi(module))) {
-      signalPassFailure();
-      return;
-    }
-    if (failed(rewriteTensorTypedFuncCalls(module))) {
+    if (failed(validateNoTensorFunctionAbi(module))) {
       signalPassFailure();
       return;
     }

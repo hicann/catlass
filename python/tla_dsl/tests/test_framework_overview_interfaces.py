@@ -651,29 +651,29 @@ def _kernel_copy_gm_row_major_to_cbuf_zn(mem: tla.Tensor, mem_i8: tla.Tensor) ->
     # IR output:
     # module {
     #   "tla.func"() ({
-    #   ^bb0(%arg0: !tla.tensor<!tla.layout<!tla.shape<200,260>, !tla.stride<88,1>, !tla.shape<72,88>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>, %arg1: !tla.tensor<!tla.layout<!tla.shape<100,140>, !tla.stride<92,1>, !tla.shape<56,92>, row_major>, !tla.coord<0,0>, !tla.ptr<i8, gm, 1>>):
+    #   ^bb0(%arg0: !tla.tensor<!tla.layout<!tla.shape<200,260>, !tla.stride<260,1>, !tla.shape<72,88>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>, %arg1: !tla.tensor<!tla.layout<!tla.shape<100,140>, !tla.stride<140,1>, !tla.shape<56,92>, row_major>, !tla.coord<0,0>, !tla.ptr<i8, gm, 1>>):
     #     %0 = "tla.make_shape"() : () -> !tla.shape<32,32>
     #     %1 = "tla.make_coord"() : () -> !tla.coord<1,1>
     #     %2 = "tla.make_coord"() : () -> !tla.coord<32,32>
-    #     %3 = "tla.tile_view"(%arg0, %0, %2) : (!tla.tensor<!tla.layout<!tla.shape<200,260>, !tla.stride<88,1>, !tla.shape<72,88>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>, !tla.shape<32,32>, !tla.coord<32,32>) -> !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<88,1>, !tla.shape<32,32>, row_major>, !tla.coord<32,32>, !tla.ptr<f32, gm, 4>>
+    #     %3 = "tla.tile_view"(%arg0, %0, %2) : (!tla.tensor<!tla.layout<!tla.shape<200,260>, !tla.stride<260,1>, !tla.shape<72,88>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>, !tla.shape<32,32>, !tla.coord<32,32>) -> !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<260,1>, !tla.shape<32,32>, row_major>, !tla.coord<32,32>, !tla.ptr<f32, gm, 4>>
     #     %4 = "tla.make_shape"() : () -> !tla.shape<32,32>
     #     %5 = "tla.make_coord"() : () -> !tla.coord<0,0>
     #     %6 = "tla.make_coord"() : () -> !tla.coord<0,0>
-    #     %7 = "tla.tile_view"(%arg0, %4, %6) : (!tla.tensor<!tla.layout<!tla.shape<200,260>, !tla.stride<88,1>, !tla.shape<72,88>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>, !tla.shape<32,32>, !tla.coord<0,0>) -> !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<88,1>, !tla.shape<32,32>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>
+    #     %7 = "tla.tile_view"(%arg0, %4, %6) : (!tla.tensor<!tla.layout<!tla.shape<200,260>, !tla.stride<260,1>, !tla.shape<72,88>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>, !tla.shape<32,32>, !tla.coord<0,0>) -> !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<260,1>, !tla.shape<32,32>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>
     #     %8 = "tla.alloc_ptr"() {size_bytes = 4096 : i64} : () -> !tla.ptr<i8, l1, 512>
     #     %9 = "tla.recast_ptr"(%8) : (!tla.ptr<i8, l1, 512>) -> !tla.ptr<f32, l1, 512>
-    #     %10 = "tla.make_tensor_like"(%9, %3) {layoutTag = "zN"} : (!tla.ptr<f32, l1, 512>, !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<88,1>, !tla.shape<32,32>, row_major>, !tla.coord<32,32>, !tla.ptr<f32, gm, 4>>) -> !tla.tensor<!tla.layout<!tla.shape<(16,2),(8,4)>, !tla.stride<(8,128),(1,256)>, !tla.shape<32,32>, zN>, !tla.coord<0,0>, !tla.ptr<f32, l1, 4>>
-    #     "tla.copy"(%10, %3) : (!tla.tensor<!tla.layout<!tla.shape<(16,2),(8,4)>, !tla.stride<(8,128),(1,256)>, !tla.shape<32,32>, zN>, !tla.coord<0,0>, !tla.ptr<f32, l1, 4>>, !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<88,1>, !tla.shape<32,32>, row_major>, !tla.coord<32,32>, !tla.ptr<f32, gm, 4>>) -> ()
-    #     "tla.copy"(%10, %7) : (!tla.tensor<!tla.layout<!tla.shape<(16,2),(8,4)>, !tla.stride<(8,128),(1,256)>, !tla.shape<32,32>, zN>, !tla.coord<0,0>, !tla.ptr<f32, l1, 4>>, !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<88,1>, !tla.shape<32,32>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>) -> ()
+    #     %10 = "tla.make_tensor_like"(%9, %3) {layoutTag = "zN"} : (!tla.ptr<f32, l1, 512>, !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<260,1>, !tla.shape<32,32>, row_major>, !tla.coord<32,32>, !tla.ptr<f32, gm, 4>>) -> !tla.tensor<!tla.layout<!tla.shape<(16,2),(8,4)>, !tla.stride<(8,128),(1,256)>, !tla.shape<32,32>, zN>, !tla.coord<0,0>, !tla.ptr<f32, l1, 4>>
+    #     "tla.copy"(%10, %3) : (!tla.tensor<!tla.layout<!tla.shape<(16,2),(8,4)>, !tla.stride<(8,128),(1,256)>, !tla.shape<32,32>, zN>, !tla.coord<0,0>, !tla.ptr<f32, l1, 4>>, !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<260,1>, !tla.shape<32,32>, row_major>, !tla.coord<32,32>, !tla.ptr<f32, gm, 4>>) -> ()
+    #     "tla.copy"(%10, %7) : (!tla.tensor<!tla.layout<!tla.shape<(16,2),(8,4)>, !tla.stride<(8,128),(1,256)>, !tla.shape<32,32>, zN>, !tla.coord<0,0>, !tla.ptr<f32, l1, 4>>, !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<260,1>, !tla.shape<32,32>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>) -> ()
     #     "tla.return"() : () -> ()
-    #   }) {function_type = (!tla.tensor<!tla.layout<!tla.shape<200,260>, !tla.stride<88,1>, !tla.shape<72,88>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>, !tla.tensor<!tla.layout<!tla.shape<100,140>, !tla.stride<92,1>, !tla.shape<56,92>, row_major>, !tla.coord<0,0>, !tla.ptr<i8, gm, 1>>) -> (), sym_name = "_kernel_copy_gm_row_major_to_cbuf_zn"} : () -> ()
+    #   }) {function_type = (!tla.tensor<!tla.layout<!tla.shape<200,260>, !tla.stride<260,1>, !tla.shape<72,88>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>, !tla.tensor<!tla.layout<!tla.shape<100,140>, !tla.stride<140,1>, !tla.shape<56,92>, row_major>, !tla.coord<0,0>, !tla.ptr<i8, gm, 1>>) -> (), sym_name = "_kernel_copy_gm_row_major_to_cbuf_zn"} : () -> ()
     # }
     # TlaCompile:
     # module attributes {dlti.target_system_spec = #dlti.target_system_spec<"NPU" : #hacc.target_device_spec<#dlti.dl_entry<"AI_CORE_COUNT", 32 : i32>, #dlti.dl_entry<"CUBE_CORE_COUNT", 32 : i32>, #dlti.dl_entry<"VECTOR_CORE_COUNT", 64 : i32>, #dlti.dl_entry<"UB_SIZE", 2031616 : i32>, #dlti.dl_entry<"L1_SIZE", 4194304 : i32>, #dlti.dl_entry<"L0A_SIZE", 524288 : i32>, #dlti.dl_entry<"L0B_SIZE", 524288 : i32>, #dlti.dl_entry<"L0C_SIZE", 2097152 : i32>, #dlti.dl_entry<"UB_ALIGN_SIZE", 256 : i32>, #dlti.dl_entry<"L1_ALIGN_SIZE", 256 : i32>, #dlti.dl_entry<"L0C_ALIGN_SIZE", 4096 : i32>, #dlti.dl_entry<"MINIMAL_D_CACHE_SIZE", 262144 : i32>, #dlti.dl_entry<"MAXIMUM_D_CACHE_SIZE", 983040 : i32>, #dlti.dl_entry<"ARCH", "dav-c310">>>, hacc.target = #hacc.target<"Ascend950PR_9589">, hivm.module_core_type = #hivm.module_core_type<AIC>} {
     #   func.func private @copy_gm_row_major_to_cbuf_zN_float(memref<?x?xf32, strided<[?, ?], offset: ?>, #hivm.address_space<gm>>, memref<?xf32, strided<[?], offset: ?>, #hivm.address_space<cbuf>>, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64) attributes {hacc.always_inline, hivm.func_core_type = #hivm.func_core_type<AIC>, llvm.emit_c_interface}
-    #   func.func @_kernel_copy_gm_row_major_to_cbuf_zn(%arg0: memref<200x260xf32, strided<[88, 1], offset: ?>, #hivm.address_space<gm>>, %arg1: memref<100x140xi8, strided<[92, 1], offset: ?>, #hivm.address_space<gm>>) attributes {hacc.entry, hacc.function_kind = #hacc.function_kind<DEVICE>, hivm.func_core_type = #hivm.func_core_type<AIC>, mix_mode = "mix", parallel_mode = "simd"} {
+    #   func.func @_kernel_copy_gm_row_major_to_cbuf_zn(%arg0: memref<200x260xf32, #hivm.address_space<gm>>, %arg1: memref<100x140xi8, #hivm.address_space<gm>>) attributes {hacc.entry, hacc.function_kind = #hacc.function_kind<DEVICE>, hivm.func_core_type = #hivm.func_core_type<AIC>, mix_mode = "mix", parallel_mode = "simd"} {
     #     %c32 = arith.constant 32 : index
-    #     %c88 = arith.constant 88 : index
+    #     %c260 = arith.constant 260 : index
     #     %c1 = arith.constant 1 : index
     #     %c0 = arith.constant 0 : index
     #     %c0_i64 = arith.constant 0 : i64
@@ -685,9 +685,9 @@ def _kernel_copy_gm_row_major_to_cbuf_zn(mem: tla.Tensor, mem_i8: tla.Tensor) ->
     #     %c128 = arith.constant 128 : index
     #     %c256 = arith.constant 256 : index
     #     %cast = memref.cast %0 : memref<1024xf32, #hivm.address_space<cbuf>> to memref<?xf32, strided<[?], offset: ?>, #hivm.address_space<cbuf>>
-    #     %cast_0 = memref.cast %arg0 : memref<200x260xf32, strided<[88, 1], offset: ?>, #hivm.address_space<gm>> to memref<?x?xf32, strided<[?, ?], offset: ?>, #hivm.address_space<gm>>
+    #     %cast_0 = memref.cast %arg0 : memref<200x260xf32, #hivm.address_space<gm>> to memref<?x?xf32, strided<[?, ?], offset: ?>, #hivm.address_space<gm>>
     #     %1 = arith.index_cast %c32 : index to i64
-    #     %2 = arith.index_cast %c88 : index to i64
+    #     %2 = arith.index_cast %c260 : index to i64
     #     %3 = arith.index_cast %c1 : index to i64
     #     %4 = arith.index_cast %c16 : index to i64
     #     %5 = arith.index_cast %c2 : index to i64
@@ -705,18 +705,18 @@ def _kernel_copy_gm_row_major_to_cbuf_zn(mem: tla.Tensor, mem_i8: tla.Tensor) ->
 
 def test_interface_copy_gm_to_cbuf_zn_two_copies_dsl_mlir() -> None:
     """Eager ``Tensor`` → ``dump_mlir``：``mem`` / ``mem_i8`` 的 **逻辑 shape** 与 **origin_shape** 均不同，
-    且 **origin 不含 128**；``stride`` 与各自 ``origin_shape`` 上的默认行主连续布局一致（否则
-    ``bridgeTlaFuncTensorType`` 会生成带 stride 的 GM memref，后续 ``collapse_shape`` 易失败）。
+    且 **origin 不含 128**；``stride`` 按各自 layout ``shape`` 构造合法的行主布局，
+    以确保相邻行不重叠，同时保留 ``shape`` 与 ``origin_shape`` 不同的覆盖。
     两路 f32 ``tile_view``、两次 ``tla.copy``、单次 4096B alloc + recast/like；第二参数仅用于入口类型差异。"""
     with runtime_mod._eager_capture():
-        # 逻辑视图大于 origin；origin 行主连续 → stride = (origin 列数, 1)
+        # Layout shape 大于 origin；row-major stride 按 layout shape 的列数构造。
         mem = tla.Tensor(
             tla.make_shape(200, 260),
             tla.Float32,
             addrspace=tla.AddressSpace.gm,
             origin_shape=tla.make_shape(72, 88),
             coord=tla.make_coord(0, 0),
-            stride=tla.make_stride(88, 1),
+            stride=tla.make_stride(260, 1),
             layout_tag=tla.arch.RowMajor,
         )
         mem_i8 = tla.Tensor(
@@ -725,7 +725,7 @@ def test_interface_copy_gm_to_cbuf_zn_two_copies_dsl_mlir() -> None:
             addrspace=tla.AddressSpace.gm,
             origin_shape=tla.make_shape(56, 92),
             coord=tla.make_coord(0, 0),
-            stride=tla.make_stride(92, 1),
+            stride=tla.make_stride(140, 1),
             layout_tag=tla.arch.RowMajor,
         )
     mlir = _kernel_copy_gm_row_major_to_cbuf_zn.dump_mlir(type_args=(mem, mem_i8))

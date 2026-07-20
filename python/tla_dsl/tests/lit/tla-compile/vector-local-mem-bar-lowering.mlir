@@ -6,8 +6,11 @@ module {
   func.func @vector_local_mem_bar(
       %src_memref: memref<64xf32, #hivm.address_space<ub>>,
       %dst_memref: memref<64xf32, #hivm.address_space<ub>>) {
-    %src = builtin.unrealized_conversion_cast %src_memref : memref<64xf32, #hivm.address_space<ub>> to !fvec
-    %dst = builtin.unrealized_conversion_cast %dst_memref : memref<64xf32, #hivm.address_space<ub>> to !fvec
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    %c64 = arith.constant 64 : index
+    %src = tla.tensor_desc %src_memref[%c0, %c0, %c64, %c1, %c1, %c64, %c1, %c64] : (memref<64xf32, #hivm.address_space<ub>>, index, index, index, index, index, index, index, index) -> !fvec
+    %dst = tla.tensor_desc %dst_memref[%c0, %c0, %c64, %c1, %c1, %c64, %c1, %c64] : (memref<64xf32, #hivm.address_space<ub>>, index, index, index, index, index, index, index, index) -> !fvec
     "tla.vec.func"() ({
       %shape = "tla.make_shape"() : () -> !tla.shape<64>
       %coord = "tla.make_coord"() : () -> !tla.coord<0>

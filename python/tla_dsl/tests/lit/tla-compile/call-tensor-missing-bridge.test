@@ -15,4 +15,5 @@ module {
   }
 }
 
-// CHECK: cannot lower tla.tensor operand for call @consume_root
+// CHECK: error:
+// CHECK-SAME: tensor-typed func.call is not supported

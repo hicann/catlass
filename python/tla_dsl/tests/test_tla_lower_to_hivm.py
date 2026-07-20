@@ -98,25 +98,31 @@ def _mmad_tensor_args() -> tuple[tla.Tensor, tla.Tensor, tla.Tensor]:
     with runtime_mod._eager_capture():
         return (
             tla.Tensor(
-                tla.make_shape((16, 8), (16, 4)),
+                tla.make_shape(128, 64),
                 tla.Float16,
-                addrspace=tla.AddressSpace.l0a,
+                addrspace=tla.AddressSpace.gm,
                 origin_shape=tla.make_shape(128, 64),
-                layout_tag=tla.arch.zN,
+                coord=tla.make_coord(0, 0),
+                stride=tla.make_stride(64, 1),
+                layout_tag=tla.arch.RowMajor,
             ),
             tla.Tensor(
-                tla.make_shape((16, 4), (16, 8)),
+                tla.make_shape(64, 128),
                 tla.Float16,
-                addrspace=tla.AddressSpace.l0b,
+                addrspace=tla.AddressSpace.gm,
                 origin_shape=tla.make_shape(64, 128),
-                layout_tag=tla.arch.nZ,
+                coord=tla.make_coord(0, 0),
+                stride=tla.make_stride(128, 1),
+                layout_tag=tla.arch.RowMajor,
             ),
             tla.Tensor(
-                tla.make_shape((16, 8), (16, 8)),
+                tla.make_shape(128, 128),
                 tla.Float32,
-                addrspace=tla.AddressSpace.l0c,
+                addrspace=tla.AddressSpace.gm,
                 origin_shape=tla.make_shape(128, 128),
-                layout_tag=tla.arch.L0Clayout,
+                coord=tla.make_coord(0, 0),
+                stride=tla.make_stride(128, 1),
+                layout_tag=tla.arch.RowMajor,
             ),
         )
 
@@ -130,9 +136,18 @@ def _skip_if_mmad_rank2_tile_view_regression(exc: BaseException) -> None:
 
 @tla.kernel
 def _cube_attr_kernel(mem_a: tla.Tensor, mem_b: tla.Tensor, mem_c: tla.Tensor) -> None:
-    lhs = tla.tile_view(mem_a, tla.make_shape(16, 16), tla.make_coord(0, 0))
-    rhs = tla.tile_view(mem_b, tla.make_shape(16, 16), tla.make_coord(0, 0))
-    acc = tla.tile_view(mem_c, tla.make_shape(16, 16), tla.make_coord(0, 0))
+    lhs_parent = tla.tile_view(mem_a, tla.make_shape(16, 16), tla.make_coord(0, 0))
+    rhs_parent = tla.tile_view(mem_b, tla.make_shape(16, 16), tla.make_coord(0, 0))
+    acc_parent = tla.tile_view(mem_c, tla.make_shape(16, 16), tla.make_coord(0, 0))
+    lhs = tla.make_tensor_like(
+        tla.allocate((16, 16), tla.Float16, tla.AddressSpace.l0a, 512), lhs_parent, tla.arch.zN
+    )
+    rhs = tla.make_tensor_like(
+        tla.allocate((16, 16), tla.Float16, tla.AddressSpace.l0b, 512), rhs_parent, tla.arch.nZ
+    )
+    acc = tla.make_tensor_like(
+        tla.allocate((16, 16), tla.Float32, tla.AddressSpace.l0c, 512), acc_parent, tla.arch.L0Clayout
+    )
     with tla.cube():
         tla.mmad(acc, lhs, rhs, init_c=False)
 

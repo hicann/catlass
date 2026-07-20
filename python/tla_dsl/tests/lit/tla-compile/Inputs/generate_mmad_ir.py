@@ -111,9 +111,15 @@ def _static_f32_mmad_kernel() -> None:
 def _dynamic_init_mmad_kernel(
     mem_a: tla.Tensor, mem_b: tla.Tensor, mem_c: tla.Tensor
 ) -> None:
-    lhs = tla.tile_view(mem_a, tla.make_shape(32, 32), tla.make_coord(0, 0))
-    rhs = tla.tile_view(mem_b, tla.make_shape(32, 32), tla.make_coord(0, 0))
-    acc = tla.tile_view(mem_c, tla.make_shape(32, 32), tla.make_coord(0, 0))
+    lhs = tla.make_tensor_like(
+        tla.allocate((32, 32), tla.Float32, tla.AddressSpace.l0a, 512), mem_a, tla.arch.zN
+    )
+    rhs = tla.make_tensor_like(
+        tla.allocate((32, 32), tla.Float32, tla.AddressSpace.l0b, 512), mem_b, tla.arch.nZ
+    )
+    acc = tla.make_tensor_like(
+        tla.allocate((32, 32), tla.Float32, tla.AddressSpace.l0c, 512), mem_c, tla.arch.L0Clayout
+    )
     with tla.cube():
         for outer in tla.range(0, 2, 1):
             for inner in tla.range(0, 2, 1):
@@ -125,9 +131,15 @@ def _dynamic_init_mmad_kernel(
 def _dynamic_unit_mmad_kernel(
     mem_a: tla.Tensor, mem_b: tla.Tensor, mem_c: tla.Tensor
 ) -> None:
-    lhs = tla.tile_view(mem_a, tla.make_shape(32, 32), tla.make_coord(0, 0))
-    rhs = tla.tile_view(mem_b, tla.make_shape(32, 32), tla.make_coord(0, 0))
-    acc = tla.tile_view(mem_c, tla.make_shape(32, 32), tla.make_coord(0, 0))
+    lhs = tla.make_tensor_like(
+        tla.allocate((32, 32), tla.Float32, tla.AddressSpace.l0a, 512), mem_a, tla.arch.zN
+    )
+    rhs = tla.make_tensor_like(
+        tla.allocate((32, 32), tla.Float32, tla.AddressSpace.l0b, 512), mem_b, tla.arch.nZ
+    )
+    acc = tla.make_tensor_like(
+        tla.allocate((32, 32), tla.Float32, tla.AddressSpace.l0c, 512), mem_c, tla.arch.L0Clayout
+    )
     with tla.cube():
         for outer in tla.range(0, 2, 1):
             for inner in tla.range(0, 2, 1):
@@ -139,9 +151,15 @@ def _dynamic_unit_mmad_kernel(
 def _dynamic_init_unit_mmad_kernel(
     mem_a: tla.Tensor, mem_b: tla.Tensor, mem_c: tla.Tensor
 ) -> None:
-    lhs = tla.tile_view(mem_a, tla.make_shape(32, 32), tla.make_coord(0, 0))
-    rhs = tla.tile_view(mem_b, tla.make_shape(32, 32), tla.make_coord(0, 0))
-    acc = tla.tile_view(mem_c, tla.make_shape(32, 32), tla.make_coord(0, 0))
+    lhs = tla.make_tensor_like(
+        tla.allocate((32, 32), tla.Float32, tla.AddressSpace.l0a, 512), mem_a, tla.arch.zN
+    )
+    rhs = tla.make_tensor_like(
+        tla.allocate((32, 32), tla.Float32, tla.AddressSpace.l0b, 512), mem_b, tla.arch.nZ
+    )
+    acc = tla.make_tensor_like(
+        tla.allocate((32, 32), tla.Float32, tla.AddressSpace.l0c, 512), mem_c, tla.arch.L0Clayout
+    )
     with tla.cube():
         for outer in tla.range(0, 2, 1):
             for inner in tla.range(0, 2, 1):
@@ -154,25 +172,31 @@ def _f32_mmad_args() -> tuple[tla.Tensor, tla.Tensor, tla.Tensor]:
     with runtime_mod._eager_capture():
         return (
             tla.Tensor(
-                tla.make_shape((16, 2), (8, 4)),
+                tla.make_shape(32, 32),
                 tla.Float32,
-                addrspace=tla.AddressSpace.l0a,
+                addrspace=tla.AddressSpace.gm,
                 origin_shape=tla.make_shape(32, 32),
-                layout_tag=tla.arch.zN,
+                coord=tla.make_coord(0, 0),
+                stride=tla.make_stride(32, 1),
+                layout_tag=tla.arch.RowMajor,
             ),
             tla.Tensor(
-                tla.make_shape((8, 4), (16, 2)),
+                tla.make_shape(32, 32),
                 tla.Float32,
-                addrspace=tla.AddressSpace.l0b,
+                addrspace=tla.AddressSpace.gm,
                 origin_shape=tla.make_shape(32, 32),
-                layout_tag=tla.arch.nZ,
+                coord=tla.make_coord(0, 0),
+                stride=tla.make_stride(32, 1),
+                layout_tag=tla.arch.RowMajor,
             ),
             tla.Tensor(
-                tla.make_shape((16, 2), (16, 2)),
+                tla.make_shape(32, 32),
                 tla.Float32,
-                addrspace=tla.AddressSpace.l0c,
+                addrspace=tla.AddressSpace.gm,
                 origin_shape=tla.make_shape(32, 32),
-                layout_tag=tla.arch.L0Clayout,
+                coord=tla.make_coord(0, 0),
+                stride=tla.make_stride(32, 1),
+                layout_tag=tla.arch.RowMajor,
             ),
         )
 

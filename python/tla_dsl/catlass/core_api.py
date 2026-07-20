@@ -3043,6 +3043,8 @@ def copy(dst: TileLike, src: TileLike, params: CopyParams | None = None, *, loc:
     _require_category("copy", "dst", dst, "tensor", 0)
     _require_category("copy", "src", src, "tensor", 1)
     _require_frontend_state("copy")
+    dst_value = _as_value(dst)
+    src_value = _as_value(src)
 
     # Cube data-path copies (GM->L1, L1->L0A/L0B, L0C->GM, L0C->UB, L1->UB) must
     # live in a tla.cube region; vector staging copies (GM<->UB, UB->L1) must
@@ -3051,7 +3053,10 @@ def copy(dst: TileLike, src: TileLike, params: CopyParams | None = None, *, loc:
     # through scf.if/scf.for; when it can't be resolved, skip the frontend check
     # and let the MLIR verifier enforce placement.
     try:
-        _route = (str(src.addrspace).lower(), str(dst.addrspace).lower())
+        _route = (
+            _tla_tensor_type_for_mlir_value(src_value).addrspace.lower(),
+            _tla_tensor_type_for_mlir_value(dst_value).addrspace.lower(),
+        )
     except TlaLoweringError:
         _route = None
     if _route in _COPY_CUBE_ROUTES:
@@ -3059,7 +3064,7 @@ def copy(dst: TileLike, src: TileLike, params: CopyParams | None = None, *, loc:
     elif _route in _COPY_VECTOR_ROUTES:
         _runtime._require_enclosing_region("copy", "vector")
 
-    if src.addrspace == "l0c":
+    if _route is not None and _route[0] == "l0c":
         if params is None:
             params = CopyL0C2DstParams() # use default
         if isinstance(params, CopyL0C2DstParams):
@@ -3095,7 +3100,7 @@ def copy(dst: TileLike, src: TileLike, params: CopyParams | None = None, *, loc:
     else:
         params_value = None
 
-    return _tla_ops_gen.copy(_as_value(dst), _as_value(src), params=params_value, loc=loc)
+    return _tla_ops_gen.copy(dst_value, src_value, params=params_value, loc=loc)
 
 
 @dsl_user_op

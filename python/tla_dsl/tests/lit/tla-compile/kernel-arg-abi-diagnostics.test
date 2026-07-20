@@ -1,0 +1,80 @@
+// RUN: split-file %s %t
+// RUN: not %tla_compile %t/non-gm.mlir -o - 2>&1 | %filecheck %s --check-prefix=NON_GM
+// RUN: not %tla_compile %t/rank.mlir -o - 2>&1 | %filecheck %s --check-prefix=RANK
+// RUN: not %tla_compile %t/layout.mlir -o - 2>&1 | %filecheck %s --check-prefix=LAYOUT
+// RUN: not %tla_compile %t/coord.mlir -o - 2>&1 | %filecheck %s --check-prefix=COORD
+// RUN: not %tla_compile %t/origin.mlir -o - 2>&1 | %filecheck %s --check-prefix=ORIGIN
+// RUN: not %tla_compile %t/row-stride.mlir -o - 2>&1 | %filecheck %s --check-prefix=ROW-STRIDE
+// RUN: not %tla_compile %t/column-stride.mlir -o - 2>&1 | %filecheck %s --check-prefix=COL-STRIDE
+// RUN: not %tla_compile %t/result.mlir -o - 2>&1 | %filecheck %s --check-prefix=RESULT
+
+// NON_GM: error:
+// NON_GM-SAME: kernel tensor argument 0 must use gm address space
+// RANK: error:
+// RANK-SAME: kernel tensor argument 0 must have matching rank-1 or rank-2
+// LAYOUT: error:
+// LAYOUT-SAME: kernel tensor argument 0 must use row_major or column_major layout
+// COORD: error:
+// COORD-SAME: kernel tensor argument 0 cannot have dynamic coordinates
+// ORIGIN: error:
+// ORIGIN-SAME: kernel tensor argument 0 cannot have dynamic origin_shape
+// ROW-STRIDE: error:
+// ROW-STRIDE-SAME: row_major kernel tensor argument 0 must have non-overlapping rows
+// COL-STRIDE: error:
+// COL-STRIDE-SAME: column_major kernel tensor argument 0 must have compact stride [1, rows]
+// RESULT: error:
+// RESULT-SAME: kernel tensor results are not supported by the device ABI
+
+//--- non-gm.mlir
+module {
+  tla.func @bad_non_gm(%arg0: !tla.tensor<!tla.layout<!tla.shape<8,8>, !tla.stride<8,1>, !tla.shape<8,8>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, ub, 4>>) {
+    tla.return
+  }
+}
+
+//--- rank.mlir
+module {
+  tla.func @bad_rank(%arg0: !tla.tensor<!tla.layout<!tla.shape<2,3,4>, !tla.stride<12,4,1>, !tla.shape<2,3,4>, row_major>, !tla.coord<0,0,0>, !tla.ptr<f32, gm, 4>>) {
+    tla.return
+  }
+}
+
+//--- layout.mlir
+module {
+  tla.func @bad_layout(%arg0: !tla.tensor<!tla.layout<!tla.shape<(16,1),(16,1)>, !tla.stride<(16,256),(1,256)>, !tla.shape<16,16>, zN>, !tla.coord<0,0>, !tla.ptr<f16, gm, 2>>) {
+    tla.return
+  }
+}
+
+//--- coord.mlir
+module {
+  tla.func @bad_coord(%arg0: !tla.tensor<!tla.layout<!tla.shape<8,8>, !tla.stride<8,1>, !tla.shape<8,8>, row_major>, !tla.coord<?,0>, !tla.ptr<f32, gm, 4>>) {
+    tla.return
+  }
+}
+
+//--- origin.mlir
+module {
+  tla.func @bad_origin(%arg0: !tla.tensor<!tla.layout<!tla.shape<?,8>, !tla.stride<?,1>, !tla.shape<?,8>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>) {
+    tla.return
+  }
+}
+
+//--- row-stride.mlir
+module {
+  tla.func @bad_row_stride(%arg0: !tla.tensor<!tla.layout<!tla.shape<8,16>, !tla.stride<9,1>, !tla.shape<8,16>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>) {
+    tla.return
+  }
+}
+
+//--- column-stride.mlir
+module {
+  tla.func @bad_column_stride(%arg0: !tla.tensor<!tla.layout<!tla.shape<8,16>, !tla.stride<1,9>, !tla.shape<8,16>, column_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>) {
+    tla.return
+  }
+}
+
+//--- result.mlir
+module {
+  func.func private @bad_result() -> !tla.tensor<!tla.layout<!tla.shape<8>, !tla.stride<1>, !tla.shape<8>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>
+}

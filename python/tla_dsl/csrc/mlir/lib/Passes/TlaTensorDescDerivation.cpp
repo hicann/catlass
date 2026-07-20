@@ -9,154 +9,6 @@
 
 namespace tla {
 
-static mlir::Value makeIndexConstant(mlir::OpBuilder& builder, mlir::Location loc, int64_t value)
-{
-    return builder.create<arith::ConstantIndexOp>(loc, value);
-}
-
-static mlir::FailureOr<mlir::Value> makeStaticTensorInfoIndex(
-    mlir::OpBuilder& builder, mlir::Operation* op, int64_t value, llvm::StringRef fieldName)
-{
-    if (value == ShapedType::kDynamic) {
-        op->emitError() << "dynamic tensor metadata leaf in " << fieldName
-                        << " is not yet supported in LowerToStdPass descriptor extraction";
-        return failure();
-    }
-    return makeIndexConstant(builder, op->getLoc(), value);
-}
-
-static mlir::FailureOr<llvm::SmallVector<mlir::Value, 4>> materializeStaticTensorInfoIndices(
-    mlir::OpBuilder& builder, mlir::Operation* op, llvm::ArrayRef<int64_t> values, llvm::StringRef fieldName)
-{
-    SmallVector<Value, 4> materialized;
-    materialized.reserve(values.size());
-    for (int64_t value : values) {
-        FailureOr<Value> indexValue = makeStaticTensorInfoIndex(builder, op, value, fieldName);
-        if (failed(indexValue))
-            return failure();
-        materialized.push_back(*indexValue);
-    }
-    return materialized;
-}
-
-static mlir::FailureOr<llvm::SmallVector<mlir::Value, 4>> materializeTensorInfoIndicesWithDynamicValues(
-    mlir::OpBuilder& builder, mlir::Operation* op, llvm::ArrayRef<int64_t> values,
-    llvm::ArrayRef<mlir::Value> dynamicValues, llvm::StringRef fieldName)
-{
-    SmallVector<Value, 4> materialized;
-    materialized.reserve(values.size());
-    size_t dynamicIndex = 0;
-    for (int64_t value : values) {
-        if (value == ShapedType::kDynamic) {
-            if (dynamicIndex >= dynamicValues.size()) {
-                op->emitError() << "dynamic tensor metadata leaf in " << fieldName
-                                << " is missing SSA dynamic value in descriptor extraction";
-                return failure();
-            }
-            Value dynamicValue = dynamicValues[dynamicIndex++];
-            if (!dynamicValue || !dynamicValue.getType().isIndex()) {
-                op->emitError() << "dynamic tensor metadata leaf in " << fieldName
-                                << " requires index-typed SSA dynamic value";
-                return failure();
-            }
-            materialized.push_back(dynamicValue);
-            continue;
-        }
-        FailureOr<Value> indexValue = makeStaticTensorInfoIndex(builder, op, value, fieldName);
-        if (failed(indexValue))
-            return failure();
-        materialized.push_back(*indexValue);
-    }
-    return materialized;
-}
-
-static mlir::FailureOr<llvm::SmallVector<mlir::Value, 4>> packRank2DynamicMetadataLeaves(
-    mlir::Operation* op, llvm::ArrayRef<int64_t> leafDims, mlir::Value axis0, mlir::Value axis1,
-    llvm::StringRef fieldName)
-{
-    SmallVector<Value, 4> dynamicVals;
-    if (leafDims.size() != 2) {
-        op->emitError() << fieldName << " expects two index leaves for rank-2 tla.tile_view metadata";
-        return failure();
-    }
-    for (size_t i = 0; i < 2; ++i) {
-        if (leafDims[i] == ShapedType::kDynamic)
-            dynamicVals.push_back(i == 0 ? axis0 : axis1);
-    }
-    return dynamicVals;
-}
-
-static mlir::FailureOr<TensorDescriptor> buildTensorDescriptorFromTensorInfo(
-    mlir::OpBuilder& builder, mlir::Operation* op, mlir::Value base, mlir::Type bridgedBaseMemrefType,
-    const TileTypeInfo& info, llvm::ArrayRef<mlir::Value> coordDynamicValues = {},
-    llvm::ArrayRef<mlir::Value> originShapeDynamicValues = {})
-{
-    FailureOr<SmallVector<Value, 4>> coord =
-        coordDynamicValues.empty() ?
-            materializeStaticTensorInfoIndices(builder, op, info.coordDims, "coord") :
-            materializeTensorInfoIndicesWithDynamicValues(builder, op, info.coordDims, coordDynamicValues, "coord");
-    FailureOr<SmallVector<Value, 4>> originShape =
-        originShapeDynamicValues.empty() ?
-            materializeStaticTensorInfoIndices(builder, op, info.originShapeDims, "origin_shape") :
-            materializeTensorInfoIndicesWithDynamicValues(
-                builder, op, info.originShapeDims, originShapeDynamicValues, "origin_shape");
-    if (failed(coord) || failed(originShape))
-        return failure();
-
-    Value stride0;
-    Value stride1;
-    Value shape0;
-    Value shape1;
-    SmallVector<Value, 4> packedShape;
-    SmallVector<Value, 4> packedStride;
-
-    if (isLinearLayout(info.layoutTag)) {
-        FailureOr<SmallVector<Value, 4>> shape =
-            materializeStaticTensorInfoIndices(builder, op, info.shapeDims, "shape");
-        FailureOr<SmallVector<Value, 4>> stride =
-            materializeStaticTensorInfoIndices(builder, op, info.strideDims, "stride");
-        if (failed(shape) || failed(stride))
-            return failure();
-        shape0 = (*shape)[0];
-        shape1 = (*shape)[1];
-        stride0 = (*stride)[0];
-        stride1 = (*stride)[1];
-    } else {
-        FailureOr<SmallVector<Value, 4>> shape =
-            materializeStaticTensorInfoIndices(builder, op, info.shapeDims, "packed shape");
-        FailureOr<SmallVector<Value, 4>> stride =
-            materializeStaticTensorInfoIndices(builder, op, info.strideDims, "packed stride");
-        if (failed(shape) || failed(stride))
-            return failure();
-        packedShape = std::move(*shape);
-        packedStride = std::move(*stride);
-        shape0 = (*originShape)[0];
-        shape1 = (*originShape)[1];
-        stride0 = packedStride[0];
-        stride1 = packedStride[1];
-    }
-
-    return TensorDescriptor{
-        base,
-        bridgedBaseMemrefType,
-        (*coord)[0],
-        (*coord)[1],
-        stride0,
-        stride1,
-        shape0,
-        shape1,
-        (*originShape)[0],
-        (*originShape)[1],
-        (*coord)[0],
-        (*coord)[1],
-        info.layoutTag,
-        info.addressSpace,
-        info.elementType,
-        info.rank,
-        std::move(packedShape),
-        std::move(packedStride)};
-}
-
 using ConstantFactory = llvm::function_ref<mlir::Value(mlir::Operation* anchor, int64_t value, unsigned bits)>;
 
 mlir::Value IndexConstantCache::get(mlir::Operation* anchor, int64_t value, unsigned bits)
@@ -336,7 +188,6 @@ mlir::LogicalResult TensorDescriptorDerivation::derive(mlir::func::FuncOp funcOp
     bool derivationFailed = false;
     auto& tensorDescriptorByValue = descriptorByValue;
     tensorDescriptorByValue.clear();
-    Operation* root = funcOp.getOperation();
     auto isTensorScfCarrier = [](Value value) {
         if (Operation* def = value.getDefiningOp())
             return isa<scf::IfOp, scf::ForOp, scf::WhileOp>(def);
@@ -509,39 +360,6 @@ mlir::LogicalResult TensorDescriptorDerivation::derive(mlir::func::FuncOp funcOp
             op, base, bridgedBaseType, info, parent, row, col, sh0, sh1, getOrCreateConstant);
     };
 
-    // Seed tensor casts of already-bridged function arguments.
-    auto seedRootTensorDescriptors = [&](Operation* funcOp, Block& entryBlock) {
-        Location loc = funcOp->getLoc();
-        OpBuilder builder(&entryBlock, entryBlock.begin());
-        auto seedDescriptor = [&](Value descriptorValue, Value baseValue, Type tileType) {
-            auto info = decodeTileTypeInfo(tileType);
-            if (failed(info))
-                return;
-            auto bridgedBaseType = llvm::dyn_cast<MemRefType>(baseValue.getType());
-            if (!bridgedBaseType)
-                return;
-            FailureOr<TensorDescriptor> desc =
-                buildTensorDescriptorFromTensorInfo(builder, funcOp, baseValue, bridgedBaseType, *info);
-            if (failed(desc))
-                return;
-            tensorDescriptorByValue[descriptorValue] = *desc;
-        };
-
-        for (Operation& op : entryBlock) {
-            auto castOp = llvm::dyn_cast<UnrealizedConversionCastOp>(op);
-            if (!castOp || castOp->getNumOperands() != 1 || castOp->getNumResults() != 1)
-                continue;
-            Value base = castOp.getOperand(0);
-            if (!llvm::isa<BlockArgument>(base))
-                continue;
-            seedDescriptor(castOp.getResult(0), base, castOp.getResult(0).getType());
-        }
-    };
-
-    // The standard pipeline has already lowered the Python kernel container and
-    // bridged its tensor arguments before descriptor materialization.
-    seedRootTensorDescriptors(root, funcOp.getBody().front());
-
     // Derive descriptors for tile-producing ops in SSA order: mixed
     // tla.tile_view/tla.make_tensor_like chains rely on producer descriptors
     // being available when their users are visited.
@@ -594,104 +412,57 @@ mlir::LogicalResult TensorDescriptorDerivation::derive(mlir::func::FuncOp funcOp
                 return;
             }
 
-            Value source = tileOp.getOperand(0);
-            if (auto srcMemref = dyn_cast<MemRefType>(source.getType())) {
-                FailureOr<MemRefType> bridgedBaseType = srcMemref;
-
-                auto explicitLayout = getExplicitTensorLayoutTagAttr(op);
-                if (succeeded(explicitLayout)) {
-                    if (*explicitLayout != resultInfo->layoutTag) {
-                        op->emitError() << "tla.tile_view layouttag must match result tensor layout_tag";
-                        derivationFailed = true;
-                        return;
-                    }
-                } else if (auto layoutTagAttr = op->getAttrOfType<StringAttr>("layouttag")) {
-                    op->emitError() << "unsupported tla.tile_view layouttag '" << layoutTagAttr.getValue() << "'";
-                    derivationFailed = true;
+            Value source = tileOp.getSource();
+            auto parentIt = tensorDescriptorByValue.find(source);
+            if (parentIt == tensorDescriptorByValue.end()) {
+                if (deferScfDependentProducer(tileOp.getResult(), source))
                     return;
-                }
-
-                OpBuilder builder(op);
-                FailureOr<SmallVector<Value, 4>> coordDyn =
-                    packRank2DynamicMetadataLeaves(op, resultInfo->coordDims, row, col, "coord");
-                Value srcDim0 = builder.create<mlir::memref::DimOp>(op->getLoc(), source, 0);
-                Value srcDim1 = builder.create<mlir::memref::DimOp>(op->getLoc(), source, 1);
-                Value rest0 = builder.create<arith::SubIOp>(op->getLoc(), srcDim0, row);
-                Value rest1 = builder.create<arith::SubIOp>(op->getLoc(), srcDim1, col);
-                Value origin0Dyn = builder.create<arith::MinSIOp>(op->getLoc(), shape0, rest0);
-                Value origin1Dyn = builder.create<arith::MinSIOp>(op->getLoc(), shape1, rest1);
-                FailureOr<SmallVector<Value, 4>> originDyn = packRank2DynamicMetadataLeaves(
-                    op, resultInfo->originShapeDims, origin0Dyn, origin1Dyn, "origin_shape");
-                if (failed(coordDyn) || failed(originDyn)) {
-                    derivationFailed = true;
-                    return;
-                }
-                FailureOr<TensorDescriptor> desc = buildTensorDescriptorFromTensorInfo(
-                    builder, op, source, *bridgedBaseType, *resultInfo, *coordDyn, *originDyn);
-                if (failed(desc)) {
-                    derivationFailed = true;
-                    return;
-                }
-                tensorDescriptorByValue[tileOp.getResult()] = *desc;
+                op->emitError() << "missing descriptor for tla.tile_view source tile; expected "
+                                   "a materialized tensor producer or structural SCF carrier";
+                derivationFailed = true;
+                return;
+            }
+            const TensorDescriptor& parent = parentIt->second;
+            if (!validateTensorDescriptorV1(op, parent,
+                                            "malformed parent tensor descriptor for tla.tile_view source tile",
+                                            /*requireShapeOperands=*/false)) {
+                derivationFailed = true;
+                return;
+            }
+            if (resultInfo->rank != parent.rank || resultInfo->addressSpace != parent.addrspace ||
+                resultInfo->elementType != parent.elementType) {
+                op->emitError() << "tla.tile_view result tile metadata must match parent descriptor "
+                                   "(rank/element type/addrspace) when source is a tile";
+                derivationFailed = true;
                 return;
             }
 
-            if (llvm::isa<::tla::TlaTensorType>(source.getType())) {
-                auto parentIt = tensorDescriptorByValue.find(source);
-                if (parentIt == tensorDescriptorByValue.end()) {
-                    if (deferScfDependentProducer(tileOp.getResult(), source))
-                        return;
-                    op->emitError() << "missing descriptor for tla.tile_view source tile; expected "
-                                       "a materialized tensor producer or structural SCF carrier";
+            auto explicitLayout = getExplicitTensorLayoutTagAttr(op);
+            if (succeeded(explicitLayout)) {
+                if (*explicitLayout != resultInfo->layoutTag) {
+                    op->emitError() << "tla.tile_view layouttag must match result tensor layout_tag";
                     derivationFailed = true;
                     return;
                 }
-                const TensorDescriptor& parent = parentIt->second;
-                if (!validateTensorDescriptorV1(
-                        op, parent, "malformed parent tensor descriptor for tla.tile_view source tile",
-                        /*requireShapeOperands=*/false)) {
-                    derivationFailed = true;
-                    return;
-                }
-                if (resultInfo->rank != parent.rank || resultInfo->addressSpace != parent.addrspace ||
-                    resultInfo->elementType != parent.elementType) {
-                    op->emitError() << "tla.tile_view result tile metadata must match parent descriptor "
-                                       "(rank/element type/addrspace) when source is a tile";
-                    derivationFailed = true;
-                    return;
-                }
-
-                auto explicitLayout = getExplicitTensorLayoutTagAttr(op);
-                if (succeeded(explicitLayout)) {
-                    if (*explicitLayout != resultInfo->layoutTag) {
-                        op->emitError() << "tla.tile_view layouttag must match result tensor layout_tag";
-                        derivationFailed = true;
-                        return;
-                    }
-                } else if (auto layoutTagAttr = op->getAttrOfType<StringAttr>("layouttag")) {
-                    op->emitError() << "unsupported tla.tile_view layouttag '" << layoutTagAttr.getValue() << "'";
-                    derivationFailed = true;
-                    return;
-                }
-
-                auto bridgedParent = dyn_cast<MemRefType>(parent.bridgedBaseMemrefType);
-                if (!bridgedParent) {
-                    op->emitError() << "tla.tile_view parent descriptor missing bridged memref type";
-                    derivationFailed = true;
-                    return;
-                }
-                FailureOr<TensorDescriptor> desc = buildTileViewResultDescriptorFromParent(
-                    op, parent.base, bridgedParent, *resultInfo, parent, row, col, shape0, shape1);
-                if (failed(desc)) {
-                    derivationFailed = true;
-                    return;
-                }
-                tensorDescriptorByValue[tileOp.getResult()] = *desc;
+            } else if (auto layoutTagAttr = op->getAttrOfType<StringAttr>("layouttag")) {
+                op->emitError() << "unsupported tla.tile_view layouttag '" << layoutTagAttr.getValue() << "'";
+                derivationFailed = true;
                 return;
             }
 
-            op->emitError() << "tla.tile_view source must be either a builtin memref or !tla.tensor";
-            derivationFailed = true;
+            auto bridgedParent = dyn_cast<MemRefType>(parent.bridgedBaseMemrefType);
+            if (!bridgedParent) {
+                op->emitError() << "tla.tile_view parent descriptor missing bridged memref type";
+                derivationFailed = true;
+                return;
+            }
+            FailureOr<TensorDescriptor> desc = buildTileViewResultDescriptorFromParent(
+                op, parent.base, bridgedParent, *resultInfo, parent, row, col, shape0, shape1);
+            if (failed(desc)) {
+                derivationFailed = true;
+                return;
+            }
+            tensorDescriptorByValue[tileOp.getResult()] = *desc;
             return;
         }
 

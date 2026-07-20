@@ -9,7 +9,7 @@ namespace tla {
 
 mlir::FailureOr<mlir::MemRefType> bridgeTlaTensorType(mlir::Type tlaTensorType)
 {
-    return bridgeTlaFuncTensorType(tlaTensorType);
+    return bridgeTlaTensorStorageType(tlaTensorType);
 }
 
 bool isPackedLayout(TensorLayoutTag layoutTag)

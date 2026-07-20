@@ -1,9 +1,269 @@
+#include "Passes/TlaTensorDescriptor.h"
 #include "PassesCommon.h"
 #include "PassesInternal.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 
 namespace tla {
 namespace {
+
+static bool isKernelEntryCandidate(Operation *funcOp, Region &body) {
+  if (body.empty() || isPrivateSymbol(funcOp))
+    return false;
+  auto kind = funcOp->getAttrOfType<hacc::HACCFuncTypeAttr>(hacc::HACCFuncTypeAttr::name);
+  return !kind || kind.getFunctionKind() == hacc::HACCFuncType::DEVICE;
+}
+
+static LogicalResult validateKernelTensorArg(Operation *funcOp, unsigned argIndex,
+                                             ::tla::TlaTensorType tensorType) {
+  FailureOr<ParsedTensorInfo> info = parseTensorInfo(tensorType);
+  if (failed(info))
+    return funcOp->emitError() << "kernel tensor argument " << argIndex
+                               << " has malformed tensor metadata";
+  if (info->addressSpace != ::AddressSpace::gm)
+    return funcOp->emitError() << "kernel tensor argument " << argIndex
+                               << " must use gm address space";
+  if (info->layoutTag != "row_major" && info->layoutTag != "column_major")
+    return funcOp->emitError() << "kernel tensor argument " << argIndex
+                               << " must use row_major or column_major layout";
+
+  size_t rank = info->shape.size();
+  if ((rank != 1 && rank != 2) || info->strides.size() != rank || info->coord.size() != rank ||
+      info->originShape.size() != rank)
+    return funcOp->emitError() << "kernel tensor argument " << argIndex
+                               << " must have matching rank-1 or rank-2 shape, stride, "
+                                  "coord, and origin metadata";
+
+  if (llvm::any_of(info->coord, [](int64_t value) { return value == ShapedType::kDynamic; }))
+    return funcOp->emitError() << "kernel tensor argument " << argIndex
+                               << " cannot have dynamic coordinates";
+  if (!llvm::all_of(info->coord, [](int64_t value) { return value == 0; }))
+    return funcOp->emitError() << "kernel tensor argument " << argIndex
+                               << " must be a root tensor with zero coordinates";
+  if (llvm::any_of(info->originShape, [](int64_t value) { return value == ShapedType::kDynamic; }))
+    return funcOp->emitError() << "kernel tensor argument " << argIndex
+                               << " cannot have dynamic origin_shape";
+  if (llvm::any_of(info->originShape, [](int64_t value) { return value <= 0; }))
+    return funcOp->emitError() << "kernel tensor argument " << argIndex
+                               << " origin_shape must contain positive extents";
+  if (llvm::any_of(info->shape,
+                   [](int64_t value) { return value != ShapedType::kDynamic && value <= 0; }))
+    return funcOp->emitError() << "kernel tensor argument " << argIndex
+                               << " shape must contain positive or dynamic extents";
+  if (llvm::any_of(info->strides,
+                   [](int64_t value) { return value != ShapedType::kDynamic && value <= 0; }))
+    return funcOp->emitError() << "kernel tensor argument " << argIndex
+                               << " stride must contain positive or dynamic values";
+
+  // Preserve padded and otherwise strided row-major ABI layouts, but reject
+  // static metadata whose adjacent rows overlap. Dynamic metadata is carried
+  // by the memref ABI and cannot be compared at compile time.
+  if (info->layoutTag == "row_major" && rank == 2) {
+    int64_t rows = info->shape[0];
+    int64_t columns = info->shape[1];
+    int64_t rowStride = info->strides[0];
+    int64_t columnStride = info->strides[1];
+    bool isStatic = columns != ShapedType::kDynamic &&
+                    rowStride != ShapedType::kDynamic &&
+                    columnStride != ShapedType::kDynamic;
+    if (rows != 1 && isStatic &&
+        (rowStride - 1) / columnStride < columns - 1)
+      return funcOp->emitError()
+             << "row_major kernel tensor argument " << argIndex
+             << " must have non-overlapping rows: stride[0] must exceed "
+                "(shape[1] - 1) * stride[1]";
+  }
+
+  // Column-major buffers are physically contiguous row-major buffers over the
+  // transposed shape. Their logical strides are therefore recoverable only for
+  // the compact column-major form.
+  if (info->layoutTag == "column_major") {
+    if (rank == 1) {
+      if (info->strides[0] != 1)
+        return funcOp->emitError() << "rank-1 column_major kernel tensor argument " << argIndex
+                                   << " must have compact stride 1";
+    } else {
+      if (info->strides[0] != 1)
+        return funcOp->emitError() << "column_major kernel tensor argument " << argIndex
+                                   << " must have compact leading stride 1";
+      int64_t rows = info->shape[0];
+      int64_t columnStride = info->strides[1];
+      bool recoverable = rows == ShapedType::kDynamic ? columnStride == ShapedType::kDynamic
+                                                      : columnStride == rows;
+      if (!recoverable)
+        return funcOp->emitError() << "column_major kernel tensor argument " << argIndex
+                                   << " must have compact stride [1, rows]";
+    }
+  }
+
+  if (failed(bridgeTlaTensorStorageType(tensorType)))
+    return funcOp->emitError() << "kernel tensor argument " << argIndex
+                               << " cannot be represented by the GM memref ABI";
+  return success();
+}
+
+static LogicalResult validateFunctionTensorAbi(Operation *funcOp, FunctionType funcType,
+                                               Region *body) {
+  if (llvm::any_of(funcType.getResults(),
+                   [](Type type) { return isa<::tla::TlaTensorType>(type); }))
+    return funcOp->emitError("kernel tensor results are not supported by the device ABI");
+
+  bool hasTensorArg =
+      llvm::any_of(funcType.getInputs(), [](Type type) { return isa<::tla::TlaTensorType>(type); });
+  if (!hasTensorArg)
+    return success();
+  if (!body || !isKernelEntryCandidate(funcOp, *body))
+    return funcOp->emitError(
+        "tla.tensor function arguments are supported only on non-private device entries");
+
+  for (auto [index, type] : llvm::enumerate(funcType.getInputs())) {
+    if (auto tensorType = dyn_cast<::tla::TlaTensorType>(type))
+      if (failed(validateKernelTensorArg(funcOp, index, tensorType)))
+        return failure();
+  }
+  return success();
+}
+
+static LogicalResult validateModuleTensorAbi(ModuleOp module) {
+  for (::tla::FuncOp funcOp : module.getOps<::tla::FuncOp>()) {
+    auto typeAttr = funcOp->getAttrOfType<TypeAttr>("function_type");
+    auto funcType = typeAttr ? dyn_cast<FunctionType>(typeAttr.getValue()) : FunctionType();
+    if (!funcType)
+      return funcOp.emitError("expected function_type to be a FunctionType");
+    if (failed(validateFunctionTensorAbi(funcOp, funcType, &funcOp.getBody())))
+      return failure();
+  }
+  for (func::FuncOp funcOp : module.getOps<func::FuncOp>())
+    if (failed(validateFunctionTensorAbi(funcOp, funcOp.getFunctionType(), &funcOp.getBody())))
+      return failure();
+
+  LogicalResult result = success();
+  module.walk([&](func::CallOp callOp) {
+    if (llvm::any_of(callOp.getOperandTypes(),
+                     [](Type type) { return isa<::tla::TlaTensorType>(type); }) ||
+        llvm::any_of(callOp.getResultTypes(),
+                     [](Type type) { return isa<::tla::TlaTensorType>(type); })) {
+      callOp.emitError("tensor-typed func.call is not supported; tensor values must remain "
+                       "inside a kernel entry");
+      result = failure();
+    }
+  });
+  return result;
+}
+
+static FailureOr<Value> materializeRootTensorDescriptor(OpBuilder &builder, Location loc,
+                                                        BlockArgument base,
+                                                        ::tla::TlaTensorType tensorType) {
+  FailureOr<ParsedTensorInfo> rawInfo = parseTensorInfo(tensorType);
+  FailureOr<TileTypeInfo> normalizedInfo = decodeTileTypeInfo(tensorType);
+  if (failed(rawInfo) || failed(normalizedInfo))
+    return failure();
+
+  auto constant = [&](int64_t value) -> Value {
+    return builder.create<arith::ConstantIndexOp>(loc, value);
+  };
+  SmallVector<Value, 2> shape;
+  for (auto [axis, extent] : llvm::enumerate(rawInfo->shape)) {
+    shape.push_back(extent == ShapedType::kDynamic
+                        ? builder.create<mlir::memref::DimOp>(loc, base, axis).getResult()
+                        : constant(extent));
+  }
+
+  SmallVector<Value, 2> abiStrides;
+  if (rawInfo->layoutTag == "row_major" &&
+      llvm::is_contained(rawInfo->strides, ShapedType::kDynamic)) {
+    auto metadata = builder.create<mlir::memref::ExtractStridedMetadataOp>(loc, base);
+    abiStrides.append(metadata.getStrides().begin(), metadata.getStrides().end());
+  }
+
+  SmallVector<Value, 2> stride;
+  if (rawInfo->layoutTag == "row_major") {
+    for (auto [axis, value] : llvm::enumerate(rawInfo->strides))
+      stride.push_back(value == ShapedType::kDynamic ? abiStrides[axis] : constant(value));
+  } else if (rawInfo->shape.size() == 1) {
+    stride.push_back(constant(1));
+  } else {
+    stride.push_back(constant(1));
+    stride.push_back(shape[0]);
+  }
+
+  Value zero = constant(0);
+  Value shape0;
+  Value shape1;
+  Value stride0;
+  Value stride1;
+  Value origin0;
+  Value origin1;
+  if (rawInfo->shape.size() == 1) {
+    shape0 = constant(1);
+    shape1 = shape[0];
+    stride1 = stride[0];
+    stride0 = builder.createOrFold<arith::MulIOp>(loc, shape1, stride1);
+    origin0 = constant(1);
+    origin1 = constant(rawInfo->originShape[0]);
+  } else {
+    shape0 = shape[0];
+    shape1 = shape[1];
+    stride0 = stride[0];
+    stride1 = stride[1];
+    origin0 = constant(rawInfo->originShape[0]);
+    origin1 = constant(rawInfo->originShape[1]);
+  }
+
+  return builder
+      .create<::tla::TensorDescOp>(loc, tensorType, base, zero, zero, stride0, stride1, shape0,
+                                   shape1, origin0, origin1, ValueRange{})
+      .getResult();
+}
+
+static LogicalResult materializeKernelTensorEntryAbi(ModuleOp module) {
+  for (func::FuncOp funcOp : module.getOps<func::FuncOp>()) {
+    FunctionType originalType = funcOp.getFunctionType();
+    if (!llvm::any_of(originalType.getInputs(),
+                      [](Type type) { return isa<::tla::TlaTensorType>(type); }))
+      continue;
+    if (!hasRequiredHaccEntryAttrs(funcOp) || funcOp.isDeclaration())
+      return funcOp.emitError("tensor ABI materialization requires a defined HACC device entry");
+
+    SmallVector<Type, 8> bridgedInputs;
+    bridgedInputs.reserve(originalType.getNumInputs());
+    for (Type input : originalType.getInputs()) {
+      if (!isa<::tla::TlaTensorType>(input)) {
+        bridgedInputs.push_back(input);
+        continue;
+      }
+      FailureOr<MemRefType> bridged =
+          bridgeTlaTensorStorageType(cast<::tla::TlaTensorType>(input));
+      if (failed(bridged))
+        return funcOp.emitError("failed to bridge validated kernel tensor argument");
+      bridgedInputs.push_back(*bridged);
+    }
+
+    funcOp.setType(
+        FunctionType::get(funcOp.getContext(), bridgedInputs, originalType.getResults()));
+    for (auto [arg, type] : llvm::zip_equal(funcOp.getArguments(), bridgedInputs))
+      arg.setType(type);
+
+    Block &entry = funcOp.getBody().front();
+    OpBuilder builder(&entry, entry.begin());
+    for (auto [index, originalArgType] : llvm::enumerate(originalType.getInputs())) {
+      auto tensorType = dyn_cast<::tla::TlaTensorType>(originalArgType);
+      if (!tensorType)
+        continue;
+      BlockArgument arg = entry.getArgument(index);
+      SmallVector<OpOperand *, 8> originalUses;
+      originalUses.reserve(std::distance(arg.use_begin(), arg.use_end()));
+      for (OpOperand &use : arg.getUses())
+        originalUses.push_back(&use);
+      FailureOr<Value> descriptor =
+          materializeRootTensorDescriptor(builder, funcOp.getLoc(), arg, tensorType);
+      if (failed(descriptor))
+        return funcOp.emitError() << "failed to materialize root descriptor for argument " << index;
+      for (OpOperand *use : originalUses)
+        use->set(*descriptor);
+    }
+  }
+  return success();
+}
 
 // Aggregate two core kinds: same kind stays; differing non-MIX kinds (or any
 // MIX) promote to MIX.
@@ -95,26 +355,21 @@ public:
   StringRef getArgument() const override { return "tla-lower-func"; }
   StringRef getName() const override { return "TlaLowerFuncPass"; }
   StringRef getDescription() const override {
-    return "Lower tla.func device containers to HACC func.func: classify AIC/AIV/MIX "
-           "from tla.cube/tla.vector regions, stamp the per-function HACC/HIVM entry "
-           "attributes, and attach the module core type and C310 target attributes.";
+    return "Lower tla.func containers and kernel tensor ABI: classify AIC/AIV/MIX, "
+           "stamp HACC/HIVM attributes, convert GM tensor arguments to memrefs, and "
+           "materialize root tensor descriptors.";
   }
 
   void getDependentDialects(DialectRegistry &registry) const override {
-    registry.insert<mlir::DLTIDialect, hacc::HACCDialect, hivm::HIVMDialect, func::FuncDialect,
-                    ::tla::TlaDialect>();
+    registry.insert<arith::ArithDialect, mlir::DLTIDialect, hacc::HACCDialect, hivm::HIVMDialect,
+                    func::FuncDialect, mlir::memref::MemRefDialect, ::tla::TlaDialect>();
   }
 
   // A function whose core type we should infer: skip declarations, private
   // helpers, and (once HACC-marked) host functions. Runs before HACC marking
   // too, where tla.func ops carry no function-kind attr yet.
   static bool isInferableFunc(Operation *funcOp, Region &body) {
-    if (body.empty() || isPrivateSymbol(funcOp))
-      return false;
-    auto kind = funcOp->getAttrOfType<hacc::HACCFuncTypeAttr>(hacc::HACCFuncTypeAttr::name);
-    if (kind && kind.getFunctionKind() != hacc::HACCFuncType::DEVICE)
-      return false;
-    return true;
+    return isKernelEntryCandidate(funcOp, body);
   }
 
   HivmCoreKind inferFuncCoreKind(Operation *funcOp) {
@@ -142,6 +397,13 @@ public:
     ModuleOp module = getOperation();
     MLIRContext *ctx = &getContext();
 
+    // Validate the complete tensor ABI surface before changing attributes,
+    // containers, signatures, or block arguments.
+    if (failed(validateModuleTensorAbi(module))) {
+      signalPassFailure();
+      return;
+    }
+
     // 1. Classify + stamp each device function, aggregating the module core type.
     //    Done on the tla.func containers so the attrs are carried onto func.func
     //    by the CopyNonSignatureAttrs lowering below.
@@ -167,6 +429,10 @@ public:
     // 2. Lower the tla.func containers to func.func and attach the C310 module
     //    target attributes.
     if (failed(lowerTlaFuncContainers(module, ctx))) {
+      signalPassFailure();
+      return;
+    }
+    if (failed(materializeKernelTensorEntryAbi(module))) {
       signalPassFailure();
       return;
     }

@@ -65,16 +65,14 @@ assignOrGetAllocPtrOffset(::tla::AllocPtrOp allocOp,
 static FailureOr<Value> resolveTensorBacking(Value tensor) {
   if (isa<MemRefType, ::tla::PtrType>(tensor.getType()))
     return tensor;
+  if (auto desc = tensor.getDefiningOp<::tla::TensorDescOp>())
+    return resolveTensorBacking(desc.getBase());
   if (auto tileView = tensor.getDefiningOp<::tla::TileViewOp>())
     return resolveTensorBacking(tileView.getSource());
   if (auto makeTensor = tensor.getDefiningOp<::tla::MakeTensorOp>())
     return makeTensor.getPtr();
   if (auto makeTensorLike = tensor.getDefiningOp<::tla::MakeTensorLikeOp>())
     return makeTensorLike.getPtr();
-  if (auto cast = tensor.getDefiningOp<UnrealizedConversionCastOp>()) {
-    if (cast.getNumOperands() == 1)
-      return resolveTensorBacking(cast.getOperand(0));
-  }
   return failure();
 }
 
@@ -87,9 +85,8 @@ static LogicalResult resolveTensorPtrOps(ModuleOp module) {
 
     FailureOr<Value> base = resolveTensorBacking(op.getSrc());
     if (failed(base)) {
-      op.emitError()
-          << "tensor_ptr source must resolve through tile_view/make_tensor to "
-             "a backing !tla.ptr or memref";
+      op.emitError() << "tensor_ptr source must resolve through tensor_desc, tile_view, or "
+                        "make_tensor to a backing !tla.ptr or memref";
       return failure();
     }
 

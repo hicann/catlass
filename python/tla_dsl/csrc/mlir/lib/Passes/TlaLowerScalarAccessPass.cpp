@@ -1,3 +1,4 @@
+#include "Passes/TlaTensorToMemref.h"
 #include "PassesCommon.h"
 #include "PassesInternal.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -7,13 +8,78 @@
 namespace tla {
 namespace {
 
-// Lower tla.scalar_load/store on bridged memref sources/dests before
-// vector/cube region outlining.
-//
-// Placement: after tla-split-mixed-func, before tla-vector-region /
-// tla-cube-region. Phase-1 ScalarSSA only covers GM kernel args already
-// bridged by tla-lower-func (StridedLayout carries strides); leftover
-// !tla.tensor sources are rejected here.
+// Build the logical rank-1/rank-2 GM view described by tla.tensor_desc. This is
+// intentionally independent of the ABI memref's physical layout: column-major
+// tensors use a physically contiguous external buffer while the descriptor
+// carries the logical column-major strides.
+static FailureOr<Value> materializeScalarView(OpBuilder &builder, Operation *diagnosticOp,
+                                              Value tensor,
+                                              llvm::DenseMap<Value, Value> &baseMemrefCache) {
+  auto descOp = tensor.getDefiningOp<::tla::TensorDescOp>();
+  if (!descOp)
+    return diagnosticOp->emitError("scalar access expects a materialized tla.tensor_desc source"),
+           failure();
+
+  FailureOr<TensorDescriptor> descOr = descriptorFromTensorDescOp(descOp);
+  FailureOr<ParsedTensorInfo> rawInfo = parseTensorInfo(tensor.getType());
+  if (failed(descOr) || failed(rawInfo))
+    return failure();
+  TensorDescriptor &desc = *descOr;
+  if (desc.addrspace != "gm")
+    return diagnosticOp->emitError("scalar access supports only GM tensor descriptors"), failure();
+  if (!isLinearLayout(desc.layoutTag) || !desc.packedShape.empty() || !desc.packedStride.empty())
+    return diagnosticOp->emitError(
+               "scalar access supports only linear row_major/column_major descriptors"),
+           failure();
+  size_t logicalRank = rawInfo->shape.size();
+  if (logicalRank != 1 && logicalRank != 2)
+    return diagnosticOp->emitError("scalar access descriptor must have logical rank 1 or 2"),
+           failure();
+  if (!validateTensorDescriptorV1(diagnosticOp, desc, "malformed descriptor for scalar access",
+                                  /*requireShapeOperands=*/true))
+    return failure();
+
+  FailureOr<Value> base = getOrMaterializeDescriptorBaseMemref(builder, diagnosticOp->getLoc(),
+                                                               desc, diagnosticOp, baseMemrefCache);
+  if (failed(base))
+    return failure();
+  auto baseType = dyn_cast<MemRefType>((*base).getType());
+  if (!baseType)
+    return diagnosticOp->emitError("scalar descriptor base did not materialize as memref"),
+           failure();
+
+  Location loc = diagnosticOp->getLoc();
+  auto metadata = builder.create<mlir::memref::ExtractStridedMetadataOp>(loc, *base);
+  Value rowOffset = builder.createOrFold<arith::MulIOp>(loc, desc.rowOffset, desc.stride0);
+  Value colOffset = builder.createOrFold<arith::MulIOp>(loc, desc.colOffset, desc.stride1);
+  Value logicalOffset = builder.createOrFold<arith::AddIOp>(loc, rowOffset, colOffset);
+  Value storageOffset =
+      builder.createOrFold<arith::AddIOp>(loc, metadata.getOffset(), logicalOffset);
+
+  SmallVector<Value, 2> sizes;
+  SmallVector<Value, 2> strides;
+  if (logicalRank == 1) {
+    sizes.push_back(desc.shape1);
+    strides.push_back(desc.stride1);
+  } else {
+    sizes.append({desc.shape0, desc.shape1});
+    strides.append({desc.stride0, desc.stride1});
+  }
+
+  SmallVector<int64_t, 2> dynamicShape(logicalRank, ShapedType::kDynamic);
+  SmallVector<int64_t, 2> dynamicStrides(logicalRank, ShapedType::kDynamic);
+  auto layout = StridedLayoutAttr::get(builder.getContext(), ShapedType::kDynamic, dynamicStrides);
+  auto viewType =
+      MemRefType::get(dynamicShape, baseType.getElementType(), layout, baseType.getMemorySpace());
+  return builder
+      .create<mlir::memref::ReinterpretCastOp>(loc, viewType, metadata.getBaseBuffer(),
+                                               storageOffset, sizes, strides)
+      .getResult();
+}
+
+// Placement: after tla-lower-tensor-desc, before vector/cube outlining. Every
+// tensor-semantic scalar operation consumes a materialized descriptor; raw ABI
+// memrefs are never accepted by tla.scalar_load/store.
 class TlaLowerScalarAccessPass
     : public PassWrapper<TlaLowerScalarAccessPass, OperationPass<ModuleOp>> {
 public:
@@ -22,90 +88,60 @@ public:
   StringRef getArgument() const override { return "tla-lower-scalar-access"; }
   StringRef getName() const override { return "TlaLowerScalarAccessPass"; }
   StringRef getDescription() const override {
-    return "Lower tla.scalar_load/store on bridged memrefs to memref.load/store "
-           "before vector and cube region passes.";
+    return "Lower descriptor-based GM scalar tensor accesses to memref.load/store.";
   }
 
   void getDependentDialects(DialectRegistry &registry) const override {
     registry.insert<arith::ArithDialect, func::FuncDialect, mlir::memref::MemRefDialect,
-                    ::tla::TlaDialect>();
+                    ::tla::TlaDialect, hivm::HIVMDialect>();
   }
 
   void runOnOperation() override {
-    if (failed(lowerScalarLoadOnMemrefs(getOperation())) ||
-        failed(lowerScalarStoreOnMemrefs(getOperation())))
+    llvm::DenseMap<Value, Value> baseMemrefCache;
+    if (failed(lowerScalarLoads(getOperation(), baseMemrefCache)) ||
+        failed(lowerScalarStores(getOperation(), baseMemrefCache)))
       signalPassFailure();
   }
 
 private:
-  static LogicalResult lowerScalarLoadOnMemrefs(ModuleOp module) {
+  static LogicalResult lowerScalarLoads(ModuleOp module,
+                                        llvm::DenseMap<Value, Value> &baseMemrefCache) {
     SmallVector<::tla::ScalarLoadOp, 16> ops;
     module.walk([&](::tla::ScalarLoadOp op) { ops.push_back(op); });
     for (::tla::ScalarLoadOp op : ops) {
-      Value source = op.getSource();
-      auto memrefTy = dyn_cast<MemRefType>(source.getType());
-      if (!memrefTy) {
-        return op.emitError(
-                   "tla.scalar_load expects a bridged memref source after "
-                   "tla-lower-func (Phase-1 GM kernel-arg indexing only)"),
-               failure();
-      }
+      SmallVector<Value, 2> indices(op.getIndices().begin(), op.getIndices().end());
+      auto rawInfo = parseTensorInfo(op.getSource().getType());
+      if (failed(rawInfo) || indices.size() != rawInfo->shape.size())
+        return op.emitError("scalar_load index count must match logical tensor rank"), failure();
 
       OpBuilder builder(op);
-      SmallVector<Value, 2> indices(op.getIndices().begin(), op.getIndices().end());
-
-      Value loaded;
-      if (memrefTy.getRank() == 1) {
-        if (indices.size() != 1)
-          return op.emitError("rank-1 memref scalar_load expects exactly 1 index"),
-                 failure();
-        loaded = builder.create<mlir::memref::LoadOp>(op.getLoc(), source, indices[0]);
-      } else if (memrefTy.getRank() == 2) {
-        if (indices.size() != 2)
-          return op.emitError("rank-2 memref scalar_load expects exactly 2 indices"),
-                 failure();
-        loaded = builder.create<mlir::memref::LoadOp>(op.getLoc(), source, indices);
-      } else {
-        return op.emitError("tla.scalar_load memref source must be rank-1 or rank-2"),
-               failure();
-      }
+      FailureOr<Value> view =
+          materializeScalarView(builder, op.getOperation(), op.getSource(), baseMemrefCache);
+      if (failed(view))
+        return failure();
+      Value loaded = builder.create<mlir::memref::LoadOp>(op.getLoc(), *view, indices);
       op.getResult().replaceAllUsesWith(loaded);
       op.erase();
     }
     return success();
   }
 
-  static LogicalResult lowerScalarStoreOnMemrefs(ModuleOp module) {
+  static LogicalResult lowerScalarStores(ModuleOp module,
+                                         llvm::DenseMap<Value, Value> &baseMemrefCache) {
     SmallVector<::tla::ScalarStoreOp, 16> ops;
     module.walk([&](::tla::ScalarStoreOp op) { ops.push_back(op); });
     for (::tla::ScalarStoreOp op : ops) {
-      Value dest = op.getDest();
-      auto memrefTy = dyn_cast<MemRefType>(dest.getType());
-      if (!memrefTy) {
-        return op.emitError(
-                   "tla.scalar_store expects a bridged memref dest after "
-                   "tla-lower-func (Phase-1 GM kernel-arg indexing only)"),
-               failure();
-      }
+      SmallVector<Value, 2> indices(op.getIndices().begin(), op.getIndices().end());
+      auto rawInfo = parseTensorInfo(op.getDest().getType());
+      if (failed(rawInfo) || indices.size() != rawInfo->shape.size())
+        return op.emitError("scalar_store index count must match logical tensor rank"), failure();
 
       OpBuilder builder(op);
-      SmallVector<Value, 2> indices(op.getIndices().begin(), op.getIndices().end());
-
-      Value value = op.getValue();
-      if (memrefTy.getRank() == 1) {
-        if (indices.size() != 1)
-          return op.emitError("rank-1 memref scalar_store expects exactly 1 index"),
-                 failure();
-        builder.create<mlir::memref::StoreOp>(op.getLoc(), value, dest, indices[0]);
-      } else if (memrefTy.getRank() == 2) {
-        if (indices.size() != 2)
-          return op.emitError("rank-2 memref scalar_store expects exactly 2 indices"),
-                 failure();
-        builder.create<mlir::memref::StoreOp>(op.getLoc(), value, dest, indices);
-      } else {
-        return op.emitError("tla.scalar_store memref dest must be rank-1 or rank-2"),
-               failure();
-      }
+      FailureOr<Value> view =
+          materializeScalarView(builder, op.getOperation(), op.getDest(), baseMemrefCache);
+      if (failed(view))
+        return failure();
+      builder.create<mlir::memref::StoreOp>(op.getLoc(), op.getValue(), *view, indices);
       op.erase();
     }
     return success();
