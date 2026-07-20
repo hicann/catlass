@@ -418,7 +418,7 @@ class VectorSSA:
         self,
         kind: ReductionOp,
         *,
-        mask: Any | None = None,
+        mask: Any,
         init_value: Any | None = None,
         reduction_profile: Any | None = None,
         loc: mlir_ir.Location | None = None,
@@ -3930,7 +3930,7 @@ def interleave(
 
     src0_value = _as_value(src0)
     src1_value = _as_value(src1)
-    
+
     src_desc = _tla_tensor_type_for_mlir_value(src0_value)
     element_type = str(src_desc.element_type).lower()
     if element_type not in _INTERLEAVE_ELEMENT_TYPES:
@@ -3939,7 +3939,7 @@ def interleave(
             f"unsupported element type {src_desc.element_type}; supported types are "
             f"{', '.join(sorted(_INTERLEAVE_ELEMENT_TYPES))}",
         )
-    
+
     dst0_value, dst1_value = _tla_ops_gen.interleave(
         src0_value.type,
         src0_value.type,
@@ -3952,7 +3952,7 @@ def interleave(
     _register_tla_tensor_type(dst1_value, src_desc)
 
     return VectorSSA(dst0_value), VectorSSA(dst1_value)
-    
+
 
 @dsl_user_op
 def deinterleave(
@@ -4142,15 +4142,14 @@ def _emit_vector_reduce(
     operand: VectorSSA,
     kind: ReductionOp,
     *,
-    mask: MaskSSA | None = None,
+    mask: MaskSSA,
     init_value: Any | None = None,
     reduction_profile: Any | None = None,
     loc: mlir_ir.Location | None = None,
 ) -> VectorSSA:
     op_name = "VectorSSA.reduce"
     _require_category(op_name, "operand", operand, "vector_ssa", 0)
-    if mask is not None:
-        _require_category(op_name, "mask", mask, "mask_ssa", 1)
+    _require_category(op_name, "mask", mask, "mask_ssa", 1)
     if init_value is not None:
         raise NotImplementedError(f"{op_name} only supports init_value=None")
     if reduction_profile is not None:
@@ -4166,7 +4165,7 @@ def _emit_vector_reduce(
     operand_value = _as_value(operand)
     operand_desc = _tla_tensor_type_for_mlir_value(operand_value)
     _check_reduction_element_type_supported(op_name, operand_desc.element_type)
-    mask_value = _as_value(mask) if mask is not None else None
+    mask_value = _as_value(mask)
     result_desc = _reduction_result_descriptor(operand_value)
     result = _tla_ops_gen.reduce(
         result_desc.to_mlir_type(operand_value.type.context),

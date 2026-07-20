@@ -16,10 +16,6 @@ namespace {
 // Passes/TlaTensorToMemref.h (raw, non-normalized decode). Unqualified uses below
 // resolve to ::tla:: via namespace lookup.
 
-
-
-
-
 static hivmave::VFPgeOp createAvePgeMask(OpBuilder &b, Location loc, VectorType maskType,
                                          hivmave::PgePattern pattern) {
   return b.create<hivmave::VFPgeOp>(loc, maskType, pattern);
@@ -60,17 +56,6 @@ static hivmave::VFLoadOp createVFLoad(OpBuilder &b, Location loc, VectorType vec
                   hivmave::UnalignedAttr::get(b.getContext()));
   return load;
 }
-
-
-
-
-
-
-
-
-
-
-
 
 static std::string buildUniqueVectorHelperName(ModuleOp module, int &nextVectorRegionId) {
   std::string helperName;
@@ -126,24 +111,17 @@ static bool isSupportedVectorReductionElementType(Type elementType) {
   }
 }
 
-static FailureOr<int64_t> getTlaTensorValidLaneCount(Type tensorType) {
-  auto info = parseTensorInfo(tensorType);
-  if (failed(info))
-    return failure();
-  return getStaticNumElements(info->originShape);
+// A store destination tile is directly a tla.tensor_desc result after
+// tla-lower-tensor-desc (the sole descriptor producer). Only look one level;
+// the caller diagnoses when the value is not a descriptor result.
+static ::tla::TensorDescOp findTensorDescProducer(Value tensorValue) {
+  return tensorValue ? tensorValue.getDefiningOp<::tla::TensorDescOp>() : nullptr;
 }
 
 static LogicalResult validateVectorReduction(::tla::ReduceOp reduceOp, Type elementType) {
   if (!isSupportedVectorReductionElementType(elementType))
     return reduceOp.emitError()
            << "tla.reduce unsupported reduction element type " << elementType;
-  auto resultValidLanes = getTlaTensorValidLaneCount(reduceOp->getResult(0).getType());
-  if (failed(resultValidLanes))
-    return reduceOp.emitError("failed to determine tla.reduce result valid lanes");
-  if (*resultValidLanes != 1)
-    return reduceOp.emitError()
-           << "expected tla.reduce result to have one valid lane, got "
-           << *resultValidLanes;
   return success();
 }
 
@@ -641,19 +619,13 @@ static FailureOr<Value> createVectorReductionResult(OpBuilder &b, Location loc,
   auto aveKind = getAveReductionCombiningKind(reduceOp, elementType);
   if (failed(aveKind))
     return failure();
-  auto validLanes = getTlaTensorValidLaneCount(reduceOp.getOperand().getType());
-  if (failed(validLanes))
-    return reduceOp.emitError("failed to determine tla.reduce operand valid lanes"),
-           failure();
-  auto maskType = VectorType::get(vecType.getShape(), b.getI1Type());
-  Value activeMask = explicitMask;
-  if (!activeMask) {
-    Value trueShape = b.create<arith::ConstantIndexOp>(loc, *validLanes);
-    activeMask = createAvePltMask(b, loc, maskType, trueShape).getRes();
-  }
+  // The active mask is supplied explicitly by the frontend; tla.reduce no longer
+  // derives one from the operand's originShape.
+  if (!explicitMask)
+    return reduceOp.emitError("tla.reduce requires an explicit mask"), failure();
 
   Value reducedVec =
-      b.create<hivmave::ReductionOp>(loc, vecType, *aveKind, operand, activeMask).getResult();
+      b.create<hivmave::ReductionOp>(loc, vecType, *aveKind, operand, explicitMask).getResult();
   // ave.hir.reduction preserves the input vector shape and places the reduced
   // value in lane 0; TLA reductions expose that single valid lane as vector<1xT>.
   auto resultType = VectorType::get({1}, elementType);
@@ -729,6 +701,23 @@ static Value lookupOrCloneScalarValue(OpBuilder &b, Value value,
   Operation *cloned = b.clone(*def);
   valueMap[value] = cloned->getResult(0);
   return cloned->getResult(0);
+}
+
+// Materialize the valid-lane count of a tla.tensor as an index SSA value for the
+// active mask. Falls back to the producing tla.tensor_desc's origin_shape0*origin_shape1,
+// mapped into the helper via lookupOrCloneScalarValue (vec.func-external scalars are
+// helper args; in-region index arithmetic is cloned ahead of the descriptor).
+static FailureOr<Value> getTlaTensorValidLaneCount(OpBuilder &b, Location loc,
+                                                           Value tensorValue,
+                                                           DenseMap<Value, Value> &valueMap) {
+  if (auto descOp = findTensorDescProducer(tensorValue)) {
+    Value origin0 = lookupOrCloneScalarValue(b, descOp.getOriginShape0(), valueMap);
+    Value origin1 = lookupOrCloneScalarValue(b, descOp.getOriginShape1(), valueMap);
+    if (!origin0 || !origin1)
+      return failure();
+    return b.create<arith::MulIOp>(loc, origin0, origin1).getResult();
+  }
+  return failure();
 }
 
 static FailureOr<Value> castScalarForVectorElement(Value scalar, Type elementType) {
@@ -1318,7 +1307,12 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
       if (!mask)
         return failure();
     } else {
-      mask = createAvePgeMask(b, loc, opCtx->maskVecType, hivmave::PgePattern::ALL);
+      auto validLanes =
+          getTlaTensorValidLaneCount(b, loc, storeOp.getDest(), valueMap);
+      if (failed(validLanes))
+        return storeOp.emitError("failed to determine tla.store dest valid lanes"),
+               failure();
+      mask = createAvePltMask(b, loc, opCtx->maskVecType, *validLanes).getRes();
     }
     // store_unalign (this PR): mark AVE masked-store as unaligned UB access.
     if (storeOp.getUnalignedUbAccess().value_or(false)) {

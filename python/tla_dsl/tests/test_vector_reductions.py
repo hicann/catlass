@@ -26,9 +26,10 @@ def vector_reduce_kernel(src: tla.Tensor) -> None:
     with tla.vector():
         with tla.vec.func(mode="simd"):
             src_reg = src_tile.load()
-            _ = src_reg.reduce(tla.ReductionOp.ADD)
-            _ = src_reg.reduce(tla.ReductionOp.MAX)
-            _ = src_reg.reduce(tla.ReductionOp.MIN)
+            reduce_mask = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Float32)
+            _ = src_reg.reduce(tla.ReductionOp.ADD, mask=reduce_mask)
+            _ = src_reg.reduce(tla.ReductionOp.MAX, mask=reduce_mask)
+            _ = src_reg.reduce(tla.ReductionOp.MIN, mask=reduce_mask)
 
 
 @tla.kernel
@@ -46,7 +47,8 @@ def vector_unsigned_reduce_kernel(src: tla.Tensor) -> None:
     src_tile = tla.tile_view(src, tla.make_shape(64), tla.make_coord(0))
     with tla.vector():
         with tla.vec.func(mode="simd"):
-            _ = src_tile.load().reduce(tla.ReductionOp.ADD)
+            reduce_mask = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.UInt16)
+            _ = src_tile.load().reduce(tla.ReductionOp.ADD, mask=reduce_mask)
 
 
 @tla.kernel
@@ -54,7 +56,8 @@ def reduce_non_reduction_op_kernel(src: tla.Tensor) -> None:
     src_tile = tla.tile_view(src, tla.make_shape(64), tla.make_coord(0))
     with tla.vector():
         with tla.vec.func(mode="simd"):
-            _ = src_tile.load().reduce("add")
+            reduce_mask = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Float32)
+            _ = src_tile.load().reduce("add", mask=reduce_mask)
 
 
 @tla.kernel
@@ -62,7 +65,8 @@ def reduce_init_value_keyword_kernel(src: tla.Tensor) -> None:
     src_tile = tla.tile_view(src, tla.make_shape(64), tla.make_coord(0))
     with tla.vector():
         with tla.vec.func(mode="simd"):
-            _ = src_tile.load().reduce(tla.ReductionOp.ADD, init_value=0.0)
+            reduce_mask = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Float32)
+            _ = src_tile.load().reduce(tla.ReductionOp.ADD, mask=reduce_mask, init_value=0.0)
 
 
 @tla.kernel
@@ -70,7 +74,8 @@ def reduce_profile_keyword_kernel(src: tla.Tensor) -> None:
     src_tile = tla.tile_view(src, tla.make_shape(64), tla.make_coord(0))
     with tla.vector():
         with tla.vec.func(mode="simd"):
-            _ = src_tile.load().reduce(tla.ReductionOp.ADD, reduction_profile=0)
+            reduce_mask = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Float32)
+            _ = src_tile.load().reduce(tla.ReductionOp.ADD, mask=reduce_mask, reduction_profile=0)
 
 
 @tla.kernel
@@ -78,11 +83,21 @@ def reduce_none_keywords_kernel(src: tla.Tensor) -> None:
     src_tile = tla.tile_view(src, tla.make_shape(64), tla.make_coord(0))
     with tla.vector():
         with tla.vec.func(mode="simd"):
+            reduce_mask = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Float32)
             _ = src_tile.load().reduce(
                 tla.ReductionOp.ADD,
+                mask=reduce_mask,
                 init_value=None,
                 reduction_profile=None,
             )
+
+
+@tla.kernel
+def vector_reduce_no_mask_kernel(src: tla.Tensor) -> None:
+    src_tile = tla.tile_view(src, tla.make_shape(64), tla.make_coord(0))
+    with tla.vector():
+        with tla.vec.func(mode="simd"):
+            _ = src_tile.load().reduce(tla.ReductionOp.ADD)
 
 
 def test_vector_reduce_public_export_exists() -> None:
@@ -154,3 +169,11 @@ def test_reduce_hides_unsupported_semantic_keywords(
 ) -> None:
     with pytest.raises(UnsupportedExecutionLowering, match=match):
         kernel.dump_mlir(type_args=(_vector_tensor(),))
+
+
+def test_reduce_requires_explicit_mask() -> None:
+    with pytest.raises(
+        UnsupportedExecutionLowering,
+        match=r"missing.*keyword-only.*argument.*'mask'",
+    ):
+        vector_reduce_no_mask_kernel.dump_mlir(type_args=(_vector_tensor(),))
