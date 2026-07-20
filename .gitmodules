@@ -2,7 +2,7 @@
 	path = 3rdparty/googletest
 	url = https://gitcode.com/GitHub_Trending/go/googletest.git
 	branch = v1.14.x
-[submodule "python/tla_dsl/3rdparty/AscendNPU-IR-Dev"]
-	path = python/tla_dsl/3rdparty/AscendNPU-IR-Dev
-	url = https://gitcode.com/Ascend/AscendNPU-IR-Dev.git
-	branch = A5/dev
+[submodule "python/tla_dsl/3rdparty/AscendNPU-IR"]
+	path = python/tla_dsl/3rdparty/AscendNPU-IR
+	url = https://gitcode.com/Ascend/AscendNPU-IR.git
+	branch = feature/regbase

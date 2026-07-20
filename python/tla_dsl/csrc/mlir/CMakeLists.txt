@@ -22,12 +22,12 @@ else()
 endif()
 message("-- TLA_DSL_CATLASS_INCLUDE_DIR Value: ${TLA_DSL_CATLASS_INCLUDE_DIR}")
 
-# AscendNPU-IR-Dev lives under python/tla_dsl/3rdparty (mlir is under
+# AscendNPU-IR lives under python/tla_dsl/3rdparty (mlir is under
 # python/tla_dsl/csrc/mlir). The TLA compiler intentionally uses the Dev
 # BiShengIR tree for all bishengir headers/libs so pass declarations and linked
 # implementations stay from the same checkout.
 set(TLA_DSL_ASCENDNPU_IR_ROOT
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../3rdparty/AscendNPU-IR-Dev)
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../3rdparty/AscendNPU-IR)
 if(DEFINED ENV{TLA_DSL_PREBUILT_ASCENDNPU_IR}
    AND NOT "$ENV{TLA_DSL_PREBUILT_ASCENDNPU_IR}" STREQUAL "")
   set(TLA_DSL_ASCENDNPU_IR_ROOT "$ENV{TLA_DSL_PREBUILT_ASCENDNPU_IR}")
@@ -76,7 +76,7 @@ set(TLA_DSL_HIVM_REQUIRED_LIBS
 if(NOT EXISTS ${TLA_DSL_HIVM_HEADER} OR NOT EXISTS ${TLA_DSL_HIVM_ENUMS_INC})
   message(FATAL_ERROR
           "AscendNPU-IR generated headers are required. Build "
-          "python/tla_dsl/3rdparty/AscendNPU-IR-Dev first or set TLA_DSL_PREBUILT_ASCENDNPU_IR.")
+          "python/tla_dsl/3rdparty/AscendNPU-IR first or set TLA_DSL_PREBUILT_ASCENDNPU_IR.")
 endif()
 foreach(tla_dsl_hivm_lib IN LISTS TLA_DSL_HIVM_REQUIRED_LIBS)
   file(GLOB tla_dsl_hivm_matches
@@ -86,7 +86,7 @@ foreach(tla_dsl_hivm_lib IN LISTS TLA_DSL_HIVM_REQUIRED_LIBS)
   if("${tla_dsl_hivm_matches}" STREQUAL "")
     message(FATAL_ERROR
             "AscendNPU-IR library ${tla_dsl_hivm_lib} is required. Build "
-            "python/tla_dsl/3rdparty/AscendNPU-IR-Dev first or set TLA_DSL_PREBUILT_ASCENDNPU_IR.")
+            "python/tla_dsl/3rdparty/AscendNPU-IR first or set TLA_DSL_PREBUILT_ASCENDNPU_IR.")
   endif()
   list(GET tla_dsl_hivm_matches 0 tla_dsl_hivm_match)
   list(APPEND TLA_DSL_HIVM_REQUIRED_LIB_FILES "${tla_dsl_hivm_match}")

@@ -21,19 +21,19 @@
 # Toolchain paths (env overrides first; directory-layout fallbacks last):
 #   CANN:             ASCEND_HOME_PATH (source set_env.sh if not already in env)
 #                     → WORKSPACE_ROOT/Ascend/9.1.0-beta.1/ascend-toolkit/set_env.sh
-#   AscendNPU-IR-Dev: TLA_DSL_PREBUILT_ASCENDNPU_IR
+#   AscendNPU-IR: TLA_DSL_PREBUILT_ASCENDNPU_IR
 #                     → TLA_DSL_ASCENDNPU_IR_ROOT
-#                     → WORKSPACE_ROOT/AscendNPU-IR-Dev
-#                     → TLA_DSL_DIR/3rdparty/AscendNPU-IR-Dev
+#                     → WORKSPACE_ROOT/AscendNPU-IR
+#                     → TLA_DSL_DIR/3rdparty/AscendNPU-IR
 #   TLA DSL:          TLA_DSL_DIR → CATDSL_ROOT/python/tla_dsl
 #
 # CANN 9.1+ ships hivmc-a5 in toolkit; no separate HIVMC sibling is required.
-# LLVM/MLIR come from AscendNPU-IR-Dev build/install, not from conda.
+# LLVM/MLIR come from AscendNPU-IR build/install, not from conda.
 #
 # Usage:
 #   bash tests/run_dsl_test.sh
 #   bash tests/run_dsl_test.sh --device 0
-#   TLA_DSL_PREBUILT_ASCENDNPU_IR=/path/to/AscendNPU-IR-Dev bash tests/run_dsl_test.sh --device 0
+#   TLA_DSL_PREBUILT_ASCENDNPU_IR=/path/to/AscendNPU-IR bash tests/run_dsl_test.sh --device 0
 
 set -euo pipefail
 
@@ -56,14 +56,14 @@ _resolve_cann_set_env_sh() {
     return 1
 }
 
-# Prefer env for AscendNPU-IR-Dev; fall back to monorepo sibling, then in-tree 3rdparty.
+# Prefer env for AscendNPU-IR; fall back to monorepo sibling, then in-tree 3rdparty.
 if [[ -z "${TLA_DSL_PREBUILT_ASCENDNPU_IR:-}" ]]; then
     if [[ -n "${TLA_DSL_ASCENDNPU_IR_ROOT:-}" ]]; then
         TLA_DSL_PREBUILT_ASCENDNPU_IR="${TLA_DSL_ASCENDNPU_IR_ROOT}"
-    elif [[ -d "${WORKSPACE_ROOT}/AscendNPU-IR-Dev" ]]; then
-        TLA_DSL_PREBUILT_ASCENDNPU_IR="${WORKSPACE_ROOT}/AscendNPU-IR-Dev"
+    elif [[ -d "${WORKSPACE_ROOT}/AscendNPU-IR" ]]; then
+        TLA_DSL_PREBUILT_ASCENDNPU_IR="${WORKSPACE_ROOT}/AscendNPU-IR"
     else
-        TLA_DSL_PREBUILT_ASCENDNPU_IR="${TLA_DSL_DIR}/3rdparty/AscendNPU-IR-Dev"
+        TLA_DSL_PREBUILT_ASCENDNPU_IR="${TLA_DSL_DIR}/3rdparty/AscendNPU-IR"
     fi
 fi
 TLA_DSL_ASCENDNPU_IR_ROOT="${TLA_DSL_ASCENDNPU_IR_ROOT:-${TLA_DSL_PREBUILT_ASCENDNPU_IR}}"
@@ -121,7 +121,7 @@ Run end-to-end validation for:
   - scalar_index_control_flow (scalar_index_control_flow.py: GM scalar read/write,
     loop/dynamic-if/constexpr-if, vec.func)
 Runs basic_mmad default MNK plus m=1, n=2, k=3.
-Activates conda env "${CONDA_ENV}", sources CANN set_env.sh, exports AscendNPU-IR-Dev MLIR/LLVM
+Activates conda env "${CONDA_ENV}", sources CANN set_env.sh, exports AscendNPU-IR MLIR/LLVM
 env, runs ./build.sh, then runs the test.
 
 Options:
@@ -142,14 +142,14 @@ Toolchain (env first, layout fallback last):
   TLA_DSL_PREBUILT_ASCENDNPU_IR  current: ${TLA_DSL_PREBUILT_ASCENDNPU_IR}
   TLA_DSL_ASCENDNPU_IR_ROOT      current: ${TLA_DSL_ASCENDNPU_IR_ROOT}
     resolve: TLA_DSL_PREBUILT_ASCENDNPU_IR → TLA_DSL_ASCENDNPU_IR_ROOT
-             → WORKSPACE_ROOT/AscendNPU-IR-Dev
-             → TLA_DSL_DIR/3rdparty/AscendNPU-IR-Dev
+             → WORKSPACE_ROOT/AscendNPU-IR
+             → TLA_DSL_DIR/3rdparty/AscendNPU-IR
   MLIR_DIR                       (default: ${MLIR_DIR:-<after Dev export>})
 
 Example:
   bash ${SCRIPT_PATH}/run_dsl_test.sh
   bash ${SCRIPT_PATH}/run_dsl_test.sh --device 0
-  TLA_DSL_PREBUILT_ASCENDNPU_IR=/path/to/AscendNPU-IR-Dev \\
+  TLA_DSL_PREBUILT_ASCENDNPU_IR=/path/to/AscendNPU-IR \\
     bash ${SCRIPT_PATH}/run_dsl_test.sh --device 0
 EOF
 }
@@ -225,7 +225,7 @@ _export_toolchain_env() {
     echo "    WORKSPACE_ROOT=${WORKSPACE_ROOT}"
 
     if [[ ! -d "${TLA_DSL_PREBUILT_ASCENDNPU_IR}" ]]; then
-        echo "error: AscendNPU-IR-Dev directory not found: ${TLA_DSL_PREBUILT_ASCENDNPU_IR}" >&2
+        echo "error: AscendNPU-IR directory not found: ${TLA_DSL_PREBUILT_ASCENDNPU_IR}" >&2
         exit 1
     fi
     export TLA_DSL_PREBUILT_ASCENDNPU_IR
@@ -234,7 +234,7 @@ _export_toolchain_env() {
     echo "    TLA_DSL_ASCENDNPU_IR_ROOT=${TLA_DSL_ASCENDNPU_IR_ROOT}"
 
     if ! _ascendnpu_ir_dev_is_prebuilt "${TLA_DSL_PREBUILT_ASCENDNPU_IR}"; then
-        echo "error: AscendNPU-IR-Dev is not built at ${TLA_DSL_PREBUILT_ASCENDNPU_IR}" >&2
+        echo "error: AscendNPU-IR is not built at ${TLA_DSL_PREBUILT_ASCENDNPU_IR}" >&2
         echo "       Build it first (see python/tla_dsl/README.md §2.4)." >&2
         exit 1
     fi
@@ -242,7 +242,7 @@ _export_toolchain_env() {
 }
 
 _prepare_tla_dsl() {
-    echo "==> Using AscendNPU-IR-Dev at ${TLA_DSL_PREBUILT_ASCENDNPU_IR}"
+    echo "==> Using AscendNPU-IR at ${TLA_DSL_PREBUILT_ASCENDNPU_IR}"
     if [[ -f "${CATDSL_ROOT}/.gitmodules" ]]; then
         (
             cd "${CATDSL_ROOT}"

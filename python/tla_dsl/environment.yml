@@ -1,22 +1,20 @@
 # Conda environment for Ascend Catlass DSL Python/build tooling.
-# LLVM/MLIR are provided by the AscendNPU-IR-Dev build, not by conda.
+# LLVM/MLIR are provided by the AscendNPU-IR build, not by conda.
 name: ascend-catlass-dsl
 channels:
   - defaults
   - conda-forge
 dependencies:
-  - python=3.11
-  - pip=26.0.1
-  - cmake=4.2.3
+  - python>=3.10,<3.14
+  - pip
+  - cmake>=3.28
+  - ninja>=1.12
   - defaults::numpy<2
   - conda-forge::pybind11=2.13.6
-  - conda-forge::pybind11-global=2.13.6
   - conda-forge::ninja=1.13.2
   - defaults::clang=19.1.7
   - defaults::clangxx=19.1.7
   - defaults::clang-tools=19.1.7
   - defaults::lit=19.1.7
-  - conda-forge::gcc=11.3
-  - conda-forge::gxx=11.3
   - pip:
       - -r requirements.txt
