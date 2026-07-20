@@ -366,6 +366,19 @@ mlir::LogicalResult CmpOp::verify() {
   return mlir::success();
 }
 
+mlir::LogicalResult DebugPrintOp::verify() {
+  auto type = getValue().getType();
+  auto integerType = mlir::dyn_cast<mlir::IntegerType>(type);
+  bool isSignlessI32 = integerType && integerType.isSignless() &&
+                       integerType.getWidth() == 32;
+  if (!isSignlessI32 && !type.isF32())
+    return emitOpError("expected a signless i32 or f32 scalar, got ") << type;
+  if (!hasEnclosingRegion<CubeOp>(getOperation()) &&
+      !hasEnclosingRegion<VectorOp>(getOperation()))
+    return emitOpError("must be nested inside a tla.cube or tla.vector region");
+  return mlir::success();
+}
+
 static mlir::ParseResult parseIndexTreeValueOp(mlir::OpAsmParser &parser,
                                                mlir::OperationState &result) {
   llvm::SmallVector<mlir::OpAsmParser::UnresolvedOperand, 4> dynElemsOperands;

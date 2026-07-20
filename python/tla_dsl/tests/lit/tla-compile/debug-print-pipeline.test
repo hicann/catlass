@@ -1,0 +1,18 @@
+// RUN: sed -n '/BEGIN-REJECT$/,/END-REJECT$/p' %s | not %tla_compile - -o - 2>&1 | %filecheck %s --check-prefix=REJECT
+// RUN: sed -n '/BEGIN-NOOP$/,/END-NOOP$/p' %s | %tla_compile - --emit=tla-mlir -o - | %filecheck %s --check-prefix=NOOP
+
+// BEGIN-REJECT
+module {
+  tla.func @unsupported(%v: i32) {
+    "tla.vector"() ({ tla.debug_print %v : i32 }) : () -> ()
+    tla.return
+  }
+}
+// END-REJECT
+// REJECT: tla.debug_print backend lowering is not implemented; only TLA IR emission is supported
+// REJECT-NOT: failed to legalize operation
+
+// BEGIN-NOOP
+module { tla.func @without_debug_print() { tla.return } }
+// END-NOOP
+// NOOP: func.func @without_debug_print

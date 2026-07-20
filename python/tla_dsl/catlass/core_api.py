@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import builtins as _builtins
+import inspect
 import math
 import warnings
 from enum import Enum
@@ -729,11 +730,25 @@ def _const_i64(value: int, *, loc: mlir_ir.Location | None = None) -> mlir_ir.Va
     return op.results[0]
 
 
-def _const_f32(value: float) -> mlir_ir.Value:
+def _const_i32(value: int, *, loc: mlir_ir.Location | None = None) -> mlir_ir.Value:
+    i32_type = mlir_ir.IntegerType.get_signless(32)
+    op = mlir_ir.Operation.create(
+        "arith.constant",
+        results=[i32_type],
+        attributes={"value": mlir_ir.IntegerAttr.get(i32_type, value)},
+        loc=loc,
+    )
+    return op.results[0]
+
+
+def _const_f32(
+    value: float, *, loc: mlir_ir.Location | None = None
+) -> mlir_ir.Value:
     op = mlir_ir.Operation.create(
         "arith.constant",
         results=[mlir_ir.F32Type.get()],
         attributes={"value": mlir_ir.FloatAttr.get_f32(float(value))},
+        loc=loc,
     )
     return op.results[0]
 
@@ -2323,6 +2338,88 @@ def _require_bool_or_value(op_name: str, name: str, value: Any, position: int) -
         op_name,
         f"invalid argument '{name}' (position {position}): expected bool|value, got {_type_name(value)}",
     )
+
+
+_DEBUG_PRINT_I32_MIN = -(2**31)
+_DEBUG_PRINT_I32_MAX = 2**31 - 1
+
+
+def _debug_print_operand(value: Any, *, loc: mlir_ir.Location | None) -> mlir_ir.Value:
+    resolved = _resolve_bound_value(value)
+    if isinstance(resolved, bool):
+        _op_error(
+            "debug_print",
+            "unsupported value type bool; expected a signless i32 or f32 scalar",
+        )
+    if isinstance(resolved, int):
+        if not _DEBUG_PRINT_I32_MIN <= resolved <= _DEBUG_PRINT_I32_MAX:
+            _op_error(
+                "debug_print", f"Python int {resolved} is outside signless i32 range"
+            )
+        return _const_i32(resolved, loc=loc)
+    if isinstance(resolved, float):
+        return _const_f32(resolved, loc=loc)
+    if isinstance(resolved, Scalar):
+        dtype = resolved.dtype.lower()
+        if dtype == "i32":
+            return _const_i32(int(resolved.value), loc=loc)
+        if dtype == "f32":
+            return _const_f32(float(resolved.value), loc=loc)
+        _op_error(
+            "debug_print",
+            f"unsupported value type {dtype}; expected a signless i32 or f32 scalar",
+        )
+    if isinstance(resolved, ScalarSSA):
+        resolved = _resolve_bound_value(resolved.value)
+    if isinstance(resolved, VectorSSA):
+        resolved = _resolve_bound_value(resolved.value)
+    if not isinstance(resolved, mlir_ir.Value):
+        _op_error(
+            "debug_print",
+            f"unsupported value type {_type_name(value)}; expected a signless i32 or f32 scalar",
+        )
+
+    value_type = resolved.type
+    if isinstance(value_type, mlir_ir.F32Type):
+        return resolved
+    if mlir_ir.IntegerType.isinstance(value_type):
+        int_type = mlir_ir.IntegerType(value_type)
+        if int_type.width == 32 and int_type.is_signless:
+            return resolved
+    _op_error(
+        "debug_print",
+        f"unsupported value type {value_type}; expected a signless i32 or f32 scalar",
+    )
+
+
+def debug_print(*args: Any, **kwargs: Any) -> None:
+    """Emit one typed i32 or f32 debug value inside a cube or vector region."""
+    if kwargs:
+        _op_error("debug_print", "does not accept keyword arguments")
+    if len(args) != 1:
+        _op_error(
+            "debug_print", f"expects exactly one positional argument; got {len(args)}"
+        )
+    value = _resolve_bound_value(args[0])
+    if isinstance(value, bool):
+        _op_error(
+            "debug_print",
+            "unsupported value type bool; expected a signless i32 or f32 scalar",
+        )
+    if (
+        isinstance(value, int)
+        and not _DEBUG_PRINT_I32_MIN <= value <= _DEBUG_PRINT_I32_MAX
+    ):
+        _op_error("debug_print", f"Python int {value} is outside signless i32 range")
+    _require_frontend_state("debug_print")
+    _runtime._require_enclosing_cube_or_vector("debug_print")
+    loc = _capture_user_loc()
+    _tla_ops_gen.debug_print(_debug_print_operand(value, loc=loc), loc=loc)
+
+
+debug_print.__signature__ = inspect.Signature(
+    [inspect.Parameter("value", inspect.Parameter.POSITIONAL_ONLY)]
+)
 
 
 def _require_dtype(op_name: str, name: str, value: Any, position: int) -> None:
@@ -4912,6 +5009,7 @@ __all__ = [
     "make_tensor",
     "make_tensor_like",
     "copy",
+    "debug_print",
     "flag",
     "cross_flag",
     "cross_core_set_flag",

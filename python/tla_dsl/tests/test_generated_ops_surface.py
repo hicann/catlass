@@ -58,6 +58,7 @@ def test_generated_binding_symbols_exist_for_wrapped_ops() -> None:
     required = (
         "tile_view",
         "copy",
+        "debug_print",
         "flag",
         "cross_flag",
         "cross_core_set_flag",
@@ -118,6 +119,9 @@ def test_mask_bitwise_public_dispatch_emits_mask_ops() -> None:
 def test_public_api_exports_representative_helpers() -> None:
     assert callable(tla.tile_view)
     assert callable(tla.copy)
+    assert callable(tla.debug_print)
+    assert not hasattr(tla, "print")
+    assert not hasattr(tla, "debug_printf")
     assert callable(tla.flag)
     assert callable(tla.cross_flag)
     assert callable(tla.mutex)

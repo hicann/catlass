@@ -1,0 +1,54 @@
+// RUN: sed -n '/BEGIN-VALID$/,/END-VALID$/p' %s | %tla_compile - --emit=tlair -o %t
+// RUN: %tla_compile %t --emit=tlair -o - | %filecheck %s --check-prefix=VALID
+// RUN: for t in I64 SI32 UI32 F16 INDEX TENSOR VECTOR PTR; do sed -n "/BEGIN-${t}$/,/END-${t}$/p" %s | not %tla_compile - -o - 2>&1; done | %filecheck %s --check-prefix=TYPES
+// RUN: sed -n '/BEGIN-REGION$/,/END-REGION$/p' %s | not %tla_compile - -o - 2>&1 | %filecheck %s --check-prefix=REGION
+
+// BEGIN-VALID
+module {
+  tla.func @valid(%i: i32, %f: f32) {
+    "tla.cube"() ({ tla.debug_print %i : i32 }) : () -> ()
+    "tla.vector"() ({ tla.debug_print %f : f32 }) : () -> ()
+    tla.return
+  }
+}
+// END-VALID
+// VALID: tla.debug_print %{{.*}} : i32
+// VALID: tla.debug_print %{{.*}} : f32
+
+// BEGIN-I64
+module { tla.func @bad(%v: i64) { "tla.vector"() ({ tla.debug_print %v : i64 }) : () -> () tla.return } }
+// END-I64
+// BEGIN-SI32
+module { tla.func @bad(%v: si32) { "tla.vector"() ({ tla.debug_print %v : si32 }) : () -> () tla.return } }
+// END-SI32
+// BEGIN-UI32
+module { tla.func @bad(%v: ui32) { "tla.vector"() ({ tla.debug_print %v : ui32 }) : () -> () tla.return } }
+// END-UI32
+// BEGIN-F16
+module { tla.func @bad(%v: f16) { "tla.vector"() ({ tla.debug_print %v : f16 }) : () -> () tla.return } }
+// END-F16
+// BEGIN-INDEX
+module { tla.func @bad(%v: index) { "tla.vector"() ({ tla.debug_print %v : index }) : () -> () tla.return } }
+// END-INDEX
+// BEGIN-TENSOR
+module { tla.func @bad(%v: tensor<4xi32>) { "tla.vector"() ({ tla.debug_print %v : tensor<4xi32> }) : () -> () tla.return } }
+// END-TENSOR
+// BEGIN-VECTOR
+module { tla.func @bad(%v: vector<4xi32>) { "tla.vector"() ({ tla.debug_print %v : vector<4xi32> }) : () -> () tla.return } }
+// END-VECTOR
+// BEGIN-PTR
+module { tla.func @bad(%v: !tla.ptr<i32, gm, 4>) { "tla.vector"() ({ tla.debug_print %v : !tla.ptr<i32, gm, 4> }) : () -> () tla.return } }
+// END-PTR
+// TYPES: expected a signless i32 or f32 scalar, got 'i64'
+// TYPES: expected a signless i32 or f32 scalar, got 'si32'
+// TYPES: expected a signless i32 or f32 scalar, got 'ui32'
+// TYPES: expected a signless i32 or f32 scalar, got 'f16'
+// TYPES: expected a signless i32 or f32 scalar, got 'index'
+// TYPES: expected a signless i32 or f32 scalar, got 'tensor<4xi32>'
+// TYPES: expected a signless i32 or f32 scalar, got 'vector<4xi32>'
+// TYPES: expected a signless i32 or f32 scalar, got '!tla.ptr<i32, gm, 4>'
+
+// BEGIN-REGION
+module { tla.func @regionless(%v: i32) { tla.debug_print %v : i32 tla.return } }
+// END-REGION
+// REGION: must be nested inside a tla.cube or tla.vector region

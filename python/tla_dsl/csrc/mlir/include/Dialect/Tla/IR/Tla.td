@@ -724,6 +724,17 @@ def Tla_PipeBarrierOp : Tla_Op<"pipe_barrier", []> {
   let hasVerifier = 1;
 }
 
+def Tla_DebugPrintOp : Tla_Op<"debug_print", [MemoryEffects<[MemWrite]>]> {
+  let summary = "Typed frontend debug print op";
+  let description = [{
+    Side-effecting TLA IR for exactly one builtin signless i32 or f32 value.
+    Backend lowering is intentionally unsupported.
+  }];
+  let arguments = (ins AnyType:$value);
+  let assemblyFormat = "$value attr-dict `:` type($value)";
+  let hasVerifier = 1;
+}
+
 def Tla_MutexOp : Tla_Op<"mutex", [Pure]> {
   let summary = "Mutex literal";
   let description = [{
