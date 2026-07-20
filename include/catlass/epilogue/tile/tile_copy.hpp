@@ -197,6 +197,18 @@ struct TileCopyRescaleO {
     using CopyUbToGmO = Tile::CopyUb2GmTla<ArchTag, TensorUbO, TensorGmO>;
 };
 
+template <
+    class ArchTag,
+    /// Element for C matrix operand
+    class ElementC_, class LayoutTagC_,
+    /// GemmType for D matrix operand
+    class DType>
+struct TileCopy<ArchTag, Gemm::GemmType<ElementC_, LayoutTagC_, AscendC::TPosition::VECCALC>, DType> {
+    using ElementD = typename DType::Element;
+
+    using CopyUbToGmD = CopyUb2Gm<ArchTag, DType>;
+};
+
 } // namespace Catlass::Epilogue::Tile
 
 #endif // CATLASS_EPILOGUE_TILE_TILE_COPY_HPP

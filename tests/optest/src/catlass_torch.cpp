@@ -398,4 +398,8 @@ REGISTER_TORCH_FUNC(ascend950_basic_conv2d_tla);
 static auto& conv_bias = ConvBiasOp::Run;
 REGISTER_TORCH_FUNC(conv_bias);
 
+using GroupedMatmulSliceMGeluOp = GroupedMatmulLike<CatlassKernel::GroupedMatmulSliceMGelu, GmmSliceDir::M>;
+static auto& grouped_matmul_slice_m_gelu = GroupedMatmulSliceMGeluOp::Run;
+REGISTER_TORCH_FUNC(grouped_matmul_slice_m_gelu);
+
 } // namespace CatlassKernelWrapper

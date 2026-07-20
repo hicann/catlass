@@ -200,6 +200,13 @@ struct EpilogueFAOnlineSoftmax {
 struct EpilogueFARescaleO {
     using ArchTag = Arch::Ascend950;
 };
+
+struct EpilogueElemWiseNoSourceFromUB {
+    using ArchTag = Arch::Ascend950;
+    // Number of operands. Including Src, Dst 2 operands
+    static constexpr uint32_t OPERANDS_NUM = 2;
+    static constexpr uint32_t UB_STAGES = 2;
+};
 } // namespace Catlass::Epilogue
 
 #endif // CATLASS_EPILOGUE_DISPATCH_POLICY_HPP

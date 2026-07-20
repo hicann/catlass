@@ -101,6 +101,7 @@ from .w4a4_matmul_per_token_per_channel_dequant import (
 )
 from .w4a8_matmul import w4a8_matmul  # example 32
 from .w8a16_matmul import w8a16_matmul  # example 30
+from .grouped_matmul_slice_m_gelu import grouped_matmul_slice_m_gelu  # example 80
 
 __all__ = [
     "basic_matmul",  # example 00
@@ -181,4 +182,5 @@ __all__ = [
     "ascend950_fp8_mx_grouped_matmul_finalize_routing_no_deter",  # example 71 no_deter
     "ascend950_basic_conv2d_tla",  # example 56
     "ascend950_matmul_full_loadA",  # example 73
+    "grouped_matmul_slice_m_gelu",  # example 80
 ]

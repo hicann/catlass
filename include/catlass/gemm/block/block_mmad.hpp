@@ -153,5 +153,6 @@ struct BlockPrologue {
 #include "catlass/gemm/block/block_mmad_flash_attention_pv.hpp"
 #include "catlass/gemm/block/block_mmad_flash_attention_qk.hpp"
 #include "catlass/gemm/block/block_mmad_flash_attention_qk_DN.hpp"
+#include "catlass/gemm/block/block_mmad_preload_async_with_callback_tla_l0c_to_ub.hpp"
 #endif
 #endif // CATLASS_GEMM_BLOCK_BLOCK_MMAD_HPP

@@ -55,6 +55,7 @@ class BlockEpilogue {
 #include "catlass/epilogue/block/block_epilogue_flash_attention_online_softmax_high_prec.hpp"
 #include "catlass/epilogue/block/block_epilogue_flash_attention_online_softmax_low_prec.hpp"
 #include "catlass/epilogue/block/block_epilogue_flash_attention_rescale_o.hpp"
+#include "catlass/epilogue/block/block_epilogue_elemwise_no_source_from_ub.hpp"
 #endif
 
 #endif // CATLASS_EPILOGUE_BLOCK_BLOCK_EPILOGUE_HPP

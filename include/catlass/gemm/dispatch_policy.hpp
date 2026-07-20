@@ -338,6 +338,24 @@ struct MmadPreloadAsyncWithCallback : public MmadBase<ArchTag_, true> {
     static constexpr bool ENABLE_L1_RESIDENT = ENABLE_L1_RESIDENT_;
 };
 
+template <
+    class ArchTag_, uint32_t PRELOAD_STAGES_, uint32_t L1A_STAGES_, uint32_t L1B_STAGES_, uint32_t L0A_STAGES_,
+    uint32_t L0B_STAGES_, uint32_t L0C_STAGES_, bool ENABLE_UNIT_FLAG_, bool ENABLE_SHUFFLE_K_,
+    bool USE_HF32_MODE_ = false, bool ENABLE_L1_RESIDENT_ = false>
+struct MmadPreloadAsyncWithCallbackL0CToUB : public MmadBase<ArchTag_, true> {
+    static constexpr uint32_t PRELOAD_STAGES = PRELOAD_STAGES_;
+    static constexpr uint32_t L1A_STAGES = L1A_STAGES_;
+    static constexpr uint32_t L1B_STAGES = L1B_STAGES_;
+    static constexpr uint32_t L0A_STAGES = L0A_STAGES_;
+    static constexpr uint32_t L0B_STAGES = L0B_STAGES_;
+    static constexpr uint32_t L0C_STAGES = L0C_STAGES_;
+    static constexpr bool ENABLE_UNIT_FLAG = ENABLE_UNIT_FLAG_;
+    static constexpr bool ENABLE_SHUFFLE_K = ENABLE_SHUFFLE_K_;
+    static constexpr bool USE_HF32_MODE = USE_HF32_MODE_;
+    static constexpr bool ENABLE_L1_RESIDENT = ENABLE_L1_RESIDENT_;
+    static constexpr bool ENABLE_DYNAMIC_TILE = true;
+};
+
 // 基于TLA提供block层不感知尾块逻辑，tile层感知originShape的流程。使用TileView与MakeTensorLike。
 template <class ArchTag_, bool ENABLE_UNIT_FLAG_ = false>
 struct MmadPingpongTlaV2 : public MmadBase<ArchTag_, ENABLE_UNIT_FLAG_> {

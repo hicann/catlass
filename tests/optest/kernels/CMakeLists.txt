@@ -276,6 +276,7 @@ add_subdirectory(71_ascend950_fp8_mx_grouped_matmul_finalize_routing)
 add_subdirectory(73_ascend950_matmul_full_loadA)
 add_subdirectory(56_ascend950_basic_conv2d_tla)
 add_subdirectory(72_ascend950_fp8_mx_flash_attention_infer)
+add_subdirectory(80_grouped_matmul_slice_m_gelu)
 
 if(_JIT_KERNEL_ENTRIES)
     set(_JIT_TARGET catlass_kernel_jit)
