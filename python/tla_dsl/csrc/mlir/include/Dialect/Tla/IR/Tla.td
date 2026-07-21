@@ -487,11 +487,12 @@ def Tla_FullOp : Tla_Op<"full", [Pure]> {
 def Tla_ArangeOp : Tla_Op<"arange", [Pure]> {
   let summary = "Create monotonic lane indices in a vector register";
   let description = [{
-    Fill the vector helper register with a monotonic sequence starting at
-    ``start``. With ``order = increase`` (default) lanes hold ``start``,
-    ``start + 1``, ...; with ``order = decrease`` lanes hold ``start``,
-    ``start - 1``, .... Lowers to AVE ``vci`` with ``INCREASE`` / ``DECREASE``.
-    The Python API currently accepts only ``order = increase``.
+    Fill the vector helper register with a monotonic sequence.
+    
+    With ``order = increase``(default), lane ``i`` holds ``base + i`` (i.e. ``start``, ``start + 1``, ...).
+    With ``order = decrease``, lane ``i`` holds ``base + VL - 1 - i`` (i.e. ``start + VL - 1``, ``start + VL - 2``, ..., ``start``).
+    
+    Lowers to AVE ``vci`` with ``INCREASE`` / ``DECREASE`` mode.
   }];
   let arguments = (ins AnyTypeOf<[I8, I16, I32, I64]>:$start,
                        StrAttr:$order);

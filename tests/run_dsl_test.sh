@@ -115,7 +115,7 @@ Run end-to-end validation for:
   - reduction_ops (reduction_ops.py <op> --run for add/max/min)
   - compare_mask (compare_mask.py <op> --run --all-dtypes for each compare-mask op)
   - unary_ops (unary_ops.py <op> --run --all-dtypes for exp/log/sqrt/abs/neg/masked_unary/masked_abs/masked_neg)
-  - arange_op (arange_op.py increase --run --all-dtypes)
+  - arange_op (arange_op.py [increase/decrease] --run --all-dtypes)
   - interleave_op (interleave_op.py interleave/deinterleave --run --all-dtypes)
   - squeeze_op (squeeze_op.py squeeze --run --all-dtypes)
   - scalar_index_control_flow (scalar_index_control_flow.py: GM scalar read/write,
@@ -514,6 +514,11 @@ _run_arange_op_case() {
     (
         cd "${TLA_DSL_DIR}"
         python "${ARANGE_OP_REL}" increase --run --all-dtypes --device "${DEVICE_ID}"
+    )
+    echo "==> Running arange_op validation [decrease all dtypes]: decrease --run --all-dtypes --device ${DEVICE_ID}"
+    (
+        cd "${TLA_DSL_DIR}"
+        python "${ARANGE_OP_REL}" decrease --run --all-dtypes --device "${DEVICE_ID}"
     )
 }
 

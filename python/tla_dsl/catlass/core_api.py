@@ -3687,16 +3687,30 @@ def _vector_tile_descriptor(dtype: type[Numeric], *, dtype_token: str) -> TlaTen
 
 @dsl_user_op
 def arange(
-    start: Any = 0,
+    base: Any = 0,
     *,
     order: str = "increase",
     dtype: Any,
     loc: mlir_ir.Location | None = None,
 ) -> VectorSSA:
-    """Create a 1-D vector SSA filled with ``start + lane`` (monotonic increase).
+    """Create a 1-D vector SSA with monotonically increasing or decreasing values.
 
-    Maps directly to CANN ``Reg::Arange`` / AVE ``vci`` with ``INCREASE``;
+    - ``order="increase"`` (default): Create a 1-D vector SSA filled with ``base + lane`` (monotonic increase)
+
+    - ``order="decrease"``: Create a 1-D vector SSA filled with ``base + VL - 1 - lane`` (monotonic decrease)
+
+    Maps directly to AVE ``vci`` with ``INCREASE`` or ``DECREASE``;
     adjacent lanes are always spaced by 1 (no ``step`` parameter).
+
+    Example:
+    ```python
+    # Store an ascending sequence [0, 1, 2, ..., 63] into ``dst`` (a ``tla.Tensor`` on ``tla.AddressSpace.ub``)
+    dst_tile = tla.tile_view(dst, tla.make_shape(64), tla.make_coord(0))
+    dst_tile.store(tla.arange(0, dtype=tla.Int32))
+
+    # Or with descending order, store [63, 62, ..., 0]
+    dst_tile.store(tla.arange(0, order="decrease", dtype=tla.Int32))
+    ```
     """
     op_name = "arange"
     order = str(order).lower()
@@ -3704,11 +3718,6 @@ def arange(
         _op_error(
             op_name,
             f"order must be one of {sorted(_ARANGE_ORDERS)}; got {order!r}",
-        )
-    if order == "decrease":
-        _op_error(
-            op_name,
-            "order='decrease' is not supported for tla.arange; only 'increase' is available",
         )
     _require_dtype(op_name, "dtype", dtype, 2)
     if not (
@@ -3733,13 +3742,13 @@ def arange(
     desc = _vector_tile_descriptor(dtype, dtype_token=dtype_token)
     context = loc.context if loc is not None else mlir_ir.Context.current
     element_type = desc.element_mlir_type(context)
-    const = _const_int_value(start)
+    const = _const_int_value(base)
     if const is not None:
         start_value = _scalar_constant_for_element_type(
             op_name, const, element_type, loc=loc
         )
     else:
-        resolved = _resolve_bound_value(start)
+        resolved = _resolve_bound_value(base)
         if isinstance(resolved, mlir_ir.Value):
             if resolved.type == element_type:
                 start_value = resolved
@@ -3753,7 +3762,7 @@ def arange(
             else:
                 _op_error(
                     op_name,
-                    "start must be an integer literal or index SSA value",
+                    "base must be an integer literal or index SSA value",
                 )
         elif isinstance(resolved, _runtime._IndexExpr):
             index_value = _runtime._coerce_index_value(resolved)
@@ -3766,7 +3775,7 @@ def arange(
         else:
             _op_error(
                 op_name,
-                "start must be an integer literal or index SSA value",
+                "base must be an integer literal or index SSA value",
             )
     result = _tla_ops_gen.arange(
         _coerce_type(desc), start_value, order=order, loc=loc

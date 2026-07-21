@@ -21,6 +21,7 @@ _KERNEL_DTYPE = tla.Int32
 _KERNEL_TORCH_DTYPE = None
 _KERNEL_ELEMENT_BYTES = 4
 _KERNEL_SHAPE = (VECTOR_ELE,)
+_ARANGE_ORDER = "increase"
 
 
 @tla.kernel
@@ -46,7 +47,7 @@ def arange_op(mem_out: tla.Tensor) -> None:
                 )
                 chunk_start = i * VL_ELE
                 out_tile.store(
-                    tla.arange(chunk_start, dtype=_KERNEL_DTYPE)
+                    tla.arange(chunk_start, order=_ARANGE_ORDER, dtype=_KERNEL_DTYPE)
                 )
 
         tla.set_flag(vec_done)
@@ -60,6 +61,9 @@ def _operator_specs() -> dict[str, dict[str, Any]]:
         "increase": {
             "default_atol": 0,
         },
+        "decrease": {
+            "default_atol": 0,
+        },
     }
 
 
@@ -69,11 +73,12 @@ def _set_kernel_config(
     shape: tuple[int, ...] | None = None,
 ) -> tuple[type[Any], Any, float | int]:
     global VL_ELE, LOOPS, VECTOR_ELE, _KERNEL_DTYPE, _KERNEL_TORCH_DTYPE, _KERNEL_ELEMENT_BYTES
-    global _KERNEL_SHAPE
+    global _KERNEL_SHAPE, _ARANGE_ORDER
     specs = _operator_specs()
     if op_name not in specs:
         choices = ", ".join(sorted(specs))
         raise SystemExit(f"unknown arange variant {op_name!r}; expected one of: {choices}")
+    _ARANGE_ORDER = op_name
     config = vector_kernel_config(dtype_name, shape, ALL_DTYPES)
     VECTOR_ELE = config.vector_elements
     _KERNEL_SHAPE = shape if shape is not None else (VECTOR_ELE,)
@@ -100,10 +105,23 @@ def _make_inputs(args: Any, dtype_name: str, _torch: Any) -> tuple[Any, ...]:
     return tuple()
 
 
-def _expected(_op_name: str, _inputs: tuple[Any, ...]) -> Any:
+def _expected(op_name: str, _inputs: tuple[Any, ...]) -> Any:
     import torch
 
-    idx = torch.arange(VECTOR_ELE, dtype=torch.int64, device="cpu")
+    if op_name == "decrease":
+        result = torch.empty(VECTOR_ELE, dtype=torch.int64)
+        for i in range(LOOPS):
+            start = i * VL_ELE
+            end = min((i + 1) * VL_ELE, VECTOR_ELE)
+            block_len = end - start
+            result[start:end] = torch.arange(
+                start + VL_ELE - 1, start + VL_ELE - 1 - block_len, -1
+            )
+        idx = result
+    elif op_name == "increase":
+        idx = torch.arange(VECTOR_ELE, dtype=torch.int64, device="cpu")
+    else:
+        raise ValueError(f"mode can only be 'increase' or 'decrease' for tla.arange")
     return idx.to(dtype=_KERNEL_TORCH_DTYPE, device="npu")
 
 
