@@ -3153,70 +3153,111 @@ def flag(
 @dsl_user_op
 def cross_flag(
     name: str,
-    src_pipe: PipeLike,
-    dst_pipe: PipeLike,
     *,
     mode: int = 2,
     loc: mlir_ir.Location | None = None,
 ) -> TlaCrossFlag:
-    """Materialize a cross-core synchronization flag."""
+    """Materialize a named cross-core synchronization flag.
+    Source and destination pipes are specified by the corresponding set and wait operations.
+    Mode 4 selects 1:1 AIC-to-AIV synchronization, addressing AIV0 and AIV1 independently.
+    """
     if not isinstance(name, str):
         _op_error(
             "cross_flag",
             f"invalid argument 'name' (position 0): expected str, got {_type_name(name)}",
         )
-    if not isinstance(mode, int) or mode not in (0, 1, 2):
+    if not isinstance(mode, int) or isinstance(mode, bool) or mode not in (0, 1, 2, 4):
         _op_error(
             "cross_flag",
-            f"invalid argument 'mode': expected one of 0, 1, or 2, got {mode!r}",
+            f"invalid argument 'mode': expected one of 0, 1, 2, or 4, got {mode!r}",
         )
-    _require_pipe("cross_flag", "src_pipe", src_pipe, 1)
-    _require_pipe("cross_flag", "dst_pipe", dst_pipe, 2)
     _require_frontend_state("cross_flag")
     ctx = loc.context if loc is not None else mlir_ir.Context.current
-    src_value = str(_token(src_pipe)).lower()
-    dst_value = str(_token(dst_pipe)).lower()
-    src_attr = mlir_ir.Attribute.parse(f"#tla.pipe<{src_value}>", context=ctx)
-    dst_attr = mlir_ir.Attribute.parse(f"#tla.pipe<{dst_value}>", context=ctx)
-    mode_attr = None
-    if mode != 2:
-        mode_attr = mlir_ir.IntegerAttr.get(
-            mlir_ir.IntegerType.get_signless(64, context=ctx), mode
-        )
     return _tla_ops_gen.cross_flag(
-        _tla_type_bridge.cross_flag_type_get(ctx),
+        _tla_type_bridge.cross_flag_type_get(ctx, mode),
         name,
-        src_attr,
-        dst_attr,
-        mode=mode_attr,
         loc=loc,
+    )
+
+
+def _cross_flag_aiv_id_attr(
+    op_name: str,
+    cross_flag_value: CrossFlagLike,
+    aiv_id: int | None,
+    *,
+    loc: mlir_ir.Location | None,
+) -> mlir_ir.IntegerAttr | None:
+    mode = _tla_type_bridge.cross_flag_mode(_as_value(cross_flag_value).type)
+    if mode == 4:
+        if not isinstance(aiv_id, int) or isinstance(aiv_id, bool) or aiv_id not in (0, 1):
+            _op_error(
+                op_name,
+                "invalid argument 'aiv_id': mode 4 requires compile-time 0 or 1, "
+                f"got {aiv_id!r}",
+            )
+    elif aiv_id is not None:
+        _op_error(
+            op_name,
+            f"invalid argument 'aiv_id': mode {mode} requires None, got {aiv_id!r}",
+        )
+    if aiv_id is None:
+        return None
+    ctx = loc.context if loc is not None else mlir_ir.Context.current
+    return mlir_ir.IntegerAttr.get(
+        mlir_ir.IntegerType.get_signless(64, context=ctx), aiv_id
     )
 
 
 @dsl_user_op
 def cross_core_set_flag(
-    cross_flag_value: CrossFlagLike, *, loc: mlir_ir.Location | None = None
+    cross_flag_value: CrossFlagLike,
+    pipe: PipeLike,
+    aiv_id: int | None = None,
+    *,
+    loc: mlir_ir.Location | None = None,
 ) -> None:
-    """Set a cross-core synchronization flag."""
+    """Set a cross-core synchronization flag from ``pipe``."""
     _require_category(
         "cross_core_set_flag", "flag", cross_flag_value, "cross_flag", 0
     )
+    _require_pipe("cross_core_set_flag", "pipe", pipe, 1)
     _require_frontend_state("cross_core_set_flag")
     _runtime._require_enclosing_cube_or_vector("cross_core_set_flag")
-    return _tla_ops_gen.cross_core_set_flag(_as_value(cross_flag_value), loc=loc)
+    aiv_id_attr = _cross_flag_aiv_id_attr(
+        "cross_core_set_flag", cross_flag_value, aiv_id, loc=loc
+    )
+    return _tla_ops_gen.cross_core_set_flag(
+        _as_value(cross_flag_value),
+        _pipe_attr_from_token(pipe, loc=loc),
+        aiv_id=aiv_id_attr,
+        loc=loc,
+    )
 
 
 @dsl_user_op
 def cross_core_wait_flag(
-    cross_flag_value: CrossFlagLike, *, loc: mlir_ir.Location | None = None
+    cross_flag_value: CrossFlagLike,
+    pipe: PipeLike,
+    aiv_id: int | None = None,
+    *,
+    loc: mlir_ir.Location | None = None,
 ) -> None:
-    """Wait on a cross-core synchronization flag."""
+    """Wait on a cross-core synchronization flag on ``pipe``."""
     _require_category(
         "cross_core_wait_flag", "flag", cross_flag_value, "cross_flag", 0
     )
+    _require_pipe("cross_core_wait_flag", "pipe", pipe, 1)
     _require_frontend_state("cross_core_wait_flag")
     _runtime._require_enclosing_cube_or_vector("cross_core_wait_flag")
-    return _tla_ops_gen.cross_core_wait_flag(_as_value(cross_flag_value), loc=loc)
+    aiv_id_attr = _cross_flag_aiv_id_attr(
+        "cross_core_wait_flag", cross_flag_value, aiv_id, loc=loc
+    )
+    return _tla_ops_gen.cross_core_wait_flag(
+        _as_value(cross_flag_value),
+        _pipe_attr_from_token(pipe, loc=loc),
+        aiv_id=aiv_id_attr,
+        loc=loc,
+    )
 
 
 @dsl_user_op

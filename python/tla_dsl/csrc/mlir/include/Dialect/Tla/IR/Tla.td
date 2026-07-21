@@ -22,7 +22,8 @@ class Tla_Op<string mnemonic, list<Trait> traits = []> : Op<TlaDialect, mnemonic
 def Tla_CrossFlagType : TypeDef<TlaDialect, "CrossFlag", []> {
   let mnemonic = "cross_flag";
   let summary = "Synchronization flag used for cross-core coordination.";
-  let assemblyFormat = "";
+  let parameters = (ins "int64_t":$mode);
+  let assemblyFormat = "`<` $mode `>`";
 }
 
 def Tla_FlagType : TypeDef<TlaDialect, "Flag", []> {
@@ -537,7 +538,8 @@ def Tla_CrossCoreSetFlagOp : Tla_Op<"cross_core_set_flag", []> {
   let description = [{
     Set a cross-core synchronization flag.
   }];
-  let arguments = (ins Tla_CrossFlagType:$flag);
+  let arguments = (ins Tla_CrossFlagType:$flag, Tla_PipeAttr:$pipe,
+                       OptionalAttr<I64Attr>:$aiv_id);
   let assemblyFormat = [{
     $flag attr-dict `:` qualified(type($flag))
   }];
@@ -549,7 +551,8 @@ def Tla_CrossCoreWaitFlagOp : Tla_Op<"cross_core_wait_flag", []> {
   let description = [{
     Wait on a cross-core synchronization flag.
   }];
-  let arguments = (ins Tla_CrossFlagType:$flag);
+  let arguments = (ins Tla_CrossFlagType:$flag, Tla_PipeAttr:$pipe,
+                       OptionalAttr<I64Attr>:$aiv_id);
   let assemblyFormat = [{
     $flag attr-dict `:` qualified(type($flag))
   }];
@@ -561,8 +564,7 @@ def Tla_CrossFlagOp : Tla_Op<"cross_flag", [Pure]> {
   let description = [{
     Materialize a cross-core synchronization flag.
   }];
-  let arguments = (ins StrAttr:$name, Tla_PipeAttr:$src_pipe, Tla_PipeAttr:$dst_pipe,
-                       DefaultValuedOptionalAttr<I64Attr, "2">:$mode);
+  let arguments = (ins StrAttr:$name);
   let results = (outs Tla_CrossFlagType:$flag);
   let assemblyFormat = [{
     $name attr-dict `->` qualified(type($flag))

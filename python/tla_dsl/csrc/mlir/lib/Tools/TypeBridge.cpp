@@ -216,9 +216,15 @@ MlirType flagTypeGet(MlirContext context) {
   return toMlirType(::tla::FlagType::get(ctx), "tla.flag");
 }
 
-MlirType crossFlagTypeGet(MlirContext context) {
-  MLIRContext *ctx = bridgeContext(context);
-  return toMlirType(::tla::CrossFlagType::get(ctx), "tla.cross_flag");
+MlirType crossFlagTypeGet(MlirContext context, int64_t mode)
+{
+    MLIRContext* ctx = bridgeContext(context);
+    return toMlirType(::tla::CrossFlagType::get(ctx, mode), "tla.cross_flag");
+}
+
+int64_t crossFlagMode(MlirType type)
+{
+    return checkedTlaType<::tla::CrossFlagType>(type, "!tla.cross_flag type").getMode();
 }
 
 MlirType mutexTypeGet(MlirContext context) {
@@ -352,7 +358,8 @@ PYBIND11_MODULE(_tla_type_bridge_native, m) {
         py::arg("alignment"));
   m.def("value_type_get", &valueTypeGet, py::arg("context"), py::arg("element_type") = py::none());
   m.def("flag_type_get", &flagTypeGet, py::arg("context"));
-  m.def("cross_flag_type_get", &crossFlagTypeGet, py::arg("context"));
+  m.def("cross_flag_type_get", &crossFlagTypeGet, py::arg("context"), py::arg("mode"));
+  m.def("cross_flag_mode", &crossFlagMode, py::arg("type"));
   m.def("mutex_type_get", &mutexTypeGet, py::arg("context"));
   m.def("copy_l0c2dst_params_type_get", &copyL0C2DstParamsTypeGet, py::arg("context"));
 

@@ -194,10 +194,95 @@ def test_allocate_rejects_size_overflow() -> None:
             tla.allocate(2**63, tla.Float16, tla.AddressSpace.l1, 512)
 
 
-def test_cross_flag_requires_valid_mode() -> None:
+@pytest.mark.parametrize("mode", [False, True, 3])
+def test_cross_flag_requires_valid_mode(mode: Any) -> None:
     with runtime_mod._eager_capture():
         with pytest.raises(tla.TlaCoreAPIError, match="tla.cross_flag"):
-            tla.cross_flag("x", "gpu", tla.pipes.MTE2)
+            tla.cross_flag("x", mode=mode)
+
+
+def test_cross_flag_accepts_mode4() -> None:
+    with runtime_mod._eager_capture():
+        tla.cross_flag("x", mode=4)
+
+
+def test_cross_flag_rejects_removed_declaration_pipes() -> None:
+    with runtime_mod._eager_capture():
+        with pytest.raises(TypeError):
+            tla.cross_flag("x", tla.pipes.MTE3, tla.pipes.SCALAR)
+
+
+def test_cross_core_flag_ops_require_call_site_pipe() -> None:
+    for op in (tla.cross_core_set_flag, tla.cross_core_wait_flag):
+        signature = inspect.signature(op)
+        assert signature.parameters["pipe"].default is inspect.Signature.empty
+        with pytest.raises(TypeError):
+            signature.bind(object())
+
+
+def test_cross_core_flag_ops_reject_invalid_pipe() -> None:
+    @tla.kernel
+    def kernel() -> None:
+        cross = tla.cross_flag("x")
+        with tla.vector():
+            tla.cross_core_set_flag(cross, "gpu")
+
+    with pytest.raises(tla.TlaCoreAPIError, match="tla.cross_core_set_flag"):
+        kernel.dump_mlir()
+
+
+@tla.kernel
+def _cross_set_aiv_id_kernel(
+    mode: tla.Constexpr[int], aiv_id: tla.Constexpr[Any]
+) -> None:
+    cross = tla.cross_flag("x", mode=mode)
+    with tla.vector():
+        tla.cross_core_set_flag(cross, tla.pipes.VECTOR, aiv_id)
+
+
+@tla.kernel
+def _cross_wait_aiv_id_kernel(
+    mode: tla.Constexpr[int], aiv_id: tla.Constexpr[Any]
+) -> None:
+    cross = tla.cross_flag("x", mode=mode)
+    with tla.vector():
+        tla.cross_core_wait_flag(cross, tla.pipes.VECTOR, aiv_id)
+
+
+@pytest.mark.parametrize(
+    "kernel", [_cross_set_aiv_id_kernel, _cross_wait_aiv_id_kernel]
+)
+@pytest.mark.parametrize("aiv_id", [None, -1, 2, True, "0"])
+def test_mode4_cross_core_flag_ops_require_static_aiv_id(
+    kernel: Any, aiv_id: Any
+) -> None:
+    with pytest.raises(
+        tla.TlaCoreAPIError, match="mode 4 requires compile-time 0 or 1"
+    ):
+        kernel.dump_mlir(type_args=(4, aiv_id))
+
+
+@pytest.mark.parametrize(
+    "kernel", [_cross_set_aiv_id_kernel, _cross_wait_aiv_id_kernel]
+)
+@pytest.mark.parametrize("mode", [0, 1, 2])
+def test_non_mode4_cross_core_flag_ops_reject_aiv_id(kernel: Any, mode: int) -> None:
+    with pytest.raises(tla.TlaCoreAPIError, match=f"mode {mode} requires None"):
+        kernel.dump_mlir(type_args=(mode, 0))
+
+
+def test_mode4_cross_core_flag_ops_emit_aiv_id() -> None:
+    @tla.kernel
+    def kernel() -> None:
+        cross = tla.cross_flag("x", mode=4)
+        with tla.vector():
+            tla.cross_core_set_flag(cross, tla.pipes.FIX, 0)
+            tla.cross_core_wait_flag(cross, tla.pipes.VECTOR, 1)
+
+    mlir = kernel.dump_mlir()
+    assert "!tla.cross_flag<4>" in mlir
+    assert "aiv_id = 0 : i64" in mlir
+    assert "aiv_id = 1 : i64" in mlir
 
 
 def test_mutex_requires_valid_resource_and_id() -> None:

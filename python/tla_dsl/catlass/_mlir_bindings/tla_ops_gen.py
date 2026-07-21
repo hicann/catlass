@@ -676,13 +676,21 @@ class CrossCoreSetFlagOp(_ods_ir.OpView):
 
   _ODS_REGIONS = (0, True)
 
-  def __init__(self, flag, *, loc=None, ip=None):
+  def __init__(self, flag, pipe, *, aiv_id=None, loc=None, ip=None):
     operands = []
     results = []
     attributes = {}
     regions = None
     operands.append(_get_op_result_or_value(flag))
     _ods_context = _ods_get_default_loc_context(loc)
+    attributes["pipe"] = (pipe if (
+    isinstance(pipe, _ods_ir.Attribute) or
+    not _ods_ir.AttrBuilder.contains('Tla_PipeAttr')) else
+      _ods_ir.AttrBuilder.get('Tla_PipeAttr')(pipe, context=_ods_context))
+    if aiv_id is not None: attributes["aiv_id"] = (aiv_id if (
+        isinstance(aiv_id, _ods_ir.Attribute) or
+        not _ods_ir.AttrBuilder.contains('I64Attr')) else
+          _ods_ir.AttrBuilder.get('I64Attr')(aiv_id, context=_ods_context))
     _ods_successors = None
     super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
 
@@ -690,8 +698,35 @@ class CrossCoreSetFlagOp(_ods_ir.OpView):
   def flag(self):
     return self.operation.operands[0]
 
-def cross_core_set_flag(flag, *, loc=None, ip=None) -> _ods_ir.Operation:
-  return _get_op_result_or_op_results(CrossCoreSetFlagOp(flag=flag, loc=loc, ip=ip))
+  @builtins.property
+  def pipe(self):
+    return self.operation.attributes["pipe"]
+
+  @pipe.setter
+  def pipe(self, value):
+    if value is None:
+      raise ValueError("'None' not allowed as value for mandatory attributes")
+    self.operation.attributes["pipe"] = value
+
+  @builtins.property
+  def aiv_id(self):
+    if "aiv_id" not in self.operation.attributes:
+      return None
+    return self.operation.attributes["aiv_id"]
+
+  @aiv_id.setter
+  def aiv_id(self, value):
+    if value is not None:
+      self.operation.attributes["aiv_id"] = value
+    elif "aiv_id" in self.operation.attributes:
+      del self.operation.attributes["aiv_id"]
+
+  @aiv_id.deleter
+  def aiv_id(self):
+    del self.operation.attributes["aiv_id"]
+
+def cross_core_set_flag(flag, pipe, *, aiv_id=None, loc=None, ip=None) -> _ods_ir.Operation:
+  return _get_op_result_or_op_results(CrossCoreSetFlagOp(flag=flag, pipe=pipe, aiv_id=aiv_id, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
 class CrossCoreWaitFlagOp(_ods_ir.OpView):
@@ -699,13 +734,21 @@ class CrossCoreWaitFlagOp(_ods_ir.OpView):
 
   _ODS_REGIONS = (0, True)
 
-  def __init__(self, flag, *, loc=None, ip=None):
+  def __init__(self, flag, pipe, *, aiv_id=None, loc=None, ip=None):
     operands = []
     results = []
     attributes = {}
     regions = None
     operands.append(_get_op_result_or_value(flag))
     _ods_context = _ods_get_default_loc_context(loc)
+    attributes["pipe"] = (pipe if (
+    isinstance(pipe, _ods_ir.Attribute) or
+    not _ods_ir.AttrBuilder.contains('Tla_PipeAttr')) else
+      _ods_ir.AttrBuilder.get('Tla_PipeAttr')(pipe, context=_ods_context))
+    if aiv_id is not None: attributes["aiv_id"] = (aiv_id if (
+        isinstance(aiv_id, _ods_ir.Attribute) or
+        not _ods_ir.AttrBuilder.contains('I64Attr')) else
+          _ods_ir.AttrBuilder.get('I64Attr')(aiv_id, context=_ods_context))
     _ods_successors = None
     super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
 
@@ -713,8 +756,35 @@ class CrossCoreWaitFlagOp(_ods_ir.OpView):
   def flag(self):
     return self.operation.operands[0]
 
-def cross_core_wait_flag(flag, *, loc=None, ip=None) -> _ods_ir.Operation:
-  return _get_op_result_or_op_results(CrossCoreWaitFlagOp(flag=flag, loc=loc, ip=ip))
+  @builtins.property
+  def pipe(self):
+    return self.operation.attributes["pipe"]
+
+  @pipe.setter
+  def pipe(self, value):
+    if value is None:
+      raise ValueError("'None' not allowed as value for mandatory attributes")
+    self.operation.attributes["pipe"] = value
+
+  @builtins.property
+  def aiv_id(self):
+    if "aiv_id" not in self.operation.attributes:
+      return None
+    return self.operation.attributes["aiv_id"]
+
+  @aiv_id.setter
+  def aiv_id(self, value):
+    if value is not None:
+      self.operation.attributes["aiv_id"] = value
+    elif "aiv_id" in self.operation.attributes:
+      del self.operation.attributes["aiv_id"]
+
+  @aiv_id.deleter
+  def aiv_id(self):
+    del self.operation.attributes["aiv_id"]
+
+def cross_core_wait_flag(flag, pipe, *, aiv_id=None, loc=None, ip=None) -> _ods_ir.Operation:
+  return _get_op_result_or_op_results(CrossCoreWaitFlagOp(flag=flag, pipe=pipe, aiv_id=aiv_id, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
 class CrossFlagOp(_ods_ir.OpView):
@@ -722,7 +792,7 @@ class CrossFlagOp(_ods_ir.OpView):
 
   _ODS_REGIONS = (0, True)
 
-  def __init__(self, flag, name, src_pipe, dst_pipe, *, mode=None, loc=None, ip=None):
+  def __init__(self, flag, name, *, loc=None, ip=None):
     operands = []
     results = []
     attributes = {}
@@ -732,18 +802,6 @@ class CrossFlagOp(_ods_ir.OpView):
     isinstance(name, _ods_ir.Attribute) or
     not _ods_ir.AttrBuilder.contains('StrAttr')) else
       _ods_ir.AttrBuilder.get('StrAttr')(name, context=_ods_context))
-    attributes["src_pipe"] = (src_pipe if (
-    isinstance(src_pipe, _ods_ir.Attribute) or
-    not _ods_ir.AttrBuilder.contains('Tla_PipeAttr')) else
-      _ods_ir.AttrBuilder.get('Tla_PipeAttr')(src_pipe, context=_ods_context))
-    attributes["dst_pipe"] = (dst_pipe if (
-    isinstance(dst_pipe, _ods_ir.Attribute) or
-    not _ods_ir.AttrBuilder.contains('Tla_PipeAttr')) else
-      _ods_ir.AttrBuilder.get('Tla_PipeAttr')(dst_pipe, context=_ods_context))
-    if mode is not None: attributes["mode"] = (mode if (
-        isinstance(mode, _ods_ir.Attribute) or
-        not _ods_ir.AttrBuilder.contains('I64Attr')) else
-          _ods_ir.AttrBuilder.get('I64Attr')(mode, context=_ods_context))
     results.append(flag)
     _ods_successors = None
     super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
@@ -759,48 +817,11 @@ class CrossFlagOp(_ods_ir.OpView):
     self.operation.attributes["name"] = value
 
   @builtins.property
-  def src_pipe(self):
-    return self.operation.attributes["src_pipe"]
-
-  @src_pipe.setter
-  def src_pipe(self, value):
-    if value is None:
-      raise ValueError("'None' not allowed as value for mandatory attributes")
-    self.operation.attributes["src_pipe"] = value
-
-  @builtins.property
-  def dst_pipe(self):
-    return self.operation.attributes["dst_pipe"]
-
-  @dst_pipe.setter
-  def dst_pipe(self, value):
-    if value is None:
-      raise ValueError("'None' not allowed as value for mandatory attributes")
-    self.operation.attributes["dst_pipe"] = value
-
-  @builtins.property
-  def mode(self):
-    if "mode" not in self.operation.attributes:
-      return None
-    return self.operation.attributes["mode"]
-
-  @mode.setter
-  def mode(self, value):
-    if value is not None:
-      self.operation.attributes["mode"] = value
-    elif "mode" in self.operation.attributes:
-      del self.operation.attributes["mode"]
-
-  @mode.deleter
-  def mode(self):
-    del self.operation.attributes["mode"]
-
-  @builtins.property
   def flag(self):
     return self.operation.results[0]
 
-def cross_flag(flag, name, src_pipe, dst_pipe, *, mode=None, loc=None, ip=None) -> _ods_ir.Value:
-  return _get_op_result_or_op_results(CrossFlagOp(flag=flag, name=name, src_pipe=src_pipe, dst_pipe=dst_pipe, mode=mode, loc=loc, ip=ip))
+def cross_flag(flag, name, *, loc=None, ip=None) -> _ods_ir.Value:
+  return _get_op_result_or_op_results(CrossFlagOp(flag=flag, name=name, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
 class CubeOp(_ods_ir.OpView):

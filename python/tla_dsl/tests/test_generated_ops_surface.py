@@ -41,9 +41,9 @@ def _ops_surface_kernel(src: tla.Tensor, dst: tla.Tensor) -> None:
         ready = tla.flag("ready")
         tla.set_flag(ready)
         tla.wait_flag(ready)
-        cross = tla.cross_flag("x", tla.pipes.MTE3, tla.pipes.SCALAR)
-        tla.cross_core_set_flag(cross)
-        tla.cross_core_wait_flag(cross)
+        cross = tla.cross_flag("x")
+        tla.cross_core_set_flag(cross, tla.pipes.MTE3)
+        tla.cross_core_wait_flag(cross, tla.pipes.SCALAR)
         tla.pipe_barrier(tla.pipes.MTE3)
         mutex_ping = tla.mutex(resource="l0a_ping", id=0)
         mutex_pong = tla.mutex(resource="l0a_pong", id=1)
@@ -114,6 +114,32 @@ def test_mask_bitwise_public_dispatch_emits_mask_ops() -> None:
         "tla.bitwise_xor",
     ):
         assert op_name in mlir
+
+
+def test_cross_flag_public_api_emits_call_site_pipes() -> None:
+    with runtime_mod._eager_capture():
+        src = tla.Tensor(
+            tla.make_shape(1, 16), tla.Float16, origin_shape=tla.make_shape(1, 16)
+        )
+        dst = tla.Tensor(
+            tla.make_shape(1, 16), tla.Float16, origin_shape=tla.make_shape(1, 16)
+        )
+    mlir = _ops_surface_kernel.dump_mlir(type_args=(src, dst))
+    cross_flag_line = next(
+        line for line in mlir.splitlines() if 'tla.cross_flag "x"' in line
+    )
+    assert "src_pipe" not in cross_flag_line
+    assert "dst_pipe" not in cross_flag_line
+    assert "tla.cross_core_set_flag" in mlir
+    assert "tla.cross_core_wait_flag" in mlir
+    set_line = next(
+        line for line in mlir.splitlines() if "tla.cross_core_set_flag" in line
+    )
+    wait_line = next(
+        line for line in mlir.splitlines() if "tla.cross_core_wait_flag" in line
+    )
+    assert "pipe = #tla.pipe<mte3>" in set_line
+    assert "pipe = #tla.pipe<scalar>" in wait_line
 
 
 def test_public_api_exports_representative_helpers() -> None:

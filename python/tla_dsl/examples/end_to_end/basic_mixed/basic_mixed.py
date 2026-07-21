@@ -47,7 +47,7 @@ def basic_mixed(
     ub_loaded = tla.flag("ub_loaded", tla.arch.MTE2, tla.arch.VECTOR)
     vec_done = tla.flag("vec_done", tla.arch.VECTOR, tla.arch.MTE3)
 
-    fix_done = tla.cross_flag("fix_done", tla.arch.FIX, tla.arch.VECTOR)
+    fix_done = tla.cross_flag("fix_done")
 
     l1a_ptr = tla.allocate(L1_STAGE_BYTES // 4, tla.Float32, tla.AddressSpace.l1, 512)
     l1b_ptr = tla.allocate(L1_STAGE_BYTES // 4, tla.Float32, tla.AddressSpace.l1, 512)
@@ -96,7 +96,7 @@ def basic_mixed(
             l0c2ub_mode=tla.params.L0C2UBMode.SPLIT_M
         ))
 
-        tla.cross_core_set_flag(fix_done)
+        tla.cross_core_set_flag(fix_done, tla.arch.FIX)
         tla.pipe_barrier(tla.pipes.ALL)
 
     with tla.vector():
@@ -122,7 +122,7 @@ def basic_mixed(
         tla.wait_flag(ub_loaded)
 
         ub_c = tla.make_tensor_like(c_ub_ptr, gm_result, tla.arch.RowMajor)
-        tla.cross_core_wait_flag(fix_done)
+        tla.cross_core_wait_flag(fix_done, tla.arch.VECTOR)
 
         for row_tile_idx in tla.range(0, VECTOR_TILE_M//VECTOR_REG_TILE_M, 1):
             with tla.vec.func(mode="simd"):

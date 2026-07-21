@@ -42,8 +42,8 @@ def basic_mixed_ub2l1(
     ub_load_ready = tla.flag("ub_load_ready", tla.arch.MTE3, tla.arch.MTE2)
     ub_loaded = tla.flag("ub_loaded", tla.arch.MTE2, tla.arch.MTE3)
 
-    ub2l1_ready = tla.cross_flag("ub2l1_ready", tla.arch.MTE1, tla.arch.MTE3)
-    ub2l1_done = tla.cross_flag("ub2l1_done", tla.arch.MTE3, tla.arch.MTE1)
+    ub2l1_ready = tla.cross_flag("ub2l1_ready")
+    ub2l1_done = tla.cross_flag("ub2l1_done")
 
     allocator = tla.utils.LocalmemAllocator()
 
@@ -62,7 +62,7 @@ def basic_mixed_ub2l1(
     ub_a_ptr = tla.recast_ptr(ub_a_ptr, dtype=tla.Float32)
 
     with tla.cube():
-        tla.cross_core_set_flag(ub2l1_ready)
+        tla.cross_core_set_flag(ub2l1_ready, tla.arch.MTE1)
 
         gm_a = tla.tile_view(lhs, tla.make_shape(M_DIM, K_DIM), tla.make_coord(0, 0))
         gm_b = tla.tile_view(rhs, tla.make_shape(K_DIM, N_DIM), tla.make_coord(0, 0))
@@ -75,7 +75,7 @@ def basic_mixed_ub2l1(
         tla.set_flag(l1_loaded)
         tla.wait_flag(l1_loaded)
 
-        tla.cross_core_wait_flag(ub2l1_done) # wait ub_a->l1_a
+        tla.cross_core_wait_flag(ub2l1_done, tla.arch.MTE1)  # wait ub_a->l1_a
 
         l1_a_l0 = tla.tile_view(
             l1_a, tla.make_shape(M_DIM, K_DIM), tla.make_coord(0, 0)
@@ -126,9 +126,9 @@ def basic_mixed_ub2l1(
             tla.make_shape(M_DIM//2, K_DIM),
             tla.make_coord(vec_idx, 0)
         )
-        tla.cross_core_wait_flag(ub2l1_ready)
+        tla.cross_core_wait_flag(ub2l1_ready, tla.arch.MTE3)
         tla.copy(l1_a, ub_a)
-        tla.cross_core_set_flag(ub2l1_done)
+        tla.cross_core_set_flag(ub2l1_done, tla.arch.MTE3)
 
         tla.pipe_barrier(tla.pipes.ALL)
 

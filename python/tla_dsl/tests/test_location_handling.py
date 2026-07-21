@@ -138,7 +138,7 @@ def test_representative_ops_work_without_explicit_loc() -> None:
         st = tla.make_stride(1, 100)
         tla.make_layout(sh, st)
         tla.flag("ready")
-        tla.cross_flag("x", tla.pipes.MTE3, tla.pipes.SCALAR)
+        tla.cross_flag("x")
         tla.mutex(resource="l0a_ping", id=-1)
 
     mlir = state.module.operation.get_asm(

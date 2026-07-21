@@ -285,13 +285,37 @@ mlir::LogicalResult ArangeOp::verify() {
 
 TLA_VERIFY_IN_CUBE_OR_VECTOR(SetFlagOp)
 TLA_VERIFY_IN_CUBE_OR_VECTOR(WaitFlagOp)
-TLA_VERIFY_IN_CUBE_OR_VECTOR(CrossCoreSetFlagOp)
-TLA_VERIFY_IN_CUBE_OR_VECTOR(CrossCoreWaitFlagOp)
 TLA_VERIFY_IN_CUBE_OR_VECTOR(MutexLockOp)
 TLA_VERIFY_IN_CUBE_OR_VECTOR(MutexUnlockOp)
 TLA_VERIFY_IN_CUBE_OR_VECTOR(PipeBarrierOp)
 
 #undef TLA_VERIFY_IN_CUBE_OR_VECTOR
+
+template <typename OpTy>
+static mlir::LogicalResult verifyCrossCoreFlagOp(OpTy op)
+{
+    if (!hasEnclosingRegion<CubeOp>(op.getOperation()) && !hasEnclosingRegion<VectorOp>(op.getOperation()))
+        return op.emitOpError("must be nested inside a tla.cube or tla.vector region");
+    auto flagType = mlir::cast<CrossFlagType>(op.getFlag().getType());
+    auto aivIdAttr = op->template getAttrOfType<mlir::IntegerAttr>("aiv_id");
+    if (flagType.getMode() == 4) {
+        if (!aivIdAttr || (aivIdAttr.getInt() != 0 && aivIdAttr.getInt() != 1))
+            return op.emitOpError("mode 4 requires aiv_id to be the compile-time integer 0 or 1");
+    } else if (aivIdAttr) {
+        return op.emitOpError("aiv_id is only valid for mode 4 cross flags");
+    }
+    return mlir::success();
+}
+
+mlir::LogicalResult CrossCoreSetFlagOp::verify()
+{
+    return verifyCrossCoreFlagOp(*this);
+}
+
+mlir::LogicalResult CrossCoreWaitFlagOp::verify()
+{
+    return verifyCrossCoreFlagOp(*this);
+}
 
 mlir::LogicalResult LocalMemBarOp::verify() {
   auto kind = getBarrierKind();

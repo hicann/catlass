@@ -1434,3 +1434,40 @@ def test_dynamic_if_expr_error_reports_original_source_location() -> None:
     assert "list indices" in message
     assert "_IndexExpr" in message
 
+
+@tla.kernel
+def cross_flag_statement_if_kernel() -> None:
+    ping = tla.cross_flag("ping")
+    pong = tla.cross_flag("pong")
+    selected = ping
+    if tla.arch.block_idx() == 0:
+        selected = ping
+    else:
+        selected = pong
+    with tla.vector():
+        tla.cross_core_set_flag(selected, tla.arch.FIX)
+        tla.cross_core_wait_flag(selected, tla.arch.VECTOR)
+
+
+@tla.kernel
+def cross_flag_inline_if_kernel() -> None:
+    ping = tla.cross_flag("ping")
+    pong = tla.cross_flag("pong")
+    selected = ping if tla.arch.block_idx() == 0 else pong
+    with tla.vector():
+        tla.cross_core_set_flag(selected, tla.arch.FIX)
+        tla.cross_core_wait_flag(selected, tla.arch.VECTOR)
+
+
+@pytest.mark.parametrize(
+    "kernel", (cross_flag_statement_if_kernel, cross_flag_inline_if_kernel)
+)
+def test_dynamic_cross_flag_selection_emits_frontend_ir(kernel: Any) -> None:
+    mlir = kernel.dump_mlir()
+    assert mlir.count("= tla.cross_flag") == 2
+    assert "scf.if" in mlir
+    assert "!tla.cross_flag" in mlir
+    assert "tla.cross_core_set_flag" in mlir
+    assert "tla.cross_core_wait_flag" in mlir
+    assert "#tla.pipe<fix>" in mlir
+    assert "#tla.pipe<vector>" in mlir
