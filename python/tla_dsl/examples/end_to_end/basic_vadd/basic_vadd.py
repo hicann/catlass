@@ -326,7 +326,8 @@ def _run_single_case(args: argparse.Namespace, dtype_name: str, torch: Any) -> i
         tla_z,
         **_runtime_kwargs(args),
     )
-    artifact(tla_x, tla_y, tla_z, block=args.block)
+    block = max(1, args.block if args.block != -1 else tla.get_aicore_num(args.device))
+    artifact(tla_x, tla_y, tla_z, block=block)
 
     torch.npu.synchronize()
     if dtype_name in {"f32", "f16"}:
@@ -382,7 +383,7 @@ def _build_parser() -> argparse.ArgumentParser:
     mode.add_argument("--build-only", action="store_true")
     mode.add_argument("--run", action="store_true")
     parser.add_argument("--device", type=int, default=2)
-    parser.add_argument("--block", type=int, default=1)
+    parser.add_argument("--block", type=int, default=-1)
     parser.add_argument("--dtype", choices=("f32", "f16", "i8", "i16", "i32"), default="f32")
     parser.add_argument(
         "--all-dtypes",

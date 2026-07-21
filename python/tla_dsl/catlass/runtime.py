@@ -30,6 +30,9 @@ from .execution import (
 )
 from .types import RuntimeTensorError
 
+_ACL_DEV_ATTR_AICORE_CORE_NUM = 101
+_ACL_DEV_ATTR_VECTOR_CORE_NUM = 201
+
 
 class TlaIRNotExecutableError(RuntimeError):
     """Raised when attempting to execute APIs that only exist on the lowered TLA MLIR path."""
@@ -185,6 +188,26 @@ def current_stream() -> Any | None:
     """Return the initialized runtime stream, if any."""
 
     return _GLOBAL_RUNTIME_STATE.stream
+
+
+def get_aicore_num(device: int | str | None = None) -> int:
+    """Return the number of AICore on the current device."""
+    device_id = _normalize_runtime_device(device)
+    acl = _load_acl()
+
+    aicore_num, ret = acl.rt.get_device_info(device_id, _ACL_DEV_ATTR_AICORE_CORE_NUM)
+    _require_acl_success(ret, f"acl.rt.get_device_info({device_id}, _ACL_DEV_ATTR_AICORE_CORE_NUM)")
+    return aicore_num
+
+
+def get_vector_core_num(device: int | str | None = None) -> int:
+    """Return the number of VectorCore on the current device."""
+    device_id = _normalize_runtime_device(device)
+    acl = _load_acl()
+
+    vector_core_num, ret = acl.rt.get_device_info(device_id, _ACL_DEV_ATTR_VECTOR_CORE_NUM)
+    _require_acl_success(ret, f"acl.rt.get_device_info({device_id}, _ACL_DEV_ATTR_VECTOR_CORE_NUM)")
+    return vector_core_num
 
 
 def register_device_ptr(ptr: int) -> None:
@@ -757,6 +780,8 @@ __all__ = [
     "constexpr",
     "current_device_id",
     "current_stream",
+    "get_aicore_num",
+    "get_vector_core_num",
     "finalize",
     "initialize",
     "jit",

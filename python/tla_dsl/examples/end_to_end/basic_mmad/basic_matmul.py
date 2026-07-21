@@ -333,7 +333,8 @@ def run_single_case(
         tla_tensor_c,
         **_runtime_kwargs(args),
     )
-    artifact(tla_tensor_a, tla_tensor_b, tla_tensor_c, block=args.block)
+    block = max(1, args.block if args.block != -1 else tla.get_aicore_num(args.device))
+    artifact(tla_tensor_a, tla_tensor_b, tla_tensor_c, block=block)
 
     torch.npu.synchronize()
     actual = torch_tensor_c.to(torch.float32)
@@ -449,7 +450,7 @@ def _build_parser() -> argparse.ArgumentParser:
         default=_kernels.k,
         help=f"GEMM K dimension (default: {_kernels.k}).",
     )
-    parser.add_argument("--block", type=int, default=1, help="Launch block count.")
+    parser.add_argument("--block", type=int, default=-1, help="Launch block count.")
     parser.add_argument("--sentinel", type=float, default=-7.0, help="Initial C value.")
     parser.add_argument(
         "--atol", type=float, default=1e-3, help="Comparison tolerance."

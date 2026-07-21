@@ -65,6 +65,8 @@ finalize = _runtime.finalize
 runtime_state = _runtime.runtime_state
 current_device_id = _runtime.current_device_id
 current_stream = _runtime.current_stream
+get_aicore_num = _runtime.get_aicore_num
+get_vector_core_num = _runtime.get_vector_core_num
 utils = _runtime.utils
 pipes = _runtime.pipes
 cross_modes = _runtime.cross_modes
@@ -104,6 +106,8 @@ __all__ = [
     "runtime_state",
     "current_device_id",
     "current_stream",
+    "get_aicore_num",
+    "get_vector_core_num",
     "tla",
     "types",
     "core",
