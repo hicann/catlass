@@ -22,9 +22,9 @@ module {
       %src_tile = "tla.tile_view"(%src, %shape, %coord) : (!fvec, !tla.shape<64>, !tla.coord<0>) -> !fvec
       %dst_tile = "tla.tile_view"(%dst, %shape, %coord) : (!fvec, !tla.shape<64>, !tla.coord<0>) -> !fvec
       %mask = "tla.create_mask"() {pattern = "VL8", dtype = f32} : () -> !tla.mask
-      %v0 = "tla.load"(%src_tile) : (!fvec) -> !fvec
-      %v1 = "tla.squeeze"(%v0, %mask) : (!fvec, !tla.mask) -> !fvec
-      "tla.store"(%dst_tile, %v1) : (!fvec, !fvec) -> ()
+      %v0 = "tla.load"(%src_tile) : (!fvec) -> !tla.vector<64xf32>
+      %v1 = "tla.squeeze"(%v0, %mask) : (!tla.vector<64xf32>, !tla.mask) -> !tla.vector<64xf32>
+      "tla.store"(%dst_tile, %v1) : (!fvec, !tla.vector<64xf32>) -> ()
     }) {mode = "simd"} : () -> ()
     return
   }
@@ -46,9 +46,9 @@ module {
       %src_tile = "tla.tile_view"(%src, %shape, %coord) : (!hvec, !tla.shape<128>, !tla.coord<0>) -> !hvec
       %dst_tile = "tla.tile_view"(%dst, %shape, %coord) : (!hvec, !tla.shape<128>, !tla.coord<0>) -> !hvec
       %mask = "tla.create_mask"() {pattern = "VL8", dtype = f16} : () -> !tla.mask
-      %v0 = "tla.load"(%src_tile) : (!hvec) -> !hvec
-      %v1 = "tla.squeeze"(%v0, %mask) : (!hvec, !tla.mask) -> !hvec
-      "tla.store"(%dst_tile, %v1) : (!hvec, !hvec) -> ()
+      %v0 = "tla.load"(%src_tile) : (!hvec) -> !tla.vector<128xf16>
+      %v1 = "tla.squeeze"(%v0, %mask) : (!tla.vector<128xf16>, !tla.mask) -> !tla.vector<128xf16>
+      "tla.store"(%dst_tile, %v1) : (!hvec, !tla.vector<128xf16>) -> ()
     }) {mode = "simd"} : () -> ()
     return
   }
@@ -70,9 +70,9 @@ module {
       %src_tile = "tla.tile_view"(%src, %shape, %coord) : (!ivec, !tla.shape<64>, !tla.coord<0>) -> !ivec
       %dst_tile = "tla.tile_view"(%dst, %shape, %coord) : (!ivec, !tla.shape<64>, !tla.coord<0>) -> !ivec
       %mask = "tla.create_mask"() {pattern = "VL8", dtype = i32} : () -> !tla.mask
-      %v0 = "tla.load"(%src_tile) : (!ivec) -> !ivec
-      %v1 = "tla.squeeze"(%v0, %mask) : (!ivec, !tla.mask) -> !ivec
-      "tla.store"(%dst_tile, %v1) : (!ivec, !ivec) -> ()
+      %v0 = "tla.load"(%src_tile) : (!ivec) -> !tla.vector<64xi32>
+      %v1 = "tla.squeeze"(%v0, %mask) : (!tla.vector<64xi32>, !tla.mask) -> !tla.vector<64xi32>
+      "tla.store"(%dst_tile, %v1) : (!ivec, !tla.vector<64xi32>) -> ()
     }) {mode = "simd"} : () -> ()
     return
   }

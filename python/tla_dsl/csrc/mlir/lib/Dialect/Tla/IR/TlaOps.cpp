@@ -134,13 +134,13 @@ mlir::LogicalResult VecFuncOp::verify() {
 }
 
 static mlir::LogicalResult
-verifyInterleaveLikeElementTypes(mlir::Operation *op, TlaTensorType src0Type,
-                                 TlaTensorType src1Type, TlaTensorType dst0Type,
-                                 TlaTensorType dst1Type) {
-  mlir::Type src0ElementType = src0Type.getPtr().getPointee();
-  mlir::Type src1ElementType = src1Type.getPtr().getPointee();
-  mlir::Type dst0ElementType = dst0Type.getPtr().getPointee();
-  mlir::Type dst1ElementType = dst1Type.getPtr().getPointee();
+verifyInterleaveLikeElementTypes(mlir::Operation *op, VectorSSAType src0Type,
+                                 VectorSSAType src1Type, VectorSSAType dst0Type,
+                                 VectorSSAType dst1Type) {
+  mlir::Type src0ElementType = src0Type.getElementType();
+  mlir::Type src1ElementType = src1Type.getElementType();
+  mlir::Type dst0ElementType = dst0Type.getElementType();
+  mlir::Type dst1ElementType = dst1Type.getElementType();
   if (src0ElementType != src1ElementType ||
       src0ElementType != dst0ElementType || src0ElementType != dst1ElementType)
     return op->emitOpError()
@@ -210,18 +210,18 @@ mlir::LogicalResult BitwiseNotOp::verify() {
   if (!hasEnclosingRegion<VecFuncOp>(getOperation()))
     return emitOpError("must be nested inside a tla.vec.func region");
 
-  auto operandTensor = mlir::dyn_cast<TlaTensorType>(getOperand().getType());
-  auto resultTensor = mlir::dyn_cast<TlaTensorType>(getResult().getType());
-  bool operandIsTensor = static_cast<bool>(operandTensor);
-  bool resultIsTensor = static_cast<bool>(resultTensor);
-  if (operandIsTensor != resultIsTensor)
+  auto operandVector = mlir::dyn_cast<VectorSSAType>(getOperand().getType());
+  auto resultVector = mlir::dyn_cast<VectorSSAType>(getResult().getType());
+  bool operandIsVector = static_cast<bool>(operandVector);
+  bool resultIsVector = static_cast<bool>(resultVector);
+  if (operandIsVector != resultIsVector)
     return emitOpError(
-        "requires operand and result to have the same !tla.tensor or !tla.mask category");
+        "requires operand and result to have the same !tla.vector or !tla.mask category");
 
-  if (operandIsTensor &&
-      operandTensor.getPtr().getPointee() != resultTensor.getPtr().getPointee())
+  if (operandIsVector &&
+      operandVector.getElementType() != resultVector.getElementType())
     return emitOpError(
-        "requires !tla.tensor operand and result to have identical element types");
+        "requires !tla.vector operand and result to have identical element types");
   return mlir::success();
 }
 
@@ -230,22 +230,22 @@ static mlir::LogicalResult verifyBitwiseBinaryOp(OpTy op) {
   if (!hasEnclosingRegion<VecFuncOp>(op.getOperation()))
     return op.emitOpError("must be nested inside a tla.vec.func region");
 
-  auto lhsTensor = mlir::dyn_cast<TlaTensorType>(op.getLhs().getType());
-  auto rhsTensor = mlir::dyn_cast<TlaTensorType>(op.getRhs().getType());
-  auto resultTensor = mlir::dyn_cast<TlaTensorType>(op.getResult().getType());
-  bool lhsIsTensor = static_cast<bool>(lhsTensor);
-  bool rhsIsTensor = static_cast<bool>(rhsTensor);
-  bool resultIsTensor = static_cast<bool>(resultTensor);
-  if (lhsIsTensor != rhsIsTensor || lhsIsTensor != resultIsTensor)
+  auto lhsVector = mlir::dyn_cast<VectorSSAType>(op.getLhs().getType());
+  auto rhsVector = mlir::dyn_cast<VectorSSAType>(op.getRhs().getType());
+  auto resultVector = mlir::dyn_cast<VectorSSAType>(op.getResult().getType());
+  bool lhsIsVector = static_cast<bool>(lhsVector);
+  bool rhsIsVector = static_cast<bool>(rhsVector);
+  bool resultIsVector = static_cast<bool>(resultVector);
+  if (lhsIsVector != rhsIsVector || lhsIsVector != resultIsVector)
     return op.emitOpError(
-        "requires lhs, rhs, and result to have the same !tla.tensor or !tla.mask category");
+        "requires lhs, rhs, and result to have the same !tla.vector or !tla.mask category");
 
-  if (lhsIsTensor) {
-    mlir::Type lhsElementType = lhsTensor.getPtr().getPointee();
-    if (rhsTensor.getPtr().getPointee() != lhsElementType ||
-        resultTensor.getPtr().getPointee() != lhsElementType)
+  if (lhsIsVector) {
+    mlir::Type lhsElementType = lhsVector.getElementType();
+    if (rhsVector.getElementType() != lhsElementType ||
+        resultVector.getElementType() != lhsElementType)
       return op.emitOpError(
-          "requires !tla.tensor lhs, rhs, and result to have identical element types");
+          "requires !tla.vector lhs, rhs, and result to have identical element types");
   }
   return mlir::success();
 }
@@ -366,23 +366,21 @@ mlir::LogicalResult CmpOp::verify() {
            << getMode() << "\"";
 
   auto lhsType = getLhs().getType();
-  auto lhsPtr = lhsType.getPtr();
-  mlir::Type lhsElementType = lhsPtr.getPointee();
+  mlir::Type lhsElementType = lhsType.getElementType();
   if (!isSupportedCmpElementType(lhsElementType))
     return emitOpError() << "unsupported compare element type "
                          << lhsElementType;
 
   auto rhsType = getRhs().getType();
-  auto rhsTensorType = mlir::dyn_cast<::tla::TlaTensorType>(rhsType);
-  if (!rhsTensorType) {
+  auto rhsVectorType = mlir::dyn_cast<::tla::VectorSSAType>(rhsType);
+  if (!rhsVectorType) {
     if (rhsType != lhsElementType)
       return emitOpError() << "scalar operand must have element type "
                            << lhsElementType << ", got " << rhsType;
     return mlir::success();
   }
 
-  auto rhsPtr = rhsTensorType.getPtr();
-  mlir::Type rhsElementType = rhsPtr.getPointee();
+  mlir::Type rhsElementType = rhsVectorType.getElementType();
   if (lhsElementType != rhsElementType)
     return emitOpError() << "operands must have the same element type, got "
                          << lhsElementType << " and " << rhsElementType;

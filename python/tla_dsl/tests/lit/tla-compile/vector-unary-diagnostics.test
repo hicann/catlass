@@ -18,9 +18,9 @@
 //       %shape = "tla.make_shape"() : () -> !tla.shape<64>
 //       %coord = "tla.make_coord"() : () -> !tla.coord<0>
 //       %tile = "tla.tile_view"(%src, %shape, %coord) : (!vec, !tla.shape<64>, !tla.coord<0>) -> !vec
-//       %v0 = tla.load %tile : !vec -> !vec
-//       %v1 = tla.exp %v0 : !vec -> !vec
-//       tla.store %tile, %v1 : !vec, !vec
+//       %v0 = tla.load %tile : !vec -> !tla.vector<64xi32>
+//       %v1 = tla.exp %v0 : !tla.vector<64xi32> -> !tla.vector<64xi32>
+//       tla.store %tile, %v1 : !vec, !tla.vector<64xi32>
 //     }) : () -> ()
 //     return
 //   }
@@ -39,9 +39,9 @@
 //       %shape = "tla.make_shape"() : () -> !tla.shape<64>
 //       %coord = "tla.make_coord"() : () -> !tla.coord<0>
 //       %tile = "tla.tile_view"(%src, %shape, %coord) : (!vec, !tla.shape<64>, !tla.coord<0>) -> !vec
-//       %v0 = tla.load %tile : !vec -> !vec
-//       %v1 = tla.abs %v0 : !vec -> !vec
-//       tla.store %tile, %v1 : !vec, !vec
+//       %v0 = tla.load %tile : !vec -> !tla.vector<64xbf16>
+//       %v1 = tla.abs %v0 : !tla.vector<64xbf16> -> !tla.vector<64xbf16>
+//       tla.store %tile, %v1 : !vec, !tla.vector<64xbf16>
 //     }) : () -> ()
 //     return
 //   }

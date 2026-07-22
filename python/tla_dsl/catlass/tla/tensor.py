@@ -164,15 +164,13 @@ class _Tensor(TensorABC):
             VectorSSA,
             _as_value,
             _coerce_type,
-            _register_tla_tensor_metadata,
-            _register_tla_tensor_type,
+            _full_vector_ssa_descriptor,
             _require_frontend_state,
             _tla_tensor_type_for_mlir_value,
-            _vector_lane_count,
+            _vector_ssa_type_from_tensor_descriptor,
         )
         from ..execution_lowering import TlaLoweringError
         from ..params import LoadDist, NormalLoadParams, PostMode, UnalignLoadParams
-        from ..types import dtype_size_bytes
 
         loc = _normalize_user_loc(loc)
         _require_frontend_state("load")
@@ -210,19 +208,14 @@ class _Tensor(TensorABC):
 
         source = _as_value(self)
         source_desc = _tla_tensor_type_for_mlir_value(source)
-        result_desc = source_desc
+        result_desc = _vector_ssa_type_from_tensor_descriptor(source_desc)
         if (
             isinstance(params, NormalLoadParams)
             and params.load_dist == LoadDist.DIST_BRC_B32
         ):
-            lanes = _vector_lane_count(dtype_size_bytes(source_desc.element_type))
-            result_desc = source_desc.with_updates(
-                shape=lanes, stride=1, origin_shape=lanes
-            )
+            result_desc = _full_vector_ssa_descriptor(source_desc.element_type)
 
         result = _tla_ops_gen.load(_coerce_type(result_desc), source, **load_kwargs)
-        _register_tla_tensor_type(result, result_desc)
-        _register_tla_tensor_metadata(result, result_desc.metadata())
         return VectorSSA(result)
 
     @dsl_user_op

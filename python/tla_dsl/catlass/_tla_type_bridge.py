@@ -129,25 +129,35 @@ def layout_type_from_components_get(
     )
 
 
-def value_element_type_get(
-    context: mlir_ir.Context, value_type: mlir_ir.Type
-) -> mlir_ir.Type | None:
-    del context
-    try:
-        return _load_bridge_extension().value_element_type_get(value_type)
-    except ValueError:
-        return None
-
-
-def value_type_get(
-    context: mlir_ir.Context, element_type: mlir_ir.Type | None = None
+def vector_ssa_type_get(
+    context: mlir_ir.Context,
+    valid_lanes: int | None,
+    element_type: mlir_ir.Type,
 ) -> mlir_ir.Type:
-    if element_type is not None and not isinstance(element_type, mlir_ir.Type):
+    if valid_lanes is not None and (
+        isinstance(valid_lanes, bool) or not isinstance(valid_lanes, int)
+    ):
         raise TypeError(
-            "Tla value bridge expects element_type as mlir.ir.Type, "
+            "Tla vector bridge expects valid_lanes as int or None, "
+            f"got {type(valid_lanes).__name__}"
+        )
+    if not isinstance(element_type, mlir_ir.Type):
+        raise TypeError(
+            "Tla vector bridge expects element_type as mlir.ir.Type, "
             f"got {type(element_type).__name__}"
         )
-    return _load_bridge_extension().value_type_get(context, element_type)
+    return _load_bridge_extension().vector_ssa_type_get(
+        context, valid_lanes, element_type
+    )
+
+
+def vector_ssa_element_type_get(vector_type: mlir_ir.Type) -> mlir_ir.Type:
+    return _load_bridge_extension().vector_ssa_element_type_get(vector_type)
+
+
+def vector_ssa_valid_lanes_get(vector_type: mlir_ir.Type) -> int | None:
+    lanes = _load_bridge_extension().vector_ssa_valid_lanes_get(vector_type)
+    return None if lanes is None else int(lanes)
 
 
 def flag_type_get(context: mlir_ir.Context) -> mlir_ir.Type:
@@ -198,8 +208,8 @@ def type_is_layout(type_like: mlir_ir.Type) -> bool:
     return bool(_load_bridge_extension().type_is_layout(type_like))
 
 
-def type_is_value(type_like: mlir_ir.Type) -> bool:
-    return bool(_load_bridge_extension().type_is_value(type_like))
+def type_is_vector_ssa(type_like: mlir_ir.Type) -> bool:
+    return bool(_load_bridge_extension().type_is_vector_ssa(type_like))
 
 
 def type_is_flag(type_like: mlir_ir.Type) -> bool:
@@ -349,7 +359,8 @@ __all__ = [
     "type_is_shape",
     "type_is_stride",
     "type_is_tensor",
-    "type_is_value",
-    "value_element_type_get",
-    "value_type_get",
+    "type_is_vector_ssa",
+    "vector_ssa_element_type_get",
+    "vector_ssa_type_get",
+    "vector_ssa_valid_lanes_get",
 ]

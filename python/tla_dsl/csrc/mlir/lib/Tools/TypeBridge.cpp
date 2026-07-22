@@ -196,19 +196,28 @@ MlirType layoutTypeGet(MlirContext context, const std::vector<int64_t> &shapeTre
   return toMlirType(type, "tla.layout");
 }
 
-MlirType valueElementTypeGet(MlirType valueType) {
-  auto value = checkedTlaType<::tla::ValueType>(valueType, "!tla.value type");
-  if (!value.getElementType())
-    throw py::value_error("!tla.value has no element type");
-  return toMlirType(value.getElementType(), "value element type");
+MlirType vectorSSAElementTypeGet(MlirType vectorType) {
+  auto vector = checkedTlaType<::tla::VectorSSAType>(vectorType, "!tla.vector type");
+  return toMlirType(vector.getElementType(), "vector element type");
 }
 
-MlirType valueTypeGet(MlirContext context, py::object elementType) {
+py::object vectorSSAValidLanesGet(MlirType vectorType) {
+  auto vector = checkedTlaType<::tla::VectorSSAType>(vectorType, "!tla.vector type");
+  if (vector.getValidLanes() == ShapedType::kDynamic)
+    return py::none();
+  return py::int_(vector.getValidLanes());
+}
+
+MlirType vectorSSATypeGet(MlirContext context, py::object validLanes,
+                          MlirType elementType) {
   MLIRContext *ctx = bridgeContext(context);
-  Type element;
-  if (!elementType.is_none())
-    element = bridgeType(elementType.cast<MlirType>(), "element type");
-  return toMlirType(::tla::ValueType::get(ctx, element), "tla.value");
+  int64_t lanes = validLanes.is_none() ? ShapedType::kDynamic
+                                       : validLanes.cast<int64_t>();
+  Type element = bridgeType(elementType, "element type");
+  Type type = ::tla::VectorSSAType::getChecked(
+      [&] { return emitBridgeError(ctx, "invalid tla.vector type bridge input"); },
+      ctx, lanes, element);
+  return toMlirType(type, "tla.vector");
 }
 
 MlirType flagTypeGet(MlirContext context) {
@@ -265,8 +274,8 @@ std::optional<std::string> tlaTypeCategory(MlirType type) {
   Type unwrapped = bridgeType(type);
   if (isa<::tla::TlaTensorType>(unwrapped))
     return "tensor";
-  if (isa<::tla::ValueType>(unwrapped))
-    return "value";
+  if (isa<::tla::VectorSSAType>(unwrapped))
+    return "vector_ssa";
   if (isa<::tla::ShapeType>(unwrapped))
     return "shape";
   if (isa<::tla::CoordType>(unwrapped))
@@ -356,7 +365,8 @@ PYBIND11_MODULE(_tla_type_bridge_native, m) {
         py::arg("element_type"), py::arg("addrspace"), py::arg("layout"), py::arg("ptr_alignment"));
   m.def("ptr_type_get", &ptrTypeGet, py::arg("context"), py::arg("pointee"), py::arg("addrspace"),
         py::arg("alignment"));
-  m.def("value_type_get", &valueTypeGet, py::arg("context"), py::arg("element_type") = py::none());
+  m.def("vector_ssa_type_get", &vectorSSATypeGet, py::arg("context"),
+        py::arg("valid_lanes"), py::arg("element_type"));
   m.def("flag_type_get", &flagTypeGet, py::arg("context"));
   m.def("cross_flag_type_get", &crossFlagTypeGet, py::arg("context"), py::arg("mode"));
   m.def("cross_flag_mode", &crossFlagMode, py::arg("type"));
@@ -369,7 +379,7 @@ PYBIND11_MODULE(_tla_type_bridge_native, m) {
   m.def("type_is_coord", &typeIs<::tla::CoordType>, py::arg("type"));
   m.def("type_is_stride", &typeIs<::tla::StrideType>, py::arg("type"));
   m.def("type_is_layout", &typeIs<::tla::LayoutType>, py::arg("type"));
-  m.def("type_is_value", &typeIs<::tla::ValueType>, py::arg("type"));
+  m.def("type_is_vector_ssa", &typeIs<::tla::VectorSSAType>, py::arg("type"));
   m.def("type_is_flag", &typeIs<::tla::FlagType>, py::arg("type"));
   m.def("type_is_cross_flag", &typeIs<::tla::CrossFlagType>, py::arg("type"));
   m.def("type_is_mutex", &typeIs<::tla::MutexType>, py::arg("type"));
@@ -380,7 +390,10 @@ PYBIND11_MODULE(_tla_type_bridge_native, m) {
   m.def("ptr_addrspace", &ptrAddrspace, py::arg("ptr_type"));
   m.def("ptr_alignment", &ptrAlignment, py::arg("ptr_type"));
   m.def("tensor_ptr_type_get", &tensorPtrTypeGet, py::arg("tensor_type"));
-  m.def("value_element_type_get", &valueElementTypeGet, py::arg("value_type"));
+  m.def("vector_ssa_element_type_get", &vectorSSAElementTypeGet,
+        py::arg("vector_type"));
+  m.def("vector_ssa_valid_lanes_get", &vectorSSAValidLanesGet,
+        py::arg("vector_type"));
   m.def("lower_to_mlir", &lowerToMlir, py::arg("module"), py::arg("mlir_print_ir_before"),
         py::arg("mlir_print_ir_after"), py::arg("mlir_print_ir_before_all"),
         py::arg("mlir_print_ir_after_all"),

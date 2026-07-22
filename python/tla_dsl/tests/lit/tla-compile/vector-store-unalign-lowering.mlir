@@ -19,8 +19,8 @@ module {
       %coord = "tla.make_coord"() : () -> !tla.coord<0>
       %src_tile = "tla.tile_view"(%src, %shape, %coord) : (!fvec, !tla.shape<64>, !tla.coord<0>) -> !fvec
       %dst_tile = "tla.tile_view"(%dst, %shape, %coord) : (!fvec, !tla.shape<64>, !tla.coord<0>) -> !fvec
-      %loaded = tla.load %src_tile : !fvec -> !fvec
-      tla.store %dst_tile, %loaded {unaligned_ub_access} : !fvec, !fvec
+      %loaded = tla.load %src_tile : !fvec -> !tla.vector<64xf32>
+      tla.store %dst_tile, %loaded {unaligned_ub_access} : !fvec, !tla.vector<64xf32>
     }) : () -> ()
     return
   }

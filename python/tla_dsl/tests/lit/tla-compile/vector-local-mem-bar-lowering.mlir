@@ -16,11 +16,11 @@ module {
       %coord = "tla.make_coord"() : () -> !tla.coord<0>
       %src_tile = "tla.tile_view"(%src, %shape, %coord) : (!fvec, !tla.shape<64>, !tla.coord<0>) -> !fvec
       %dst_tile = "tla.tile_view"(%dst, %shape, %coord) : (!fvec, !tla.shape<64>, !tla.coord<0>) -> !fvec
-      %loaded_before = tla.load %src_tile : !fvec -> !fvec
-      tla.store %dst_tile, %loaded_before : !fvec, !fvec
+      %loaded_before = tla.load %src_tile : !fvec -> !tla.vector<64xf32>
+      tla.store %dst_tile, %loaded_before : !fvec, !tla.vector<64xf32>
       tla.local_mem_bar 3
-      %loaded_after = tla.load %dst_tile : !fvec -> !fvec
-      tla.store %src_tile, %loaded_after : !fvec, !fvec
+      %loaded_after = tla.load %dst_tile : !fvec -> !tla.vector<64xf32>
+      tla.store %src_tile, %loaded_after : !fvec, !tla.vector<64xf32>
     }) : () -> ()
     return
   }

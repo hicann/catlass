@@ -42,6 +42,16 @@ def scalar_cmp_kernel(lhs: tla.Tensor) -> None:
 
 
 @tla.kernel
+def scalar_cmp_i64_kernel(lhs: tla.Tensor) -> None:
+    lhs_tile = tla.tile_view(lhs, tla.make_shape(32), tla.make_coord(0))
+    with tla.vector():
+        with tla.vec.func(mode="simd"):
+            lhs_reg = lhs_tile.load()
+            _ = tla.cmp(lhs_reg, 0, "gt")
+
+
+
+@tla.kernel
 def masked_add_kernel(lhs: tla.Tensor, rhs: tla.Tensor, dst: tla.Tensor) -> None:
     lhs_tile = tla.tile_view(lhs, tla.make_shape(64), tla.make_coord(0))
     rhs_tile = tla.tile_view(rhs, tla.make_shape(64), tla.make_coord(0))
@@ -129,9 +139,9 @@ def test_cmp_result_can_mask_vector_op_and_store() -> None:
 
 
 def test_cmp_rejects_unsupported_dtype() -> None:
-    tensor = _vector_tensor(dtype=tla.Int64)
+    tensor = _vector_tensor(shape=32, dtype=tla.Int64)
     with pytest.raises(Exception, match="unsupported compare element type"):
-        scalar_cmp_kernel.dump_mlir(type_args=(tensor,))
+        scalar_cmp_i64_kernel.dump_mlir(type_args=(tensor,))
 
 
 def test_cmp_accepts_static_tile_with_dynamic_tile_view() -> None:

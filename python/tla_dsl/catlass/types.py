@@ -302,6 +302,62 @@ class TlaLayoutDescriptor:
         )
 
 @dataclass(frozen=True)
+class TlaVectorSSATypeDescriptor:
+    """Internal structured descriptor for the TLA vector SSA type."""
+
+    valid_lanes: int | None
+    element_type: str
+
+    def __post_init__(self) -> None:
+        lanes = self.valid_lanes
+        if lanes is not None:
+            if isinstance(lanes, bool) or not isinstance(lanes, int):
+                raise TypeError(
+                    "TlaVectorSSATypeDescriptor valid_lanes must be int or None"
+                )
+            if lanes <= 0:
+                raise ValueError(
+                    "TlaVectorSSATypeDescriptor valid_lanes must be positive"
+                )
+        element_type = str(self.element_type).strip().lower()
+        if not element_type:
+            raise ValueError(
+                "TlaVectorSSATypeDescriptor element_type must be non-empty"
+            )
+        element_bytes = dtype_size_bytes(element_type)
+        if element_type == "i1" or element_bytes <= 0 or 256 % element_bytes != 0:
+            raise ValueError(
+                f"unsupported VectorSSA element type {element_type!r}"
+            )
+        capacity = 256 // element_bytes
+        if lanes is not None and lanes > capacity:
+            raise ValueError(
+                f"VectorSSA valid_lanes must be <= {capacity} for {element_type}, got {lanes}"
+            )
+        object.__setattr__(self, "element_type", element_type)
+
+    def element_mlir_type(
+        self, context: mlir_ir.Context | None = None
+    ) -> mlir_ir.Type:
+        ctx = _tla_type_context(context)
+        with ctx:
+            return Numeric.from_dtype_token(self.element_type).mlir_type(ctx)
+
+    def to_mlir_type(
+        self, context: mlir_ir.Context | None = None
+    ) -> mlir_ir.Type:
+        ctx = _tla_type_context(context)
+        return _tla_type_bridge.vector_ssa_type_get(
+            ctx,
+            self.valid_lanes,
+            self.element_mlir_type(ctx),
+        )
+
+    def with_element_type(self, element_type: str) -> "TlaVectorSSATypeDescriptor":
+        return TlaVectorSSATypeDescriptor(self.valid_lanes, element_type)
+
+
+@dataclass(frozen=True)
 class TlaTensorTypeDescriptor:
     """Structured Python descriptor for ``!tla.tensor`` metadata.
 
@@ -418,8 +474,6 @@ class TlaTensorTypeDescriptor:
             "layout_tag": self.layout_tag,
         }
 
-class TlaValue:
-    """Marker annotation for Tla register values."""
 
 class TlaTensor:
     """Marker annotation for Tla tensor/view values."""
@@ -457,7 +511,6 @@ class TlaRegion:
     """Marker annotation for Tla region stubs."""
 
 _ANNOTATION_CATEGORY = {
-    TlaValue: "value",
     TlaTensor: "tensor",
     TlaAllocPtr: "alloc_ptr",
     TlaFlag: "flag",
@@ -640,7 +693,6 @@ __all__ = [
     "TlaIndexTreeType",
     "TlaLayoutDescriptor",
     "TlaTensorTypeDescriptor",
-    "TlaValue",
     "TlaTensor",
     "TlaTile",
     "TlaFlag",

@@ -17,8 +17,8 @@ module {
       %coord = "tla.make_coord"() : () -> !tla.coord<0>
       %src_tile = "tla.tile_view"(%src, %shape, %coord) : (!fvec, !tla.shape<1>, !tla.coord<0>) -> !fvec
       %dst_tile = "tla.tile_view"(%dst, %shape, %coord) : (!fvec, !tla.shape<1>, !tla.coord<0>) -> !fvec
-      %loaded = tla.load %src_tile {load_dist = #tla.load_dist<brc_b32>} : !fvec -> !fvec
-      tla.store %dst_tile, %loaded : !fvec, !fvec
+      %loaded = tla.load %src_tile {load_dist = #tla.load_dist<brc_b32>} : !fvec -> !tla.vector<64xf32>
+      tla.store %dst_tile, %loaded : !fvec, !tla.vector<64xf32>
     }) : () -> ()
     return
   }

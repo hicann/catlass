@@ -46,6 +46,7 @@ from .types import (
     AddressSpace,
     TlaIndexTreeType,
     TlaLayoutDescriptor,
+    TlaVectorSSATypeDescriptor,
     TlaTensorTypeDescriptor,
     PtrType,
     LayoutType,
@@ -60,7 +61,6 @@ from .types import (
     TlaStride,
     TlaTensor,
     TlaTile,
-    TlaValue,
     dtype_size_bytes,
 )
 from .params import CopyParams, CopyL0C2DstParams, QuantMode, L0C2UBMode, MemType
@@ -207,7 +207,6 @@ IndexTree: TypeAlias = IndexLike | tuple["IndexTree", ...]
 ShapeLike: TypeAlias = IndexTree
 CoordLike: TypeAlias = IndexTree
 StrideLike: TypeAlias = IndexTree
-ValueLike: TypeAlias = Numeric | mlir_ir.Value
 TileLike: TypeAlias = mlir_ir.Value
 MemrefLike: TypeAlias = Tensor | mlir_ir.Value
 FlagLike: TypeAlias = mlir_ir.Value
@@ -377,8 +376,8 @@ class VectorSSA:
             raise TypeError(
                 f"VectorSSA expects mlir.ir.Value, got {type(value).__name__}"
             )
-        if not _tla_type_bridge.type_is_tensor(value.type):
-            raise TypeError(f"VectorSSA expects !tla.tensor<...>, got {value.type}")
+        if not _tla_type_bridge.type_is_vector_ssa(value.type):
+            raise TypeError(f"VectorSSA expects !tla.vector<NxT>, got {value.type}")
         self.value = value
         self.__tla_category__ = "vector_ssa"
         _runtime._bind_frontend_value(self, value)
@@ -485,8 +484,8 @@ class VectorSSA:
         _runtime._require_enclosing_region("cast", "vec.func")
         operand_value = _as_value(self)
         context = operand_value.type.context
-        src_desc = _tla_tensor_type_for_mlir_value(operand_value)
-        result_desc = src_desc.with_updates(element_type=_dtype_to_str(dst_type))
+        src_desc = _vector_ssa_type_for_mlir_value(operand_value)
+        result_desc = src_desc.with_element_type(_dtype_to_str(dst_type))
         with context:
             trait_attr = mlir_ir.DenseI32ArrayAttr.get(params.codes())
         mask_value = _as_value(mask) if mask is not None else None
@@ -497,7 +496,6 @@ class VectorSSA:
             mask=mask_value,
             loc=loc,
         )
-        _register_tla_tensor_type(result, result_desc)
         return VectorSSA(result)
 
 
@@ -704,7 +702,7 @@ def _const_bool(value: bool) -> mlir_ir.Value:
     return op.results[0]
 
 
-def _as_i1_value(value: Any) ->mlir_ir.Value:
+def _as_i1_value(value: Any) -> mlir_ir.Value:
     if isinstance(value, bool):
         val = _const_bool(value)
     elif _category(value) == "bool":
@@ -956,6 +954,8 @@ def _as_branch_value(value: Any) -> mlir_ir.Value:
 def _wrap_frontend_value(value: mlir_ir.Value) -> Any:
     if PtrType.isinstance(value.type):
         return _Pointer(value)
+    if _tla_type_bridge.type_is_vector_ssa(value.type):
+        return VectorSSA(value)
     if _tla_type_bridge.type_is_tensor(value.type):
         return _Tensor(value)
     if _tla_type_bridge.type_is_mutex(value.type):
@@ -1139,6 +1139,37 @@ def _refine_pointer_alignment(current_alignment: int, offset: Any) -> int:
     if const_offset is None:
         return 1
     return _builtins.max(1, math.gcd(current_alignment, abs(const_offset)))
+
+
+def _vector_ssa_type_for_mlir_value(
+    value: mlir_ir.Value,
+) -> TlaVectorSSATypeDescriptor:
+    if not _tla_type_bridge.type_is_vector_ssa(value.type):
+        raise TlaLoweringError(
+            f"expected !tla.vector<NxT> SSA value, got {value.type}"
+        )
+    element_type = _tla_type_bridge.vector_ssa_element_type_get(value.type)
+    valid_lanes = _tla_type_bridge.vector_ssa_valid_lanes_get(value.type)
+    return TlaVectorSSATypeDescriptor(
+        valid_lanes=valid_lanes,
+        element_type=_dtype_to_str(element_type),
+    )
+
+
+def _vector_ssa_type_from_tensor_descriptor(
+    tensor_type: TlaTensorTypeDescriptor,
+) -> TlaVectorSSATypeDescriptor:
+    valid_lanes = 1
+    for dim in _flatten_tla_tuple(tensor_type.origin_shape):
+        if dim is None:
+            valid_lanes = None
+            break
+        if isinstance(dim, bool) or not isinstance(dim, int):
+            raise TlaLoweringError(
+                "VectorSSA load requires static integer or dynamic origin_shape leaves"
+            )
+        valid_lanes *= dim
+    return TlaVectorSSATypeDescriptor(valid_lanes, tensor_type.element_type)
 
 
 def _register_tla_tensor_type(
@@ -1506,15 +1537,6 @@ def _remap_tensor_like_trees_for_layout(
     )
 
 
-def _tla_value_element_type(value_type: mlir_ir.Type) -> mlir_ir.Type:
-    element_type = _tla_type_bridge.value_element_type_get(
-        value_type.context, value_type
-    )
-    if element_type is None:
-        raise TlaLoweringError(f"expected typed !tla.value<element>, got {value_type}")
-    return element_type
-
-
 def _logical_tensor_shape_from_metadata(value: mlir_ir.Value) -> tuple[int | None, ...]:
     """Recover the logical tensor shape from registered/frontend tensor metadata."""
     for field in ("origin_shape", "shape"):
@@ -1528,13 +1550,6 @@ def _logical_tensor_shape_from_metadata(value: mlir_ir.Value) -> tuple[int | Non
     raise TlaLoweringError(
         "expected flat tensor metadata shape/origin_shape for register fragment"
     )
-
-
-def _elem_from_type(type_str: str) -> str | None:
-    """Element type from spelled ``!tla.value``."""
-    if type_str.startswith("!tla.value<") and type_str.endswith(">"):
-        return type_str[len("!tla.value<") : -1].strip() or None
-    return None
 
 
 def _layout_attr_from_value(value: mlir_ir.Value) -> str | None:
@@ -2343,17 +2358,15 @@ def _require_pointer_addrspace(op_name: str, value: Any, position: int) -> str:
     return str(value)
 
 
-def _require_bool_or_value(op_name: str, name: str, value: Any, position: int) -> None:
+def _require_bool(op_name: str, name: str, value: Any, position: int) -> None:
     resolved = _resolve_bound_value(value)
     if isinstance(resolved, bool):
         return
     if _category(resolved) == "bool":
         return
-    if _category(resolved) == "value":
-        return
     _op_error(
         op_name,
-        f"invalid argument '{name}' (position {position}): expected bool|value, got {_type_name(value)}",
+        f"invalid argument '{name}' (position {position}): expected bool, got {_type_name(value)}",
     )
 
 
@@ -3572,14 +3585,15 @@ def mmad(
     acc: TileLike,
     lhs: TileLike,
     rhs: TileLike,
-    init_c: bool | ValueLike | None = None,
-    unit_flag: int | ValueLike | None = None,
+    init_c: bool | mlir_ir.Value | None = None,
+    unit_flag: IndexLike | None = None,
     acc_type: DTypeLike | None = None,
     loc: mlir_ir.Location | None = None,
     **extra_kwargs: Any,
-) -> TlaValue:
+) -> None:
     """Emit a matrix-multiply-accumulate operation over Tla tiles.
 
+    ``init_c`` accepts only a Python ``bool`` or an SSA value of type ``i1``.
     When ``acc_type`` is provided, it must be a concrete
     :class:`~catlass.base_dsl.typing.Numeric` (e.g. ``tla.Float32``) or an ``mlir_ir.Type``;
     string dtype tokens are not accepted.
@@ -3597,7 +3611,7 @@ def mmad(
 
     if init_c is None:
         init_c = False
-    _require_bool_or_value("mmad", "init_c", init_c, 3)
+    _require_bool("mmad", "init_c", init_c, 3)
     init_c_value = _as_i1_value(init_c)
 
     if unit_flag is None:
@@ -3627,7 +3641,7 @@ def mmad(
     lhs_value = _as_value(lhs)
     rhs_value = _as_value(rhs)
     _validate_mmad_contract(acc_value, lhs_value, rhs_value)
-    return _tla_ops_gen.mmad(
+    _tla_ops_gen.mmad(
         acc_value,
         lhs_value,
         rhs_value,
@@ -3674,7 +3688,7 @@ def full(
             f"unsupported vector element dtype {dtype.dtype}; supported dtypes are "
             f"{', '.join(sorted(_FULL_SUPPORTED_DTYPES))}",
         )
-    desc = _vector_tile_descriptor(dtype, dtype_token=dtype_token)
+    desc = _full_vector_ssa_descriptor(dtype_token)
     scalar_value = int(resolved) if isinstance(resolved, bool) else resolved
     context = loc.context if loc is not None else mlir_ir.Context.current
     scalar = _scalar_constant_for_element_type(
@@ -3684,26 +3698,13 @@ def full(
         loc=loc,
     )
     result = _tla_ops_gen.full(_coerce_type(desc), scalar, loc=loc)
-    _register_tla_tensor_type(result, desc)
-    _register_tla_tensor_metadata(result, desc.metadata())
     return VectorSSA(result)
 
 
-def _vector_tile_descriptor(dtype: type[Numeric], *, dtype_token: str) -> TlaTensorTypeDescriptor:
+def _full_vector_ssa_descriptor(dtype_token: str) -> TlaVectorSSATypeDescriptor:
     element_bytes = dtype_size_bytes(dtype_token)
     lanes = _vector_lane_count(element_bytes)
-    return TlaTensorTypeDescriptor(
-        layout=TlaLayoutDescriptor(
-            shape=TlaIndexTreeType("shape", lanes),
-            stride=TlaIndexTreeType("stride", 1),
-            origin_shape=TlaIndexTreeType("shape", lanes),
-            layout_tag="row_major",
-        ),
-        coord=0,
-        element_type=dtype_token,
-        addrspace="ub",
-        ptr_alignment=_builtins.max(1, element_bytes),
-    )
+    return TlaVectorSSATypeDescriptor(lanes, dtype_token)
 
 
 @dsl_user_op
@@ -3760,7 +3761,7 @@ def arange(
         )
     _require_frontend_state(op_name)
     _runtime._require_enclosing_region(op_name, "vec.func")
-    desc = _vector_tile_descriptor(dtype, dtype_token=dtype_token)
+    desc = _full_vector_ssa_descriptor(dtype_token)
     context = loc.context if loc is not None else mlir_ir.Context.current
     element_type = desc.element_mlir_type(context)
     const = _const_int_value(base)
@@ -3801,8 +3802,6 @@ def arange(
     result = _tla_ops_gen.arange(
         _coerce_type(desc), start_value, order=order, loc=loc
     )
-    _register_tla_tensor_type(result, desc)
-    _register_tla_tensor_metadata(result, desc.metadata())
     return VectorSSA(result)
 
 
@@ -3829,7 +3828,6 @@ def _emit_vector_binary(
     _runtime._require_enclosing_region(op_name, "vec.func")
     lhs_value = _as_value(lhs)
     rhs_value = _as_value(rhs)
-    lhs_desc = _tla_tensor_type_for_mlir_value(lhs_value)
     mask_value = _as_value(mask) if mask is not None else None
     result = emitter(
         lhs_value.type,
@@ -3838,7 +3836,6 @@ def _emit_vector_binary(
         mask=mask_value,
         loc=loc,
     )
-    _register_tla_tensor_type(result, lhs_desc)
     return VectorSSA(result)
 
 
@@ -3976,7 +3973,7 @@ def _emit_vector_scalar_binary(
     _require_frontend_state(op_name)
     _runtime._require_enclosing_region(op_name, "vec.func")
     lhs_value = _as_value(lhs)
-    lhs_desc = _tla_tensor_type_for_mlir_value(lhs_value)
+    lhs_desc = _vector_ssa_type_for_mlir_value(lhs_value)
     rhs_value = _numeric_ir_value_for_element_type(
         op_name, rhs_num, lhs_desc.element_mlir_type(lhs_value.type.context), loc=loc
     )
@@ -3988,7 +3985,6 @@ def _emit_vector_scalar_binary(
         mask=mask_value,
         loc=loc,
     )
-    _register_tla_tensor_type(result, lhs_desc)
     return VectorSSA(result)
 
 
@@ -4067,7 +4063,7 @@ def _emit_vector_unary(
     _require_frontend_state(op_name)
     _runtime._require_enclosing_region(op_name, "vec.func")
     operand_value = _as_value(operand)
-    element_type = str(_tla_tensor_type_for_mlir_value(operand_value).element_type)
+    element_type = _vector_ssa_type_for_mlir_value(operand_value).element_type
     if op_name in {"exp", "log", "sqrt"}:
         if element_type not in _FLOAT_UNARY_ELEMENT_TYPES:
             _op_error(
@@ -4082,14 +4078,12 @@ def _emit_vector_unary(
             f"got {element_type}",
         )
     mask_value = _as_value(mask) if mask is not None else None
-    result_desc = _tla_tensor_type_for_mlir_value(operand_value)
     result = emitter(
         operand_value.type,
         operand_value,
         mask=mask_value,
         loc=loc,
     )
-    _register_tla_tensor_type(result, result_desc)
     return VectorSSA(result)
 
 
@@ -4147,7 +4141,7 @@ def interleave(
     src0_value = _as_value(src0)
     src1_value = _as_value(src1)
 
-    src_desc = _tla_tensor_type_for_mlir_value(src0_value)
+    src_desc = _vector_ssa_type_for_mlir_value(src0_value)
     element_type = str(src_desc.element_type).lower()
     if element_type not in _INTERLEAVE_ELEMENT_TYPES:
         _op_error(
@@ -4164,8 +4158,6 @@ def interleave(
         loc=loc,
     )
 
-    _register_tla_tensor_type(dst0_value, src_desc)
-    _register_tla_tensor_type(dst1_value, src_desc)
 
     return VectorSSA(dst0_value), VectorSSA(dst1_value)
 
@@ -4185,7 +4177,7 @@ def deinterleave(
     src0_value = _as_value(src0)
     src1_value = _as_value(src1)
 
-    src_desc = _tla_tensor_type_for_mlir_value(src0_value)
+    src_desc = _vector_ssa_type_for_mlir_value(src0_value)
     element_type = str(src_desc.element_type).lower()
     if element_type not in _INTERLEAVE_ELEMENT_TYPES:
         _op_error(
@@ -4202,8 +4194,6 @@ def deinterleave(
         loc=loc,
     )
 
-    _register_tla_tensor_type(dst0_value, src_desc)
-    _register_tla_tensor_type(dst1_value, src_desc)
 
     return VectorSSA(dst0_value), VectorSSA(dst1_value)
 
@@ -4338,20 +4328,9 @@ def div(
 
 def _reduction_result_descriptor(
     operand_value: mlir_ir.Value,
-) -> TlaTensorTypeDescriptor:
-    operand_desc = _tla_tensor_type_for_mlir_value(operand_value)
-    return TlaTensorTypeDescriptor(
-        layout=TlaLayoutDescriptor(
-            shape=TlaIndexTreeType("shape", 1),
-            stride=TlaIndexTreeType("stride", 1),
-            origin_shape=TlaIndexTreeType("shape", 1),
-            layout_tag=operand_desc.layout_tag,
-        ),
-        coord=0,
-        element_type=operand_desc.element_type,
-        addrspace=operand_desc.addrspace,
-        ptr_alignment=operand_desc.ptr_alignment,
-    )
+) -> TlaVectorSSATypeDescriptor:
+    operand_desc = _vector_ssa_type_for_mlir_value(operand_value)
+    return TlaVectorSSATypeDescriptor(1, operand_desc.element_type)
 
 
 def _emit_vector_reduce(
@@ -4379,7 +4358,7 @@ def _emit_vector_reduce(
     _require_frontend_state(op_name)
     _runtime._require_enclosing_region(op_name, "vec.func")
     operand_value = _as_value(operand)
-    operand_desc = _tla_tensor_type_for_mlir_value(operand_value)
+    operand_desc = _vector_ssa_type_for_mlir_value(operand_value)
     _check_reduction_element_type_supported(op_name, operand_desc.element_type)
     mask_value = _as_value(mask)
     result_desc = _reduction_result_descriptor(operand_value)
@@ -4390,7 +4369,6 @@ def _emit_vector_reduce(
         mask=mask_value,
         loc=loc,
     )
-    _register_tla_tensor_type(result, result_desc)
     return VectorSSA(result)
 
 
@@ -4416,7 +4394,6 @@ def where(
     _runtime._require_enclosing_region("where", "vec.func")
     x_value = _as_value(x)
     y_value = _as_value(y)
-    x_desc = _tla_tensor_type_for_mlir_value(x_value)
     mask_value = _as_value(mask)
     result = _tla_ops_gen.where(
         x_value.type,
@@ -4425,7 +4402,6 @@ def where(
         y_value,
         loc=loc,
     )
-    _register_tla_tensor_type(result, x_desc)
     return VectorSSA(result)
 
 
@@ -4448,14 +4424,12 @@ def squeeze(
     _runtime._require_enclosing_region("squeeze", "vec.func")
     src_value = _as_value(src)
     mask_value = _as_value(mask)
-    src_desc = _tla_tensor_type_for_mlir_value(src_value)
     result = _tla_ops_gen.squeeze(
         src_value.type,
         src_value,
         mask_value,
         loc=loc,
     )
-    _register_tla_tensor_type(result, src_desc)
     return VectorSSA(result)
 
 
@@ -4482,7 +4456,7 @@ def _emit_bitwise_unary(
             emitter(operand_value.type, operand_value, mask=mask_value, loc=loc)
         )
 
-    result_desc = _tla_tensor_type_for_mlir_value(operand_value)
+    result_desc = _vector_ssa_type_for_mlir_value(operand_value)
     element_type = str(result_desc.element_type)
     if element_type not in _BITWISE_UNARY_TYPES:
         _op_error(
@@ -4496,7 +4470,6 @@ def _emit_bitwise_unary(
         mask=mask_value,
         loc=loc,
     )
-    _register_tla_tensor_type(result, result_desc)
     return VectorSSA(result)
 
 
@@ -4519,7 +4492,7 @@ def _emit_bitwise_binary(
     if src0_category != src1_category:
         _op_error(
             op_name,
-            "src0_reg and src1_reg must both be MaskReg values or both be RegTensor values",
+            "src0_reg and src1_reg must both be MaskSSA values or both be VectorSSA values",
         )
     if mask is not None:
         _require_category(op_name, "mask", mask, "mask_ssa", 2)
@@ -4537,8 +4510,6 @@ def _emit_bitwise_binary(
     if src0_category == "mask_ssa":
         return MaskSSA(result)
 
-    result_desc = _tla_tensor_type_for_mlir_value(src0_value)
-    _register_tla_tensor_type(result, result_desc)
     return VectorSSA(result)
 
 
@@ -4581,7 +4552,7 @@ def cmp(
         rhs_value = _as_value(rhs)
     else:
         assert rhs_num is not None
-        lhs_desc = _tla_tensor_type_for_mlir_value(lhs_value)
+        lhs_desc = _vector_ssa_type_for_mlir_value(lhs_value)
         rhs_value = _numeric_ir_value_for_element_type(
             "cmp", rhs_num, lhs_desc.element_mlir_type(lhs_value.type.context), loc=loc
         )
@@ -4603,7 +4574,7 @@ def bitwise_and(
     mask: Any | None = None,
     loc: mlir_ir.Location | None = None,
 ) -> MaskSSA | VectorSSA:
-    """Emit element-wise bitwise AND for MaskReg or RegTensor SSA values."""
+    """Emit element-wise bitwise AND for MaskSSA or VectorSSA values."""
     return _emit_bitwise_binary(
         "bitwise_and",
         _tla_ops_gen.bitwise_and,
@@ -4622,7 +4593,7 @@ def bitwise_or(
     mask: Any | None = None,
     loc: mlir_ir.Location | None = None,
 ) -> MaskSSA | VectorSSA:
-    """Emit element-wise bitwise OR for MaskReg or RegTensor SSA values."""
+    """Emit element-wise bitwise OR for MaskSSA or VectorSSA values."""
     return _emit_bitwise_binary(
         "bitwise_or",
         _tla_ops_gen.bitwise_or,
@@ -4641,7 +4612,7 @@ def bitwise_xor(
     mask: Any | None = None,
     loc: mlir_ir.Location | None = None,
 ) -> MaskSSA | VectorSSA:
-    """Emit element-wise bitwise XOR for MaskReg or RegTensor SSA values."""
+    """Emit element-wise bitwise XOR for MaskSSA or VectorSSA values."""
     return _emit_bitwise_binary(
         "bitwise_xor",
         _tla_ops_gen.bitwise_xor,
@@ -4673,7 +4644,7 @@ def gather(
     x_value = _as_value(x)
     y_value = _as_value(y)
     x_desc = _tla_tensor_descriptor_from_type_or_value(x_value)
-    y_desc = _tla_tensor_descriptor_from_type_or_value(y_value)
+    y_desc = _vector_ssa_type_for_mlir_value(y_value)
 
     # validate x addrspace is ub
     if x_desc.addrspace.lower() != "ub":
@@ -4732,13 +4703,12 @@ def gather(
         _require_category("gather", "mask", mask, "mask_ssa", 2)
     mask_value = _as_value(mask) if mask is not None else None
     result = _tla_ops_gen.gather(
-        x_value.type,
+        _vector_ssa_type_from_tensor_descriptor(x_desc).to_mlir_type(x_value.type.context),
         x_value,
         y_value,
         mask=mask_value,
         loc=loc,
     )
-    _register_tla_tensor_type(result, x_desc)
     return VectorSSA(result)
 
 

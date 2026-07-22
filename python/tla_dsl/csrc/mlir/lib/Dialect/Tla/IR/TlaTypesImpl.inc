@@ -263,28 +263,66 @@ LogicalResult TlaTensorType::verify(function_ref<InFlightDiagnostic()> emitError
   return success();
 }
 
-Type ValueType::parse(AsmParser &parser) {
+Type VectorSSAType::parse(AsmParser &parser) {
   auto &dialectParser = static_cast<DialectAsmParser &>(parser);
   StringRef full = dialectParser.getFullSymbolSpec();
-  if (!full.consume_front("value"))
-    return Type{};
-  Type elementType;
-  if (full.empty()) {
-    return ValueType::get(parser.getContext(), elementType);
-  }
-  if (!full.consume_front("<") || !full.ends_with(">"))
+  if (!full.consume_front("vector<") || !full.consume_back(">"))
     return (parser.emitError(parser.getCurrentLocation(),
-                             "expected optional `<` ... `>` around tla.value element type"),
+                             "expected !tla.vector<NxT>"),
             Type{});
-  elementType = parseTypeFromText(parser, full.drop_back());
+
+  auto [lanesText, elementText] = full.split('x');
+  if (lanesText.empty() || elementText.empty())
+    return (parser.emitError(parser.getCurrentLocation(),
+                             "expected !tla.vector<NxT>"),
+            Type{});
+
+  int64_t validLanes = ShapedType::kDynamic;
+  if (lanesText != "?" && lanesText.getAsInteger(10, validLanes))
+    return (parser.emitError(parser.getCurrentLocation(),
+                             "expected vector lane count as a positive integer or ?"),
+            Type{});
+
+  Type elementType = parseTypeFromText(parser, elementText);
   if (!elementType)
     return Type{};
-  return ValueType::get(parser.getContext(), elementType);
+  return VectorSSAType::getChecked(
+      [&] { return parser.emitError(parser.getCurrentLocation())
+                   << "invalid tla.vector type"; },
+      parser.getContext(), validLanes, elementType);
 }
 
-void ValueType::print(AsmPrinter &printer) const {
-  if (getElementType())
-    printer << "<" << getElementType() << ">";
+void VectorSSAType::print(AsmPrinter &printer) const {
+  printer << "<";
+  if (getValidLanes() == ShapedType::kDynamic)
+    printer << "?";
+  else
+    printer << getValidLanes();
+  printer << "x" << getElementType() << ">";
+}
+
+LogicalResult VectorSSAType::verify(function_ref<InFlightDiagnostic()> emitError,
+                                    int64_t validLanes, Type elementType) {
+  if (!elementType)
+    return emitError() << "tla.vector element type must be non-null";
+  if (!mlir::isa<IntegerType, FloatType>(elementType))
+    return emitError() << "tla.vector element type must be an integer or float, got "
+                       << elementType;
+
+  unsigned bitWidth = elementType.getIntOrFloatBitWidth();
+  if (bitWidth == 0 || bitWidth % 8 != 0)
+    return emitError() << "tla.vector element type must have a byte-aligned width, got "
+                       << elementType;
+
+  constexpr int64_t kVectorRegisterBytes = 256;
+  int64_t capacity = kVectorRegisterBytes / static_cast<int64_t>(bitWidth / 8);
+  if (capacity <= 0)
+    return emitError() << "tla.vector element type is wider than the 256-byte register";
+  if (validLanes != ShapedType::kDynamic &&
+      (validLanes <= 0 || validLanes > capacity))
+    return emitError() << "tla.vector valid lane count must be in [1, " << capacity
+                       << "] for element type " << elementType << ", got " << validLanes;
+  return success();
 }
 
 } // namespace tla

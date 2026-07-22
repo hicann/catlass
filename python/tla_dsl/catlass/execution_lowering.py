@@ -338,17 +338,17 @@ def _coerce_location(
 
 
 def _coerce_type(ctx: mlir_ir.Context, type_like: Any) -> mlir_ir.Type:
-    from . import _tla_type_bridge
-
     if isinstance(type_like, mlir_ir.Type):
         return type_like
     if type_like is None:
-        return _tla_type_bridge.value_type_get(ctx)
+        raise TypeError(
+            "execution lowering could not resolve a concrete runtime argument type"
+        )
     if isinstance(type_like, str):
         with ctx:
             return Numeric.from_dtype_token(type_like).mlir_type(ctx)
     raise TypeError(
-        "execution lowering expected mlir.ir.Type, Tla element token, or None; "
+        "execution lowering expected mlir.ir.Type or a Tla element token; "
         f"got {type(type_like).__name__}"
     )
 
@@ -357,7 +357,7 @@ def _category_from_type_like(ctx: mlir_ir.Context, type_like: Any) -> str | None
     from . import _tla_type_bridge
 
     if type_like is None:
-        return "value"
+        return None
     try:
         ty = _coerce_type(ctx, type_like)
     except Exception:

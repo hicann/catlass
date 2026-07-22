@@ -279,7 +279,7 @@ def _expected(op_name: str, inputs: tuple[Any, ...]) -> tuple[Any, ...]:
 
 HARNESS = DirectVectorOpHarness(
     DirectVectorOpConfig(
-        description="Compile and run predicate-mask and RegTensor bitwise kernels.",
+        description="Compile and run MaskSSA and VectorSSA bitwise kernels.",
         kernel=bitwise_ops,
         all_dtypes=ALL_DTYPES,
         operator_specs=_operator_specs,

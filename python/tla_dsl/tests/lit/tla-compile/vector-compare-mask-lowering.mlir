@@ -25,14 +25,14 @@ module {
       %lhs_tile = "tla.tile_view"(%lhs, %shape, %coord) : (!vec, !tla.shape<64>, !tla.coord<0>) -> !vec
       %rhs_tile = "tla.tile_view"(%rhs, %shape, %coord) : (!vec, !tla.shape<64>, !tla.coord<0>) -> !vec
       %dst_tile = "tla.tile_view"(%dst, %shape, %coord) : (!vec, !tla.shape<64>, !tla.coord<0>) -> !vec
-      %lhs_vec = tla.load %lhs_tile : !vec -> !vec
-      %rhs_vec = tla.load %rhs_tile : !vec -> !vec
+      %lhs_vec = tla.load %lhs_tile : !vec -> !tla.vector<64xf32>
+      %rhs_vec = tla.load %rhs_tile : !vec -> !tla.vector<64xf32>
       %active = "tla.create_mask"() {pattern = "H", dtype = f32} : () -> !tla.mask
       %cst = arith.constant 0.000000e+00 : f32
-      %lt = tla.cmp "lt" %lhs_vec, %rhs_vec mask %active : !vec, !vec mask !tla.mask -> !tla.mask
-      %ge = tla.cmp "ge" %lhs_vec, %cst : !vec, f32 -> !tla.mask
-      %sum = tla.add %lhs_vec, %rhs_vec mask %lt : !vec, !vec mask !tla.mask -> !vec
-      tla.store %dst_tile, %sum mask %ge : !vec, !vec mask !tla.mask
+      %lt = tla.cmp "lt" %lhs_vec, %rhs_vec mask %active : !tla.vector<64xf32>, !tla.vector<64xf32> mask !tla.mask -> !tla.mask
+      %ge = tla.cmp "ge" %lhs_vec, %cst : !tla.vector<64xf32>, f32 -> !tla.mask
+      %sum = tla.add %lhs_vec, %rhs_vec mask %lt : !tla.vector<64xf32>, !tla.vector<64xf32> mask !tla.mask -> !tla.vector<64xf32>
+      tla.store %dst_tile, %sum mask %ge : !vec, !tla.vector<64xf32> mask !tla.mask
     }) : () -> ()
     return
   }

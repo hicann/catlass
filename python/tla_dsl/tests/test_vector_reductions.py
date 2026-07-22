@@ -9,13 +9,13 @@ from catlass.execution_lowering import UnsupportedExecutionLowering
 import catlass.runtime as runtime_mod
 
 
-def _vector_tensor(dtype: type[tla.Numeric] = tla.Float32) -> tla.Tensor:
+def _vector_tensor(dtype: type[tla.Numeric] = tla.Float32, shape: int = 64) -> tla.Tensor:
     with runtime_mod._eager_capture():
         return tla.Tensor(
-            tla.make_shape(64),
+            tla.make_shape(shape),
             dtype,
             addrspace=tla.AddressSpace.ub,
-            origin_shape=tla.make_shape(64),
+            origin_shape=tla.make_shape(shape),
             layout_tag=tla.arch.RowMajor,
         )
 
@@ -30,6 +30,17 @@ def vector_reduce_kernel(src: tla.Tensor) -> None:
             _ = src_reg.reduce(tla.ReductionOp.ADD, mask=reduce_mask)
             _ = src_reg.reduce(tla.ReductionOp.MAX, mask=reduce_mask)
             _ = src_reg.reduce(tla.ReductionOp.MIN, mask=reduce_mask)
+
+
+@tla.kernel
+def vector_reduce_i64_kernel(src: tla.Tensor) -> None:
+    src_tile = tla.tile_view(src, tla.make_shape(32), tla.make_coord(0))
+    with tla.vector():
+        with tla.vec.func(mode="simd"):
+            src_reg = src_tile.load()
+            reduce_mask = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Int64)
+            _ = src_reg.reduce(tla.ReductionOp.ADD, mask=reduce_mask)
+
 
 
 @tla.kernel
@@ -143,7 +154,7 @@ def test_unsupported_reduction_element_type_is_rejected() -> None:
         tla.TlaCoreAPIError,
         match=r"VectorSSA\.reduce.*unsupported reduction element type i64",
     ):
-        vector_reduce_kernel.dump_mlir(type_args=(_vector_tensor(tla.Int64),))
+        vector_reduce_i64_kernel.dump_mlir(type_args=(_vector_tensor(tla.Int64, 32),))
 
 
 def test_reduce_rejects_non_reduction_op() -> None:

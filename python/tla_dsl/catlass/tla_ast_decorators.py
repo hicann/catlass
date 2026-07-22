@@ -93,6 +93,25 @@ def _call_with_control_flow_source(fn: Callable[..., Any], *args: Any) -> Any:
         raise wrapped from exc
 
 
+def _reject_vector_ssa_control_flow_values(
+    construct: str,
+    values: list[Any] | tuple[Any, ...],
+    leaf_names: list[str] | tuple[str, ...],
+) -> None:
+    """Keep VectorSSA out of result-bearing SCF until explicitly supported."""
+    from . import _tla_type_bridge
+
+    for index, value in enumerate(values):
+        value_type = getattr(value, "type", None)
+        if value_type is None or not _tla_type_bridge.type_is_vector_ssa(value_type):
+            continue
+        name = leaf_names[index] if index < len(leaf_names) else str(index)
+        raise TlaCoreAPIError(
+            f"{construct} does not currently support VectorSSA value {name!r}; "
+            "keep the VectorSSA read-only across the region or store it to UB"
+        )
+
+
 def _loop_unroll_attr(**kwargs: Any) -> Any:
     from mlir import ir as mlir_ir  # type: ignore[assignment]
 
@@ -179,6 +198,9 @@ class ScfGenerator:
         else:
             ir_values = initial_ir_values
             pytree_def = initial_pytree_def
+        _reject_vector_ssa_control_flow_values(
+            f"Dynamic {op_type_name} carried values", ir_values, pytree_def[1]
+        )
         expected_types = (
             initial_ir_types
             if initial_ir_types is not None
@@ -193,6 +215,9 @@ class ScfGenerator:
                 op_type_name,
                 full_write_args_count,
                 mix_iter_arg_names,
+            )
+            _reject_vector_ssa_control_flow_values(
+                f"Dynamic {op_type_name} region results", region_values, yield_pytree_def[1]
             )
             if pytree_def[0] != yield_pytree_def[0]:
                 if len(region_values) != len(expected_types):
@@ -355,6 +380,10 @@ def _while_execute_dynamic(
     from mlir.dialects import scf  # type: ignore[import-not-found]
     from . import core_api as _core_api
 
+    if _runtime._has_enclosing_region("vec.func"):
+        raise TlaCoreAPIError(
+            "while loops are not currently supported inside tla.vec.func()"
+        )
     carried_count = (
         len(carried_values)
         if full_write_args_count is None or full_write_args_count == 0
@@ -856,11 +885,17 @@ def _internal_frontend_if_expr(
         true_mlir, result_pytree_def = _core_api.unpack_to_irvalue(
             [true_probe], "if expression", 1, ["if expression"]
         )
+        _reject_vector_ssa_control_flow_values(
+            "Conditional expression results", true_mlir, result_pytree_def[1]
+        )
         result_spec = result_pytree_def[0][0]
         true_leaf_names = result_pytree_def[1]
         false_probe = _call_with_control_flow_source(false_fn)
         false_mlir, false_pytree_def = _core_api.unpack_to_irvalue(
             [false_probe], "if expression", 1, ["if expression"]
+        )
+        _reject_vector_ssa_control_flow_values(
+            "Conditional expression results", false_mlir, false_pytree_def[1]
         )
         false_spec = false_pytree_def[0][0]
         false_leaf_names = false_pytree_def[1]

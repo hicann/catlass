@@ -101,29 +101,29 @@ module {
         %mask_bitwise_or = "tla.bitwise_or"(%mask_bitwise_or_all, %m4, %all) : (!tla.mask, !tla.mask, !tla.mask) -> !tla.mask
         %mask_bitwise_xor_all = "tla.bitwise_xor"(%h, %m4) : (!tla.mask, !tla.mask) -> !tla.mask
         %mask_bitwise_xor = "tla.bitwise_xor"(%mask_bitwise_xor_all, %m4, %all) : (!tla.mask, !tla.mask, !tla.mask) -> !tla.mask
-        %reg0 = "tla.load"(%src0_tile) : (!vec) -> !vec
-        %reg1 = "tla.load"(%src1_tile) : (!vec) -> !vec_alt
+        %reg0 = "tla.load"(%src0_tile) : (!vec) -> !tla.vector<64xi32>
+        %reg1 = "tla.load"(%src1_tile) : (!vec) -> !tla.vector<64xi32>
         %zero = arith.constant 0 : i32
-        %zero_reg = "tla.full"(%zero) : (i32) -> !vec
-        %out_mask_not = "tla.where"(%mask_bitwise_not, %reg0, %zero_reg) : (!tla.mask, !vec, !vec) -> !vec
-        %out_mask_and = "tla.where"(%mask_bitwise_and, %reg0, %zero_reg) : (!tla.mask, !vec, !vec) -> !vec
-        %out_mask_or = "tla.where"(%mask_bitwise_or, %reg0, %zero_reg) : (!tla.mask, !vec, !vec) -> !vec
-        %out_mask_xor = "tla.where"(%mask_bitwise_xor, %reg0, %zero_reg) : (!tla.mask, !vec, !vec) -> !vec
-        %reg_bitwise_not = "tla.bitwise_not"(%reg0) : (!vec) -> !vec_alt
-        %reg_bitwise_and_all = "tla.bitwise_and"(%reg0, %reg1) : (!vec, !vec_alt) -> !vec_alt
-        %reg_bitwise_and = "tla.bitwise_and"(%reg_bitwise_and_all, %reg1, %all) : (!vec_alt, !vec_alt, !tla.mask) -> !vec
-        %reg_bitwise_or_all = "tla.bitwise_or"(%reg0, %reg1) : (!vec, !vec_alt) -> !vec_alt
-        %reg_bitwise_or = "tla.bitwise_or"(%reg_bitwise_or_all, %reg1, %all) : (!vec_alt, !vec_alt, !tla.mask) -> !vec
-        %reg_bitwise_xor_all = "tla.bitwise_xor"(%reg0, %reg1) : (!vec, !vec_alt) -> !vec_alt
-        %reg_bitwise_xor = "tla.bitwise_xor"(%reg_bitwise_xor_all, %reg1, %all) : (!vec_alt, !vec_alt, !tla.mask) -> !vec
-        "tla.store"(%dst_mask_not_tile, %out_mask_not) : (!vec, !vec) -> ()
-        "tla.store"(%dst_mask_and_tile, %out_mask_and) : (!vec, !vec) -> ()
-        "tla.store"(%dst_mask_or_tile, %out_mask_or) : (!vec, !vec) -> ()
-        "tla.store"(%dst_mask_xor_tile, %out_mask_xor) : (!vec, !vec) -> ()
-        "tla.store"(%dst_reg_not_tile, %reg_bitwise_not) : (!vec, !vec_alt) -> ()
-        "tla.store"(%dst_reg_and_tile, %reg_bitwise_and) : (!vec, !vec) -> ()
-        "tla.store"(%dst_reg_or_tile, %reg_bitwise_or) : (!vec, !vec) -> ()
-        "tla.store"(%dst_reg_xor_tile, %reg_bitwise_xor) : (!vec, !vec) -> ()
+        %zero_reg = "tla.full"(%zero) : (i32) -> !tla.vector<64xi32>
+        %out_mask_not = "tla.where"(%mask_bitwise_not, %reg0, %zero_reg) : (!tla.mask, !tla.vector<64xi32>, !tla.vector<64xi32>) -> !tla.vector<64xi32>
+        %out_mask_and = "tla.where"(%mask_bitwise_and, %reg0, %zero_reg) : (!tla.mask, !tla.vector<64xi32>, !tla.vector<64xi32>) -> !tla.vector<64xi32>
+        %out_mask_or = "tla.where"(%mask_bitwise_or, %reg0, %zero_reg) : (!tla.mask, !tla.vector<64xi32>, !tla.vector<64xi32>) -> !tla.vector<64xi32>
+        %out_mask_xor = "tla.where"(%mask_bitwise_xor, %reg0, %zero_reg) : (!tla.mask, !tla.vector<64xi32>, !tla.vector<64xi32>) -> !tla.vector<64xi32>
+        %reg_bitwise_not = "tla.bitwise_not"(%reg0) : (!tla.vector<64xi32>) -> !tla.vector<64xi32>
+        %reg_bitwise_and_all = "tla.bitwise_and"(%reg0, %reg1) : (!tla.vector<64xi32>, !tla.vector<64xi32>) -> !tla.vector<64xi32>
+        %reg_bitwise_and = "tla.bitwise_and"(%reg_bitwise_and_all, %reg1, %all) : (!tla.vector<64xi32>, !tla.vector<64xi32>, !tla.mask) -> !tla.vector<64xi32>
+        %reg_bitwise_or_all = "tla.bitwise_or"(%reg0, %reg1) : (!tla.vector<64xi32>, !tla.vector<64xi32>) -> !tla.vector<64xi32>
+        %reg_bitwise_or = "tla.bitwise_or"(%reg_bitwise_or_all, %reg1, %all) : (!tla.vector<64xi32>, !tla.vector<64xi32>, !tla.mask) -> !tla.vector<64xi32>
+        %reg_bitwise_xor_all = "tla.bitwise_xor"(%reg0, %reg1) : (!tla.vector<64xi32>, !tla.vector<64xi32>) -> !tla.vector<64xi32>
+        %reg_bitwise_xor = "tla.bitwise_xor"(%reg_bitwise_xor_all, %reg1, %all) : (!tla.vector<64xi32>, !tla.vector<64xi32>, !tla.mask) -> !tla.vector<64xi32>
+        "tla.store"(%dst_mask_not_tile, %out_mask_not) : (!vec, !tla.vector<64xi32>) -> ()
+        "tla.store"(%dst_mask_and_tile, %out_mask_and) : (!vec, !tla.vector<64xi32>) -> ()
+        "tla.store"(%dst_mask_or_tile, %out_mask_or) : (!vec, !tla.vector<64xi32>) -> ()
+        "tla.store"(%dst_mask_xor_tile, %out_mask_xor) : (!vec, !tla.vector<64xi32>) -> ()
+        "tla.store"(%dst_reg_not_tile, %reg_bitwise_not) : (!vec, !tla.vector<64xi32>) -> ()
+        "tla.store"(%dst_reg_and_tile, %reg_bitwise_and) : (!vec, !tla.vector<64xi32>) -> ()
+        "tla.store"(%dst_reg_or_tile, %reg_bitwise_or) : (!vec, !tla.vector<64xi32>) -> ()
+        "tla.store"(%dst_reg_xor_tile, %reg_bitwise_xor) : (!vec, !tla.vector<64xi32>) -> ()
       }) {mode = "simd"} : () -> ()
     }) : () -> ()
     return

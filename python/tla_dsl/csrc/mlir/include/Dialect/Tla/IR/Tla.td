@@ -91,11 +91,15 @@ def Tla_CoordType : Tla_IndexTreeType<"Coord", "coord", "Coordinate tuple for hi
 
 def Tla_StrideType : Tla_IndexTreeType<"Stride", "stride", "Stride tuple for layouts.">;
 
-def Tla_ValueType : TypeDef<TlaDialect, "Value", []> {
-  let mnemonic = "value";
-  let summary = "Register-resident value (scalar or vector tile).";
-  let parameters = (ins OptionalParameter<"::mlir::Type", "element type">:$elementType);
+def Tla_VectorSSAType : TypeDef<TlaDialect, "VectorSSA", []> {
+  let mnemonic = "vector";
+  let summary = "Register-resident vector SSA value.";
+  let parameters = (ins
+    "int64_t":$validLanes,
+    "::mlir::Type":$elementType
+  );
   let hasCustomAssemblyFormat = 1;
+  let genVerifyDecl = 1;
 }
 
 def Tla_ScalarValueType : AnyTypeOf<[AnyInteger, AnyFloat, Index],
@@ -477,9 +481,9 @@ def Tla_FullOp : Tla_Op<"full", [Pure]> {
     enclosing vector lowering context.
   }];
   let arguments = (ins AnyTypeOf<[I1, I8, I16, I32, I64, BF16, F16, F32]>:$value);
-  let results = (outs Tla_TensorType:$result);
+  let results = (outs Tla_VectorSSAType:$result);
   let assemblyFormat = [{
-    $value attr-dict `:` type($value) `->` type($result)
+    $value attr-dict `:` type($value) `->` qualified(type($result))
   }];
   let hasVerifier = 1;
 }
@@ -496,9 +500,9 @@ def Tla_ArangeOp : Tla_Op<"arange", [Pure]> {
   }];
   let arguments = (ins AnyTypeOf<[I8, I16, I32, I64]>:$start,
                        StrAttr:$order);
-  let results = (outs Tla_TensorType:$result);
+  let results = (outs Tla_VectorSSAType:$result);
   let assemblyFormat = [{
-    $start attr-dict `:` type($start) `->` type($result)
+    $start attr-dict `:` type($start) `->` qualified(type($result))
   }];
   let hasVerifier = 1;
 }
@@ -615,9 +619,9 @@ def Tla_LoadOp : Tla_Op<"load", []> {
   let arguments = (ins Tla_TensorType:$source,
                        OptionalAttr<Tla_LoadDistAttr>:$load_dist,
                        OptionalAttr<UnitAttr>:$unaligned_ub_access);
-  let results = (outs Tla_TensorType:$result);
+  let results = (outs Tla_VectorSSAType:$result);
   let assemblyFormat = [{
-    $source attr-dict `:` type($source) `->` type($result)
+    $source attr-dict `:` type($source) `->` qualified(type($result))
   }];
   let hasVerifier = 1;
 }
@@ -868,11 +872,11 @@ def Tla_StoreOp : Tla_Op<"store", []> {
     UB access (``vstas``/``vstus`` inserted by the HIVMAVE pipeline).
     Must be nested inside a ``tla.vec.func`` region.
   }];
-  let arguments = (ins Tla_TensorType:$dest, Tla_TensorType:$source,
+  let arguments = (ins Tla_TensorType:$dest, Tla_VectorSSAType:$source,
                        Optional<Tla_MaskType>:$mask,
                        OptionalAttr<UnitAttr>:$unaligned_ub_access);
   let assemblyFormat = [{
-    $dest `,` $source (`mask` $mask^)? attr-dict `:` type($dest) `,` type($source)
+    $dest `,` $source (`mask` $mask^)? attr-dict `:` type($dest) `,` qualified(type($source))
     (`mask` qualified(type($mask))^)?
   }];
   let hasVerifier = 1;
@@ -926,9 +930,9 @@ class Tla_BitwiseUnaryOp<string mnemonic, string opSummary, string opDescription
     The ``mask`` operand predicates which lanes are computed; masked-out lanes
     are undefined/zeroed. When omitted, all lanes are active.
   }];
-  let arguments = (ins AnyTypeOf<[Tla_TensorType, Tla_MaskType]>:$operand,
+  let arguments = (ins AnyTypeOf<[Tla_VectorSSAType, Tla_MaskType]>:$operand,
                        Optional<Tla_MaskType>:$mask);
-  let results = (outs AnyTypeOf<[Tla_TensorType, Tla_MaskType]>:$result);
+  let results = (outs AnyTypeOf<[Tla_VectorSSAType, Tla_MaskType]>:$result);
   let assemblyFormat = [{
     $operand (`mask` $mask^)? attr-dict `:`
     qualified(type($operand)) (`mask` qualified(type($mask))^)?
@@ -945,10 +949,10 @@ class Tla_BitwiseBinaryOp<string mnemonic, string opSummary, string opDescriptio
     The ``mask`` operand predicates which lanes are computed; masked-out lanes
     are undefined/zeroed. When omitted, all lanes are active.
   }];
-  let arguments = (ins AnyTypeOf<[Tla_TensorType, Tla_MaskType]>:$lhs,
-                       AnyTypeOf<[Tla_TensorType, Tla_MaskType]>:$rhs,
+  let arguments = (ins AnyTypeOf<[Tla_VectorSSAType, Tla_MaskType]>:$lhs,
+                       AnyTypeOf<[Tla_VectorSSAType, Tla_MaskType]>:$rhs,
                        Optional<Tla_MaskType>:$mask);
-  let results = (outs AnyTypeOf<[Tla_TensorType, Tla_MaskType]>:$result);
+  let results = (outs AnyTypeOf<[Tla_VectorSSAType, Tla_MaskType]>:$result);
   let assemblyFormat = [{
     $lhs `,` $rhs (`mask` $mask^)? attr-dict `:`
     qualified(type($lhs)) `,` qualified(type($rhs))
@@ -960,37 +964,37 @@ class Tla_BitwiseBinaryOp<string mnemonic, string opSummary, string opDescriptio
 
 def Tla_BitwiseNotOp : Tla_BitwiseUnaryOp<"bitwise_not",
     "Element-wise bitwise NOT",
-    "Element-wise bitwise NOT on MaskReg or RegTensor values.">;
+    "Element-wise bitwise NOT on MaskSSA or VectorSSA values.">;
 
 def Tla_BitwiseAndOp : Tla_BitwiseBinaryOp<"bitwise_and",
     "Element-wise bitwise AND",
-    "Element-wise bitwise AND on MaskReg or RegTensor values.">;
+    "Element-wise bitwise AND on MaskSSA or VectorSSA values.">;
 
 def Tla_BitwiseOrOp : Tla_BitwiseBinaryOp<"bitwise_or",
     "Element-wise bitwise OR",
-    "Element-wise bitwise OR on MaskReg or RegTensor values.">;
+    "Element-wise bitwise OR on MaskSSA or VectorSSA values.">;
 
 def Tla_BitwiseXorOp : Tla_BitwiseBinaryOp<"bitwise_xor",
     "Element-wise bitwise XOR",
-    "Element-wise bitwise XOR on MaskReg or RegTensor values.">;
+    "Element-wise bitwise XOR on MaskSSA or VectorSSA values.">;
 
 def Tla_CmpOp : Tla_Op<"cmp", [Pure]> {
   let summary = "Create a mask by comparing a vector with a vector or scalar";
   let description = [{
     Data-dependent mask: lane ``i`` is true when ``lhs[i] <mode> rhs[i]``.
-    ``rhs`` may be a vector tensor or scalar SSA value. ``mode`` is one of
+    ``rhs`` may be a VectorSSA value or scalar SSA value. ``mode`` is one of
     ``lt``, ``le``, ``gt``, ``ge``, ``eq``, ``ne``. An optional mask controls
     which lanes participate in the compare.
   }];
-  let arguments = (ins Tla_TensorType:$lhs,
-                       AnyTypeOf<[Tla_TensorType, Tla_ScalarValueType]>:$rhs,
+  let arguments = (ins Tla_VectorSSAType:$lhs,
+                       AnyTypeOf<[Tla_VectorSSAType, Tla_ScalarValueType]>:$rhs,
                        StrAttr:$mode,
                        Optional<Tla_MaskType>:$mask);
   let results = (outs Tla_MaskType:$result);
   let hasVerifier = 1;
   let assemblyFormat = [{
     $mode $lhs `,` $rhs (`mask` $mask^)? attr-dict `:`
-    type($lhs) `,` type($rhs) (`mask` qualified(type($mask))^)? `->` qualified(type($result))
+    qualified(type($lhs)) `,` qualified(type($rhs)) (`mask` qualified(type($mask))^)? `->` qualified(type($result))
   }];
 }
 
@@ -1042,51 +1046,51 @@ class Tla_VectorBinaryOp<string mnemonic, string opSummary, string opDescription
     An optional mask controls which lanes are computed; masked-out lanes are
     undefined/zeroed.
   }];
-  let arguments = (ins Tla_TensorType:$lhs, Tla_TensorType:$rhs,
+  let arguments = (ins Tla_VectorSSAType:$lhs, Tla_VectorSSAType:$rhs,
                        Optional<Tla_MaskType>:$mask);
-  let results = (outs Tla_TensorType:$result);
+  let results = (outs Tla_VectorSSAType:$result);
   let assemblyFormat = [{
     $lhs `,` $rhs (`mask` $mask^)? attr-dict `:`
-    type($lhs) `,` type($rhs) (`mask` qualified(type($mask))^)? `->` type($result)
+    qualified(type($lhs)) `,` qualified(type($rhs)) (`mask` qualified(type($mask))^)? `->` qualified(type($result))
   }];
   let hasVerifier = 1;
 }
 
 def Tla_AddOp : Tla_VectorBinaryOp<"add",
-    "Vector add for tensor fragments",
-    "Element-wise add on tensor fragments / vector tiles.">;
+    "Vector add on VectorSSA values",
+    "Element-wise add on VectorSSA values.">;
 
 def Tla_SubOp : Tla_VectorBinaryOp<"sub",
-    "Vector subtract for tensor fragments",
-    "Element-wise subtract on tensor fragments / vector tiles.">;
+    "Vector subtract on VectorSSA values",
+    "Element-wise subtract on VectorSSA values.">;
 
 def Tla_MulOp : Tla_VectorBinaryOp<"mul",
-    "Vector multiply for tensor fragments",
-    "Element-wise multiply on tensor fragments / vector tiles.">;
+    "Vector multiply on VectorSSA values",
+    "Element-wise multiply on VectorSSA values.">;
 
 def Tla_DivOp : Tla_VectorBinaryOp<"div",
-    "Vector divide for tensor fragments",
-    "Element-wise divide on tensor fragments / vector tiles.">;
+    "Vector divide on VectorSSA values",
+    "Element-wise divide on VectorSSA values.">;
 
 def Tla_MaxOp : Tla_VectorBinaryOp<"max",
-    "Vector maximum for tensor fragments",
-    "Element-wise maximum on tensor fragments / vector tiles.">;
+    "Vector maximum on VectorSSA values",
+    "Element-wise maximum on VectorSSA values.">;
 
 def Tla_MinOp : Tla_VectorBinaryOp<"min",
-    "Vector minimum for tensor fragments",
-    "Element-wise minimum on tensor fragments / vector tiles.">;
+    "Vector minimum on VectorSSA values",
+    "Element-wise minimum on VectorSSA values.">;
 
 def Tla_GatherOp : Tla_Op<"gather", [Pure]> {
-  let summary = "Vector gather for tensor fragments";
+  let summary = "Vector gather on VectorSSA values";
   let description = [{
     Gathers elements from ``x`` to ``result``according to the indices in ``y``.
   }];
-  let arguments = (ins Tla_TensorType:$x, Tla_TensorType:$y,
+  let arguments = (ins Tla_TensorType:$x, Tla_VectorSSAType:$y,
                        Optional<Tla_MaskType>:$mask);
-  let results = (outs Tla_TensorType:$result);
+  let results = (outs Tla_VectorSSAType:$result);
   let assemblyFormat = [{
     $x `,` $y (`mask` $mask^)? attr-dict `:`
-    type($x) `,` type($y) (`mask` qualified(type($mask))^)? `->` type($result)
+    type($x) `,` qualified(type($y)) (`mask` qualified(type($mask))^)? `->` qualified(type($result))
   }];
 }
 
@@ -1097,43 +1101,43 @@ def Tla_SqueezeOp : Tla_Op<"squeeze", [Pure]> {
   Remaining lanes in ``result`` are zeroed. This matches AscendC ``Squeeze``
   semantics (valid elements packed from low to high, not value-sorted).
   }];
-  let arguments = (ins Tla_TensorType:$src, Tla_MaskType:$mask);
-  let results = (outs Tla_TensorType:$result);
+  let arguments = (ins Tla_VectorSSAType:$src, Tla_MaskType:$mask);
+  let results = (outs Tla_VectorSSAType:$result);
   let assemblyFormat = [{
     $src `,` $mask attr-dict `:`
-    type($src) `,` qualified(type($mask)) `->` type($result)
+    qualified(type($src)) `,` qualified(type($mask)) `->` qualified(type($result))
   }];
 }
 
 def Tla_CastOp : Tla_Op<"cast", [Pure]> {
-  let summary = "Vector element-type conversion for tensor fragments";
+  let summary = "Vector element-type conversion on VectorSSA values";
   let description = [{
-    Convert a register-resident tensor fragment from one element type to another
+    Convert a register-resident VectorSSA value from one element type to another
     (e.g. ``f32`` -> ``f16``, ``f32`` -> ``i32``). The ``trait`` attribute carries
     the cast knobs (rounding, saturation, register slot). An optional mask
     predicates which lanes are converted.
   }];
-  let arguments = (ins Tla_TensorType:$source, DenseI32ArrayAttr:$trait,
+  let arguments = (ins Tla_VectorSSAType:$source, DenseI32ArrayAttr:$trait,
                        Optional<Tla_MaskType>:$mask);
-  let results = (outs Tla_TensorType:$result);
+  let results = (outs Tla_VectorSSAType:$result);
   let assemblyFormat = [{
     $source `,` $trait (`mask` $mask^)? attr-dict `:`
-    type($source) (`mask` qualified(type($mask))^)? `->` type($result)
+    qualified(type($source)) (`mask` qualified(type($mask))^)? `->` qualified(type($result))
   }];
 }
 
 def Tla_WhereOp : Tla_Op<"where", [Pure]> {
-  let summary = "Vector select for tensor fragments";
+  let summary = "Vector select on VectorSSA values";
   let description = [{
-    Element-wise select on tensor fragments / vector tiles. For each lane the
+    Element-wise select on VectorSSA values. For each lane the
     result holds the corresponding lane of ``x`` where the mask is
-    active and ``y`` elsewhere. ``x`` and ``y`` must share the same tensor type.
+    active and ``y`` elsewhere. ``x`` and ``y`` must share the same VectorSSA type.
   }];
-  let arguments = (ins Tla_MaskType:$mask, Tla_TensorType:$x, Tla_TensorType:$y);
-  let results = (outs Tla_TensorType:$result);
+  let arguments = (ins Tla_MaskType:$mask, Tla_VectorSSAType:$x, Tla_VectorSSAType:$y);
+  let results = (outs Tla_VectorSSAType:$result);
   let assemblyFormat = [{
     $mask `,` $x `,` $y attr-dict `:`
-    qualified(type($mask)) `,` type($x) `,` type($y) `->` type($result)
+    qualified(type($mask)) `,` qualified(type($x)) `,` qualified(type($y)) `->` qualified(type($result))
   }];
   let hasVerifier = 1;
 }
@@ -1146,73 +1150,73 @@ class Tla_VectorScalarBinaryOp<string mnemonic, string opSummary, string opDescr
     The right-hand side is a scalar SSA value. An optional mask controls which
     lanes are computed; masked-out lanes are undefined/zeroed.
   }];
-  let arguments = (ins Tla_TensorType:$lhs, Tla_ScalarValueType:$rhs,
+  let arguments = (ins Tla_VectorSSAType:$lhs, Tla_ScalarValueType:$rhs,
                        Optional<Tla_MaskType>:$mask);
-  let results = (outs Tla_TensorType:$result);
+  let results = (outs Tla_VectorSSAType:$result);
   let assemblyFormat = [{
     $lhs `,` $rhs (`mask` $mask^)? attr-dict `:`
-    type($lhs) `,` type($rhs) (`mask` qualified(type($mask))^)? `->` type($result)
+    qualified(type($lhs)) `,` type($rhs) (`mask` qualified(type($mask))^)? `->` qualified(type($result))
   }];
   let hasVerifier = 1;
 }
 
 def Tla_AddsOp : Tla_VectorScalarBinaryOp<"adds",
-    "Vector-scalar add for tensor fragments",
-    "Element-wise add of a scalar to tensor fragments / vector tiles.">;
+    "Vector-scalar add on VectorSSA values",
+    "Element-wise add of a scalar to VectorSSA values.">;
 
 def Tla_SubsOp : Tla_VectorScalarBinaryOp<"subs",
-    "Vector-scalar subtract for tensor fragments",
-    "Element-wise subtract of a scalar from tensor fragments / vector tiles.">;
+    "Vector-scalar subtract on VectorSSA values",
+    "Element-wise subtract of a scalar from VectorSSA values.">;
 
 def Tla_MulsOp : Tla_VectorScalarBinaryOp<"muls",
-    "Vector-scalar multiply for tensor fragments",
-    "Element-wise multiply of tensor fragments / vector tiles by a scalar.">;
+    "Vector-scalar multiply on VectorSSA values",
+    "Element-wise multiply of VectorSSA values by a scalar.">;
 
 def Tla_MaxsOp : Tla_VectorScalarBinaryOp<"maxs",
-    "Vector-scalar maximum for tensor fragments",
-    "Element-wise maximum of tensor fragments / vector tiles and a scalar.">;
+    "Vector-scalar maximum on VectorSSA values",
+    "Element-wise maximum of VectorSSA values and a scalar.">;
 
 def Tla_MinsOp : Tla_VectorScalarBinaryOp<"mins",
-    "Vector-scalar minimum for tensor fragments",
-    "Element-wise minimum of tensor fragments / vector tiles and a scalar.">;
+    "Vector-scalar minimum on VectorSSA values",
+    "Element-wise minimum of VectorSSA values and a scalar.">;
 
 def Tla_DivsOp : Tla_VectorScalarBinaryOp<"divs",
-    "Vector-scalar divide for tensor fragments",
-    "Element-wise divide of tensor fragments / vector tiles by a scalar.">;
+    "Vector-scalar divide on VectorSSA values",
+    "Element-wise divide of VectorSSA values by a scalar.">;
 
 def Tla_ReduceOp : Tla_Op<"reduce", [Pure]> {
-  let summary = "Vector reduction for tensor fragments";
+  let summary = "Vector reduction on VectorSSA values";
   let description = [{
-    Reduce a register-resident tensor fragment to a one-lane tensor fragment.
+    Reduce a register-resident VectorSSA value to a one-lane VectorSSA value.
   }];
-  let arguments = (ins Tla_TensorType:$operand, Optional<Tla_MaskType>:$mask,
+  let arguments = (ins Tla_VectorSSAType:$operand, Optional<Tla_MaskType>:$mask,
                        StrAttr:$kind);
-  let results = (outs Tla_TensorType:$result);
+  let results = (outs Tla_VectorSSAType:$result);
   let assemblyFormat = [{
     $operand (`mask` $mask^)? attr-dict `:`
-    type($operand) (`mask` qualified(type($mask))^)? `->` type($result)
+    qualified(type($operand)) (`mask` qualified(type($mask))^)? `->` qualified(type($result))
   }];
   let hasVerifier = 1;
 }
 
 def Tla_InterleaveOp : Tla_Op<"interleave", [Pure]> {
-  let summary = "Vector interleave for tensor fragments";
-  let arguments = (ins Tla_TensorType:$src0, Tla_TensorType:$src1);
-  let results = (outs Tla_TensorType:$dst0, Tla_TensorType:$dst1);
+  let summary = "Vector interleave on VectorSSA values";
+  let arguments = (ins Tla_VectorSSAType:$src0, Tla_VectorSSAType:$src1);
+  let results = (outs Tla_VectorSSAType:$dst0, Tla_VectorSSAType:$dst1);
   let assemblyFormat = [{
     $src0 `,` $src1 attr-dict `:`
-    type($src0) `,` type($src1) `->` type($dst0) `,` type($dst1)
+    qualified(type($src0)) `,` qualified(type($src1)) `->` qualified(type($dst0)) `,` qualified(type($dst1))
   }];
   let hasVerifier = 1;
 }
 
 def Tla_DeInterleaveOp : Tla_Op<"deinterleave", [Pure]> {
-  let summary = "Vector deinterleave for tensor fragments";
-  let arguments = (ins Tla_TensorType:$src0, Tla_TensorType:$src1);
-  let results = (outs Tla_TensorType:$dst0, Tla_TensorType:$dst1);
+  let summary = "Vector deinterleave on VectorSSA values";
+  let arguments = (ins Tla_VectorSSAType:$src0, Tla_VectorSSAType:$src1);
+  let results = (outs Tla_VectorSSAType:$dst0, Tla_VectorSSAType:$dst1);
   let assemblyFormat = [{
     $src0 `,` $src1 attr-dict `:`
-    type($src0) `,` type($src1) `->` type($dst0) `,` type($dst1)
+    qualified(type($src0)) `,` qualified(type($src1)) `->` qualified(type($dst0)) `,` qualified(type($dst1))
   }];
   let hasVerifier = 1;
 }
@@ -1225,36 +1229,36 @@ class Tla_VectorUnaryOp<string mnemonic, string opSummary, string opDescription>
     An optional mask controls which lanes are computed; masked-out lanes are
     undefined/zeroed.
   }];
-  let arguments = (ins Tla_TensorType:$operand,
+  let arguments = (ins Tla_VectorSSAType:$operand,
                        Optional<Tla_MaskType>:$mask);
-  let results = (outs Tla_TensorType:$result);
+  let results = (outs Tla_VectorSSAType:$result);
   let assemblyFormat = [{
     $operand (`mask` $mask^)? attr-dict `:`
-    type($operand) (`mask` qualified(type($mask))^)?
-    `->` type($result)
+    qualified(type($operand)) (`mask` qualified(type($mask))^)?
+    `->` qualified(type($result))
   }];
   let hasVerifier = 1;
 }
 
 def Tla_ExpOp : Tla_VectorUnaryOp<"exp",
-    "Vector exponential for tensor fragments",
-    "Element-wise exponential on tensor fragments / vector tiles.">;
+    "Vector exponential on VectorSSA values",
+    "Element-wise exponential on VectorSSA values.">;
 
 def Tla_LogOp : Tla_VectorUnaryOp<"log",
-    "Vector natural logarithm for tensor fragments",
-    "Element-wise natural logarithm on tensor fragments / vector tiles.">;
+    "Vector natural logarithm on VectorSSA values",
+    "Element-wise natural logarithm on VectorSSA values.">;
 
 def Tla_SqrtOp : Tla_VectorUnaryOp<"sqrt",
-    "Vector square root for tensor fragments",
-    "Element-wise square root on tensor fragments / vector tiles.">;
+    "Vector square root on VectorSSA values",
+    "Element-wise square root on VectorSSA values.">;
 
 def Tla_AbsOp : Tla_VectorUnaryOp<"abs",
-    "Vector absolute value for tensor fragments",
-    "Element-wise absolute value on tensor fragments / vector tiles.">;
+    "Vector absolute value on VectorSSA values",
+    "Element-wise absolute value on VectorSSA values.">;
 
 def Tla_NegOp : Tla_VectorUnaryOp<"neg",
-    "Vector negate for tensor fragments",
-    "Element-wise negate on tensor fragments / vector tiles.">;
+    "Vector negate on VectorSSA values",
+    "Element-wise negate on VectorSSA values.">;
 
 def Tla_VectorOp : Tla_Op<"vector", [NoTerminator, SingleBlock]> {
   let summary = "Vector region";

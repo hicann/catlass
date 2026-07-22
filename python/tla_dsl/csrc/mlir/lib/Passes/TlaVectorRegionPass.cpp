@@ -450,7 +450,7 @@ static Value createVectorBinaryResult(OpBuilder &b, Location loc, VectorBinaryKi
   case VectorBinaryKind::Min:
     return b.create<hivmave::VFMinOp>(loc, vecType, lhs, rhs, mask, Value()).getResult();
   case VectorBinaryKind::And:
-    if (isa<::tla::TlaTensorType>(tlaOperandType))
+    if (isa<::tla::VectorSSAType>(tlaOperandType))
       return b.create<hivmave::VFAndOp>(loc, vecType, lhs, rhs, mask, Value())
           .getResult();
     if (isa<::tla::MaskType>(tlaOperandType))
@@ -459,7 +459,7 @@ static Value createVectorBinaryResult(OpBuilder &b, Location loc, VectorBinaryKi
           .getRes();
     return nullptr;
   case VectorBinaryKind::Or:
-    if (isa<::tla::TlaTensorType>(tlaOperandType))
+    if (isa<::tla::VectorSSAType>(tlaOperandType))
       return b.create<hivmave::VFOrOp>(loc, vecType, lhs, rhs, mask, Value()).getResult();
     if (isa<::tla::MaskType>(tlaOperandType))
       return b.create<hivmave::PregOrOp>(
@@ -467,7 +467,7 @@ static Value createVectorBinaryResult(OpBuilder &b, Location loc, VectorBinaryKi
           .getRes();
     return nullptr;
   case VectorBinaryKind::Xor:
-    if (isa<::tla::TlaTensorType>(tlaOperandType))
+    if (isa<::tla::VectorSSAType>(tlaOperandType))
       return b.create<hivmave::VFXorOp>(loc, vecType, lhs, rhs, mask, Value())
           .getResult();
     if (isa<::tla::MaskType>(tlaOperandType))
@@ -650,7 +650,7 @@ static Value createVectorUnaryResult(OpBuilder &b, Location loc, VectorUnaryKind
   case VectorUnaryKind::Neg:
     return b.create<hivmave::VFNegOp>(loc, vecType, operand, mask, Value()).getResult();
   case VectorUnaryKind::Not:
-    if (isa<::tla::TlaTensorType>(tlaOperandType))
+    if (isa<::tla::VectorSSAType>(tlaOperandType))
       return b.create<hivmave::VFNotOp>(loc, vecType, operand, mask, Value()).getResult();
     if (isa<::tla::MaskType>(tlaOperandType))
       return b.create<hivmave::PregNotOp>(
@@ -857,13 +857,13 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
     auto srcVecType = dyn_cast<VectorType>(src.getType());
     if (!srcVecType)
       return castOp.emitError("tla.cast source is not a vector value"), failure();
-    auto dstInfo = parseTensorInfo(castOp.getResult().getType());
-    if (failed(dstInfo))
-      return castOp.emitError("failed to parse tla.cast result element type"), failure();
-    auto dstLanesOr = getVectorLaneCount(dstInfo->elementType);
+    auto dstType = dyn_cast<::tla::VectorSSAType>(castOp.getResult().getType());
+    if (!dstType)
+      return castOp.emitError("expected !tla.vector result type"), failure();
+    auto dstLanesOr = getVectorLaneCount(dstType.getElementType());
     if (failed(dstLanesOr))
       return castOp.emitError("unsupported tla.cast destination element type"), failure();
-    auto dstVecType = VectorType::get({*dstLanesOr}, dstInfo->elementType);
+    auto dstVecType = VectorType::get({*dstLanesOr}, dstType.getElementType());
     // Reject casts whose source or destination element type has no AVE cast path
     // (unsigned integers, i1/bool, f64) rather than emitting invalid AVE IR.
     if (!isSupportedCastElementType(srcVecType.getElementType()) ||
@@ -898,11 +898,11 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
     if (!source)
       return failure();
     // No vector operand to key off: the broadcast width comes from the result
-    // tensor's element type.
-    auto resultInfo = parseTensorInfo(fullOp.getResult().getType());
-    if (failed(resultInfo))
-      return fullOp.emitError("failed to parse tla.full result element type"), failure();
-    auto opCtx = deriveVecCtxForElement(resultInfo->elementType);
+    // VectorSSA element type.
+    auto resultType = dyn_cast<::tla::VectorSSAType>(fullOp.getResult().getType());
+    if (!resultType)
+      return fullOp.emitError("expected !tla.vector result type"), failure();
+    auto opCtx = deriveVecCtxForElement(resultType.getElementType());
     if (failed(opCtx))
       return fullOp.emitError("unsupported tla.full result element type"), failure();
     if (source.getType() != opCtx->elementType)
@@ -919,11 +919,11 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
     Value start = lookupOrCloneScalarValue(b, arangeOp.getStart(), valueMap);
     if (!start)
       return failure();
-    // Width comes from the result tensor's element type.
-    auto resultInfo = parseTensorInfo(arangeOp.getResult().getType());
-    if (failed(resultInfo))
-      return arangeOp.emitError("failed to parse tla.arange result element type"), failure();
-    auto opCtx = deriveVecCtxForElement(resultInfo->elementType);
+    // Width comes from the result VectorSSA element type.
+    auto resultType = dyn_cast<::tla::VectorSSAType>(arangeOp.getResult().getType());
+    if (!resultType)
+      return arangeOp.emitError("expected !tla.vector result type"), failure();
+    auto opCtx = deriveVecCtxForElement(resultType.getElementType());
     if (failed(opCtx))
       return arangeOp.emitError("unsupported tla.arange result element type"), failure();
     if (isa<FloatType>(opCtx->elementType))
@@ -1180,12 +1180,12 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
       return failure();
 
     Type tlaOperandType = operands.operand.getType();
-    if (isa<::tla::TlaTensorType>(tlaOperandType)) {
+    if (isa<::tla::VectorSSAType>(tlaOperandType)) {
       if (failed(validateVectorUnaryElementType(
               &op, *info, operandVecType.getElementType())))
         return failure();
     } else if (!isa<::tla::MaskType>(tlaOperandType)) {
-      return op.emitError("expected !tla.tensor or !tla.mask operand");
+      return op.emitError("expected !tla.vector or !tla.mask operand");
     }
 
     Value mask;
@@ -1270,7 +1270,7 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
     } else {
       mask = b.create<hivmave::VFPgeOp>(loc, opCtx->maskVecType, hivmave::PgePattern::ALL);
     }
-    if (isa<::tla::TlaTensorType>(cmpOp.getRhs().getType())) {
+    if (isa<::tla::VectorSSAType>(cmpOp.getRhs().getType())) {
       Value rhs = valueMap.lookup(cmpOp.getRhs());
       if (!rhs)
         return failure();
@@ -1807,7 +1807,7 @@ public:
         if (!producedValues.contains(cmpOp.getLhs()))
           return rewriter.notifyMatchFailure(
               vecFuncOp, "expected tla.cmp lhs from tla.load or prior compute op");
-        if (isa<::tla::TlaTensorType>(cmpOp.getRhs().getType()) &&
+        if (isa<::tla::VectorSSAType>(cmpOp.getRhs().getType()) &&
             !producedValues.contains(cmpOp.getRhs()))
           return rewriter.notifyMatchFailure(
               vecFuncOp, "expected tla.cmp rhs from tla.load or prior compute op");

@@ -43,10 +43,10 @@ module {
         %22 = tla.make_coord -> !tla.coord<0,0>
         %23 = tla.make_coord -> !tla.coord<0,0>
         %24 = tla.tile_view %12, %21, %23 : !tla.tensor<!tla.layout<!tla.shape<?,32>, !tla.stride<32,1>, !tla.shape<?,32>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, ub, 256>>, !tla.shape<2,32>, !tla.coord<0,0> -> !tla.tensor<!tla.layout<!tla.shape<2,32>, !tla.stride<32,1>, !tla.shape<?,32>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, ub, 256>>
-        %25 = tla.load %16 : <!tla.layout<!tla.shape<2,32>, !tla.stride<32,1>, !tla.shape<?,32>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, ub, 256>> -> <!tla.layout<!tla.shape<2,32>, !tla.stride<32,1>, !tla.shape<?,32>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, ub, 256>>
-        %26 = tla.load %20 : <!tla.layout<!tla.shape<2,32>, !tla.stride<32,1>, !tla.shape<?,32>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, ub, 256>> -> <!tla.layout<!tla.shape<2,32>, !tla.stride<32,1>, !tla.shape<?,32>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, ub, 256>>
-        %27 = tla.add %25, %26 : <!tla.layout<!tla.shape<2,32>, !tla.stride<32,1>, !tla.shape<?,32>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, ub, 256>>, <!tla.layout<!tla.shape<2,32>, !tla.stride<32,1>, !tla.shape<?,32>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, ub, 256>> -> <!tla.layout<!tla.shape<2,32>, !tla.stride<32,1>, !tla.shape<?,32>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, ub, 256>>
-        tla.store %24, %27 : <!tla.layout<!tla.shape<2,32>, !tla.stride<32,1>, !tla.shape<?,32>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, ub, 256>>, <!tla.layout<!tla.shape<2,32>, !tla.stride<32,1>, !tla.shape<?,32>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, ub, 256>>
+        %25 = tla.load %16 : <!tla.layout<!tla.shape<2,32>, !tla.stride<32,1>, !tla.shape<?,32>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, ub, 256>> -> !tla.vector<?xf32>
+        %26 = tla.load %20 : <!tla.layout<!tla.shape<2,32>, !tla.stride<32,1>, !tla.shape<?,32>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, ub, 256>> -> !tla.vector<?xf32>
+        %27 = tla.add %25, %26 : !tla.vector<?xf32>, !tla.vector<?xf32> -> !tla.vector<?xf32>
+        tla.store %24, %27 : <!tla.layout<!tla.shape<2,32>, !tla.stride<32,1>, !tla.shape<?,32>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, ub, 256>>, !tla.vector<?xf32>
       }) {mode = "simd"} : () -> ()
       // Chunk at coord<1,0> → flat offset 1*32=32
       "tla.vec.func"() ({
@@ -62,10 +62,10 @@ module {
         %22 = tla.make_coord -> !tla.coord<1,0>
         %23 = tla.make_coord -> !tla.coord<2,0>
         %24 = tla.tile_view %12, %21, %23 : !tla.tensor<!tla.layout<!tla.shape<?,32>, !tla.stride<32,1>, !tla.shape<?,32>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, ub, 256>>, !tla.shape<2,32>, !tla.coord<2,0> -> !tla.tensor<!tla.layout<!tla.shape<2,32>, !tla.stride<32,1>, !tla.shape<?,32>, row_major>, !tla.coord<2,0>, !tla.ptr<f32, ub, 256>>
-        %25 = tla.load %16 : <!tla.layout<!tla.shape<2,32>, !tla.stride<32,1>, !tla.shape<?,32>, row_major>, !tla.coord<2,0>, !tla.ptr<f32, ub, 256>> -> <!tla.layout<!tla.shape<2,32>, !tla.stride<32,1>, !tla.shape<?,32>, row_major>, !tla.coord<2,0>, !tla.ptr<f32, ub, 256>>
-        %26 = tla.load %20 : <!tla.layout<!tla.shape<2,32>, !tla.stride<32,1>, !tla.shape<?,32>, row_major>, !tla.coord<2,0>, !tla.ptr<f32, ub, 256>> -> <!tla.layout<!tla.shape<2,32>, !tla.stride<32,1>, !tla.shape<?,32>, row_major>, !tla.coord<2,0>, !tla.ptr<f32, ub, 256>>
-        %27 = tla.add %25, %26 : <!tla.layout<!tla.shape<2,32>, !tla.stride<32,1>, !tla.shape<?,32>, row_major>, !tla.coord<2,0>, !tla.ptr<f32, ub, 256>>, <!tla.layout<!tla.shape<2,32>, !tla.stride<32,1>, !tla.shape<?,32>, row_major>, !tla.coord<2,0>, !tla.ptr<f32, ub, 256>> -> <!tla.layout<!tla.shape<2,32>, !tla.stride<32,1>, !tla.shape<?,32>, row_major>, !tla.coord<2,0>, !tla.ptr<f32, ub, 256>>
-        tla.store %24, %27 : <!tla.layout<!tla.shape<2,32>, !tla.stride<32,1>, !tla.shape<?,32>, row_major>, !tla.coord<2,0>, !tla.ptr<f32, ub, 256>>, <!tla.layout<!tla.shape<2,32>, !tla.stride<32,1>, !tla.shape<?,32>, row_major>, !tla.coord<2,0>, !tla.ptr<f32, ub, 256>>
+        %25 = tla.load %16 : <!tla.layout<!tla.shape<2,32>, !tla.stride<32,1>, !tla.shape<?,32>, row_major>, !tla.coord<2,0>, !tla.ptr<f32, ub, 256>> -> !tla.vector<?xf32>
+        %26 = tla.load %20 : <!tla.layout<!tla.shape<2,32>, !tla.stride<32,1>, !tla.shape<?,32>, row_major>, !tla.coord<2,0>, !tla.ptr<f32, ub, 256>> -> !tla.vector<?xf32>
+        %27 = tla.add %25, %26 : !tla.vector<?xf32>, !tla.vector<?xf32> -> !tla.vector<?xf32>
+        tla.store %24, %27 : <!tla.layout<!tla.shape<2,32>, !tla.stride<32,1>, !tla.shape<?,32>, row_major>, !tla.coord<2,0>, !tla.ptr<f32, ub, 256>>, !tla.vector<?xf32>
       }) {mode = "simd"} : () -> ()
       // Chunk at coord<2,0> → flat offset 2*32=64
       "tla.vec.func"() ({
@@ -81,10 +81,10 @@ module {
         %22 = tla.make_coord -> !tla.coord<2,0>
         %23 = tla.make_coord -> !tla.coord<4,0>
         %24 = tla.tile_view %12, %21, %23 : !tla.tensor<!tla.layout<!tla.shape<?,32>, !tla.stride<32,1>, !tla.shape<?,32>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, ub, 256>>, !tla.shape<2,32>, !tla.coord<4,0> -> !tla.tensor<!tla.layout<!tla.shape<2,32>, !tla.stride<32,1>, !tla.shape<?,32>, row_major>, !tla.coord<4,0>, !tla.ptr<f32, ub, 256>>
-        %25 = tla.load %16 : <!tla.layout<!tla.shape<2,32>, !tla.stride<32,1>, !tla.shape<?,32>, row_major>, !tla.coord<4,0>, !tla.ptr<f32, ub, 256>> -> <!tla.layout<!tla.shape<2,32>, !tla.stride<32,1>, !tla.shape<?,32>, row_major>, !tla.coord<4,0>, !tla.ptr<f32, ub, 256>>
-        %26 = tla.load %20 : <!tla.layout<!tla.shape<2,32>, !tla.stride<32,1>, !tla.shape<?,32>, row_major>, !tla.coord<4,0>, !tla.ptr<f32, ub, 256>> -> <!tla.layout<!tla.shape<2,32>, !tla.stride<32,1>, !tla.shape<?,32>, row_major>, !tla.coord<4,0>, !tla.ptr<f32, ub, 256>>
-        %27 = tla.add %25, %26 : <!tla.layout<!tla.shape<2,32>, !tla.stride<32,1>, !tla.shape<?,32>, row_major>, !tla.coord<4,0>, !tla.ptr<f32, ub, 256>>, <!tla.layout<!tla.shape<2,32>, !tla.stride<32,1>, !tla.shape<?,32>, row_major>, !tla.coord<4,0>, !tla.ptr<f32, ub, 256>> -> <!tla.layout<!tla.shape<2,32>, !tla.stride<32,1>, !tla.shape<?,32>, row_major>, !tla.coord<4,0>, !tla.ptr<f32, ub, 256>>
-        tla.store %24, %27 : <!tla.layout<!tla.shape<2,32>, !tla.stride<32,1>, !tla.shape<?,32>, row_major>, !tla.coord<4,0>, !tla.ptr<f32, ub, 256>>, <!tla.layout<!tla.shape<2,32>, !tla.stride<32,1>, !tla.shape<?,32>, row_major>, !tla.coord<4,0>, !tla.ptr<f32, ub, 256>>
+        %25 = tla.load %16 : <!tla.layout<!tla.shape<2,32>, !tla.stride<32,1>, !tla.shape<?,32>, row_major>, !tla.coord<4,0>, !tla.ptr<f32, ub, 256>> -> !tla.vector<?xf32>
+        %26 = tla.load %20 : <!tla.layout<!tla.shape<2,32>, !tla.stride<32,1>, !tla.shape<?,32>, row_major>, !tla.coord<4,0>, !tla.ptr<f32, ub, 256>> -> !tla.vector<?xf32>
+        %27 = tla.add %25, %26 : !tla.vector<?xf32>, !tla.vector<?xf32> -> !tla.vector<?xf32>
+        tla.store %24, %27 : <!tla.layout<!tla.shape<2,32>, !tla.stride<32,1>, !tla.shape<?,32>, row_major>, !tla.coord<4,0>, !tla.ptr<f32, ub, 256>>, !tla.vector<?xf32>
       }) {mode = "simd"} : () -> ()
     }) : () -> ()
     "tla.return"() : () -> ()

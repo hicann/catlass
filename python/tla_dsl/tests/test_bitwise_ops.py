@@ -37,7 +37,7 @@ def _mask_bitwise_kernel(src: tla.Tensor, dst: tla.Tensor) -> None:
 
 
 @tla.kernel
-def _regtensor_bitwise_unary_kernel(src: tla.Tensor, dst: tla.Tensor) -> None:
+def _vector_ssa_bitwise_unary_kernel(src: tla.Tensor, dst: tla.Tensor) -> None:
     src_tile = tla.tile_view(src, tla.make_shape(64), tla.make_coord(0))
     dst_tile = tla.tile_view(dst, tla.make_shape(64), tla.make_coord(0))
     with tla.vector():
@@ -48,7 +48,7 @@ def _regtensor_bitwise_unary_kernel(src: tla.Tensor, dst: tla.Tensor) -> None:
 
 
 @tla.kernel
-def _regtensor_bitwise_binary_kernel(src0: tla.Tensor, src1: tla.Tensor, dst: tla.Tensor) -> None:
+def _vector_ssa_bitwise_binary_kernel(src0: tla.Tensor, src1: tla.Tensor, dst: tla.Tensor) -> None:
     src0_tile = tla.tile_view(src0, tla.make_shape(64), tla.make_coord(0))
     src1_tile = tla.tile_view(src1, tla.make_shape(64), tla.make_coord(0))
     dst_tile = tla.tile_view(dst, tla.make_shape(64), tla.make_coord(0))
@@ -118,10 +118,10 @@ _REG_BITWISE_BINARY_DTYPES = (
     tla.Int8,
 )
 _REGTENSOR_BITWISE_CASES = tuple(
-    ("bitwise_not", "tla.bitwise_not", dtype, _regtensor_bitwise_unary_kernel, 2)
+    ("bitwise_not", "tla.bitwise_not", dtype, _vector_ssa_bitwise_unary_kernel, 2)
     for dtype in _REG_BITWISE_UNARY_DTYPES
 ) + tuple(
-    (binding_name, op_name, dtype, _regtensor_bitwise_binary_kernel, 3)
+    (binding_name, op_name, dtype, _vector_ssa_bitwise_binary_kernel, 3)
     for binding_name, op_name in (
         ("bitwise_and", "tla.bitwise_and"),
         ("bitwise_or", "tla.bitwise_or"),
@@ -132,7 +132,7 @@ _REGTENSOR_BITWISE_CASES = tuple(
 
 
 @pytest.mark.parametrize(("binding_name", "op_name", "dtype", "kernel", "tensor_count"), _REGTENSOR_BITWISE_CASES)
-def test_regtensor_bitwise_bindings_and_public_ops_emit_mlir(
+def test_vector_ssa_bitwise_bindings_and_public_ops_emit_mlir(
     binding_name: str, op_name: str, dtype: type[tla.Numeric], kernel: object, tensor_count: int
 ) -> None:
     global _REG_BITWISE_DTYPE
@@ -167,8 +167,8 @@ def _invalid_mask_bitwise_kernel(src: tla.Tensor, dst: tla.Tensor) -> None:
             dst_tile.store(reg, mask=tla.bitwise_not(all_mask, mask=reg))
 
 
-def test_regtensor_bitwise_rejects_mixed_regtensor_and_maskreg() -> None:
-    with pytest.raises(tla.TlaCoreAPIError, match="both be MaskReg values or both be RegTensor"):
+def test_vector_ssa_bitwise_rejects_mixed_vector_and_mask() -> None:
+    with pytest.raises(tla.TlaCoreAPIError, match="both be MaskSSA values or both be VectorSSA"):
         _invalid_mixed_bitwise_kernel.dump_mlir(type_args=_tensor_args(tla.Int32, 2))
 
 

@@ -29,9 +29,9 @@ module {
         %idx_tile = "tla.tile_view"(%idx_mem, %shape, %coord) : (!i32vec, !tla.shape<64>, !tla.coord<0>) -> !i32vec
         %dst_tile = "tla.tile_view"(%dst, %shape, %coord) : (!vec, !tla.shape<64>, !tla.coord<0>) -> !vec
         %mask = "tla.create_mask"() {pattern = "M4", dtype = f32} : () -> !tla.mask
-        %indices = tla.load %idx_tile : !i32vec -> !i32vec
-        %gathered = tla.gather %src_tile, %indices mask %mask : !vec, !i32vec mask !tla.mask -> !vec
-        tla.store %dst_tile, %gathered : !vec, !vec
+        %indices = tla.load %idx_tile : !i32vec -> !tla.vector<64xi32>
+        %gathered = tla.gather %src_tile, %indices mask %mask : !vec, !tla.vector<64xi32> mask !tla.mask -> !tla.vector<64xf32>
+        tla.store %dst_tile, %gathered : !vec, !tla.vector<64xf32>
       }) {mode = "simd"} : () -> ()
     }) : () -> ()
     return

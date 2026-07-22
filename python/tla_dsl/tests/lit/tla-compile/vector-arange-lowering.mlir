@@ -17,8 +17,8 @@ module {
         %coord = "tla.make_coord"() : () -> !tla.coord<0>
         %dst_tile = "tla.tile_view"(%dst, %shape, %coord) : (!t, !tla.shape<64>, !tla.coord<0>) -> !t
         %start = arith.constant 3 : i32
-        %idx = "tla.arange"(%start) {order = "increase"} : (i32) -> !t
-        "tla.store"(%dst_tile, %idx) : (!t, !t) -> ()
+        %idx = "tla.arange"(%start) {order = "increase"} : (i32) -> !tla.vector<64xi32>
+        "tla.store"(%dst_tile, %idx) : (!t, !tla.vector<64xi32>) -> ()
       }) {mode = "simd"} : () -> ()
     }) : () -> ()
     return

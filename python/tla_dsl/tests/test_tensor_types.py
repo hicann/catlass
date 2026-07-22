@@ -4,6 +4,7 @@ from unittest.mock import patch
 import pytest
 
 import catlass as tla
+from catlass import _tla_type_bridge
 import catlass.core_api as core_api_mod
 import catlass.runtime as runtime_mod
 from catlass.base_dsl.runtime.dlpack_types import DLDeviceType
@@ -78,6 +79,83 @@ def test_tla_type_descriptors_construct_native_mlir_types() -> None:
         assert str(tensor.to_mlir_type(ctx)) == (
             "!tla.tensor<!tla.layout<!tla.shape<(?,16),8>, !tla.stride<(16,1),128>, !tla.shape<(32,16),8>, zN>, !tla.coord<0,0,0>, !tla.ptr<f16, gm, 2>>"
         )
+
+
+def test_vector_ssa_type_roundtrip_and_bridge_accessors() -> None:
+    with mlir_ir.Context() as ctx:
+        _tla_type_bridge.load_tla_dialect(ctx)
+        f32 = tla.Float32.mlir_type(ctx)
+        static_type = _tla_type_bridge.vector_ssa_type_get(ctx, 64, f32)
+        dynamic_type = _tla_type_bridge.vector_ssa_type_get(ctx, None, f32)
+
+        assert str(static_type) == "!tla.vector<64xf32>"
+        assert str(dynamic_type) == "!tla.vector<?xf32>"
+        assert _tla_type_bridge.type_is_vector_ssa(static_type)
+        assert _tla_type_bridge.tla_type_category(static_type) == "vector_ssa"
+        assert _tla_type_bridge.vector_ssa_valid_lanes_get(static_type) == 64
+        assert _tla_type_bridge.vector_ssa_valid_lanes_get(dynamic_type) is None
+        assert str(_tla_type_bridge.vector_ssa_element_type_get(static_type)) == "f32"
+
+
+@pytest.mark.parametrize(
+    ("type_text", "valid"),
+    (
+        ("!tla.vector<64xf32>", True),
+        ("!tla.vector<65xf32>", False),
+        ("!tla.vector<128xf16>", True),
+        ("!tla.vector<129xf16>", False),
+        ("!tla.vector<?xf32>", True),
+    ),
+)
+def test_vector_ssa_type_enforces_register_capacity(
+    type_text: str, valid: bool
+) -> None:
+    with mlir_ir.Context() as ctx:
+        _tla_type_bridge.load_tla_dialect(ctx)
+        if valid:
+            assert str(mlir_ir.Type.parse(type_text)) == type_text
+        else:
+            with pytest.raises(mlir_ir.MLIRError, match="valid lane count"):
+                mlir_ir.Type.parse(type_text)
+
+
+def test_vector_ssa_type_rejects_i1_elements() -> None:
+    with pytest.raises(ValueError, match="unsupported VectorSSA element type"):
+        tla.types.TlaVectorSSATypeDescriptor(1, "i1")
+
+    with mlir_ir.Context() as ctx:
+        _tla_type_bridge.load_tla_dialect(ctx)
+        with pytest.raises(mlir_ir.MLIRError, match="byte-aligned width"):
+            mlir_ir.Type.parse("!tla.vector<1xi1>")
+
+
+def test_vector_ssa_with_element_type_preserves_valid_lanes() -> None:
+    static = tla.types.TlaVectorSSATypeDescriptor(64, "f32")
+    dynamic = tla.types.TlaVectorSSATypeDescriptor(None, "f16")
+
+    converted_static = static.with_element_type("f16")
+    converted_dynamic = dynamic.with_element_type("f32")
+
+    assert converted_static.valid_lanes == 64
+    assert converted_static.element_type == "f16"
+    assert converted_dynamic.valid_lanes is None
+    assert converted_dynamic.element_type == "f32"
+
+
+def test_vector_ssa_with_element_type_rejects_insufficient_capacity() -> None:
+    descriptor = tla.types.TlaVectorSSATypeDescriptor(128, "f16")
+
+    with pytest.raises(ValueError, match="valid_lanes must be <= 64 for f32"):
+        descriptor.with_element_type("f32")
+
+
+def test_legacy_tla_value_type_and_python_marker_are_removed() -> None:
+    assert not hasattr(tla, "TlaValue")
+    assert not hasattr(_tla_type_bridge, "value_type_get")
+    with mlir_ir.Context() as ctx, pytest.raises(mlir_ir.MLIRError):
+        _tla_type_bridge.load_tla_dialect(ctx)
+        mlir_ir.Type.parse("!tla.value<f32>")
+
 
 
 def test_ptr_type_uses_bridge_accessors_for_nested_pointee() -> None:

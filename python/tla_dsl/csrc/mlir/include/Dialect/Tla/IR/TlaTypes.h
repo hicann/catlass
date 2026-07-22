@@ -42,5 +42,4 @@ using layout = ::mlir::Type;
 using tensor = ::mlir::Type;
 using tile = ::mlir::Type;
 // PtrType is defined in Types.h.inc (TableGen TypeDef).
-using value = ::mlir::Type;
 } // namespace tla

@@ -524,12 +524,7 @@ class Numeric(metaclass=NumericMeta, is_abstract=True):
             prefix = "u" if int_type.is_unsigned else "i"
             token = f"{prefix}{int_type.width}"
         else:
-            from catlass import _tla_type_bridge
-
-            element_type = _tla_type_bridge.value_element_type_get(ty.context, ty)
-            if element_type is None:
-                raise TypeError(f"unsupported element type for Numeric: {ty!r}")
-            return Numeric.from_mlir_type(element_type)
+            raise TypeError(f"unsupported element type for Numeric: {ty!r}")
         try:
             return _TOKEN_TO_NUMERIC[token]
         except KeyError as exc:

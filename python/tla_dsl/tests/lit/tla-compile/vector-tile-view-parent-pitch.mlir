@@ -20,8 +20,8 @@ module {
         %tile_shape = tla.make_shape -> !tla.shape<1,64>
         %tile_coord = tla.make_coord -> !tla.coord<1,0>
         %chunk = tla.tile_view %parent, %tile_shape, %tile_coord : !parent, !tla.shape<1,64>, !tla.coord<1,0> -> !chunk
-        %value = tla.load %chunk : !chunk -> !chunk
-        tla.store %chunk, %value : !chunk, !chunk
+        %value = tla.load %chunk : !chunk -> !tla.vector<64xf32>
+        tla.store %chunk, %value : !chunk, !tla.vector<64xf32>
       }) {mode = "simd"} : () -> ()
     }) : () -> ()
     "tla.return"() : () -> ()

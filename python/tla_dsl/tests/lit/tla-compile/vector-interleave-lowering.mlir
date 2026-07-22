@@ -31,11 +31,11 @@ module {
       %src1_tile = "tla.tile_view"(%src1, %shape, %coord) : (!fvec, !tla.shape<64>, !tla.coord<0>) -> !fvec
       %dst0_tile = "tla.tile_view"(%dst0, %shape, %coord) : (!fvec, !tla.shape<64>, !tla.coord<0>) -> !fvec
       %dst1_tile = "tla.tile_view"(%dst1, %shape, %coord) : (!fvec, !tla.shape<64>, !tla.coord<0>) -> !fvec
-      %v0 = tla.load %src0_tile : !fvec -> !fvec
-      %v1 = tla.load %src1_tile : !fvec -> !fvec
-      %r0, %r1 = tla.interleave %v0, %v1 : !fvec, !fvec -> !fvec, !fvec
-      tla.store %dst0_tile, %r0 : !fvec, !fvec
-      tla.store %dst1_tile, %r1 : !fvec, !fvec
+      %v0 = tla.load %src0_tile : !fvec -> !tla.vector<64xf32>
+      %v1 = tla.load %src1_tile : !fvec -> !tla.vector<64xf32>
+      %r0, %r1 = tla.interleave %v0, %v1 : !tla.vector<64xf32>, !tla.vector<64xf32> -> !tla.vector<64xf32>, !tla.vector<64xf32>
+      tla.store %dst0_tile, %r0 : !fvec, !tla.vector<64xf32>
+      tla.store %dst1_tile, %r1 : !fvec, !tla.vector<64xf32>
     }) : () -> ()
     return
   }
