@@ -471,15 +471,47 @@ def _const_i1(value: int) -> Any:
 
 
 def _coerce_index_value(value: Any) -> Any:
-    from mlir import ir as mlir_ir  # type: ignore[assignment]
+    mlir_ir: Any = importlib.import_module("mlir.ir")
+
+    from .base_dsl.typing import Numeric
+
+    def _to_index_ssa(ssa: Any) -> Any:
+        """Cast a signless integer SSA value to ``index`` when needed."""
+        if isinstance(ssa.type, mlir_ir.IndexType):
+            return ssa
+        if (
+            mlir_ir.IntegerType.isinstance(ssa.type)
+            and mlir_ir.IntegerType(ssa.type).is_signless
+        ):
+            return mlir_ir.Operation.create(
+                "arith.index_cast",
+                operands=[ssa],
+                results=[mlir_ir.IndexType.get()],
+            ).results[0]
+        raise TlaCoreAPIError(
+            f"Expected index-like SSA value, got type {ssa.type}"
+        )
 
     while isinstance(value, _IndexExpr):
         value = value._value
+
+    # Signed Integer Numeric (Int*/Bool/Index) → index, with ``index_cast`` for
+    # element SSA. Reject UInt* the same way as ``core_api._as_index_value``.
+    if isinstance(value, Numeric):
+        if not (type(value).is_integer and type(value).signed):
+            raise TlaCoreAPIError(
+                f"Expected signed integer Numeric index, got {type(value).__name__}; "
+                f"cast explicitly with .to(Int32) (or another Int*) before comparing"
+            )
+        if isinstance(value.value, (int, bool)):
+            return _const_index(int(value.value))
+        return _to_index_ssa(value.ir_value())
+
     resolved = _resolve_frontend_bound_value(value)
     if isinstance(resolved, mlir_ir.Value):
-        return resolved
+        return _to_index_ssa(resolved)
     if isinstance(value, mlir_ir.Value):
-        return value
+        return _to_index_ssa(value)
     if isinstance(value, bool):
         return _const_index(int(value))
     if isinstance(value, int):

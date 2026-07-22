@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import builtins
 import linecache
+import operator
 import types
 from typing import Any, Callable
 
@@ -691,6 +692,31 @@ def _compare_index_or_python(left: Any, right: Any, predicate: Any, op: str) -> 
     from mlir import ir as mlir_ir  # type: ignore[assignment]
     from mlir.dialects import arith  # type: ignore[import-not-found]
 
+    from .base_dsl.typing import Numeric
+
+    _PY_COMPARE = {
+        "==": operator.eq,
+        "!=": operator.ne,
+        "<": operator.lt,
+        "<=": operator.le,
+        ">": operator.gt,
+        ">=": operator.ge,
+    }
+
+    def _python_compare(a: Any, b: Any) -> Any:
+        fn = _PY_COMPARE.get(op)
+        if fn is None:
+            raise TlaCoreAPIError(f"Unsupported comparison operator: {op}")
+        return fn(a, b)
+
+    # Numeric SSA binds an ``ir.Value``; check the wrapper *before* resolving so
+    # we use typed ``Numeric.__lt__``/… instead of index coercion.
+    # ``if value < 0`` then emits element-typed ``arith.cmpi`` (e.g. i32).
+    # Mixed ``index`` vs Numeric still goes through ``_IndexExpr`` / python
+    # operators, which rely on ``_coerce_index_value`` to ``index_cast``.
+    if isinstance(left, Numeric) or isinstance(right, Numeric):
+        return _python_compare(left, right)
+
     lhs = _resolve_frontend_bound_value(left)
     rhs = _resolve_frontend_bound_value(right)
     if lhs is None:
@@ -701,19 +727,7 @@ def _compare_index_or_python(left: Any, right: Any, predicate: Any, op: str) -> 
         lhs_index = _coerce_index_value(lhs)
         rhs_index = _coerce_index_value(rhs)
         return _BoolExpr(arith.CmpIOp(predicate, lhs_index, rhs_index).result)
-    if op == "==":
-        return left == right
-    if op == "!=":
-        return left != right
-    if op == "<":
-        return left < right
-    if op == "<=":
-        return left <= right
-    if op == ">":
-        return left > right
-    if op == ">=":
-        return left >= right
-    raise TlaCoreAPIError(f"Unsupported comparison operator: {op}")
+    return _python_compare(left, right)
 
 
 def _internal_frontend_if(

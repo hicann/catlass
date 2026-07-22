@@ -12,6 +12,8 @@ Control-flow patterns in this example:
 - Dynamic ``if`` selecting scalar *values* (Numeric carried through ``scf.if``)
 - ``tla.const_expr`` compile-time forward vs reversed indexing
 - Scalar read/store inside ``tla.vector`` / ``tla.vec.func`` (VF)
+- AST Numeric compare in ``if`` (``value < 0`` → element-typed ``cmpi``)
+- AST index-vs-Int32 compare (``i >= tile_range[0]`` → ``index_cast``)
 """
 
 from __future__ import annotations
@@ -22,6 +24,7 @@ from pathlib import Path
 import catlass as tla
 
 LENGTH = 8
+COMPARE_LEN = 4
 ROW = 2
 COLS = 64
 SCALAR_COL = 5
@@ -105,6 +108,34 @@ def scalar_index_vec_func_kernel(meta: tla.Tensor, out: tla.Tensor) -> None:
         with tla.vec.func(mode="simd"):
             for i in tla.range(0, LENGTH, 1):
                 out[i] = meta[i]
+
+
+@tla.kernel
+def scalar_index_numeric_compare_if_kernel(src: tla.Tensor, out: tla.Tensor) -> None:
+    """Element-typed Numeric compare in dynamic ``if`` (``value < 0``)."""
+    for i in tla.range(0, COMPARE_LEN, 1):
+        value = src[i]
+        if value < 0:
+            value = value + 1
+        else:
+            value = value + 2
+        out[i] = value
+
+
+@tla.kernel
+def scalar_index_vs_numeric_compare_kernel(
+    tile_range: tla.Tensor,
+    out: tla.Tensor,
+) -> None:
+    """Loop index vs Int32 scalar load (``i >= tile_range[0]``)."""
+    limit = tile_range[0]
+    for i in tla.range(0, COMPARE_LEN, 1):
+        flag = tla.Int32(0)
+        if i >= limit:
+            flag = tla.Int32(1)
+        else:
+            flag = tla.Int32(0)
+        out[i] = flag
 
 
 def _require_torch_npu(device: int):
@@ -306,6 +337,62 @@ def _run_vec_func(
     return 0
 
 
+def _run_numeric_compare_if(args: argparse.Namespace, torch, device: str) -> int:
+    # [-2, -1, 0, 1] → +1 if <0 else +2 → [-1, 0, 2, 3]
+    src = torch.tensor([-2, -1, 0, 1], dtype=torch.int32, device=device)
+    out = torch.full((COMPARE_LEN,), -99, dtype=torch.int32, device=device)
+    src_t = _gm_vector_contiguous(src)
+    out_t = _gm_vector_contiguous(out)
+
+    artifact = tla.compile(
+        scalar_index_numeric_compare_if_kernel,
+        src_t,
+        out_t,
+        cache_dir=args.cache_dir,
+        force_recompile=args.force_recompile,
+    )
+    artifact(src_t, out_t, block=args.block)
+    torch.npu.synchronize()
+
+    expected = [-1, 0, 2, 3]
+    actual = [int(out[i].item()) for i in range(COMPARE_LEN)]
+    if actual != expected:
+        print(f"numeric_compare_if_failed expected={expected} actual={actual}")
+        return 1
+    print(f"numeric_compare_if_ok=True values={actual}")
+    return 0
+
+
+def _run_index_vs_numeric_compare(
+    args: argparse.Namespace, torch, device: str
+) -> int:
+    # limit=2 → for i in 0..3: flag = 1 if i >= 2 else 0 → [0, 0, 1, 1]
+    tile_range = torch.tensor([2], dtype=torch.int32, device=device)
+    out = torch.full((COMPARE_LEN,), -99, dtype=torch.int32, device=device)
+    tile_t = _gm_vector_contiguous(tile_range)
+    out_t = _gm_vector_contiguous(out)
+
+    artifact = tla.compile(
+        scalar_index_vs_numeric_compare_kernel,
+        tile_t,
+        out_t,
+        cache_dir=args.cache_dir,
+        force_recompile=args.force_recompile,
+    )
+    artifact(tile_t, out_t, block=args.block)
+    torch.npu.synchronize()
+
+    expected = [0, 0, 1, 1]
+    actual = [int(out[i].item()) for i in range(COMPARE_LEN)]
+    if actual != expected:
+        print(
+            f"index_vs_numeric_compare_failed expected={expected} actual={actual}"
+        )
+        return 1
+    print(f"index_vs_numeric_compare_ok=True values={actual}")
+    return 0
+
+
 def run(args: argparse.Namespace) -> int:
     tla.initialize(device=args.device)
     torch = _require_torch_npu(args.device)
@@ -324,6 +411,8 @@ def run(args: argparse.Namespace) -> int:
             lambda: _run_value_through_dynamic_if(args, torch, device),
             lambda: _run_constexpr_if(args, torch, meta_t, out_t, out),
             lambda: _run_vec_func(args, torch, meta_t, out_t, out),
+            lambda: _run_numeric_compare_if(args, torch, device),
+            lambda: _run_index_vs_numeric_compare(args, torch, device),
         )
         for runner in runners:
             rc = runner()

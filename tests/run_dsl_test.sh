@@ -121,7 +121,7 @@ Run end-to-end validation for:
   - interleave_op (interleave_op.py interleave/deinterleave --run --all-dtypes)
   - squeeze_op (squeeze_op.py squeeze --run --all-dtypes)
   - scalar_index_control_flow (scalar_index_control_flow.py: GM scalar read/write,
-    loop/dynamic-if/constexpr-if, vec.func)
+    loop/dynamic-if/constexpr-if, vec.func, AST Numeric / index-vs-Int32 compare)
   - scalar_kernel_arg (scalar_kernel_arg.py: host Numeric kernel args used in
     same-type scalar arithmetic)
 Runs basic_mmad default MNK plus m=1, n=2, k=3.
@@ -559,7 +559,7 @@ _run_squeeze_op_case() {
 _run_squeeze_op_case
 
 _run_scalar_index_control_flow_case() {
-    echo "==> Running scalar_index_control_flow validation [GM scalar indexing]: --device ${DEVICE_ID}"
+    echo "==> Running scalar_index_control_flow validation [GM scalar indexing + AST compare]: --device ${DEVICE_ID}"
     (
         cd "${TLA_DSL_DIR}"
         python "${SCALAR_INDEX_CONTROL_FLOW_REL}" --device "${DEVICE_ID}"
