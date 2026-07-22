@@ -26,6 +26,14 @@ def _kernel_scalar_load_1d(meta: tla.Tensor) -> None:
 
 
 @tla.kernel
+def _kernel_bool_flag_in_if(flags: tla.Tensor) -> None:
+    """Host bool / tla.Bool element used as ``if`` predicate (fag_75-style)."""
+    is_valid = flags[0, 1]
+    if is_valid and tla.arch.block_idx() == 0:
+        tla.make_coord(1, 0)
+
+
+@tla.kernel
 def _kernel_scalar_load_2d(meta: tla.Tensor) -> None:
     _ = meta[1, 3]
 
@@ -73,6 +81,17 @@ def test_tensor_scalar_load_emits_tla_scalar_load_1d() -> None:
     assert "tla.scalar_load" in mlir
     assert "row_major" in mlir
     assert "tla.load" not in mlir.replace("tla.scalar_load", "")
+
+
+def test_bool_tensor_load_usable_in_if_and() -> None:
+    """Bool GM tensor scalar_load → i1 predicate; ``if flag and ...`` is legal."""
+    flags = _gm_tensor_2d(4, 8, dtype=tla.Bool)
+    mlir = _kernel_bool_flag_in_if.dump_mlir(type_args=(flags,))
+    assert "tla.scalar_load" in mlir
+    assert "scf.if" in mlir
+    assert "arith.andi" in mlir
+    assert "!tla.ptr<i1" in mlir
+    assert "-> i1" in mlir
 
 
 def test_scalar_load_returns_typed_scalar_ssa() -> None:

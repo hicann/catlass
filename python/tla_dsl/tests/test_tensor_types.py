@@ -391,6 +391,35 @@ def test_from_dlpack_rejects_cpu_buffer() -> None:
         _from_dlpack_with_parsed(parsed, layout_tag=tla.arch.RowMajor)
 
 
+def test_from_dlpack_bool_maps_to_tla_bool() -> None:
+    """DLPack kDLBool (bits=8) → tla.Bool (element token i1); matches torch.bool."""
+    from catlass.base_dsl.runtime.dlpack_types import DLDataTypeCode
+
+    parsed = _device_dlpack_fields(
+        shape=(4, 8),
+        strides=(8, 1),
+        dtype_code=int(DLDataTypeCode.kDLBool),
+        dtype_bits=8,
+    )
+    tensor = _from_dlpack_with_parsed(parsed, layout_tag=tla.arch.RowMajor)
+
+    assert tensor.dtype == "i1"
+    assert tensor._shape_tuple == (4, 8)
+    tensor.prepare_for_launch()
+
+
+def test_from_dlpack_rejects_packed_bool_bits() -> None:
+    """Bit-packed bool (bits!=8) is not a DLPack host convention we accept."""
+    from catlass.base_dsl.runtime.dlpack_types import DLDataTypeCode
+
+    parsed = _device_dlpack_fields(
+        dtype_code=int(DLDataTypeCode.kDLBool),
+        dtype_bits=1,
+    )
+    with pytest.raises(tla.types.RuntimeTensorError, match="unsupported DLPack dtype"):
+        _from_dlpack_with_parsed(parsed, layout_tag=tla.arch.RowMajor)
+
+
 def test_from_dlpack_rejects_scalar_tensor() -> None:
     parsed = _device_dlpack_fields(shape=(), strides=())
     with pytest.raises(

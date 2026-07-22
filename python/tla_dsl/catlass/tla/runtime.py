@@ -411,6 +411,7 @@ def from_dlpack(
     from ..base_dsl.runtime.dlpack_types import DLDataTypeCode
     from ..base_dsl.typing import (
         BFloat16,
+        Bool,
         Float16,
         Float32,
         Float64,
@@ -461,6 +462,8 @@ def from_dlpack(
         raise RuntimeTensorError(f"unsupported DLPack dtype lanes={lanes}")
     dtype_code = int(parsed["dtype_code"])
     dtype_bits = int(parsed["dtype_bits"])
+    # DLPack bool is byte-sized storage (kDLBool, bits=8), matching torch.bool /
+    # NumPy bool_. Map to TLA Bool (MLIR i1); tensor element size is still 1 byte.
     dtype_mapping: dict[tuple[int, int], type] = {
         (DLDataTypeCode.kDLInt, 8): Int8,
         (DLDataTypeCode.kDLInt, 16): Int16,
@@ -474,6 +477,7 @@ def from_dlpack(
         (DLDataTypeCode.kDLFloat, 32): Float32,
         (DLDataTypeCode.kDLFloat, 64): Float64,
         (DLDataTypeCode.kDLBfloat, 16): BFloat16,
+        (DLDataTypeCode.kDLBool, 8): Bool,
     }
     dtype = dtype_mapping.get((dtype_code, dtype_bits))
     if dtype is None:

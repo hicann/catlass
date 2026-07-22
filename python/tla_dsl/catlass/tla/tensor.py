@@ -400,6 +400,12 @@ class _Tensor(TensorABC):
             raise TlaLoweringError(
                 f"tla.scalar_load result type mismatch: expected {elem_type}, got {result.type}"
             )
+        # Bool / i1 loads are control-flow predicates: expose as _BoolExpr so
+        # ``if tensor[i]`` / ``and`` see category "bool" (not bare ScalarSSA).
+        if mlir_ir.IntegerType.isinstance(elem_type):
+            int_ty = mlir_ir.IntegerType(elem_type)
+            if int_ty.width == 1:
+                return _runtime._BoolExpr(result)
         return ScalarSSA.from_mlir_type(elem_type, result)
 
     @dsl_user_op
