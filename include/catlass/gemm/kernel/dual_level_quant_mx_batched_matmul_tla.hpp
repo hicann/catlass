@@ -490,6 +490,10 @@ public:
                 tensorBlockA, tensorBlockB, tensorBlockC, actualBlockShape, tensorBlockMxScaleA, tensorBlockMxScaleB);
         }
 
+        if constexpr (BlockMmad::DispatchPolicy::ASYNC) {
+            blockMmad.template SynchronizeBlock<>();
+        }
+
         AscendC::PipeBarrier<PIPE_ALL>();
     }
 

@@ -25,11 +25,11 @@ using std::size_t;
 #include "catlass/epilogue/dispatch_policy.hpp"
 #include "catlass/epilogue/tile/tile_copy_dual_level_quant_mx.hpp"
 #include "catlass/gemm/block/block_mmad.hpp"
+#include "catlass/gemm/block/block_mmad_mx_preload_tla.hpp"
 #include "catlass/gemm/block/block_swizzle.hpp"
 #include "catlass/gemm/dispatch_policy.hpp"
 #include "catlass/gemm/gemm_type.hpp"
 #include "catlass/layout/layout.hpp"
-#include "catlass/status.hpp"
 #include "tla/layout.hpp"
 
 #include "catlass_kernel.h"
@@ -61,7 +61,11 @@ using LayoutTagC = Catlass::layout::RowMajor;
 
 using ArchTag = Catlass::Arch::Ascend950;
 constexpr bool enableUnitFlag = true;
+#if defined(CATLASS_EXAMPLE63_USE_PRELOAD)
+using DispatchPolicy = Catlass::Gemm::MmadMxPreload<ArchTag, 1, enableUnitFlag, 16>;
+#else
 using DispatchPolicy = Catlass::Gemm::MmadMx<ArchTag, enableUnitFlag, 16>;
+#endif
 using L1TileShape = tla::Shape<tla::Int<256>, tla::Int<256>, tla::Int<512>>;
 using L0TileShape = tla::Shape<tla::Int<256>, tla::Int<256>, tla::Int<256>>;
 
@@ -104,8 +108,15 @@ extern "C" void run(uint32_t blockNum, aclrtStream stream, const CatlassKernel::
     using TileCopyMmad = Catlass::Gemm::Tile::PackedMxTileCopyTla<
         ArchTag, ElementA, LayoutTagA, ElementB, LayoutTagB, ElementMxScale, decltype(layoutMxScaleA), ElementMxScale,
         decltype(layoutMxScaleB), ElementC, LayoutTagC, void>;
+#if defined(CATLASS_EXAMPLE63_USE_PRELOAD)
+    using BlockMmad = Catlass::Gemm::Block::BlockMmadMxPreloadTla<
+        DispatchPolicy, L1TileShape, L0TileShape,
+        ElementA, ElementB, ElementC, void, TileCopyMmad>;
+#else
     using BlockMmad = Catlass::Gemm::Block::BlockMmadTla<
-        DispatchPolicy, L1TileShape, L0TileShape, ElementA, ElementB, ElementC, void, TileCopyMmad>;
+        DispatchPolicy, L1TileShape, L0TileShape,
+        ElementA, ElementB, ElementC, void, TileCopyMmad>;
+#endif
 
     constexpr uint32_t ubStages = 1;
     using EpilogueDispatchPolicy = Catlass::Epilogue::EpilogueAscend950DualLevelQuantMx<ubStages>;

@@ -188,6 +188,8 @@ public:
         if (actualTileShape.column() < SUB_TILE_K) {
             AscendC::Duplicate(ubInput, static_cast<ElementInput>(0), SUB_TILE_COUNT);
         }
+        // The next input copy may overlap the previous output copy, but it
+        // must not overwrite ubInput while V is still consuming it.
         AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID0);
         AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID0);
         AscendC::WaitFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID0);
@@ -300,29 +302,18 @@ private:
         auto* s2Base = (__ubuf__ uint8_t*)ubS2.GetPhyAddr();
         auto* recipBase = (__ubuf__ uint16_t*)ubReciprocal.GetPhyAddr();
 
-        for (uint32_t row = 0; row < rows; ++row) {
-            auto* rowIn = inBase + row * inStride;
-            auto* rowFp4 = fp4Base + row * fp4Stride;
-            auto* rowS1 = s1Base + row * s1Stride;
-            auto* rowS2 = s2Base + row * s2Stride;
-
-            for (uint32_t l0 = 0; l0 < l0Blocks; ++l0) {
-                auto* x = rowIn + l0 * LEVEL0_BLOCK_SIZE;
-                auto* y = rowFp4 + l0 * (LEVEL0_BLOCK_SIZE / 2);
-                auto* s1 = rowS1 + l0;
-                auto* s2 = rowS2 + l0 * L1_BLOCKS_PER_L0;
-
-                ComputeLevel0AndXTmp(x, s1);
-                ComputeLevel1ScaleAndReciprocal(x, s2, recipBase);
-                ComputeFp4Packed(x, y, recipBase);
-            }
-        }
+        ComputeAllQuantRows(inBase, s1Base, s2Base, fp4Base, recipBase, rows, inStride, s1Stride, s2Stride, fp4Stride);
     }
 
     // -----------------------------------------------------------------------
     // ComputeLevel0AndXTmp (verbatim copy)
     // -----------------------------------------------------------------------
     __simd_vf__ inline void ComputeLevel0AndXTmp(__ubuf__ ElementInput* xAddr, __ubuf__ float* s1Addr)
+    {
+        ComputeLevel0AndXTmpImpl(xAddr, s1Addr);
+    }
+
+    __simd_callee__ inline void ComputeLevel0AndXTmpImpl(__ubuf__ ElementInput* xAddr, __ubuf__ float* s1Addr)
     {
         namespace MAPI = AscendC::MicroAPI;
         CATLASS_DUAL_LEVEL_QUANT_MX_CAST_TRAIT(kCastXToFp32Zero, ZERO, UNKNOWN, UNKNOWN);
@@ -444,6 +435,32 @@ private:
     __simd_vf__ inline void ComputeLevel1ScaleAndReciprocal(
         __ubuf__ ElementInput* xTmpAddr, __ubuf__ uint8_t* s2Addr, __ubuf__ uint16_t* recipAddr)
     {
+        ComputeLevel1ScaleAndReciprocalImpl(xTmpAddr, s2Addr, recipAddr);
+    }
+
+    // Keep CATLASS task ownership and the 128x512 UB tile, but amortize one
+    // vector-function launch over all valid rows in the tile.
+    __simd_vf__ inline void ComputeAllQuantRows(
+        __ubuf__ ElementInput* xBase, __ubuf__ float* s1Base, __ubuf__ uint8_t* s2Base, __ubuf__ uint8_t* yBase,
+        __ubuf__ uint16_t* recipBase, uint32_t rows, uint32_t xStride, uint32_t s1Stride, uint32_t s2Stride,
+        uint32_t yStride)
+    {
+        for (uint32_t row = 0; row < rows; ++row) {
+            auto* x = xBase + row * xStride;
+            auto* s1 = s1Base + row * s1Stride;
+            auto* s2 = s2Base + row * s2Stride;
+            auto* y = yBase + row * yStride;
+
+            ComputeLevel0AndXTmpImpl(x, s1);
+            AscendC::Reg::LocalMemBar<AscendC::Reg::MemType::VEC_STORE, AscendC::Reg::MemType::VEC_LOAD>();
+            ComputeLevel1ScaleAndReciprocalImpl(x, s2, recipBase);
+            AscendC::Reg::LocalMemBar<AscendC::Reg::MemType::VEC_STORE, AscendC::Reg::MemType::VEC_LOAD>();
+            ComputeFp4PackedImpl(x, y, recipBase);
+        }
+    }
+    __simd_callee__ inline void ComputeLevel1ScaleAndReciprocalImpl(
+        __ubuf__ ElementInput* xTmpAddr, __ubuf__ uint8_t* s2Addr, __ubuf__ uint16_t* recipAddr)
+    {
         namespace MAPI = AscendC::MicroAPI;
         CATLASS_DUAL_LEVEL_QUANT_MX_CAST_TRAIT(kCastHalfToBF16, UNKNOWN, UNKNOWN, CAST_TRUNC);
 
@@ -530,25 +547,24 @@ private:
     __simd_vf__ inline void ComputeFp4Packed(
         __ubuf__ ElementInput* xTmpAddr, __ubuf__ uint8_t* yAddr, __ubuf__ uint16_t* recipAddr)
     {
+        ComputeFp4PackedImpl(xTmpAddr, yAddr, recipAddr);
+    }
+
+    __simd_callee__ inline void ComputeFp4PackedImpl(
+        __ubuf__ ElementInput* xTmpAddr, __ubuf__ uint8_t* yAddr, __ubuf__ uint16_t* recipAddr)
+    {
         namespace MAPI = AscendC::MicroAPI;
-        CATLASS_DUAL_LEVEL_QUANT_MX_CAST_TRAIT(kCastXToFp32Zero, ZERO, UNKNOWN, UNKNOWN);
-        CATLASS_DUAL_LEVEL_QUANT_MX_CAST_TRAIT(kCastXToFp32One, ONE, UNKNOWN, UNKNOWN);
         CATLASS_DUAL_LEVEL_QUANT_MX_CAST_TRAIT(kCastBF16ToFp4, ZERO, SAT, CAST_RINT);
-        CATLASS_DUAL_LEVEL_QUANT_MX_CAST_TRAIT(kCastFp32ToBF16, ZERO, NO_SAT, CAST_RINT);
+        CATLASS_DUAL_LEVEL_QUANT_MX_CAST_TRAIT(kCastHalfToBF16Trunc, UNKNOWN, UNKNOWN, CAST_TRUNC);
 
         MAPI::RegTensor<ElementInput> xTmp0, xTmp1;
         MAPI::RegTensor<uint16_t> scaleForMulFP16;
-        MAPI::RegTensor<float> scaleForMulZeroFP32;
         MAPI::RegTensor<fp4x2_e2m1_t> y0FP4, y1FP4;
 
-        MAPI::RegTensor<float> xTmp0ZeroFP32, xTmp0OneFP32;
-        MAPI::RegTensor<float> xTmp1ZeroFP32, xTmp1OneFP32;
-        MAPI::RegTensor<bfloat16_t> xTmp0ZeroBF16, xTmp0OneBF16;
-        MAPI::RegTensor<bfloat16_t> xTmp1ZeroBF16, xTmp1OneBF16;
+        MAPI::RegTensor<bfloat16_t> xTmp0BF16, xTmp1BF16;
 
         MAPI::MaskReg dataMaskB8 = MAPI::CreateMask<uint8_t>();
         MAPI::MaskReg dataMaskB16 = MAPI::CreateMask<uint16_t>();
-        MAPI::MaskReg dataMaskB32 = MAPI::CreateMask<uint32_t>();
 
         auto* xLoad = xTmpAddr;
         auto* yWrite = yAddr;
@@ -562,40 +578,15 @@ private:
                 xTmp0, xTmp1, xLoad, VL_HALF * 2);
 
             if constexpr (std::is_same_v<ElementInput, half>) {
-                MAPI::Cast<float, bfloat16_t, kCastXToFp32Zero>(
-                    scaleForMulZeroFP32, (MAPI::RegTensor<bfloat16_t>&)scaleForMulFP16, dataMaskB16);
-
-                MAPI::Cast<float, ElementInput, kCastXToFp32Zero>(xTmp0ZeroFP32, xTmp0, dataMaskB16);
-                MAPI::Cast<float, ElementInput, kCastXToFp32One>(xTmp0OneFP32, xTmp0, dataMaskB16);
-                MAPI::Mul(xTmp0ZeroFP32, scaleForMulZeroFP32, xTmp0ZeroFP32, dataMaskB32);
-                MAPI::Mul(xTmp0OneFP32, scaleForMulZeroFP32, xTmp0OneFP32, dataMaskB32);
-                ComputeFP4FromHalf(xTmp0ZeroFP32);
-                ComputeFP4FromHalf(xTmp0OneFP32);
-                MAPI::Cast<bfloat16_t, float, kCastFp32ToBF16>(xTmp0ZeroBF16, xTmp0ZeroFP32, dataMaskB32);
-                MAPI::Cast<bfloat16_t, float, kCastFp32ToBF16>(xTmp0OneBF16, xTmp0OneFP32, dataMaskB32);
-                MAPI::Pack<uint16_t, uint32_t, MAPI::HighLowPart::LOWEST>(
-                    (MAPI::RegTensor<uint16_t>&)xTmp0ZeroBF16, (MAPI::RegTensor<uint32_t>&)xTmp0ZeroBF16);
-                MAPI::Pack<uint16_t, uint32_t, MAPI::HighLowPart::LOWEST>(
-                    (MAPI::RegTensor<uint16_t>&)xTmp0OneBF16, (MAPI::RegTensor<uint32_t>&)xTmp0OneBF16);
-                MAPI::Interleave(xTmp0ZeroBF16, xTmp0OneBF16, xTmp0ZeroBF16, xTmp0OneBF16);
-
-                MAPI::Cast<float, ElementInput, kCastXToFp32Zero>(xTmp1ZeroFP32, xTmp1, dataMaskB16);
-                MAPI::Cast<float, ElementInput, kCastXToFp32One>(xTmp1OneFP32, xTmp1, dataMaskB16);
-                MAPI::Mul(xTmp1ZeroFP32, scaleForMulZeroFP32, xTmp1ZeroFP32, dataMaskB32);
-                MAPI::Mul(xTmp1OneFP32, scaleForMulZeroFP32, xTmp1OneFP32, dataMaskB32);
-                ComputeFP4FromHalf(xTmp1ZeroFP32);
-                ComputeFP4FromHalf(xTmp1OneFP32);
-                MAPI::Cast<bfloat16_t, float, kCastFp32ToBF16>(xTmp1ZeroBF16, xTmp1ZeroFP32, dataMaskB32);
-                MAPI::Cast<bfloat16_t, float, kCastFp32ToBF16>(xTmp1OneBF16, xTmp1OneFP32, dataMaskB32);
-                MAPI::Pack<uint16_t, uint32_t, MAPI::HighLowPart::LOWEST>(
-                    (MAPI::RegTensor<uint16_t>&)xTmp1ZeroBF16, (MAPI::RegTensor<uint32_t>&)xTmp1ZeroBF16);
-                MAPI::Pack<uint16_t, uint32_t, MAPI::HighLowPart::LOWEST>(
-                    (MAPI::RegTensor<uint16_t>&)xTmp1OneBF16, (MAPI::RegTensor<uint32_t>&)xTmp1OneBF16);
-                MAPI::Interleave(xTmp1ZeroBF16, xTmp1OneBF16, xTmp1ZeroBF16, xTmp1OneBF16);
-
-                MAPI::Interleave(xTmp0ZeroBF16, xTmp1ZeroBF16, xTmp0ZeroBF16, xTmp1ZeroBF16);
-                MAPI::Cast<fp4x2_e2m1_t, bfloat16_t, kCastBF16ToFp4>(y0FP4, xTmp0ZeroBF16, dataMaskB16);
-                MAPI::Cast<fp4x2_e2m1_t, bfloat16_t, kCastBF16ToFp4>(y1FP4, xTmp1ZeroBF16, dataMaskB16);
+                FP16Convert(xTmp0, xTmp0, dataMaskB16);
+                FP16Convert(xTmp1, xTmp1, dataMaskB16);
+                MAPI::Cast<bfloat16_t, ElementInput, kCastHalfToBF16Trunc>(xTmp0BF16, xTmp0, dataMaskB16);
+                MAPI::Cast<bfloat16_t, ElementInput, kCastHalfToBF16Trunc>(xTmp1BF16, xTmp1, dataMaskB16);
+                MAPI::Mul(xTmp0BF16, (MAPI::RegTensor<bfloat16_t>&)scaleForMulFP16, xTmp0BF16, dataMaskB16);
+                MAPI::Mul(xTmp1BF16, (MAPI::RegTensor<bfloat16_t>&)scaleForMulFP16, xTmp1BF16, dataMaskB16);
+                MAPI::Interleave(xTmp0BF16, xTmp1BF16, xTmp0BF16, xTmp1BF16);
+                MAPI::Cast<fp4x2_e2m1_t, bfloat16_t, kCastBF16ToFp4>(y0FP4, xTmp0BF16, dataMaskB16);
+                MAPI::Cast<fp4x2_e2m1_t, bfloat16_t, kCastBF16ToFp4>(y1FP4, xTmp1BF16, dataMaskB16);
             } else {
                 MAPI::Mul(xTmp0, (MAPI::RegTensor<bfloat16_t>&)scaleForMulFP16, xTmp0, dataMaskB16);
                 MAPI::Mul(xTmp1, (MAPI::RegTensor<bfloat16_t>&)scaleForMulFP16, xTmp1, dataMaskB16);
@@ -611,43 +602,21 @@ private:
         }
     }
 
-    // -----------------------------------------------------------------------
-    // ComputeFP4FromHalf (verbatim copy)
-    // -----------------------------------------------------------------------
-    template <class RegTensorFloat>
-    __simd_callee__ inline void ComputeFP4FromHalf(RegTensorFloat& Reg)
+    template <class HalfReg, class MaskReg>
+    __simd_callee__ inline void FP16Convert(HalfReg& output, HalfReg& input, MaskReg& mask)
     {
         namespace MAPI = AscendC::MicroAPI;
-
-        MAPI::MaskReg pregAll32 = MAPI::CreateMask<uint32_t, MAPI::MaskPattern::ALL>();
-        MAPI::MaskReg zeroMask, specialMask, negInfMask;
-
-        MAPI::RegTensor<int32_t> negZero, maxExpFP32, exp0FP32, exp1FP32;
-        MAPI::Duplicate(negZero, NEG_ZERO_I32);
-
-        MAPI::Compare<int32_t, AscendC::CMPMODE::EQ>(negInfMask, (MAPI::RegTensor<int32_t>&)Reg, negZero, pregAll32);
-
-        MAPI::Duplicate(maxExpFP32, static_cast<int32_t>(MAX_EXP_FOR_FP32));
-        MAPI::And(exp0FP32, (MAPI::RegTensor<int32_t>&)Reg, maxExpFP32, pregAll32);
-        MAPI::ShiftRights(exp0FP32, exp0FP32, SHR_NUM_FP32, pregAll32);
-        MAPI::Adds(exp0FP32, exp0FP32, FP32_BIAS_NEG_VAL, pregAll32);
-        MAPI::Maxs(exp0FP32, exp0FP32, 0, pregAll32);
-        MAPI::Adds(exp0FP32, exp0FP32, NEG_ONE_I32, pregAll32);
-        MAPI::Muls(exp1FP32, exp0FP32, NEG_ONE_I32, pregAll32);
-        MAPI::Adds(exp1FP32, exp1FP32, FP32_BIAS_VAL, pregAll32);
-        MAPI::ShiftLefts(exp1FP32, exp1FP32, SHR_NUM_FP32, pregAll32);
-
-        MAPI::Mul(Reg, Reg, (MAPI::RegTensor<float>&)exp1FP32, pregAll32);
-        MAPI::Adds(exp0FP32, exp0FP32, FP32_BIAS_VAL, pregAll32);
-        MAPI::ShiftLefts(exp0FP32, exp0FP32, SHR_NUM_FP32, pregAll32);
-        MAPI::CompareScalar<float, AscendC::CMPMODE::LT>(specialMask, Reg, 0, pregAll32);
-        MAPI::Truncate<float, AscendC::RoundMode::CAST_RINT>(Reg, Reg, pregAll32);
-        MAPI::Mul(Reg, Reg, (MAPI::RegTensor<float>&)exp0FP32, pregAll32);
-
-        MAPI::CompareScalar<float, AscendC::CMPMODE::EQ>(zeroMask, Reg, 0, pregAll32);
-        MAPI::MaskAnd(zeroMask, specialMask, zeroMask, pregAll32);
-        MAPI::MaskOr(zeroMask, negInfMask, zeroMask, pregAll32);
-        MAPI::Select<int32_t>((MAPI::RegTensor<int32_t>&)Reg, negZero, (MAPI::RegTensor<int32_t>&)Reg, zeroMask);
+        MAPI::RegTensor<uint16_t> specialValueTensor, newMantissa, andResult, newValue;
+        MAPI::MaskReg specialMask, nonzeroMask;
+        MAPI::Duplicate(specialValueTensor, static_cast<uint16_t>(0x00ff));
+        MAPI::Duplicate(newMantissa, static_cast<uint16_t>(0x0008));
+        MAPI::And(andResult, (MAPI::RegTensor<uint16_t>&)input, specialValueTensor, mask);
+        MAPI::CompareScalar<uint16_t, AscendC::CMPMODE::GT>(nonzeroMask, andResult, 0, mask);
+        MAPI::CompareScalar<uint16_t, AscendC::CMPMODE::LT>(specialMask, andResult, 0x0008, mask);
+        MAPI::MaskAnd(specialMask, specialMask, nonzeroMask, mask);
+        MAPI::Or(newValue, (MAPI::RegTensor<uint16_t>&)input, newMantissa, mask);
+        MAPI::Select<uint16_t>(
+            (MAPI::RegTensor<uint16_t>&)output, newValue, (MAPI::RegTensor<uint16_t>&)input, specialMask);
     }
 
     // -----------------------------------------------------------------------
