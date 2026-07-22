@@ -414,7 +414,6 @@ def from_dlpack(
         Bool,
         Float16,
         Float32,
-        Float64,
         Int16,
         Int32,
         Int64,
@@ -475,7 +474,6 @@ def from_dlpack(
         (DLDataTypeCode.kDLUInt, 64): UInt64,
         (DLDataTypeCode.kDLFloat, 16): Float16,
         (DLDataTypeCode.kDLFloat, 32): Float32,
-        (DLDataTypeCode.kDLFloat, 64): Float64,
         (DLDataTypeCode.kDLBfloat, 16): BFloat16,
         (DLDataTypeCode.kDLBool, 8): Bool,
     }

@@ -1,5 +1,6 @@
 --trusted-host=pypi.org
 --trusted-host=files.pythonhosted.org
+numpy
 pytest==9.0.2
 ruff==0.15.1
 black==24.4.0

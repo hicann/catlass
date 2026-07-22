@@ -43,7 +43,15 @@ def test_float16_rounding_halfway() -> None:
 
 
 def test_bfloat16_rounding_halfway_even() -> None:
-    # Halfway: lower 16 bits are exactly 0x8000, round to even (keep upper)
+    # Halfway: lower 16 bits are exactly 0x8000, upper even → stay (RNE).
     f32_bits = 0x3F808000
     value = struct.unpack("f", struct.pack("I", f32_bits))[0]
     assert tla.BFloat16(value).__c_pointers__()[0] == 0x3F80
+
+
+def test_bfloat16_rounding_halfway_odd_upper() -> None:
+    # f32 = 1.0 + 2^-7 + 2^-8 = 1.01171875, upper=0x3F81 (odd), lower=0x8000
+    # RNE rounds up to 0x3F82 (bf16 = 1.015625); truncate would keep 0x3F81.
+    f32_bits = 0x3F818000
+    value = struct.unpack("f", struct.pack("I", f32_bits))[0]
+    assert tla.BFloat16(value).__c_pointers__()[0] == 0x3F82

@@ -16,7 +16,8 @@
 # python/tla_dsl/examples/end_to_end/vector_ops (binary_op.py, masked_binary.py,
 # bitwise_ops.py, reduction_ops.py, compare_mask.py, unary_ops.py, arange_op.py,
 # interleave_op.py, squeeze_op.py).
-# python/tla_dsl/examples/end_to_end/tensor_index (scalar_index_control_flow.py).
+# python/tla_dsl/examples/end_to_end/tensor_index (scalar_index_control_flow.py,
+# scalar_kernel_arg.py).
 #
 # Toolchain paths (env overrides first; directory-layout fallbacks last):
 #   CANN:             ASCEND_HOME_PATH (source set_env.sh if not already in env)
@@ -91,6 +92,7 @@ ARANGE_OP_REL="examples/end_to_end/vector_ops/arange_op.py"
 INTERLEAVE_OP_REL="examples/end_to_end/vector_ops/interleave_op.py"
 SQUEEZE_OP_REL="examples/end_to_end/vector_ops/squeeze_op.py"
 SCALAR_INDEX_CONTROL_FLOW_REL="examples/end_to_end/tensor_index/scalar_index_control_flow.py"
+SCALAR_KERNEL_ARG_REL="examples/end_to_end/tensor_index/scalar_kernel_arg.py"
 
 _ascendnpu_ir_dev_is_prebuilt() {
     local root="$1"
@@ -120,6 +122,8 @@ Run end-to-end validation for:
   - squeeze_op (squeeze_op.py squeeze --run --all-dtypes)
   - scalar_index_control_flow (scalar_index_control_flow.py: GM scalar read/write,
     loop/dynamic-if/constexpr-if, vec.func)
+  - scalar_kernel_arg (scalar_kernel_arg.py: host Numeric kernel args used in
+    same-type scalar arithmetic)
 Runs basic_mmad default MNK plus m=1, n=2, k=3.
 Activates conda env "${CONDA_ENV}", sources CANN set_env.sh, exports AscendNPU-IR MLIR/LLVM
 env, runs ./build.sh, then runs the test.
@@ -563,5 +567,15 @@ _run_scalar_index_control_flow_case() {
 }
 
 _run_scalar_index_control_flow_case
+
+_run_scalar_kernel_arg_case() {
+    echo "==> Running scalar_kernel_arg validation [Numeric args arithmetic]: --device ${DEVICE_ID}"
+    (
+        cd "${TLA_DSL_DIR}"
+        python "${SCALAR_KERNEL_ARG_REL}" --device "${DEVICE_ID}"
+    )
+}
+
+_run_scalar_kernel_arg_case
 
 echo "==> run_dsl_test.sh finished successfully"

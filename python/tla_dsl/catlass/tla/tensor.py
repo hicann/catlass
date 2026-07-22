@@ -10,7 +10,7 @@ from .. import _tla_type_bridge
 from .._mlir_bindings import tla_ops_gen as _tla_ops_gen
 from ..base_dsl.op import dsl_user_op
 from .. import runtime as _runtime
-from ..base_dsl.typing import Bool, Numeric, ScalarSSA
+from ..base_dsl.typing import Bool, Numeric
 from .typing import Tensor as TensorABC
 
 
@@ -291,42 +291,36 @@ class _Tensor(TensorABC):
 
     def _cvt_to_dest(
         self,
-        data: Any,
+        data: Numeric,
         dest_element_type: mlir_ir.Type,
         *,
         loc: mlir_ir.Location | None = None,
     ) -> mlir_ir.Value:
-        """Same-kind upcast / type check for typed ``Scalar`` (CuTeDSL ``_Tensor._cvt_to_dest``)."""
-        from ..base_dsl.typing import _TOKEN_TO_NUMERIC, _mlir_type_to_elem_token
+        """Require exact element type match, then ``ir_value`` / host constant."""
         from ..core_api import _op_error, _scalar_constant_for_element_type
-        from ..types import Scalar
 
-        if not isinstance(data, Scalar):
-            raise TypeError(f"expected Scalar, got {type(data).__name__}")
-        src_token = data.dtype.strip().lower()
-        dest_token = _mlir_type_to_elem_token(dest_element_type)
-        src_cls = _TOKEN_TO_NUMERIC.get(src_token)
-        dest_cls = _TOKEN_TO_NUMERIC.get(dest_token)
-        if src_cls is None or dest_cls is None:
-            if src_token != dest_token:
-                _op_error(
-                    "scalar_store",
-                    f"type mismatch, store {src_token} to Tensor with element type {dest_token}",
-                )
+        if not isinstance(data, Numeric):
+            raise TypeError(f"expected Numeric, got {type(data).__name__}")
+
+        dest_cls = Numeric.from_mlir_type(dest_element_type)
+        src_cls = type(data)
+
+        # No silent upcast/promote: store value dtype must match the tensor element
+        # type. Callers should convert explicitly with ``.to(...)`` / ``cast``.
+        if src_cls is not dest_cls:
+            _op_error(
+                "scalar_store",
+                f"type mismatch, store {src_cls.dtype} "
+                f"to Tensor with element type {dest_cls.dtype}; "
+                f"cast explicitly with .to({dest_cls.__name__}) before store",
+            )
+
+        # Host literals: emit dest-typed constant (range / fraction checks).
+        if isinstance(data.value, (bool, int, float)):
             return _scalar_constant_for_element_type(
                 "scalar_store", data.value, dest_element_type, loc=loc
             )
-        src_is_float = src_token.startswith("f") or src_token == "bf16"
-        dest_is_float = dest_token.startswith("f") or dest_token == "bf16"
-        same_kind = src_is_float == dest_is_float
-        if same_kind and dest_cls.width >= src_cls.width:
-            return _scalar_constant_for_element_type(
-                "scalar_store", data.value, dest_element_type, loc=loc
-            )
-        _op_error(
-            "scalar_store",
-            f"type mismatch, store {src_token} to Tensor with element type {dest_token}",
-        )
+        return data.ir_value(loc=loc)
 
     @dsl_user_op
     def __getitem__(
@@ -401,12 +395,12 @@ class _Tensor(TensorABC):
                 f"tla.scalar_load result type mismatch: expected {elem_type}, got {result.type}"
             )
         # Bool / i1 loads are control-flow predicates: expose as _BoolExpr so
-        # ``if tensor[i]`` / ``and`` see category "bool" (not bare ScalarSSA).
+        # ``if tensor[i]`` / ``and`` see category "bool" (not bare Numeric).
         if mlir_ir.IntegerType.isinstance(elem_type):
             int_ty = mlir_ir.IntegerType(elem_type)
             if int_ty.width == 1:
                 return _runtime._BoolExpr(result)
-        return ScalarSSA.from_mlir_type(elem_type, result)
+        return Numeric.from_mlir_type(elem_type)(result)
 
     @dsl_user_op
     def __setitem__(
@@ -416,16 +410,16 @@ class _Tensor(TensorABC):
         *,
         loc: mlir_ir.Location | None = None,
     ) -> None:
-        """Set tensor elements at specified coordinates.
+        """Set tensor elements at scalar coordinates.
 
-        ``data`` may be a ``ScalarSSA`` (e.g. from ``tensor[j]``), a bare Python
-        ``int``/``float`` literal (converted to the tensor element type), or a typed
-        ``Scalar`` (e.g. ``tla.Float32(1.0)``; CuTeDSL ``_cvt_to_dest`` rules).
+        ``data`` may be a ``Numeric`` (e.g. from ``tensor[j]``), a bare Python
+        ``int``/``float`` literal (converted to the tensor element type), or an
+        ``mlir.ir.Value`` that ``as_numeric`` can wrap (``__setitem__``).
         """
+        from ..base_dsl.typing import as_numeric
         from ..core_api import (
             _as_index_value,
             _as_value,
-            _category,
             _flatten_tla_tuple,
             _op_error,
             _require_category,
@@ -436,7 +430,6 @@ class _Tensor(TensorABC):
             _type_name,
         )
         from ..execution_lowering import TlaLoweringError
-        from ..types import Scalar
 
         loc = _normalize_user_loc(loc)
         if crd is None or (type(crd) is tuple and any(part is None for part in crd)):
@@ -474,21 +467,32 @@ class _Tensor(TensorABC):
             )
 
         elem_type = parent.element_mlir_type()
+        # Canonicalize to Numeric, then _cvt_to_dest → ir_value.
+        # Bare Python numbers stay dest-typed constants (range / fraction checks).
         resolved = _resolve_bound_value(data)
-        if _category(data) == "scalar_ssa":
-            store_value = _as_value(data)
-        elif isinstance(resolved, Scalar):
-            store_value = _Tensor._cvt_to_dest(self, resolved, elem_type, loc=loc)
-        elif isinstance(resolved, (int, float)) and not isinstance(resolved, bool):
+        if isinstance(resolved, (int, float)) and not isinstance(resolved, bool):
             store_value = _scalar_constant_for_element_type(
                 "scalar_store", resolved, elem_type, loc=loc
             )
         else:
-            _op_error(
-                "scalar_store",
-                f"invalid argument 'value' (position 1): expected scalar_ssa or "
-                f"scalar literal, got {_type_name(data)}",
-            )
+            try:
+                if isinstance(resolved, Numeric):
+                    num = resolved
+                elif isinstance(resolved, mlir_ir.Value):
+                    num = as_numeric(resolved)
+                elif isinstance(data, Numeric):
+                    num = data
+                elif isinstance(data, mlir_ir.Value):
+                    num = as_numeric(data)
+                else:
+                    raise TypeError(type(data).__name__)
+            except (TypeError, ValueError, KeyError):
+                _op_error(
+                    "scalar_store",
+                    f"invalid argument 'value' (position 1): expected Numeric or "
+                    f"scalar literal, got {_type_name(data)}",
+                )
+            store_value = _Tensor._cvt_to_dest(self, num, elem_type, loc=loc)
         if str(store_value.type) != str(elem_type):
             raise TlaLoweringError(
                 f"tla.scalar_store value type mismatch: expected {elem_type}, got {store_value.type}"

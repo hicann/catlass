@@ -94,10 +94,8 @@ def test_bool_tensor_load_usable_in_if_and() -> None:
     assert "-> i1" in mlir
 
 
-def test_scalar_load_returns_typed_scalar_ssa() -> None:
+def test_scalar_load_returns_typed_numeric() -> None:
     from mlir import ir as mlir_ir
-
-    from catlass.base_dsl.typing import ScalarSSA
 
     ctx = mlir_ir.Context()
     ctx.allow_unregistered_dialects = True
@@ -115,16 +113,15 @@ def test_scalar_load_returns_typed_scalar_ssa() -> None:
             attributes={"value": mlir_ir.FloatAttr.get(f32, 1.5)},
         ).results[0]
 
-        ssa_i32 = ScalarSSA.from_value(i32_val, tla.Int32)
-        assert isinstance(ssa_i32, ScalarSSA)
-        assert ssa_i32.dtype is tla.Int32
-        assert ssa_i32.element_type == "i32"
+        ssa_i32 = tla.Int32(i32_val)
+        assert isinstance(ssa_i32, tla.Int32)
+        assert isinstance(ssa_i32, tla.Numeric)
+        assert type(ssa_i32).dtype == "i32"
         assert ssa_i32.ir_value() is i32_val
 
-        ssa_f32 = ScalarSSA.from_mlir_type(f32, f32_val)
-        assert isinstance(ssa_f32, ScalarSSA)
-        assert ssa_f32.dtype is tla.Float32
-        assert ScalarSSA.from_value(f32_val).dtype is tla.Float32
+        ssa_f32 = tla.Float32(f32_val)
+        assert isinstance(ssa_f32, tla.Float32)
+        assert type(ssa_f32).dtype == "f32"
 
 
 def test_tensor_scalar_load_emits_tla_scalar_load_2d() -> None:
@@ -176,8 +173,8 @@ def test_tensor_scalar_store_python_literals() -> None:
         k_bad_float.dump_mlir(type_args=(_gm_tensor_1d(4, dtype=tla.Int32),))
 
 
-def test_tensor_scalar_store_typed_scalar() -> None:
-    """Typed Scalar keeps dtype: match/upcast OK; cross-kind rejected."""
+def test_tensor_scalar_store_typed_numeric() -> None:
+    """Typed Numeric must match tensor dtype; no silent same-kind upcast."""
     out_f32 = _gm_tensor_1d(4, dtype=tla.Float32)
     out_i32 = _gm_tensor_1d(4, dtype=tla.Int32)
 
@@ -186,15 +183,21 @@ def test_tensor_scalar_store_typed_scalar() -> None:
         o[0] = tla.Float32(1.1125)
 
     @tla.kernel
-    def k_upcast(o: tla.Tensor) -> None:
+    def k_upcast_rejected(o: tla.Tensor) -> None:
         o[0] = tla.Int16(7)
+
+    @tla.kernel
+    def k_explicit_to(o: tla.Tensor) -> None:
+        o[0] = tla.Int16(7).to(tla.Int32)
 
     @tla.kernel
     def k_mismatch(o: tla.Tensor) -> None:
         o[0] = tla.Float32(1)
 
     assert "tla.scalar_store" in k_match.dump_mlir(type_args=(out_f32,))
-    assert "tla.scalar_store" in k_upcast.dump_mlir(type_args=(out_i32,))
+    assert "tla.scalar_store" in k_explicit_to.dump_mlir(type_args=(out_i32,))
+    with pytest.raises(Exception, match="type mismatch"):
+        k_upcast_rejected.dump_mlir(type_args=(out_i32,))
     with pytest.raises(Exception, match="type mismatch"):
         k_mismatch.dump_mlir(type_args=(out_i32,))
 
@@ -207,7 +210,7 @@ def test_tensor_scalar_store_rejects_non_scalar_value() -> None:
     def k(o: tla.Tensor, m: tla.Tensor) -> None:
         o[0] = m  # tensor, not scalar
 
-    with pytest.raises(Exception, match="expected scalar_ssa or scalar literal"):
+    with pytest.raises(Exception, match="expected Numeric or scalar literal"):
         k.dump_mlir(type_args=(out, meta))
 
 

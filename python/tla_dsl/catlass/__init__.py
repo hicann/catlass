@@ -15,7 +15,17 @@ from . import types as types
 from .tla.runtime import _Tensor
 from . import core_api as core
 from .address_space import AddressSpace
-from .base_dsl.typing import Constexpr, JitArgument, Pointer, ScalarSSA
+from .base_dsl.typing import (
+    Constexpr,
+    JitArgument,
+    Pointer,
+    as_numeric,
+    cast,
+    DslType,
+    NumericMeta,
+    IntegerMeta,
+    FloatMeta,
+)
 from . import runtime as _runtime
 from .base_dsl import BaseDSL, DSLLocation
 from .base_dsl.jit_executor import TlaJitExecutor as _TlaJitExecutor
@@ -43,8 +53,9 @@ kernel = _dsl.kernel
 ascendnpuir_kernel = _dsl.ascendnpuir_kernel
 Tensor = _Tensor
 TypedTensor = tla.TypedTensor
-Scalar = types.Scalar
 Numeric = types.Numeric
+Integer = types.Integer
+Float = types.Float
 Bool = types.Bool
 Int8 = types.Int8
 Int16 = types.Int16
@@ -56,7 +67,6 @@ UInt32 = types.UInt32
 UInt64 = types.UInt64
 Index = types.Index
 Float32 = types.Float32
-Float64 = types.Float64
 Float16 = types.Float16
 BFloat16 = types.BFloat16
 const_expr = _runtime.const_expr
@@ -114,9 +124,15 @@ __all__ = [
     "Tensor",
     "TypedTensor",
     "Pointer",
-    "Scalar",
     "Numeric",
-    "ScalarSSA",
+    "Integer",
+    "Float",
+    "as_numeric",
+    "cast",
+    "DslType",
+    "NumericMeta",
+    "IntegerMeta",
+    "FloatMeta",
     "Bool",
     "Int8",
     "Int16",
@@ -128,7 +144,6 @@ __all__ = [
     "UInt64",
     "Index",
     "Float32",
-    "Float64",
     "Float16",
     "BFloat16",
     "JitArgument",

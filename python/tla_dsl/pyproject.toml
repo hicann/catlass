@@ -11,6 +11,9 @@ license = { text = "MIT" }
 authors = [
   { name = "Ascend Catlass DSL Contributors" }
 ]
+dependencies = [
+  "numpy",
+]
 dynamic = ["version"]
 
 [project.optional-dependencies]

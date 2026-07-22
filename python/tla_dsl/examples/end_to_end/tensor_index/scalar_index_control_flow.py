@@ -9,7 +9,7 @@ Control-flow patterns in this example:
 - Python scalar literal store (``out[i] = 1.1125``)
 - ``tla.range`` loop copy
 - Dynamic ``if`` selecting read index (index merge, load after branch)
-- Dynamic ``if`` selecting scalar *values* (ScalarSSA carried through ``scf.if``)
+- Dynamic ``if`` selecting scalar *values* (Numeric carried through ``scf.if``)
 - ``tla.const_expr`` compile-time forward vs reversed indexing
 - Scalar read/store inside ``tla.vector`` / ``tla.vec.func`` (VF)
 """
@@ -227,7 +227,7 @@ def _run_value_through_dynamic_if(
     torch,
     device: str,
 ) -> int:
-    """ScalarSSA value selected by a dynamic host/runtime ``selector`` int."""
+    """Numeric value selected by a dynamic host/runtime ``selector`` int."""
     meta = torch.arange(LENGTH, dtype=torch.float32, device=device)
     out = torch.full((1,), -1.0, dtype=torch.float32, device=device)
     meta_t = _gm_vector_contiguous(meta)

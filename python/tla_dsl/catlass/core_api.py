@@ -27,7 +27,7 @@ _CAST_SUPPORTED_DTYPES = frozenset(
 from ._mlir_bindings import tla_ops_gen as _tla_ops_gen
 from .base_dsl import ast_helpers as _ast_helpers
 from .base_dsl.op import dsl_user_op, _capture_user_loc
-from .base_dsl.typing import Float32, Int8, Numeric, ScalarSSA
+from .base_dsl.typing import Float32, Int8, Numeric, as_numeric
 from .base_dsl.typing import Pointer as PointerABC
 from .base_dsl.typing import Pointer as PointerTypeHint
 from .tla.tensor import normalize_tile_view_coord
@@ -61,7 +61,6 @@ from .types import (
     TlaTensor,
     TlaTile,
     TlaValue,
-    Scalar,
     dtype_size_bytes,
 )
 from .params import CopyParams, CopyL0C2DstParams, QuantMode, L0C2UBMode, MemType
@@ -208,7 +207,7 @@ IndexTree: TypeAlias = IndexLike | tuple["IndexTree", ...]
 ShapeLike: TypeAlias = IndexTree
 CoordLike: TypeAlias = IndexTree
 StrideLike: TypeAlias = IndexTree
-ValueLike: TypeAlias = Scalar | ScalarSSA | mlir_ir.Value
+ValueLike: TypeAlias = Numeric | mlir_ir.Value
 TileLike: TypeAlias = mlir_ir.Value
 MemrefLike: TypeAlias = Tensor | mlir_ir.Value
 FlagLike: TypeAlias = mlir_ir.Value
@@ -673,7 +672,14 @@ def _region_stub(op_name: str) -> _RegionStub:
 
 
 def _resolve_bound_value(value: Any) -> Any:
+    """Resolve frontend proxy bindings.
+
+    Keep ``Numeric`` / ``VectorSSA`` / ``MaskSSA`` wrappers intact (user-facing
+    object stays typed; use ``_as_value`` / ``ir_value`` to obtain SSA).
+    """
     if isinstance(value, mlir_ir.Value):
+        return value
+    if isinstance(value, (Numeric, VectorSSA, MaskSSA)):
         return value
     bound = _runtime._resolve_frontend_bound_value(value)
     if bound is not None:
@@ -776,8 +782,29 @@ def _vector_lane_count(element_bytes: int) -> int:
 
 def _as_index_value(value: Any) -> mlir_ir.Value:
     resolved = _resolve_bound_value(value)
+    if isinstance(resolved, Numeric):
+        # Index path: Int*/Bool/Index only (signless). Reject UInt* — use .to(Int*).
+        if not (type(resolved).is_integer and type(resolved).signed):
+            raise TlaLoweringError(
+                f"Expected signed integer Numeric index, got {type(resolved).__name__}; "
+                f"cast explicitly with .to(Int32) (or another Int*) before indexing"
+            )
+        resolved = resolved.ir_value()
     if isinstance(resolved, mlir_ir.Value):
-        return resolved
+        if isinstance(resolved.type, mlir_ir.IndexType):
+            return resolved
+        if (
+            mlir_ir.IntegerType.isinstance(resolved.type)
+            and mlir_ir.IntegerType(resolved.type).is_signless
+        ):
+            return mlir_ir.Operation.create(
+                "arith.index_cast",
+                operands=[resolved],
+                results=[mlir_ir.IndexType.get()],
+            ).results[0]
+        raise TlaLoweringError(
+            f"Expected index-like operand, got SSA type {resolved.type}"
+        )
     if isinstance(resolved, bool):
         return _const_index(int(resolved))
     if isinstance(resolved, int):
@@ -811,16 +838,18 @@ def _as_i64_value(value: Any, *, loc: mlir_ir.Location | None = None) -> mlir_ir
         return _const_i64(int(resolved), loc=loc)
     if isinstance(resolved, int):
         return _const_i64(resolved, loc=loc)
-    if isinstance(resolved, Scalar):
-        dtype = resolved.dtype.lower()
-        if dtype == "index" or dtype.startswith("i"):
+    if isinstance(resolved, Numeric) and isinstance(
+        resolved.value, (bool, int)
+    ):
+        dtype = type(resolved).dtype.lower()
+        if dtype == "index" or (dtype.startswith("i") and dtype[1:].isdigit()):
             return _const_i64(int(resolved.value), loc=loc)
     raise TlaLoweringError(f"Expected i64-like operand, got {type(value).__name__}")
 
 
 def _coerce_inttoptr_address(
     addr_token: str,
-    value: int | mlir_ir.Value,
+    value: int | mlir_ir.Value | Numeric,
     loc: mlir_ir.Location | None,
 ) -> mlir_ir.Value:
     """Integer SSA for ``tla.inttoptr`` (``gm`` / ``generic`` → i64, else i32)."""
@@ -831,6 +860,13 @@ def _coerce_inttoptr_address(
         else mlir_ir.IntegerType.get_signless(32)
     )
     resolved = _resolve_bound_value(value)
+    if isinstance(resolved, Numeric):
+        if not type(resolved).is_integer:
+            _op_error(
+                "make_ptr",
+                f"address must be int or integer Numeric/SSA, got {_type_name(value)}",
+            )
+        resolved = resolved.ir_value(loc=loc)
     if isinstance(resolved, mlir_ir.Value):
         if PtrType.isinstance(resolved.type):
             _op_error(
@@ -883,8 +919,10 @@ def _as_value(value: Any) -> mlir_ir.Value:
         resolved = _resolve_bound_value(resolved.value)
     if isinstance(resolved, VectorSSA):
         resolved = _resolve_bound_value(resolved.value)
-    if isinstance(resolved, ScalarSSA):
+    if isinstance(resolved, MaskSSA):
         resolved = _resolve_bound_value(resolved.value)
+    if isinstance(resolved, Numeric):
+        resolved = resolved.ir_value()
     if isinstance(resolved, _MutexValue):
         resolved = _resolve_bound_value(resolved.value)
     if isinstance(resolved, mlir_ir.Value):
@@ -894,8 +932,6 @@ def _as_value(value: Any) -> mlir_ir.Value:
             if host is not None:
                 st.tensor_host_by_value[resolved] = host
         return resolved
-    if isinstance(resolved, Scalar):
-        return _const_for_scalar(resolved)
     if isinstance(resolved, bool):
         return _const_index(int(resolved))
     if isinstance(resolved, int):
@@ -1013,29 +1049,9 @@ def pack_from_irvalue(
     return list(tree_utils.rebuild_frontend_if_carried_values(wrapped, specs))
 
 
-def _const_for_scalar(scalar: Scalar) -> mlir_ir.Value:
-    dtype = scalar.dtype.lower()
-    if dtype == "f32":
-        return _const_f32(float(scalar.value))
-    if dtype == "index":
-        return _const_index(int(scalar.value))
-    if dtype.startswith("i"):
-        width = int(dtype[1:]) if dtype[1:].isdigit() else 32
-        op = mlir_ir.Operation.create(
-            "arith.constant",
-            results=[mlir_ir.IntegerType.get_signless(width)],
-            attributes={
-                "value": mlir_ir.IntegerAttr.get(
-                    mlir_ir.IntegerType.get_signless(width), int(scalar.value)
-                )
-            },
-        )
-        return op.results[0]
-    raise TlaLoweringError(f"Unsupported Scalar constant dtype: {scalar.dtype}")
-
 
 def _const_attr(value: Any) -> mlir_ir.Attribute:
-    if isinstance(value, Scalar):
+    if isinstance(value, Numeric) and isinstance(value.value, (bool, int, float)):
         value = value.value
     if isinstance(value, bool):
         return mlir_ir.BoolAttr.get(value)
@@ -1073,8 +1089,9 @@ def _const_int_value(value: Any) -> int | None:
         return int(resolved)
     if isinstance(resolved, int):
         return resolved
-    if isinstance(resolved, Scalar):
-        if resolved.dtype.lower().startswith("i") or resolved.dtype.lower() == "index":
+    if isinstance(resolved, Numeric) and isinstance(resolved.value, (bool, int)):
+        dtype = type(resolved).dtype.lower()
+        if dtype.startswith("i") or dtype == "index":
             return int(resolved.value)
     if isinstance(resolved, mlir_ir.Value):
         owner = getattr(resolved, "owner", None)
@@ -1902,7 +1919,7 @@ def _is_static(x: Any) -> bool:
         return all(_is_static(a) for a in x)
     if isinstance(x, (bool, int)):
         return True
-    if isinstance(x, Scalar):
+    if isinstance(x, Numeric) and isinstance(getattr(x, "value", None), (bool, int)):
         return _const_int_value(x) is not None
     return False
 
@@ -2359,17 +2376,17 @@ def _debug_print_operand(value: Any, *, loc: mlir_ir.Location | None) -> mlir_ir
         return _const_i32(resolved, loc=loc)
     if isinstance(resolved, float):
         return _const_f32(resolved, loc=loc)
-    if isinstance(resolved, Scalar):
-        dtype = resolved.dtype.lower()
-        if dtype == "i32":
-            return _const_i32(int(resolved.value), loc=loc)
-        if dtype == "f32":
-            return _const_f32(float(resolved.value), loc=loc)
-        _op_error(
-            "debug_print",
-            f"unsupported value type {dtype}; expected a signless i32 or f32 scalar",
-        )
-    if isinstance(resolved, ScalarSSA):
+    if isinstance(resolved, Numeric):
+        if isinstance(resolved.value, (int, float, bool)):
+            dtype = type(resolved).dtype.lower()
+            if dtype == "i32":
+                return _const_i32(int(resolved.value), loc=loc)
+            if dtype == "f32":
+                return _const_f32(float(resolved.value), loc=loc)
+            _op_error(
+                "debug_print",
+                f"unsupported value type {dtype}; expected a signless i32 or f32 scalar",
+            )
         resolved = _resolve_bound_value(resolved.value)
     if isinstance(resolved, VectorSSA):
         resolved = _resolve_bound_value(resolved.value)
@@ -3644,8 +3661,12 @@ def full(
             f"(e.g. tla.Float32), got {_type_name(dtype)}",
         )
     resolved = _resolve_bound_value(value)
-    if not isinstance(resolved, (bool, int, float, Scalar)):
-        _op_error("full", "value must be a Python scalar literal or typed scalar")
+    if isinstance(resolved, Numeric):
+        if isinstance(resolved.value, mlir_ir.Value):
+            _op_error("full", "value must be a Python scalar literal or host Numeric")
+        resolved = resolved.value
+    if not isinstance(resolved, (bool, int, float)):
+        _op_error("full", "value must be a Python scalar literal or host Numeric")
     dtype_token = str(dtype.dtype).strip().lower()
     if dtype_token not in _FULL_SUPPORTED_DTYPES:
         _op_error(
@@ -3821,11 +3842,47 @@ def _emit_vector_binary(
     return VectorSSA(result)
 
 
-def _is_scalar_literal(value: Any) -> bool:
+def _as_vector_scalar_numeric(value: Any) -> Numeric | None:
+    """Canonicalize vector–scalar rhs to ``Numeric`` via ``as_numeric``.
+
+    Returns ``None`` if ``value`` is not a scalar operand.
+    """
+    if isinstance(value, VectorSSA) or _category(value) == "vector_ssa":
+        return None
+    if isinstance(value, Numeric):
+        return value
     resolved = _resolve_bound_value(value)
-    return isinstance(resolved, Scalar) or (
-        isinstance(resolved, (int, float)) and not isinstance(resolved, bool)
-    )
+    if isinstance(resolved, Numeric):
+        return resolved
+    if isinstance(resolved, (bool, int, float)):
+        return as_numeric(resolved)
+    if isinstance(resolved, mlir_ir.Value):
+        # Also accept bare ``ir.Value`` via ``as_numeric``.
+        try:
+            return as_numeric(resolved)
+        except (TypeError, ValueError, KeyError):
+            return None
+    return None
+
+
+def _numeric_ir_value_for_element_type(
+    op_name: str,
+    scalar: Numeric,
+    element_type: mlir_ir.Type,
+    *,
+    loc: mlir_ir.Location | None = None,
+) -> mlir_ir.Value:
+    """Materialize scalar for vector–scalar ops via ``to`` + ``ir_value``.
+
+    Host Python numbers keep literal ``arith.constant`` emission (range / fraction
+    checks). Dynamic SSA uses ``Numeric.to`` + ``ir_value``.
+    """
+    if isinstance(scalar.value, (bool, int, float)):
+        return _scalar_constant_for_element_type(
+            op_name, scalar.value, element_type, loc=loc
+        )
+    dest_cls = Numeric.from_mlir_type(element_type)
+    return scalar.to(dest_cls, loc=loc).ir_value(loc=loc)
 
 
 def _scalar_constant_for_element_type(
@@ -3835,8 +3892,14 @@ def _scalar_constant_for_element_type(
     *,
     loc: mlir_ir.Location | None = None,
 ) -> mlir_ir.Value:
+    """Emit ``arith.constant`` from a host scalar literal only."""
     resolved = _resolve_bound_value(scalar)
-    if isinstance(resolved, Scalar):
+    if isinstance(resolved, Numeric):
+        if isinstance(resolved.value, mlir_ir.Value):
+            _op_error(
+                op_name,
+                f"invalid argument 'rhs' (position 1): expected scalar literal, got Numeric SSA",
+            )
         resolved = resolved.value
     if isinstance(resolved, bool) or not isinstance(resolved, (int, float)):
         _op_error(
@@ -3853,7 +3916,7 @@ def _scalar_constant_for_element_type(
                 f"{element_type}, got {resolved!r}",
             )
         int_value = int(resolved)
-        # Range check before IntegerAttr.get (signed bounds for signless, like CuTe Integer.min/max).
+        # Range check before IntegerAttr.get (signed bounds for signless integer types).
         if isinstance(element_type, mlir_ir.IndexType):
             lo, hi = -(2**63), 2**63 - 1
         else:
@@ -3902,7 +3965,8 @@ def _emit_vector_scalar_binary(
     loc: mlir_ir.Location | None = None,
 ) -> VectorSSA:
     _require_category(op_name, "lhs", lhs, "vector_ssa", 0)
-    if not _is_scalar_literal(rhs):
+    rhs_num = _as_vector_scalar_numeric(rhs)
+    if rhs_num is None:
         _op_error(
             op_name,
             f"invalid argument 'rhs' (position 1): expected scalar, got {_type_name(rhs)}",
@@ -3913,8 +3977,8 @@ def _emit_vector_scalar_binary(
     _runtime._require_enclosing_region(op_name, "vec.func")
     lhs_value = _as_value(lhs)
     lhs_desc = _tla_tensor_type_for_mlir_value(lhs_value)
-    rhs_value = _scalar_constant_for_element_type(
-        op_name, rhs, lhs_desc.element_mlir_type(lhs_value.type.context), loc=loc
+    rhs_value = _numeric_ir_value_for_element_type(
+        op_name, rhs_num, lhs_desc.element_mlir_type(lhs_value.type.context), loc=loc
     )
     mask_value = _as_value(mask) if mask is not None else None
     result = emitter(
@@ -3940,13 +4004,13 @@ def _emit_commutative_vector_scalar_binary(
     scalar_op_name = scalar_op_name or op_name
     lhs_category = _category(lhs)
     rhs_category = _category(rhs)
-    lhs_scalar = _is_scalar_literal(lhs)
-    rhs_scalar = _is_scalar_literal(rhs)
-    if lhs_category == "vector_ssa" and rhs_scalar:
+    lhs_num = _as_vector_scalar_numeric(lhs)
+    rhs_num = _as_vector_scalar_numeric(rhs)
+    if lhs_category == "vector_ssa" and rhs_num is not None:
         return _emit_vector_scalar_binary(
             op_name, getattr(_tla_ops_gen, scalar_op_name), lhs, rhs, mask=mask, loc=loc
         )
-    if lhs_scalar and rhs_category == "vector_ssa":
+    if lhs_num is not None and rhs_category == "vector_ssa":
         return _emit_vector_scalar_binary(
             op_name, getattr(_tla_ops_gen, scalar_op_name), rhs, lhs, mask=mask, loc=loc
         )
@@ -3966,15 +4030,15 @@ def _emit_vector_binary_or_scalar(
 ) -> VectorSSA:
     lhs_category = _category(lhs)
     rhs_category = _category(rhs)
-    lhs_scalar = _is_scalar_literal(lhs)
-    rhs_scalar = _is_scalar_literal(rhs)
+    lhs_num = _as_vector_scalar_numeric(lhs)
+    rhs_num = _as_vector_scalar_numeric(rhs)
     if lhs_category == "vector_ssa" and rhs_category == "vector_ssa":
         return _emit_vector_binary(op_name, vector_emitter, lhs, rhs, mask=mask, loc=loc)
-    if lhs_category == "vector_ssa" and rhs_scalar:
+    if lhs_category == "vector_ssa" and rhs_num is not None:
         return _emit_vector_scalar_binary(
             op_name, getattr(_tla_ops_gen, scalar_op_name), lhs, rhs, mask=mask, loc=loc
         )
-    if commutative and lhs_scalar and rhs_category == "vector_ssa":
+    if commutative and lhs_num is not None and rhs_category == "vector_ssa":
         return _emit_vector_scalar_binary(
             op_name, getattr(_tla_ops_gen, scalar_op_name), rhs, lhs, mask=mask, loc=loc
         )
@@ -4502,8 +4566,8 @@ def cmp(
         )
     _require_category("cmp", "lhs", lhs, "vector_ssa", 0)
     rhs_category = _category(rhs)
-    rhs_scalar = _is_scalar_literal(rhs)
-    if rhs_category != "vector_ssa" and not rhs_scalar:
+    rhs_num = _as_vector_scalar_numeric(rhs)
+    if rhs_category != "vector_ssa" and rhs_num is None:
         _op_error(
             "cmp",
             f"invalid argument 'rhs' (position 1): expected vector or scalar, got {_type_name(rhs)}",
@@ -4516,9 +4580,10 @@ def cmp(
     if rhs_category == "vector_ssa":
         rhs_value = _as_value(rhs)
     else:
+        assert rhs_num is not None
         lhs_desc = _tla_tensor_type_for_mlir_value(lhs_value)
-        rhs_value = _scalar_constant_for_element_type(
-            "cmp", rhs, lhs_desc.element_mlir_type(lhs_value.type.context), loc=loc
+        rhs_value = _numeric_ir_value_for_element_type(
+            "cmp", rhs_num, lhs_desc.element_mlir_type(lhs_value.type.context), loc=loc
         )
         _check_compare_element_type_supported("cmp", lhs_desc.element_type)
     mask_ty = _tla_mask_type(lhs_value.type.context)
@@ -4748,7 +4813,7 @@ def allocate(
 @dsl_user_op
 def make_ptr(
     dtype: type[Numeric] | None,
-    value: int | mlir_ir.Value,
+    value: int | mlir_ir.Value | Numeric,
     mem_space: AddressSpace = AddressSpace.gm,
     *,
     assumed_align: int | None = None,

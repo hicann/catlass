@@ -9,7 +9,6 @@ from typing import Any, Callable, get_type_hints
 from mlir import ir as mlir_ir  # type: ignore[assignment]
 
 from .. import runtime as _runtime
-from ..types import annotation_to_category
 
 
 def _capture_user_loc() -> mlir_ir.Location | None:
@@ -43,10 +42,18 @@ def _record_category(value: Any, category: str) -> None:
 
 def dsl_user_op(op_func: Callable[..., Any]) -> Callable[..., Any]:
     """Attach caller source location to user-facing DSL op calls."""
-    return_annotation = get_type_hints(op_func, globalns=op_func.__globals__).get(
-        "return"
-    )
-    return_category = annotation_to_category(return_annotation)
+    # Lazy import: ``types`` imports ``typing``, so a top-level import here
+    # would cycle when ``typing`` decorates Numeric with ``dsl_user_op``.
+    return_category: str | None = None
+    try:
+        from ..types import annotation_to_category
+
+        return_annotation = get_type_hints(
+            op_func, globalns=op_func.__globals__
+        ).get("return")
+        return_category = annotation_to_category(return_annotation)
+    except Exception:
+        return_category = None
 
     @wraps(op_func)
     def wrapper(*args: Any, **kwargs: Any) -> Any:

@@ -14,7 +14,7 @@ from . import runtime as runtime_mod
 from . import tla_ast_decorators as ast_decorators
 from .base_dsl.ast_preprocessor import maybe_transform_for_lowering
 from .base_dsl import DSLLocation
-from .base_dsl.typing import Constexpr, _elem_token_to_mlir_type
+from .base_dsl.typing import Constexpr, Numeric
 from .tla.typing import Tensor
 
 
@@ -258,26 +258,32 @@ def _build_tla_func(
             )
             return _Tensor.__setitem__(self, crd, data, loc=loc)
 
-    proxies = [_ArgProxy() for _ in runtime_arg_names]
     call_args_for_fn = list(call_args)
-    idx = 0
-    for i, name in enumerate(arg_names):
-        if name in runtime_arg_names:
-            call_args_for_fn[i] = proxies[idx]
-            idx += 1
-    call_args_for_fn = tuple(call_args_for_fn)
-    arg_bindings = {
-        id(proxy): value for proxy, value in zip(proxies, entry.arguments, strict=False)
-    }
+    arg_bindings: dict[int, Any] = {}
     category_bindings: dict[int, str] = {}
-    for name, proxy, value in zip(
-        runtime_arg_names, proxies, entry.arguments, strict=False
-    ):
-        category = _category_from_type_like(ctx, arg_types.get(name))
-        if category is None:
+    runtime_idx = 0
+    for i, name in enumerate(arg_names):
+        if name in constexpr_names:
             continue
-        category_bindings[id(proxy)] = category
-        category_bindings[id(value)] = category
+        ssa = entry.arguments[runtime_idx]
+        host_arg = call_args[i]
+        # Numeric host args must stay typed Numeric around the block SSA so
+        # operators (``a + b``, ``a // 2``, …) lower via Numeric.__*__.
+        if isinstance(host_arg, Numeric):
+            num = type(host_arg)(ssa)
+            call_args_for_fn[i] = num
+            category_bindings[id(num)] = "numeric"
+            category_bindings[id(ssa)] = "numeric"
+        else:
+            proxy = _ArgProxy()
+            call_args_for_fn[i] = proxy
+            arg_bindings[id(proxy)] = ssa
+            category = _category_from_type_like(ctx, arg_types.get(name))
+            if category is not None:
+                category_bindings[id(proxy)] = category
+                category_bindings[id(ssa)] = category
+        runtime_idx += 1
+    call_args_for_fn = tuple(call_args_for_fn)
 
     tensor_host_by_value: dict[Any, Any] = {}
     for pos, name in enumerate(arg_names):
@@ -340,7 +346,7 @@ def _coerce_type(ctx: mlir_ir.Context, type_like: Any) -> mlir_ir.Type:
         return _tla_type_bridge.value_type_get(ctx)
     if isinstance(type_like, str):
         with ctx:
-            return _elem_token_to_mlir_type(type_like)
+            return Numeric.from_dtype_token(type_like).mlir_type(ctx)
     raise TypeError(
         "execution lowering expected mlir.ir.Type, Tla element token, or None; "
         f"got {type(type_like).__name__}"

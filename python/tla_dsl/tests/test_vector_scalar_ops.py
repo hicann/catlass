@@ -60,6 +60,41 @@ def invalid_integer_scalar_fraction_kernel(lhs: tla.Tensor) -> None:
             _ = tla.add(reg, 1.9)
 
 
+@tla.kernel
+def vector_scalar_numeric_ssa_kernel(
+    lhs: tla.Tensor, scalar_buf: tla.Tensor
+) -> None:
+    """Dynamic Numeric SSA as vector–scalar rhs."""
+    tile = tla.tile_view(lhs, tla.make_shape(64), tla.make_coord(0))
+    with tla.vector():
+        with tla.vec.func(mode="simd"):
+            reg = tile.load()
+            s = scalar_buf[0]
+            _ = tla.add(reg, s)
+            _ = tla.mul(s, reg)
+            _ = tla.cmp(reg, s, mode="gt")
+
+
+def test_vector_scalar_accepts_numeric_ssa() -> None:
+    with runtime_mod._eager_capture():
+        scalar_buf = tla.Tensor(
+            tla.make_shape(1),
+            tla.Float32,
+            addrspace=tla.AddressSpace.gm,
+            origin_shape=tla.make_shape(1),
+            layout_tag=tla.arch.RowMajor,
+        )
+    mlir = vector_scalar_numeric_ssa_kernel.dump_mlir(
+        type_args=(_vector_tensor(), scalar_buf)
+    )
+    assert "tla.adds" in mlir
+    assert "tla.muls" in mlir
+    assert "tla.cmp" in mlir
+    # Dynamic scalar must not be forced through a fresh host arith.constant alone;
+    # scalar load feeds the vector–scalar ops.
+    assert "tla.scalar_load" in mlir or "memref.load" in mlir or "tla.load" in mlir
+
+
 def test_vector_scalar_symbols_are_exported() -> None:
     for symbol in ("add", "sub", "mul", "max", "min", "div"):
         assert callable(getattr(tla, symbol))

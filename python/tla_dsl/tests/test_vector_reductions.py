@@ -141,9 +141,9 @@ def test_reduce_accepts_none_semantic_keywords() -> None:
 def test_unsupported_reduction_element_type_is_rejected() -> None:
     with pytest.raises(
         tla.TlaCoreAPIError,
-        match=r"VectorSSA\.reduce.*unsupported reduction element type f64",
+        match=r"VectorSSA\.reduce.*unsupported reduction element type i64",
     ):
-        vector_reduce_kernel.dump_mlir(type_args=(_vector_tensor(tla.Float64),))
+        vector_reduce_kernel.dump_mlir(type_args=(_vector_tensor(tla.Int64),))
 
 
 def test_reduce_rejects_non_reduction_op() -> None:

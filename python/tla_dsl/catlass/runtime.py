@@ -439,12 +439,15 @@ class _BoolExpr:
 def _coerce_bool_value(value: Any) -> Any:
     from mlir import ir as mlir_ir  # type: ignore[assignment]
 
-    from .base_dsl.typing import Bool, ScalarSSA
+    from .base_dsl.typing import Bool, Numeric
 
     if isinstance(value, _BoolExpr):
         return value._value
-    if isinstance(value, ScalarSSA) and value.dtype is Bool:
-        return value.value
+    # Numeric ``Bool`` (legacy ScalarSSA path removed); unwrap SSA or host bool.
+    if isinstance(value, Numeric) and type(value) is Bool:
+        if isinstance(value.value, mlir_ir.Value):
+            return value.value
+        return _const_i1(int(bool(value.value)))
     resolved = _resolve_frontend_bound_value(value)
     if isinstance(resolved, mlir_ir.Value):
         return resolved

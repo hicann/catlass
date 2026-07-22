@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import ctypes
 import importlib
-import struct
 import weakref
 from dataclasses import dataclass
 from typing import Any, Iterable, Iterator, Literal, TypeAlias
@@ -12,7 +10,6 @@ from typing import Any, Iterable, Iterator, Literal, TypeAlias
 from .base_dsl.typing import (
     Numeric,
     Pointer as PointerABC,
-    _elem_token_to_mlir_type,
 )
 
 from mlir import ir as mlir_ir  # type: ignore[assignment]
@@ -20,7 +17,6 @@ from mlir import ir as mlir_ir  # type: ignore[assignment]
 from ._mlir_bindings import tla_ops_gen as _tla_ops_gen  # noqa: F401 — register ``tla`` dialect
 from . import _tla_type_bridge
 from .address_space import AddressSpace
-
 
 def _coerce_host_tensor_dtype(value: Any) -> str:
     if isinstance(value, type) and issubclass(value, Numeric):
@@ -35,7 +31,6 @@ def _coerce_host_tensor_dtype(value: Any) -> str:
         f"got {type(value).__name__}"
     )
 
-
 def _coerce_host_tensor_addrspace(value: Any) -> str:
     if isinstance(value, AddressSpace):
         return value.name
@@ -44,9 +39,7 @@ def _coerce_host_tensor_addrspace(value: Any) -> str:
         f"got {type(value).__name__}"
     )
 
-
 _cached_ptr_typeid: mlir_ir.TypeID | None = None
-
 
 class PtrType(mlir_ir.Type):
     """``!tla.ptr<...>`` as a proper Python subclass of :class:`mlir.ir.Type` (Tla-style)."""
@@ -107,7 +100,6 @@ class PtrType(mlir_ir.Type):
     def mlir_type(self) -> mlir_ir.Type:
         """Former façade field: the underlying MLIR type is ``self``."""
         return self
-
 
 class LayoutType(mlir_ir.Type):
     """``!tla.layout<!tla.shape<...>, !tla.stride<...>[, !tla.shape<...>]>`` type wrapper."""
@@ -185,11 +177,9 @@ class LayoutType(mlir_ir.Type):
     def mlir_type(self) -> mlir_ir.Type:
         return self
 
-
 TlaIndexTreeKind = Literal["shape", "coord", "stride"]
 TlaIndexTreeLeaf: TypeAlias = int | None
 TlaIndexTree: TypeAlias = TlaIndexTreeLeaf | tuple["TlaIndexTree", ...]
-
 
 def _tla_type_context(context: mlir_ir.Context | None = None) -> mlir_ir.Context:
     if context is not None:
@@ -199,7 +189,6 @@ def _tla_type_context(context: mlir_ir.Context | None = None) -> mlir_ir.Context
     except ValueError:
         return mlir_ir.Context()
     return current if current is not None else mlir_ir.Context()
-
 
 def _normalize_index_tree_leaf(value: Any) -> int | None:
     if isinstance(value, bool):
@@ -216,7 +205,6 @@ def _normalize_index_tree_leaf(value: Any) -> int | None:
         "Tla index type metadata expects static int leaves or None for dynamic leaves; "
         f"got {type(value).__name__}"
     )
-
 
 def _normalize_index_tree(tree: Any, *, _tuple_depth: int = 0) -> Any:
     if isinstance(tree, list):
@@ -235,19 +223,16 @@ def _normalize_index_tree(tree: Any, *, _tuple_depth: int = 0) -> Any:
         )
     return _normalize_index_tree_leaf(tree)
 
-
 def _index_tree_to_asm(tree: Any) -> str:
     if isinstance(tree, tuple):
         return "(" + ",".join(_index_tree_to_asm(x) for x in tree) + ")"
     leaf = _normalize_index_tree_leaf(tree)
     return "?" if leaf is None else str(leaf)
 
-
 def _index_tree_top_level_to_asm(tree: Any) -> str:
     if isinstance(tree, tuple):
         return ",".join(_index_tree_to_asm(x) for x in tree)
     return _index_tree_to_asm(tree)
-
 
 def _index_tree_to_metadata(tree: Any, dynamic_values: Iterator[Any]) -> Any:
     if isinstance(tree, tuple):
@@ -256,7 +241,6 @@ def _index_tree_to_metadata(tree: Any, dynamic_values: Iterator[Any]) -> Any:
     if leaf is not None:
         return leaf
     return next(dynamic_values)
-
 
 @dataclass(frozen=True)
 class TlaIndexTreeType:
@@ -293,7 +277,6 @@ class TlaIndexTreeType:
     def metadata(self, dynamic_values: Iterable[Any] = ()) -> Any:
         return _index_tree_to_metadata(self.tree, iter(dynamic_values))
 
-
 @dataclass(frozen=True)
 class TlaLayoutDescriptor:
     """Structured Python descriptor for ``!tla.layout``."""
@@ -317,7 +300,6 @@ class TlaLayoutDescriptor:
         return _tla_type_bridge.layout_type_get(
             ctx, self.shape.tree, self.stride.tree, origin_tree, self.layout_tag
         )
-
 
 @dataclass(frozen=True)
 class TlaTensorTypeDescriptor:
@@ -373,7 +355,7 @@ class TlaTensorTypeDescriptor:
     def element_mlir_type(self, context: mlir_ir.Context | None = None) -> mlir_ir.Type:
         ctx = _tla_type_context(context)
         with ctx:
-            return _elem_token_to_mlir_type(self.element_type)
+            return Numeric.from_dtype_token(self.element_type).mlir_type(ctx)
 
     def to_asm(self) -> str:
         return str(self.to_mlir_type())
@@ -436,57 +418,43 @@ class TlaTensorTypeDescriptor:
             "layout_tag": self.layout_tag,
         }
 
-
 class TlaValue:
     """Marker annotation for Tla register values."""
-
 
 class TlaTensor:
     """Marker annotation for Tla tensor/view values."""
 
-
 TlaTile = TlaTensor
-
 
 class TlaAllocPtr:
     """Marker annotation for raw allocator-backed byte buffers."""
 
-
 class TlaFlag:
     """Marker annotation for Tla flag values."""
-
 
 class TlaCrossFlag:
     """Marker annotation for Tla cross-flag values."""
 
-
 class TlaMutex:
     """Marker annotation for Tla mutex values."""
-
 
 class TlaIndex:
     """Marker annotation for index values."""
 
-
 class TlaShape:
     """Marker for ``make_shape`` / ``!tla.shape<...>``; ``tla.tile_view`` takes this value."""
-
 
 class TlaCoord:
     """Marker for ``make_coord`` / ``!tla.coord<...>``; ``tla.tile_view`` takes this value."""
 
-
 class TlaStride:
     """Marker annotation for ``make_stride`` / ``!tla.stride<...>``."""
-
 
 class TlaLayout:
     """Marker for ``make_layout(shape, stride, *, origin_shape=...)`` / ``!tla.layout<!tla.shape<…>, !tla.stride<…>, !tla.shape<…>, row_major>``."""
 
-
 class TlaRegion:
     """Marker annotation for Tla region stubs."""
-
 
 _ANNOTATION_CATEGORY = {
     TlaValue: "value",
@@ -504,10 +472,8 @@ _ANNOTATION_CATEGORY = {
     PointerABC: "pointer",
 }
 
-
 def annotation_to_category(annotation: Any) -> str | None:
     return _ANNOTATION_CATEGORY.get(annotation)
-
 
 _TENSOR_DTYPE_SIZES: dict[str, int] = {
     "i1": 1,
@@ -522,9 +488,7 @@ _TENSOR_DTYPE_SIZES: dict[str, int] = {
     "f16": 2,
     "bf16": 2,
     "f32": 4,
-    "f64": 8,
 }
-
 
 def dtype_size_bytes(dtype: str) -> int:
     """Storage size in bytes for a Tla element type token (e.g. ``f16``, ``i32``).
@@ -534,9 +498,7 @@ def dtype_size_bytes(dtype: str) -> int:
     """
     return int(_TENSOR_DTYPE_SIZES.get(dtype.strip().lower(), 0))
 
-
 _LIVE_TENSORS: dict[int, weakref.ReferenceType[Any]] = {}
-
 
 def _track_live_tensor(tensor: Any) -> None:
     tensor_id = id(tensor)
@@ -545,7 +507,6 @@ def _track_live_tensor(tensor: Any) -> None:
         _LIVE_TENSORS.pop(tensor_id, None)
 
     _LIVE_TENSORS[tensor_id] = weakref.ref(tensor, _cleanup)
-
 
 def invalidate_runtime_allocations(
     *,
@@ -563,7 +524,6 @@ def invalidate_runtime_allocations(
                 continue
             tensor.data_ptr = 0
 
-
 def _flatten_int_leaves_tree(tree: Any) -> list[int]:
     """Preorder flatten of positive-int leaves (same leaf order as :func:`catlass.core_api._flatten_tla_tuple`)."""
     if isinstance(tree, (tuple, list)):
@@ -575,13 +535,11 @@ def _flatten_int_leaves_tree(tree: Any) -> list[int]:
         return [tree]
     raise TypeError(f"tensor shape tree expects int leaves, got {type(tree).__name__}")
 
-
 def _tree_structure_mask(tree: Any) -> Any:
     """Shape-only mask: nested tuples match; leaves are ``None`` placeholders."""
     if isinstance(tree, (tuple, list)):
         return tuple(_tree_structure_mask(x) for x in tree)
     return None
-
 
 def _try_remap_stride_coord_trees(
     comp: tuple[Any, ...],
@@ -615,15 +573,12 @@ def _try_remap_stride_coord_trees(
     stride_ok = _tree_structure_mask(stride_tree) == _tree_structure_mask(comp)
     return (stride_tree if stride_ok else None, coord_tree)
 
-
 class RuntimeTensorError(RuntimeError):
     """Raised when tensor buffer binding or layout validation fails."""
-
 
 def _flat_layout_leaves(tree: Any) -> tuple[int, ...]:
     """Preorder flatten of positive-int leaves from a shape/stride component tree."""
     return tuple(int(x) for x in _flatten_int_leaves_tree(tree))
-
 
 def _deduce_leading_dim(
     shape: tuple[int, ...],
@@ -643,7 +598,6 @@ def _deduce_leading_dim(
         "cannot deduce leading_dim: multiple dimensions have stride 1"
     )
 
-
 def _replace_flat_leaves_in_tree(tree: Any, new_leaves: Iterable[Any]) -> Any:
     iterator = iter(new_leaves)
 
@@ -654,130 +608,14 @@ def _replace_flat_leaves_in_tree(tree: Any, new_leaves: Iterable[Any]) -> Any:
 
     return _visit(tree)
 
-
-@dataclass(frozen=True)
-class Scalar:
-    """Typed scalar wrapper for runtime argument passing."""
-
-    value: Any
-    dtype: str
-
-    def __tla_type__(self) -> str:
-        return self.dtype
-
-    def __get_mlir_types__(
-        self, context: mlir_ir.Context | None = None
-    ) -> list[mlir_ir.Type]:
-        with _tla_type_context(context):
-            return [_elem_token_to_mlir_type(self.dtype)]
-
-    def __c_pointers__(self) -> list[int]:
-        dtype = self.dtype.lower()
-        if dtype == "i1":
-            packed = 1 if bool(self.value) else 0
-            return [packed]
-        if dtype == "i8":
-            packed = ctypes.c_int8(int(self.value)).value & 0xFF
-            return [packed]
-        if dtype == "i16":
-            packed = ctypes.c_int16(int(self.value)).value & 0xFFFF
-            return [packed]
-        if dtype == "i32":
-            packed = ctypes.c_int32(int(self.value)).value & 0xFFFFFFFF
-            return [packed]
-        if dtype == "i64":
-            packed = ctypes.c_int64(int(self.value)).value & 0xFFFFFFFFFFFFFFFF
-            return [packed]
-        if dtype == "u8":
-            packed = int(self.value) & 0xFF
-            return [packed]
-        if dtype == "u16":
-            packed = int(self.value) & 0xFFFF
-            return [packed]
-        if dtype == "u32":
-            packed = int(self.value) & 0xFFFFFFFF
-            return [packed]
-        if dtype == "u64":
-            packed = int(self.value) & 0xFFFFFFFFFFFFFFFF
-            return [packed]
-        if dtype == "f32":
-            packed = struct.unpack("I", struct.pack("f", float(self.value)))[0]
-            return [packed]
-        if dtype == "f16":
-            return [_float16_bits(float(self.value))]
-        if dtype == "bf16":
-            return [_bfloat16_bits(float(self.value))]
-        if dtype == "f64":
-            packed = struct.unpack("Q", struct.pack("d", float(self.value)))[0]
-            return [packed]
-        if dtype == "index":
-            packed = ctypes.c_int64(int(self.value)).value & 0xFFFFFFFFFFFFFFFF
-            return [packed]
-        raise ValueError(f"Unsupported scalar dtype: {self.dtype}")
-
-    def __new_from_mlir_values__(self, values: list[Any]) -> "Scalar":
-        del values
-        return self
-
-
-def _float16_bits(value: float) -> int:
-    f32 = struct.unpack("I", struct.pack("f", value))[0]
-    sign = (f32 >> 31) & 0x1
-    exp = (f32 >> 23) & 0xFF
-    frac = f32 & 0x7FFFFF
-
-    if exp == 0xFF:
-        # Inf/NaN
-        half_exp = 0x1F
-        half_frac = 0x200 if frac != 0 else 0
-    else:
-        exp = exp - 127
-        if exp > 15:
-            # Overflow to Inf
-            half_exp = 0x1F
-            half_frac = 0
-        elif exp < -14:
-            # Subnormal or zero
-            if exp < -24:
-                half_exp = 0
-                half_frac = 0
-            else:
-                shift = (-exp) - 14
-                mant = (1 << 23) | frac
-                half_frac = mant >> (13 + shift)
-                # round to nearest even
-                remainder = mant & ((1 << (13 + shift)) - 1)
-                halfway = 1 << (12 + shift)
-                if remainder > halfway or (remainder == halfway and (half_frac & 0x1)):
-                    half_frac += 1
-                half_exp = 0
-        else:
-            half_exp = exp + 15
-            half_frac = frac >> 13
-            remainder = frac & 0x1FFF
-            if remainder > 0x1000 or (remainder == 0x1000 and (half_frac & 0x1)):
-                half_frac += 1
-                if half_frac == 0x400:
-                    half_frac = 0
-                    half_exp += 1
-                    if half_exp >= 0x1F:
-                        half_exp = 0x1F
-                        half_frac = 0
-
-    return (sign << 15) | ((half_exp & 0x1F) << 10) | (half_frac & 0x3FF)
-
-
-def _bfloat16_bits(value: float) -> int:
-    f32 = struct.unpack("I", struct.pack("f", value))[0]
-    upper = f32 >> 16
-    lower = f32 & 0xFFFF
-    # round to nearest even
-    if lower > 0x8000 or (lower == 0x8000 and (upper & 0x1)):
-        upper = (upper + 1) & 0xFFFF
-    return upper
-
-
 from .base_dsl.typing import (
+    DslType,
+    NumericMeta,
+    IntegerMeta,
+    FloatMeta,
+    Integer,
+    Float,
+    cast,
     Bool,
     Int8,
     Int16,
@@ -791,9 +629,7 @@ from .base_dsl.typing import (
     Float16,
     BFloat16,
     Float32,
-    Float64,
 )
-
 
 __all__ = [
     "AddressSpace",
@@ -816,9 +652,15 @@ __all__ = [
     "TlaLayout",
     "TlaRegion",
     "Tensor",
-    "Scalar",
     "RuntimeTensorError",
+    "DslType",
+    "NumericMeta",
+    "IntegerMeta",
+    "FloatMeta",
     "Numeric",
+    "Integer",
+    "Float",
+    "cast",
     "Bool",
     "Int8",
     "Int16",
@@ -830,7 +672,6 @@ __all__ = [
     "UInt64",
     "Index",
     "Float32",
-    "Float64",
     "Float16",
     "BFloat16",
     "annotation_to_category",
