@@ -20,13 +20,13 @@ module {
       %coord = "tla.make_coord"() : () -> !tla.coord<0>
       %src_tile = "tla.tile_view"(%src, %shape, %coord) : (!fvec, !tla.shape<64>, !tla.coord<0>) -> !fvec
       %dst_tile = "tla.tile_view"(%dst, %shape, %coord) : (!fvec, !tla.shape<64>, !tla.coord<0>) -> !fvec
-      %mask = "tla.create_mask"() {dtype = f32, pattern = "M4"} : () -> !tla.mask
+      %mask = "tla.create_mask"() {dtype = f32, pattern = "M4"} : () -> !tla.mask<64>
       %v0 = tla.load %src_tile : !fvec -> !tla.vector<64xf32>
       %v1 = tla.exp %v0 : !tla.vector<64xf32> -> !tla.vector<64xf32>
       %v2 = tla.log %v1 : !tla.vector<64xf32> -> !tla.vector<64xf32>
       %v3 = tla.sqrt %v2 : !tla.vector<64xf32> -> !tla.vector<64xf32>
       %v4 = tla.neg %v3 : !tla.vector<64xf32> -> !tla.vector<64xf32>
-      %v5 = tla.abs %v4 mask %mask : !tla.vector<64xf32> mask !tla.mask -> !tla.vector<64xf32>
+      %v5 = tla.abs %v4 mask %mask : !tla.vector<64xf32> mask !tla.mask<64> -> !tla.vector<64xf32>
       tla.store %dst_tile, %v5 : !fvec, !tla.vector<64xf32>
     }) : () -> ()
     return

@@ -3,6 +3,7 @@
 #include "Passes/TlaTensorToMemref.h"
 #include "bishengir/Dialect/HIVM/IR/HIVM.h"
 #include "bishengir/Dialect/HIVMAVE/IR/HIVMAVE.h"
+#include "bishengir/Dialect/Utils/Util.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
@@ -401,13 +402,12 @@ static hivmave::MaskWidthAttr maskWidthAttrForElement(OpBuilder &b, Type element
   return hivmave::MaskWidthAttr::get(b.getContext(), maskWidthForElement(elementType));
 }
 
-// The mask-register width implied by a predicate vector's lane count. A mask
-// vector<Nxi1> predicates a 256-byte compute register, so each lane covers
-// 256/N bytes: 64 lanes -> B32, 128 -> B16, 256 -> B8. This lets mask-logic ops
-// pick their width from the mask operand itself rather than a region element
-// type.
-static hivmave::MaskWidth maskWidthForMaskVec(VectorType maskVecType) {
-  int64_t lanes = maskVecType.getNumElements();
+// The semantic width of a MaskSSA is carried by !tla.mask<N>, independently
+// of its lowered predicate-register container. A carrier crossing SCF uses the
+// backend-native vector<256xi1> container, but !tla.mask<64> must still select
+// B32 rather than being misclassified as B8 from that container width.
+static hivmave::MaskWidth maskWidthForMaskType(::tla::MaskSSAType maskType) {
+  int64_t lanes = maskType.getPhysicalLanes();
   if (lanes <= 0)
     return hivmave::MaskWidth::B32;
   int64_t bytesPerLane = 256 / lanes;
@@ -418,8 +418,10 @@ static hivmave::MaskWidth maskWidthForMaskVec(VectorType maskVecType) {
   return hivmave::MaskWidth::B32;
 }
 
-static hivmave::MaskWidthAttr maskWidthAttrForMaskVec(OpBuilder &b, VectorType maskVecType) {
-  return hivmave::MaskWidthAttr::get(b.getContext(), maskWidthForMaskVec(maskVecType));
+static hivmave::MaskWidthAttr maskWidthAttrForMaskType(
+    OpBuilder &b, ::tla::MaskSSAType maskType) {
+  return hivmave::MaskWidthAttr::get(b.getContext(),
+                                     maskWidthForMaskType(maskType));
 }
 
 // Build the AVE vector op for a tla binary op. The mask controls active lanes.
@@ -453,36 +455,93 @@ static Value createVectorBinaryResult(OpBuilder &b, Location loc, VectorBinaryKi
     if (isa<::tla::VectorSSAType>(tlaOperandType))
       return b.create<hivmave::VFAndOp>(loc, vecType, lhs, rhs, mask, Value())
           .getResult();
-    if (isa<::tla::MaskType>(tlaOperandType))
+    if (isa<::tla::MaskSSAType>(tlaOperandType))
       return b.create<hivmave::PregAndOp>(
-                   loc, vecType, maskWidthAttrForMaskVec(b, vecType), lhs, rhs, mask)
+                   loc, vecType,
+                   maskWidthAttrForMaskType(
+                       b, cast<::tla::MaskSSAType>(tlaOperandType)),
+                   lhs, rhs, mask)
           .getRes();
     return nullptr;
   case VectorBinaryKind::Or:
     if (isa<::tla::VectorSSAType>(tlaOperandType))
       return b.create<hivmave::VFOrOp>(loc, vecType, lhs, rhs, mask, Value()).getResult();
-    if (isa<::tla::MaskType>(tlaOperandType))
+    if (isa<::tla::MaskSSAType>(tlaOperandType))
       return b.create<hivmave::PregOrOp>(
-                   loc, vecType, maskWidthAttrForMaskVec(b, vecType), lhs, rhs, mask)
+                   loc, vecType,
+                   maskWidthAttrForMaskType(
+                       b, cast<::tla::MaskSSAType>(tlaOperandType)),
+                   lhs, rhs, mask)
           .getRes();
     return nullptr;
   case VectorBinaryKind::Xor:
     if (isa<::tla::VectorSSAType>(tlaOperandType))
       return b.create<hivmave::VFXorOp>(loc, vecType, lhs, rhs, mask, Value())
           .getResult();
-    if (isa<::tla::MaskType>(tlaOperandType))
+    if (isa<::tla::MaskSSAType>(tlaOperandType))
       return b.create<hivmave::PregXorOp>(
-                   loc, vecType, maskWidthAttrForMaskVec(b, vecType), lhs, rhs, mask)
+                   loc, vecType,
+                   maskWidthAttrForMaskType(
+                       b, cast<::tla::MaskSSAType>(tlaOperandType)),
+                   lhs, rhs, mask)
           .getRes();
     return nullptr;
   }
   return nullptr;
 }
 
-// An all-lanes-active predicate for a vector of the given width.
-static Value allTrueMaskFor(OpBuilder &b, Location loc, VectorType vecType) {
-  auto maskType = VectorType::get(vecType.getShape(), b.getI1Type());
-  return createAvePgeMask(b, loc, maskType, hivmave::PgePattern::ALL);
+static int64_t maskElementBitWidthForLanes(int64_t lanes) {
+  if (lanes >= 256)
+    return 8;
+  if (lanes >= 128)
+    return 16;
+  return 32;
+}
+
+// AVE represents a semantic vector<Nxi1> predicate as a hardware
+// vector<256xi1>. When those types differ, annotate the AVE producer with the
+// semantic element width so HIVMAVE lowering still selects pge/plt.b8/b16/b32
+// from N instead of the full container width.
+static void annotateFullPregWidth(OpBuilder &b, Operation *op,
+                                  VectorType resultType,
+                                  int64_t semanticLanes) {
+  if (resultType.getNumElements() == semanticLanes)
+    return;
+  op->setAttr(mlir::utils::elementAlignmentBitWidth,
+              b.getI32IntegerAttr(maskElementBitWidthForLanes(semanticLanes)));
+}
+
+static Value createPredicatePge(OpBuilder &b, Location loc,
+                                VectorType resultType,
+                                int64_t semanticLanes,
+                                hivmave::PgePattern pattern) {
+  auto pge = createAvePgeMask(b, loc, resultType, pattern);
+  annotateFullPregWidth(b, pge, resultType, semanticLanes);
+  return pge.getRes();
+}
+
+static hivmave::VFPltOp createPredicatePlt(OpBuilder &b, Location loc,
+                                           VectorType resultType,
+                                           int64_t semanticLanes,
+                                           Value trueShape) {
+  auto plt = createAvePltMask(b, loc, resultType, trueShape);
+  annotateFullPregWidth(b, plt, resultType, semanticLanes);
+  return plt;
+}
+
+// An all-lanes-active predicate for a data or MaskSSA vector. MaskSSA keeps its
+// semantic lane count in tlaOperandType even when its mapped value is the full
+// predicate-register container.
+static Value allTrueMaskFor(OpBuilder &b, Location loc, VectorType vecType,
+                            Type tlaOperandType, bool useFullPreg) {
+  int64_t semanticLanes = vecType.getNumElements();
+  if (auto maskType = dyn_cast<::tla::MaskSSAType>(tlaOperandType))
+    semanticLanes = maskType.getPhysicalLanes();
+  VectorType maskType =
+      useFullPreg ? fullPregVecType(b.getContext())
+                  : VectorType::get({semanticLanes}, b.getI1Type());
+  return createPredicatePge(b, loc, maskType, semanticLanes,
+                            hivmave::PgePattern::ALL);
 }
 
 // Map the tla.cast round mode onto the HIVM round_mode attribute.
@@ -644,9 +703,12 @@ static Value createVectorUnaryResult(OpBuilder &b, Location loc, VectorUnaryKind
   case VectorUnaryKind::Not:
     if (isa<::tla::VectorSSAType>(tlaOperandType))
       return b.create<hivmave::VFNotOp>(loc, vecType, operand, mask, Value()).getResult();
-    if (isa<::tla::MaskType>(tlaOperandType))
+    if (isa<::tla::MaskSSAType>(tlaOperandType))
       return b.create<hivmave::PregNotOp>(
-                   loc, vecType, maskWidthAttrForMaskVec(b, vecType), operand, mask)
+                   loc, vecType,
+                   maskWidthAttrForMaskType(
+                       b, cast<::tla::MaskSSAType>(tlaOperandType)),
+                   operand, mask)
           .getRes();
     return nullptr;
   }
@@ -671,14 +733,17 @@ struct VecLowerCtx {
 // width (hence lane count, at a fixed 256-byte register) differs from the
 // region's, and same-256-byte register can hold f32 (64), f16 (128) or i8
 // (256) lanes.
-static FailureOr<VecLowerCtx> deriveVecCtxForElement(Type elementType) {
+static FailureOr<VecLowerCtx> deriveVecCtxForElement(Type elementType,
+                                                     bool useFullPreg) {
   auto lanesOr = getVectorLaneCount(elementType);
   if (failed(lanesOr) || *lanesOr <= 0)
     return failure();
   int64_t lanes = *lanesOr;
   auto i1Type = IntegerType::get(elementType.getContext(), 1);
-  return VecLowerCtx{lanes, elementType, VectorType::get({lanes}, elementType),
-                     VectorType::get({lanes}, i1Type)};
+  auto maskVecType = useFullPreg ? fullPregVecType(elementType.getContext())
+                                 : VectorType::get({lanes}, i1Type);
+  return VecLowerCtx{lanes, elementType,
+                     VectorType::get({lanes}, elementType), maskVecType};
 }
 
 // Return the value already mapped into the helper, or clone an arith.constant
@@ -754,15 +819,29 @@ static FailureOr<Value> createVectorScalarBinaryResult(OpBuilder &b, Location lo
                                   ctx.elementType, ctx.vecType, lhs, rhs, mask);
 }
 
-static LogicalResult lowerNestedVectorBlock(Block *sourceBlock, OpBuilder &b, ModuleOp module,
-                                            DenseMap<Value, Value> &valueMap);
+static FailureOr<Type> lowerSCFCarrierType(Type type) {
+  if (auto vectorType = dyn_cast<::tla::VectorSSAType>(type)) {
+    auto ctx = deriveVecCtxForElement(vectorType.getElementType(), false);
+    if (failed(ctx)) return failure();
+    return Type(ctx->vecType);
+  }
+  if (isa<::tla::MaskSSAType>(type))
+    return Type(fullPregVecType(type.getContext()));
+  return type;
+}
+
+static LogicalResult lowerNestedVectorBlock(Block *sourceBlock, OpBuilder &b,
+                                            ModuleOp module,
+                                            DenseMap<Value, Value> &valueMap,
+                                            bool useFullPreg);
 
 // Re-create one vec.func body op inside the helper: tla ops become AVE vector
 // ops; scf control flow and index arithmetic are carried verbatim. Each op
 // derives its own vector/mask width from its operands or result element type,
 // so a single region may mix element widths (e.g. across tla.cast).
 static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp module,
-                                         DenseMap<Value, Value> &valueMap) {
+                                         DenseMap<Value, Value> &valueMap,
+                                         bool useFullPreg) {
   Location loc = op.getLoc();
 
   // make_shape / make_coord are dead after tla-lower-tensor-desc (their leaves
@@ -817,7 +896,7 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
     auto sourceType = dyn_cast<MemRefType>(source.getType());
     if (!sourceType)
       return failure();
-    auto opCtx = deriveVecCtxForElement(sourceType.getElementType());
+    auto opCtx = deriveVecCtxForElement(sourceType.getElementType(), useFullPreg);
     if (failed(opCtx))
       return failure();
     Value zero = b.create<arith::ConstantIndexOp>(loc, 0);
@@ -875,7 +954,8 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
       if (!mask)
         return failure();
     } else {
-      mask = allTrueMaskFor(b, loc, srcVecType);
+      mask = allTrueMaskFor(b, loc, srcVecType,
+                            castOp.getSource().getType(), useFullPreg);
     }
     auto result =
         createVectorCastResult(b, loc, srcVecType, dstVecType, trait, src, mask);
@@ -894,7 +974,7 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
     auto resultType = dyn_cast<::tla::VectorSSAType>(fullOp.getResult().getType());
     if (!resultType)
       return fullOp.emitError("expected !tla.vector result type"), failure();
-    auto opCtx = deriveVecCtxForElement(resultType.getElementType());
+    auto opCtx = deriveVecCtxForElement(resultType.getElementType(), useFullPreg);
     if (failed(opCtx))
       return fullOp.emitError("unsupported tla.full result element type"), failure();
     if (source.getType() != opCtx->elementType)
@@ -915,7 +995,7 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
     auto resultType = dyn_cast<::tla::VectorSSAType>(arangeOp.getResult().getType());
     if (!resultType)
       return arangeOp.emitError("expected !tla.vector result type"), failure();
-    auto opCtx = deriveVecCtxForElement(resultType.getElementType());
+    auto opCtx = deriveVecCtxForElement(resultType.getElementType(), useFullPreg);
     if (failed(opCtx))
       return arangeOp.emitError("unsupported tla.arange result element type"), failure();
     if (isa<FloatType>(opCtx->elementType))
@@ -963,7 +1043,8 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
       if (!mask)
         return failure();
     } else {
-      mask = allTrueMaskFor(b, loc, opVecType);
+      mask = allTrueMaskFor(b, loc, opVecType, operands.lhs.getType(),
+                            useFullPreg);
     }
     Value result = createVectorBinaryResult(b, loc, info->kind, operands.lhs.getType(),
                                             opElemType, opVecType, lhs, rhs, mask);
@@ -984,7 +1065,7 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
     auto lhsTy = dyn_cast<VectorType>(lhs.getType());
     if (!lhsTy)
       return failure();
-    auto opCtx = deriveVecCtxForElement(lhsTy.getElementType());
+    auto opCtx = deriveVecCtxForElement(lhsTy.getElementType(), useFullPreg);
     if (failed(opCtx))
       return failure();
     auto scalarOr = materializeVectorScalarValue(b, operands, valueMap, *opCtx);
@@ -996,7 +1077,8 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
       if (!mask)
         return failure();
     } else {
-      mask = createAvePgeMask(b, loc, opCtx->maskVecType, hivmave::PgePattern::ALL);
+      mask = createPredicatePge(b, loc, opCtx->maskVecType, opCtx->lanes,
+                                 hivmave::PgePattern::ALL);
     }
     auto result = createVectorScalarBinaryResult(b, loc, *info, *opCtx, lhs, *scalarOr, mask);
     if (failed(result))
@@ -1017,7 +1099,7 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
     auto xTy = dyn_cast<VectorType>(x.getType());
     if (!xTy)
       return failure();
-    auto opCtx = deriveVecCtxForElement(xTy.getElementType());
+    auto opCtx = deriveVecCtxForElement(xTy.getElementType(), useFullPreg);
     if (failed(opCtx))
       return failure();
     valueMap[whereOp.getResult()] =
@@ -1036,7 +1118,7 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
     auto srcTy = dyn_cast<VectorType>(src.getType());
     if (!srcTy)
       return failure();
-    auto opCtx = deriveVecCtxForElement(srcTy.getElementType());
+    auto opCtx = deriveVecCtxForElement(srcTy.getElementType(), useFullPreg);
     if (failed(opCtx))
       return failure();
     std::string calleeName = getSqueezeLibraryCallName(srcTy.getElementType());
@@ -1062,7 +1144,7 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
     auto operandTy = dyn_cast<VectorType>(operand.getType());
     if (!operandTy)
       return failure();
-    auto opCtx = deriveVecCtxForElement(operandTy.getElementType());
+    auto opCtx = deriveVecCtxForElement(operandTy.getElementType(), useFullPreg);
     if (failed(opCtx))
       return failure();
     Value mask;
@@ -1150,9 +1232,11 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
       if (!mask)
         return failure();
     } else {
-      // Predicate follows the gathered vector's own lane count.
-      auto maskVecType = VectorType::get({numElems}, b.getI1Type());
-      mask = b.create<hivmave::VFPgeOp>(loc, maskVecType, hivmave::PgePattern::ALL);
+      // Predicate follows the gathered vector semantic lane count.
+      auto maskVecType = useFullPreg ? fullPregVecType(b.getContext())
+                                     : VectorType::get({numElems}, b.getI1Type());
+      mask = createPredicatePge(b, loc, maskVecType, numElems,
+                                 hivmave::PgePattern::ALL);
     }
     Value zero = b.create<arith::ConstantIndexOp>(loc, 0);
     valueMap[gatherOp.getResult()] =
@@ -1176,8 +1260,8 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
       if (failed(validateVectorUnaryElementType(
               &op, *info, operandVecType.getElementType())))
         return failure();
-    } else if (!isa<::tla::MaskType>(tlaOperandType)) {
-      return op.emitError("expected !tla.vector or !tla.mask operand");
+    } else if (!isa<::tla::MaskSSAType>(tlaOperandType)) {
+      return op.emitError("expected !tla.vector<NxT> or !tla.mask<N> operand");
     }
 
     Value mask;
@@ -1186,7 +1270,8 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
       if (!mask)
         return failure();
     } else {
-      mask = allTrueMaskFor(b, loc, operandVecType);
+      mask = allTrueMaskFor(b, loc, operandVecType, tlaOperandType,
+                            useFullPreg);
     }
     Value result = createVectorUnaryResult(b, loc, info->kind, tlaOperandType,
                                            operandVecType, operand, mask);
@@ -1204,12 +1289,12 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
     if (!pattern)
       return maskOp.emitError("unknown tla.create_mask pattern: ") << maskOp.getPattern(),
              failure();
-    auto opCtx = deriveVecCtxForElement(maskOp.getDtype());
+    auto opCtx = deriveVecCtxForElement(maskOp.getDtype(), useFullPreg);
     if (failed(opCtx))
       return maskOp.emitError("unsupported tla.create_mask dtype: ") << maskOp.getDtype(),
              failure();
-    valueMap[maskOp.getResult()] =
-        createAvePgeMask(b, loc, opCtx->maskVecType, *pattern);
+    valueMap[maskOp.getResult()] = createPredicatePge(
+        b, loc, opCtx->maskVecType, opCtx->lanes, *pattern);
     return success();
   }
 
@@ -1227,11 +1312,12 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
         lookupOrCloneScalarValue(b, updateMaskOp.getTrueShape(), valueMap);
     if (!trueShape)
       return failure();
-    auto opCtx = deriveVecCtxForElement(updateMaskOp.getDtype());
+    auto opCtx = deriveVecCtxForElement(updateMaskOp.getDtype(), useFullPreg);
     if (failed(opCtx))
       return updateMaskOp.emitError("unsupported tla.update_mask dtype: ")
              << updateMaskOp.getDtype(), failure();
-    auto plt = createAvePltMask(b, loc, opCtx->maskVecType, trueShape);
+    auto plt = createPredicatePlt(b, loc, opCtx->maskVecType, opCtx->lanes,
+                                   trueShape);
     valueMap[updateMaskOp.getMask()] = plt.getRes();
     // new_true_shape = true_shape - lanes, which is exactly what plt computes.
     // We materialize it with index arithmetic rather than consuming plt's second
@@ -1252,7 +1338,7 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
     auto lhsTy = dyn_cast<VectorType>(lhs.getType());
     if (!lhsTy)
       return failure();
-    auto opCtx = deriveVecCtxForElement(lhsTy.getElementType());
+    auto opCtx = deriveVecCtxForElement(lhsTy.getElementType(), useFullPreg);
     if (failed(opCtx))
       return failure();
     auto cmpType = mapCmpMode(cmpOp.getMode());
@@ -1265,7 +1351,8 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
       if (!mask)
         return failure();
     } else {
-      mask = b.create<hivmave::VFPgeOp>(loc, opCtx->maskVecType, hivmave::PgePattern::ALL);
+      mask = createPredicatePge(b, loc, opCtx->maskVecType, opCtx->lanes,
+                                 hivmave::PgePattern::ALL);
     }
     if (isa<::tla::VectorSSAType>(cmpOp.getRhs().getType())) {
       Value rhs = valueMap.lookup(cmpOp.getRhs());
@@ -1296,7 +1383,7 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
     auto sourceTy = dyn_cast<VectorType>(source.getType());
     if (!sourceTy)
       return failure();
-    auto opCtx = deriveVecCtxForElement(sourceTy.getElementType());
+    auto opCtx = deriveVecCtxForElement(sourceTy.getElementType(), useFullPreg);
     if (failed(opCtx))
       return failure();
     if (storeOp.getMask()) {
@@ -1309,7 +1396,9 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
       if (failed(validLanes))
         return storeOp.emitError("failed to determine tla.store dest valid lanes"),
                failure();
-      mask = createAvePltMask(b, loc, opCtx->maskVecType, *validLanes).getRes();
+      mask = createPredicatePlt(b, loc, opCtx->maskVecType, opCtx->lanes,
+                                *validLanes)
+                 .getRes();
     }
     // store_unalign (this PR): mark AVE masked-store as unaligned UB access.
     if (storeOp.getUnalignedUbAccess().value_or(false)) {
@@ -1323,8 +1412,8 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
   }
 
   // scf.for: rebuild the loop, including loop-carried iter_args, and lower its
-  // body. Init args and the scf.yield operands are index/scalar SSA threaded
-  // through the helper (e.g. the tail counter produced by tla.update_mask).
+  // body. Init args and the scf.yield operands may be register, index, or
+  // scalar SSA values threaded through the helper (e.g. the tail counter produced by tla.update_mask).
   if (auto forOp = dyn_cast<scf::ForOp>(op)) {
     Value lb = lookupOrCloneScalarValue(b, forOp.getLowerBound(), valueMap);
     Value ub = lookupOrCloneScalarValue(b, forOp.getUpperBound(), valueMap);
@@ -1364,7 +1453,8 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
               newArg = nb.create<arith::IndexCastOp>(nloc, nb.getIndexType(), newArg);
             nestedMap[regionIterArgs[i]] = newArg;
           }
-          if (failed(lowerNestedVectorBlock(forOp.getBody(), nb, module, nestedMap))) {
+          if (failed(lowerNestedVectorBlock(forOp.getBody(), nb, module, nestedMap,
+                                       useFullPreg))) {
             bodyStatus = failure();
             nb.create<scf::YieldOp>(nloc, iterArgs);
             return;
@@ -1398,27 +1488,53 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
     return success();
   }
 
-  // scf.if: rebuild as a result-less conditional (carried results must be
-  // unused) and lower both regions. The condition is already in the value map.
+  // scf.if: rebuild result-bearing conditionals after converting register
+  // carrier types to physical builtin vectors. Each branch is lowered with an
+  // independent value map, and its old scf.yield operands feed the new op.
   if (auto ifOp = dyn_cast<scf::IfOp>(op)) {
-    for (Value result : ifOp.getResults())
-      if (!result.use_empty())
-        return failure();
     Value cond = lookupOrCloneScalarValue(b, ifOp.getCondition(), valueMap);
-    if (!cond)
-      return failure();
-    bool hasElse = !ifOp.getElseRegion().empty();
-    auto newIf = b.create<scf::IfOp>(loc, TypeRange{}, cond, hasElse);
-    DenseMap<Value, Value> thenMap = valueMap;
-    OpBuilder tb(newIf.thenBlock()->getTerminator());
-    if (failed(lowerNestedVectorBlock(ifOp.thenBlock(), tb, module, thenMap)))
-      return failure();
-    if (hasElse) {
-      DenseMap<Value, Value> elseMap = valueMap;
-      OpBuilder eb(newIf.elseBlock()->getTerminator());
-      if (failed(lowerNestedVectorBlock(ifOp.elseBlock(), eb, module, elseMap)))
-        return failure();
+    if (!cond) return failure();
+
+    SmallVector<Type> resultTypes;
+    for (Value result : ifOp.getResults()) {
+      auto loweredType = lowerSCFCarrierType(result.getType());
+      if (failed(loweredType)) return failure();
+      resultTypes.push_back(*loweredType);
     }
+
+    bool hasElse = !ifOp.getElseRegion().empty();
+    auto newIf = b.create<scf::IfOp>(loc, resultTypes, cond, hasElse);
+    auto lowerBranch = [&](Block *oldBlock, Block *newBlock) -> LogicalResult {
+      DenseMap<Value, Value> branchMap = valueMap;
+      if (!newBlock->empty() &&
+          newBlock->back().hasTrait<OpTrait::IsTerminator>())
+        newBlock->back().erase();
+      OpBuilder branchBuilder = OpBuilder::atBlockEnd(newBlock);
+      if (failed(lowerNestedVectorBlock(oldBlock, branchBuilder, module,
+                                        branchMap, useFullPreg)))
+        return failure();
+
+      auto oldYield = dyn_cast<scf::YieldOp>(oldBlock->getTerminator());
+      if (!oldYield) return failure();
+      SmallVector<Value> yielded;
+      for (Value operand : oldYield.getOperands()) {
+        Value mapped =
+            lookupOrCloneScalarValue(branchBuilder, operand, branchMap);
+        if (!mapped) return failure();
+        yielded.push_back(mapped);
+      }
+      branchBuilder.create<scf::YieldOp>(oldYield.getLoc(), yielded);
+      return success();
+    };
+
+    if (failed(lowerBranch(ifOp.thenBlock(), newIf.thenBlock())))
+      return failure();
+    if (hasElse && failed(lowerBranch(ifOp.elseBlock(), newIf.elseBlock())))
+      return failure();
+
+    for (auto [oldResult, newResult] :
+         llvm::zip(ifOp.getResults(), newIf.getResults()))
+      valueMap[oldResult] = newResult;
     return success();
   }
 
@@ -1499,13 +1615,14 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
 }
 
 static LogicalResult lowerNestedVectorBlock(Block *sourceBlock, OpBuilder &b, ModuleOp module,
-                                            DenseMap<Value, Value> &valueMap) {
+                                            DenseMap<Value, Value> &valueMap,
+                                            bool useFullPreg) {
   for (Operation &op : sourceBlock->getOperations()) {
     // Terminators are reproduced by the enclosing op (scf.for/scf.if) or by
     // buildHelperFunc's func.return.
     if (op.hasTrait<OpTrait::IsTerminator>())
       continue;
-    if (failed(lowerNestedVectorOp(op, b, module, valueMap)))
+    if (failed(lowerNestedVectorOp(op, b, module, valueMap, useFullPreg)))
       return failure();
   }
   return success();
@@ -1597,6 +1714,34 @@ static void collectVectorHelperScalarOperands(::tla::VecFuncOp vecFuncOp,
   // scalar collection is needed.
 }
 
+// Compatibility lowering for the current NPUIR AVE-to-RegBase pipeline: AVE
+// predicate ops lower to the backend-native vector<256xi1> container, but SCF
+// signatures are not structurally type-converted. Conservatively put every
+// predicate in an outlined helper on the full-preg representation whenever the
+// helper contains both SCF and MaskSSA. This is intentionally a helper-level
+// over-approximation, not a dataflow proof that a particular MaskSSA crosses an
+// SCF edge; one uniform representation also keeps AVE predicate producers and
+// consumers type-consistent.
+//
+// TODO: Remove this compatibility mode once NPUIR AVE-to-RegBase conversion
+// structurally converts predicate-bearing scf.if/scf.for signatures and maps
+// their block arguments, yields, and results to vector<256xi1>.
+static bool requiresFullPregForControlFlow(::tla::VecFuncOp vecFuncOp) {
+  bool hasControlFlow = false;
+  bool hasMaskSSA = false;
+  vecFuncOp.walk([&](Operation *op) {
+    hasControlFlow |= isa<scf::ForOp, scf::IfOp>(op);
+    auto isMaskSSA = [](Value value) {
+      return isa<::tla::MaskSSAType>(value.getType());
+    };
+    hasMaskSSA |= llvm::any_of(op->getOperands(), isMaskSSA) ||
+                  llvm::any_of(op->getResults(), isMaskSSA);
+    return hasControlFlow && hasMaskSSA ? WalkResult::interrupt()
+                                        : WalkResult::advance();
+  });
+  return hasControlFlow && hasMaskSSA;
+}
+
 // Build a vector_region helper for a tla.vec.func body. The helper receives one
 // full-size UB memref per referenced tensor; the for/if control flow is carried
 // inside the helper, where each tla.load/store is lowered to an AVE
@@ -1681,7 +1826,8 @@ static FailureOr<func::FuncOp> buildHelperFunc(ModuleOp module, func::FuncOp par
     if (auto it = baseToArg.find(desc.getBase()); it != baseToArg.end())
       valueMap[desc.getResult()] = it->second;
   });
-  if (failed(lowerNestedVectorBlock(body, b, module, valueMap))) {
+  bool useFullPreg = requiresFullPregForControlFlow(vecFuncOp);
+  if (failed(lowerNestedVectorBlock(body, b, module, valueMap, useFullPreg))) {
     // Discard the partially-built helper so an unsupported construct fails
     // cleanly (the vec.func is left intact) instead of leaking malformed IR.
     helper.erase();
@@ -1760,6 +1906,20 @@ public:
       producedValues.insert(updateMask.getMask());
     for (::tla::ArangeOp arange : aranges)
       producedValues.insert(arange.getResult());
+    auto isRegisterCarrier = [](Value value) {
+      Type type = value.getType();
+      return isa<::tla::VectorSSAType, ::tla::MaskSSAType>(type);
+    };
+    vecFuncOp.walk([&](scf::ForOp forOp) {
+      for (BlockArgument arg : forOp.getRegionIterArgs())
+        if (isRegisterCarrier(arg)) producedValues.insert(arg);
+      for (Value result : forOp.getResults())
+        if (isRegisterCarrier(result)) producedValues.insert(result);
+    });
+    vecFuncOp.walk([&](scf::IfOp ifOp) {
+      for (Value result : ifOp.getResults())
+        if (isRegisterCarrier(result)) producedValues.insert(result);
+    });
 
     for (Operation *computeOp : computeOps) {
       if (isa<::tla::InterleaveOp>(computeOp) ||
@@ -1813,6 +1973,11 @@ public:
               vecFuncOp, "expected tla.cmp mask from create/update mask or "
                          "prior mask compute op");
       } else if (auto whereOp = dyn_cast<::tla::WhereOp>(computeOp)) {
+        if (!producedValues.contains(whereOp.getMask()))
+          return rewriter.notifyMatchFailure(
+              vecFuncOp,
+              "expected tla.where mask from create/update mask, compare, "
+              "SCF carrier, or prior mask compute op");
         if (!producedValues.contains(whereOp.getX()) ||
             !producedValues.contains(whereOp.getY()))
           return rewriter.notifyMatchFailure(
@@ -1827,6 +1992,9 @@ public:
                          "prior mask compute op");
       } else if (auto reduceOp = dyn_cast<::tla::ReduceOp>(computeOp)) {
         Value operand = reduceOp.getOperand();
+        if (reduceOp.getMask() && !producedValues.contains(reduceOp.getMask()))
+          return rewriter.notifyMatchFailure(
+              vecFuncOp, "expected tla.reduce mask from a legal mask producer");
         if (!producedValues.contains(operand))
           return rewriter.notifyMatchFailure(
               vecFuncOp, "expected tla.reduce operand from tla.load or prior compute op");
@@ -1841,10 +2009,16 @@ public:
           return rewriter.notifyMatchFailure(
             vecFuncOp, "expected tla.deinterleave operands from tla.load or prior compute op");
       } else if (auto gatherOp = dyn_cast<::tla::GatherOp>(computeOp)) {
+        if (gatherOp.getMask() && !producedValues.contains(gatherOp.getMask()))
+          return rewriter.notifyMatchFailure(
+              vecFuncOp, "expected tla.gather mask from a legal mask producer");
         if (!producedValues.contains(gatherOp.getY()))
           return rewriter.notifyMatchFailure(
               vecFuncOp, "expected tla.gather y operand from tla.load or prior compute op");
       } else if (auto castOp = dyn_cast<::tla::CastOp>(computeOp)) {
+        if (castOp.getMask() && !producedValues.contains(castOp.getMask()))
+          return rewriter.notifyMatchFailure(
+              vecFuncOp, "expected tla.cast mask from a legal mask producer");
         if (!producedValues.contains(castOp.getSource()))
           return rewriter.notifyMatchFailure(
               vecFuncOp, "expected tla.cast source from tla.load or prior compute op");
@@ -1854,10 +2028,14 @@ public:
       for (Value result : computeOp->getResults())
         producedValues.insert(result);
     }
-    for (::tla::StoreOp store : stores)
+    for (::tla::StoreOp store : stores) {
+      if (store.getMask() && !producedValues.contains(store.getMask()))
+        return rewriter.notifyMatchFailure(
+            vecFuncOp, "expected tla.store mask from a legal mask producer");
       if (!producedValues.contains(store.getSource()))
         return rewriter.notifyMatchFailure(
             vecFuncOp, "expected tla.store source from tla.load or compute op");
+    }
 
     auto funcOp = vecFuncOp->getParentOfType<func::FuncOp>();
     if (!funcOp)

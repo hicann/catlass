@@ -22,9 +22,9 @@ module {
         %coord = "tla.make_coord"() : () -> !tla.coord<0>
         %src_tile = "tla.tile_view"(%src, %shape, %coord) : (!vec, !tla.shape<64>, !tla.coord<0>) -> !vec
         %dst_tile = "tla.tile_view"(%dst, %shape, %coord) : (!vec, !tla.shape<64>, !tla.coord<0>) -> !vec
-        %mask = "tla.create_mask"() {pattern = "M4", dtype = f32} : () -> !tla.mask
+        %mask = "tla.create_mask"() {pattern = "M4", dtype = f32} : () -> !tla.mask<64>
         %v = tla.load %src_tile : !vec -> !tla.vector<64xf32>
-        %mul = tla.muls %v, %cst mask %mask : !tla.vector<64xf32>, f32 mask !tla.mask -> !tla.vector<64xf32>
+        %mul = tla.muls %v, %cst mask %mask : !tla.vector<64xf32>, f32 mask !tla.mask<64> -> !tla.vector<64xf32>
         %max = tla.maxs %mul, %cst : !tla.vector<64xf32>, f32 -> !tla.vector<64xf32>
         %out = tla.mins %max, %cst : !tla.vector<64xf32>, f32 -> !tla.vector<64xf32>
         tla.store %dst_tile, %out : !vec, !tla.vector<64xf32>

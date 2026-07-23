@@ -220,6 +220,20 @@ MlirType vectorSSATypeGet(MlirContext context, py::object validLanes,
   return toMlirType(type, "tla.vector");
 }
 
+MlirType maskSSATypeGet(MlirContext context, int64_t physicalLanes) {
+  MLIRContext *ctx = bridgeContext(context);
+  Type type = ::tla::MaskSSAType::getChecked(
+      [&] {
+        return emitBridgeError(ctx, "invalid tla.mask type bridge input");
+      },
+      ctx, physicalLanes);
+  return toMlirType(type, "tla.mask");
+}
+
+int64_t maskSSAPhysicalLanesGet(MlirType maskType) {
+  return checkedTlaType<::tla::MaskSSAType>(maskType, "!tla.mask<N> type").getPhysicalLanes();
+}
+
 MlirType flagTypeGet(MlirContext context) {
   MLIRContext *ctx = bridgeContext(context);
   return toMlirType(::tla::FlagType::get(ctx), "tla.flag");
@@ -276,6 +290,8 @@ std::optional<std::string> tlaTypeCategory(MlirType type) {
     return "tensor";
   if (isa<::tla::VectorSSAType>(unwrapped))
     return "vector_ssa";
+  if (isa<::tla::MaskSSAType>(unwrapped))
+    return "mask_ssa";
   if (isa<::tla::ShapeType>(unwrapped))
     return "shape";
   if (isa<::tla::CoordType>(unwrapped))
@@ -367,6 +383,8 @@ PYBIND11_MODULE(_tla_type_bridge_native, m) {
         py::arg("alignment"));
   m.def("vector_ssa_type_get", &vectorSSATypeGet, py::arg("context"),
         py::arg("valid_lanes"), py::arg("element_type"));
+  m.def("mask_ssa_type_get", &maskSSATypeGet, py::arg("context"),
+        py::arg("physical_lanes"));
   m.def("flag_type_get", &flagTypeGet, py::arg("context"));
   m.def("cross_flag_type_get", &crossFlagTypeGet, py::arg("context"), py::arg("mode"));
   m.def("cross_flag_mode", &crossFlagMode, py::arg("type"));
@@ -380,6 +398,7 @@ PYBIND11_MODULE(_tla_type_bridge_native, m) {
   m.def("type_is_stride", &typeIs<::tla::StrideType>, py::arg("type"));
   m.def("type_is_layout", &typeIs<::tla::LayoutType>, py::arg("type"));
   m.def("type_is_vector_ssa", &typeIs<::tla::VectorSSAType>, py::arg("type"));
+  m.def("type_is_mask_ssa", &typeIs<::tla::MaskSSAType>, py::arg("type"));
   m.def("type_is_flag", &typeIs<::tla::FlagType>, py::arg("type"));
   m.def("type_is_cross_flag", &typeIs<::tla::CrossFlagType>, py::arg("type"));
   m.def("type_is_mutex", &typeIs<::tla::MutexType>, py::arg("type"));
@@ -394,6 +413,7 @@ PYBIND11_MODULE(_tla_type_bridge_native, m) {
         py::arg("vector_type"));
   m.def("vector_ssa_valid_lanes_get", &vectorSSAValidLanesGet,
         py::arg("vector_type"));
+  m.def("mask_ssa_physical_lanes_get", &maskSSAPhysicalLanesGet, py::arg("mask_type"));
   m.def("lower_to_mlir", &lowerToMlir, py::arg("module"), py::arg("mlir_print_ir_before"),
         py::arg("mlir_print_ir_after"), py::arg("mlir_print_ir_before_all"),
         py::arg("mlir_print_ir_after_all"),

@@ -175,6 +175,15 @@ Type parseTypeFromText(AsmParser &parser, StringRef text) {
 
 namespace tla {
 
+LogicalResult MaskSSAType::verify(function_ref<InFlightDiagnostic()> emitError,
+                               int64_t physicalLanes) {
+  if (physicalLanes != 32 && physicalLanes != 64 && physicalLanes != 128 && physicalLanes != 256)
+    return emitError()
+           << "tla.mask physical lane count must be one of 32, 64, 128, or 256, got "
+           << physicalLanes;
+  return success();
+}
+
 LogicalResult getTlaIndexTreeLeaves(ArrayRef<int64_t> tree, SmallVectorImpl<int64_t> &leaves) {
   return flattenIndexTree(tree, leaves);
 }

@@ -96,6 +96,40 @@ def full_tensor_vs_tile_view_cmp_kernel(full: tla.Tensor, other: tla.Tensor) -> 
             _ = tla.cmp(full_tile.load(), other_tile.load(), "lt")
 
 
+@tla.kernel
+def mask_widths_kernel() -> None:
+    with tla.vector():
+        with tla.vec.func(mode="simd"):
+            _ = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Int64)
+            _ = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Float32)
+            _ = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Float16)
+            _ = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Int8)
+
+
+@tla.kernel
+def mismatched_mask_add_kernel(
+    lhs: tla.Tensor, rhs: tla.Tensor, dst: tla.Tensor
+) -> None:
+    lhs_tile = tla.tile_view(lhs, tla.make_shape(64), tla.make_coord(0))
+    rhs_tile = tla.tile_view(rhs, tla.make_shape(64), tla.make_coord(0))
+    dst_tile = tla.tile_view(dst, tla.make_shape(64), tla.make_coord(0))
+    with tla.vector():
+        with tla.vec.func(mode="simd"):
+            lhs_reg = lhs_tile.load()
+            rhs_reg = rhs_tile.load()
+            mask = tla.create_mask(pattern=tla.mask.H, dtype=tla.Float16)
+            dst_tile.store(tla.add(lhs_reg, rhs_reg, mask=mask))
+
+
+@tla.kernel
+def mismatched_mask_bitwise_kernel() -> None:
+    with tla.vector():
+        with tla.vec.func(mode="simd"):
+            mask64 = tla.create_mask(pattern=tla.mask.H, dtype=tla.Float32)
+            mask128 = tla.create_mask(pattern=tla.mask.H, dtype=tla.Float16)
+            _ = tla.bitwise_or(mask64, mask128)
+
+
 def test_cmp_symbol_is_exported() -> None:
     assert callable(tla.cmp)
 
@@ -118,7 +152,7 @@ def test_cmp_accepts_scalar_rhs() -> None:
     mlir = scalar_cmp_kernel.dump_mlir(type_args=(tensor,))
 
     _assert_cmp_mode(mlir, "gt")
-    assert "!tla.mask" in mlir
+    assert "!tla.mask<64>" in mlir
 
 
 def test_cmp_accepts_input_mask() -> None:
@@ -136,6 +170,30 @@ def test_cmp_result_can_mask_vector_op_and_store() -> None:
     assert mlir.count("tla.cmp") == 1
     assert "tla.add" in mlir
     assert "tla.store" in mlir
+
+
+def test_create_mask_encodes_physical_predicate_lanes() -> None:
+    mlir = mask_widths_kernel.dump_mlir()
+
+    for lanes in (32, 64, 128, 256):
+        assert f"!tla.mask<{lanes}>" in mlir
+
+
+def test_masked_vector_op_rejects_mismatched_predicate_lanes() -> None:
+    tensor = _vector_tensor()
+    with pytest.raises(
+        Exception,
+        match=r"mask has 128 predicate lanes, expected 64 for f32 VectorSSA",
+    ):
+        mismatched_mask_add_kernel.dump_mlir(type_args=(tensor, tensor, tensor))
+
+
+def test_mask_bitwise_rejects_mismatched_mask_types() -> None:
+    with pytest.raises(
+        Exception,
+        match=r"src1_reg has type !tla\.mask<128>, expected !tla\.mask<64>",
+    ):
+        mismatched_mask_bitwise_kernel.dump_mlir()
 
 
 def test_cmp_rejects_unsupported_dtype() -> None:

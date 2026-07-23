@@ -170,41 +170,157 @@ mlir::LogicalResult DeInterleaveOp::verify() {
       getDst0().getType(), getDst1().getType());
 }
 
-// Vector compute ops (element-wise vector-vector and vector-scalar arithmetic)
-// must live inside a tla.vec.func region.
-#define TLA_VERIFY_IN_VEC_FUNC(OpTy)                                            \
-  mlir::LogicalResult OpTy::verify() {                                          \
+// Register predicates describe the physical lane width of a 256-byte data
+// register. Valid data lanes may be smaller, but predicate compatibility is
+// determined by element width rather than VectorSSA valid_lanes.
+static mlir::FailureOr<int64_t> getPhysicalVectorLanes(
+    VectorSSAType vectorType) {
+  constexpr int64_t kVectorRegisterBytes = 256;
+  int64_t elementBytes =
+      getByteSizeOfFixedWidthScalarType(vectorType.getElementType());
+  if (elementBytes <= 0 || kVectorRegisterBytes % elementBytes != 0)
+    return mlir::failure();
+  return kVectorRegisterBytes / elementBytes;
+}
+
+static mlir::LogicalResult verifyMaskMatchesVector(mlir::Operation *op,
+                                                   mlir::Value mask,
+                                                   VectorSSAType vectorType) {
+  if (!mask) return mlir::success();
+  auto maskType = mlir::dyn_cast<MaskSSAType>(mask.getType());
+  if (!maskType) return op->emitOpError("expected a !tla.mask<N> predicate");
+  auto expectedPhysicalLanes = getPhysicalVectorLanes(vectorType);
+  if (mlir::failed(expectedPhysicalLanes))
+    return op->emitOpError()
+           << "cannot derive predicate lanes for " << vectorType;
+  if (maskType.getPhysicalLanes() != *expectedPhysicalLanes)
+    return op->emitOpError()
+           << "mask has " << maskType.getPhysicalLanes()
+           << " predicate lanes, expected " << *expectedPhysicalLanes << " for "
+           << vectorType.getElementType() << " VectorSSA";
+  return mlir::success();
+}
+
+// Vector compute ops must live inside a tla.vec.func region.
+#define TLA_VERIFY_IN_VEC_FUNC(OpTy)                                           \
+  mlir::LogicalResult OpTy::verify() {                                         \
     if (!hasEnclosingRegion<VecFuncOp>(getOperation()))                        \
-      return emitOpError("must be nested inside a tla.vec.func region");        \
-    return mlir::success();                                                     \
+      return emitOpError("must be nested inside a tla.vec.func region");       \
+    return mlir::success();                                                    \
   }
 
-TLA_VERIFY_IN_VEC_FUNC(AddOp)
-TLA_VERIFY_IN_VEC_FUNC(SubOp)
-TLA_VERIFY_IN_VEC_FUNC(MulOp)
-TLA_VERIFY_IN_VEC_FUNC(DivOp)
-TLA_VERIFY_IN_VEC_FUNC(MaxOp)
-TLA_VERIFY_IN_VEC_FUNC(MinOp)
-TLA_VERIFY_IN_VEC_FUNC(AddsOp)
-TLA_VERIFY_IN_VEC_FUNC(SubsOp)
-TLA_VERIFY_IN_VEC_FUNC(MulsOp)
-TLA_VERIFY_IN_VEC_FUNC(DivsOp)
-TLA_VERIFY_IN_VEC_FUNC(MaxsOp)
-TLA_VERIFY_IN_VEC_FUNC(MinsOp)
 TLA_VERIFY_IN_VEC_FUNC(LoadOp)
-TLA_VERIFY_IN_VEC_FUNC(StoreOp)
 TLA_VERIFY_IN_VEC_FUNC(FullOp)
-TLA_VERIFY_IN_VEC_FUNC(WhereOp)
-TLA_VERIFY_IN_VEC_FUNC(CreateMaskOp)
-TLA_VERIFY_IN_VEC_FUNC(UpdateMaskOp)
-TLA_VERIFY_IN_VEC_FUNC(ExpOp)
-TLA_VERIFY_IN_VEC_FUNC(LogOp)
-TLA_VERIFY_IN_VEC_FUNC(SqrtOp)
-TLA_VERIFY_IN_VEC_FUNC(AbsOp)
-TLA_VERIFY_IN_VEC_FUNC(NegOp)
-TLA_VERIFY_IN_VEC_FUNC(ReduceOp)
 
 #undef TLA_VERIFY_IN_VEC_FUNC
+
+#define TLA_VERIFY_MASKED_VECTOR_LHS(OpTy)                                     \
+  mlir::LogicalResult OpTy::verify() {                                         \
+    if (!hasEnclosingRegion<VecFuncOp>(getOperation()))                        \
+      return emitOpError("must be nested inside a tla.vec.func region");       \
+    return verifyMaskMatchesVector(getOperation(), getMask(),                  \
+                                   getLhs().getType());                        \
+  }
+
+TLA_VERIFY_MASKED_VECTOR_LHS(AddOp)
+TLA_VERIFY_MASKED_VECTOR_LHS(SubOp)
+TLA_VERIFY_MASKED_VECTOR_LHS(MulOp)
+TLA_VERIFY_MASKED_VECTOR_LHS(DivOp)
+TLA_VERIFY_MASKED_VECTOR_LHS(MaxOp)
+TLA_VERIFY_MASKED_VECTOR_LHS(MinOp)
+TLA_VERIFY_MASKED_VECTOR_LHS(AddsOp)
+TLA_VERIFY_MASKED_VECTOR_LHS(SubsOp)
+TLA_VERIFY_MASKED_VECTOR_LHS(MulsOp)
+TLA_VERIFY_MASKED_VECTOR_LHS(DivsOp)
+TLA_VERIFY_MASKED_VECTOR_LHS(MaxsOp)
+TLA_VERIFY_MASKED_VECTOR_LHS(MinsOp)
+
+#undef TLA_VERIFY_MASKED_VECTOR_LHS
+
+#define TLA_VERIFY_MASKED_VECTOR_OPERAND(OpTy)                                 \
+  mlir::LogicalResult OpTy::verify() {                                         \
+    if (!hasEnclosingRegion<VecFuncOp>(getOperation()))                        \
+      return emitOpError("must be nested inside a tla.vec.func region");       \
+    return verifyMaskMatchesVector(getOperation(), getMask(),                  \
+                                   getOperand().getType());                    \
+  }
+
+TLA_VERIFY_MASKED_VECTOR_OPERAND(ExpOp)
+TLA_VERIFY_MASKED_VECTOR_OPERAND(LogOp)
+TLA_VERIFY_MASKED_VECTOR_OPERAND(SqrtOp)
+TLA_VERIFY_MASKED_VECTOR_OPERAND(AbsOp)
+TLA_VERIFY_MASKED_VECTOR_OPERAND(NegOp)
+
+#undef TLA_VERIFY_MASKED_VECTOR_OPERAND
+
+mlir::LogicalResult StoreOp::verify() {
+  if (!hasEnclosingRegion<VecFuncOp>(getOperation()))
+    return emitOpError("must be nested inside a tla.vec.func region");
+  return verifyMaskMatchesVector(getOperation(), getMask(),
+                                 getSource().getType());
+}
+
+static mlir::LogicalResult verifyMaskProducerType(mlir::Operation *op,
+                                                  MaskSSAType maskType,
+                                                  mlir::Type elementType) {
+  int64_t elementBytes = getByteSizeOfFixedWidthScalarType(elementType);
+  constexpr int64_t kVectorRegisterBytes = 256;
+  if (elementBytes <= 0 || kVectorRegisterBytes % elementBytes != 0)
+    return op->emitOpError() << "unsupported predicate dtype " << elementType;
+  int64_t expectedPhysicalLanes = kVectorRegisterBytes / elementBytes;
+  if (maskType.getPhysicalLanes() != expectedPhysicalLanes)
+    return op->emitOpError() << "result mask has " << maskType.getPhysicalLanes()
+                             << " predicate lanes, expected " << expectedPhysicalLanes
+                             << " for dtype " << elementType;
+  return mlir::success();
+}
+
+mlir::LogicalResult CreateMaskOp::verify() {
+  if (!hasEnclosingRegion<VecFuncOp>(getOperation()))
+    return emitOpError("must be nested inside a tla.vec.func region");
+  return verifyMaskProducerType(getOperation(), getResult().getType(),
+                                getDtype());
+}
+
+mlir::LogicalResult UpdateMaskOp::verify() {
+  if (!hasEnclosingRegion<VecFuncOp>(getOperation()))
+    return emitOpError("must be nested inside a tla.vec.func region");
+  return verifyMaskProducerType(getOperation(), getMask().getType(),
+                                getDtype());
+}
+
+mlir::LogicalResult WhereOp::verify() {
+  if (!hasEnclosingRegion<VecFuncOp>(getOperation()))
+    return emitOpError("must be nested inside a tla.vec.func region");
+  return verifyMaskMatchesVector(getOperation(), getMask(), getX().getType());
+}
+
+mlir::LogicalResult GatherOp::verify() {
+  if (!hasEnclosingRegion<VecFuncOp>(getOperation()))
+    return emitOpError("must be nested inside a tla.vec.func region");
+  return verifyMaskMatchesVector(getOperation(), getMask(),
+                                 getResult().getType());
+}
+
+mlir::LogicalResult SqueezeOp::verify() {
+  if (!hasEnclosingRegion<VecFuncOp>(getOperation()))
+    return emitOpError("must be nested inside a tla.vec.func region");
+  return verifyMaskMatchesVector(getOperation(), getMask(), getSrc().getType());
+}
+
+mlir::LogicalResult CastOp::verify() {
+  if (!hasEnclosingRegion<VecFuncOp>(getOperation()))
+    return emitOpError("must be nested inside a tla.vec.func region");
+  return verifyMaskMatchesVector(getOperation(), getMask(),
+                                 getSource().getType());
+}
+
+mlir::LogicalResult ReduceOp::verify() {
+  if (!hasEnclosingRegion<VecFuncOp>(getOperation()))
+    return emitOpError("must be nested inside a tla.vec.func region");
+  return verifyMaskMatchesVector(getOperation(), getMask(),
+                                 getOperand().getType());
+}
 
 mlir::LogicalResult BitwiseNotOp::verify() {
   if (!hasEnclosingRegion<VecFuncOp>(getOperation()))
@@ -218,10 +334,21 @@ mlir::LogicalResult BitwiseNotOp::verify() {
     return emitOpError(
         "requires operand and result to have the same !tla.vector or !tla.mask category");
 
-  if (operandIsVector &&
-      operandVector.getElementType() != resultVector.getElementType())
+  if (operandIsVector) {
+    if (operandVector.getElementType() != resultVector.getElementType())
+      return emitOpError(
+          "requires !tla.vector operand and result to have identical element types");
+    return verifyMaskMatchesVector(getOperation(), getMask(), operandVector);
+  }
+
+  auto operandMask = mlir::cast<MaskSSAType>(getOperand().getType());
+  auto resultMask = mlir::cast<MaskSSAType>(getResult().getType());
+  if (resultMask != operandMask)
     return emitOpError(
-        "requires !tla.vector operand and result to have identical element types");
+        "requires MaskSSA operand and result to have identical types");
+  if (getMask() && getMask().getType() != operandMask)
+    return emitOpError(
+        "requires optional mask to have the same MaskSSA type as operand");
   return mlir::success();
 }
 
@@ -246,7 +373,18 @@ static mlir::LogicalResult verifyBitwiseBinaryOp(OpTy op) {
         resultVector.getElementType() != lhsElementType)
       return op.emitOpError(
           "requires !tla.vector lhs, rhs, and result to have identical element types");
+    return verifyMaskMatchesVector(op.getOperation(), op.getMask(), lhsVector);
   }
+
+  auto lhsMask = mlir::cast<MaskSSAType>(op.getLhs().getType());
+  auto rhsMask = mlir::cast<MaskSSAType>(op.getRhs().getType());
+  auto resultMask = mlir::cast<MaskSSAType>(op.getResult().getType());
+  if (rhsMask != lhsMask || resultMask != lhsMask)
+    return op.emitOpError(
+        "requires MaskSSA lhs, rhs, and result to have identical types");
+  if (op.getMask() && op.getMask().getType() != lhsMask)
+    return op.emitOpError(
+        "requires optional mask to have the same MaskSSA type as operands");
   return mlir::success();
 }
 
@@ -370,6 +508,9 @@ mlir::LogicalResult CmpOp::verify() {
   if (!isSupportedCmpElementType(lhsElementType))
     return emitOpError() << "unsupported compare element type "
                          << lhsElementType;
+  if (failed(verifyMaskMatchesVector(getOperation(), getResult(), lhsType)) ||
+      failed(verifyMaskMatchesVector(getOperation(), getMask(), lhsType)))
+    return mlir::failure();
 
   auto rhsType = getRhs().getType();
   auto rhsVectorType = mlir::dyn_cast<::tla::VectorSSAType>(rhsType);

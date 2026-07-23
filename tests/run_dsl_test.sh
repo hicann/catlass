@@ -15,7 +15,7 @@
 # python/tla_dsl/examples/end_to_end/basic_mixed (basic_mixed_ub2l1.py).
 # python/tla_dsl/examples/end_to_end/vector_ops (binary_op.py, masked_binary.py,
 # bitwise_ops.py, reduction_ops.py, compare_mask.py, unary_ops.py, arange_op.py,
-# interleave_op.py, squeeze_op.py).
+# interleave_op.py, squeeze_op.py, register_control_flow.py).
 # python/tla_dsl/examples/end_to_end/tensor_index (scalar_index_control_flow.py,
 # scalar_kernel_arg.py).
 # python/tla_dsl/examples/end_to_end/debug_print (debug_print.py, debug_print_mixed.py).
@@ -92,6 +92,7 @@ UNARY_OPS_REL="examples/end_to_end/vector_ops/unary_ops.py"
 ARANGE_OP_REL="examples/end_to_end/vector_ops/arange_op.py"
 INTERLEAVE_OP_REL="examples/end_to_end/vector_ops/interleave_op.py"
 SQUEEZE_OP_REL="examples/end_to_end/vector_ops/squeeze_op.py"
+REGISTER_CONTROL_FLOW_REL="examples/end_to_end/vector_ops/register_control_flow.py"
 SCALAR_INDEX_CONTROL_FLOW_REL="examples/end_to_end/tensor_index/scalar_index_control_flow.py"
 SCALAR_KERNEL_ARG_REL="examples/end_to_end/tensor_index/scalar_kernel_arg.py"
 DEBUG_PRINT_REL="examples/end_to_end/debug_print/debug_print.py"
@@ -123,6 +124,8 @@ Run end-to-end validation for:
   - arange_op (arange_op.py [increase/decrease] --run --all-dtypes)
   - interleave_op (interleave_op.py interleave/deinterleave --run --all-dtypes)
   - squeeze_op (squeeze_op.py squeeze --run --all-dtypes)
+  - register_control_flow (register_control_flow.py register_carriers --run:
+    mixed VectorSSA/MaskSSA scf.for carriers and masked store)
   - scalar_index_control_flow (scalar_index_control_flow.py: GM scalar read/write,
     loop/dynamic-if/constexpr-if, vec.func, AST Numeric / index-vs-Int32 compare)
   - scalar_kernel_arg (scalar_kernel_arg.py: host Numeric kernel args used in
@@ -352,6 +355,10 @@ if [[ ! -f "${TLA_DSL_DIR}/${SQUEEZE_OP_REL}" ]]; then
     echo "error: missing ${SQUEEZE_OP_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
 fi
+if [[ ! -f "${TLA_DSL_DIR}/${REGISTER_CONTROL_FLOW_REL}" ]]; then
+    echo "error: missing ${REGISTER_CONTROL_FLOW_REL} under ${TLA_DSL_DIR}" >&2
+    exit 1
+fi
 if [[ ! -f "${TLA_DSL_DIR}/${SCALAR_INDEX_CONTROL_FLOW_REL}" ]]; then
     echo "error: missing ${SCALAR_INDEX_CONTROL_FLOW_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
@@ -570,6 +577,17 @@ _run_squeeze_op_case() {
 }
 
 _run_squeeze_op_case
+
+_run_register_control_flow_case() {
+    echo "==> Running register_control_flow validation [mixed VectorSSA/MaskSSA carriers]: register_carriers --run --device ${DEVICE_ID}"
+    (
+        cd "${TLA_DSL_DIR}"
+        python "${REGISTER_CONTROL_FLOW_REL}" register_carriers --run \
+            --device "${DEVICE_ID}" --force-recompile
+    )
+}
+
+_run_register_control_flow_case
 
 _run_scalar_index_control_flow_case() {
     echo "==> Running scalar_index_control_flow validation [GM scalar indexing + AST compare]: --device ${DEVICE_ID}"

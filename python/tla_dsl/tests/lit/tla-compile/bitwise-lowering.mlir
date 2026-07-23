@@ -89,33 +89,33 @@ module {
         %dst_reg_and_tile = "tla.tile_view"(%dst_reg_and, %shape, %coord) : (!vec, !tla.shape<64>, !tla.coord<0>) -> !vec
         %dst_reg_or_tile = "tla.tile_view"(%dst_reg_or, %shape, %coord) : (!vec, !tla.shape<64>, !tla.coord<0>) -> !vec
         %dst_reg_xor_tile = "tla.tile_view"(%dst_reg_xor, %shape, %coord) : (!vec, !tla.shape<64>, !tla.coord<0>) -> !vec
-        %all = "tla.create_mask"() {pattern = "ALL", dtype = i32} : () -> !tla.mask
-        %h = "tla.create_mask"() {pattern = "H", dtype = i32} : () -> !tla.mask
-        %q = "tla.create_mask"() {pattern = "Q", dtype = i32} : () -> !tla.mask
-        %m4 = "tla.create_mask"() {pattern = "M4", dtype = i32} : () -> !tla.mask
-        %mask_bitwise_not_all = "tla.bitwise_not"(%q) : (!tla.mask) -> !tla.mask
-        %mask_bitwise_not = "tla.bitwise_not"(%mask_bitwise_not_all, %all) : (!tla.mask, !tla.mask) -> !tla.mask
-        %mask_bitwise_and_all = "tla.bitwise_and"(%h, %m4) : (!tla.mask, !tla.mask) -> !tla.mask
-        %mask_bitwise_and = "tla.bitwise_and"(%mask_bitwise_and_all, %m4, %all) : (!tla.mask, !tla.mask, !tla.mask) -> !tla.mask
-        %mask_bitwise_or_all = "tla.bitwise_or"(%q, %m4) : (!tla.mask, !tla.mask) -> !tla.mask
-        %mask_bitwise_or = "tla.bitwise_or"(%mask_bitwise_or_all, %m4, %all) : (!tla.mask, !tla.mask, !tla.mask) -> !tla.mask
-        %mask_bitwise_xor_all = "tla.bitwise_xor"(%h, %m4) : (!tla.mask, !tla.mask) -> !tla.mask
-        %mask_bitwise_xor = "tla.bitwise_xor"(%mask_bitwise_xor_all, %m4, %all) : (!tla.mask, !tla.mask, !tla.mask) -> !tla.mask
+        %all = "tla.create_mask"() {pattern = "ALL", dtype = i32} : () -> !tla.mask<64>
+        %h = "tla.create_mask"() {pattern = "H", dtype = i32} : () -> !tla.mask<64>
+        %q = "tla.create_mask"() {pattern = "Q", dtype = i32} : () -> !tla.mask<64>
+        %m4 = "tla.create_mask"() {pattern = "M4", dtype = i32} : () -> !tla.mask<64>
+        %mask_bitwise_not_all = "tla.bitwise_not"(%q) : (!tla.mask<64>) -> !tla.mask<64>
+        %mask_bitwise_not = "tla.bitwise_not"(%mask_bitwise_not_all, %all) : (!tla.mask<64>, !tla.mask<64>) -> !tla.mask<64>
+        %mask_bitwise_and_all = "tla.bitwise_and"(%h, %m4) : (!tla.mask<64>, !tla.mask<64>) -> !tla.mask<64>
+        %mask_bitwise_and = "tla.bitwise_and"(%mask_bitwise_and_all, %m4, %all) : (!tla.mask<64>, !tla.mask<64>, !tla.mask<64>) -> !tla.mask<64>
+        %mask_bitwise_or_all = "tla.bitwise_or"(%q, %m4) : (!tla.mask<64>, !tla.mask<64>) -> !tla.mask<64>
+        %mask_bitwise_or = "tla.bitwise_or"(%mask_bitwise_or_all, %m4, %all) : (!tla.mask<64>, !tla.mask<64>, !tla.mask<64>) -> !tla.mask<64>
+        %mask_bitwise_xor_all = "tla.bitwise_xor"(%h, %m4) : (!tla.mask<64>, !tla.mask<64>) -> !tla.mask<64>
+        %mask_bitwise_xor = "tla.bitwise_xor"(%mask_bitwise_xor_all, %m4, %all) : (!tla.mask<64>, !tla.mask<64>, !tla.mask<64>) -> !tla.mask<64>
         %reg0 = "tla.load"(%src0_tile) : (!vec) -> !tla.vector<64xi32>
         %reg1 = "tla.load"(%src1_tile) : (!vec) -> !tla.vector<64xi32>
         %zero = arith.constant 0 : i32
         %zero_reg = "tla.full"(%zero) : (i32) -> !tla.vector<64xi32>
-        %out_mask_not = "tla.where"(%mask_bitwise_not, %reg0, %zero_reg) : (!tla.mask, !tla.vector<64xi32>, !tla.vector<64xi32>) -> !tla.vector<64xi32>
-        %out_mask_and = "tla.where"(%mask_bitwise_and, %reg0, %zero_reg) : (!tla.mask, !tla.vector<64xi32>, !tla.vector<64xi32>) -> !tla.vector<64xi32>
-        %out_mask_or = "tla.where"(%mask_bitwise_or, %reg0, %zero_reg) : (!tla.mask, !tla.vector<64xi32>, !tla.vector<64xi32>) -> !tla.vector<64xi32>
-        %out_mask_xor = "tla.where"(%mask_bitwise_xor, %reg0, %zero_reg) : (!tla.mask, !tla.vector<64xi32>, !tla.vector<64xi32>) -> !tla.vector<64xi32>
+        %out_mask_not = "tla.where"(%mask_bitwise_not, %reg0, %zero_reg) : (!tla.mask<64>, !tla.vector<64xi32>, !tla.vector<64xi32>) -> !tla.vector<64xi32>
+        %out_mask_and = "tla.where"(%mask_bitwise_and, %reg0, %zero_reg) : (!tla.mask<64>, !tla.vector<64xi32>, !tla.vector<64xi32>) -> !tla.vector<64xi32>
+        %out_mask_or = "tla.where"(%mask_bitwise_or, %reg0, %zero_reg) : (!tla.mask<64>, !tla.vector<64xi32>, !tla.vector<64xi32>) -> !tla.vector<64xi32>
+        %out_mask_xor = "tla.where"(%mask_bitwise_xor, %reg0, %zero_reg) : (!tla.mask<64>, !tla.vector<64xi32>, !tla.vector<64xi32>) -> !tla.vector<64xi32>
         %reg_bitwise_not = "tla.bitwise_not"(%reg0) : (!tla.vector<64xi32>) -> !tla.vector<64xi32>
         %reg_bitwise_and_all = "tla.bitwise_and"(%reg0, %reg1) : (!tla.vector<64xi32>, !tla.vector<64xi32>) -> !tla.vector<64xi32>
-        %reg_bitwise_and = "tla.bitwise_and"(%reg_bitwise_and_all, %reg1, %all) : (!tla.vector<64xi32>, !tla.vector<64xi32>, !tla.mask) -> !tla.vector<64xi32>
+        %reg_bitwise_and = "tla.bitwise_and"(%reg_bitwise_and_all, %reg1, %all) : (!tla.vector<64xi32>, !tla.vector<64xi32>, !tla.mask<64>) -> !tla.vector<64xi32>
         %reg_bitwise_or_all = "tla.bitwise_or"(%reg0, %reg1) : (!tla.vector<64xi32>, !tla.vector<64xi32>) -> !tla.vector<64xi32>
-        %reg_bitwise_or = "tla.bitwise_or"(%reg_bitwise_or_all, %reg1, %all) : (!tla.vector<64xi32>, !tla.vector<64xi32>, !tla.mask) -> !tla.vector<64xi32>
+        %reg_bitwise_or = "tla.bitwise_or"(%reg_bitwise_or_all, %reg1, %all) : (!tla.vector<64xi32>, !tla.vector<64xi32>, !tla.mask<64>) -> !tla.vector<64xi32>
         %reg_bitwise_xor_all = "tla.bitwise_xor"(%reg0, %reg1) : (!tla.vector<64xi32>, !tla.vector<64xi32>) -> !tla.vector<64xi32>
-        %reg_bitwise_xor = "tla.bitwise_xor"(%reg_bitwise_xor_all, %reg1, %all) : (!tla.vector<64xi32>, !tla.vector<64xi32>, !tla.mask) -> !tla.vector<64xi32>
+        %reg_bitwise_xor = "tla.bitwise_xor"(%reg_bitwise_xor_all, %reg1, %all) : (!tla.vector<64xi32>, !tla.vector<64xi32>, !tla.mask<64>) -> !tla.vector<64xi32>
         "tla.store"(%dst_mask_not_tile, %out_mask_not) : (!vec, !tla.vector<64xi32>) -> ()
         "tla.store"(%dst_mask_and_tile, %out_mask_and) : (!vec, !tla.vector<64xi32>) -> ()
         "tla.store"(%dst_mask_or_tile, %out_mask_or) : (!vec, !tla.vector<64xi32>) -> ()

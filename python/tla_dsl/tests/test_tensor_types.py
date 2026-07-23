@@ -97,6 +97,45 @@ def test_vector_ssa_type_roundtrip_and_bridge_accessors() -> None:
         assert str(_tla_type_bridge.vector_ssa_element_type_get(static_type)) == "f32"
 
 
+def test_mask_ssa_type_roundtrip_and_bridge_accessors() -> None:
+    with mlir_ir.Context() as ctx:
+        _tla_type_bridge.load_tla_dialect(ctx)
+        for physical_lanes in (32, 64, 128, 256):
+            mask_type = _tla_type_bridge.mask_ssa_type_get(ctx, physical_lanes)
+
+            assert str(mask_type) == f"!tla.mask<{physical_lanes}>"
+            assert _tla_type_bridge.type_is_mask_ssa(mask_type)
+            assert _tla_type_bridge.tla_type_category(mask_type) == "mask_ssa"
+            assert _tla_type_bridge.mask_ssa_physical_lanes_get(mask_type) == physical_lanes
+            assert (
+                str(tla.types.TlaMaskSSATypeDescriptor(physical_lanes).to_mlir_type(ctx))
+                == f"!tla.mask<{physical_lanes}>"
+            )
+
+
+@pytest.mark.parametrize("physical_lanes", (0, 1, 31, 33, 63, 65, 257))
+def test_mask_ssa_type_rejects_invalid_physical_lane_counts(physical_lanes: int) -> None:
+    with pytest.raises(ValueError, match="physical_lanes must be one of"):
+        tla.types.TlaMaskSSATypeDescriptor(physical_lanes)
+
+    with mlir_ir.Context() as ctx:
+        _tla_type_bridge.load_tla_dialect(ctx)
+        with pytest.raises(mlir_ir.MLIRError, match="lane count must be one of"):
+            mlir_ir.Type.parse(f"!tla.mask<{physical_lanes}>")
+
+
+def test_legacy_unparameterized_mask_type_is_rejected() -> None:
+    with mlir_ir.Context() as ctx:
+        _tla_type_bridge.load_tla_dialect(ctx)
+        with pytest.raises(mlir_ir.MLIRError):
+            mlir_ir.Type.parse("!tla.mask")
+
+
+def test_register_ssa_wrappers_are_publicly_exported() -> None:
+    assert tla.VectorSSA is core_api_mod.VectorSSA
+    assert tla.MaskSSA is core_api_mod.MaskSSA
+
+
 @pytest.mark.parametrize(
     ("type_text", "valid"),
     (

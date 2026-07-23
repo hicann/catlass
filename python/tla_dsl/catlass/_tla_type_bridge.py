@@ -160,6 +160,18 @@ def vector_ssa_valid_lanes_get(vector_type: mlir_ir.Type) -> int | None:
     return None if lanes is None else int(lanes)
 
 
+def mask_ssa_type_get(context: mlir_ir.Context, physical_lanes: int) -> mlir_ir.Type:
+    if isinstance(physical_lanes, bool) or not isinstance(physical_lanes, int):
+        raise TypeError(
+            f"Tla mask bridge expects physical_lanes as int, got {type(physical_lanes).__name__}"
+        )
+    return _load_bridge_extension().mask_ssa_type_get(context, physical_lanes)
+
+
+def mask_ssa_physical_lanes_get(mask_type: mlir_ir.Type) -> int:
+    return int(_load_bridge_extension().mask_ssa_physical_lanes_get(mask_type))
+
+
 def flag_type_get(context: mlir_ir.Context) -> mlir_ir.Type:
     return _load_bridge_extension().flag_type_get(context)
 
@@ -210,6 +222,10 @@ def type_is_layout(type_like: mlir_ir.Type) -> bool:
 
 def type_is_vector_ssa(type_like: mlir_ir.Type) -> bool:
     return bool(_load_bridge_extension().type_is_vector_ssa(type_like))
+
+
+def type_is_mask_ssa(type_like: mlir_ir.Type) -> bool:
+    return bool(_load_bridge_extension().type_is_mask_ssa(type_like))
 
 
 def type_is_flag(type_like: mlir_ir.Type) -> bool:
@@ -342,6 +358,8 @@ __all__ = [
     "layout_type_from_components_get",
     "layout_type_get",
     "load_tla_dialect",
+    "mask_ssa_physical_lanes_get",
+    "mask_ssa_type_get",
     "mutex_type_get",
     "ptr_addrspace",
     "ptr_alignment",
@@ -354,6 +372,7 @@ __all__ = [
     "type_is_cross_flag",
     "type_is_flag",
     "type_is_layout",
+    "type_is_mask_ssa",
     "type_is_mutex",
     "type_is_ptr",
     "type_is_shape",

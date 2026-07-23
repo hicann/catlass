@@ -358,6 +358,27 @@ class TlaVectorSSATypeDescriptor:
 
 
 @dataclass(frozen=True)
+class TlaMaskSSATypeDescriptor:
+    """Structured descriptor for a register-resident predicate mask."""
+
+    physical_lanes: int
+
+    def __post_init__(self) -> None:
+        if isinstance(self.physical_lanes, bool) or not isinstance(self.physical_lanes, int):
+            raise TypeError("TlaMaskSSATypeDescriptor physical_lanes must be int")
+        if self.physical_lanes not in (32, 64, 128, 256):
+            raise ValueError(
+                "TlaMaskSSATypeDescriptor physical_lanes must be one of "
+                f"32, 64, 128, or 256, got {self.physical_lanes}"
+            )
+
+    def to_mlir_type(self, context: mlir_ir.Context | None = None) -> mlir_ir.Type:
+        return _tla_type_bridge.mask_ssa_type_get(
+            _tla_type_context(context), self.physical_lanes
+        )
+
+
+@dataclass(frozen=True)
 class TlaTensorTypeDescriptor:
     """Structured Python descriptor for ``!tla.tensor`` metadata.
 
@@ -692,6 +713,8 @@ __all__ = [
     "TlaIndexTree",
     "TlaIndexTreeType",
     "TlaLayoutDescriptor",
+    "TlaMaskSSATypeDescriptor",
+    "TlaVectorSSATypeDescriptor",
     "TlaTensorTypeDescriptor",
     "TlaTensor",
     "TlaTile",

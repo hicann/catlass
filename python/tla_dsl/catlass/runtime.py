@@ -732,6 +732,8 @@ _CORE_API_EXPORTS = (
     "make_layout",
     "IndexTree",
     "range_constexpr",
+    "VectorSSA",
+    "MaskSSA",
 )
 
 

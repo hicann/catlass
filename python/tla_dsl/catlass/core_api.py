@@ -46,6 +46,7 @@ from .types import (
     AddressSpace,
     TlaIndexTreeType,
     TlaLayoutDescriptor,
+    TlaMaskSSATypeDescriptor,
     TlaVectorSSATypeDescriptor,
     TlaTensorTypeDescriptor,
     PtrType,
@@ -368,21 +369,31 @@ class _Pointer(PointerABC):
         return self.__add__(other)
 
 
-class VectorSSA:
-    """Frontend proxy for loaded vector SSA values."""
+class _RegisterSSA:
+    """Shared one-value protocol for register-resident frontend SSA wrappers."""
+
+    _category = ""
+    _expected_type = ""
+
+    @classmethod
+    def _matches_register_type(cls, value_type: mlir_ir.Type) -> bool:
+        raise NotImplementedError
 
     def __init__(self, value: mlir_ir.Value) -> None:
         if not isinstance(value, mlir_ir.Value):
             raise TypeError(
-                f"VectorSSA expects mlir.ir.Value, got {type(value).__name__}"
+                f"{type(self).__name__} expects mlir.ir.Value, "
+                f"got {type(value).__name__}"
             )
-        if not _tla_type_bridge.type_is_vector_ssa(value.type):
-            raise TypeError(f"VectorSSA expects !tla.vector<NxT>, got {value.type}")
+        if not self._matches_register_type(value.type):
+            raise TypeError(
+                f"{type(self).__name__} expects {self._expected_type}, got {value.type}"
+            )
         self.value = value
-        self.__tla_category__ = "vector_ssa"
+        self.__tla_category__ = self._category
         _runtime._bind_frontend_value(self, value)
-        _runtime._bind_frontend_category(self, "vector_ssa")
-        _runtime._bind_frontend_category(value, "vector_ssa")
+        _runtime._bind_frontend_category(self, self._category)
+        _runtime._bind_frontend_category(value, self._category)
 
     def __tla_type__(self) -> str:
         return str(self.value.type)
@@ -393,6 +404,25 @@ class VectorSSA:
 
     def __extract_mlir_values__(self) -> list[Any]:
         return [self.value]
+
+    def __new_from_mlir_values__(self, values: list[Any]) -> "_RegisterSSA":
+        if len(values) != 1 or not isinstance(values[0], mlir_ir.Value):
+            raise TlaCoreAPIError(
+                f"{type(self).__name__} control-flow reconstruction expects "
+                "exactly one MLIR SSA value"
+            )
+        return type(self)(values[0])
+
+
+class VectorSSA(_RegisterSSA):
+    """Frontend proxy for a register-resident data vector SSA value."""
+
+    _category = "vector_ssa"
+    _expected_type = "!tla.vector<NxT>"
+
+    @classmethod
+    def _matches_register_type(cls, value_type: mlir_ir.Type) -> bool:
+        return _tla_type_bridge.type_is_vector_ssa(value_type)
 
     def __add__(self, other: Any) -> "VectorSSA":
         return add(self, other)
@@ -489,6 +519,8 @@ class VectorSSA:
         with context:
             trait_attr = mlir_ir.DenseI32ArrayAttr.get(params.codes())
         mask_value = _as_value(mask) if mask is not None else None
+        if mask_value is not None:
+            _require_mask_matches_vector("cast", mask_value, operand_value)
         result = _tla_ops_gen.cast(
             result_desc.to_mlir_type(context),
             operand_value,
@@ -499,31 +531,15 @@ class VectorSSA:
         return VectorSSA(result)
 
 
-class MaskSSA:
-    """Frontend proxy for a vector mask SSA value (`!tla.mask`)."""
+class MaskSSA(_RegisterSSA):
+    """Frontend proxy for a register-resident predicate mask SSA value."""
 
-    def __init__(self, value: mlir_ir.Value) -> None:
-        if not isinstance(value, mlir_ir.Value):
-            raise TypeError(
-                f"MaskSSA expects mlir.ir.Value, got {type(value).__name__}"
-            )
-        if str(value.type) != "!tla.mask":
-            raise TypeError(f"MaskSSA expects !tla.mask, got {value.type}")
-        self.value = value
-        self.__tla_category__ = "mask_ssa"
-        _runtime._bind_frontend_value(self, value)
-        _runtime._bind_frontend_category(self, "mask_ssa")
-        _runtime._bind_frontend_category(value, "mask_ssa")
+    _category = "mask_ssa"
+    _expected_type = "!tla.mask<N>"
 
-    def __tla_type__(self) -> str:
-        return str(self.value.type)
-
-    def __get_mlir_types__(self, context: mlir_ir.Context | None = None) -> list[Any]:
-        del context
-        return [self.value.type]
-
-    def __extract_mlir_values__(self) -> list[Any]:
-        return [self.value]
+    @classmethod
+    def _matches_register_type(cls, value_type: mlir_ir.Type) -> bool:
+        return _tla_type_bridge.type_is_mask_ssa(value_type)
 
 
 class _MutexValue:
@@ -956,6 +972,8 @@ def _wrap_frontend_value(value: mlir_ir.Value) -> Any:
         return _Pointer(value)
     if _tla_type_bridge.type_is_vector_ssa(value.type):
         return VectorSSA(value)
+    if _tla_type_bridge.type_is_mask_ssa(value.type):
+        return MaskSSA(value)
     if _tla_type_bridge.type_is_tensor(value.type):
         return _Tensor(value)
     if _tla_type_bridge.type_is_mutex(value.type):
@@ -1154,6 +1172,48 @@ def _vector_ssa_type_for_mlir_value(
         valid_lanes=valid_lanes,
         element_type=_dtype_to_str(element_type),
     )
+
+
+def _mask_ssa_type_for_mlir_value(
+    value: mlir_ir.Value,
+) -> TlaMaskSSATypeDescriptor:
+    if not _tla_type_bridge.type_is_mask_ssa(value.type):
+        raise TlaLoweringError(f"expected !tla.mask<N> SSA value, got {value.type}")
+    return TlaMaskSSATypeDescriptor(
+        physical_lanes=_tla_type_bridge.mask_ssa_physical_lanes_get(value.type)
+    )
+
+
+def _mask_ssa_type_for_element_type(
+    element_type: str,
+) -> TlaMaskSSATypeDescriptor:
+    token = str(element_type).strip().lower()
+    element_bytes = dtype_size_bytes(token)
+    if (
+        token == "i1"
+        or element_bytes <= 0
+        or _VECTOR_REGISTER_BYTES % element_bytes != 0
+    ):
+        _op_error(
+            "mask",
+            f"unsupported predicate element type {token!r}; expected a "
+            "byte-aligned type that fits a 256-byte vector register",
+        )
+    return TlaMaskSSATypeDescriptor(physical_lanes=_vector_lane_count(element_bytes))
+
+
+def _require_mask_matches_vector(
+    op_name: str, mask_value: mlir_ir.Value, vector_value: mlir_ir.Value
+) -> None:
+    mask_desc = _mask_ssa_type_for_mlir_value(mask_value)
+    vector_desc = _vector_ssa_type_for_mlir_value(vector_value)
+    expected_physical_lanes = _mask_ssa_type_for_element_type(vector_desc.element_type).physical_lanes
+    if mask_desc.physical_lanes != expected_physical_lanes:
+        _op_error(
+            op_name,
+            f"mask has {mask_desc.physical_lanes} predicate lanes, expected "
+            f"{expected_physical_lanes} for {vector_desc.element_type} VectorSSA",
+        )
 
 
 def _vector_ssa_type_from_tensor_descriptor(
@@ -3829,6 +3889,16 @@ def _emit_vector_binary(
     lhs_value = _as_value(lhs)
     rhs_value = _as_value(rhs)
     mask_value = _as_value(mask) if mask is not None else None
+    lhs_desc = _vector_ssa_type_for_mlir_value(lhs_value)
+    rhs_desc = _vector_ssa_type_for_mlir_value(rhs_value)
+    if lhs_desc.element_type != rhs_desc.element_type:
+        _op_error(
+            op_name,
+            f"rhs has element type {rhs_desc.element_type}, expected "
+            f"{lhs_desc.element_type}",
+        )
+    if mask_value is not None:
+        _require_mask_matches_vector(op_name, mask_value, lhs_value)
     result = emitter(
         lhs_value.type,
         lhs_value,
@@ -3978,6 +4048,8 @@ def _emit_vector_scalar_binary(
         op_name, rhs_num, lhs_desc.element_mlir_type(lhs_value.type.context), loc=loc
     )
     mask_value = _as_value(mask) if mask is not None else None
+    if mask_value is not None:
+        _require_mask_matches_vector(op_name, mask_value, lhs_value)
     result = emitter(
         lhs_value.type,
         lhs_value,
@@ -4078,6 +4150,8 @@ def _emit_vector_unary(
             f"got {element_type}",
         )
     mask_value = _as_value(mask) if mask is not None else None
+    if mask_value is not None:
+        _require_mask_matches_vector(op_name, mask_value, operand_value)
     result = emitter(
         operand_value.type,
         operand_value,
@@ -4361,6 +4435,7 @@ def _emit_vector_reduce(
     operand_desc = _vector_ssa_type_for_mlir_value(operand_value)
     _check_reduction_element_type_supported(op_name, operand_desc.element_type)
     mask_value = _as_value(mask)
+    _require_mask_matches_vector(op_name, mask_value, operand_value)
     result_desc = _reduction_result_descriptor(operand_value)
     result = _tla_ops_gen.reduce(
         result_desc.to_mlir_type(operand_value.type.context),
@@ -4384,8 +4459,8 @@ def where(
 
     Lanes where ``mask`` (a ``MaskSSA`` from ``tla.create_mask`` or
     ``tla.update_mask``) is active take the corresponding lane of ``x``; the
-    remaining lanes take ``y``. ``x`` and ``y`` must have identical
-    ``!tla.tensor`` types. Lowers to ``ave.hir.vsel``.
+    remaining lanes take ``y``. ``x`` and ``y`` must have the same VectorSSA
+    element type; their valid-lane metadata may differ. Lowers to ``ave.hir.vsel``.
     """
     _require_category("where", "mask", mask, "mask_ssa", 0)
     _require_category("where", "x", x, "vector_ssa", 1)
@@ -4395,6 +4470,14 @@ def where(
     x_value = _as_value(x)
     y_value = _as_value(y)
     mask_value = _as_value(mask)
+    x_desc = _vector_ssa_type_for_mlir_value(x_value)
+    y_desc = _vector_ssa_type_for_mlir_value(y_value)
+    if x_desc.element_type != y_desc.element_type:
+        _op_error(
+            "where",
+            f"y has element type {y_desc.element_type}, expected {x_desc.element_type}",
+        )
+    _require_mask_matches_vector("where", mask_value, x_value)
     result = _tla_ops_gen.where(
         x_value.type,
         mask_value,
@@ -4424,6 +4507,7 @@ def squeeze(
     _runtime._require_enclosing_region("squeeze", "vec.func")
     src_value = _as_value(src)
     mask_value = _as_value(mask)
+    _require_mask_matches_vector("squeeze", mask_value, src_value)
     result = _tla_ops_gen.squeeze(
         src_value.type,
         src_value,
@@ -4451,6 +4535,14 @@ def _emit_bitwise_unary(
     _runtime._require_enclosing_region(op_name, "vec.func")
     operand_value = _as_value(operand)
     mask_value = _as_value(mask) if mask is not None else None
+    if mask_value is not None:
+        if operand_category == "mask_ssa":
+            if mask_value.type != operand_value.type:
+                _op_error(
+                    op_name, "optional mask must have the same MaskSSA type as operand"
+                )
+        else:
+            _require_mask_matches_vector(op_name, mask_value, operand_value)
     if operand_category == "mask_ssa":
         return MaskSSA(
             emitter(operand_value.type, operand_value, mask=mask_value, loc=loc)
@@ -4499,11 +4591,35 @@ def _emit_bitwise_binary(
     _require_frontend_state(op_name)
     _runtime._require_enclosing_region(op_name, "vec.func")
     src0_value = _as_value(src0_reg)
+    src1_value = _as_value(src1_reg)
+    if src0_category == "mask_ssa":
+        if src1_value.type != src0_value.type:
+            _op_error(
+                op_name,
+                f"src1_reg has type {src1_value.type}, expected {src0_value.type}",
+            )
+    else:
+        src0_desc = _vector_ssa_type_for_mlir_value(src0_value)
+        src1_desc = _vector_ssa_type_for_mlir_value(src1_value)
+        if src1_desc.element_type != src0_desc.element_type:
+            _op_error(
+                op_name,
+                f"src1_reg has element type {src1_desc.element_type}, expected "
+                f"{src0_desc.element_type}",
+            )
     mask_value = _as_value(mask) if mask is not None else None
+    if mask_value is not None:
+        if src0_category == "mask_ssa":
+            if mask_value.type != src0_value.type:
+                _op_error(
+                    op_name, "optional mask must have the same MaskSSA type as operands"
+                )
+        else:
+            _require_mask_matches_vector(op_name, mask_value, src0_value)
     result = emitter(
         src0_value.type,
         src0_value,
-        _as_value(src1_reg),
+        src1_value,
         mask=mask_value,
         loc=loc,
     )
@@ -4511,12 +4627,6 @@ def _emit_bitwise_binary(
         return MaskSSA(result)
 
     return VectorSSA(result)
-
-
-def _tla_mask_type(context: mlir_ir.Context) -> mlir_ir.Type:
-    """Return ``!tla.mask`` parsed in the same MLIR context as the surrounding SSA values."""
-    _tla_type_bridge.load_tla_dialect(context)
-    return mlir_ir.Type.parse("!tla.mask", context=context)
 
 
 @dsl_user_op
@@ -4548,17 +4658,29 @@ def cmp(
     _require_frontend_state("cmp")
     _runtime._require_enclosing_region("cmp", "vec.func")
     lhs_value = _as_value(lhs)
+    lhs_desc = _vector_ssa_type_for_mlir_value(lhs_value)
     if rhs_category == "vector_ssa":
         rhs_value = _as_value(rhs)
     else:
         assert rhs_num is not None
-        lhs_desc = _vector_ssa_type_for_mlir_value(lhs_value)
         rhs_value = _numeric_ir_value_for_element_type(
             "cmp", rhs_num, lhs_desc.element_mlir_type(lhs_value.type.context), loc=loc
         )
         _check_compare_element_type_supported("cmp", lhs_desc.element_type)
-    mask_ty = _tla_mask_type(lhs_value.type.context)
+    mask_ty = _mask_ssa_type_for_element_type(lhs_desc.element_type).to_mlir_type(
+        lhs_value.type.context
+    )
     mask_value = _as_value(mask) if mask is not None else None
+    if rhs_category == "vector_ssa":
+        rhs_desc = _vector_ssa_type_for_mlir_value(rhs_value)
+        if rhs_desc.element_type != lhs_desc.element_type:
+            _op_error(
+                "cmp",
+                f"rhs has element type {rhs_desc.element_type}, expected "
+                f"{lhs_desc.element_type}",
+            )
+    if mask_value is not None:
+        _require_mask_matches_vector("cmp", mask_value, lhs_value)
     return MaskSSA(
         _tla_ops_gen.cmp(
             mask_ty, lhs_value, rhs_value, mode, mask=mask_value, loc=loc
@@ -4702,8 +4824,18 @@ def gather(
     if mask is not None:
         _require_category("gather", "mask", mask, "mask_ssa", 2)
     mask_value = _as_value(mask) if mask is not None else None
+    result_desc = _vector_ssa_type_from_tensor_descriptor(x_desc)
+    if mask_value is not None:
+        expected_mask = _mask_ssa_type_for_element_type(result_desc.element_type)
+        actual_mask = _mask_ssa_type_for_mlir_value(mask_value)
+        if actual_mask.physical_lanes != expected_mask.physical_lanes:
+            _op_error(
+                "gather",
+                f"mask has {actual_mask.physical_lanes} predicate lanes, expected "
+                f"{expected_mask.physical_lanes} for {result_desc.element_type} VectorSSA",
+            )
     result = _tla_ops_gen.gather(
-        _vector_ssa_type_from_tensor_descriptor(x_desc).to_mlir_type(x_value.type.context),
+        result_desc.to_mlir_type(x_value.type.context),
         x_value,
         y_value,
         mask=mask_value,
@@ -5017,8 +5149,12 @@ def create_mask(
     _require_frontend_state("create_mask")
     _runtime._require_enclosing_region("create_mask", "vec.func")
     elem_type = _mask_elem_type("create_mask", dtype, loc)
-    mask_ty = mlir_ir.Type.parse("!tla.mask")
-    token = pattern._token if isinstance(pattern, _MaskPatternSentinel) else str(pattern)
+    mask_ty = _mask_ssa_type_for_element_type(_dtype_to_str(elem_type)).to_mlir_type(
+        elem_type.context
+    )
+    token = (
+        pattern._token if isinstance(pattern, _MaskPatternSentinel) else str(pattern)
+    )
     return MaskSSA(
         _tla_ops_gen.create_mask(
             mask_ty, pattern=token, dtype=mlir_ir.TypeAttr.get(elem_type), loc=loc
@@ -5050,7 +5186,9 @@ def update_mask(
     _runtime._require_enclosing_region("update_mask", "vec.func")
     elem_type = _mask_elem_type("update_mask", dtype, loc)
     true_shape_value = _as_index_value(true_shape)
-    mask_ty = mlir_ir.Type.parse("!tla.mask")
+    mask_ty = _mask_ssa_type_for_element_type(_dtype_to_str(elem_type)).to_mlir_type(
+        elem_type.context
+    )
     index_ty = mlir_ir.IndexType.get()
     mask_value, new_true_shape = _tla_ops_gen.update_mask(
         mask_ty, index_ty, true_shape_value, mlir_ir.TypeAttr.get(elem_type), loc=loc
@@ -5150,5 +5288,6 @@ __all__ = [
     "range_constexpr",
     "_Pointer",
     "VectorSSA",
+    "MaskSSA",
     "LocalmemAllocator",
 ]

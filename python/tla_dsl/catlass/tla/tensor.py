@@ -240,6 +240,7 @@ class _Tensor(TensorABC):
             _as_value,
             _require_category,
             _require_frontend_state,
+            _require_mask_matches_vector,
         )
         from ..execution_lowering import TlaLoweringError
         from ..params import NormalStoreParams, StoreParams, UnalignStoreParams
@@ -257,13 +258,14 @@ class _Tensor(TensorABC):
             )
         _require_frontend_state("store")
         _runtime._require_enclosing_region("store", "vec.func")
+        value_val = _as_value(value)
         mask_val = _as_value(mask) if mask is not None else None
+        if mask_val is not None:
+            _require_mask_matches_vector("store", mask_val, value_val)
         store_kwargs: dict[str, Any] = {"loc": loc}
         if isinstance(params, UnalignStoreParams):
             store_kwargs["unaligned_ub_access"] = True
-        _tla_ops_gen.store(
-            _as_value(self), _as_value(value), mask=mask_val, **store_kwargs
-        )
+        _tla_ops_gen.store(_as_value(self), value_val, mask=mask_val, **store_kwargs)
 
     def _check_can_scalar_load_store(self) -> None:
         """Phase-1 ``scalar_load``/``scalar_store`` preconditions (GM only; not ``tla.load``/``tla.store``)."""

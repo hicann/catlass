@@ -128,7 +128,7 @@ def test_vector_reduce_emits_mask() -> None:
 
     reduce_line = next(line for line in mlir.splitlines() if "tla.reduce" in line)
     assert "tla.reduce" in reduce_line
-    assert "!tla.mask" in reduce_line
+    assert "!tla.mask<64>" in reduce_line
     assert 'kind = "add"' in reduce_line
 
 

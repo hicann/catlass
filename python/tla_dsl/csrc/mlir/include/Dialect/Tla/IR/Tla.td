@@ -32,10 +32,12 @@ def Tla_FlagType : TypeDef<TlaDialect, "Flag", []> {
   let assemblyFormat = "";
 }
 
-def Tla_MaskType : TypeDef<TlaDialect, "Mask", []> {
+def Tla_MaskSSAType : TypeDef<TlaDialect, "MaskSSA", []> {
   let mnemonic = "mask";
-  let summary = "Vector element-wise mask for conditional vector ops.";
-  let assemblyFormat = "";
+  let summary = "Register-resident predicate mask SSA value.";
+  let parameters = (ins "int64_t":$physicalLanes);
+  let assemblyFormat = "`<` $physicalLanes `>`";
+  let genVerifyDecl = 1;
 }
 
 
@@ -873,7 +875,7 @@ def Tla_StoreOp : Tla_Op<"store", []> {
     Must be nested inside a ``tla.vec.func`` region.
   }];
   let arguments = (ins Tla_TensorType:$dest, Tla_VectorSSAType:$source,
-                       Optional<Tla_MaskType>:$mask,
+                       Optional<Tla_MaskSSAType>:$mask,
                        OptionalAttr<UnitAttr>:$unaligned_ub_access);
   let assemblyFormat = [{
     $dest `,` $source (`mask` $mask^)? attr-dict `:` type($dest) `,` qualified(type($source))
@@ -893,7 +895,7 @@ def Tla_CreateMaskOp : Tla_Op<"create_mask", [Pure]> {
     the enclosing vector region's element width.
   }];
   let arguments = (ins StrAttr:$pattern, TypeAttr:$dtype);
-  let results = (outs Tla_MaskType:$result);
+  let results = (outs Tla_MaskSSAType:$result);
   let assemblyFormat = [{
     attr-dict `:` qualified(type($result))
   }];
@@ -915,7 +917,7 @@ def Tla_UpdateMaskOp : Tla_Op<"update_mask", [Pure]> {
     enclosing vector region's element width.
   }];
   let arguments = (ins Index:$true_shape, TypeAttr:$dtype);
-  let results = (outs Tla_MaskType:$mask, Index:$new_true_shape);
+  let results = (outs Tla_MaskSSAType:$mask, Index:$new_true_shape);
   let assemblyFormat = [{
     $true_shape `,` $dtype attr-dict `:` qualified(type($mask)) `,` type($new_true_shape)
   }];
@@ -930,9 +932,9 @@ class Tla_BitwiseUnaryOp<string mnemonic, string opSummary, string opDescription
     The ``mask`` operand predicates which lanes are computed; masked-out lanes
     are undefined/zeroed. When omitted, all lanes are active.
   }];
-  let arguments = (ins AnyTypeOf<[Tla_VectorSSAType, Tla_MaskType]>:$operand,
-                       Optional<Tla_MaskType>:$mask);
-  let results = (outs AnyTypeOf<[Tla_VectorSSAType, Tla_MaskType]>:$result);
+  let arguments = (ins AnyTypeOf<[Tla_VectorSSAType, Tla_MaskSSAType]>:$operand,
+                       Optional<Tla_MaskSSAType>:$mask);
+  let results = (outs AnyTypeOf<[Tla_VectorSSAType, Tla_MaskSSAType]>:$result);
   let assemblyFormat = [{
     $operand (`mask` $mask^)? attr-dict `:`
     qualified(type($operand)) (`mask` qualified(type($mask))^)?
@@ -949,10 +951,10 @@ class Tla_BitwiseBinaryOp<string mnemonic, string opSummary, string opDescriptio
     The ``mask`` operand predicates which lanes are computed; masked-out lanes
     are undefined/zeroed. When omitted, all lanes are active.
   }];
-  let arguments = (ins AnyTypeOf<[Tla_VectorSSAType, Tla_MaskType]>:$lhs,
-                       AnyTypeOf<[Tla_VectorSSAType, Tla_MaskType]>:$rhs,
-                       Optional<Tla_MaskType>:$mask);
-  let results = (outs AnyTypeOf<[Tla_VectorSSAType, Tla_MaskType]>:$result);
+  let arguments = (ins AnyTypeOf<[Tla_VectorSSAType, Tla_MaskSSAType]>:$lhs,
+                       AnyTypeOf<[Tla_VectorSSAType, Tla_MaskSSAType]>:$rhs,
+                       Optional<Tla_MaskSSAType>:$mask);
+  let results = (outs AnyTypeOf<[Tla_VectorSSAType, Tla_MaskSSAType]>:$result);
   let assemblyFormat = [{
     $lhs `,` $rhs (`mask` $mask^)? attr-dict `:`
     qualified(type($lhs)) `,` qualified(type($rhs))
@@ -989,8 +991,8 @@ def Tla_CmpOp : Tla_Op<"cmp", [Pure]> {
   let arguments = (ins Tla_VectorSSAType:$lhs,
                        AnyTypeOf<[Tla_VectorSSAType, Tla_ScalarValueType]>:$rhs,
                        StrAttr:$mode,
-                       Optional<Tla_MaskType>:$mask);
-  let results = (outs Tla_MaskType:$result);
+                       Optional<Tla_MaskSSAType>:$mask);
+  let results = (outs Tla_MaskSSAType:$result);
   let hasVerifier = 1;
   let assemblyFormat = [{
     $mode $lhs `,` $rhs (`mask` $mask^)? attr-dict `:`
@@ -1047,7 +1049,7 @@ class Tla_VectorBinaryOp<string mnemonic, string opSummary, string opDescription
     undefined/zeroed.
   }];
   let arguments = (ins Tla_VectorSSAType:$lhs, Tla_VectorSSAType:$rhs,
-                       Optional<Tla_MaskType>:$mask);
+                       Optional<Tla_MaskSSAType>:$mask);
   let results = (outs Tla_VectorSSAType:$result);
   let assemblyFormat = [{
     $lhs `,` $rhs (`mask` $mask^)? attr-dict `:`
@@ -1086,12 +1088,13 @@ def Tla_GatherOp : Tla_Op<"gather", [Pure]> {
     Gathers elements from ``x`` to ``result``according to the indices in ``y``.
   }];
   let arguments = (ins Tla_TensorType:$x, Tla_VectorSSAType:$y,
-                       Optional<Tla_MaskType>:$mask);
+                       Optional<Tla_MaskSSAType>:$mask);
   let results = (outs Tla_VectorSSAType:$result);
   let assemblyFormat = [{
     $x `,` $y (`mask` $mask^)? attr-dict `:`
     type($x) `,` qualified(type($y)) (`mask` qualified(type($mask))^)? `->` qualified(type($result))
   }];
+  let hasVerifier = 1;
 }
 
 def Tla_SqueezeOp : Tla_Op<"squeeze", [Pure]> {
@@ -1101,12 +1104,13 @@ def Tla_SqueezeOp : Tla_Op<"squeeze", [Pure]> {
   Remaining lanes in ``result`` are zeroed. This matches AscendC ``Squeeze``
   semantics (valid elements packed from low to high, not value-sorted).
   }];
-  let arguments = (ins Tla_VectorSSAType:$src, Tla_MaskType:$mask);
+  let arguments = (ins Tla_VectorSSAType:$src, Tla_MaskSSAType:$mask);
   let results = (outs Tla_VectorSSAType:$result);
   let assemblyFormat = [{
     $src `,` $mask attr-dict `:`
     qualified(type($src)) `,` qualified(type($mask)) `->` qualified(type($result))
   }];
+  let hasVerifier = 1;
 }
 
 def Tla_CastOp : Tla_Op<"cast", [Pure]> {
@@ -1118,12 +1122,13 @@ def Tla_CastOp : Tla_Op<"cast", [Pure]> {
     predicates which lanes are converted.
   }];
   let arguments = (ins Tla_VectorSSAType:$source, DenseI32ArrayAttr:$trait,
-                       Optional<Tla_MaskType>:$mask);
+                       Optional<Tla_MaskSSAType>:$mask);
   let results = (outs Tla_VectorSSAType:$result);
   let assemblyFormat = [{
     $source `,` $trait (`mask` $mask^)? attr-dict `:`
     qualified(type($source)) (`mask` qualified(type($mask))^)? `->` qualified(type($result))
   }];
+  let hasVerifier = 1;
 }
 
 def Tla_WhereOp : Tla_Op<"where", [Pure]> {
@@ -1133,7 +1138,7 @@ def Tla_WhereOp : Tla_Op<"where", [Pure]> {
     result holds the corresponding lane of ``x`` where the mask is
     active and ``y`` elsewhere. ``x`` and ``y`` must share the same VectorSSA type.
   }];
-  let arguments = (ins Tla_MaskType:$mask, Tla_VectorSSAType:$x, Tla_VectorSSAType:$y);
+  let arguments = (ins Tla_MaskSSAType:$mask, Tla_VectorSSAType:$x, Tla_VectorSSAType:$y);
   let results = (outs Tla_VectorSSAType:$result);
   let assemblyFormat = [{
     $mask `,` $x `,` $y attr-dict `:`
@@ -1151,7 +1156,7 @@ class Tla_VectorScalarBinaryOp<string mnemonic, string opSummary, string opDescr
     lanes are computed; masked-out lanes are undefined/zeroed.
   }];
   let arguments = (ins Tla_VectorSSAType:$lhs, Tla_ScalarValueType:$rhs,
-                       Optional<Tla_MaskType>:$mask);
+                       Optional<Tla_MaskSSAType>:$mask);
   let results = (outs Tla_VectorSSAType:$result);
   let assemblyFormat = [{
     $lhs `,` $rhs (`mask` $mask^)? attr-dict `:`
@@ -1189,7 +1194,7 @@ def Tla_ReduceOp : Tla_Op<"reduce", [Pure]> {
   let description = [{
     Reduce a register-resident VectorSSA value to a one-lane VectorSSA value.
   }];
-  let arguments = (ins Tla_VectorSSAType:$operand, Optional<Tla_MaskType>:$mask,
+  let arguments = (ins Tla_VectorSSAType:$operand, Optional<Tla_MaskSSAType>:$mask,
                        StrAttr:$kind);
   let results = (outs Tla_VectorSSAType:$result);
   let assemblyFormat = [{
@@ -1230,7 +1235,7 @@ class Tla_VectorUnaryOp<string mnemonic, string opSummary, string opDescription>
     undefined/zeroed.
   }];
   let arguments = (ins Tla_VectorSSAType:$operand,
-                       Optional<Tla_MaskType>:$mask);
+                       Optional<Tla_MaskSSAType>:$mask);
   let results = (outs Tla_VectorSSAType:$result);
   let assemblyFormat = [{
     $operand (`mask` $mask^)? attr-dict `:`
