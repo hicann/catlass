@@ -144,6 +144,95 @@ def test_load_brc_b32_emits_tlair(compiler_tlair: Any) -> None:
 
 
 @tla.kernel
+def load_dintlv_b32_kernel(
+    src: tla.Tensor,
+    dst0: tla.Tensor,
+    dst1: tla.Tensor,
+) -> None:
+    src_tile = tla.tile_view(src, tla.make_shape(128), tla.make_coord(0))
+    dst0_tile = tla.tile_view(dst0, tla.make_shape(64), tla.make_coord(0))
+    dst1_tile = tla.tile_view(dst1, tla.make_shape(64), tla.make_coord(0))
+    with tla.vector():
+        with tla.vec.func(mode="simd"):
+            v0, v1 = src_tile.load(
+                NormalLoadParams(load_dist=LoadDist.DIST_DINTLV_B32)
+            )
+            dst0_tile.store(v0)
+            dst1_tile.store(v1)
+
+
+def test_load_dintlv_b32_emits_tlair(compiler_tlair: Any) -> None:
+    mlir = compiler_tlair(
+        load_dintlv_b32_kernel,
+        type_args=(
+            _ub_tensor(extent=128),
+            _ub_tensor(),
+            _ub_tensor(),
+        ),
+    )
+
+    assert "#tla.load_dist<dintlv_b32>" in mlir
+    load_lines = [line for line in mlir.splitlines() if "tla.load" in line]
+    assert len(load_lines) == 1
+    assert "->" in load_lines[0]
+    # Dual-destination: two result types after ->
+    assert load_lines[0].count("!") >= 3
+
+
+@tla.kernel
+def load_dintlv_b32_wrong_dtype_kernel(src: tla.Tensor, dst: tla.Tensor) -> None:
+    src_tile = tla.tile_view(src, tla.make_shape(256), tla.make_coord(0))
+    dst_tile = tla.tile_view(dst, tla.make_shape(128), tla.make_coord(0))
+    with tla.vector():
+        with tla.vec.func(mode="simd"):
+            v0, _v1 = src_tile.load(
+                NormalLoadParams(load_dist=LoadDist.DIST_DINTLV_B32)
+            )
+            dst_tile.store(v0)
+
+
+def test_load_dintlv_b32_rejects_non_f32(compiler_tlair: Any) -> None:
+    with pytest.raises(Exception, match="f32|DIST_DINTLV_B32"):
+        compiler_tlair(
+            load_dintlv_b32_wrong_dtype_kernel,
+            type_args=(
+                _ub_tensor(dtype=tla.Float16, extent=256),
+                _ub_tensor(dtype=tla.Float16, extent=128),
+            ),
+        )
+
+
+@tla.kernel
+def load_dintlv_b32_i32_kernel(
+    src: tla.Tensor,
+    dst0: tla.Tensor,
+    dst1: tla.Tensor,
+) -> None:
+    src_tile = tla.tile_view(src, tla.make_shape(128), tla.make_coord(0))
+    dst0_tile = tla.tile_view(dst0, tla.make_shape(64), tla.make_coord(0))
+    dst1_tile = tla.tile_view(dst1, tla.make_shape(64), tla.make_coord(0))
+    with tla.vector():
+        with tla.vec.func(mode="simd"):
+            v0, v1 = src_tile.load(
+                NormalLoadParams(load_dist=LoadDist.DIST_DINTLV_B32)
+            )
+            dst0_tile.store(v0)
+            dst1_tile.store(v1)
+
+
+def test_load_dintlv_b32_rejects_i32(compiler_tlair: Any) -> None:
+    with pytest.raises(Exception, match="f32|DIST_DINTLV_B32"):
+        compiler_tlair(
+            load_dintlv_b32_i32_kernel,
+            type_args=(
+                _ub_tensor(dtype=tla.Int32, extent=128),
+                _ub_tensor(dtype=tla.Int32, extent=64),
+                _ub_tensor(dtype=tla.Int32, extent=64),
+            ),
+        )
+
+
+@tla.kernel
 def load_post_mode_update_kernel(src: tla.Tensor, dst: tla.Tensor) -> None:
     src_tile = tla.tile_view(src, tla.make_shape(64), tla.make_coord(0))
     dst_tile = tla.tile_view(dst, tla.make_shape(64), tla.make_coord(0))

@@ -159,7 +159,12 @@ class _Tensor(TensorABC):
         *,
         loc: mlir_ir.Location | None = None,
     ) -> Any:
-        """Load this tensor tile into vector SSA inside a tla.vec.func region."""
+        """Load this tensor tile into vector SSA inside a tla.vec.func region.
+
+        Single-destination modes (``DIST_NORM``, ``DIST_BRC_B32``, unalign) return
+        one ``VectorSSA``. Dual-destination ``DIST_DINTLV_B32`` returns a
+        ``(VectorSSA, VectorSSA)`` pair (even/odd b32 elements; f32 only).
+        """
         from ..core_api import (
             VectorSSA,
             _as_value,
@@ -196,6 +201,11 @@ class _Tensor(TensorABC):
                 f"currently unsupported is_pre {params.is_pre}"
             )
 
+        is_dintlv = (
+            isinstance(params, NormalLoadParams)
+            and params.load_dist == LoadDist.DIST_DINTLV_B32
+        )
+
         load_kwargs: dict[str, Any] = {"loc": loc}
         if isinstance(params, UnalignLoadParams):
             load_kwargs["unaligned_ub_access"] = True
@@ -208,14 +218,35 @@ class _Tensor(TensorABC):
 
         source = _as_value(self)
         source_desc = _tla_tensor_type_for_mlir_value(source)
-        result_desc = _vector_ssa_type_from_tensor_descriptor(source_desc)
-        if (
+        if is_dintlv:
+            # AscendNPU-IR lowers DINTLV_B32 only to vldsx2.v64f32; reject
+            # i32/u32 (and other dtypes) at the frontend until IR dispatches.
+            elem = str(source_desc.element_type).strip().lower()
+            if elem != "f32":
+                raise TlaLoweringError(
+                    "DIST_DINTLV_B32 currently requires f32 element type "
+                    f"(got {source_desc.element_type})"
+                )
+            # Dual-destination load writes two full VL registers (even/odd).
+            # Source tile is typically 2*VL elements; do not derive result
+            # VectorSSA lanes from the source origin_shape.
+            result_desc = _full_vector_ssa_descriptor(source_desc.element_type)
+        elif (
             isinstance(params, NormalLoadParams)
             and params.load_dist == LoadDist.DIST_BRC_B32
         ):
             result_desc = _full_vector_ssa_descriptor(source_desc.element_type)
+        else:
+            result_desc = _vector_ssa_type_from_tensor_descriptor(source_desc)
 
-        result = _tla_ops_gen.load(_coerce_type(result_desc), source, **load_kwargs)
+        result_type = _coerce_type(result_desc)
+        if is_dintlv:
+            results = _tla_ops_gen.load(
+                result_type, result_type, source, **load_kwargs
+            )
+            return tuple(VectorSSA(result) for result in results)
+
+        result = _tla_ops_gen.load(result_type, None, source, **load_kwargs)
         return VectorSSA(result)
 
     @dsl_user_op

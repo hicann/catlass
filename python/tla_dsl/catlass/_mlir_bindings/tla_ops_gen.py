@@ -1268,7 +1268,7 @@ class LoadOp(_ods_ir.OpView):
 
   _ODS_REGIONS = (0, True)
 
-  def __init__(self, result, source, *, load_dist=None, unaligned_ub_access=None, loc=None, ip=None):
+  def __init__(self, result, result2, source, *, load_dist=None, unaligned_ub_access=None, loc=None, ip=None):
     operands = []
     results = []
     attributes = {}
@@ -1282,6 +1282,7 @@ class LoadOp(_ods_ir.OpView):
     if bool(unaligned_ub_access): attributes["unaligned_ub_access"] = _ods_ir.UnitAttr.get(
       _ods_get_default_loc_context(loc))
     results.append(result)
+    if result2 is not None: results.append(result2)
     _ods_successors = None
     super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
 
@@ -1325,8 +1326,12 @@ class LoadOp(_ods_ir.OpView):
   def result(self):
     return self.operation.results[0]
 
-def load(result, source, *, load_dist=None, unaligned_ub_access=None, loc=None, ip=None) -> _ods_ir.Value:
-  return _get_op_result_or_op_results(LoadOp(result=result, source=source, load_dist=load_dist, unaligned_ub_access=unaligned_ub_access, loc=loc, ip=ip))
+  @builtins.property
+  def result2(self):
+    return None if len(self.operation.results) < 2 else self.operation.results[1]
+
+def load(result, result2, source, *, load_dist=None, unaligned_ub_access=None, loc=None, ip=None) -> _Sequence[_ods_ir.Value]:
+  return _get_op_result_or_op_results(LoadOp(result=result, result2=result2, source=source, load_dist=load_dist, unaligned_ub_access=unaligned_ub_access, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
 class LocalMemBarOp(_ods_ir.OpView):

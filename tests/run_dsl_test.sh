@@ -22,7 +22,7 @@
 #
 # Toolchain paths (env overrides first; directory-layout fallbacks last):
 #   CANN:             ASCEND_HOME_PATH (source set_env.sh if not already in env)
-#                     → WORKSPACE_ROOT/Ascend/9.1.0-beta.1/ascend-toolkit/set_env.sh
+#                     → WORKSPACE_ROOT/Ascend/9.1.0-beta.3/ascend-toolkit/set_env.sh
 #   AscendNPU-IR: TLA_DSL_PREBUILT_ASCENDNPU_IR
 #                     → TLA_DSL_ASCENDNPU_IR_ROOT
 #                     → WORKSPACE_ROOT/AscendNPU-IR
@@ -50,7 +50,7 @@ _resolve_cann_set_env_sh() {
         printf '%s\n' "${ASCEND_HOME_PATH}/set_env.sh"
         return 0
     fi
-    local fallback="${WORKSPACE_ROOT}/Ascend/9.1.0-beta.1/ascend-toolkit/set_env.sh"
+    local fallback="${WORKSPACE_ROOT}/Ascend/9.1.0-beta.3/ascend-toolkit/set_env.sh"
     if [[ -f "${fallback}" ]]; then
         printf '%s\n' "${fallback}"
         return 0
@@ -91,6 +91,7 @@ COMPARE_MASK_OPS=(
 UNARY_OPS_REL="examples/end_to_end/vector_ops/unary_ops.py"
 ARANGE_OP_REL="examples/end_to_end/vector_ops/arange_op.py"
 INTERLEAVE_OP_REL="examples/end_to_end/vector_ops/interleave_op.py"
+LOAD_DINTLV_OP_REL="examples/end_to_end/vector_ops/load_dintlv_op.py"
 SQUEEZE_OP_REL="examples/end_to_end/vector_ops/squeeze_op.py"
 REGISTER_CONTROL_FLOW_REL="examples/end_to_end/vector_ops/register_control_flow.py"
 SCALAR_INDEX_CONTROL_FLOW_REL="examples/end_to_end/tensor_index/scalar_index_control_flow.py"
@@ -123,6 +124,7 @@ Run end-to-end validation for:
   - unary_ops (unary_ops.py <op> --run --all-dtypes for exp/log/sqrt/abs/neg/masked_unary/masked_abs/masked_neg)
   - arange_op (arange_op.py [increase/decrease] --run --all-dtypes)
   - interleave_op (interleave_op.py interleave/deinterleave --run --all-dtypes)
+  - load_dintlv_op (load_dintlv_op.py dintlv_b32 --run --all-dtypes; f32 only)
   - squeeze_op (squeeze_op.py squeeze --run --all-dtypes)
   - register_control_flow (register_control_flow.py register_carriers --run:
     mixed VectorSSA/MaskSSA scf.for carriers and masked store)
@@ -149,7 +151,7 @@ Paths (auto from script location):
 Toolchain (env first, layout fallback last):
   ASCEND_HOME_PATH               current: ${ASCEND_HOME_PATH:-<unset>}
     resolve: ASCEND_HOME_PATH/set_env.sh
-             → WORKSPACE_ROOT/Ascend/9.1.0-beta.1/ascend-toolkit/set_env.sh
+             → WORKSPACE_ROOT/Ascend/9.1.0-beta.3/ascend-toolkit/set_env.sh
     note: sourcing CANN set_env.sh sets ASCEND_HOME_PATH automatically
   TLA_DSL_PREBUILT_ASCENDNPU_IR  current: ${TLA_DSL_PREBUILT_ASCENDNPU_IR}
   TLA_DSL_ASCENDNPU_IR_ROOT      current: ${TLA_DSL_ASCENDNPU_IR_ROOT}
@@ -287,7 +289,7 @@ if ! _cann_set_env_sh="$(_resolve_cann_set_env_sh)"; then
     echo "error: CANN set_env.sh not found." >&2
     echo "       Set ASCEND_HOME_PATH to your CANN toolkit root (with set_env.sh)," >&2
     echo "       or source CANN set_env.sh before running this script," >&2
-    echo "       or place CANN at ${WORKSPACE_ROOT}/Ascend/9.1.0-beta.1/ascend-toolkit/set_env.sh" >&2
+    echo "       or place CANN at ${WORKSPACE_ROOT}/Ascend/9.1.0-beta.3/ascend-toolkit/set_env.sh" >&2
     exit 1
 fi
 echo "==> Sourcing CANN: ${_cann_set_env_sh}"
@@ -567,6 +569,16 @@ _run_deinterleave_op_case() {
 }
 
 _run_deinterleave_op_case
+
+_run_load_dintlv_op_case() {
+    echo "==> Running load_dintlv_op validation [dintlv_b32 f32]: dintlv_b32 --run --all-dtypes --device ${DEVICE_ID}"
+    (
+        cd "${TLA_DSL_DIR}"
+        python "${LOAD_DINTLV_OP_REL}" dintlv_b32 --run --all-dtypes --device "${DEVICE_ID}"
+    )
+}
+
+_run_load_dintlv_op_case
 
 _run_squeeze_op_case() {
     echo "==> Running squeeze_op validation [squeeze all dtypes]: squeeze --run --all-dtypes --device ${DEVICE_ID}"

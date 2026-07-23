@@ -274,15 +274,19 @@ def Tla_L0C2UBModeAttr : Tla_EnumAttr<"L0C2UBMode", "l0c2ub_mode"> {
 // LoadDist Enum Attr
 def Tla_LoadDist_Norm : I32EnumAttrCase<"norm", 0>;
 def Tla_LoadDist_BrcB32 : I32EnumAttrCase<"brc_b32", 1>;
+def Tla_LoadDist_DintlvB32 : I32EnumAttrCase<"dintlv_b32", 2>;
 def Tla_LoadDistEnum : Tla_I32Enum<"LoadDist", "Load distribution for tla.load.", [
   Tla_LoadDist_Norm,
-  Tla_LoadDist_BrcB32
+  Tla_LoadDist_BrcB32,
+  Tla_LoadDist_DintlvB32
 ]>;
 def Tla_LoadDistAttr : Tla_EnumAttr<"LoadDist", "load_dist"> {
   let parameters = (ins EnumParameter<Tla_LoadDistEnum>:$load_dist);
   let assemblyFormat = "`<` params `>`";
   let description = [{
     Broadcast/load distribution pattern for tla.load.
+    ``dintlv_b32`` is dual-destination de-interleave load (even/odd b32
+    elements into two vector registers); requires a second result.
   }];
 }
 
@@ -617,13 +621,17 @@ def Tla_LoadOp : Tla_Op<"load", []> {
     Load a tensor tile into vector SSA. Must be nested inside a ``tla.vec.func``
     region. When ``unaligned_ub_access`` is set, lowers to ``ave.hir.vload`` with
     unaligned UB access (``vldas``/``vldus`` inserted by the HIVMAVE pipeline).
+    Dual-destination ``dintlv_b32`` produces a second result (even/odd b32
+    elements), lowering to ``ave.hir.vload <DINTLV_B32>``.
   }];
   let arguments = (ins Tla_TensorType:$source,
                        OptionalAttr<Tla_LoadDistAttr>:$load_dist,
                        OptionalAttr<UnitAttr>:$unaligned_ub_access);
-  let results = (outs Tla_VectorSSAType:$result);
+  let results = (outs Tla_VectorSSAType:$result,
+                      Optional<Tla_VectorSSAType>:$result2);
   let assemblyFormat = [{
     $source attr-dict `:` type($source) `->` qualified(type($result))
+    ( `,` qualified(type($result2))^)?
   }];
   let hasVerifier = 1;
 }

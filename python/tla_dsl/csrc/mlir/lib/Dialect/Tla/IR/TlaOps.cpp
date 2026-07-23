@@ -209,7 +209,6 @@ static mlir::LogicalResult verifyMaskMatchesVector(mlir::Operation *op,
     return mlir::success();                                                    \
   }
 
-TLA_VERIFY_IN_VEC_FUNC(LoadOp)
 TLA_VERIFY_IN_VEC_FUNC(FullOp)
 
 #undef TLA_VERIFY_IN_VEC_FUNC
@@ -320,6 +319,25 @@ mlir::LogicalResult ReduceOp::verify() {
     return emitOpError("must be nested inside a tla.vec.func region");
   return verifyMaskMatchesVector(getOperation(), getMask(),
                                  getOperand().getType());
+}
+
+mlir::LogicalResult LoadOp::verify() {
+  if (!hasEnclosingRegion<VecFuncOp>(getOperation()))
+    return emitOpError("must be nested inside a tla.vec.func region");
+
+  bool isDintlv = false;
+  if (auto loadDistAttr = getLoadDist())
+    isDintlv = loadDistAttr->getLoadDist() == ::LoadDist::dintlv_b32;
+
+  if (isDintlv) {
+    if (!getResult2())
+      return emitOpError(
+          "load_dist dintlv_b32 requires a second result (dual-destination load)");
+  } else if (getResult2()) {
+    return emitOpError(
+        "second result is only valid with load_dist dintlv_b32");
+  }
+  return mlir::success();
 }
 
 mlir::LogicalResult BitwiseNotOp::verify() {

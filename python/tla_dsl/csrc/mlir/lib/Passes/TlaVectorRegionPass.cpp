@@ -42,16 +42,32 @@ static hivmave::LoadDist mapTlaLoadDistToAve(::LoadDist dist) {
     return hivmave::LoadDist::NORM;
   case ::LoadDist::brc_b32:
     return hivmave::LoadDist::BRC_B32;
+  case ::LoadDist::dintlv_b32:
+    return hivmave::LoadDist::DINTLV_B32;
   }
   llvm_unreachable("unsupported tla.load load_dist");
+}
+
+static bool isDualDestLoadDist(hivmave::LoadDist pattern) {
+  return pattern == hivmave::LoadDist::DINTLV_B8 ||
+         pattern == hivmave::LoadDist::DINTLV_B16 ||
+         pattern == hivmave::LoadDist::DINTLV_B32;
 }
 
 static hivmave::VFLoadOp createVFLoad(OpBuilder &b, Location loc, VectorType vecType,
                                       Value memref, Value index, hivmave::LoadDist pattern,
                                       bool unaligned) {
-  auto load = b.create<hivmave::VFLoadOp>(loc, vecType, memref, ValueRange{index});
-  if (pattern != hivmave::LoadDist::NORM)
-    load.setPattern(pattern);
+  // Always pass ``pattern`` at create time. Dual-destination dists need two
+  // result types up front (AVE's convenience builder only emits a single NORM
+  // result), and single-destination non-NORM (e.g. BRC_B32) can use the same
+  // pattern-in-create overload instead of create-then-setPattern.
+  SmallVector<Type, 2> resultTypes;
+  resultTypes.push_back(vecType);
+  if (isDualDestLoadDist(pattern))
+    resultTypes.push_back(vecType);
+
+  auto load = b.create<hivmave::VFLoadOp>(loc, resultTypes, pattern, memref,
+                                          ValueRange{index});
   if (unaligned)
     load->setAttr(hivmave::UnalignedAttr::name,
                   hivmave::UnalignedAttr::get(b.getContext()));
@@ -904,10 +920,20 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
     hivmave::LoadDist pattern = hivmave::LoadDist::NORM;
     if (auto loadDistAttr = loadOp.getLoadDist())
       pattern = mapTlaLoadDistToAve(loadDistAttr->getLoadDist());
-    valueMap[loadOp.getResult()] =
-        createVFLoad(b, loc, opCtx->vecType, source, zero, pattern,
-                     loadOp.getUnalignedUbAccess().value_or(false))
-            .getRes();
+    bool dual = isDualDestLoadDist(pattern);
+    if (dual != static_cast<bool>(loadOp.getResult2()))
+      return loadOp.emitError(
+                 "dintlv load_dist requires exactly two results; other "
+                 "load_dist values require one"),
+             failure();
+    // DINTLV_* still takes a VL-wide tile view (same as AVE ProcessVsstb /
+    // HIVM2VLLoadOpLowering): the distribution pattern reads 2*VL from that
+    // base address. Do not widen the memref to 2*VL — that breaks hivmc ABI.
+    auto vfLoad = createVFLoad(b, loc, opCtx->vecType, source, zero, pattern,
+                               loadOp.getUnalignedUbAccess().value_or(false));
+    valueMap[loadOp.getResult()] = vfLoad.getRes();
+    if (dual)
+      valueMap[loadOp.getResult2()] = vfLoad.getRes1();
     return success();
   }
 
@@ -1897,8 +1923,11 @@ public:
     // Validate the graph: every compute operand and store source must come from
     // a tla.load result or a prior compute result inside this region.
     DenseSet<Value> producedValues;
-    for (::tla::LoadOp load : loads)
+    for (::tla::LoadOp load : loads) {
       producedValues.insert(load.getResult());
+      if (Value result2 = load.getResult2())
+        producedValues.insert(result2);
+    }
     for (::tla::FullOp full : fulls)
       producedValues.insert(full.getResult());
     for (::tla::CreateMaskOp createMask : createMasks)
