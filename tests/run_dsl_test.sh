@@ -388,6 +388,7 @@ _run_basic_mmad_case "default MNK"
 _run_basic_mmad_case "m=1 n=2 k=3" --m 1 --n 2 --k 3
 _run_basic_mmad_case "mutex mode" --use-mutex
 _run_basic_mmad_case "mutex with mode" --use-mutex-with
+_run_basic_mmad_case "atomic add" --use-atomic-add
 
 _run_basic_mmad_ptr_case() {
     echo "==> Running basic_mmad_ptr validation [ptr + offset -> make_tensor]: --run --device ${DEVICE_ID}"
@@ -412,6 +413,7 @@ _run_basic_vadd_case() {
 _run_basic_vadd_case "all dtypes"
 _run_basic_vadd_case "mutex mode" --use-mutex
 _run_basic_vadd_case "mutex with mode" --use-mutex-with
+_run_basic_vadd_case "enable atomic add" --use-atomic-add
 
 _run_basic_mixed_case() {
     echo "==> Running basic_mixed validation [fixed shape/dtypes]: --run --device ${DEVICE_ID}"

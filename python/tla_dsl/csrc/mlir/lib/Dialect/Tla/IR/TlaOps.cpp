@@ -510,6 +510,23 @@ mlir::LogicalResult CopyOp::verify() {
   if (vectorRoute && !hasEnclosingRegion<VectorOp>(getOperation()))
     return emitOpError(
         "copy between GM/UB/L1 must be nested inside a tla.vector region");
+
+  // Validate atomic_mode attribute when present.
+  auto atomicModeAttr = getAtomicModeAttr();
+  if (atomicModeAttr && atomicModeAttr.getAtomicMode() != AtomicMode::none) {
+    if (atomicModeAttr.getAtomicMode() != AtomicMode::add)
+      return emitOpError("unsupported atomic_mode; currently only 'add' is supported");
+
+    if (dst != AddressSpace::gm)
+      return emitOpError("atomic operation requires dst to be in GM address space");
+
+    auto elemType = dstTy.getPtr().getPointee();
+    if (!elemType.isF32() && !elemType.isF16() && !elemType.isBF16() &&
+        !elemType.isInteger(32) && !elemType.isInteger(16) && !elemType.isInteger(8))
+      return emitOpError("atomic operation requires dst element type to be one of "
+                         "f32, f16, bf16, i32, i16, i8");
+  }
+
   return mlir::success();
 }
 

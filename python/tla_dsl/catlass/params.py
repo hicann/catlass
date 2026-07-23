@@ -22,6 +22,17 @@ class L0C2UBMode(enum.IntEnum):
     def __str__(self):
         return self.name  # "NO_SPLIT_VEC_0"/..
 
+class AtomicMode(enum.Enum):
+    """Atomic operation mode"""
+    
+    NONE = "none"        # No atomic operation 
+    ADD = "add"          # Set atomic add
+
+    def __str__(self) -> str:
+        return self.value
+
+
+@dataclass
 class CopyParams:
     """Marker annotation for base copy params. """
     pass
@@ -91,6 +102,17 @@ class UnalignLoadParams(LoadParams):
 
 
 @dataclass
+class CopyUbToGmParams(CopyParams):
+    atomic_mode: AtomicMode = AtomicMode.NONE
+
+    def _validate(self):
+        VALID_ATOMIC_MODE = (AtomicMode.NONE, AtomicMode.ADD)
+        cls_name = type(self).__name__
+        if self.atomic_mode not in VALID_ATOMIC_MODE:
+            raise ValueError(f"{cls_name}.atomic_mode must be one of {VALID_ATOMIC_MODE}")
+
+
+@dataclass
 class CopyL0C2DstParams(CopyParams):
     unit_flag: int = 0
     relu_enable: bool = False
@@ -98,11 +120,13 @@ class CopyL0C2DstParams(CopyParams):
     quant_scale: float | None = None
     quant_tensor: TlaTensor | None = None
     l0c2ub_mode: L0C2UBMode = L0C2UBMode.NO_SPLIT_VEC_0
+    atomic_mode: AtomicMode = AtomicMode.NONE
 
     def _validate(self):
         from .core_api import _category
         from .execution_lowering import TlaLoweringError
         VALID_UNIT_FLAG = (0b00, 0b11)
+        VALID_ATOMIC_MODE = (AtomicMode.NONE, AtomicMode.ADD)
         cls_name = type(self).__name__
         if not isinstance(self.unit_flag, int):
             raise TlaLoweringError(f"{cls_name}.unit_flag must be a compile-time int")
@@ -128,6 +152,8 @@ class CopyL0C2DstParams(CopyParams):
                 raise TlaLoweringError(
                     f"{cls_name}.quant_tensor must be a tensor, got {type(self.quant_tensor).__name__}"
                 )
+        if self.atomic_mode not in VALID_ATOMIC_MODE:
+            raise ValueError(f"{cls_name}.atomic_mode must be one of {VALID_ATOMIC_MODE}")
 
 
 # ---------------------------------------------------------------------------

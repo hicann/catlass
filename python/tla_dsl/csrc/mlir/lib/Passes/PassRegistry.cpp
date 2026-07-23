@@ -5,6 +5,7 @@
 #include "bishengir/Conversion/HIVMAVEToStandard/HIVMAVEToStandard.h"
 #include "bishengir/Conversion/HIVMToStandard/HIVMToStandard.h"
 #include "bishengir/Dialect/HIVMAVE/Transforms/Passes.h"
+#include "bishengir/Dialect/HIVM/Transforms/Passes.h"
 
 #include "mlir/Dialect/MemRef/Transforms/Passes.h"
 #include "mlir/Pass/PassRegistry.h"
@@ -67,6 +68,10 @@ void buildTlaPipeline(OpPassManager &pm) {
   // been lowered. In particular, vsub followed by vexp becomes vexpdif on
   // Ascend 950 targets before AVE intrinsic conversion consumes the ops.
   pm.nest<func::FuncOp>().addPass(hivmave::createCombineAVEOPsPass());
+  // Decompose HIVM ops which are not natively supported by hivmc.
+  // For example, ``SetAtomicOp`` is decomposed into a sequence of
+  // ``set_ctrl`` operations.
+  pm.nest<func::FuncOp>().addPass(hivm::createHIVMDecomposeOpPass());
   mlir::ConvertHIVMToStandardOptions hivmToStdOptions;
   pm.addPass(mlir::createConvertHIVMToStandardPass(hivmToStdOptions));
   pm.addPass(mlir::createConvertHIVMAVEToStandardPass());

@@ -309,6 +309,32 @@ def Tla_RegSlotEnum : Tla_I32Enum<"RegSlot", "Packed-register position for a nar
   Tla_RegSlot_Three
 ]>;
 
+// ---------------------------------------------------------------------------
+// AtomicMode: the atomic mode passing to ``tla.params.CopyParams``
+// front-end (catlass/params.py). The enum keywords are the MLIR-asm tokens.
+// ---------------------------------------------------------------------------
+
+// AtomicMode: None, Add
+
+def Tla_AtomicMode_None : I32EnumAttrCase<"none", 0>;
+def Tla_AtomicMode_Add : I32EnumAttrCase<"add", 1>;
+
+def Tla_AtomicMode_Enum : Tla_I32Enum<"AtomicMode", "Atomic type", [
+  Tla_AtomicMode_None,
+  Tla_AtomicMode_Add
+]>;
+
+def Tla_AtomicModeAttr : Tla_EnumAttr<"AtomicMode", "atomic_mode"> {
+  let parameters = (ins EnumParameter<Tla_AtomicMode_Enum>:$atomic_mode);
+  let assemblyFormat = "`<` params `>`";
+  let description = [{
+    Atomic operation kind for tla.copy
+
+    The supported atomic mode listed below:
+      - ADD
+  }];
+}
+
 // SatMode: overflow behaviour of the cast (AVE `sat` BoolAttr).
 def Tla_SatMode_Unknown : I32EnumAttrCase<"unknown", 0>;
 def Tla_SatMode_Sat : I32EnumAttrCase<"sat", 1>;
@@ -534,10 +560,13 @@ def Tla_CopyOp : Tla_Op<"copy", []> {
     copies (GM->L1, L1->L0A, L1->L0B, L0C->GM, L0C->UB, L1->UB) must be nested
     inside a ``tla.cube`` region; vector staging copies (GM->UB, UB->GM, UB->L1)
     must be nested inside a ``tla.vector`` region.
+
+    The atomic operation is enabled if ``atomic_mode`` provided, and currently only ``AtomicMode.ADD`` is supported, which is lowered to HIVM ``SetAtomicOp``
   }];
   let arguments = (ins
     Tla_TensorType:$dst, Tla_TensorType:$src,
-    Optional<AnyTypeOf<[Tla_CopyL0C2DstParamsType]>>:$params);
+    Optional<AnyTypeOf<[Tla_CopyL0C2DstParamsType]>>:$params,
+    OptionalAttr<Tla_AtomicModeAttr>:$atomic_mode);
   let assemblyFormat = [{
     $dst `,` $src (`,` $params^)? attr-dict `:` qualified(type($dst)) `,` qualified(type($src)) (`,` qualified(type($params))^)?
   }];

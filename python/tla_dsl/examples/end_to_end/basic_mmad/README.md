@@ -6,6 +6,7 @@
 |------|------|
 | **`basic_matmul.py`** | 主入口：可配置 GM **布局**与 **元素类型**，多 block、K 维分块、L1/L0 双缓冲；**`--run`** 用 **torch + torch_npu** 上板并校验；**`--build-only`** 仅编译；**`--dump-tlair`** 仅导出 TLA MLIR。 |
 | **`basic_mmad_kernels.py`** | 设备内核（`@tla.kernel` 的 `basic_mmad_kernel`）及问题规模 `m/n/k`、分块常量。 |
+| **`basic_mmad_kernels_atomic_add.py`** | 每个 K tile 独立计算后立刻搬移，在 GM 上进行原子加，当前GM C和DTYPE_C均为f32，不支持 `sentinel` 设置。 |
 | **`basic_mmad_kernels_mutex.py`** | 使用显式 `mutex.lock/unlock` 的同步版本，可通过 `--use-mutex` 选择。 |
 | **`basic_mmad_kernels_mutex_with.py`** | 使用 `with tla.mutex_guard(...)` 的同步版本，可通过 `--use-mutex-with` 选择。 |
 
@@ -106,6 +107,10 @@ python examples/end_to_end/basic_mmad/basic_matmul.py --device 0
 python examples/end_to_end/basic_mmad/basic_matmul.py --run --device 0 \
   --layout-a row --layout-b col \
   --dtype-a f16 --dtype-b f16 --dtype-c f32
+
+python examples/end_to_end/basic_mmad/basic_matmul.py --run --device 0 \
+  --use-atomic-add --dtype-a f16 --dtype-b f16 --dtype-c f32 \
+  --force-recompile
 
 python examples/end_to_end/basic_mmad/basic_matmul.py --run --all-layouts --device 0
 python examples/end_to_end/basic_mmad/basic_matmul.py --run --all-mmad-dtypes --device 0

@@ -159,6 +159,20 @@ Attribute TlaDialect::parseAttribute(DialectAsmParser &parser, Type type) const 
     return ::tla::L0C2UBModeAttr::get(getContext(), *symbolized);
   }
 
+  if (attrTag == "atomic_mode") {
+    if (parser.parseLess())
+      return {};
+    StringRef modeKeyword;
+    if (parser.parseKeyword(&modeKeyword) || parser.parseGreater())
+      return {};
+    auto symbolized = ::symbolizeAtomicMode(modeKeyword);
+    if (!symbolized) {
+      parser.emitError(parser.getNameLoc()) << "invalid tla.atomic_mode value: " << modeKeyword;
+      return {};
+    }
+    return ::tla::AtomicModeAttr::get(getContext(), *symbolized);
+  }
+
   if (attrTag == "load_dist") {
     if (parser.parseLess())
       return {};

@@ -8,6 +8,7 @@ import catlass as tla
 from catlass.runtime import from_dlpack
 
 import basic_mmad_kernels as _kernels
+import basic_mmad_kernels_atomic_add as _kernels_atomic_add
 import basic_mmad_kernels_mutex as _kernels_mutex
 import basic_mmad_kernels_mutex_with as _kernels_mutex_with
 
@@ -104,13 +105,25 @@ def _apply_kernel_dtypes(dtype_a: ElemDType, dtype_b: ElemDType, dtype_c: ElemDT
         kernel_mod.DTYPE_B = dtype_b_tla
         kernel_mod.DTYPE_GM_C = dtype_c_tla
         kernel_mod.DTYPE_C = tla.Float32
+    
+    # For atomic add operation, set DTYPE_C and DTYPE_GM_C as same as ``f32``
+    # to avoid possible precison loss
+    _kernels_atomic_add.DTYPE_A = dtype_a_tla
+    _kernels_atomic_add.DTYPE_B = dtype_b_tla
+    _kernels_atomic_add.DTYPE_GM_C = tla.Float32
+    _kernels_atomic_add.DTYPE_C = tla.Float32
 
 
 def _apply_problem_size(m_val: int, n_val: int, k_val: int) -> None:
     global m, n, k
     if m_val <= 0 or n_val <= 0 or k_val <= 0:
         raise ValueError(f"m, n, k must be positive; got m={m_val}, n={n_val}, k={k_val}")
-    for kernel_mod in (_kernels, _kernels_mutex, _kernels_mutex_with):
+    for kernel_mod in (
+        _kernels,
+        _kernels_atomic_add,
+        _kernels_mutex,
+        _kernels_mutex_with,
+    ):
         kernel_mod.m = m_val
         kernel_mod.n = n_val
         kernel_mod.k = k_val
@@ -228,6 +241,10 @@ def _comparison_atol(dtype_c: ElemDType, args: argparse.Namespace) -> float:
     if dtype_c in ("f16", "bf16"):
         return max(float(args.atol), 5e-3)
     return float(args.atol)
+
+
+def _uses_atomic_add_kernel() -> bool:
+    return basic_mmad_kernel is _kernels_atomic_add.basic_mmad_kernel
 
 
 def _first_mismatch_torch(
@@ -417,6 +434,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "f16,f16,f32 | f16,f16,f16 | bf16,bf16,f32 | bf16,bf16,bf16 | f32,f32,f32. "
             "dtype-c is GM C element type (fp32 or narrowed fp16/bf16); L0C stays fp32 and "
             "tla.copy lowers to copy_cc_to_gm_row_major_float | _half | _bf16. "
+            "The atomic-add kernel requires fp32 GM C and accumulates K-tile partials in GM. "
             "GM row_major→L1 zN and GM column_major→L1 nZ only. Output C is GM row_major."
         )
     )
@@ -529,6 +547,14 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="use mutex_guard with-syntax instead of explicit mutex lock/unlock",
     )
+    parser.add_argument(
+        "--use-atomic-add",
+        action="store_true",
+        help=(
+            "Compute every K tile with a cleared L0C accumulator and atomically "
+            "accumulate it into fp32 GM C."
+        ),
+    )
     return parser
 
 
@@ -536,12 +562,20 @@ def main() -> int:
     global basic_mmad_kernel
 
     args = _build_parser().parse_args()
-    if args.use_mutex and args.use_mutex_with:
-        raise SystemExit("--use-mutex and --use-mutex-with are mutually exclusive.")
+    selected_variants = sum(
+        (args.use_mutex, args.use_mutex_with, args.use_atomic_add)
+    )
+    if selected_variants > 1:
+        raise SystemExit(
+            "--use-mutex, --use-mutex-with, and --use-atomic-add are mutually exclusive."
+        )
     if args.use_mutex:
         basic_mmad_kernel = _kernels_mutex.basic_mmad_kernel
-    if args.use_mutex_with:
+    elif args.use_mutex_with:
         basic_mmad_kernel = _kernels_mutex_with.basic_mmad_kernel
+    elif args.use_atomic_add:
+        basic_mmad_kernel = _kernels_atomic_add.basic_mmad_kernel
+
     _apply_problem_size(args.m, args.n, args.k)
     if not args.all_mmad_dtypes:
         _validate_mmad_dtype_triple(args.dtype_a, args.dtype_b, args.dtype_c)

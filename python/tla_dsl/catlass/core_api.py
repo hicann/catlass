@@ -64,7 +64,7 @@ from .types import (
     TlaTile,
     dtype_size_bytes,
 )
-from .params import CopyParams, CopyL0C2DstParams, QuantMode, L0C2UBMode, MemType
+from .params import CopyParams, CopyL0C2DstParams, QuantMode, L0C2UBMode, AtomicMode, MemType
 
 
 _PIPE_VALUES = {
@@ -3129,6 +3129,13 @@ def copy(dst: TileLike, src: TileLike, params: CopyParams | None = None, *, loc:
 
     Frontend policy is intentionally minimal: ``tla.copy`` accepts only tensor
     operands and leaves layout/route selection to lowering.
+
+    If ``atomic_mode`` set to ``AtomicMode.ADD``, the operation acts like:
+    ```plain
+    set_atomic_add();
+    copyOp();
+    set_atomic_none();
+    ```
     """
     _require_category("copy", "dst", dst, "tensor", 0)
     _require_category("copy", "src", src, "tensor", 1)
@@ -3190,7 +3197,26 @@ def copy(dst: TileLike, src: TileLike, params: CopyParams | None = None, *, loc:
     else:
         params_value = None
 
-    return _tla_ops_gen.copy(dst_value, src_value, params=params_value, loc=loc)
+    # Check if atomic mode enabled and acquire lowered atomic_mode_attr
+    atomic_mode_attr = None
+    atomic_mode = params.atomic_mode if params is not None else None
+    if atomic_mode is not None and atomic_mode != AtomicMode.NONE:
+        if atomic_mode != AtomicMode.ADD:
+            raise NotImplementedError(f"currently unsupported atomic mode {str(atomic_mode)}")
+
+        if _route is None:
+            raise TlaLoweringError(f"Atomic operation is enabled but the route does not exist")
+
+        if _route[1] != "gm":
+            raise TlaLoweringError(f"When atomic operation is enabled, the dst location should only be GM but got {_route[1]}")
+            
+        if dst.dtype not in ("f32", "f16", "i16", "i32", "i8", "bf16"):
+            raise TlaLoweringError(f"The supported atomic operation's data type includes f32, f16, i16, i32, i8, bf16, the data type {dst.dtype} is not supported")
+
+        ctx = loc.context if loc is not None else mlir_ir.Context.current
+        atomic_mode_attr = mlir_ir.Attribute.parse(f"#tla.atomic_mode<{atomic_mode.value}>", context=ctx)
+
+    return _tla_ops_gen.copy(dst_value, src_value, params=params_value, loc=loc, atomic_mode=atomic_mode_attr)
 
 
 @dsl_user_op

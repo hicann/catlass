@@ -167,6 +167,40 @@ def basic_vadd_mutex_with(mem_x: tla.Tensor, mem_y: tla.Tensor, mem_z: tla.Tenso
             tla.copy(z_gm, z_ub)
         tla.pipe_barrier(tla.pipes.ALL)
 
+@tla.kernel
+def basic_vadd_atomic_add(mem_x: tla.Tensor, mem_y: tla.Tensor, mem_z: tla.Tensor) -> None:
+    """This demo use one AIV to compute Z = X + Y, which is done by setting the atomic add operation."""
+    ub_loaded = tla.flag("ub_loaded", tla.arch.MTE2, tla.arch.MTE3)
+
+    x_gm = tla.tile_view(mem_x, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
+    y_gm = tla.tile_view(mem_y, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
+    z_gm = tla.tile_view(mem_z, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
+
+    x_ub_ptr = tla.allocate(VECTOR_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 256)
+    y_ub_ptr = tla.allocate(VECTOR_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 256)
+
+    x_ub = tla.make_tensor_like(x_ub_ptr, x_gm, tla.arch.RowMajor)
+    y_ub = tla.make_tensor_like(y_ub_ptr, y_gm, tla.arch.RowMajor)
+
+    with tla.vector():
+        # To avoid possible race condition since every 
+        # launched block sees the same GM tiles,
+        # Restrict this work to only one block.
+        if tla.arch.block_idx() == 0:
+            tla.copy(x_ub, x_gm)
+            tla.copy(y_ub, y_gm)
+
+            tla.set_flag(ub_loaded)
+            tla.wait_flag(ub_loaded)
+
+            # Z = X (plain copy, overwrite z on GM)
+            tla.copy(z_gm, x_ub)
+            tla.pipe_barrier(tla.pipes.MTE3)
+
+            tla.copy(z_gm, y_ub, tla.params.CopyUbToGmParams(atomic_mode=tla.params.AtomicMode.ADD))
+            tla.pipe_barrier(tla.pipes.MTE3)
+        tla.pipe_barrier(tla.pipes.ALL)
+
 
 def _dtype_config(dtype_name: str) -> tuple[type[Any], Any, float | int, int, int]:
     try:
@@ -246,6 +280,8 @@ def _select_kernel(args: argparse.Namespace) -> Any:
         return basic_vadd_mutex
     if getattr(args, "use_mutex_with", False):
         return basic_vadd_mutex_with
+    if getattr(args, "use_atomic_add", False):
+        return basic_vadd_atomic_add
     return basic_vadd
 
 
@@ -403,6 +439,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "--use-mutex-with",
         action="store_true",
         help="Use tla.mutex_guard with-syntax sync.",
+    )
+    sync.add_argument(
+        "--use-atomic-add",
+        action="store_true",
+        help="Use a block-0 plain X store followed by an atomic Y add.",
     )
     parser.add_argument("--dump-tlair", action="store_true")
     return parser

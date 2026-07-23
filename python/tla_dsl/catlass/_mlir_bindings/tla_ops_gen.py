@@ -592,7 +592,7 @@ class CopyOp(_ods_ir.OpView):
 
   _ODS_REGIONS = (0, True)
 
-  def __init__(self, dst, src, *, params=None, loc=None, ip=None):
+  def __init__(self, dst, src, *, params=None, atomic_mode=None, loc=None, ip=None):
     operands = []
     results = []
     attributes = {}
@@ -601,6 +601,10 @@ class CopyOp(_ods_ir.OpView):
     operands.append(_get_op_result_or_value(src))
     if params is not None: operands.append(_get_op_result_or_value(params))
     _ods_context = _ods_get_default_loc_context(loc)
+    if atomic_mode is not None: attributes["atomic_mode"] = (atomic_mode if (
+        isinstance(atomic_mode, _ods_ir.Attribute) or
+        not _ods_ir.AttrBuilder.contains('Tla_AtomicModeAttr')) else
+          _ods_ir.AttrBuilder.get('Tla_AtomicModeAttr')(atomic_mode, context=_ods_context))
     _ods_successors = None
     super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
 
@@ -616,8 +620,25 @@ class CopyOp(_ods_ir.OpView):
   def params(self):
     return None if len(self.operation.operands) < 3 else self.operation.operands[2]
 
-def copy(dst, src, *, params=None, loc=None, ip=None) -> _ods_ir.Operation:
-  return _get_op_result_or_op_results(CopyOp(dst=dst, src=src, params=params, loc=loc, ip=ip))
+  @builtins.property
+  def atomic_mode(self):
+    if "atomic_mode" not in self.operation.attributes:
+      return None
+    return self.operation.attributes["atomic_mode"]
+
+  @atomic_mode.setter
+  def atomic_mode(self, value):
+    if value is not None:
+      self.operation.attributes["atomic_mode"] = value
+    elif "atomic_mode" in self.operation.attributes:
+      del self.operation.attributes["atomic_mode"]
+
+  @atomic_mode.deleter
+  def atomic_mode(self):
+    del self.operation.attributes["atomic_mode"]
+
+def copy(dst, src, *, params=None, atomic_mode=None, loc=None, ip=None) -> _ods_ir.Operation:
+  return _get_op_result_or_op_results(CopyOp(dst=dst, src=src, params=params, atomic_mode=atomic_mode, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
 class CreateMaskOp(_ods_ir.OpView):

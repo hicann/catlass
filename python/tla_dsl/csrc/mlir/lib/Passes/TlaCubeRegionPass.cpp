@@ -2,6 +2,7 @@
 #include "PassesCommon.h"
 #include "PassesInternal.h"
 #include "Passes/TlaTensorToMemref.h"
+#include "bishengir/Dialect/HIVM/IR/HIVM.h"
 
 // tla-cube-region: lowers the cube (AIC) compute ops (tla.copy / tla.mmad) via
 // the shared !tla.tensor->memref lowering (TlaTensorMemrefLowering), then flattens
@@ -347,7 +348,27 @@ namespace {
         }
         auto callee =
             ::tla::getOrCreateRuntimeCall(op->getParentOfType<ModuleOp>(), calleeName, operandTypes);
+        
+        // Enclose `copy` with atomic add and atomic none 
+        auto atomicModeAttr = op->getAttrOfType<::tla::AtomicModeAttr>("atomic_mode");
+        Type elemType = cast<MemRefType>(dstDesc.base.getType()).getElementType();
+        bool _enable_atomic = atomicModeAttr && atomicModeAttr.getAtomicMode() != AtomicMode::none;
+        if (_enable_atomic) {
+          if (atomicModeAttr.getAtomicMode() != AtomicMode::add) {
+            op.emitError() << "currently only atomic add is supported";
+            return failure();
+          }
+          
+          auto modeAttr = hivm::AtomicKindAttr::get(rewriter.getContext(), hivm::AtomicKind::ADD);
+          rewriter.create<hivm::SetAtomicOp>(op.getLoc(), modeAttr,
+                                             mlir::TypeAttr::get(elemType));
+        }
         rewriter.create<func::CallOp>(op.getLoc(), callee, operands);
+        if (_enable_atomic) {
+          auto modeAttr = hivm::AtomicKindAttr::get(rewriter.getContext(), hivm::AtomicKind::NONE);
+          rewriter.create<hivm::SetAtomicOp>(op.getLoc(), modeAttr,
+                                             mlir::TypeAttr::get(elemType));
+        }
         toErase.push_back(op.getOperation());
         return success();
       }

@@ -2210,7 +2210,25 @@ public:
     operands.append(payload.begin(), payload.end());
     auto callee = ::tla::getOrCreateRuntimeCall(copyOp->getParentOfType<ModuleOp>(), calleeName,
                                                  operandTypes);
-    rewriter.create<func::CallOp>(copyOp.getLoc(), callee, operands);
+
+    // Enclose `copy` with atomic add and atomic none 
+    auto atomicModeAttr = copyOp->getAttrOfType<::tla::AtomicModeAttr>("atomic_mode");
+    Type dstType = cast<MemRefType>(dstDesc.base.getType()).getElementType();
+    bool _enable_atomic = atomicModeAttr && atomicModeAttr.getAtomicMode() != AtomicMode::none;
+    if (_enable_atomic) {
+      if (atomicModeAttr.getAtomicMode() != AtomicMode::add) {
+        copyOp.emitError() << "currently only atomic add is supported";
+        return failure();
+      }
+
+      auto modeAttr = hivm::AtomicKindAttr::get(rewriter.getContext(), hivm::AtomicKind::ADD);
+      rewriter.create<hivm::SetAtomicOp>(copyOp.getLoc(), modeAttr, mlir::TypeAttr::get(dstType));
+    }
+    rewriter.create<func::CallOp>(copyOp.getLoc(), callee, operands);                     
+    if (_enable_atomic) {
+      auto modeAttr = hivm::AtomicKindAttr::get(rewriter.getContext(), hivm::AtomicKind::NONE);
+      rewriter.create<hivm::SetAtomicOp>(copyOp.getLoc(), modeAttr, mlir::TypeAttr::get(dstType));
+    }
     rewriter.eraseOp(copyOp);
     return success();
   }
