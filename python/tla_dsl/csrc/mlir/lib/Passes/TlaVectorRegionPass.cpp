@@ -624,15 +624,7 @@ static FailureOr<Value> createVectorReductionResult(OpBuilder &b, Location loc,
   if (!explicitMask)
     return reduceOp.emitError("tla.reduce requires an explicit mask"), failure();
 
-  Value reducedVec =
-      b.create<hivmave::ReductionOp>(loc, vecType, *aveKind, operand, explicitMask).getResult();
-  // ave.hir.reduction preserves the input vector shape and places the reduced
-  // value in lane 0; TLA reductions expose that single valid lane as vector<1xT>.
-  auto resultType = VectorType::get({1}, elementType);
-  auto resultMaskType = VectorType::get({1}, b.getI1Type());
-  Value resultMask =
-      createAvePgeMask(b, loc, resultMaskType, hivmave::PgePattern::ALL).getRes();
-  return b.create<hivmave::VFBroadcastVectorOp>(loc, resultType, reducedVec, resultMask, true).getRes();
+  return b.create<hivmave::ReductionOp>(loc, vecType, *aveKind, operand, explicitMask).getResult();
 }
 
 static Value createVectorUnaryResult(OpBuilder &b, Location loc, VectorUnaryKind kind,
@@ -1227,7 +1219,12 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
   // The op's own dtype attr fixes the lane count (256 bytes / element size)
   // and hence the i1 mask width and the tail decrement.
   if (auto updateMaskOp = dyn_cast<::tla::UpdateMaskOp>(op)) {
-    Value trueShape = valueMap.lookup(updateMaskOp.getTrueShape());
+    // The true-shape operand may be a vec.func-external index constant (e.g.
+    // tla.update_mask(1) building a single-lane mask): such constants are not
+    // collected as helper arguments, so clone them inline like other scalar
+    // operands instead of a bare valueMap lookup (which would miss them).
+    Value trueShape =
+        lookupOrCloneScalarValue(b, updateMaskOp.getTrueShape(), valueMap);
     if (!trueShape)
       return failure();
     auto opCtx = deriveVecCtxForElement(updateMaskOp.getDtype());
