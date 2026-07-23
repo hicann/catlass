@@ -50,6 +50,7 @@ set(TLA_DSL_HIVM_REQUIRED_LIBS
     MLIRHIVMTransforms
     MLIRHIVMToStandard
     MLIRAVEDialect
+    MLIRHIVMAVETransforms
     MLIRAVEUtils
     MLIRHIVMAVEToAVEIntrin
     MLIRHIVMAVEToStandard

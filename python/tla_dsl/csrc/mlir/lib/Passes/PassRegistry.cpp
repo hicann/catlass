@@ -6,12 +6,24 @@
 #include "bishengir/Conversion/HIVMAVEToStandard/HIVMAVEToStandard.h"
 #include "bishengir/Conversion/HIVMToStandard/HIVMToStandard.h"
 #include "bishengir/Conversion/VectorToHIVMAVE/VectorToHIVMAVE.h"
+#include "bishengir/Dialect/HIVMAVE/Transforms/Passes.h"
 
 #include "mlir/Dialect/MemRef/Transforms/Passes.h"
+#include "mlir/Pass/PassRegistry.h"
+
+#include <memory>
 
 namespace tla {
 
 void registerTlaPasses() {
+  // Register the external pass arguments used by TlaCompile's
+  // --mlir-print-ir-before/after filters without pulling in every upstream pass.
+  mlir::registerPass([]() -> std::unique_ptr<mlir::Pass> {
+    return hivmave::createCombineAVEOPsPass();
+  });
+  mlir::registerPass([]() -> std::unique_ptr<mlir::Pass> {
+    return mlir::createConvertHIVMAVEToAVEIntrinPass();
+  });
   registerTlaLowerDebugPrintPass();
   registerTlaLowerFuncPass();
   registerTlaLowerScalarAccessPass();
@@ -55,6 +67,10 @@ void buildTlaPipeline(OpPassManager &pm) {
   pm.addPass(createCSEPass());
   pm.addPass(mlir::createVectorToHIVMAVEConversionPass());
   pm.nest<func::FuncOp>().addPass(mlir::createArithToHIVMAVEConversionPass());
+  // Fuse AVE instruction sequences after every TLA/vector/arith producer has
+  // been lowered. In particular, vsub followed by vexp becomes vexpdif on
+  // Ascend 950 targets before AVE intrinsic conversion consumes the ops.
+  pm.nest<func::FuncOp>().addPass(hivmave::createCombineAVEOPsPass());
   mlir::ConvertHIVMToStandardOptions hivmToStdOptions;
   pm.addPass(mlir::createConvertHIVMToStandardPass(hivmToStdOptions));
   pm.addPass(mlir::createConvertHIVMAVEToStandardPass());
