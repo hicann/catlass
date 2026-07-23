@@ -767,13 +767,6 @@ def kernel(fn: Callable[..., Any]) -> Any:
     return _kernel(fn)
 
 
-def ascendnpuir_kernel(filename: str) -> Any:
-    """Compat wrapper for the file-backed AscendNPU-IR kernel decorator."""
-
-    from .dsl import ascendnpuir_kernel as _ascendnpuir_kernel
-
-    return _ascendnpuir_kernel(filename)
-
 
 def __getattr__(name: str) -> Any:
     if name in _CORE_API_EXPORTS:
@@ -827,7 +820,6 @@ __all__ = [
     "initialize",
     "jit",
     "kernel",
-    "ascendnpuir_kernel",
     "pipes",
     "runtime_state",
     "utils",

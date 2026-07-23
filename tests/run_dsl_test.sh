@@ -18,6 +18,7 @@
 # interleave_op.py, squeeze_op.py).
 # python/tla_dsl/examples/end_to_end/tensor_index (scalar_index_control_flow.py,
 # scalar_kernel_arg.py).
+# python/tla_dsl/examples/end_to_end/debug_print (debug_print.py, debug_print_mixed.py).
 #
 # Toolchain paths (env overrides first; directory-layout fallbacks last):
 #   CANN:             ASCEND_HOME_PATH (source set_env.sh if not already in env)
@@ -93,6 +94,8 @@ INTERLEAVE_OP_REL="examples/end_to_end/vector_ops/interleave_op.py"
 SQUEEZE_OP_REL="examples/end_to_end/vector_ops/squeeze_op.py"
 SCALAR_INDEX_CONTROL_FLOW_REL="examples/end_to_end/tensor_index/scalar_index_control_flow.py"
 SCALAR_KERNEL_ARG_REL="examples/end_to_end/tensor_index/scalar_kernel_arg.py"
+DEBUG_PRINT_REL="examples/end_to_end/debug_print/debug_print.py"
+DEBUG_PRINT_MIXED_REL="examples/end_to_end/debug_print/debug_print_mixed.py"
 
 _ascendnpu_ir_dev_is_prebuilt() {
     local root="$1"
@@ -124,6 +127,8 @@ Run end-to-end validation for:
     loop/dynamic-if/constexpr-if, vec.func, AST Numeric / index-vs-Int32 compare)
   - scalar_kernel_arg (scalar_kernel_arg.py: host Numeric kernel args used in
     same-type scalar arithmetic)
+  - debug_print (i32/f32 scalar prints on AIV and AIC)
+  - debug_print_mixed (cube-only, vector-only, and combined scalar prints)
 Runs basic_mmad default MNK plus m=1, n=2, k=3.
 Activates conda env "${CONDA_ENV}", sources CANN set_env.sh, exports AscendNPU-IR MLIR/LLVM
 env, runs ./build.sh, then runs the test.
@@ -349,6 +354,14 @@ if [[ ! -f "${TLA_DSL_DIR}/${SQUEEZE_OP_REL}" ]]; then
 fi
 if [[ ! -f "${TLA_DSL_DIR}/${SCALAR_INDEX_CONTROL_FLOW_REL}" ]]; then
     echo "error: missing ${SCALAR_INDEX_CONTROL_FLOW_REL} under ${TLA_DSL_DIR}" >&2
+    exit 1
+fi
+if [[ ! -f "${TLA_DSL_DIR}/${DEBUG_PRINT_REL}" ]]; then
+    echo "error: missing ${DEBUG_PRINT_REL} under ${TLA_DSL_DIR}" >&2
+    exit 1
+fi
+if [[ ! -f "${TLA_DSL_DIR}/${DEBUG_PRINT_MIXED_REL}" ]]; then
+    echo "error: missing ${DEBUG_PRINT_MIXED_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
 fi
 
@@ -577,5 +590,55 @@ _run_scalar_kernel_arg_case() {
 }
 
 _run_scalar_kernel_arg_case
+_run_debug_print_case() {
+    local arch_scope="$1"
+    local dtype="$2"
+    local value="$3"
+    echo "==> Running debug_print validation [${arch_scope} ${dtype}]: --run --device ${DEVICE_ID} --arch-scope ${arch_scope} --dtype ${dtype} --value ${value}"
+    (
+        cd "${TLA_DSL_DIR}"
+        python "${DEBUG_PRINT_REL}" --run --device "${DEVICE_ID}" \
+            --arch-scope "${arch_scope}" --dtype "${dtype}" --value "${value}" \
+            --force-recompile
+    )
+}
+
+for _debug_arch_scope in aiv.c310 aic.c310; do
+    _run_debug_print_case "${_debug_arch_scope}" i32 -37
+    _run_debug_print_case "${_debug_arch_scope}" f32 1.25
+done
+
+_run_debug_print_expression_case() {
+    local arch_scope="$1"
+    local dtype="$2"
+    local lhs="$3"
+    local rhs="$4"
+    echo "==> Running computed debug_print validation [${arch_scope} ${dtype}]: ${lhs} + ${rhs}"
+    (
+        cd "${TLA_DSL_DIR}"
+        python "${DEBUG_PRINT_REL}" --run --device "${DEVICE_ID}" \
+            --arch-scope "${arch_scope}" --dtype "${dtype}" --value "${lhs}" \
+            --expression --rhs "${rhs}" --force-recompile
+    )
+}
+
+for _debug_arch_scope in aiv.c310 aic.c310; do
+    _run_debug_print_expression_case "${_debug_arch_scope}" i32 -37 5
+    _run_debug_print_expression_case "${_debug_arch_scope}" f32 1.25 0.75
+done
+
+_run_debug_print_mixed_case() {
+    local print_region="$1"
+    echo "==> Running debug_print_mixed validation [${print_region}]: --run --device ${DEVICE_ID} --print-region ${print_region}"
+    (
+        cd "${TLA_DSL_DIR}"
+        python "${DEBUG_PRINT_MIXED_REL}" --run --device "${DEVICE_ID}" \
+            --print-region "${print_region}" --force-recompile
+    )
+}
+
+for _debug_print_region in cube vector both; do
+    _run_debug_print_mixed_case "${_debug_print_region}"
+done
 
 echo "==> run_dsl_test.sh finished successfully"

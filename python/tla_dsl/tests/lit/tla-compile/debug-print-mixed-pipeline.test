@@ -1,0 +1,30 @@
+// RUN: sed -n '/BEGIN-LOWER$/,/END-LOWER$/p' %s | %tla_compile - -o - | %filecheck %s --check-prefix=LOWER
+
+// BEGIN-LOWER
+module {
+  tla.func @debug_print_mixed(%x: f32, %y: f32) {
+    "tla.cube"() ({
+      %value = arith.constant -37 : i32
+      tla.debug_print %value : i32
+    }) : () -> ()
+    "tla.vector"() ({
+      %sum = arith.addf %x, %y : f32
+      tla.debug_print %sum : f32
+    }) : () -> ()
+    tla.return
+  }
+}
+// END-LOWER
+// LOWER-LABEL: func.func @debug_print_mixed_mix_aic
+// LOWER-SAME: %[[AIC_WORKSPACE:arg[0-9]+]]: i64 {{.*}}hacc.arg_type = #hacc.arg_type<workspace>{{.*}}tla.debug_print.workspace
+// LOWER-NOT: func_dyn_memref_args
+// LOWER-NOT: memref.extract_aligned_pointer_as_index
+// LOWER-NOT: arith.index_cast
+// LOWER: call @_mlir_ciface_tla_printf_x_i32(%{{.*}}, %[[AIC_WORKSPACE]])
+// LOWER-LABEL: func.func @debug_print_mixed_mix_aiv
+// LOWER-SAME: %[[AIV_WORKSPACE:arg[0-9]+]]: i64 {{.*}}hacc.arg_type = #hacc.arg_type<workspace>{{.*}}tla.debug_print.workspace
+// LOWER-NOT: func_dyn_memref_args
+// LOWER-NOT: memref.extract_aligned_pointer_as_index
+// LOWER-NOT: arith.index_cast
+// LOWER: call @_mlir_ciface_tla_printf_v_f32(%{{.*}}, %[[AIV_WORKSPACE]])
+// LOWER-NOT: tla.debug_print

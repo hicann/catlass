@@ -72,4 +72,23 @@ if(TLA_DSL_BUILD_RUNTIME_WRAPPER)
     OUTPUT_NAME "tla_dsl_runtime_wrapper"
     BUILD_RPATH "${ASCEND_HOME_PATH}/lib64"
   )
+
+  add_executable(tla_dsl_runtime_wrapper_decoder_test
+    ${PROJECT_SOURCE_DIR}/tests/RuntimeWrapperDecoderTest.cpp)
+  target_include_directories(tla_dsl_runtime_wrapper_decoder_test PRIVATE
+    ${PROJECT_SOURCE_DIR}/include
+    ${ASCEND_HOME_PATH}/include
+    ${ASCEND_HOME_PATH}/include/experiment
+    ${ASCEND_HOME_PATH}/include/experiment/msprof/toolchain
+    ${ASCEND_HOME_PATH}/../ascend-toolkit/latest/x86_64-linux/pkg_inc
+    ${ASCEND_HOME_PATH}/../ascend-toolkit/latest/aarch64-linux/pkg_inc
+    ${ASCEND_HOME_PATH}/../ascend-toolkit/latest/x86_64-linux/pkg_inc/runtime
+    ${ASCEND_HOME_PATH}/../ascend-toolkit/latest/aarch64-linux/pkg_inc/runtime
+  )
+  target_link_directories(tla_dsl_runtime_wrapper_decoder_test PRIVATE
+    ${ASCEND_HOME_PATH}/lib64)
+  target_link_libraries(tla_dsl_runtime_wrapper_decoder_test PRIVATE
+    runtime ascendcl dl pthread m c_sec)
+  set_target_properties(tla_dsl_runtime_wrapper_decoder_test PROPERTIES
+    BUILD_RPATH "${ASCEND_HOME_PATH}/lib64")
 endif()

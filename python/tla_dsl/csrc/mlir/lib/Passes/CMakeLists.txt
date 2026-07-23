@@ -1,6 +1,6 @@
 add_library(TlaPasses
   PassRegistry.cpp
-  TlaRejectDebugPrintPass.cpp
+  TlaLowerDebugPrintPass.cpp
   TlaLowerFuncPass.cpp
   TlaLowerScalarAccessPass.cpp
   TlaSplitMixedFuncPass.cpp

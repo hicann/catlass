@@ -10,7 +10,7 @@
 
 namespace tla {
 
-void registerTlaRejectDebugPrintPass();
+void registerTlaLowerDebugPrintPass();
 void registerTlaLowerFuncPass();
 void registerTlaLowerScalarAccessPass();
 void registerTlaSplitMixedFuncPass();

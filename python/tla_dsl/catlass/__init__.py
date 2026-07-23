@@ -46,11 +46,9 @@ TlaKernelArtifact = _runtime.TlaKernelArtifact
 TlaExecutionResult = _runtime.TlaExecutionResult
 TlaJitExecutor = _TlaJitExecutor
 TlaJitFunction = _dsl.TlaJitFunction
-AscendNpuIrKernelFunction = _dsl.AscendNpuIrKernelFunction
 compile = _dsl.compile
 jit = _dsl.jit
 kernel = _dsl.kernel
-ascendnpuir_kernel = _dsl.ascendnpuir_kernel
 Tensor = _Tensor
 TypedTensor = tla.TypedTensor
 Numeric = types.Numeric
@@ -103,11 +101,9 @@ __all__ = [
     "TlaExecutionResult",
     "TlaJitExecutor",
     "TlaJitFunction",
-    "AscendNpuIrKernelFunction",
     "compile",
     "jit",
     "kernel",
-    "ascendnpuir_kernel",
     "DSLLocation",
     "BaseDSL",
     "const_expr",

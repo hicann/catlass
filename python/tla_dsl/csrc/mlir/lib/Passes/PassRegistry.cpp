@@ -12,7 +12,7 @@
 namespace tla {
 
 void registerTlaPasses() {
-  registerTlaRejectDebugPrintPass();
+  registerTlaLowerDebugPrintPass();
   registerTlaLowerFuncPass();
   registerTlaLowerScalarAccessPass();
   registerTlaSplitMixedFuncPass();
@@ -29,7 +29,6 @@ void registerTlaPasses() {
 }
 
 void buildTlaPipeline(OpPassManager &pm) {
-  pm.addPass(createTlaRejectDebugPrintPass());
   // Lower Tla function containers to func.func before HIVM lowering so
   // downstream passes and tools inspect func.func. This single pass classifies
   // each device function's AIC/AIV/MIX core type from its tla.cube/tla.vector
@@ -48,6 +47,7 @@ void buildTlaPipeline(OpPassManager &pm) {
   pm.addPass(createTlaVectorRegionPass());
   pm.addPass(createTlaCubeRegionPass());
   pm.addPass(createTlaFinalizeMemrefPass());
+  pm.addPass(createTlaLowerDebugPrintPass());
   pm.addPass(createTlaLowerBlockIdxPass());
   pm.addPass(createTlaLowerFlagBarrierToHivmPass());
   pm.addPass(createTlaLowerMutexToStdPass());

@@ -314,9 +314,7 @@ def _build_tla_func(
             except Exception as exc:
                 message = _format_execution_source_error(fn, exc)
                 if message is None:
-                    message = (
-                        f"Execution-mode lowering failed while running `{fn.__name__}`: {exc}"
-                    )
+                    message = f"Execution-mode lowering failed while running `{fn.__name__}`: {exc}"
                 raise UnsupportedExecutionLowering(message) from exc
         mlir_ir.Operation.create("tla.return", loc=fn_loc)
 

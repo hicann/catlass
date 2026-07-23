@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 import inspect
 from typing import Any, Callable, Mapping, Sequence
 import contextvars
@@ -220,155 +219,6 @@ class TlaJitFunction:
         return mlir
 
 
-@dataclass
-class AscendNpuIrKernelFunction:
-    """Wrapper for file-backed AscendNPU-IR kernels."""
-
-    fn: Callable[..., Any]
-    mlir_file: Path
-    decorator_location: DSLLocation | None = None
-
-    def compile(self, **kwargs: Any) -> TlaKernelArtifact:
-        runtime = _runtime.runtime_options_from_kwargs(kwargs)
-        return _compile_kernel_compat(
-            fn=self.fn,
-            kind="ascendnpuir_kernel",
-            options={
-                "mlir_file": str(self.mlir_file),
-                "entrypoint": self.fn.__name__,
-            },
-            runtime=runtime,
-            type_args=None,
-            decorator_location=self.decorator_location,
-        )
-
-    def launch(
-        self,
-        *launch_args: Any,
-        block: int | None = None,
-        args: Sequence[Any] | None = None,
-        **kwargs: Any,
-    ) -> TlaExecutionResult:
-        if "grid" in kwargs:
-            raise TlaUnsupportedAbiError(
-                "`grid` is not supported. Use `block` with an integer value."
-            )
-        if block is None:
-            block = 1
-        if not isinstance(block, int):
-            raise TlaUnsupportedAbiError("`block` must be an int.")
-        if launch_args and args is not None:
-            raise TlaUnsupportedAbiError("Launch arguments specified multiple times.")
-        if args is None:
-            args = launch_args
-        self._validate_launch_args(args)
-        launch_kwargs = dict(kwargs)
-        launch_kwargs["grid"] = (int(block), 1, 1)
-        _apply_ascendnpuir_launch_target_defaults(launch_kwargs, self.mlir_file)
-        runtime = _runtime.runtime_options_for_launch(
-            _runtime.runtime_options_from_kwargs(launch_kwargs)
-        )
-        artifact = _compile_kernel_compat(
-            fn=self.fn,
-            kind="ascendnpuir_kernel",
-            options={
-                "mlir_file": str(self.mlir_file),
-                "entrypoint": self.fn.__name__,
-            },
-            runtime=runtime,
-            type_args=None,
-            decorator_location=self.decorator_location,
-        )
-        print(f"kernel.o: {artifact.kernel_binary_path}")
-        return _runtime.execute_kernel(
-            artifact,
-            runtime=runtime,
-            launch_args=tuple(args),
-            launch_kwargs=launch_kwargs,
-        )
-
-    def __call__(self, *args: Any, **kwargs: Any) -> Any:
-        if kwargs:
-            raise TlaUnsupportedAbiError(
-                "ascendnpuir kernels accept launch arguments positionally. "
-                "Use `.launch(..., device=..., block=...)` for launch options."
-            )
-        self._validate_launch_args(args)
-        return AscendNpuIrKernelInvocation(self, launch_args=tuple(args))
-
-    def _validate_launch_args(self, args: Sequence[Any]) -> None:
-        parameters = tuple(inspect.signature(self.fn).parameters.values())
-        required = [
-            param
-            for param in parameters
-            if param.kind
-            in (
-                inspect.Parameter.POSITIONAL_ONLY,
-                inspect.Parameter.POSITIONAL_OR_KEYWORD,
-            )
-            and param.default is inspect._empty
-        ]
-        if len(args) < len(required):
-            raise TlaUnsupportedAbiError(
-                f"{self.fn.__name__} expects at least {len(required)} launch "
-                f"arguments, got {len(args)}."
-            )
-        if not any(
-            param.kind == inspect.Parameter.VAR_POSITIONAL for param in parameters
-        ) and len(args) > len(parameters):
-            raise TlaUnsupportedAbiError(
-                f"{self.fn.__name__} expects at most {len(parameters)} launch "
-                f"arguments, got {len(args)}."
-            )
-
-
-@dataclass
-class AscendNpuIrKernelInvocation:
-    """Launch wrapper for a file-backed AscendNPU-IR kernel invocation."""
-
-    kernel: AscendNpuIrKernelFunction
-    launch_args: Sequence[Any]
-
-    def launch(self, **kwargs: Any) -> TlaExecutionResult:
-        return self.kernel.launch(*self.launch_args, **kwargs)
-
-
-def _apply_ascendnpuir_launch_target_defaults(
-    launch_kwargs: dict[str, Any], mlir_file: Path
-) -> None:
-    if any(
-        key in launch_kwargs
-        for key in ("arch_scope", "target_arch", "core_type", "kernel_mode")
-    ):
-        return
-    try:
-        mlir_text = Path(mlir_file).read_text()
-    except OSError:
-        return
-
-    core_type: str | None = None
-    target_arch: str | None = None
-    if (
-        "hivm.module_core_type<AIC>" in mlir_text
-        or "hivm.func_core_type = #hivm.func_core_type<AIC>" in mlir_text
-    ):
-        core_type = "aic"
-    elif (
-        "hivm.module_core_type<AIV>" in mlir_text
-        or "hivm.func_core_type = #hivm.func_core_type<AIV>" in mlir_text
-    ):
-        core_type = "aiv"
-
-    if "dav-c310" in mlir_text or 'hacc.target<"Ascend950PR_9589">' in mlir_text:
-        target_arch = "c310"
-
-    if core_type is not None:
-        launch_kwargs.setdefault("core_type", core_type)
-        launch_kwargs.setdefault("kernel_mode", core_type)
-    if target_arch is not None:
-        launch_kwargs.setdefault("target_arch", target_arch)
-
-
 def jit(fn: Callable[..., Any]) -> TlaJitFunction:
     """Decorate a helper for Tla DSL lowering."""
 
@@ -391,19 +241,6 @@ def kernel(fn: Callable[..., Any]) -> TlaJitFunction:
     )
 
 
-def ascendnpuir_kernel(filename: str | Path) -> Callable[[Callable[..., Any]], Any]:
-    """Decorate a kernel backed by a pre-authored AscendNPU-IR MLIR file."""
-
-    def decorator(fn: Callable[..., Any]) -> AscendNpuIrKernelFunction:
-        location = _capture_decorator_location()
-        return AscendNpuIrKernelFunction(
-            fn=fn,
-            mlir_file=_resolve_source_path(filename, location),
-            decorator_location=location,
-        )
-
-    return decorator
-
 
 def _capture_decorator_location() -> DSLLocation | None:
     frame = inspect.currentframe()
@@ -422,14 +259,6 @@ def _capture_decorator_location() -> DSLLocation | None:
         function_name=caller.f_code.co_name,
     )
 
-
-def _resolve_source_path(filename: str | Path, location: DSLLocation | None) -> Path:
-    path = Path(filename).expanduser()
-    if path.is_absolute():
-        return path.resolve()
-    if location is not None:
-        return (Path(location.filename).resolve().parent / path).resolve()
-    return path.resolve()
 
 
 def _compile_kernel_compat(
@@ -490,12 +319,9 @@ __all__ = [
     "DSLLocation",
     "BaseDSL",
     "TlaJitFunction",
-    "AscendNpuIrKernelFunction",
-    "AscendNpuIrKernelInvocation",
     "KernelLauncher",
     "CompileCallable",
     "compile",
     "jit",
     "kernel",
-    "ascendnpuir_kernel",
 ]

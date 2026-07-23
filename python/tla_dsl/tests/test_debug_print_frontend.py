@@ -21,6 +21,18 @@ def _scalar_kernel(i: object, j: object, f: object) -> None:
 
 
 @tla.kernel
+def _computed_i32_kernel(x: object, y: object) -> None:
+    with tla.vector():
+        tla.debug_print(x + y)
+
+
+@tla.kernel
+def _computed_f32_kernel(x: object, y: object) -> None:
+    with tla.cube():
+        tla.debug_print(x + y)
+
+
+@tla.kernel
 def _literal_kernel() -> None:
     with tla.vector():
         tla.debug_print(-(2**31))
@@ -107,10 +119,27 @@ def test_debug_print_emits_direct_scalars_in_both_regions() -> None:
     assert any("%arg2" in line for line in debug_lines)
 
 
+@pytest.mark.parametrize(
+    ("kernel", "type_args"),
+    (
+        (_computed_i32_kernel, (tla.Int32(0), tla.Int32(0))),
+        (
+            _computed_f32_kernel,
+            (tla.Float32(0.0), tla.Float32(0.0)),
+        ),
+    ),
+)
+def test_debug_print_emits_computed_runtime_scalar(
+    kernel: object, type_args: tuple[object, object]
+) -> None:
+    mlir = kernel.dump_mlir(type_args=type_args)
+
+    assert mlir.count("tla.debug_print") == 1
+    assert "arith.add" in mlir
+
+
 def test_debug_print_f32_literal_preserves_source_location() -> None:
-    source_lines, first_lineno = inspect.getsourcelines(
-        _f32_literal_location_kernel.fn
-    )
+    source_lines, first_lineno = inspect.getsourcelines(_f32_literal_location_kernel.fn)
     line = next(
         first_lineno + offset
         for offset, source in enumerate(source_lines)
@@ -151,6 +180,53 @@ def test_debug_print_f32_literal_preserves_source_location() -> None:
         location_id = location_alias.group(1)
     else:
         pytest.fail("f32 debug-print constant did not retain its source location")
+
+
+@tla.kernel
+def _debug_print_cube_static(value: object) -> None:
+    with tla.cube():
+        tla.debug_print(value)
+
+
+@tla.kernel
+def _debug_print_cube_guarded_static(value: object) -> None:
+    with tla.cube():
+        if tla.arch.block_idx() == 0:
+            tla.debug_print(value)
+
+
+@tla.kernel
+def _debug_print_vector_static(value: object) -> None:
+    with tla.vector():
+        tla.debug_print(value)
+
+
+@tla.kernel
+def _debug_print_vector_guarded_static(value: object) -> None:
+    with tla.vector():
+        if tla.arch.block_idx() == 0:
+            tla.debug_print(value)
+
+
+_DEBUG_PRINT_MATRIX_KERNELS = {
+    ("cube", False): _debug_print_cube_static,
+    ("cube", True): _debug_print_cube_guarded_static,
+    ("vector", False): _debug_print_vector_static,
+    ("vector", True): _debug_print_vector_guarded_static,
+}
+
+
+@pytest.mark.parametrize("region", ("cube", "vector"))
+@pytest.mark.parametrize("dtype", ("i32", "f32"))
+@pytest.mark.parametrize("guarded", (False, True))
+def test_debug_print_backend_matrix(region: str, dtype: str, guarded: bool) -> None:
+    """Preserve canonical static debug-print region shapes."""
+
+    scalar = tla.Int32(7) if dtype == "i32" else tla.Float32(1.25)
+    kernel = _DEBUG_PRINT_MATRIX_KERNELS[(region, guarded)]
+    mlir = kernel.dump_mlir(type_args=(scalar,))
+    assert mlir.count("tla.debug_print") == 1
+    assert dtype in mlir
 
 
 @pytest.mark.parametrize(

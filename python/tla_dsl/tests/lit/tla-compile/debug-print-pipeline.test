@@ -1,16 +1,25 @@
-// RUN: sed -n '/BEGIN-REJECT$/,/END-REJECT$/p' %s | not %tla_compile - -o - 2>&1 | %filecheck %s --check-prefix=REJECT
+// RUN: sed -n '/BEGIN-LOWER$/,/END-LOWER$/p' %s | %tla_compile - -o - | %filecheck %s --check-prefix=LOWER
 // RUN: sed -n '/BEGIN-NOOP$/,/END-NOOP$/p' %s | %tla_compile - --emit=tla-mlir -o - | %filecheck %s --check-prefix=NOOP
 
-// BEGIN-REJECT
+// BEGIN-LOWER
 module {
-  tla.func @unsupported(%v: i32) {
-    "tla.vector"() ({ tla.debug_print %v : i32 }) : () -> ()
+  tla.func @debug_print_scalars(%v: i32, %f: f32) {
+    "tla.cube"() ({ tla.debug_print %v : i32 }) : () -> ()
+    "tla.cube"() ({ tla.debug_print %f : f32 }) : () -> ()
     tla.return
   }
 }
-// END-REJECT
-// REJECT: tla.debug_print backend lowering is not implemented; only TLA IR emission is supported
-// REJECT-NOT: failed to legalize operation
+// END-LOWER
+// LOWER-DAG: func.func private @_mlir_ciface_tla_printf_x_i32(i32, i64)
+// LOWER-DAG: func.func private @_mlir_ciface_tla_printf_v_f32(f32, i64)
+// LOWER-LABEL: func.func @debug_print_scalars
+// LOWER-SAME: %[[WORKSPACE:arg[0-9]+]]: i64 {{.*}}hacc.arg_type = #hacc.arg_type<workspace>{{.*}}tla.debug_print.workspace
+// LOWER-NOT: func_dyn_memref_args
+// LOWER-NOT: memref.extract_aligned_pointer_as_index
+// LOWER-NOT: arith.index_cast
+// LOWER: call @_mlir_ciface_tla_printf_x_i32(%{{.*}}, %[[WORKSPACE]])
+// LOWER: call @_mlir_ciface_tla_printf_v_f32(%{{.*}}, %[[WORKSPACE]])
+// LOWER-NOT: tla.debug_print
 
 // BEGIN-NOOP
 module { tla.func @without_debug_print() { tla.return } }
