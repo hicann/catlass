@@ -814,7 +814,8 @@ static FailureOr<Value> createVectorScalarBinaryResult(OpBuilder &b, Location lo
         .getResult();
   }
 
-  Value rhs = b.create<vector::BroadcastOp>(loc, ctx.vecType, scalar).getResult();
+  Value rhs =
+      b.create<hivmave::VFBroadcastScalarOp>(loc, ctx.vecType, scalar).getRes();
   return createVectorBinaryResult(b, loc, info.kind, info.operands.lhs.getType(),
                                   ctx.elementType, ctx.vecType, lhs, rhs, mask);
 }

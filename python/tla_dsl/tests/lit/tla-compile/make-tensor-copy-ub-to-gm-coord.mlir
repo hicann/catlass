@@ -32,13 +32,10 @@ module {
 }
 
 // CHECK-LABEL: func.func private @copy_ub_row_major_to_gm_row_major_float
-// The GM dst coord (16) and stride0 (32) travel as i64 constant payload args
-// (absCoord0=16, stride0=32), so the stub computes the store offset 16*32 = 512
-// elements. Before the cifax lowering the coord was dropped to a 0 offset.
-// CHECK-SAME: constant_value = 16 : i64
-// CHECK-SAME: constant_value = 32 : i64
 // CHECK-SAME: hivm.func_core_type = #hivm.func_core_type<AIV>
 // CHECK-LABEL: func.func @make_tensor_copy_ub_to_gm_coord
+// CHECK: llvm.mlir.constant(16 : i64) : i64
+// CHECK: llvm.mlir.constant(32 : i64) : i64
 // CHECK: call @copy_ub_row_major_to_gm_row_major_float
 // CHECK-NOT: tla.make_tensor
 // CHECK-NOT: memref.reinterpret_cast

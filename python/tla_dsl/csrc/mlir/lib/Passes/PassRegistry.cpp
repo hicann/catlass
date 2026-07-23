@@ -1,11 +1,9 @@
 #include "PassesCommon.h"
 #include "PassesInternal.h"
 
-#include "bishengir/Conversion/ArithToHIVMAVE/ArithToHIVMAVE.h"
 #include "bishengir/Conversion/HIVMAVEToAVEIntrin/HIVMAVEToAVEIntrin.h"
 #include "bishengir/Conversion/HIVMAVEToStandard/HIVMAVEToStandard.h"
 #include "bishengir/Conversion/HIVMToStandard/HIVMToStandard.h"
-#include "bishengir/Conversion/VectorToHIVMAVE/VectorToHIVMAVE.h"
 #include "bishengir/Dialect/HIVMAVE/Transforms/Passes.h"
 
 #include "mlir/Dialect/MemRef/Transforms/Passes.h"
@@ -65,8 +63,6 @@ void buildTlaPipeline(OpPassManager &pm) {
   pm.addPass(createTlaLowerMutexToStdPass());
   pm.addPass(createTlaPrologueEpiloguePass());
   pm.addPass(createCSEPass());
-  pm.addPass(mlir::createVectorToHIVMAVEConversionPass());
-  pm.nest<func::FuncOp>().addPass(mlir::createArithToHIVMAVEConversionPass());
   // Fuse AVE instruction sequences after every TLA/vector/arith producer has
   // been lowered. In particular, vsub followed by vexp becomes vexpdif on
   // Ascend 950 targets before AVE intrinsic conversion consumes the ops.

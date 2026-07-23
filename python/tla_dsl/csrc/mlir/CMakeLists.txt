@@ -56,9 +56,7 @@ set(TLA_DSL_HIVM_REQUIRED_LIBS
     MLIRHIVMAVEToStandard
     MLIRHIVMRegbaseIntrinsDialect
     MLIRHIVMRegbaseIntrinsUtils
-    MLIRArithToHIVMAVE
     MLIRHFusionToHIVM
-    MLIRVectorToHIVMAVE
     MLIRTensorUtils
     MLIRAnnotationDialect
     BiShengIRDialectUtils
