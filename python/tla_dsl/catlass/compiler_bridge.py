@@ -17,6 +17,14 @@ class BridgeUnavailableError(RuntimeError):
     """Raised when the in-process compile bridge is unavailable."""
 
 
+class BridgeLoweringError(RuntimeError):
+    """Raised when the in-process bridge pipeline fails after producing IR dumps."""
+
+    def __init__(self, message: str, *, pass_ir_dump: str = "") -> None:
+        super().__init__(message)
+        self.pass_ir_dump = pass_ir_dump
+
+
 @dataclass(frozen=True)
 class TlaLoweringResult:
     """Result of lowering a live ``tla``-dialect MLIR module through the typed bridge."""
@@ -47,9 +55,15 @@ def lower_tlair_module_to_mlir(
         bool(mlir_print_ir_before_all),
         bool(mlir_print_ir_after_all),
     )
+    pass_ir_dump = str(result.get("pass_ir_dump", ""))
+    if result.get("success", True) is False:
+        raise BridgeLoweringError(
+            str(result.get("error", "Failed to run Tla pipeline.")),
+            pass_ir_dump=pass_ir_dump,
+        )
     return TlaLoweringResult(
         lowered_mlir=str(result["lowered_mlir"]),
-        pass_ir_dump=str(result.get("pass_ir_dump", "")),
+        pass_ir_dump=pass_ir_dump,
     )
 
 
@@ -65,6 +79,7 @@ def resolve_bridge_extension_path() -> Path | None:
 
 
 __all__ = [
+    "BridgeLoweringError",
     "BridgeUnavailableError",
     "TlaLoweringResult",
     "lower_tlair_module_to_mlir",

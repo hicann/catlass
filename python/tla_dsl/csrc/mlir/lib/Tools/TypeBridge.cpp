@@ -347,13 +347,13 @@ py::dict lowerToMlir(MlirModule cModule, std::vector<std::string> printBefore,
 
   std::string output;
   std::string error;
-  if (!tla::tools::runTlaCompilePipelinesWithManagers(
-          module, StringRef("mlir"), tlaPm, llvmPm, output, error,
-          /*rewriteTileSignaturesToLLVMPointer=*/true)) {
-    throw std::runtime_error(error.empty() ? "Failed to run Tla pipeline." : error);
-  }
+  bool success = tla::tools::runTlaCompilePipelinesWithManagers(
+      module, StringRef("mlir"), tlaPm, llvmPm, output, error,
+      /*rewriteTileSignaturesToLLVMPointer=*/true);
   passDumpStream.flush();
   py::dict result;
+  result["success"] = success;
+  result["error"] = success ? "" : (error.empty() ? "Failed to run Tla pipeline." : error);
   result["lowered_mlir"] = output;
   result["pass_ir_dump"] = passDump;
   return result;

@@ -28,6 +28,7 @@ from .base_dsl.arch import (
 )
 from .base_dsl import BaseDSL, DSLLocation
 from .compiler_bridge import (
+    BridgeLoweringError,
     BridgeUnavailableError,
     lower_tlair_module_to_mlir,
     resolve_bridge_extension_path,
@@ -73,6 +74,10 @@ class TlaBackendCompilerNotFoundError(TlaExecutionError):
 
 class TlaKernelCompileError(TlaExecutionError):
     """Raised when kernel lowering or backend compilation fails."""
+
+    def __init__(self, message: str, *, pass_ir_dump: str = "") -> None:
+        super().__init__(message)
+        self.pass_ir_dump = pass_ir_dump
 
 
 class TlaRuntimeUnavailableError(TlaExecutionError):
@@ -220,12 +225,21 @@ def compile_kernel(
     pass_dump_path = artifact_dir / "pass-ir-dump.mlir"
     kernel_path = artifact_dir / "kernel.o"
 
-    lowering_result = _run_tla_lowering_to_mlir(
-        lowered_module=lowered.module,
-        tlair_mlir=tlair_mlir,
-        mlir_path=mlir_path,
-        runtime=runtime,
-    )
+    try:
+        lowering_result = _run_tla_lowering_to_mlir(
+            lowered_module=lowered.module,
+            tlair_mlir=tlair_mlir,
+            mlir_path=mlir_path,
+            runtime=runtime,
+        )
+    except TlaKernelCompileError as exc:
+        if exc.pass_ir_dump:
+            pass_dump_path.write_text(exc.pass_ir_dump)
+            raise TlaKernelCompileError(
+                f"{exc}\npass IR dump: {pass_dump_path}",
+                pass_ir_dump=exc.pass_ir_dump,
+            ) from exc
+        raise
     if lowering_result.pass_ir_dump:
         pass_dump_path.write_text(lowering_result.pass_ir_dump)
     runtime_for_hivmc = _runtime_options_from_lowered_mlir(
@@ -1278,6 +1292,11 @@ def _run_typed_bridge_to_mlir(
         )
     except BridgeUnavailableError as exc:
         raise TlaCompilerBridgeUnavailableError(str(exc)) from exc
+    except BridgeLoweringError as exc:
+        raise TlaKernelCompileError(
+            f"In-process Tla compiler bridge failed.\nerror:\n{exc}",
+            pass_ir_dump=exc.pass_ir_dump,
+        ) from exc
     except Exception as exc:
         raise TlaKernelCompileError(
             f"In-process Tla compiler bridge failed.\nerror:\n{exc}"
@@ -1325,23 +1344,42 @@ def _run_tla_compile_cli_to_mlir(
     mlir_path: Path,
     runtime: TlaRuntimeOptions | None = None,
 ) -> Any:
-    del runtime
     input_path = mlir_path.with_suffix(".tlair.mlir")
     input_path.write_text(tlair_mlir)
+    cmd = [str(tla_compile), str(input_path), "-o", str(mlir_path)]
+    print_requested = False
+    if runtime is not None:
+        for pass_name in runtime.mlir_print_ir_before:
+            cmd.append(f"--mlir-print-ir-before={pass_name}")
+        for pass_name in runtime.mlir_print_ir_after:
+            cmd.append(f"--mlir-print-ir-after={pass_name}")
+        if runtime.mlir_print_ir_before_all:
+            cmd.append("--mlir-print-ir-before-all")
+        if runtime.mlir_print_ir_after_all:
+            cmd.append("--mlir-print-ir-after-all")
+        print_requested = bool(
+            runtime.mlir_print_ir_before
+            or runtime.mlir_print_ir_after
+            or runtime.mlir_print_ir_before_all
+            or runtime.mlir_print_ir_after_all
+        )
     try:
-        subprocess.run(
-            [str(tla_compile), str(input_path), "-o", str(mlir_path)],
+        completed = subprocess.run(
+            cmd,
             check=True,
             capture_output=True,
             text=True,
             env=_tla_compile_env(),
         )
     except subprocess.CalledProcessError as exc:
+        stderr = exc.stderr or ""
+        stderr_message = "<captured in pass IR dump>" if print_requested else stderr
         raise TlaKernelCompileError(
             f"TlaCompile CLI fallback failed with exit code {exc.returncode}\n"
-            f"cmd: {tla_compile} {input_path} -o {mlir_path}\n"
+            f"cmd: {' '.join(cmd)}\n"
             f"stdout:\n{exc.stdout or ''}\n"
-            f"stderr:\n{exc.stderr or ''}"
+            f"stderr:\n{stderr_message}",
+            pass_ir_dump=stderr if print_requested else "",
         ) from exc
     if not mlir_path.exists():
         raise TlaKernelCompileError(
@@ -1353,7 +1391,7 @@ def _run_tla_compile_cli_to_mlir(
         (),
         {
             "lowered_mlir": mlir_path.read_text(),
-            "pass_ir_dump": "",
+            "pass_ir_dump": completed.stderr if print_requested else "",
         },
     )()
 

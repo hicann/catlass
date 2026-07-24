@@ -539,6 +539,34 @@ def test_lower_tlair_module_to_mlir_uses_typed_extension(monkeypatch) -> None:
     ]
 
 
+def test_lower_tlair_module_to_mlir_preserves_pass_dump_on_failure(
+    monkeypatch,
+) -> None:
+    module = object()
+
+    class _FakeExtension:
+        def lower_to_mlir(self, *_args) -> dict[str, object]:
+            return {
+                "success": False,
+                "error": "pipeline failed",
+                "lowered_mlir": "",
+                "pass_ir_dump": "// ----- IR Dump After failing-pass -----\nmodule {}\n",
+            }
+
+    monkeypatch.setattr(
+        compiler_bridge, "_load_bridge_extension", lambda: _FakeExtension()
+    )
+
+    with pytest.raises(
+        compiler_bridge.BridgeLoweringError, match="pipeline failed"
+    ) as exc_info:
+        compiler_bridge.lower_tlair_module_to_mlir(
+            module, mlir_print_ir_after_all=True
+        )
+
+    assert "IR Dump After failing-pass" in exc_info.value.pass_ir_dump
+
+
 def test_lower_tlair_module_to_mlir_requires_typed_extension(monkeypatch) -> None:
     module = object()
 
@@ -605,6 +633,51 @@ def test_run_tla_lowering_to_mlir_falls_back_to_tla_compile(
                 "env": execution._tla_compile_env(),
             },
         )
+    ]
+
+
+def test_tla_compile_cli_preserves_ir_dump_on_failure(
+    monkeypatch, tmp_path
+) -> None:
+    lowered_path = tmp_path / "lowered.mlir"
+    tla_compile = tmp_path / "TlaCompile"
+    tla_compile.write_text("")
+    pass_ir_dump = "// ----- IR Dump After failing-pass -----\nmodule {}\n"
+
+    calls: list[tuple[list[str], dict[str, object]]] = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append((list(cmd), kwargs))
+        raise execution.subprocess.CalledProcessError(
+            1,
+            cmd,
+            output="cli stdout",
+            stderr=pass_ir_dump,
+        )
+
+    monkeypatch.setattr(execution.subprocess, "run", fake_run)
+    runtime = execution.TlaRuntimeOptions(
+        mlir_print_ir_before=["tla-lower-func"],
+        mlir_print_ir_after=["tla-finalize-memref"],
+        mlir_print_ir_before_all=True,
+        mlir_print_ir_after_all=True,
+    )
+
+    with pytest.raises(execution.TlaKernelCompileError) as exc_info:
+        execution._run_tla_compile_cli_to_mlir(
+            tla_compile=tla_compile,
+            tlair_mlir="module { tla.func @k() { tla.return } }\n",
+            mlir_path=lowered_path,
+            runtime=runtime,
+        )
+
+    assert exc_info.value.pass_ir_dump == pass_ir_dump
+    assert "<captured in pass IR dump>" in str(exc_info.value)
+    assert calls[0][0][-4:] == [
+        "--mlir-print-ir-before=tla-lower-func",
+        "--mlir-print-ir-after=tla-finalize-memref",
+        "--mlir-print-ir-before-all",
+        "--mlir-print-ir-after-all",
     ]
 
 
