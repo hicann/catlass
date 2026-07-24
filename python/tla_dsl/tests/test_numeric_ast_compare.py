@@ -30,9 +30,8 @@ def _numeric_compare_if_kernel(src: tla.Tensor, out: tla.Tensor) -> None:
 
 
 @tla.kernel
-def _index_vs_numeric_compare_kernel(limit_buf: tla.Tensor, out: tla.Tensor) -> None:
-    # Loop / tile index (index SSA) vs scalar load (Int32 Numeric), as in fag_81:
-    # ``kv_token_idx >= tile_range[i]``.
+def _loop_iv_vs_numeric_compare_kernel(limit_buf: tla.Tensor, out: tla.Tensor) -> None:
+    # Loop IV and scalar load are both Int32; compare stays on i32.
     limit = limit_buf[0]
     idx = 0
     for i in tla.range(0, 4, 1):
@@ -55,10 +54,10 @@ def test_numeric_compare_in_if_uses_element_type_not_index() -> None:
     assert "(i32, index)" not in mlir.replace(" ", "")
 
 
-def test_index_vs_numeric_compare_emits_index_cast() -> None:
+def test_loop_iv_vs_numeric_compare_stays_on_i32() -> None:
     limit_buf = _gm_tensor_1d(8, dtype=tla.Int32)
     out = _gm_tensor_1d(8, dtype=tla.Int32)
-    mlir = _index_vs_numeric_compare_kernel.dump_mlir(type_args=(limit_buf, out))
+    mlir = _loop_iv_vs_numeric_compare_kernel.dump_mlir(type_args=(limit_buf, out))
     assert "arith.cmpi" in mlir
-    assert "arith.index_cast" in mlir
+    assert ": i32" in mlir
     assert "(i32, index)" not in mlir.replace(" ", "")

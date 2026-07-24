@@ -325,137 +325,35 @@ def _resolve_frontend_bound_category(value: Any) -> str | None:
     return state.category_bindings.get(id(value))
 
 
-class _IndexExpr:
-    """Frontend proxy that carries an SSA index value through transformed Python code."""
-
-    def __init__(self, value: Any) -> None:
-        self._value = value
-        _bind_frontend_value(self, value)
-        _bind_frontend_category(self, "index")
-        _bind_frontend_category(value, "index")
-
-    def _binary(self, other: Any, op_name: str) -> "_IndexExpr":
-        from mlir import ir as mlir_ir  # type: ignore[assignment]
-
-        lhs = _coerce_index_value(self)
-        rhs = _coerce_index_value(other)
-        op = mlir_ir.Operation.create(
-            op_name, operands=[lhs, rhs], results=[mlir_ir.IndexType.get()]
-        )
-        return _IndexExpr(op.results[0])
-
-    def _compare(self, other: Any, predicate: Any) -> "_BoolExpr":
-        from mlir.dialects import arith  # type: ignore[import-not-found]
-
-        lhs = _coerce_index_value(self)
-        rhs = _coerce_index_value(other)
-        return _BoolExpr(arith.CmpIOp(predicate, lhs, rhs).result)
-
-    def __add__(self, other: Any) -> "_IndexExpr":
-        return self._binary(other, "arith.addi")
-
-    def __radd__(self, other: Any) -> "_IndexExpr":
-        return _IndexExpr(other).__add__(self)
-
-    def __sub__(self, other: Any) -> "_IndexExpr":
-        return self._binary(other, "arith.subi")
-
-    def __rsub__(self, other: Any) -> "_IndexExpr":
-        return _IndexExpr(other).__sub__(self)
-
-    def __mul__(self, other: Any) -> "_IndexExpr":
-        return self._binary(other, "arith.muli")
-
-    def __rmul__(self, other: Any) -> "_IndexExpr":
-        return _IndexExpr(other).__mul__(self)
-
-    def __floordiv__(self, other: Any) -> "_IndexExpr":
-        return self._binary(other, "arith.divui")
-
-    def __rfloordiv__(self, other: Any) -> "_IndexExpr":
-        return _IndexExpr(other).__floordiv__(self)
-
-    def __mod__(self, other: Any) -> "_IndexExpr":
-        return self._binary(other, "arith.remui")
-
-    def __rmod__(self, other: Any) -> "_IndexExpr":
-        return _IndexExpr(other).__mod__(self)
-
-    def __eq__(self, other: Any) -> "_BoolExpr":  # type: ignore[override]
-        from mlir.dialects import arith  # type: ignore[import-not-found]
-
-        return self._compare(other, arith.CmpIPredicate.eq)
-
-    def __ne__(self, other: Any) -> "_BoolExpr":  # type: ignore[override]
-        from mlir.dialects import arith  # type: ignore[import-not-found]
-
-        return self._compare(other, arith.CmpIPredicate.ne)
-
-    def __lt__(self, other: Any) -> "_BoolExpr":
-        from mlir.dialects import arith  # type: ignore[import-not-found]
-
-        return self._compare(other, arith.CmpIPredicate.slt)
-
-    def __le__(self, other: Any) -> "_BoolExpr":
-        from mlir.dialects import arith  # type: ignore[import-not-found]
-
-        return self._compare(other, arith.CmpIPredicate.sle)
-
-    def __gt__(self, other: Any) -> "_BoolExpr":
-        from mlir.dialects import arith  # type: ignore[import-not-found]
-
-        return self._compare(other, arith.CmpIPredicate.sgt)
-
-    def __ge__(self, other: Any) -> "_BoolExpr":
-        from mlir.dialects import arith  # type: ignore[import-not-found]
-
-        return self._compare(other, arith.CmpIPredicate.sge)
-
-    def __bool__(self) -> bool:
-        raise TlaIRNotExecutableError(
-            "SSA index values cannot be used as Python booleans"
-        )
-
-
-class _BoolExpr:
-    """Frontend proxy for an SSA i1 value."""
-
-    def __init__(self, value: Any) -> None:
-        self._value = value
-        _bind_frontend_value(self, value)
-        _bind_frontend_category(self, "bool")
-        _bind_frontend_category(value, "bool")
-
-    @property
-    def value(self) -> Any:
-        return self._value
-
-    def __bool__(self) -> bool:
-        raise TlaIRNotExecutableError(
-            "SSA bool values cannot be used as Python booleans"
-        )
-
-
 def _coerce_bool_value(value: Any) -> Any:
+    """Lower a bool-like frontend value to MLIR ``i1`` SSA."""
     from mlir import ir as mlir_ir  # type: ignore[assignment]
 
-    from .base_dsl.typing import Bool, Numeric
+    from .base_dsl.typing import Bool, Numeric, as_numeric
 
-    if isinstance(value, _BoolExpr):
-        return value._value
-    # Numeric ``Bool`` (legacy ScalarSSA path removed); unwrap SSA or host bool.
     if isinstance(value, Numeric) and type(value) is Bool:
         if isinstance(value.value, mlir_ir.Value):
             return value.value
         return _const_i1(int(bool(value.value)))
+    if isinstance(value, bool):
+        return _const_i1(int(value))
+    if isinstance(value, mlir_ir.Value):
+        return value
     resolved = _resolve_frontend_bound_value(value)
     if isinstance(resolved, mlir_ir.Value):
         return resolved
-    if isinstance(value, mlir_ir.Value):
-        return value
-    if isinstance(value, bool):
-        return _const_i1(int(value))
-    raise TlaCoreAPIError(f"Expected bool-like value, got {type(value).__name__}")
+    # Other Numerics / host scalars: as_numeric then require Bool.
+    try:
+        num = as_numeric(value) if not isinstance(value, Numeric) else value
+    except (TypeError, ValueError) as exc:
+        raise TlaCoreAPIError(
+            f"Expected bool-like value, got {type(value).__name__}"
+        ) from exc
+    if type(num) is not Bool:
+        raise TlaCoreAPIError(
+            f"Expected Bool, got {type(num).__name__}; cast explicitly if needed"
+        )
+    return _coerce_bool_value(num)
 
 
 def _const_i1(value: int) -> Any:
@@ -492,10 +390,7 @@ def _coerce_index_value(value: Any) -> Any:
             f"Expected index-like SSA value, got type {ssa.type}"
         )
 
-    while isinstance(value, _IndexExpr):
-        value = value._value
-
-    # Signed Integer Numeric (Int*/Bool/Index) → index, with ``index_cast`` for
+    # Signed Integer Numeric (Int*/Bool) → index, with ``index_cast`` for
     # element SSA. Reject UInt* the same way as ``core_api._as_index_value``.
     if isinstance(value, Numeric):
         if not (type(value).is_integer and type(value).signed):

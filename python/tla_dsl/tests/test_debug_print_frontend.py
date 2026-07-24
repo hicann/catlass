@@ -258,7 +258,7 @@ _SCALAR_ERROR = "expected a signless i32 or f32 scalar"
     [
         *[
             (_typed_scalar_kernel, (value,), _SCALAR_ERROR)
-            for value in (True, tla.Int64(1), tla.Index(1), tla.Float16(1.0))
+            for value in (True, tla.Int64(1), tla.UInt32(1), tla.Float16(1.0))
         ],
         (_pointer_kernel, (), _SCALAR_ERROR),
         (_tensor_kernel, (_host_vector_tensor(),), _SCALAR_ERROR),

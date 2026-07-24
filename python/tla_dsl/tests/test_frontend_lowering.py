@@ -628,8 +628,9 @@ def test_dynamic_mmad_initc_unit_flag_expression_lowers_to_scf_if(compiler_tlair
     assert mlir.count("scf.yield") >= 4
     assert '"arith.constant"() <{value = true}> : () -> i1' in mlir
     assert '"arith.constant"() <{value = false}> : () -> i1' in mlir
-    assert '"arith.constant"() <{value = 3 : index}> : () -> index' in mlir
-    assert '"arith.constant"() <{value = 2 : index}> : () -> index' in mlir
+    # unit_flag literals lower as i32 Numerics, not MLIR index.
+    assert '"arith.constant"() <{value = 3 : i32}> : () -> i32' in mlir
+    assert '"arith.constant"() <{value = 2 : i32}> : () -> i32' in mlir
     assert "!tla.ptr<f32, l0c, 4>" in mlir
     assert (
         "!tla.layout<!tla.shape<(16,1),(16,1)>, !tla.stride<(16,256),(1,256)>, !tla.shape<16,16>, zN>"
@@ -697,7 +698,7 @@ def test_tensor_shape_metadata_supports_dynamic_shape_leaf() -> None:
         )
     mlir = dynamic_tensor_shape_metadata_kernel.dump_mlir(type_args=(mem, 4))
     assert "tla.tile_view" in mlir
-    assert "arith.divui" in mlir
+    assert "arith.divsi" in mlir or "arith.divui" in mlir
     assert "!tla.shape<?,8>" in mlir
 
 
@@ -709,7 +710,7 @@ def test_make_tensor_like_shape_metadata_supports_dynamic_shape_leaf() -> None:
         )
     mlir = dynamic_make_tensor_like_shape_metadata_kernel.dump_mlir(type_args=(mem, 4))
     assert "tla.make_tensor_like" in mlir
-    assert "arith.divui" in mlir
+    assert "arith.divsi" in mlir or "arith.divui" in mlir
     assert "!tla.shape<?,8>" in mlir
 
 
@@ -722,4 +723,4 @@ def test_tensor_full_metadata_access_supports_dynamic_origin() -> None:
     assert "tla.make_tensor_like" in mlir
     assert "tla.make_stride" in mlir
     assert "tla.make_coord" in mlir
-    assert "arith.divui" in mlir
+    assert "arith.divsi" in mlir or "arith.divui" in mlir

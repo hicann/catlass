@@ -13,11 +13,8 @@ from .base_dsl.ast_helpers import FrontendRange
 from .base_dsl.utils import tree_utils
 
 TlaCoreAPIError = _runtime.TlaCoreAPIError
-_BoolExpr = _runtime._BoolExpr
-_IndexExpr = _runtime._IndexExpr
 _capture_caller_location = _runtime._capture_caller_location
 _coerce_bool_value = _runtime._coerce_bool_value
-_coerce_index_value = _runtime._coerce_index_value
 _const_i1 = _runtime._const_i1
 _resolve_frontend_bound_value = _runtime._resolve_frontend_bound_value
 _SOURCE_INFO_ATTR = "__tladsl_source_info__"
@@ -262,6 +259,8 @@ class ScfGenerator:
 def _internal_frontend_bool_and(*values: Any) -> Any:
     from mlir import ir as mlir_ir  # type: ignore[assignment]
 
+    from .base_dsl.typing import Bool
+
     if not values:
         return True
     if all(isinstance(value, bool) for value in values):
@@ -273,7 +272,7 @@ def _internal_frontend_bool_and(*values: Any) -> Any:
             "arith.andi", operands=[current, rhs], results=[current.type]
         )
         current = op.results[0]
-    return _BoolExpr(current)
+    return Bool(current)
 
 
 def _internal_frontend_for(
@@ -301,9 +300,12 @@ def _internal_frontend_for(
     carried_leaf_names = carried_pytree_def[1]
 
     mlir_loc = _capture_caller_location()
-    start = _coerce_index_value(range_value.start)
-    end = _coerce_index_value(range_value.end)
-    step = _coerce_index_value(range_value.step)
+    # ``as_numeric`` + promote to Int32 for ``scf.for`` bounds/IV.
+    from .base_dsl.typing import Int32, as_numeric
+
+    start = as_numeric(range_value.start).to(Int32).ir_value()
+    end = as_numeric(range_value.end).to(Int32).ir_value()
+    step = as_numeric(range_value.step).to(Int32).ir_value()
 
     generator = ScfGenerator()
 
@@ -323,8 +325,9 @@ def _internal_frontend_for(
         carried_args = _core_api.pack_from_irvalue(
             block_args[1:], carried_pytree_def, carried_values, len(carried_values)
         )
+        # ``as_numeric(induction_variable)``; IV SSA is already i32.
         body_result = _call_with_control_flow_source(
-            body_fn, _IndexExpr(block_args[0]), *carried_args
+            body_fn, as_numeric(block_args[0]), *carried_args
         )
         return tree_utils.extract_frontend_if_yields(
             body_result,
@@ -465,7 +468,14 @@ def _validate_dynamic_while_results(
     expected_types: list[Any],
     region_name: str,
 ) -> None:
-    if actual_pytree_def[0] != expected_pytree_def[0]:
+    # Bare int/float/bool are promoted via as_numeric before specs are built.
+    actual_specs = actual_pytree_def[0]
+    expected_specs = expected_pytree_def[0]
+    specs_ok = len(actual_specs) == len(expected_specs) and all(
+        actual == expected
+        for actual, expected in zip(actual_specs, expected_specs, strict=True)
+    )
+    if not specs_ok:
         name = _dynamic_region_structure_name(
             expected_pytree_def, actual_pytree_def, tuple()
         )
@@ -524,6 +534,8 @@ def _dynamic_region_leaf_name(
 def _internal_frontend_bool_or(*values: Any) -> Any:
     from mlir import ir as mlir_ir  # type: ignore[assignment]
 
+    from .base_dsl.typing import Bool
+
     if not values:
         return False
     if all(isinstance(value, bool) for value in values):
@@ -535,11 +547,13 @@ def _internal_frontend_bool_or(*values: Any) -> Any:
             "arith.ori", operands=[current, rhs], results=[current.type]
         )
         current = op.results[0]
-    return _BoolExpr(current)
+    return Bool(current)
 
 
 def _internal_frontend_bool_not(value: Any) -> Any:
     from mlir import ir as mlir_ir  # type: ignore[assignment]
+
+    from .base_dsl.typing import Bool
 
     if isinstance(value, bool):
         return not value
@@ -548,13 +562,15 @@ def _internal_frontend_bool_not(value: Any) -> Any:
     op = mlir_ir.Operation.create(
         "arith.xori", operands=[operand, one], results=[operand.type]
     )
-    return _BoolExpr(op.results[0])
+    return Bool(op.results[0])
 
 
 def _internal_frontend_bool(value: Any) -> Any:
+    from .base_dsl.typing import Bool
+
     if isinstance(value, bool):
         return bool(value)
-    return _BoolExpr(_coerce_bool_value(value))
+    return Bool(_coerce_bool_value(value))
 
 
 def _internal_frontend_any(iterable: Any) -> Any:
@@ -595,7 +611,7 @@ def _internal_frontend_minmax(kind: str, *values: Any) -> Any:
 
     current = flat_values[0]
     for value in flat_values[1:]:
-        current = _select_minmax_index(kind, current, value)
+        current = _select_minmax_numeric(kind, current, value)
     return current
 
 
@@ -623,22 +639,40 @@ def _flatten_minmax_values(values: tuple[Any, ...]) -> list[Any]:
 def _is_dynamic_index_like(value: Any) -> bool:
     from mlir import ir as mlir_ir  # type: ignore[assignment]
 
+    from .base_dsl.typing import Numeric
+
+    if isinstance(value, Numeric):
+        return isinstance(value.value, mlir_ir.Value)
     resolved = _resolve_frontend_bound_value(value)
     return isinstance(resolved, mlir_ir.Value) or isinstance(value, mlir_ir.Value)
 
 
-def _select_minmax_index(kind: str, left: Any, right: Any) -> Any:
-    from mlir import ir as mlir_ir  # type: ignore[assignment]
+def _select_minmax_numeric(kind: str, left: Any, right: Any) -> Any:
     from mlir.dialects import arith  # type: ignore[import-not-found]
 
-    lhs = _coerce_index_value(left)
-    rhs = _coerce_index_value(right)
-    predicate = arith.CmpIPredicate.slt if kind == "min" else arith.CmpIPredicate.sgt
-    cond = arith.CmpIOp(predicate, lhs, rhs).result
-    op = mlir_ir.Operation.create(
-        "arith.select", operands=[cond, lhs, rhs], results=[lhs.type]
-    )
-    return _runtime._IndexExpr(op.results[0])
+    from .base_dsl.typing import Numeric, as_numeric
+
+    lhs = left if isinstance(left, Numeric) else as_numeric(left)
+    rhs = right if isinstance(right, Numeric) else as_numeric(right)
+    if type(lhs) is not type(rhs):
+        raise TlaCoreAPIError(
+            f"{kind}() Numeric operands must share a type, "
+            f"got {type(lhs).__name__} and {type(rhs).__name__}"
+        )
+    if isinstance(lhs.value, (int, bool)) and isinstance(rhs.value, (int, bool)):
+        pick_left = (
+            int(lhs.value) < int(rhs.value)
+            if kind == "min"
+            else int(lhs.value) > int(rhs.value)
+        )
+        return lhs if pick_left else rhs
+    cond = (lhs < rhs) if kind == "min" else (lhs > rhs)
+    selected = arith.SelectOp(
+        _coerce_bool_value(cond),
+        lhs.ir_value(),
+        rhs.ir_value(),
+    ).result
+    return type(lhs)(selected)
 
 
 def _internal_frontend_compare(
@@ -656,8 +690,8 @@ def _internal_frontend_compare(
         current = comparator
     if not results:
         return True
-    # A single comparison returns its result directly (a _BoolExpr for scalar
-    # comparisons, or a MaskSSA for vector comparisons). Equivalent to the
+    # A single comparison returns its result directly (``Bool`` Numeric for
+    # scalar comparisons, or a MaskSSA for vector comparisons). Equivalent to the
     # bool-and path for one element, and lets vector masks pass through.
     if len(results) == 1:
         return results[0]
@@ -693,8 +727,8 @@ def _internal_frontend_compare_pair(left: Any, right: Any, op: str) -> Any:
 
 
 def _compare_index_or_python(left: Any, right: Any, predicate: Any, op: str) -> Any:
+    del predicate  # Numeric / as_numeric path emits typed cmpi; unused for bare Values.
     from mlir import ir as mlir_ir  # type: ignore[assignment]
-    from mlir.dialects import arith  # type: ignore[import-not-found]
 
     from .base_dsl.typing import Numeric
 
@@ -716,8 +750,7 @@ def _compare_index_or_python(left: Any, right: Any, predicate: Any, op: str) -> 
     # Numeric SSA binds an ``ir.Value``; check the wrapper *before* resolving so
     # we use typed ``Numeric.__lt__``/… instead of index coercion.
     # ``if value < 0`` then emits element-typed ``arith.cmpi`` (e.g. i32).
-    # Mixed ``index`` vs Numeric still goes through ``_IndexExpr`` / python
-    # operators, which rely on ``_coerce_index_value`` to ``index_cast``.
+    # Bare MLIR values (rare) go through ``as_numeric``.
     if isinstance(left, Numeric) or isinstance(right, Numeric):
         return _python_compare(left, right)
 
@@ -728,9 +761,9 @@ def _compare_index_or_python(left: Any, right: Any, predicate: Any, op: str) -> 
     if rhs is None:
         rhs = right
     if isinstance(lhs, mlir_ir.Value) or isinstance(rhs, mlir_ir.Value):
-        lhs_index = _coerce_index_value(lhs)
-        rhs_index = _coerce_index_value(rhs)
-        return _BoolExpr(arith.CmpIOp(predicate, lhs_index, rhs_index).result)
+        from .base_dsl.typing import as_numeric
+
+        return _python_compare(as_numeric(lhs), as_numeric(rhs))
     return _python_compare(left, right)
 
 

@@ -274,6 +274,14 @@ def _build_tla_func(
             call_args_for_fn[i] = num
             category_bindings[id(num)] = "numeric"
             category_bindings[id(ssa)] = "numeric"
+        elif isinstance(host_arg, int) and not isinstance(host_arg, bool):
+            # Kernel ``int`` args are i32 Numerics (not MLIR index / ArgProxy).
+            from .base_dsl.typing import Int32
+
+            num = Int32(ssa)
+            call_args_for_fn[i] = num
+            category_bindings[id(num)] = "numeric"
+            category_bindings[id(ssa)] = "numeric"
         else:
             proxy = _ArgProxy()
             call_args_for_fn[i] = proxy
@@ -384,7 +392,7 @@ def _resolve_execution_arg_types(
             if isinstance(value, bool):
                 resolved[name] = "i1"
             elif isinstance(value, int):
-                resolved[name] = "index"
+                resolved[name] = "i32"
             elif isinstance(value, float):
                 resolved[name] = "f32"
     return resolved

@@ -133,7 +133,12 @@ def flatten_frontend_if_tree(
     value: Any, name: str
 ) -> tuple[list[Any], FrontendIfTreeSpec, list[str]]:
     from ... import core_api as _core_api
+    from ..typing import as_numeric
 
+    # Bare int/float/bool enter SCF as Numeric.
+    # ``bool`` is a subclass of ``int`` — check it before ``type is int``.
+    if isinstance(value, bool) or type(value) is int or isinstance(value, float):
+        value = as_numeric(value)
     if isinstance(value, tuple):
         leaves: list[Any] = []
         leaf_names: list[str] = []
@@ -223,6 +228,11 @@ def flatten_frontend_if_tree(
 
 
 def frontend_if_tree_spec(value: Any) -> FrontendIfTreeSpec:
+    from ..typing import as_numeric, Numeric
+
+    # Same host-scalar rule as flatten_frontend_if_tree.
+    if isinstance(value, bool) or type(value) is int or isinstance(value, float):
+        value = as_numeric(value)
     if isinstance(value, tuple):
         return FrontendIfTreeSpec(
             "tuple", children=tuple(frontend_if_tree_spec(item) for item in value)
@@ -250,10 +260,11 @@ def frontend_if_tree_spec(value: Any) -> FrontendIfTreeSpec:
             node_type=type(value),
         )
     if is_frontend_if_dynamic_expression(value):
-        values = value.__extract_mlir_values__()
+        # Host Numerics must not call ``__extract_mlir_values__`` (needs MLIR ctx).
+        n = 1 if isinstance(value, Numeric) else len(value.__extract_mlir_values__())
         return FrontendIfTreeSpec(
             "dynamic_expression",
-            keys=tuple(range(len(values))),
+            keys=tuple(range(n)),
             node_type=type(value),
             metadata=value,
         )

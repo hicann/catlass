@@ -84,7 +84,9 @@ class _Tensor(TensorABC):
         tensor_type = _tla_tensor_type_for_mlir_value(self.value)
         _register_tla_tensor_type(result.value, tensor_type)
 
-        dynamic_values = iter(_runtime._IndexExpr(value) for value in values[1:])
+        from ..base_dsl.typing import as_numeric
+
+        dynamic_values = iter(as_numeric(value) for value in values[1:])
         metadata = {
             "shape": _metadata_from_type_tree(tensor_type.shape, dynamic_values),
             "stride": _metadata_from_type_tree(tensor_type.stride, dynamic_values),
@@ -420,12 +422,11 @@ class _Tensor(TensorABC):
             raise TlaLoweringError(
                 f"tla.scalar_load result type mismatch: expected {elem_type}, got {result.type}"
             )
-        # Bool / i1 loads are control-flow predicates: expose as _BoolExpr so
-        # ``if tensor[i]`` / ``and`` see category "bool" (not bare Numeric).
+        # Bool / i1 loads: Bool Numeric (``if tensor[i]`` via coerce).
         if mlir_ir.IntegerType.isinstance(elem_type):
             int_ty = mlir_ir.IntegerType(elem_type)
             if int_ty.width == 1:
-                return _runtime._BoolExpr(result)
+                return Bool(result)
         return Numeric.from_mlir_type(elem_type)(result)
 
     @dsl_user_op
@@ -544,12 +545,14 @@ def _tensor_metadata_field(value: mlir_ir.Value, field: str) -> Any:
 def _scale_coord_leaf(coord: Any, shape: Any) -> Any:
     if isinstance(coord, int):
         return coord * shape
+    from ..base_dsl.typing import as_numeric
+
     resolved = _runtime._resolve_frontend_bound_value(coord)
     if (
         resolved is not coord
         or _runtime._resolve_frontend_bound_category(coord) == "index"
     ):
-        return _runtime._IndexExpr(_runtime._coerce_index_value(coord)) * shape
+        return as_numeric(coord) * shape
     return coord * shape
 
 

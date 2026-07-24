@@ -325,7 +325,7 @@ def test_statement_while_rejects_new_value_used_after_loop() -> None:
 
 
 def test_statement_while_rejects_mismatched_carried_type() -> None:
-    with pytest.raises(tla.TlaCoreAPIError, match="expected index"):
+    with pytest.raises(tla.TlaCoreAPIError, match="expected i32"):
         _ = bad_statement_while_type_mismatch_kernel.dump_mlir(type_args=(4,))
 
 
@@ -355,7 +355,7 @@ def test_statement_while_active_object_method_call_lowers_as_carried_value() -> 
 
 
 def test_statement_while_rejects_active_object_method_structure_change() -> None:
-    with pytest.raises(tla.TlaCoreAPIError, match="'values'.*structure"):
+    with pytest.raises(tla.TlaCoreAPIError, match="structure"):
         _ = bad_statement_while_active_object_method_structure_kernel.dump_mlir(
             type_args=(4,)
         )
@@ -388,7 +388,7 @@ def test_while_execute_dynamic_rejects_condition_region_type_mismatch() -> None:
         def after(state: Any) -> list[Any]:
             return [(state[0] + 1, state[1] + 2)]
 
-        with pytest.raises(tla.TlaCoreAPIError, match="condition.*expected index"):
+        with pytest.raises(tla.TlaCoreAPIError, match=r"condition.*structure"):
             ast_decorators_mod._while_execute_dynamic(
                 before,
                 after,

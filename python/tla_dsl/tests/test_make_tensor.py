@@ -74,12 +74,12 @@ def test_make_tensor_rank1_default_coord_is_single_zero() -> None:
 
 
 def test_make_tensor_accepts_dynamic_shape_leaf() -> None:
-    """A dynamic shape/stride leaf (``_IndexExpr`` from a tla.range induction variable)
+    """A dynamic shape/stride leaf (``Int32`` from a tla.range induction variable)
     must be accepted, not rejected as index-type metadata.
 
     Regression: ``make_tensor`` previously built its ``TlaIndexTreeType`` from the raw
-    index tree (which carries ``_IndexExpr`` for dynamic leaves) and failed with
-    ``TypeError: ... expects static int leaves or None for dynamic leaves; got _IndexExpr``.
+    index tree (which carries Numeric for dynamic leaves) and failed with
+    ``TypeError: ... expects static int leaves or None for dynamic leaves; got ...``.
     The dynamic SSA value travels in the make_shape/make_stride operand; the tensor type
     only spells the leaf as ``?`` (``None``), exactly like ``tile_view``.
     """

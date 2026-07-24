@@ -9,9 +9,10 @@ struct LowerBlockIdxOp : public OpRewritePattern<::tla::BlockIdxOp> {
   LogicalResult matchAndRewrite(::tla::BlockIdxOp op, PatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
     auto hivmOp = rewriter.create<hivm::GetBlockIdxOp>(loc, rewriter.getI64Type());
-    auto indexValue =
-        rewriter.create<arith::IndexCastOp>(loc, rewriter.getIndexType(), hivmOp.getResult());
-    rewriter.replaceOp(op, indexValue.getResult());
+    // HIVM returns i64; dialect / user model use i32.
+    auto i32Value =
+        rewriter.create<arith::TruncIOp>(loc, rewriter.getI32Type(), hivmOp.getResult());
+    rewriter.replaceOp(op, i32Value.getResult());
     return success();
   }
 };
@@ -22,9 +23,9 @@ struct LowerSubBlockIdxOp : public OpRewritePattern<::tla::SubBlockIdxOp> {
   LogicalResult matchAndRewrite(::tla::SubBlockIdxOp op, PatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
     auto hivmOp = rewriter.create<hivm::GetSubBlockIdxOp>(loc, rewriter.getI64Type());
-    auto indexValue =
-        rewriter.create<arith::IndexCastOp>(loc, rewriter.getIndexType(), hivmOp.getResult());
-    rewriter.replaceOp(op, indexValue.getResult());
+    auto i32Value =
+        rewriter.create<arith::TruncIOp>(loc, rewriter.getI32Type(), hivmOp.getResult());
+    rewriter.replaceOp(op, i32Value.getResult());
     return success();
   }
 };
@@ -35,9 +36,9 @@ struct LowerBlockDimOp : public OpRewritePattern<::tla::BlockDimOp> {
   LogicalResult matchAndRewrite(::tla::BlockDimOp op, PatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
     auto hivmOp = rewriter.create<hivm::GetBlockNumOp>(loc, rewriter.getI64Type());
-    auto indexValue =
-        rewriter.create<arith::IndexCastOp>(loc, rewriter.getIndexType(), hivmOp.getResult());
-    rewriter.replaceOp(op, indexValue.getResult());
+    auto i32Value =
+        rewriter.create<arith::TruncIOp>(loc, rewriter.getI32Type(), hivmOp.getResult());
+    rewriter.replaceOp(op, i32Value.getResult());
     return success();
   }
 };

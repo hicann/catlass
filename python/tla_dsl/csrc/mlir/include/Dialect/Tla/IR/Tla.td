@@ -417,9 +417,9 @@ def Tla_WaitFlagTrait : NativeOpTrait<"::mlir::tla::trait::WaitFlag">;
 def Tla_BlockDimOp : Tla_Op<"arch.block_dim", [Pure]> {
   let summary = "Block dimension";
   let description = [{
-    Return the grid block dimension.
+    Return the grid block dimension as signless ``i32``.
   }];
-  let results = (outs Index:$dim);
+  let results = (outs I32:$dim);
   let assemblyFormat = [{
     attr-dict `->` type($dim)
   }];
@@ -428,9 +428,9 @@ def Tla_BlockDimOp : Tla_Op<"arch.block_dim", [Pure]> {
 def Tla_BlockIdxOp : Tla_Op<"arch.block_idx", [Pure]> {
   let summary = "Block index";
   let description = [{
-    Return the current block index.
+    Return the current block index as signless ``i32``.
   }];
-  let results = (outs Index:$index);
+  let results = (outs I32:$index);
   let assemblyFormat = [{
     attr-dict `->` type($index)
   }];
@@ -439,9 +439,9 @@ def Tla_BlockIdxOp : Tla_Op<"arch.block_idx", [Pure]> {
 def Tla_SubBlockIdxOp : Tla_Op<"arch.sub_block_idx", [Pure]> {
   let summary = "Sub-block index";
   let description = [{
-    Return the current sub-block index.
+    Return the current sub-block index as signless ``i32``.
   }];
-  let results = (outs Index:$index);
+  let results = (outs I32:$index);
   let assemblyFormat = [{
     attr-dict `->` type($index)
   }];

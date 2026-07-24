@@ -3,9 +3,9 @@
 module {
   tla.func @cross_flags() {
     "tla.vector"() ({
-      %idx = tla.arch.block_idx -> index
-      %zero = arith.constant 0 : index
-      %condition = arith.cmpi eq, %idx, %zero : index
+      %idx = tla.arch.block_idx -> i32
+      %zero = arith.constant 0 : i32
+      %condition = arith.cmpi eq, %idx, %zero : i32
       %direct = tla.cross_flag "direct" -> !tla.cross_flag<2>
       %ping = tla.cross_flag "ping" -> !tla.cross_flag<2>
       %pong = tla.cross_flag "pong" -> !tla.cross_flag<2>

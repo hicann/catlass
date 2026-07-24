@@ -613,11 +613,11 @@ def test_build_hivmc_a5_command_links_template_bitcode_for_aiv(
         ([tla.Int32(-7), tla.Float32(1.5)], struct.pack("<if", -7, 1.5)),
         ([tla.Float32(1.0), tla.Float32(0.25)], struct.pack("<ff", 1.0, 0.25)),
         (
-            [tla.Int16(-7), tla.Index(9)],
+            [tla.Int16(-7), tla.Int64(9)],
             struct.pack("<h", -7) + b"\0" * 6 + struct.pack("<q", 9),
         ),
     ),
-    ids=["i32-f32", "f32-f32", "i16-index"],
+    ids=["i32-f32", "f32-f32", "i16-i64"],
 )
 def test_pack_launch_args_uses_native_scalar_layout(args, expected) -> None:
     assert execution._pack_launch_args(args) == expected

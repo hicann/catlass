@@ -27,7 +27,7 @@ _CAST_SUPPORTED_DTYPES = frozenset(
 from ._mlir_bindings import tla_ops_gen as _tla_ops_gen
 from .base_dsl import ast_helpers as _ast_helpers
 from .base_dsl.op import dsl_user_op, _capture_user_loc
-from .base_dsl.typing import Float32, Int8, Numeric, as_numeric
+from .base_dsl.typing import Bool, Float32, Int8, Int32, Numeric, as_numeric
 from .base_dsl.typing import Pointer as PointerABC
 from .base_dsl.typing import Pointer as PointerTypeHint
 from .tla.tensor import normalize_tile_view_coord
@@ -54,7 +54,6 @@ from .types import (
     TlaCoord,
     TlaCrossFlag,
     TlaFlag,
-    TlaIndex,
     TlaLayout,
     TlaMutex,
     TlaRegion,
@@ -203,7 +202,7 @@ class _Layout:
         self._layout_tag = layout_tag
 
 
-IndexLike: TypeAlias = int | mlir_ir.Value
+IndexLike: TypeAlias = int | mlir_ir.Value | Numeric
 IndexTree: TypeAlias = IndexLike | tuple["IndexTree", ...]
 ShapeLike: TypeAlias = IndexTree
 CoordLike: TypeAlias = IndexTree
@@ -719,13 +718,12 @@ def _const_bool(value: bool) -> mlir_ir.Value:
 
 
 def _as_i1_value(value: Any) -> mlir_ir.Value:
+    # Bare bool and Bool Numeric both lower to i1.
     if isinstance(value, bool):
-        val = _const_bool(value)
-    elif _category(value) == "bool":
-        val = _as_value(value)
-    else:
-        raise TlaLoweringError(f"value expected to be a bool, got {type(value).__name__}")
-    return val
+        return _const_bool(value)
+    if isinstance(value, Numeric) and type(value) is Bool:
+        return value.ir_value()
+    raise TlaLoweringError(f"value expected to be a bool, got {type(value).__name__}")
 
 
 def _const_index(value: int) -> mlir_ir.Value:
@@ -797,7 +795,7 @@ def _vector_lane_count(element_bytes: int) -> int:
 def _as_index_value(value: Any) -> mlir_ir.Value:
     resolved = _resolve_bound_value(value)
     if isinstance(resolved, Numeric):
-        # Index path: Int*/Bool/Index only (signless). Reject UInt* — use .to(Int*).
+        # Index path: signed Int*/Bool only. Reject UInt* — use .to(Int*).
         if not (type(resolved).is_integer and type(resolved).signed):
             raise TlaLoweringError(
                 f"Expected signed integer Numeric index, got {type(resolved).__name__}; "
@@ -829,6 +827,15 @@ def _as_index_value(value: Any) -> mlir_ir.Value:
 def _as_i64_value(value: Any, *, loc: mlir_ir.Location | None = None) -> mlir_ir.Value:
     resolved = _resolve_bound_value(value)
     i64_type = mlir_ir.IntegerType.get_signless(64)
+    if isinstance(resolved, Numeric):
+        if isinstance(resolved.value, (bool, int)):
+            dtype = type(resolved).dtype.lower()
+            if dtype.startswith("i") and dtype[1:].isdigit():
+                return _const_i64(int(resolved.value), loc=loc)
+            raise TlaLoweringError(
+                f"Expected i64-like Numeric, got {type(resolved).__name__}"
+            )
+        resolved = resolved.ir_value(loc=loc)
     if isinstance(resolved, mlir_ir.Value):
         if isinstance(resolved.type, mlir_ir.IndexType):
             return mlir_ir.Operation.create(
@@ -852,12 +859,6 @@ def _as_i64_value(value: Any, *, loc: mlir_ir.Location | None = None) -> mlir_ir
         return _const_i64(int(resolved), loc=loc)
     if isinstance(resolved, int):
         return _const_i64(resolved, loc=loc)
-    if isinstance(resolved, Numeric) and isinstance(
-        resolved.value, (bool, int)
-    ):
-        dtype = type(resolved).dtype.lower()
-        if dtype == "index" or (dtype.startswith("i") and dtype[1:].isdigit()):
-            return _const_i64(int(resolved.value), loc=loc)
     raise TlaLoweringError(f"Expected i64-like operand, got {type(value).__name__}")
 
 
@@ -947,9 +948,9 @@ def _as_value(value: Any) -> mlir_ir.Value:
                 st.tensor_host_by_value[resolved] = host
         return resolved
     if isinstance(resolved, bool):
-        return _const_index(int(resolved))
+        return _const_i32(int(resolved))
     if isinstance(resolved, int):
-        return _const_index(resolved)
+        return _const_i32(resolved)
     if isinstance(resolved, float):
         return _const_f32(resolved)
     raise TlaLoweringError(f"Expected SSA operand, got {type(value).__name__}")
@@ -979,11 +980,14 @@ def _wrap_frontend_value(value: mlir_ir.Value) -> Any:
     if _tla_type_bridge.type_is_mutex(value.type):
         return _MutexValue(value, "", -1)
     if isinstance(value.type, mlir_ir.IndexType):
-        return _runtime._IndexExpr(value)
+        # User model: Int32; Ascend IR may still use ``index``.
+        return as_numeric(value)
     if mlir_ir.IntegerType.isinstance(value.type):
         int_type = mlir_ir.IntegerType(value.type)
         if int_type.width == 1:
-            return _runtime._BoolExpr(value)
+            # i1 surfaces as Bool Numeric.
+            return Bool(value)
+        return Numeric.from_mlir_type(value.type)(value)
     return value
 
 
@@ -1109,7 +1113,7 @@ def _const_int_value(value: Any) -> int | None:
         return resolved
     if isinstance(resolved, Numeric) and isinstance(resolved.value, (bool, int)):
         dtype = type(resolved).dtype.lower()
-        if dtype.startswith("i") or dtype == "index":
+        if dtype.startswith("i"):
             return int(resolved.value)
     if isinstance(resolved, mlir_ir.Value):
         owner = getattr(resolved, "owner", None)
@@ -1323,10 +1327,10 @@ def _as_index_expr_or_int(value: Any) -> Any:
     if const is not None:
         return int(const)
     resolved = _resolve_bound_value(value)
-    if isinstance(resolved, _runtime._IndexExpr):
+    if isinstance(resolved, Numeric) and type(resolved).is_integer and type(resolved).signed:
         return resolved
     if isinstance(resolved, mlir_ir.Value):
-        return _runtime._IndexExpr(resolved)
+        return as_numeric(resolved)
     return value
 
 
@@ -1388,7 +1392,7 @@ def _tree_crop_origin(parent_origin: Any, tile_shape: Any, tile_coord: Any) -> A
         operands=[rest_v, tile_v],
         results=[mlir_ir.IndexType.get()],
     )
-    return _runtime._IndexExpr(op.results[0])
+    return as_numeric(op.results[0])
 
 
 def _ceil_div_expr(a: Any, b: int) -> Any:
@@ -1834,11 +1838,13 @@ _format_tile_type = _format_tensor_type
 
 
 def _is_integer(value: Any) -> bool:
-    """Return whether ``value`` is a static ``int``, index/integer SSA, or a bound index."""
+    """Return whether ``value`` is a static ``int``, index/integer SSA, or Numeric Int*."""
     resolved = _resolve_bound_value(value)
     if isinstance(resolved, bool):
         return False
     if isinstance(resolved, int):
+        return True
+    if isinstance(resolved, Numeric) and type(resolved).is_integer and type(resolved).signed:
         return True
     if isinstance(resolved, mlir_ir.Value) and isinstance(
         resolved.type, (mlir_ir.IndexType, mlir_ir.IntegerType)
@@ -2219,9 +2225,76 @@ def _require_index(op_name: str, name: str, value: Any, position: int) -> None:
         return
     if _category(resolved) == "index":
         return
+    if isinstance(resolved, Numeric) and type(resolved).is_integer and type(resolved).signed:
+        # User Int32 (etc.): lowering index_casts at the use site.
+        return
     _op_error(
         op_name,
         f"invalid argument '{name}' (position {position}): expected index, got {_type_name(value)}",
+    )
+
+
+def _require_numeric(
+    op_name: str,
+    name: str,
+    value: Any,
+    position: int,
+    *,
+    integer: bool = False,
+    signed: bool | None = None,
+) -> None:
+    resolved = _resolve_bound_value(value)
+    if not isinstance(resolved, Numeric):
+        _op_error(
+            op_name,
+            f"invalid argument '{name}' (position {position}): "
+            f"expected Numeric, got {_type_name(value)}",
+        )
+    cls = type(resolved)
+    if integer and not cls.is_integer:
+        _op_error(
+            op_name,
+            f"invalid argument '{name}' (position {position}): "
+            f"expected integer Numeric, got {cls.__name__}",
+        )
+    if signed is True and not cls.signed:
+        _op_error(
+            op_name,
+            f"invalid argument '{name}' (position {position}): "
+            f"expected signed integer Numeric, got {cls.__name__}",
+        )
+    if signed is False and cls.signed:
+        _op_error(
+            op_name,
+            f"invalid argument '{name}' (position {position}): "
+            f"expected unsigned integer Numeric, got {cls.__name__}",
+        )
+
+
+def _require_index_or_numeric(
+    op_name: str, name: str, value: Any, position: int
+) -> None:
+    """Accept Python ``int``, index SSA, or signed integer ``Numeric``."""
+    resolved = _resolve_bound_value(value)
+    if isinstance(resolved, bool):
+        _op_error(
+            op_name,
+            f"invalid argument '{name}' (position {position}): "
+            f"expected index or signed integer Numeric, got bool",
+        )
+    if isinstance(resolved, int):
+        return
+    if _category(resolved) == "index":
+        return
+    if isinstance(resolved, Numeric):
+        _require_numeric(
+            op_name, name, value, position, integer=True, signed=True
+        )
+        return
+    _op_error(
+        op_name,
+        f"invalid argument '{name}' (position {position}): "
+        f"expected index or signed integer Numeric, got {_type_name(value)}",
     )
 
 
@@ -2422,11 +2495,11 @@ def _require_bool(op_name: str, name: str, value: Any, position: int) -> None:
     resolved = _resolve_bound_value(value)
     if isinstance(resolved, bool):
         return
-    if _category(resolved) == "bool":
+    if isinstance(resolved, Numeric) and type(resolved) is Bool:
         return
     _op_error(
         op_name,
-        f"invalid argument '{name}' (position {position}): expected bool, got {_type_name(value)}",
+        f"invalid argument '{name}' (position {position}): expected bool|Bool, got {_type_name(value)}",
     )
 
 
@@ -2878,7 +2951,7 @@ def make_tensor(
     # make_coord operands bundled into ``layout._layout_value`` / ``coord._coord_value``,
     # so the type only needs to mark which leaves are dynamic - same approach as
     # ``_format_tensor_type_descriptor`` (``tile_view``). The index trees above (which
-    # carry the concrete ``int`` / ``_IndexExpr`` leaf values) back the metadata below.
+    # carry the concrete ``int`` / Numeric leaf values) back the metadata below.
     shape_type_tree = _components_to_type_tree(layout._shape._components)
     stride_type_tree = _components_to_type_tree(layout._stride._components)
     origin_type_tree = (
@@ -2909,9 +2982,9 @@ def make_tensor(
     out = op.results[0]
     _register_tla_tensor_type(out, result_desc)
     try:
-        # Metadata carries the concrete leaf values (``int`` / ``_IndexExpr``) so that
+        # Metadata carries the concrete leaf values (``int`` / Numeric) so that
         # downstream ops can do coord arithmetic on dynamic leaves; equivalent to
-        # ``result_desc.metadata()`` for the static fields but preserving ``_IndexExpr``
+        # ``result_desc.metadata()`` for the static fields but preserving Numeric
         # for dynamic shape/stride/coord/origin (like ``tile_view`` does).
         _register_tla_tensor_metadata(
             out,
@@ -3550,7 +3623,7 @@ def range(
         prefetch_stages=prefetch_stages,
     )
     if end is None and step is None:
-        _require_index("range", "end", start, 0)
+        _require_index_or_numeric("range", "end", start, 0)
         return _ast_helpers.range(
             start,
             unroll=unroll,
@@ -3558,8 +3631,8 @@ def range(
             prefetch_stages=prefetch_stages,
         )
     if step is None:
-        _require_index("range", "start", start, 0)
-        _require_index("range", "end", end, 1)
+        _require_index_or_numeric("range", "start", start, 0)
+        _require_index_or_numeric("range", "end", end, 1)
         return _ast_helpers.range(
             start,
             end,
@@ -3569,9 +3642,9 @@ def range(
         )
     if end is None:
         _op_error("range", "expected 1, 2, or 3 arguments")
-    _require_index("range", "start", start, 0)
-    _require_index("range", "end", end, 1)
-    _require_index("range", "step", step, 2)
+    _require_index_or_numeric("range", "start", start, 0)
+    _require_index_or_numeric("range", "end", end, 1)
+    _require_index_or_numeric("range", "step", step, 2)
     return _ast_helpers.range(
         start,
         end,
@@ -3671,7 +3744,7 @@ def mmad(
     acc: TileLike,
     lhs: TileLike,
     rhs: TileLike,
-    init_c: bool | mlir_ir.Value | None = None,
+    init_c: bool | Bool | None = None,
     unit_flag: IndexLike | None = None,
     acc_type: DTypeLike | None = None,
     loc: mlir_ir.Location | None = None,
@@ -3710,7 +3783,9 @@ def mmad(
                 f"got [{unit_flag}]"
             )
         unit_flag_value = _const_i64(unit_flag)
-    elif _category(unit_flag) == "index": # _IndexExpr
+    elif isinstance(unit_flag, Numeric) and type(unit_flag).is_integer and type(unit_flag).signed:
+        unit_flag_value = _as_i64_value(unit_flag)
+    elif _category(unit_flag) == "index":
         unit_flag_value = _as_i64_value(unit_flag)
     else:
         raise TlaLoweringError("tla.mmad unit_flag must be a int")
@@ -3872,7 +3947,7 @@ def arange(
                     op_name,
                     "base must be an integer literal or index SSA value",
                 )
-        elif isinstance(resolved, _runtime._IndexExpr):
+        elif isinstance(resolved, Numeric) and type(resolved).is_integer and type(resolved).signed:
             index_value = _runtime._coerce_index_value(resolved)
             start_value = mlir_ir.Operation.create(
                 "arith.index_cast",
@@ -4871,27 +4946,30 @@ def gather(
 
 
 @dsl_user_op
-def arch_block_idx(*, loc: mlir_ir.Location | None = None) -> TlaIndex:
-    """Return block index in Tla execution model."""
+def arch_block_idx(*, loc: mlir_ir.Location | None = None) -> Int32:
+    """Return block index in Tla execution model (``Int32``)."""
     _require_frontend_state("arch.block_idx")
-    value = _tla_ops_gen.arch_block_idx(mlir_ir.IndexType.get(), loc=loc)
-    return _wrap_frontend_value(value)
+    i32 = mlir_ir.IntegerType.get_signless(32)
+    value = _tla_ops_gen.arch_block_idx(i32, loc=loc)
+    return Int32(value)
 
 
 @dsl_user_op
-def arch_sub_block_idx(*, loc: mlir_ir.Location | None = None) -> TlaIndex:
-    """Return sub-block index in Tla execution model."""
+def arch_sub_block_idx(*, loc: mlir_ir.Location | None = None) -> Int32:
+    """Return sub-block index in Tla execution model (``Int32``)."""
     _require_frontend_state("arch.sub_block_idx")
-    value = _tla_ops_gen.arch_sub_block_idx(mlir_ir.IndexType.get(), loc=loc)
-    return _wrap_frontend_value(value)
+    i32 = mlir_ir.IntegerType.get_signless(32)
+    value = _tla_ops_gen.arch_sub_block_idx(i32, loc=loc)
+    return Int32(value)
 
 
 @dsl_user_op
-def arch_block_dim(*, loc: mlir_ir.Location | None = None) -> TlaIndex:
-    """Return block dimension in Tla execution model."""
+def arch_block_dim(*, loc: mlir_ir.Location | None = None) -> Int32:
+    """Return block dimension in Tla execution model (``Int32``)."""
     _require_frontend_state("arch.block_dim")
-    value = _tla_ops_gen.arch_block_dim(mlir_ir.IndexType.get(), loc=loc)
-    return _wrap_frontend_value(value)
+    i32 = mlir_ir.IntegerType.get_signless(32)
+    value = _tla_ops_gen.arch_block_dim(i32, loc=loc)
+    return Int32(value)
 
 
 @dsl_user_op
@@ -5219,7 +5297,7 @@ def update_mask(
     mask_value, new_true_shape = _tla_ops_gen.update_mask(
         mask_ty, index_ty, true_shape_value, mlir_ir.TypeAttr.get(elem_type), loc=loc
     )
-    return MaskSSA(mask_value), _runtime._IndexExpr(new_true_shape)
+    return MaskSSA(mask_value), as_numeric(new_true_shape)
 
 
 _mask_namespace = _Namespace()

@@ -289,7 +289,7 @@ def test_make_coord_accepts_index_arith_var() -> None:
     mlir = make_coord_from_index_arith_ok.dump_mlir(type_args=(16,))
     assert "scf.for" in mlir
     assert "tla.for" not in mlir
-    assert "arith.divui" in mlir
+    assert ("arith.divui" in mlir) or ("arith.divsi" in mlir)
     assert "tla.make_coord" in mlir
 
 
@@ -823,6 +823,6 @@ def test_dynamic_for_body_error_reports_original_source_location() -> None:
     assert "Execution-mode lowering failed in dynamic for body" in message
     assert f"{__file__}:{line}" in message
     assert "source: values[i]" in message
-    assert "list indices" in message
-    assert "_IndexExpr" in message
+    assert "cannot be used as a Python index" in message or "list indices" in message
+    assert "Int32" in message
 

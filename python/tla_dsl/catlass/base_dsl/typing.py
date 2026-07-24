@@ -427,10 +427,6 @@ def _mlir_f32() -> mlir_ir.Type:
     return mlir_ir.F32Type.get()
 
 
-def _mlir_index() -> mlir_ir.Type:
-    return mlir_ir.IndexType.get()
-
-
 class Numeric(metaclass=NumericMeta, is_abstract=True):
     """Numeric type and value (``DslType`` / ``NumericMeta`` first-class).
 
@@ -480,8 +476,22 @@ class Numeric(metaclass=NumericMeta, is_abstract=True):
         if isinstance(value, mlir_ir.Value):
             expected = cls.mlir_type()
             if str(value.type) != str(expected):
-                src_cls = Numeric.from_mlir_type(value.type)
-                value = src_cls(value).to(cls, loc=loc).value
+                # MLIR ``index`` is not a user Numeric; cast at construction
+                # into the requested signed integer type.
+                if isinstance(value.type, mlir_ir.IndexType):
+                    if not (cls.is_integer and cls.signed):
+                        raise TypeError(
+                            f"unsupported cast from MLIR index to {cls.__name__}"
+                        )
+                    value = mlir_ir.Operation.create(
+                        "arith.index_cast",
+                        operands=[value],
+                        results=[expected],
+                        loc=loc,
+                    ).results[0]
+                else:
+                    src_cls = Numeric.from_mlir_type(value.type)
+                    value = src_cls(value).to(cls, loc=loc).value
             self.value: Any = value
             self.__tla_category__ = "numeric"
             from .. import runtime as _runtime
@@ -509,8 +519,9 @@ class Numeric(metaclass=NumericMeta, is_abstract=True):
 
     @classmethod
     def from_mlir_type(cls, ty: mlir_ir.Type) -> type[Numeric]:
+        # User-facing Numerics do not include MLIR ``index``; map to Int32.
         if isinstance(ty, mlir_ir.IndexType):
-            token = "index"
+            token = "i32"
         elif isinstance(ty, mlir_ir.F16Type):
             token = "f16"
         elif isinstance(ty, mlir_ir.BF16Type):
@@ -872,6 +883,9 @@ class Numeric(metaclass=NumericMeta, is_abstract=True):
         if isinstance(value, float):
             return Float32(value)
         if isinstance(value, mlir_ir.Value):
+            # Ascend IR may still emit MLIR ``index`` (layout leaves).
+            # ``from_mlir_type`` maps index → Int32 and ``Numeric.__init__``
+            # emits ``arith.index_cast``.
             return Numeric.from_mlir_type(value.type)(value)
         raise ValueError(
             f"unable to convert {value} in type {type(value)} to Numeric"
@@ -1068,12 +1082,6 @@ class Float32(Float, metaclass=FloatMeta, width=32, dtype="f32", mlir_type=_mlir
         return [Float32._host_bits(float(self.value))]
 
 
-class Index(
-    Integer, metaclass=IntegerMeta, width=64, dtype="index", signed=True, mlir_type=_mlir_index
-):
-    pass
-
-
 class Constexpr(Generic[_T]):
     """Type marker for compile-time-only frontend parameters."""
 
@@ -1145,7 +1153,6 @@ __all__ = [
     "Float16",
     "BFloat16",
     "Float32",
-    "Index",
     "Pointer",
     "Constexpr",
     "JitArgument",

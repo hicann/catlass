@@ -200,7 +200,7 @@ def _assert_scalar_kernel_with_local_ub(mlir: str) -> None:
         for line in mlir.splitlines()
         if line.strip().startswith("tla.func @")
     )
-    assert "(%arg0: index)" in signature
+    assert "(%arg0: i32)" in signature
     assert "!tla.tensor<" not in signature
     assert "tla.alloc_ptr" in mlir
     assert "tla.tile_view" not in mlir

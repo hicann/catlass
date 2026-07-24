@@ -609,7 +609,7 @@ def test_pointer_if_mixed_results_compile_through_tla_lower_ptr() -> None:
     )
 
     assert "scf.if" in output
-    assert "-> (i64, index)" in output
+    assert "-> (i64, i32)" in output
     assert "tla.inttoptr" in output
     assert "tla.alloc_ptr" not in output
 
@@ -726,35 +726,33 @@ def test_tensor_scf_carrier_preserves_dynamic_descriptor_fields() -> None:
 
 
 @pytest.mark.parametrize(
-    ("kernel", "control_flow", "result_count", "metadata_consumers"),
+    ("kernel", "control_flow", "result_count", "metadata_fields"),
     (
         (
             _tensor_if_dynamic_metadata_access_kernel,
             "scf.if",
             5,
-            (
-                "tla.make_shape {result}#1, {result}#4",
-                "tla.make_stride {result}#2",
-                "tla.make_coord {result}#3",
-            ),
+            # Dynamic tensor metadata is carried as i32, then index_cast at
+            # make_shape/coord/stride boundaries.
+            (1, 4, 2, 3),
         ),
         (
             _tensor_statement_if_dynamic_metadata_access_kernel,
             "scf.if",
             5,
-            ("tla.make_shape {result}#1",),
+            (1,),
         ),
         (
             _tensor_for_dynamic_metadata_access_kernel,
             "scf.for",
             5,
-            ("tla.make_shape {result}#1",),
+            (1,),
         ),
         (
             _tensor_while_dynamic_metadata_access_kernel,
             "scf.while",
             6,
-            ("tla.make_shape {result}#2",),
+            (2,),
         ),
     ),
 )
@@ -762,7 +760,7 @@ def test_tensor_scf_carrier_preserves_dynamic_metadata_ssa(
     kernel: object,
     control_flow: str,
     result_count: int,
-    metadata_consumers: tuple[str, ...],
+    metadata_fields: tuple[int, ...],
 ) -> None:
     mlir_text = kernel.dump_mlir(type_args=(128, 96, 2))
     match = re.search(
@@ -771,8 +769,9 @@ def test_tensor_scf_carrier_preserves_dynamic_metadata_ssa(
     )
     assert match is not None, mlir_text
     result = match.group(1)
-    for consumer in metadata_consumers:
-        assert consumer.format(result=result) in mlir_text
+    for field in metadata_fields:
+        assert f"arith.index_cast {result}#{field} : i32 to index" in mlir_text, mlir_text
+    assert "tla.make_shape" in mlir_text
 
     output = _run_tla_compile_ir_after_pass(
         mlir_text, "tla-lower-tensor-desc", require_success=True

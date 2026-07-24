@@ -1505,15 +1505,15 @@ def _index_sub_call(lhs: ast.expr, rhs: ast.expr) -> ast.Call:
 
 
 def _index_add(lhs: Any, rhs: Any) -> Any:
-    from catlass import runtime as _runtime
+    from catlass.base_dsl.typing import as_numeric
 
-    return _runtime._IndexExpr(_runtime._coerce_index_value(lhs)) + rhs
+    return as_numeric(lhs) + as_numeric(rhs)
 
 
 def _index_sub(lhs: Any, rhs: Any) -> Any:
-    from catlass import runtime as _runtime
+    from catlass.base_dsl.typing import as_numeric
 
-    return _runtime._IndexExpr(_runtime._coerce_index_value(lhs)) - rhs
+    return as_numeric(lhs) - as_numeric(rhs)
 
 
 def _attach_source_info(fn: Any, info: dict[str, Any]) -> Any:

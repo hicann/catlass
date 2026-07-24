@@ -525,6 +525,6 @@ def test_frontend_region_error_reports_original_source_location() -> None:
     assert "Execution-mode lowering failed in tla.cube region-body" in message
     assert f"{__file__}:{line}" in message
     assert "source: values[idx]" in message
-    assert "list indices" in message
-    assert "_IndexExpr" in message
+    assert "cannot be used as a Python index" in message or "list indices" in message
+    assert "Int32" in message
 

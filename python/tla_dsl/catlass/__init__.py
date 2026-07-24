@@ -63,7 +63,6 @@ UInt8 = types.UInt8
 UInt16 = types.UInt16
 UInt32 = types.UInt32
 UInt64 = types.UInt64
-Index = types.Index
 Float32 = types.Float32
 Float16 = types.Float16
 BFloat16 = types.BFloat16
@@ -138,7 +137,6 @@ __all__ = [
     "UInt16",
     "UInt32",
     "UInt64",
-    "Index",
     "Float32",
     "Float16",
     "BFloat16",
