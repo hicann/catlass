@@ -919,7 +919,7 @@ def Tla_SetFlagOp : Tla_Op<"set_flag", []> {
   let hasVerifier = 1;
 }
 
-def Tla_StoreOp : Tla_Op<"store", []> {
+def Tla_StoreOp : Tla_Op<"store", [AttrSizedOperandSegments]> {
   let summary = "Store";
   let description = [{
     Store vector SSA into a UB tensor tile. The destination tensor must be in
@@ -931,10 +931,12 @@ def Tla_StoreOp : Tla_Op<"store", []> {
   }];
   let arguments = (ins Tla_TensorType:$dest, Tla_VectorSSAType:$source,
                        Optional<Tla_MaskSSAType>:$mask,
+                       Optional<Tla_IntegerOrIndexType>:$block_stride,
                        OptionalAttr<UnitAttr>:$unaligned_ub_access);
   let assemblyFormat = [{
-    $dest `,` $source (`mask` $mask^)? attr-dict `:` type($dest) `,` qualified(type($source))
-    (`mask` qualified(type($mask))^)?
+    $dest `,` $source (`mask` $mask^)? (`stride` $block_stride^)? attr-dict `:`
+    type($dest) `,` qualified(type($source)) (`mask` qualified(type($mask))^)?
+    (`block_stride` qualified(type($block_stride))^)?
   }];
   let hasVerifier = 1;
 }

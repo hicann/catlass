@@ -26,6 +26,10 @@ struct VectorTy<half> {
   using type = vector_f16;
 };
 template <>
+struct VectorTy<bfloat16_t> {
+  using type = vector_bf16;
+};
+template <>
 struct VectorTy<int32_t> {
   using type = vector_s32;
 };

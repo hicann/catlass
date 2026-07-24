@@ -2450,16 +2450,19 @@ def squeeze(result, src, mask, *, loc=None, ip=None) -> _ods_ir.Value:
 class StoreOp(_ods_ir.OpView):
   OPERATION_NAME = "tla.store"
 
+  _ODS_OPERAND_SEGMENTS = [1,1,0,0,]
+
   _ODS_REGIONS = (0, True)
 
-  def __init__(self, dest, source, *, mask=None, unaligned_ub_access=None, loc=None, ip=None):
+  def __init__(self, dest, source, *, mask=None, block_stride=None, unaligned_ub_access=None, loc=None, ip=None):
     operands = []
     results = []
     attributes = {}
     regions = None
     operands.append(_get_op_result_or_value(dest))
     operands.append(_get_op_result_or_value(source))
-    if mask is not None: operands.append(_get_op_result_or_value(mask))
+    operands.append(_get_op_result_or_value(mask) if mask is not None else None)
+    operands.append(_get_op_result_or_value(block_stride) if block_stride is not None else None)
     _ods_context = _ods_get_default_loc_context(loc)
     if bool(unaligned_ub_access): attributes["unaligned_ub_access"] = _ods_ir.UnitAttr.get(
       _ods_get_default_loc_context(loc))
@@ -2468,15 +2471,31 @@ class StoreOp(_ods_ir.OpView):
 
   @builtins.property
   def dest(self):
-    return self.operation.operands[0]
+    operand_range = _ods_segmented_accessor(
+         self.operation.operands,
+         self.operation.attributes["operandSegmentSizes"], 0)
+    return operand_range[0]
 
   @builtins.property
   def source(self):
-    return self.operation.operands[1]
+    operand_range = _ods_segmented_accessor(
+         self.operation.operands,
+         self.operation.attributes["operandSegmentSizes"], 1)
+    return operand_range[0]
 
   @builtins.property
   def mask(self):
-    return None if len(self.operation.operands) < 3 else self.operation.operands[2]
+    operand_range = _ods_segmented_accessor(
+         self.operation.operands,
+         self.operation.attributes["operandSegmentSizes"], 2)
+    return operand_range[0] if len(operand_range) > 0 else None
+
+  @builtins.property
+  def block_stride(self):
+    operand_range = _ods_segmented_accessor(
+         self.operation.operands,
+         self.operation.attributes["operandSegmentSizes"], 3)
+    return operand_range[0] if len(operand_range) > 0 else None
 
   @builtins.property
   def unaligned_ub_access(self):
@@ -2493,8 +2512,8 @@ class StoreOp(_ods_ir.OpView):
   def unaligned_ub_access(self):
     del self.operation.attributes["unaligned_ub_access"]
 
-def store(dest, source, *, mask=None, unaligned_ub_access=None, loc=None, ip=None) -> _ods_ir.Operation:
-  return _get_op_result_or_op_results(StoreOp(dest=dest, source=source, mask=mask, unaligned_ub_access=unaligned_ub_access, loc=loc, ip=ip))
+def store(dest, source, *, mask=None, block_stride=None, unaligned_ub_access=None, loc=None, ip=None) -> _ods_ir.Operation:
+  return _get_op_result_or_op_results(StoreOp(dest=dest, source=source, mask=mask, block_stride=block_stride, unaligned_ub_access=unaligned_ub_access, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
 class SubBlockIdxOp(_ods_ir.OpView):

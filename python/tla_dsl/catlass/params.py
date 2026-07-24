@@ -76,6 +76,13 @@ class UnalignStoreParams(StoreParams):
     post_mode: str = PostMode.POST_MODE_NORMAL
     post_update_stride: int = 0
 
+@dataclass
+class BlockStoreParams(StoreParams):
+    """UB Block store with stride"""
+    block_stride: int = 0
+    post_mode: str = PostMode.POST_MODE_NORMAL
+    post_update_stride: int = 0
+
 
 class LoadParams:
     """Marker annotation for tensor tile load params."""

@@ -141,6 +141,14 @@ CATLASS_DEVICE auto makeUBTensor(memref_t<__ubuf__ T, Dim> *memref, const Tensor
                            Catlass::Arch::PositionUB{});
 }
 
+template <typename T, size_t Dim>
+CATLASS_DEVICE auto makeUBTensor(memref_t<__ubuf__ T, Dim> *memref, const TensorDesc4D &desc) {
+    return tla::MakeTensor(AscendC::LocalTensor<T>(AscendC::TPosition::VECCALC, localAddr(memref),
+                                 elementCount(memref)),
+                           makezNTlaLayout<T>(desc), makeTlaTileCoord(desc),
+                           Catlass::Arch::PositionUB{});
+}
+
 CATLASS_DEVICE auto makeColumnMajorTlaLayout(const TensorDesc2D &desc) {
     return tla::MakeLayout(tla::MakeShape(desc.shape0, desc.shape1),
                            tla::MakeStride(tla::Int<1>{}, desc.stride1),

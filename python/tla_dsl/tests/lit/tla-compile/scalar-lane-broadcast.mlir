@@ -23,7 +23,7 @@ module {
         %zero = arith.constant 0.000000e+00 : f32
         %full = "tla.full"(%zero) : (f32) -> !tla.vector<64xf32>
         %out = "tla.add"(%reg, %full) : (!tla.vector<64xf32>, !tla.vector<64xf32>) -> !tla.vector<64xf32>
-        "tla.store"(%dst_tile, %out) : (!t, !tla.vector<64xf32>) -> ()
+        "tla.store"(%dst_tile, %out) <{operandSegmentSizes = array<i32: 1, 1, 0, 0>}> : (!t, !tla.vector<64xf32>) -> ()
       }) {mode = "simd"} : () -> ()
     }) : () -> ()
     return

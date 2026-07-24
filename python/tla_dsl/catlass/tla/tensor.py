@@ -285,7 +285,7 @@ class _Tensor(TensorABC):
             _tla_tensor_type_for_mlir_value,
         )
         from ..execution_lowering import TlaLoweringError
-        from ..params import NormalStoreParams, StoreParams, UnalignStoreParams
+        from ..params import NormalStoreParams, StoreParams, UnalignStoreParams, BlockStoreParams
 
         loc = _normalize_user_loc(loc)
         _require_category("store", "value", value, "vector_ssa", 1)
@@ -293,7 +293,7 @@ class _Tensor(TensorABC):
             _require_category("store", "mask", mask, "mask_ssa", 2)
         if params is None:
             params = NormalStoreParams()
-        elif not isinstance(params, (NormalStoreParams, UnalignStoreParams)):
+        elif not isinstance(params, (NormalStoreParams, UnalignStoreParams, BlockStoreParams)):
             raise TlaLoweringError(
                 "store params must be NormalStoreParams or UnalignStoreParams, "
                 f"got {type(params).__name__}"
@@ -315,7 +315,13 @@ class _Tensor(TensorABC):
         store_kwargs: dict[str, Any] = {"loc": loc}
         if isinstance(params, UnalignStoreParams):
             store_kwargs["unaligned_ub_access"] = True
-        _tla_ops_gen.store(dest, value_val, mask=mask_val, **store_kwargs)
+        if isinstance(params, BlockStoreParams):
+            block_stride_value = _as_value(params.block_stride)
+        else:
+            block_stride_value = None
+        _tla_ops_gen.store(
+            dest, value_val, mask=mask_val, block_stride=block_stride_value, **store_kwargs
+        )
 
     def _check_can_scalar_load_store(self) -> None:
         """Phase-1 ``scalar_load``/``scalar_store`` preconditions (GM only; not ``tla.load``/``tla.store``)."""

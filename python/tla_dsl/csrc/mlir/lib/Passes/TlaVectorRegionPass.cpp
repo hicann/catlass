@@ -403,6 +403,41 @@ static func::FuncOp getOrCreateSqueezeLibraryCall(ModuleOp module, Location loc,
   return callee;
 }
 
+static std::string getStoreWithStrideLibraryCallName(Type elementType) {
+  if (elementType.isF32()) {
+    return "store_with_stride_float";
+  } else if (elementType.isF16()) {
+    return "store_with_stride_half";
+  }  else if (elementType.isBF16()) {
+    return "store_with_stride_bf16";
+  }
+  return {};
+}
+
+static void annotateStoreWithStrideLibraryCall(func::FuncOp callee) {
+  MLIRContext *ctx = callee.getContext();
+  callee.setPrivate();
+  callee->setAttr("llvm.emit_c_interface", UnitAttr::get(ctx));
+  callee->setAttr(hivm::TFuncCoreTypeAttr::name,
+                  hivm::TFuncCoreTypeAttr::get(ctx, hivm::TFuncCoreType::AIV));
+}
+
+static func::FuncOp getOrCreateStoreWithStrideLibraryCall(ModuleOp module, Location loc,
+                                                          Type vecType, Type memRefType,
+                                                          StringRef calleeName) {
+  auto ctx = module.getContext();
+  if (auto existing = module.lookupSymbol<func::FuncOp>(calleeName)) {
+    annotateStoreWithStrideLibraryCall(existing);
+    return existing;
+  }
+  OpBuilder moduleBuilder(module.getBodyRegion());
+  auto fnType = FunctionType::get(ctx, {vecType, memRefType,
+      IntegerType::get(ctx, 32), VectorType::get({256}, IntegerType::get(ctx, 1))}, {});
+  auto callee = moduleBuilder.create<func::FuncOp>(loc, calleeName, fnType);
+  annotateStoreWithStrideLibraryCall(callee);
+  return callee;
+}
+
 static Value castMaskToPregType(OpBuilder &b, Location loc, Value mask,
                                 VectorType pregVecType) {
   if (mask.getType() == pregVecType)
@@ -896,8 +931,42 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
     Value stride0 = lookupOrCloneScalarValue(b, descOp.getStride0(), valueMap);
     if (!rowOff || !colOff || !stride0)
       return failure();
-    Value flatOffset = b.create<arith::AddIOp>(
-        loc, b.create<arith::MulIOp>(loc, rowOff, stride0), colOff);
+    Value flatOffset;
+    if (descOp.getPacked().empty()) {
+        flatOffset = b.create<arith::AddIOp>(
+            loc, b.create<arith::MulIOp>(loc, rowOff, stride0), colOff);
+    } else if (descOp.getPacked().size() == 8) {
+        auto info = parseTensorInfo(descOp.getResult().getType());
+        if (!succeeded(info)) {
+            return descOp.emitError() << "parseTensorInfo failed";
+        }
+        auto packed = descOp.getPacked();
+        auto shape0 = lookupOrCloneScalarValue(b, packed[0], valueMap);
+        auto shape1 = lookupOrCloneScalarValue(b, packed[1], valueMap);
+        auto shape2 = lookupOrCloneScalarValue(b, packed[2], valueMap);
+        auto shape3 = lookupOrCloneScalarValue(b, packed[3], valueMap);
+        auto stride0 = lookupOrCloneScalarValue(b, packed[4], valueMap);
+        auto stride1 = lookupOrCloneScalarValue(b, packed[5], valueMap);
+        auto stride2 = lookupOrCloneScalarValue(b, packed[6], valueMap);
+        auto stride3 = lookupOrCloneScalarValue(b, packed[7], valueMap);
+        if (!shape0 || !shape1 || !shape2 || !shape3 || !stride0 || !stride1 || !stride2 || !stride3)
+            return failure();
+        if(info->layoutTag == "zN") {
+            Value pc0 = b.create<arith::RemSIOp>(loc, rowOff, shape0);
+            Value pc1 = b.create<arith::DivSIOp>(loc, rowOff, shape0);
+            Value pc2 = b.create<arith::RemSIOp>(loc, colOff, shape2);
+            Value pc3 = b.create<arith::DivSIOp>(loc, colOff, shape2);
+            Value t0 = b.create<arith::MulIOp>(loc, pc0, stride0);
+            Value t1 = b.create<arith::MulIOp>(loc, pc1, stride1);
+            Value t2 = b.create<arith::MulIOp>(loc, pc2, stride2);
+            Value t3 = b.create<arith::MulIOp>(loc, pc3, stride3);
+            Value sum01 = b.create<arith::AddIOp>(loc, t0, t1);
+            Value sum23 = b.create<arith::AddIOp>(loc, t2, t3);
+            flatOffset = b.create<arith::AddIOp>(loc, sum01, sum23);
+        } else {
+            return descOp->emitError() << "unsupported packed layout to get flatOffset";
+        }
+    }
     valueMap[descOp.getResult()] =
         ::tla::materializeFlatReinterpretSubview(b, loc, baseMemref, flatOffset, *lanesOr);
     return success();
@@ -1432,6 +1501,22 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
       auto store = b.create<hivmave::VFMaskedStoreOp>(loc, dest, ValueRange{zero}, mask, source);
       store->setAttr(hivmave::UnalignedAttr::name,
                      hivmave::UnalignedAttr::get(b.getContext()));
+    } else if (storeOp.getBlockStride()) {
+      Value blockStrideVal = lookupOrCloneScalarValue(b, storeOp.getBlockStride(), valueMap);
+      if (!blockStrideVal)
+        return failure();
+      if (!isa<IntegerType>(blockStrideVal.getType()))
+        blockStrideVal = b.create<arith::IndexCastOp>(loc, b.getI32Type(), blockStrideVal);
+      std::string calleeName = getStoreWithStrideLibraryCallName(sourceTy.getElementType());
+      if (calleeName.empty())
+        return storeOp.emitError("unsupported element type for tla.store with BlockStoreParams: ")
+             << sourceTy.getElementType(), failure();
+      auto callee = getOrCreateStoreWithStrideLibraryCall(module, loc, source.getType(), dest.getType(), calleeName);
+      if (!callee)
+        return failure();
+      VectorType pregVecType = fullPregVecType(b.getContext());
+      Value pregMask = castMaskToPregType(b, loc, mask, pregVecType);
+      b.create<func::CallOp>(loc, callee, ValueRange{source, dest, blockStrideVal, pregMask});
     } else {
       b.create<hivmave::VFMaskedStoreOp>(loc, dest, ValueRange{zero}, mask, source);
     }
