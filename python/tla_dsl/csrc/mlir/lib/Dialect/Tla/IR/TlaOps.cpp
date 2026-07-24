@@ -1,4 +1,7 @@
 #include "Dialect/Tla/IR/TlaOps.h"
+
+#include <limits>
+
 #include "Dialect/Tla/IR/TlaAttrs.h"
 #include "Dialect/Tla/IR/TlaTypes.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -585,6 +588,38 @@ mlir::LogicalResult DebugPrintOp::verify() {
   if (!hasEnclosingRegion<CubeOp>(getOperation()) &&
       !hasEnclosingRegion<VectorOp>(getOperation()))
     return emitOpError("must be nested inside a tla.cube or tla.vector region");
+  return mlir::success();
+}
+
+mlir::LogicalResult PrintTensorOp::verify() {
+  auto tensorType = getValue().getType();
+  if (!tensorType.getPtr().getPointee().isF32() ||
+      tensorType.getPtr().getAddrspace() != AddressSpace::gm)
+    return emitOpError("requires a GM float32 tensor");
+  if (!hasEnclosingRegion<CubeOp>(getOperation()) &&
+      !hasEnclosingRegion<VectorOp>(getOperation()))
+    return emitOpError("must be nested inside a tla.cube or tla.vector region");
+  if (getShape().empty())
+    return emitOpError("shape must not be empty");
+  llvm::SmallVector<int64_t, 4> tensorShape;
+  if (failed(getIndexTreeLeavesForVerify(
+          getOperation(), tensorType.getLayout().getShape(), tensorShape,
+          "tensor shape")))
+    return mlir::failure();
+  if (llvm::ArrayRef<int64_t>(getShape()) !=
+      llvm::ArrayRef<int64_t>(tensorShape))
+    return emitOpError("shape must match the tensor layout shape");
+  int64_t product = 1;
+  for (int64_t extent : getShape()) {
+    if (extent < 1 || product > std::numeric_limits<int64_t>::max() / extent)
+      return emitOpError("shape must contain a valid positive element count");
+    product *= extent;
+  }
+  int64_t length = getLengthAttr().getInt();
+  if (length < 1 || length > 16)
+    return emitOpError("length must be between 1 and 16 elements");
+  if (length > product)
+    return emitOpError("length must not exceed the tensor element count");
   return mlir::success();
 }
 

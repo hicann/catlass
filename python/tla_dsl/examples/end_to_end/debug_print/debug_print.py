@@ -17,25 +17,25 @@ DEFAULT_CACHE_DIR = Path(__file__).resolve().parent / "artifacts" / "runtime-cac
 @tla.kernel
 def debug_print_aiv_kernel(value: object) -> None:
     with tla.vector():
-        tla.debug_print(value)
+        tla.print(value)
 
 
 @tla.kernel
 def debug_print_aic_kernel(value: object) -> None:
     with tla.cube():
-        tla.debug_print(value)
+        tla.print(value)
 
 
 @tla.kernel
 def debug_print_expression_aiv_kernel(lhs: object, rhs: object) -> None:
     with tla.vector():
-        tla.debug_print(lhs + rhs)
+        tla.print(lhs + rhs)
 
 
 @tla.kernel
 def debug_print_expression_aic_kernel(lhs: object, rhs: object) -> None:
     with tla.cube():
-        tla.debug_print(lhs + rhs)
+        tla.print(lhs + rhs)
 
 
 def _kernel(args: argparse.Namespace) -> Any:
@@ -148,7 +148,7 @@ def run(args: argparse.Namespace) -> int:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Compile and run direct or computed tla.debug_print values."
+        description="Compile and run direct or computed tla.print values."
     )
     parser.add_argument("--run", action="store_true")
     parser.add_argument("--dump-tlair", action="store_true")

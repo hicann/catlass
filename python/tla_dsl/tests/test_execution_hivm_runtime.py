@@ -3,6 +3,8 @@ from __future__ import annotations
 import ctypes
 from pathlib import Path
 import importlib.util
+import math
+import os
 import struct
 import sys
 import types
@@ -36,6 +38,98 @@ def _load_debug_print_example(*, mixed: bool = False):
             del sys.modules["catlass"]
         else:
             sys.modules["catlass"] = previous
+
+
+def _load_print_tensor_example():
+    fake_catlass = types.ModuleType("catlass")
+    fake_catlass.kernel = lambda function: function
+    fake_catlass.TlaExecutionError = execution.TlaExecutionError
+    previous = sys.modules.get("catlass")
+    sys.modules["catlass"] = fake_catlass
+    try:
+        path = (
+            Path(__file__).parents[1]
+            / "examples/end_to_end/print_tensor/print_tensor.py"
+        )
+        spec = importlib.util.spec_from_file_location("print_tensor_example", path)
+        assert spec and spec.loader
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+    finally:
+        if previous is None:
+            del sys.modules["catlass"]
+        else:
+            sys.modules["catlass"] = previous
+
+
+def test_print_tensor_output_verifies_and_formats_canonical_record() -> None:
+    example = _load_print_tensor_example()
+    stable = example._format_record(example.EXPECTED_VALUES)
+
+    assert example._verify_public_output(stable) == (
+        "tla.print dtype=float32 shape=[8,4] count=16 "
+        "values=[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, "
+        "9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0]"
+    )
+
+
+def test_print_tensor_aic_example_selects_cube_kernel() -> None:
+    example = _load_print_tensor_example()
+    args = example._parser().parse_args(["--arch-scope", "aic.c310"])
+
+    assert example._kernel(args).__name__ == "print_tensor_aic_kernel"
+
+
+def test_prepare_hivmc_input_selects_aic_print_tensor_helper(
+    monkeypatch, tmp_path
+) -> None:
+    mlir_path = tmp_path / "lowered.mlir"
+    mlir_path.write_text(
+        "module { func.func @kernel(%workspace: i64 "
+        "{tla.print_tensor.workspace}) }"
+    )
+    template_bc = tmp_path / "meta_op.aic.c310.bc"
+    helper_bc = tmp_path / "bc" / "Cube" / "print_tensor.aic.c310.bc"
+    template_bc.write_bytes(b"bc")
+    helper_bc.parent.mkdir(parents=True)
+    helper_bc.write_bytes(b"bc")
+    monkeypatch.setenv("TLA_DSL_HIVM_TEMPLATE_BC", str(template_bc))
+    monkeypatch.setattr(execution, "_mlir_build_dirs", lambda: [tmp_path])
+
+    compiler_input, selected = execution._create_stamped_hivmc_input(
+        mlir_path,
+        execution.TlaRuntimeOptions(
+            core_type="aic", kernel_mode="aic", arch_scope="aic.c310"
+        ),
+    )
+
+    assert compiler_input != mlir_path
+    assert selected == f"{template_bc},{helper_bc}"
+    assert "hivm.aic_bitcode" in compiler_input.read_text()
+
+
+@pytest.mark.parametrize(
+    "output",
+    (
+        "",
+        "DumpTensor: data_type=float32 position=GM dump_size=16 [bad]",
+        "DumpTensor: data_type=float32 position=GM dump_size=16 [0.0]",
+        "\n".join(
+            [
+                "DumpTensor: data_type=float32 position=GM dump_size=16 "
+                "[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]"
+            ]
+            * 2
+        ),
+    ),
+)
+def test_print_tensor_output_rejects_missing_malformed_or_duplicate_record(
+    output: str,
+) -> None:
+    example = _load_print_tensor_example()
+    with pytest.raises(execution.TlaExecutionError, match="initialization or decoding"):
+        example._verify_public_output(output)
 
 
 def test_debug_print_output_accepts_unordered_f32_records_from_distinct_blocks() -> (
@@ -309,7 +403,7 @@ def test_prepare_hivmc_input_stamps_only_debug_print_mlir(
     monkeypatch.setenv("TLA_DSL_HIVM_TEMPLATE_BC", str(template_bc))
 
     compiler_input, template_bitcode = (
-        execution._create_stamped_debug_print_hivmc_input(
+        execution._create_stamped_hivmc_input(
             mlir_path,
             execution.TlaRuntimeOptions(core_type="aic", kernel_mode="aic"),
         )
@@ -635,7 +729,7 @@ def test_pack_launch_args_aligns_pointer_after_scalar() -> None:
 
 def test_ascend_loader_forwards_native_width_scalar_payload() -> None:
     payload = struct.pack("<Qi", 0x123456789ABCDEF0, 20)
-    launches: list[tuple[bytes, int, int]] = []
+    launches: list[tuple[bytes, int, int, int]] = []
 
     class _FakeRuntimeWrapper:
         def tla_runtime_launch_kernel(
@@ -648,10 +742,16 @@ def test_ascend_loader_forwards_native_width_scalar_payload() -> None:
             args,
             arg_size,
             expects_debug_fifo,
+            expects_print_tensor,
         ) -> int:
             size = int(arg_size)
             launches.append(
-                (ctypes.string_at(args, size), size, int(expects_debug_fifo))
+                (
+                    ctypes.string_at(args, size),
+                    size,
+                    int(expects_debug_fifo),
+                    int(expects_print_tensor),
+                )
             )
             return 0
 
@@ -665,9 +765,10 @@ def test_ascend_loader_forwards_native_width_scalar_payload() -> None:
         grid_z=1,
         args=payload,
         expects_debug_fifo=False,
+        expects_print_tensor=False,
     )
 
-    assert launches == [(payload, 12, 0)]
+    assert launches == [(payload, 12, 0, 0)]
 
 
 class _TypedPointer:
@@ -694,6 +795,157 @@ def _debug_print_artifact(tmp_path, *, entrypoint: str = "debug"):
         hivmc_path=tmp_path / "hivmc-a5",
         kernel_binary_path=tmp_path / "kernel.o",
     )
+
+
+def _print_tensor_artifact(
+    tmp_path,
+    *,
+    entrypoint: str = "dump",
+    shape: tuple[int, ...] = (4, 4),
+    length: int | None = None,
+):
+    rendered_shape = ", ".join(str(extent) for extent in shape)
+    print_length = min(16, math.prod(shape)) if length is None else length
+    return execution.TlaKernelArtifact(
+        cache_key="cache",
+        cache_dir=tmp_path,
+        tlair_mlir=(
+            'module { "tla.print_tensor"(%value) '
+            f"<{{length = {print_length} : i64, "
+            f"shape = array<i64: {rendered_shape}>}}> : (!tla.tensor) -> () }}"
+        ),
+        lowered_llvm=(
+            f"module {{ func.func @{entrypoint}(%workspace: i64 "
+            "{tla.print_tensor.workspace}, %value: i64) }"
+        ),
+        entrypoint=entrypoint,
+        compiler_bridge_path=None,
+        hivmc_path=tmp_path / "hivmc-a5",
+        kernel_binary_path=tmp_path / "kernel.o",
+    )
+
+
+def test_print_tensor_workspace_preserves_user_argument_and_uses_v1_marker(
+    tmp_path,
+) -> None:
+    artifact = _print_tensor_artifact(tmp_path)
+
+    plan = execution._build_kernel_launch_plan(
+        artifact=artifact,
+        runtime=execution.TlaRuntimeOptions(),
+        launch_args=[_TypedPointer(0x1000)],
+        grid=(1, 1, 1),
+    )
+
+    assert plan.payload == struct.pack(
+        "<QQ", 0x1000, execution._PRINT_TENSOR_WORKSPACE_SENTINEL
+    )
+    assert plan.expects_print_tensor is True
+
+
+def _install_print_tensor_loader(monkeypatch, output: str) -> None:
+    class _FakeLoader:
+        def get_current_device(self) -> int:
+            return 1
+
+        def get_current_stream(self, device: int) -> int:
+            assert device == 1
+            return 99
+
+        def load_binary(self, **kwargs):
+            del kwargs
+            return (11, 12)
+
+        def launch_with_args(self, **kwargs) -> None:
+            assert kwargs["expects_print_tensor"] is True
+            os.write(1, output.encode())
+
+    monkeypatch.setattr(execution, "_AscendLoader", _FakeLoader)
+
+
+def test_execute_kernel_decodes_and_formats_native_print_tensor_for_ordinary_call(
+    monkeypatch, tmp_path, capfd
+) -> None:
+    _install_print_tensor_loader(
+        monkeypatch,
+        "CANN address=0xdeadbeef\n"
+        "DumpTensor: data_type=float32 position=GM dump_size=4 [0, 1.5, -2, 3]\n",
+    )
+
+    execution.execute_kernel(
+        _print_tensor_artifact(tmp_path, shape=(2, 2)),
+        runtime=execution.TlaRuntimeOptions(),
+        launch_args=[_TypedPointer(0x1000)],
+        launch_kwargs={},
+    )
+
+    assert capfd.readouterr().out == (
+        "tla.print dtype=float32 shape=[2,2] count=4 "
+        "values=[0.0, 1.5, -2.0, 3.0]\n"
+    )
+
+
+@pytest.mark.parametrize(
+    "output",
+    (
+        "",
+        "DumpTensor: data_type=float32 position=GM dump_size=4 [bad]\n",
+        "\n".join(
+            ["DumpTensor: data_type=float32 position=GM dump_size=4 [0, 1, 2, 3]"]
+            * 2
+        ),
+    ),
+    ids=["missing", "malformed", "duplicate"],
+)
+def test_execute_kernel_rejects_invalid_native_print_tensor_for_ordinary_call(
+    monkeypatch, tmp_path, output
+) -> None:
+    _install_print_tensor_loader(monkeypatch, output)
+
+    with pytest.raises(execution.TlaExecutionError, match="initialization or decoding"):
+        execution.execute_kernel(
+            _print_tensor_artifact(tmp_path, shape=(2, 2)),
+            runtime=execution.TlaRuntimeOptions(),
+            launch_args=[_TypedPointer(0x1000)],
+            launch_kwargs={},
+        )
+
+
+def test_print_tensor_metadata_requires_one_static_shape() -> None:
+    with pytest.raises(execution.TlaExecutionError, match="static shape metadata"):
+        execution._print_tensor_static_metadata("module { func.func @kernel() }")
+
+
+def test_print_tensor_metadata_reads_generic_tlair_shape() -> None:
+    mlir = (
+        '"tla.print_tensor"(%value) '
+        "<{length = 4 : i64, shape = array<i64: 2, 3>}> : (!tla.tensor) -> ()"
+    )
+
+    assert execution._print_tensor_static_metadata(mlir) == ((2, 3), 4)
+
+
+@pytest.mark.parametrize(
+    ("runtime", "grid", "match"),
+    (
+        (execution.TlaRuntimeOptions(), (2, 1, 1), "single-block"),
+        (
+            execution.TlaRuntimeOptions(kernel_mode="mix"),
+            (1, 1, 1),
+            "mixed-core",
+        ),
+    ),
+)
+def test_print_tensor_launch_rejects_unsupported_grid_or_mixed_mode(
+    tmp_path, runtime, grid, match
+) -> None:
+    with pytest.raises(execution.TlaExecutionError, match=match):
+        execution._build_kernel_launch_plan(
+            artifact=_print_tensor_artifact(tmp_path),
+            runtime=runtime,
+            launch_args=[_TypedPointer(0x1000)],
+            grid=grid,
+        )
 
 
 @pytest.mark.parametrize(
@@ -804,6 +1056,37 @@ def test_cache_key_uses_ir_and_debug_print_workspace_abi_revision(
     ) != plain_key
 
 
+def test_cache_key_uses_print_tensor_workspace_abi_revision(
+    monkeypatch, tmp_path
+) -> None:
+    hivmc = tmp_path / "hivmc-a5"
+    target = execution.TlaKernelTarget("aiv.c310", "c310", "aiv", "dav-c310-vec")
+    runtime = execution.TlaRuntimeOptions()
+    monkeypatch.setattr(execution, "_tool_version", lambda _path: "test")
+    monkeypatch.setattr(execution, "_tool_fingerprint", lambda _path: "test")
+    kwargs = {
+        "tlair_mlir": (
+            'module { "tla.print_tensor"(%value) '
+            "<{length = 16 : i64, shape = array<i64: 4, 4>}> "
+            ": (!tla.tensor) -> () }"
+        ),
+        "entrypoint": "kernel",
+        "runtime": runtime,
+        "compiler_bridge_path": None,
+        "hivmc": hivmc,
+        "target": target,
+    }
+    key = execution._cache_key(**kwargs)
+
+    monkeypatch.setattr(
+        execution,
+        "_PRINT_TENSOR_WORKSPACE_ABI_REVISION",
+        "print-tensor-workspace-i64-v0",
+    )
+
+    assert execution._cache_key(**kwargs) != key
+
+
 @pytest.mark.parametrize(
     "manifest_revision", [None, "debug-print-workspace-i64-v0"]
 )
@@ -821,6 +1104,25 @@ def test_debug_print_workspace_abi_manifest_requires_current_revision(
         execution._DEBUG_PRINT_WORKSPACE_ABI_REVISION
     )
     assert execution._cache_manifest_has_current_debug_print_workspace_abi(manifest)
+
+
+@pytest.mark.parametrize(
+    "manifest_revision", [None, "print-tensor-workspace-i64-v0"]
+)
+def test_print_tensor_workspace_abi_manifest_requires_current_revision(
+    manifest_revision,
+) -> None:
+    manifest = {}
+    if manifest_revision is not None:
+        manifest["print_tensor_workspace_abi_revision"] = manifest_revision
+
+    assert not execution._cache_manifest_has_current_print_tensor_workspace_abi(
+        manifest
+    )
+    manifest["print_tensor_workspace_abi_revision"] = (
+        execution._PRINT_TENSOR_WORKSPACE_ABI_REVISION
+    )
+    assert execution._cache_manifest_has_current_print_tensor_workspace_abi(manifest)
 
 
 def test_build_kernel_launch_plan_uses_logical_mixed_handoff(tmp_path) -> None:
@@ -1026,6 +1328,7 @@ def test_execute_kernel_uses_typed_launch_payload(monkeypatch, tmp_path) -> None
             "grid_z": 1,
             "args": struct.pack("<Q", 123),
             "expects_debug_fifo": False,
+            "expects_print_tensor": False,
         },
     ) in launches
 
@@ -1069,6 +1372,7 @@ def test_execute_kernel_conveys_debug_fifo_intent_to_loader(monkeypatch, tmp_pat
                 "<QQ", 7, int.from_bytes(b"TLA_PRNT", byteorder="big")
             ),
             "expects_debug_fifo": True,
+            "expects_print_tensor": False,
         }
     ]
 
@@ -1124,5 +1428,6 @@ def test_execute_kernel_uses_empty_payload_for_zero_arg(monkeypatch, tmp_path) -
             "grid_z": 1,
             "args": b"",
             "expects_debug_fifo": False,
+            "expects_print_tensor": False,
         },
     ) in launches

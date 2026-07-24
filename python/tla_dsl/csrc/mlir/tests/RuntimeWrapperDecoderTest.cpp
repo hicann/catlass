@@ -10,8 +10,10 @@
 
 namespace {
 
-using cce::internal::AscDebugFifo::PrintTlv;
+using cce::internal::AscDebugFifo::PrintTensorTlv;
+using cce::internal::AscDebugFifo::FifoRecordType;
 using cce::internal::AscDebugFifo::PrintFormatResult;
+using cce::internal::AscDebugFifo::PrintTlv;
 
 std::vector<uint8_t> scalar_tlv(const char *format, uint64_t slot) {
   constexpr size_t kArgumentOffset = 16 + 8;
@@ -24,6 +26,23 @@ std::vector<uint8_t> scalar_tlv(const char *format, uint64_t slot) {
   tlv->fmtOffset = 16;
   std::memcpy(bytes.data() + kArgumentOffset, &slot, sizeof(slot));
   std::memcpy(bytes.data() + kFormatOffset, format, format_length);
+  return bytes;
+}
+
+std::vector<uint8_t> tensor_tlv() {
+  constexpr uint32_t kValueCount = 4;
+  constexpr uint32_t kPayloadBytes = 32;
+  std::vector<uint8_t> bytes(sizeof(PrintTensorTlv) + kPayloadBytes, 0);
+  auto *tlv = reinterpret_cast<PrintTensorTlv *>(bytes.data());
+  tlv->type = static_cast<uint32_t>(FifoRecordType::Tensor);
+  tlv->length = static_cast<uint32_t>(bytes.size() - 8);
+  tlv->data_type = 0;
+  tlv->position = 0;
+  tlv->dump_size = kValueCount * sizeof(float);
+  auto *values =
+      reinterpret_cast<float *>(bytes.data() + sizeof(PrintTensorTlv));
+  for (uint32_t i = 0; i < kValueCount; ++i)
+    values[i] = static_cast<float>(i);
   return bytes;
 }
 
@@ -49,6 +68,15 @@ int main() {
   constexpr uint64_t kWorkspace = 0x123456789abcdef0ULL;
 
   {
+    g_last_error = "first runtime error";
+    const char *message = tla_runtime_last_error();
+    g_last_error = "new runtime error";
+    if (!expect(std::strcmp(message, "first runtime error") == 0,
+                "last-error ABI pointer changed with string storage"))
+      return 1;
+  }
+
+  {
     constexpr char kOrdinaryKernelMetadata[] =
         "__asc_debug_meta_section__\0.ParamSummary_basic_vadd";
     constexpr char kPrintfKernelMetadata[] =
@@ -63,7 +91,8 @@ int main() {
                 "printf FIFO transport metadata was not classified as FIFO") ||
         !expect(uses_asc_debug_fifo(kCANN91PrintfKernelMetadata,
                                     sizeof(kCANN91PrintfKernelMetadata)),
-                "CANN 9.1 FIFO symbol without section-name string was not classified as FIFO"))
+                "CANN 9.1 FIFO symbol without section-name string was not "
+                "classified as FIFO"))
       return 1;
   }
 
@@ -119,17 +148,17 @@ int main() {
     return 1;
 
   uint64_t i32_slot = static_cast<uint32_t>(-37);
-  if (!expect(format_scalar_printf("x=%d", 4,
-                                   reinterpret_cast<const uint8_t *>(&i32_slot),
-                                   sizeof(i32_slot)) == PrintFormatResult::Printed,
+  if (!expect(format_scalar_printf(
+                  "x=%d", 4, reinterpret_cast<const uint8_t *>(&i32_slot),
+                  sizeof(i32_slot)) == PrintFormatResult::Printed,
               "valid i32 slot did not print"))
     return 1;
   float f32_value = 1.25f;
   uint64_t f32_slot = 0;
   std::memcpy(&f32_slot, &f32_value, sizeof(f32_value));
-  if (!expect(format_scalar_printf("v=%f", 4,
-                                   reinterpret_cast<const uint8_t *>(&f32_slot),
-                                   sizeof(f32_slot)) == PrintFormatResult::Printed,
+  if (!expect(format_scalar_printf(
+                  "v=%f", 4, reinterpret_cast<const uint8_t *>(&f32_slot),
+                  sizeof(f32_slot)) == PrintFormatResult::Printed,
               "valid f32 slot did not print") ||
       !expect(format_scalar_printf("x=%d", 4, nullptr, 0) ==
                   PrintFormatResult::Malformed,
@@ -150,6 +179,13 @@ int main() {
                   reinterpret_cast<const PrintTlv *>(out_of_bounds.data()),
                   out_of_bounds.size(), 7),
               "out-of-bounds format offset was not diagnosed"))
+    return 1;
+
+  auto tensor = tensor_tlv();
+  if (!expect(print_tensor_tlv(
+              reinterpret_cast<const PrintTensorTlv *>(tensor.data()),
+                  tensor.size(), 0),
+              "valid aligned f32x4 tensor TLV was rejected"))
     return 1;
 
   auto *cleanup_only = new FifoData();

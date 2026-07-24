@@ -7,6 +7,7 @@ from dataclasses import dataclass, replace
 import hashlib
 import importlib.util
 import json
+import math
 import os
 import re
 import shutil
@@ -16,7 +17,7 @@ import sysconfig
 import tempfile
 import threading
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 from .base_dsl.arch import (
     TlaKernelTarget,
@@ -41,7 +42,17 @@ _DEBUG_PRINT_WORKSPACE_SENTINEL_TEXT = b"TLA_PRNT"
 _DEBUG_PRINT_WORKSPACE_SENTINEL = int.from_bytes(
     _DEBUG_PRINT_WORKSPACE_SENTINEL_TEXT, byteorder="big"
 )
+_PRINT_TENSOR_WORKSPACE_SENTINEL_TEXT = b"TLA_TPRN"
+_PRINT_TENSOR_WORKSPACE_SENTINEL = int.from_bytes(
+    _PRINT_TENSOR_WORKSPACE_SENTINEL_TEXT, byteorder="big"
+)
 _DEBUG_PRINT_WORKSPACE_ABI_REVISION = "debug-print-workspace-i64-v1"
+_PRINT_TENSOR_WORKSPACE_ABI_REVISION = "print-tensor-workspace-i64-v1"
+_NATIVE_PRINT_TENSOR_LINE = re.compile(
+    r"DumpTensor:.*?data_type=float32.*?position=GM.*?dump_size=(?P<count>\d+).*?"
+    r"\[(?P<values>[^\]]+)\]",
+    re.DOTALL,
+)
 _HIVM_TEMPLATE_BITCODE_ATTRS = {
     "meta_op.aic.c310.bc": ("hivm.aic_bitcode", "hivm.aic_bitcode"),
     "meta_op.aiv.c310.bc": ("hivm.aiv_bitcode", "hivm.aiv_bitcode"),
@@ -120,6 +131,7 @@ class _KernelLaunchPlan:
     grid: tuple[int, int, int]
     payload: bytes
     expects_debug_fifo: bool
+    expects_print_tensor: bool
 
 
 @dataclass(frozen=True)
@@ -130,6 +142,7 @@ class _LogicalMixedHandoff:
 
 _MEMORY_COMPILE_CACHE_LOCK = threading.RLock()
 _MEMORY_COMPILE_CACHE: dict[str, TlaKernelArtifact] = {}
+_NATIVE_PRINT_TENSOR_STDOUT_LOCK = threading.RLock()
 
 
 def compile_kernel(
@@ -181,7 +194,7 @@ def compile_kernel(
             artifact_dir / str(cached_pass_dump) if cached_pass_dump else None
         )
         if (
-            _cache_manifest_has_current_debug_print_workspace_abi(cached)
+            _cache_manifest_has_current_workspace_abis(cached)
             and kernel_path.exists()
             and mlir_path.exists()
         ):
@@ -218,7 +231,7 @@ def compile_kernel(
     runtime_for_hivmc = _runtime_options_from_lowered_mlir(
         runtime, mlir_path.read_text()
     )
-    hivmc_mlir_path, template_bitcode = _create_stamped_debug_print_hivmc_input(
+    hivmc_mlir_path, template_bitcode = _create_stamped_hivmc_input(
         mlir_path, runtime_for_hivmc
     )
     try:
@@ -248,6 +261,9 @@ def compile_kernel(
                 "cache_key": cache_key,
                 "debug_print_workspace_abi_revision": (
                     _DEBUG_PRINT_WORKSPACE_ABI_REVISION
+                ),
+                "print_tensor_workspace_abi_revision": (
+                    _PRINT_TENSOR_WORKSPACE_ABI_REVISION
                 ),
                 "entrypoint": entrypoint,
                 "kernel_binary": kernel_path.name,
@@ -283,7 +299,6 @@ def compile_kernel(
     if runtime.cache_enabled and not runtime.force_recompile:
         _set_memory_cached_artifact(artifact)
     return artifact
-
 
 
 def _get_memory_cached_artifact(cache_key: str) -> TlaKernelArtifact | None:
@@ -325,6 +340,11 @@ def execute_kernel(
         launch_args=launch_args,
         grid=grid,
     )
+    print_metadata = (
+        _print_tensor_static_metadata(artifact.tlair_mlir)
+        if plan.expects_print_tensor
+        else None
+    )
 
     module_handle, function_handle = loader.load_binary(
         name=f"{plan.entrypoint} {plan.kernel_mode}",
@@ -332,15 +352,24 @@ def execute_kernel(
         shared=runtime.shared,
         device=device,
     )
-    loader.launch_with_args(
-        function=function_handle,
-        stream=int(stream),
-        grid_x=int(plan.grid[0]),
-        grid_y=int(plan.grid[1]),
-        grid_z=int(plan.grid[2]),
-        args=plan.payload,
-        expects_debug_fifo=plan.expects_debug_fifo,
-    )
+    def launch() -> None:
+        loader.launch_with_args(
+            function=function_handle,
+            stream=int(stream),
+            grid_x=int(plan.grid[0]),
+            grid_y=int(plan.grid[1]),
+            grid_z=int(plan.grid[2]),
+            args=plan.payload,
+            expects_debug_fifo=plan.expects_debug_fifo,
+            expects_print_tensor=plan.expects_print_tensor,
+        )
+    if print_metadata is None:
+        launch()
+    else:
+        shape, count = print_metadata
+        native_output = _capture_c_stdout(launch)
+        values = _decode_native_print_tensor_output(native_output, count=count)
+        print(_format_print_tensor_record(values, shape=shape))
     return TlaExecutionResult(
         artifact=artifact,
         module_handle=module_handle,
@@ -374,6 +403,16 @@ def _build_kernel_launch_plan(
     launch_args: Sequence[Any],
     grid: tuple[int, int, int],
 ) -> _KernelLaunchPlan:
+    expects_print_tensor = _has_print_tensor_workspace(artifact)
+    if expects_print_tensor:
+        if grid != (1, 1, 1):
+            raise TlaExecutionError(
+                "tla.print_tensor v1 requires a single-block launch (block=1)"
+            )
+        if runtime.kernel_mode == "mix":
+            raise TlaExecutionError(
+                "tla.print_tensor v1 does not support mixed-core kernels"
+            )
     logical_mixed_handoff = _extract_logical_mixed_handoff(artifact.lowered_llvm)
     if logical_mixed_handoff is not None and runtime.kernel_mode == "mix":
         payload, effective_grid = _build_logical_mixed_handoff_launch_args(
@@ -386,15 +425,22 @@ def _build_kernel_launch_plan(
             grid=effective_grid,
             payload=payload,
             expects_debug_fifo=_has_debug_print_workspace(artifact),
+            expects_print_tensor=False,
         )
     payload = _pack_launch_args(launch_args) if launch_args else b""
     payload = _append_debug_print_workspace_payload(payload, artifact)
+    if expects_print_tensor:
+        extension = bytearray(payload)
+        _align_payload(extension, _POINTER_ABI_SIZE)
+        extension.extend(_pack_uint64_slot(_PRINT_TENSOR_WORKSPACE_SENTINEL))
+        payload = bytes(extension)
     return _KernelLaunchPlan(
         entrypoint=artifact.entrypoint,
         kernel_mode=runtime.kernel_mode,
         grid=grid,
         payload=payload,
         expects_debug_fifo=_has_debug_print_workspace(artifact),
+        expects_print_tensor=expects_print_tensor,
     )
 
 
@@ -603,6 +649,100 @@ def _has_debug_print_workspace(artifact: TlaKernelArtifact) -> bool:
     return "tla.debug_print.workspace" in mlir_text
 
 
+def _has_print_tensor_workspace(artifact: TlaKernelArtifact) -> bool:
+    mlir_text = artifact.lowered_llvm or artifact.tlair_mlir
+    return "tla.print_tensor.workspace" in mlir_text
+
+
+def _capture_c_stdout(launch: Callable[[], None]) -> str:
+    libc = ctypes.CDLL(None)
+    with _NATIVE_PRINT_TENSOR_STDOUT_LOCK:
+        sys.stdout.flush()
+        libc.fflush(None)
+        saved_stdout = os.dup(1)
+        try:
+            with tempfile.TemporaryFile(mode="w+b") as captured:
+                os.dup2(captured.fileno(), 1)
+                try:
+                    launch()
+                finally:
+                    libc.fflush(None)
+                    sys.stdout.flush()
+                    os.dup2(saved_stdout, 1)
+                captured.seek(0)
+                return captured.read().decode("utf-8", errors="replace")
+        finally:
+            os.close(saved_stdout)
+
+
+def _print_tensor_static_metadata(tlair_mlir: str) -> tuple[tuple[int, ...], int]:
+    op_matches = list(re.finditer(r'"tla\.print_tensor"', tlair_mlir))
+    if len(op_matches) != 1:
+        raise TlaExecutionError(
+            "tla.print_tensor requires exactly one static shape metadata record; "
+            f"found {len(op_matches)}"
+        )
+    op_text = tlair_mlir[op_matches[0].start() : op_matches[0].start() + 1024]
+    shape_match = re.search(r"\bshape\s*=\s*array<i64:\s*([\d,\s]+)>", op_text)
+    if shape_match is None:
+        raise TlaExecutionError(
+            "tla.print_tensor static shape metadata is missing from the compiled artifact"
+        )
+    length_match = re.search(r"\blength\s*=\s*(\d+)", op_text)
+    if length_match is None:
+        raise TlaExecutionError(
+            "tla.print_tensor static length metadata is missing from the compiled artifact"
+        )
+    shape = tuple(int(item.strip()) for item in shape_match.group(1).split(","))
+    if not shape or any(extent < 1 for extent in shape):
+        raise TlaExecutionError(
+            "tla.print_tensor static shape metadata contains an invalid extent"
+        )
+    length = int(length_match.group(1))
+    if not 1 <= length <= 16 or length > math.prod(shape):
+        raise TlaExecutionError(
+            "tla.print_tensor static length metadata is invalid for the tensor shape"
+        )
+    return shape, length
+
+
+def _decode_native_print_tensor_output(output: str, *, count: int) -> list[float]:
+    matches = list(_NATIVE_PRINT_TENSOR_LINE.finditer(output))
+    if len(matches) != 1:
+        raise TlaExecutionError(
+            "tla.print_tensor native initialization or decoding failed: "
+            f"expected exactly one record, got {len(matches)}"
+        )
+    match = matches[0]
+    if int(match.group("count")) != count:
+        raise TlaExecutionError(
+            "tla.print_tensor native initialization or decoding failed: "
+            f"expected {count} values, record declares {match.group('count')}"
+        )
+    try:
+        values = [float(item.strip()) for item in match.group("values").split(",")]
+    except ValueError as exc:
+        raise TlaExecutionError(
+            "tla.print_tensor native initialization or decoding failed: malformed values"
+        ) from exc
+    if len(values) != count or not all(math.isfinite(value) for value in values):
+        raise TlaExecutionError(
+            "tla.print_tensor native initialization or decoding failed: "
+            f"expected {count} finite values, got {values!r}"
+        )
+    return values
+
+
+def _format_print_tensor_record(values: Sequence[float], *, shape: Sequence[int]) -> str:
+    count = len(values)
+    rendered_shape = ",".join(str(int(extent)) for extent in shape)
+    rendered_values = ", ".join(str(float(value)) for value in values)
+    return (
+        f"tla.print dtype=float32 shape=[{rendered_shape}] count={count} "
+        f"values=[{rendered_values}]"
+    )
+
+
 def runtime_options_from_kwargs(kwargs: Mapping[str, Any]) -> TlaRuntimeOptions:
     explicit_arch_scope = kwargs.get("arch_scope")
     target_arch = str(
@@ -733,6 +873,7 @@ def _cache_key(
 ) -> str:
     key_payload = {
         "debug_print_workspace_abi_revision": _DEBUG_PRINT_WORKSPACE_ABI_REVISION,
+        "print_tensor_workspace_abi_revision": _PRINT_TENSOR_WORKSPACE_ABI_REVISION,
         "entrypoint": entrypoint,
         "backend": runtime.backend,
         "kernel_mode": runtime.kernel_mode,
@@ -755,7 +896,6 @@ def _cache_key(
     return hashlib.sha256(
         json.dumps(key_payload, sort_keys=True).encode("utf-8")
     ).hexdigest()[:16]
-
 
 
 def _tool_version(binary: Path) -> str:
@@ -906,15 +1046,41 @@ def _build_hivmc_a5_command(
     return command
 
 
-def _create_stamped_debug_print_hivmc_input(
+def _create_stamped_hivmc_input(
     mlir_path: Path, runtime: TlaRuntimeOptions
 ) -> tuple[Path, str | None]:
     """Stamp a private HIVMC input only when debug-print helpers are present."""
-    if "tla.debug_print.workspace" not in mlir_path.read_text():
+    compiler_text = mlir_path.read_text()
+    if (
+        "tla.debug_print.workspace" not in compiler_text
+        and "tla.print_tensor.workspace" not in compiler_text
+    ):
         return mlir_path, None
     compiler_input = mlir_path.with_name(f"{mlir_path.stem}.hivmc-input.mlir")
     compiler_input.write_text(mlir_path.read_text())
     template_bitcode = _resolve_hivm_template_bitcode(runtime)
+    if "tla.print_tensor.workspace" in compiler_text:
+        helper = {
+            "aic": ("Cube", "print_tensor.aic.c310.bc"),
+            "aiv": ("Vector", "print_tensor.aiv.c310.bc"),
+        }.get(runtime.core_type)
+        if helper is None:
+            raise TlaRuntimeUnavailableError(
+                "tla.print_tensor v1 requires an AIC-only or AIV-only kernel"
+            )
+        helper_dir, helper_name = helper
+        probe_candidates = [
+            build_dir / "bc" / helper_dir / helper_name
+            for build_dir in _mlir_build_dirs()
+        ]
+        probe_bitcode = next(
+            (path.resolve() for path in probe_candidates if path.exists()), None
+        )
+        if probe_bitcode is None:
+            raise TlaRuntimeUnavailableError(
+                f"C310 {runtime.core_type} print tensor bitcode was not built"
+            )
+        template_bitcode = f"{template_bitcode},{probe_bitcode}"
     _stamp_hivm_template_bitcode_attrs(compiler_input, template_bitcode)
     return compiler_input, template_bitcode
 
@@ -1208,6 +1374,23 @@ def _cache_manifest_has_current_debug_print_workspace_abi(
     )
 
 
+def _cache_manifest_has_current_print_tensor_workspace_abi(
+    manifest: Mapping[str, Any],
+) -> bool:
+    return (
+        manifest.get("print_tensor_workspace_abi_revision")
+        == _PRINT_TENSOR_WORKSPACE_ABI_REVISION
+    )
+
+
+def _cache_manifest_has_current_workspace_abis(
+    manifest: Mapping[str, Any],
+) -> bool:
+    return _cache_manifest_has_current_debug_print_workspace_abi(
+        manifest
+    ) and _cache_manifest_has_current_print_tensor_workspace_abi(manifest)
+
+
 def _env_truthy(name: str, *, default: str) -> bool:
     value = os.getenv(name, default).strip().lower()
     return value in {"1", "true", "yes", "on", "y"}
@@ -1441,6 +1624,7 @@ class _AscendLoader:
             ctypes.POINTER(ctypes.c_uint8),
             ctypes.c_size_t,
             ctypes.c_int,
+            ctypes.c_int,
         ]
         lib.tla_runtime_launch_kernel.restype = ctypes.c_int
         self._module = lib
@@ -1518,6 +1702,7 @@ class _AscendLoader:
         grid_z: int,
         args: bytes,
         expects_debug_fifo: bool,
+        expects_print_tensor: bool,
     ) -> None:
         self._ensure_loaded()
         # The Ascend runtime rejects rtKernelLaunch with a zero-size argument
@@ -1540,6 +1725,7 @@ class _AscendLoader:
             raw_ptr,
             len(args),
             int(expects_debug_fifo),
+            int(expects_print_tensor),
         )
         if ret != 0:
             raise TlaRuntimeUnavailableError(self._last_error())

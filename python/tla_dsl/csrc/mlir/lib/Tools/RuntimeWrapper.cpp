@@ -1,9 +1,3 @@
-#include "acl/acl.h"
-#include "acl/error_codes/rt_error_codes.h"
-#include "runtime/kernel.h"
-#include "runtime/mem.h"
-#include "runtime/stream.h"
-
 #include <algorithm>
 #include <cstdint>
 #include <cstdlib>
@@ -16,12 +10,19 @@
 #include <unordered_map>
 #include <vector>
 
+#include "acl/acl.h"
+#include "acl/error_codes/rt_error_codes.h"
+#include "runtime/kernel.h"
+#include "runtime/mem.h"
+#include "runtime/stream.h"
+
 namespace {
 
 struct RegisteredKernel {
   std::unique_ptr<char, decltype(&std::free)> buffer{nullptr, &std::free};
   std::unique_ptr<uint64_t> stub;
   bool uses_asc_debug_fifo = false;
+  bool uses_print_tensor = false;
 };
 
 std::mutex g_mutex;
@@ -42,7 +43,8 @@ constexpr uint64_t encode_ascii_marker(const char (&text)[9]) {
 }
 constexpr uint64_t kDebugPrintWorkspaceSentinel =
     encode_ascii_marker("TLA_PRNT");
-
+constexpr uint64_t kPrintTensorWorkspaceSentinel =
+    encode_ascii_marker("TLA_TPRN");
 namespace AscDebugFifo {
 
 // CANN FIFO wire layouts: field order/types and size assertions are ABI.
@@ -52,6 +54,7 @@ constexpr uint16_t kMagic = 0xAE86;
 
 enum class FifoRecordType : uint32_t {
   Scalar = 1,
+  Tensor = 2,
   BufIn = 8,
   BufOut = 9,
 };
@@ -91,6 +94,21 @@ struct PrintTlv {
   uint64_t fmtOffset;
 };
 
+struct PrintTensorTlv {
+  uint32_t type;
+  uint32_t length;
+  uint32_t tensor_addr;
+  uint32_t data_type;
+  uint32_t desc;
+  uint32_t buffer_id;
+  uint16_t position;
+  uint16_t block_idx;
+  uint32_t dim;
+  uint32_t shape[8];
+  uint32_t reserved;
+  uint32_t dump_size;
+};
+
 struct FifoData {
   void *device_region = nullptr;
   size_t region_size = 0;
@@ -108,6 +126,8 @@ static_assert(sizeof(DebugBlockWriteInfo) == 24,
               "DebugBlockWriteInfo must match CANN asc_debug_types.h");
 static_assert(sizeof(PrintTlv) == 24,
               "PrintTlv must match CANN AICore scalar printf layout");
+static_assert(sizeof(PrintTensorTlv) == 72,
+              "PrintTensorTlv must match CANN C310 tensor print layout");
 
 uint32_t align_up(uint32_t value, uint32_t alignment) {
   return ((value + alignment - 1) / alignment) * alignment;
@@ -304,6 +324,35 @@ bool print_scalar_tlv(const PrintTlv *tlv, uint64_t total, uint32_t core) {
   return true;
 }
 
+bool print_tensor_tlv(const PrintTensorTlv *tlv, uint64_t total, uint32_t core) {
+  constexpr uint32_t kFloat32DataType = 0;
+  constexpr uint16_t kGlobalMemoryPosition = 0;
+  constexpr uint32_t kTensorPayloadAlignment = 32;
+  if (total < sizeof(PrintTensorTlv) ||
+      tlv->length != total - 2 * sizeof(uint32_t) ||
+      tlv->data_type != kFloat32DataType ||
+      tlv->position != kGlobalMemoryPosition || tlv->dim != 0 ||
+      tlv->dump_size == 0 || tlv->dump_size % sizeof(float) != 0 ||
+      tlv->dump_size > 16 * sizeof(float) ||
+      total != sizeof(PrintTensorTlv) +
+                   align_up(tlv->dump_size, kTensorPayloadAlignment))
+    return false;
+  for (uint32_t extent : tlv->shape) {
+    if (extent != 0)
+      return false;
+  }
+  const uint32_t count = tlv->dump_size / sizeof(float);
+  auto *values = reinterpret_cast<const float *>(
+      reinterpret_cast<const uint8_t *>(tlv) + sizeof(PrintTensorTlv));
+  std::printf(
+      "DumpTensor: core=%u data_type=float32 position=GM dump_size=%u [", core,
+      count);
+  for (uint32_t i = 0; i < count; ++i)
+    std::printf("%s%.9g", i == 0 ? "" : ", ", static_cast<double>(values[i]));
+  std::printf("]\n");
+  return true;
+}
+
 bool print_fifo_records(const char *host_mem, const FifoData *fifo) {
   bool printed_any_record = false;
   for (uint32_t i = 0; i < fifo->record_count; ++i) {
@@ -315,10 +364,12 @@ bool print_fifo_records(const char *host_mem, const FifoData *fifo) {
     auto *write = reinterpret_cast<const DebugBlockWriteInfo *>(
         ring + fifo->ring_buffer_bytes);
     uint64_t offset = 0;
-    uint64_t written = std::min<uint64_t>(write->bufOffset, fifo->ring_buffer_bytes);
+    uint64_t written =
+        std::min<uint64_t>(write->bufOffset, fifo->ring_buffer_bytes);
     while (offset + 8 <= written) {
       auto type = *reinterpret_cast<const uint32_t *>(ring + offset);
-      auto length = *reinterpret_cast<const uint32_t *>(ring + offset + sizeof(uint32_t));
+      auto length =
+          *reinterpret_cast<const uint32_t *>(ring + offset + sizeof(uint32_t));
       uint64_t total = 8ULL + length;
       if (length == 0 || total > written - offset) {
         if (type == static_cast<uint32_t>(FifoRecordType::Scalar))
@@ -329,7 +380,12 @@ bool print_fifo_records(const char *host_mem, const FifoData *fifo) {
       }
       if (type == static_cast<uint32_t>(FifoRecordType::Scalar)) {
         auto *tlv = reinterpret_cast<const PrintTlv *>(ring + offset);
-        printed_any_record = print_scalar_tlv(tlv, total, i) || printed_any_record;
+        printed_any_record =
+            print_scalar_tlv(tlv, total, i) || printed_any_record;
+      } else if (type == static_cast<uint32_t>(FifoRecordType::Tensor)) {
+        auto *tlv = reinterpret_cast<const PrintTensorTlv *>(ring + offset);
+        printed_any_record =
+            print_tensor_tlv(tlv, total, i) || printed_any_record;
       }
       offset += total;
     }
@@ -439,6 +495,10 @@ bool uses_asc_debug_fifo(const char *buffer, size_t buffer_size) {
   return contains_bytes(buffer, buffer_size, "g_sysPrintFifoSpace");
 }
 
+bool uses_print_tensor(const char *buffer, size_t buffer_size) {
+  return contains_bytes(buffer, buffer_size, "__tla_print_tensor_abi_v1");
+}
+
 bool validate_debug_print_fifo_contract(const std::vector<uint64_t> &values,
                                         bool expects_debug_fifo,
                                         bool binary_uses_debug_fifo) {
@@ -470,6 +530,35 @@ bool replace_debug_print_workspace_marker(std::vector<uint64_t> &values,
   return true;
 }
 
+bool move_print_tensor_workspace_to_first_argument(
+    std::vector<uint64_t> &values, uint64_t workspace) {
+  if (values.empty() ||
+      values.back() != cce::internal::kPrintTensorWorkspaceSentinel)
+    return false;
+  values.pop_back();
+  values.insert(values.begin(), workspace);
+  return true;
+}
+
+bool validate_native_print_tensor_contract(const std::vector<uint64_t> &values,
+                                   bool expects_print_tensor,
+                                   bool binary_uses_print_tensor) {
+  if (expects_print_tensor != binary_uses_print_tensor) {
+    g_last_error =
+        "native dump intent does not match registered binary metadata";
+    return false;
+  }
+  if (!expects_print_tensor)
+    return true;
+  if (values.empty() ||
+      values.back() != cce::internal::kPrintTensorWorkspaceSentinel) {
+    g_last_error =
+        "native dump marker is missing from packed kernel arguments";
+    return false;
+  }
+  return true;
+}
+
 void set_rt_error(const char *op_name, rtError_t ret) {
   g_last_error =
       std::string(op_name) + " failed: 0x" + std::to_string(static_cast<unsigned int>(ret));
@@ -482,7 +571,13 @@ void set_acl_error(const char *op_name, aclError ret) {
 
 } // namespace
 
-extern "C" const char *tla_runtime_last_error() { return g_last_error.c_str(); }
+extern "C" const char* tla_runtime_last_error()
+{
+    thread_local std::vector<char> error_buffer;
+    error_buffer.assign(g_last_error.begin(), g_last_error.end());
+    error_buffer.push_back('\0');
+    return error_buffer.data();
+}
 
 extern "C" int tla_runtime_load_kernel(const char *file_path, const char *stub_func,
                                        const char *kernel_mode, uint64_t *module_out,
@@ -528,6 +623,7 @@ extern "C" int tla_runtime_load_kernel(const char *file_path, const char *stub_f
     kernel.buffer.reset(buffer);
     kernel.stub = std::move(stub);
     kernel.uses_asc_debug_fifo = uses_asc_debug_fifo(buffer, buffer_size);
+    kernel.uses_print_tensor = uses_print_tensor(buffer, buffer_size);
     g_registered_kernels.emplace(reinterpret_cast<uint64_t>(module), std::move(kernel));
   }
 
@@ -538,29 +634,32 @@ extern "C" int tla_runtime_load_kernel(const char *file_path, const char *stub_f
 
 extern "C" int tla_runtime_launch_kernel(uint64_t function_handle, uint64_t stream_handle, int gx,
                                          int gy, int gz, const uint8_t *args, size_t arg_size,
-                                         int expects_debug_fifo) {
+                                         int expects_debug_fifo,
+                                         int expects_print_tensor) {
   const void *function = reinterpret_cast<const void *>(function_handle);
   rtStream_t stream = reinterpret_cast<rtStream_t>(stream_handle);
   uint32_t block_num =
       static_cast<uint32_t>(gx) * static_cast<uint32_t>(gy) * static_cast<uint32_t>(gz);
 
   bool binary_uses_debug_fifo = false;
+  bool binary_uses_print_tensor = false;
   {
     std::lock_guard<std::mutex> lock(g_mutex);
     for (const auto &entry : g_registered_kernels) {
       if (entry.second.stub &&
           reinterpret_cast<uint64_t>(entry.second.stub.get()) == function_handle) {
         binary_uses_debug_fifo = entry.second.uses_asc_debug_fifo;
+        binary_uses_print_tensor = entry.second.uses_print_tensor;
         break;
       }
     }
   }
 
   std::vector<uint64_t> values;
-  if (expects_debug_fifo) {
+  if (expects_debug_fifo || expects_print_tensor) {
     if (arg_size % sizeof(uint64_t) != 0) {
       g_last_error =
-          "debug print kernel arguments must be a multiple of 8 bytes";
+          "debug workspace kernel arguments must be a multiple of 8 bytes";
       return -1;
     }
     if (args && arg_size > 0) {
@@ -569,11 +668,26 @@ extern "C" int tla_runtime_launch_kernel(uint64_t function_handle, uint64_t stre
     }
   }
 
-  if (!validate_debug_print_fifo_contract(values, expects_debug_fifo != 0,
-                                          binary_uses_debug_fifo))
+  if (expects_print_tensor) {
+    if (!binary_uses_debug_fifo) {
+      g_last_error =
+          "tensor print FIFO intent does not match registered binary metadata";
+      return -1;
+    }
+  } else if (!validate_debug_print_fifo_contract(
+                 values, expects_debug_fifo != 0, binary_uses_debug_fifo)) {
     return -1;
+  }
+  if (!validate_native_print_tensor_contract(values, expects_print_tensor != 0,
+                                     binary_uses_print_tensor))
+    return -1;
+  if (expects_debug_fifo && expects_print_tensor) {
+    g_last_error = "scalar debug FIFO and native tensor print cannot share a v1 launch";
+    return -1;
+  }
 
   cce::internal::AscDebugFifo::FifoData *asc_debug_fifo = nullptr;
+  cce::internal::AscDebugFifo::FifoData *print_tensor_fifo = nullptr;
   if (expects_debug_fifo) {
     asc_debug_fifo = cce::internal::AscDebugFifo::open(block_num);
     if (!asc_debug_fifo)
@@ -586,21 +700,44 @@ extern "C" int tla_runtime_launch_kernel(uint64_t function_handle, uint64_t stre
     }
   }
 
-  // FIFO kernels need slot-level marker replacement. Ordinary kernels must
-  // preserve the exact native-width parameter buffer.
-  void *args_array = expects_debug_fifo
-                         ? (values.empty() ? nullptr
-                                           : static_cast<void *>(values.data()))
-                         : const_cast<uint8_t *>(args);
+  if (expects_print_tensor) {
+    print_tensor_fifo = cce::internal::AscDebugFifo::open(block_num);
+    if (!print_tensor_fifo)
+      return -1;
+    if (!move_print_tensor_workspace_to_first_argument(
+            values,
+            reinterpret_cast<uint64_t>(print_tensor_fifo->device_region))) {
+      cce::internal::AscDebugFifo::destroy(print_tensor_fifo);
+      g_last_error =
+          "tensor print FIFO marker must occupy the final packed kernel argument";
+      return -1;
+    }
+  }
+
+  // Debug-workspace kernels need slot-level marker replacement. Ordinary
+  // kernels must preserve the exact native-width parameter buffer.
+  const bool uses_debug_workspace = expects_debug_fifo || expects_print_tensor;
+  void *args_array =
+      uses_debug_workspace
+          ? (values.empty() ? nullptr : static_cast<void *>(values.data()))
+          : const_cast<uint8_t *>(args);
   const size_t launch_arg_size =
-      expects_debug_fifo ? values.size() * sizeof(uint64_t) : arg_size;
+      uses_debug_workspace ? values.size() * sizeof(uint64_t) : arg_size;
   rtError_t rt_ret = rtKernelLaunch(function, block_num, args_array,
                                     launch_arg_size, nullptr, stream);
   if (rt_ret != RT_ERROR_NONE) {
     if (asc_debug_fifo)
       cce::internal::AscDebugFifo::close(asc_debug_fifo, stream);
+    if (print_tensor_fifo)
+      cce::internal::AscDebugFifo::destroy(print_tensor_fifo);
     set_rt_error("rtKernelLaunch", rt_ret);
     return -1;
+  }
+
+  if (print_tensor_fifo) {
+    if (!cce::internal::AscDebugFifo::close(print_tensor_fifo, stream))
+      return -1;
+    return 0;
   }
 
   if (asc_debug_fifo) {

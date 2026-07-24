@@ -132,8 +132,11 @@ def test_cross_flag_public_api_emits_call_site_pipes() -> None:
         )
     mlir = _ops_surface_kernel.dump_mlir(type_args=(src, dst))
     cross_flag_line = next(
-        line for line in mlir.splitlines() if 'tla.cross_flag "x"' in line
+        line
+        for line in mlir.splitlines()
+        if 'tla.cross_flag "x"' in line or '"tla.cross_flag"' in line
     )
+    assert '"x"' in cross_flag_line
     assert "src_pipe" not in cross_flag_line
     assert "dst_pipe" not in cross_flag_line
     assert "tla.cross_core_set_flag" in mlir
@@ -151,8 +154,9 @@ def test_cross_flag_public_api_emits_call_site_pipes() -> None:
 def test_public_api_exports_representative_helpers() -> None:
     assert callable(tla.tile_view)
     assert callable(tla.copy)
-    assert callable(tla.debug_print)
-    assert not hasattr(tla, "print")
+    assert callable(tla.print)
+    assert not hasattr(tla, "debug_print")
+    assert not hasattr(tla, "print_tensor")
     assert not hasattr(tla, "debug_printf")
     assert callable(tla.flag)
     assert callable(tla.cross_flag)

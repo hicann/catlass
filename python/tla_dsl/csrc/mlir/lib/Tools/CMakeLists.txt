@@ -67,7 +67,8 @@ if(TLA_DSL_BUILD_RUNTIME_WRAPPER)
     ${ASCEND_HOME_PATH}/../ascend-toolkit/latest/aarch64-linux/pkg_inc/runtime
   )
   target_link_directories(tla_dsl_runtime_wrapper PRIVATE ${ASCEND_HOME_PATH}/lib64)
-  target_link_libraries(tla_dsl_runtime_wrapper PRIVATE runtime ascendcl dl pthread m c_sec)
+  target_link_libraries(tla_dsl_runtime_wrapper PRIVATE
+    ascendc_runtime runtime ascend_dump ascendcl dl pthread m c_sec)
   set_target_properties(tla_dsl_runtime_wrapper PROPERTIES
     OUTPUT_NAME "tla_dsl_runtime_wrapper"
     BUILD_RPATH "${ASCEND_HOME_PATH}/lib64"
@@ -88,7 +89,7 @@ if(TLA_DSL_BUILD_RUNTIME_WRAPPER)
   target_link_directories(tla_dsl_runtime_wrapper_decoder_test PRIVATE
     ${ASCEND_HOME_PATH}/lib64)
   target_link_libraries(tla_dsl_runtime_wrapper_decoder_test PRIVATE
-    runtime ascendcl dl pthread m c_sec)
+    ascendc_runtime runtime ascend_dump ascendcl dl pthread m c_sec)
   set_target_properties(tla_dsl_runtime_wrapper_decoder_test PROPERTIES
     BUILD_RPATH "${ASCEND_HOME_PATH}/lib64")
 endif()

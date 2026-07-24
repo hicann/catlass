@@ -580,7 +580,7 @@ _CORE_API_EXPORTS = (
     "make_tensor",
     "make_tensor_like",
     "copy",
-    "debug_print",
+    "print",
     "flag",
     "cross_flag",
     "cross_core_set_flag",

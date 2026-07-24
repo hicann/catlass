@@ -13,48 +13,48 @@ from catlass.base_dsl import BaseDSL
 @tla.kernel
 def _scalar_kernel(i: object, j: object, f: object) -> None:
     with tla.cube():
-        tla.debug_print(i)
-        tla.debug_print(f)
+        tla.print(i)
+        tla.print(f)
     with tla.vector():
-        tla.debug_print(f)
-        tla.debug_print(j)
+        tla.print(f)
+        tla.print(j)
 
 
 @tla.kernel
 def _computed_i32_kernel(x: object, y: object) -> None:
     with tla.vector():
-        tla.debug_print(x + y)
+        tla.print(x + y)
 
 
 @tla.kernel
 def _computed_f32_kernel(x: object, y: object) -> None:
     with tla.cube():
-        tla.debug_print(x + y)
+        tla.print(x + y)
 
 
 @tla.kernel
 def _literal_kernel() -> None:
     with tla.vector():
-        tla.debug_print(-(2**31))
-        tla.debug_print(2**31 - 1)
-        tla.debug_print(1.25)
+        tla.print(-(2**31))
+        tla.print(2**31 - 1)
+        tla.print(1.25)
 
 
 @tla.kernel
 def _f32_literal_location_kernel() -> None:
     with tla.vector():
-        tla.debug_print(1.25)
+        tla.print(1.25)
 
 
 @tla.kernel
 def _regionless_kernel() -> None:
-    tla.debug_print(tla.Int32(1))
+    tla.print(tla.Int32(1))
 
 
 @tla.kernel
 def _typed_scalar_kernel(value: object) -> None:
     with tla.vector():
-        tla.debug_print(value)
+        tla.print(value)
 
 
 @tla.kernel
@@ -62,13 +62,13 @@ def _pointer_kernel() -> None:
     allocator = tla.utils.LocalmemAllocator()
     ptr = allocator.allocate(64, 32, tla.AddressSpace.ub)
     with tla.vector():
-        tla.debug_print(ptr)
+        tla.print(ptr)
 
 
 @tla.kernel
 def _tensor_kernel(value: tla.Tensor) -> None:
     with tla.vector():
-        tla.debug_print(value)
+        tla.print(value)
 
 
 @tla.kernel
@@ -76,7 +76,7 @@ def _vector_value_kernel(value: tla.Tensor) -> None:
     tile = tla.tile_view(value, tla.make_shape(64), tla.make_coord(0))
     with tla.vector():
         with tla.vec.func(mode="simd"):
-            tla.debug_print(tile.load())
+            tla.print(tile.load())
 
 
 def _host_vector_tensor() -> tla.Tensor:
@@ -90,8 +90,8 @@ def _host_vector_tensor() -> tla.Tensor:
         )
 
 
-def test_debug_print_has_only_the_positional_unary_public_surface() -> None:
-    assert str(inspect.signature(tla.debug_print)) == "(value, /)"
+def test_print_has_value_and_optional_tensor_length_public_surface() -> None:
+    assert str(inspect.signature(tla.print)) == "(value, length=None, /)"
 
 
 def test_debug_print_materializes_api_local_i32_and_f32_literals() -> None:
@@ -143,7 +143,7 @@ def test_debug_print_f32_literal_preserves_source_location() -> None:
     line = next(
         first_lineno + offset
         for offset, source in enumerate(source_lines)
-        if "tla.debug_print(1.25)" in source
+        if "tla.print(1.25)" in source
     )
     lowered = BaseDSL()._lower(
         _f32_literal_location_kernel.fn,
@@ -185,27 +185,27 @@ def test_debug_print_f32_literal_preserves_source_location() -> None:
 @tla.kernel
 def _debug_print_cube_static(value: object) -> None:
     with tla.cube():
-        tla.debug_print(value)
+        tla.print(value)
 
 
 @tla.kernel
 def _debug_print_cube_guarded_static(value: object) -> None:
     with tla.cube():
         if tla.arch.block_idx() == 0:
-            tla.debug_print(value)
+            tla.print(value)
 
 
 @tla.kernel
 def _debug_print_vector_static(value: object) -> None:
     with tla.vector():
-        tla.debug_print(value)
+        tla.print(value)
 
 
 @tla.kernel
 def _debug_print_vector_guarded_static(value: object) -> None:
     with tla.vector():
         if tla.arch.block_idx() == 0:
-            tla.debug_print(value)
+            tla.print(value)
 
 
 _DEBUG_PRINT_MATRIX_KERNELS = {
@@ -232,13 +232,14 @@ def test_debug_print_backend_matrix(region: str, dtype: str, guarded: bool) -> N
 @pytest.mark.parametrize(
     ("args", "kwargs", "match"),
     [
-        ((), {}, "exactly one positional argument; got 0"),
+        ((), {}, "expects one or two positional arguments; got 0"),
         (
-            (tla.Int32(1), tla.Int32(2)),
+            (tla.Int32(1), tla.Int32(2), tla.Int32(3)),
             {},
-            "exactly one positional argument; got 2",
+            "expects one or two positional arguments; got 3",
         ),
         ((), {"value": tla.Int32(1)}, "does not accept keyword arguments"),
+        ((tla.Int32(1), 1), {}, "length is only valid"),
         ((2**31,), {}, "outside signless i32 range"),
         ((-(2**31) - 1,), {}, "outside signless i32 range"),
     ],
@@ -247,7 +248,7 @@ def test_debug_print_rejects_invalid_public_calls(
     args: tuple[object, ...], kwargs: dict[str, object], match: str
 ) -> None:
     with pytest.raises(tla.TlaCoreAPIError, match=match):
-        tla.debug_print(*args, **kwargs)
+        tla.print(*args, **kwargs)
 
 
 _SCALAR_ERROR = "expected a signless i32 or f32 scalar"
@@ -261,7 +262,7 @@ _SCALAR_ERROR = "expected a signless i32 or f32 scalar"
             for value in (True, tla.Int64(1), tla.UInt32(1), tla.Float16(1.0))
         ],
         (_pointer_kernel, (), _SCALAR_ERROR),
-        (_tensor_kernel, (_host_vector_tensor(),), _SCALAR_ERROR),
+        (_tensor_kernel, (_host_vector_tensor(),), "GM-resident"),
         (_vector_value_kernel, (_host_vector_tensor(),), _SCALAR_ERROR),
         (
             _regionless_kernel,

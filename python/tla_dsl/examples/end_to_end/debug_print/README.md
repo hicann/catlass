@@ -1,6 +1,6 @@
-# `tla.debug_print` examples
+# `tla.print` examples
 
-`tla.debug_print` supports exactly one signless `i32` or `f32` scalar in an
+`tla.print` supports exactly one signless `i32` or `f32` scalar in an
 explicit `tla.cube` or `tla.vector` region. The FIFO decoder accepts only the
 matching CANN scalar frames: `x=%d` and `v=%f`. Runtime scalar
 expressions that lower through the canonical Numeric path, such as `x + y`,

@@ -2147,7 +2147,7 @@ def _category(value: Any) -> str | None:
         return "layout"
     if isinstance(value, _Pointer):
         return "pointer"
-    if isinstance(value, _Tensor):
+    if isinstance(value, Tensor):
         return "tensor"
     category = getattr(value, "__tla_category__", None)
     if isinstance(category, str):
@@ -2507,17 +2507,17 @@ _DEBUG_PRINT_I32_MIN = -(2**31)
 _DEBUG_PRINT_I32_MAX = 2**31 - 1
 
 
-def _debug_print_operand(value: Any, *, loc: mlir_ir.Location | None) -> mlir_ir.Value:
+def _print_scalar_operand(value: Any, *, loc: mlir_ir.Location | None) -> mlir_ir.Value:
     resolved = _resolve_bound_value(value)
     if isinstance(resolved, bool):
         _op_error(
-            "debug_print",
+            "print",
             "unsupported value type bool; expected a signless i32 or f32 scalar",
         )
     if isinstance(resolved, int):
         if not _DEBUG_PRINT_I32_MIN <= resolved <= _DEBUG_PRINT_I32_MAX:
             _op_error(
-                "debug_print", f"Python int {resolved} is outside signless i32 range"
+                "print", f"Python int {resolved} is outside signless i32 range"
             )
         return _const_i32(resolved, loc=loc)
     if isinstance(resolved, float):
@@ -2530,7 +2530,7 @@ def _debug_print_operand(value: Any, *, loc: mlir_ir.Location | None) -> mlir_ir
             if dtype == "f32":
                 return _const_f32(float(resolved.value), loc=loc)
             _op_error(
-                "debug_print",
+                "print",
                 f"unsupported value type {dtype}; expected a signless i32 or f32 scalar",
             )
         resolved = _resolve_bound_value(resolved.value)
@@ -2538,7 +2538,7 @@ def _debug_print_operand(value: Any, *, loc: mlir_ir.Location | None) -> mlir_ir
         resolved = _resolve_bound_value(resolved.value)
     if not isinstance(resolved, mlir_ir.Value):
         _op_error(
-            "debug_print",
+            "print",
             f"unsupported value type {_type_name(value)}; expected a signless i32 or f32 scalar",
         )
 
@@ -2550,38 +2550,145 @@ def _debug_print_operand(value: Any, *, loc: mlir_ir.Location | None) -> mlir_ir
         if int_type.width == 32 and int_type.is_signless:
             return resolved
     _op_error(
-        "debug_print",
+        "print",
         f"unsupported value type {value_type}; expected a signless i32 or f32 scalar",
     )
 
 
-def debug_print(*args: Any, **kwargs: Any) -> None:
-    """Emit one typed i32 or f32 debug value inside a cube or vector region."""
-    if kwargs:
-        _op_error("debug_print", "does not accept keyword arguments")
-    if len(args) != 1:
-        _op_error(
-            "debug_print", f"expects exactly one positional argument; got {len(args)}"
-        )
-    value = _resolve_bound_value(args[0])
+def _emit_scalar_print(value: Any, *, loc: mlir_ir.Location | None) -> None:
     if isinstance(value, bool):
         _op_error(
-            "debug_print",
+            "print",
             "unsupported value type bool; expected a signless i32 or f32 scalar",
         )
     if (
         isinstance(value, int)
         and not _DEBUG_PRINT_I32_MIN <= value <= _DEBUG_PRINT_I32_MAX
     ):
-        _op_error("debug_print", f"Python int {value} is outside signless i32 range")
-    _require_frontend_state("debug_print")
-    _runtime._require_enclosing_cube_or_vector("debug_print")
-    loc = _capture_user_loc()
-    _tla_ops_gen.debug_print(_debug_print_operand(value, loc=loc), loc=loc)
+        _op_error("print", f"Python int {value} is outside signless i32 range")
+    _require_frontend_state("print")
+    _runtime._require_enclosing_cube_or_vector("print")
+    _tla_ops_gen.debug_print(_print_scalar_operand(value, loc=loc), loc=loc)
 
 
-debug_print.__signature__ = inspect.Signature(
-    [inspect.Parameter("value", inspect.Parameter.POSITIONAL_ONLY)]
+def _print_tensor_static_leaves(tree: Any, *, field: str) -> tuple[int, ...]:
+    if isinstance(tree, (tuple, list)):
+        leaves: list[int] = []
+        for item in tree:
+            leaves.extend(_print_tensor_static_leaves(item, field=field))
+        return tuple(leaves)
+    if isinstance(tree, int):
+        return (tree,)
+    _op_error("print", f"requires a static {field}")
+
+
+def _print_tensor_row_major_strides(shape: tuple[int, ...]) -> tuple[int, ...]:
+    stride = 1
+    result: list[int] = []
+    for extent in reversed(shape):
+        result.append(stride)
+        stride *= extent
+    return tuple(reversed(result))
+
+
+def _emit_tensor_print(
+    value: Any, length: Any, *, loc: mlir_ir.Location | None
+) -> None:
+    """Dump a prefix of one static, contiguous GM ``float32`` tensor.
+
+    Version 1 supports one call in an AIC-only or AIV-only C310 kernel launched
+    with a single block. ``value`` must be GM-resident, row-major, statically
+    shaped, and contiguous. At most 16 elements may be printed. Mixed-core and
+    multi-block launches, other dtypes/locations/layouts, and dynamic shapes are
+    intentionally unsupported.
+    """
+    if _runtime._current_frontend_state() is None:
+        _op_error("print", "tensor printing is only available in lowered Tla IR")
+    in_cube = _runtime._has_enclosing_region("cube")
+    in_vector = _runtime._has_enclosing_region("vector")
+    if not in_cube and not in_vector:
+        _op_error("print", "must be nested inside tla.cube() or tla.vector()")
+    if in_cube and in_vector:
+        _op_error("print", "mixed cube/vector placement is unsupported in v1")
+
+    if hasattr(value, "value") and _tla_type_bridge.type_is_tensor(value.value.type):
+        value = value.value
+    if not isinstance(value, mlir_ir.Value) or not _tla_type_bridge.type_is_tensor(
+        value.type
+    ):
+        _op_error("print", "expected a TLA tensor")
+    descriptor = _tla_tensor_type_for_mlir_value(value)
+    if descriptor.element_type != "f32":
+        _op_error("print", "requires a float32 tensor")
+    if descriptor.addrspace != "gm":
+        _op_error("print", "requires a GM-resident tensor")
+    if descriptor.layout_tag != "row_major":
+        _op_error("print", "requires a row-major tensor")
+
+    shape = _print_tensor_static_leaves(descriptor.shape, field="shape")
+    stride = _print_tensor_static_leaves(descriptor.stride, field="stride")
+    if not shape or any(extent < 1 for extent in shape):
+        _op_error("print", "tensor element count must be positive")
+    if stride != _print_tensor_row_major_strides(shape):
+        _op_error("print", "requires a contiguous row-major tensor")
+
+    element_count = math.prod(shape)
+    if length is None:
+        if element_count > 16:
+            _op_error(
+                "print",
+                "tensors with more than 16 elements require an explicit length",
+            )
+        print_length = element_count
+    else:
+        resolved_length = _resolve_bound_value(length)
+        if isinstance(resolved_length, bool) or not isinstance(resolved_length, int):
+            _op_error("print", "length must be a static Python integer")
+        print_length = resolved_length
+    if not 1 <= print_length <= 16:
+        _op_error("print", "length must be between 1 and 16 elements")
+    if print_length > element_count:
+        _op_error("print", "length must not exceed the tensor element count")
+
+    _tla_ops_gen.print_tensor(value, shape, print_length, loc=loc)
+
+
+def print(*args: Any, **kwargs: Any) -> None:
+    """Print one scalar or a prefix of one tensor inside a cube or vector region."""
+    if kwargs:
+        _op_error("print", "does not accept keyword arguments")
+    if not 1 <= len(args) <= 2:
+        _op_error("print", f"expects one or two positional arguments; got {len(args)}")
+
+    original_value = args[0]
+    value = _resolve_bound_value(original_value)
+    if _category(original_value) == "tensor":
+        if _runtime._current_frontend_state() is None:
+            return _emit_tensor_print(
+                value, args[1] if len(args) == 2 else None, loc=None
+            )
+        return _emit_tensor_print(
+            value,
+            args[1] if len(args) == 2 else None,
+            loc=_capture_user_loc(),
+        )
+    if len(args) == 2:
+        _op_error("print", "length is only valid when printing a tensor")
+    loc = (
+        _capture_user_loc()
+        if _runtime._current_frontend_state() is not None
+        else None
+    )
+    return _emit_scalar_print(value, loc=loc)
+
+
+print.__signature__ = inspect.Signature(
+    [
+        inspect.Parameter("value", inspect.Parameter.POSITIONAL_ONLY),
+        inspect.Parameter(
+            "length", inspect.Parameter.POSITIONAL_ONLY, default=None
+        ),
+    ]
 )
 
 
@@ -5341,7 +5448,7 @@ __all__ = [
     "make_tensor",
     "make_tensor_like",
     "copy",
-    "debug_print",
+    "print",
     "flag",
     "cross_flag",
     "cross_core_set_flag",

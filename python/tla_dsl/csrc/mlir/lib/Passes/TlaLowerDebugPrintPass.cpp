@@ -1,10 +1,12 @@
 #include "PassesCommon.h"
 #include "PassesInternal.h"
+#include "Passes/TlaTensorToMemref.h"
 
 namespace tla {
 namespace {
 
 constexpr StringLiteral kDebugPrintWorkspaceAttrName = "tla.debug_print.workspace";
+constexpr StringLiteral kPrintTensorWorkspaceAttrName = "tla.print_tensor.workspace";
 
 static std::string typeToString(Type type)
 {
@@ -34,6 +36,25 @@ static BlockArgument getOrAppendDebugPrintWorkspaceArg(func::FuncOp funcOp)
     funcOp.setArgAttr(argIndex, kDebugPrintWorkspaceAttrName, UnitAttr::get(ctx));
     funcOp.setArgAttr(
         argIndex, hacc::KernelArgTypeAttr::name, hacc::KernelArgTypeAttr::get(ctx, hacc::KernelArgType::kWorkspace));
+    return workspaceArg;
+}
+
+static BlockArgument getOrPrependPrintTensorWorkspaceArg(func::FuncOp funcOp)
+{
+    MLIRContext* ctx = funcOp.getContext();
+    for (BlockArgument arg : funcOp.getArguments()) {
+        if (funcOp.getArgAttr(arg.getArgNumber(), kPrintTensorWorkspaceAttrName))
+            return arg;
+    }
+
+    Type workspaceType = IntegerType::get(ctx, 64);
+    funcOp.insertArgument(
+        0, workspaceType, DictionaryAttr::get(ctx), funcOp.getLoc());
+    BlockArgument workspaceArg = funcOp.getArgument(0);
+    funcOp.setArgAttr(0, kPrintTensorWorkspaceAttrName, UnitAttr::get(ctx));
+    funcOp.setArgAttr(
+        0, hacc::KernelArgTypeAttr::name,
+        hacc::KernelArgTypeAttr::get(ctx, hacc::KernelArgType::kWorkspace));
     return workspaceArg;
 }
 
@@ -79,9 +100,37 @@ static LogicalResult lowerDebugPrint(::tla::DebugPrintOp op, PatternRewriter& re
     if (!funcOp)
         return op.emitError("tla.debug_print must be nested inside func.func");
     BlockArgument workspace = getOrAppendDebugPrintWorkspaceArg(funcOp);
-
-    auto callee = getOrCreateRuntimeCall(module, calleeName, {value.getType(), workspace.getType()});
+    auto callee = getOrCreateRuntimeCall(
+        module, calleeName, {value.getType(), workspace.getType()});
     rewriter.create<func::CallOp>(op.getLoc(), callee, ValueRange{value, workspace});
+    rewriter.eraseOp(op);
+    return success();
+}
+
+static LogicalResult lowerPrintTensor(::tla::PrintTensorOp op,
+                                     PatternRewriter& rewriter,
+                                     ModuleOp module)
+{
+    auto funcOp = op->getParentOfType<func::FuncOp>();
+    if (!funcOp)
+        return op.emitError("tla.print_tensor must be nested inside func.func");
+
+    FailureOr<Value> materialized =
+        materializeBaseMemref(rewriter, op.getLoc(), op.getValue());
+    if (failed(materialized))
+        return op.emitError("could not materialize the GM tensor base");
+    Value tensorPtr = rewriter.create<::mlir::memref::ExtractAlignedPointerAsIndexOp>(
+        op.getLoc(), *materialized);
+    Value tensorI64 = rewriter.create<arith::IndexCastOp>(
+        op.getLoc(), rewriter.getI64Type(), tensorPtr);
+    Value count = rewriter.create<arith::ConstantIntOp>(
+        op.getLoc(), op.getLengthAttr().getInt(), 64);
+    BlockArgument workspace = getOrPrependPrintTensorWorkspaceArg(funcOp);
+    auto callee = getOrCreateRuntimeCall(
+        module, "_mlir_ciface_tla_print_tensor_gm_f32",
+        {workspace.getType(), tensorI64.getType(), count.getType()});
+    rewriter.create<func::CallOp>(
+        op.getLoc(), callee, ValueRange{workspace, tensorI64, count});
     rewriter.eraseOp(op);
     return success();
 }
@@ -115,6 +164,18 @@ public:
             PatternRewriter rewriter(op.getContext());
             rewriter.setInsertionPoint(op);
             if (failed(lowerDebugPrint(op, rewriter, module))) {
+                signalPassFailure();
+                return;
+            }
+        }
+        SmallVector<::tla::PrintTensorOp, 8> printOps;
+        module.walk([&](::tla::PrintTensorOp op) { printOps.push_back(op); });
+        for (::tla::PrintTensorOp op : printOps) {
+            if (!op || !op->getBlock())
+                continue;
+            PatternRewriter rewriter(op.getContext());
+            rewriter.setInsertionPoint(op);
+            if (failed(lowerPrintTensor(op, rewriter, module))) {
                 signalPassFailure();
                 return;
             }

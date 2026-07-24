@@ -1,0 +1,19 @@
+// RUN: sed -n '/BEGIN-LOWER$/,/END-LOWER$/p' %s | %tla_compile - -o - | %filecheck %s --check-prefix=LOWER
+
+// BEGIN-LOWER
+module {
+  tla.func @print_tensor_aic(%x: !tla.tensor<!tla.layout<!tla.shape<4,4>, !tla.stride<4,1>, !tla.shape<4,4>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>) {
+    "tla.cube"() ({
+      tla.print_tensor %x shape = [4, 4] length = 4 : !tla.tensor<!tla.layout<!tla.shape<4,4>, !tla.stride<4,1>, !tla.shape<4,4>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>
+    }) : () -> ()
+    tla.return
+  }
+}
+// END-LOWER
+
+// LOWER-LABEL: func.func @print_tensor_aic(
+// LOWER-SAME: %[[WORKSPACE:arg0]]: i64 {{.*}}hacc.arg_type = #hacc.arg_type<workspace>{{.*}}tla.print_tensor.workspace
+// LOWER: %[[LENGTH:.*]] = {{(arith\.constant 4 : i64|llvm\.mlir\.constant\(4 : i64\) : i64)}}
+// LOWER: call @_mlir_ciface_tla_print_tensor_gm_f32(%[[WORKSPACE]], {{.*}}, %[[LENGTH]])
+// LOWER-NOT: _mlir_ciface_tla_printf
+// LOWER-NOT: tla.print_tensor

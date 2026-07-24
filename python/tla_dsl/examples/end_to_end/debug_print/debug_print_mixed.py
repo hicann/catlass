@@ -19,7 +19,7 @@ DEFAULT_CACHE_DIR = (
 @tla.kernel
 def debug_print_mixed_cube_kernel(x: object, y: object) -> None:
     with tla.cube():
-        tla.debug_print(tla.Int32(-37))
+        tla.print(tla.Int32(-37))
     with tla.vector():
         tla.pipe_barrier(tla.pipes.ALL)
 
@@ -29,15 +29,15 @@ def debug_print_mixed_vector_kernel(x: object, y: object) -> None:
     with tla.cube():
         tla.pipe_barrier(tla.pipes.ALL)
     with tla.vector():
-        tla.debug_print(tla.Float32(1.25))
+        tla.print(tla.Float32(1.25))
 
 
 @tla.kernel
 def debug_print_mixed_both_kernel(x: object, y: object) -> None:
     with tla.cube():
-        tla.debug_print(tla.Int32(-37))
+        tla.print(tla.Int32(-37))
     with tla.vector():
-        tla.debug_print(tla.Float32(1.25))
+        tla.print(tla.Float32(1.25))
 
 
 _KERNELS = {
@@ -152,7 +152,7 @@ def run(args: argparse.Namespace) -> int:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Compile and run mixed tla.debug_print."
+        description="Compile and run mixed tla.print."
     )
     parser.add_argument("--run", action="store_true")
     parser.add_argument("--dump-tlair", action="store_true")
