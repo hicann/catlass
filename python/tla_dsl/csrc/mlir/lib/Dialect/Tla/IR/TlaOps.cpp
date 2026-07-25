@@ -264,8 +264,25 @@ mlir::LogicalResult StoreOp::verify() {
     return emitOpError("dest must be !tla.tensor");
   if (destType.getPtr().getAddrspace() != AddressSpace::ub)
     return emitOpError("dest !tla.tensor must be in ub address space");
-  return verifyMaskMatchesVector(getOperation(), getMask(),
-                                 getSource().getType());
+
+  if (mlir::isa<MaskSSAType>(getSource().getType())) {
+    if (getMask())
+      return emitOpError(
+          "predicate mask is not supported when storing !tla.mask");
+    if (getUnalignedUbAccess())
+      return emitOpError(
+          "unaligned_ub_access is not supported when storing !tla.mask");
+    auto destElem = mlir::dyn_cast<mlir::IntegerType>(destType.getPtr().getPointee());
+    if (!destElem || destElem.getWidth() != 8)
+      return emitOpError(
+          "dest !tla.tensor element type must be i8 or ui8 packed mask bytes");
+    return mlir::success();
+  }
+
+  auto vectorSource = mlir::dyn_cast<VectorSSAType>(getSource().getType());
+  if (!vectorSource)
+    return emitOpError("source must be !tla.vector or !tla.mask");
+  return verifyMaskMatchesVector(getOperation(), getMask(), vectorSource);
 }
 
 static mlir::LogicalResult verifyMaskProducerType(mlir::Operation *op,
@@ -339,6 +356,28 @@ mlir::LogicalResult LoadOp::verify() {
     return emitOpError("source must be !tla.tensor");
   if (sourceType.getPtr().getAddrspace() != AddressSpace::ub)
     return emitOpError("source !tla.tensor must be in ub address space");
+
+  if (auto maskResult = mlir::dyn_cast<MaskSSAType>(getResult().getType())) {
+    if (getResult2())
+      return emitOpError("second result is not valid when loading !tla.mask");
+    if (getLoadDist())
+      return emitOpError("load_dist is not supported when loading !tla.mask");
+    if (getUnalignedUbAccess())
+      return emitOpError(
+          "unaligned_ub_access is not supported when loading !tla.mask");
+    auto sourceElem =
+        mlir::dyn_cast<mlir::IntegerType>(sourceType.getPtr().getPointee());
+    if (!sourceElem || sourceElem.getWidth() != 8)
+      return emitOpError(
+          "source !tla.tensor element type must be i8 or ui8 packed mask bytes");
+    int64_t lanes = maskResult.getPhysicalLanes();
+    if (lanes != 32 && lanes != 64 && lanes != 128 && lanes != 256)
+      return emitOpError() << "unsupported !tla.mask lane count " << lanes;
+    return mlir::success();
+  }
+
+  if (!mlir::isa<VectorSSAType>(getResult().getType()))
+    return emitOpError("result must be !tla.vector or !tla.mask");
 
   bool isDintlv = false;
   if (auto loadDistAttr = getLoadDist())

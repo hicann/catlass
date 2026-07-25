@@ -49,9 +49,21 @@ class LoadDist:
     DIST_DINTLV_B32 = "dintlv_b32"
 
 
+class MaskLoadDist:
+    """Mask load distribution modes (AscendC ``MaskDist`` / ``plds``)."""
+
+    DIST_NORM = "norm"
+
+
 class StoreDist:
     DIST_NORM = "norm"
     DIST_BRC_B32 = "brc_b32"
+
+
+class MaskStoreDist:
+    """Mask store distribution modes (AscendC ``MaskDist`` / ``psts``)."""
+
+    DIST_NORM = "norm"
 
 
 class StoreParams:
@@ -84,6 +96,13 @@ class BlockStoreParams(StoreParams):
     post_update_stride: int = 0
 
 
+@dataclass
+class MaskStoreParams(StoreParams):
+    """Continuous-aligned MaskSSA store (packed ``i8``/``u8`` UB / ``psts``)."""
+
+    store_dist: str = MaskStoreDist.DIST_NORM
+
+
 class LoadParams:
     """Marker annotation for tensor tile load params."""
 
@@ -106,6 +125,17 @@ class UnalignLoadParams(LoadParams):
     is_pre: bool = False
     post_mode: str = PostMode.POST_MODE_NORMAL
     post_update_stride: int = 0
+
+
+@dataclass
+class MaskLoadParams(LoadParams):
+    """Continuous-aligned MaskSSA load (packed ``i8``/``u8`` UB / ``plds``).
+
+    Predicate width ``!tla.mask<N>`` is inferred from the tile byte count
+    (``N = prod(origin_shape) * 8``).
+    """
+
+    load_dist: str = MaskLoadDist.DIST_NORM
 
 
 @dataclass

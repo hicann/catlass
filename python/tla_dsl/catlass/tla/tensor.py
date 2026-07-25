@@ -161,16 +161,21 @@ class _Tensor(TensorABC):
         *,
         loc: mlir_ir.Location | None = None,
     ) -> Any:
-        """Load this tensor tile into vector SSA inside a tla.vec.func region.
+        """Load this tensor tile into vector or mask SSA inside a ``tla.vec.func``.
 
-        Single-destination modes (``DIST_NORM``, ``DIST_BRC_B32``, unalign) return
-        one ``VectorSSA``. Dual-destination ``DIST_DINTLV_B32`` returns a
-        ``(VectorSSA, VectorSSA)`` pair (even/odd b32 elements; f32 only).
+        Dispatch by ``params`` type:
+
+        * ``MaskLoadParams`` → ``MaskSSA`` (packed ``i8``/``u8`` UB). ``N`` on
+          ``!tla.mask<N>`` is ``prod(origin_shape) * 8``.
+        * ``None`` / ``NormalLoadParams`` / ``UnalignLoadParams`` → ``VectorSSA``
+          (or a ``(VectorSSA, VectorSSA)`` pair for ``DIST_DINTLV_B32``).
         """
         from ..core_api import (
+            MaskSSA,
             VectorSSA,
             _as_value,
             _coerce_type,
+            _flatten_tla_tuple,
             _full_vector_ssa_descriptor,
             _op_error,
             _require_frontend_state,
@@ -178,17 +183,74 @@ class _Tensor(TensorABC):
             _vector_ssa_type_from_tensor_descriptor,
         )
         from ..execution_lowering import TlaLoweringError
-        from ..params import LoadDist, NormalLoadParams, PostMode, UnalignLoadParams
+        from ..params import (
+            LoadDist,
+            MaskLoadDist,
+            MaskLoadParams,
+            NormalLoadParams,
+            PostMode,
+            UnalignLoadParams,
+        )
+        from ..types import TlaMaskSSATypeDescriptor
 
         loc = _normalize_user_loc(loc)
         _require_frontend_state("load")
         _runtime._require_enclosing_region("load", "vec.func")
+
+        source = _as_value(self)
+        source_desc = _tla_tensor_type_for_mlir_value(source)
+        if source_desc.addrspace.lower() != "ub":
+            _op_error(
+                "load",
+                "invalid argument 'source' (position 0): expected addrspace ub, "
+                f"got {source_desc.addrspace}",
+            )
+
+        # MaskSSA path: selected by MaskLoadParams.
+        if isinstance(params, MaskLoadParams):
+            if params.load_dist != MaskLoadDist.DIST_NORM:
+                raise NotImplementedError(
+                    f"currently unsupported load_dist {params.load_dist!r}"
+                )
+            elem = str(source_desc.element_type).strip().lower()
+            if elem not in ("i8", "u8", "ui8"):
+                _op_error(
+                    "load",
+                    "invalid argument 'source' (position 0): expected i8/u8 packed "
+                    f"mask bytes, got element type {source_desc.element_type}",
+                )
+            byte_count = 1
+            for dim in _flatten_tla_tuple(source_desc.origin_shape):
+                if dim is None or isinstance(dim, bool) or not isinstance(dim, int):
+                    _op_error(
+                        "load",
+                        "source tile origin_shape must be a static integer product "
+                        f"of packed mask bytes, got {source_desc.origin_shape!r}",
+                    )
+                byte_count *= int(dim)
+            physical_lanes = byte_count * 8
+            try:
+                mask_desc = TlaMaskSSATypeDescriptor(physical_lanes=physical_lanes)
+            except ValueError as exc:
+                _op_error(
+                    "load",
+                    f"source tile has {byte_count} packed bytes "
+                    f"(→ !tla.mask<{physical_lanes}>), which is not a supported "
+                    f"mask width: {exc}",
+                )
+            mask_ty = mask_desc.to_mlir_type(
+                loc.context if loc is not None else mlir_ir.Context.current
+            )
+            return MaskSSA(
+                _tla_ops_gen.load(mask_ty, None, source, loc=loc)
+            )
+
         if params is None:
             params = NormalLoadParams()
         elif not isinstance(params, (NormalLoadParams, UnalignLoadParams)):
             raise TlaLoweringError(
-                "load params must be NormalLoadParams or UnalignLoadParams, "
-                f"got {type(params).__name__}"
+                "load params must be NormalLoadParams, UnalignLoadParams, or "
+                f"MaskLoadParams, got {type(params).__name__}"
             )
 
         if params.post_mode != PostMode.POST_MODE_NORMAL:
@@ -219,14 +281,6 @@ class _Tensor(TensorABC):
                 context=ctx,
             )
 
-        source = _as_value(self)
-        source_desc = _tla_tensor_type_for_mlir_value(source)
-        if source_desc.addrspace.lower() != "ub":
-            _op_error(
-                "load",
-                "invalid argument 'source' (position 0): expected addrspace ub, "
-                f"got {source_desc.addrspace}",
-            )
         if is_dintlv:
             # AscendNPU-IR lowers DINTLV_B32 only to vldsx2.v64f32; reject
             # i32/u32 (and other dtypes) at the frontend until IR dispatches.
@@ -267,17 +321,19 @@ class _Tensor(TensorABC):
         mask: Any | None = None,
         loc: mlir_ir.Location | None = None,
     ) -> None:
-        """Store a vector SSA value into this tensor tile inside a tla.vec.func region.
+        """Store vector or mask SSA into this tensor tile inside a ``tla.vec.func``.
 
-        An optional ``params`` controls store mode: use ``NormalStoreParams()``
-        (the default) for aligned store, or ``UnalignStoreParams()`` for unaligned
-        UB access. An optional ``mask`` (a ``MaskSSA`` from ``tla.create_mask`` or
-        ``tla.update_mask``) controls which lanes are written; masked-out lanes
-        are left untouched. Only a ``MaskSSA`` is accepted (validated below); a
-        ``mask`` here is typed ``Any`` to avoid a circular import of ``MaskSSA``.
+        Dispatch by ``params`` type:
+
+        * ``MaskStoreParams`` → packed mask store (``i8``/``u8`` UB). ``value``
+          must be ``MaskSSA``; predicate ``mask=`` is not allowed.
+        * ``None`` / ``NormalStoreParams`` / ``UnalignStoreParams`` → data store
+          (``VectorSSA``), with optional predicate ``mask``.
         """
         from ..core_api import (
             _as_value,
+            _flatten_tla_tuple,
+            _mask_ssa_type_for_mlir_value,
             _op_error,
             _require_category,
             _require_frontend_state,
@@ -285,21 +341,18 @@ class _Tensor(TensorABC):
             _tla_tensor_type_for_mlir_value,
         )
         from ..execution_lowering import TlaLoweringError
-        from ..params import NormalStoreParams, StoreParams, UnalignStoreParams, BlockStoreParams
+        from ..params import (
+            BlockStoreParams,
+            MaskStoreDist,
+            MaskStoreParams,
+            NormalStoreParams,
+            UnalignStoreParams,
+        )
 
         loc = _normalize_user_loc(loc)
-        _require_category("store", "value", value, "vector_ssa", 1)
-        if mask is not None:
-            _require_category("store", "mask", mask, "mask_ssa", 2)
-        if params is None:
-            params = NormalStoreParams()
-        elif not isinstance(params, (NormalStoreParams, UnalignStoreParams, BlockStoreParams)):
-            raise TlaLoweringError(
-                "store params must be NormalStoreParams or UnalignStoreParams, "
-                f"got {type(params).__name__}"
-            )
         _require_frontend_state("store")
         _runtime._require_enclosing_region("store", "vec.func")
+
         dest = _as_value(self)
         dest_desc = _tla_tensor_type_for_mlir_value(dest)
         if dest_desc.addrspace.lower() != "ub":
@@ -309,6 +362,62 @@ class _Tensor(TensorABC):
                 f"got {dest_desc.addrspace}",
             )
         value_val = _as_value(value)
+
+        # MaskSSA path: selected by MaskStoreParams.
+        if isinstance(params, MaskStoreParams):
+            if mask is not None:
+                raise TlaLoweringError(
+                    "store(..., MaskStoreParams) does not accept predicate mask="
+                )
+            if params.store_dist != MaskStoreDist.DIST_NORM:
+                raise NotImplementedError(
+                    f"currently unsupported store_dist {params.store_dist!r}"
+                )
+            _require_category("store", "value", value, "mask_ssa", 1)
+            elem = str(dest_desc.element_type).strip().lower()
+            if elem not in ("i8", "u8", "ui8"):
+                _op_error(
+                    "store",
+                    "invalid argument 'dest' (position 0): expected i8/u8 packed "
+                    f"mask bytes, got element type {dest_desc.element_type}",
+                )
+            mask_desc = _mask_ssa_type_for_mlir_value(value_val)
+            byte_count = 1
+            for dim in _flatten_tla_tuple(dest_desc.origin_shape):
+                if dim is None or isinstance(dim, bool) or not isinstance(dim, int):
+                    _op_error(
+                        "store",
+                        "dest tile origin_shape must be a static integer product "
+                        f"of packed mask bytes, got {dest_desc.origin_shape!r}",
+                    )
+                byte_count *= int(dim)
+            expected_bytes = mask_desc.physical_lanes // 8
+            if byte_count != expected_bytes:
+                _op_error(
+                    "store",
+                    f"dest tile has {byte_count} packed bytes, expected "
+                    f"{expected_bytes} for !tla.mask<{mask_desc.physical_lanes}>",
+                )
+            _tla_ops_gen.store(dest, value_val, loc=loc)
+            return
+
+        if _tla_type_bridge.type_is_mask_ssa(value_val.type):
+            raise TlaLoweringError(
+                "storing MaskSSA requires MaskStoreParams "
+                "(got "
+                f"{type(params).__name__ if params is not None else 'None'})"
+            )
+
+        _require_category("store", "value", value, "vector_ssa", 1)
+        if mask is not None:
+            _require_category("store", "mask", mask, "mask_ssa", 2)
+        if params is None:
+            params = NormalStoreParams()
+        elif not isinstance(params, (NormalStoreParams, UnalignStoreParams, BlockStoreParams)):
+            raise TlaLoweringError(
+                "store params must be NormalStoreParams, UnalignStoreParams, or "
+                f"MaskStoreParams, got {type(params).__name__}"
+            )
         mask_val = _as_value(mask) if mask is not None else None
         if mask_val is not None:
             _require_mask_matches_vector("store", mask_val, value_val)

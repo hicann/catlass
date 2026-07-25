@@ -15,7 +15,8 @@
 # python/tla_dsl/examples/end_to_end/basic_mixed (basic_mixed_ub2l1.py, basic_mixed_store_zN.py).
 # python/tla_dsl/examples/end_to_end/vector_ops (binary_op.py, masked_binary.py,
 # bitwise_ops.py, reduction_ops.py, compare_mask.py, unary_ops.py, arange_op.py,
-# interleave_op.py, squeeze_op.py, register_control_flow.py).
+# interleave_op.py, load_dintlv_op.py, load_store_mask.py, squeeze_op.py,
+# register_control_flow.py).
 # python/tla_dsl/examples/end_to_end/tensor_index (scalar_index_control_flow.py,
 # scalar_kernel_arg.py).
 # python/tla_dsl/examples/end_to_end/debug_print (debug_print.py, debug_print_mixed.py).
@@ -96,6 +97,7 @@ UNARY_OPS_REL="examples/end_to_end/vector_ops/unary_ops.py"
 ARANGE_OP_REL="examples/end_to_end/vector_ops/arange_op.py"
 INTERLEAVE_OP_REL="examples/end_to_end/vector_ops/interleave_op.py"
 LOAD_DINTLV_OP_REL="examples/end_to_end/vector_ops/load_dintlv_op.py"
+LOAD_STORE_MASK_REL="examples/end_to_end/vector_ops/load_store_mask.py"
 SQUEEZE_OP_REL="examples/end_to_end/vector_ops/squeeze_op.py"
 REGISTER_CONTROL_FLOW_REL="examples/end_to_end/vector_ops/register_control_flow.py"
 SCALAR_INDEX_CONTROL_FLOW_REL="examples/end_to_end/tensor_index/scalar_index_control_flow.py"
@@ -132,6 +134,8 @@ Run end-to-end validation for:
   - arange_op (arange_op.py [increase/decrease] --run --all-dtypes)
   - interleave_op (interleave_op.py interleave/deinterleave --run --all-dtypes)
   - load_dintlv_op (load_dintlv_op.py dintlv_b32 --run --all-dtypes; f32 only)
+  - load_store_mask (load_store_mask.py load_store_mask --run:
+    MaskSSA load/store round-trip via MaskLoadParams/MaskStoreParams)
   - squeeze_op (squeeze_op.py squeeze --run --all-dtypes)
   - register_control_flow (register_control_flow.py register_carriers --run:
     mixed VectorSSA/MaskSSA scf.for carriers and masked store)
@@ -627,6 +631,16 @@ _run_load_dintlv_op_case() {
 }
 
 _run_load_dintlv_op_case
+
+_run_load_store_mask_case() {
+    echo "==> Running load_store_mask validation [f32]: load_store_mask --run --device ${DEVICE_ID}"
+    (
+        cd "${TLA_DSL_DIR}"
+        python "${LOAD_STORE_MASK_REL}" load_store_mask --run --device "${DEVICE_ID}"
+    )
+}
+
+_run_load_store_mask_case
 
 _run_squeeze_op_case() {
     echo "==> Running squeeze_op validation [squeeze all dtypes]: squeeze --run --all-dtypes --device ${DEVICE_ID}"

@@ -647,17 +647,24 @@ def Tla_FuncOp : Tla_Op<"func", []> {
 def Tla_LoadOp : Tla_Op<"load", []> {
   let summary = "Load";
   let description = [{
-    Load a UB tensor tile into vector SSA. The source tensor must be in the UB
-    address space, and the operation must be nested inside a ``tla.vec.func``
-    region. When ``unaligned_ub_access`` is set, lowers to ``ave.hir.vload`` with
-    unaligned UB access (``vldas``/``vldus`` inserted by the HIVMAVE pipeline).
-    Dual-destination ``dintlv_b32`` produces a second result (even/odd b32
-    elements), lowering to ``ave.hir.vload <DINTLV_B32>``.
+    Load a UB tensor tile into vector or mask SSA. Dispatch is by result type:
+
+    * ``!tla.vector`` — data load. Optional ``load_dist`` / ``unaligned_ub_access``.
+      Dual-destination ``dintlv_b32`` produces a second result (even/odd b32
+      elements), lowering to ``ave.hir.vload <DINTLV_B32>``. Unaligned path
+      lowers to ``ave.hir.vload`` with ``vldas``/``vldus`` via HIVMAVE.
+    * ``!tla.mask`` — continuous-aligned MaskReg load (AscendC
+      ``LoadAlign(MaskReg&)`` / ``DIST_NORM`` / ``plds``). Source must be packed
+      ``i8``/``ui8`` bytes; ``N`` on ``!tla.mask<N>`` is the semantic lane count
+      (frontend derives it as ``prod(shape) * 8``). Lowers via
+      ``ave.hir.vload <NORM>`` on an ``i1`` memref view to ``hivm.plds.b8``.
+
+    Must be nested inside a ``tla.vec.func`` region.
   }];
   let arguments = (ins Tla_TensorType:$source,
                        OptionalAttr<Tla_LoadDistAttr>:$load_dist,
                        OptionalAttr<UnitAttr>:$unaligned_ub_access);
-  let results = (outs Tla_VectorSSAType:$result,
+  let results = (outs AnyTypeOf<[Tla_VectorSSAType, Tla_MaskSSAType]>:$result,
                       Optional<Tla_VectorSSAType>:$result2);
   let assemblyFormat = [{
     $source attr-dict `:` type($source) `->` qualified(type($result))
@@ -922,14 +929,22 @@ def Tla_SetFlagOp : Tla_Op<"set_flag", []> {
 def Tla_StoreOp : Tla_Op<"store", [AttrSizedOperandSegments]> {
   let summary = "Store";
   let description = [{
-    Store vector SSA into a UB tensor tile. The destination tensor must be in
-    the UB address space. An optional mask controls which lanes are written
-    (masked-out lanes are left untouched). When ``unaligned_ub_access`` is set,
-    lowers to ``ave.hir.vstore`` with unaligned UB access (``vstas``/``vstus``
-    inserted by the HIVMAVE pipeline).
-    Must be nested inside a ``tla.vec.func`` region.
+    Store vector or mask SSA into a UB tensor tile. Dispatch is by source type:
+
+    * ``!tla.vector`` — data store. Optional predicate ``mask`` controls which
+      lanes are written. Optional ``unaligned_ub_access`` lowers to unaligned
+      UB store (``vstas``/``vstus`` via HIVMAVE).
+    * ``!tla.mask`` — continuous-aligned MaskReg store (AscendC
+      ``StoreAlign(..., MaskReg&)`` / ``DIST_NORM`` / ``psts``). Destination
+      must be packed ``i8``/``ui8`` bytes. Predicate ``mask`` and
+      ``unaligned_ub_access`` are not allowed. Lowers via
+      ``ave.hir.masked_store <NORM_B8>`` on an ``i1`` memref view to
+      ``hivm.psts.b8``.
+
+    Destination must be UB. Must be nested inside a ``tla.vec.func`` region.
   }];
-  let arguments = (ins Tla_TensorType:$dest, Tla_VectorSSAType:$source,
+  let arguments = (ins Tla_TensorType:$dest,
+                       AnyTypeOf<[Tla_VectorSSAType, Tla_MaskSSAType]>:$source,
                        Optional<Tla_MaskSSAType>:$mask,
                        Optional<Tla_IntegerOrIndexType>:$block_stride,
                        OptionalAttr<UnitAttr>:$unaligned_ub_access);

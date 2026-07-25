@@ -74,6 +74,34 @@ static hivmave::VFLoadOp createVFLoad(OpBuilder &b, Location loc, VectorType vec
   return load;
 }
 
+// Map a packed-mask i8/ui8 UB tile memref onto an i1 view of ``lanes`` predicate
+// bits at the same byte address (AscendC MaskDist::DIST_NORM / plds/psts.b8).
+static FailureOr<Value> materializeI1MaskMemrefFromPackedBytes(OpBuilder &b, Location loc,
+                                                              Value packedMemref,
+                                                              int64_t lanes) {
+  if (lanes <= 0 || lanes % 8 != 0)
+    return failure();
+  auto srcTy = dyn_cast<MemRefType>(packedMemref.getType());
+  if (!srcTy)
+    return failure();
+  auto elemTy = dyn_cast<IntegerType>(srcTy.getElementType());
+  if (!elemTy || elemTy.getWidth() != 8)
+    return failure();
+
+  auto meta = b.create<mlir::memref::ExtractStridedMetadataOp>(loc, packedMemref);
+  Value basePtr =
+      b.create<mlir::memref::ExtractAlignedPointerAsIndexOp>(loc, meta.getBaseBuffer());
+  Value byteAddr = b.create<arith::AddIOp>(loc, basePtr, meta.getOffset());
+  Value addrI64 = b.create<arith::IndexCastOp>(loc, b.getI64Type(), byteAddr);
+
+  auto i1Ty = IntegerType::get(b.getContext(), 1);
+  auto layout = StridedLayoutAttr::get(b.getContext(), /*offset=*/0,
+                                       ArrayRef<int64_t>{1});
+  auto i1MemrefTy =
+      MemRefType::get({lanes}, i1Ty, layout, srcTy.getMemorySpace());
+  return b.create<hivm::PointerCastOp>(loc, i1MemrefTy, addrI64).getResult();
+}
+
 static std::string buildUniqueVectorHelperName(ModuleOp module, int &nextVectorRegionId) {
   std::string helperName;
   do {
@@ -976,6 +1004,29 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
     Value source = valueMap.lookup(loadOp.getSource());
     if (!source)
       return failure();
+
+    // MaskSSA result: packed i8 UB → i1 memref view → vload <NORM> (plds).
+    if (auto maskType = dyn_cast<::tla::MaskSSAType>(loadOp.getResult().getType())) {
+      int64_t lanes = maskType.getPhysicalLanes();
+      auto i1MemrefOr =
+          materializeI1MaskMemrefFromPackedBytes(b, loc, source, lanes);
+      if (failed(i1MemrefOr))
+        return loadOp.emitError(
+                   "failed to materialize i1 memref view for tla.load MaskSSA"),
+               failure();
+      VectorType semanticMaskType = VectorType::get({lanes}, b.getI1Type());
+      Value zero = b.create<arith::ConstantIndexOp>(loc, 0);
+      auto vfLoad =
+          createVFLoad(b, loc, semanticMaskType, *i1MemrefOr, zero,
+                       hivmave::LoadDist::NORM, /*unaligned=*/false);
+      Value loaded = vfLoad.getRes();
+      if (useFullPreg)
+        loaded =
+            castMaskToPregType(b, loc, loaded, fullPregVecType(b.getContext()));
+      valueMap[loadOp.getResult()] = loaded;
+      return success();
+    }
+
     // The loaded vector's element type comes from the tile memref, not the
     // region-global width: a load feeding a differently-typed op keeps its own
     // dtype.
@@ -1474,6 +1525,39 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
     Value source = valueMap.lookup(storeOp.getSource());
     if (!dest || !source)
       return failure();
+
+    // MaskSSA source: packed i8 UB ← i1 memref view ← masked_store <NORM_B8>.
+    if (isa<::tla::MaskSSAType>(storeOp.getSource().getType())) {
+      auto maskType = cast<::tla::MaskSSAType>(storeOp.getSource().getType());
+      int64_t lanes = maskType.getPhysicalLanes();
+      auto i1MemrefOr =
+          materializeI1MaskMemrefFromPackedBytes(b, loc, dest, lanes);
+      if (failed(i1MemrefOr))
+        return storeOp.emitError(
+                   "failed to materialize i1 memref view for tla.store MaskSSA"),
+               failure();
+      VectorType semanticMaskType = VectorType::get({lanes}, b.getI1Type());
+      VectorType pregOrSemantic =
+          useFullPreg ? fullPregVecType(b.getContext()) : semanticMaskType;
+      Value zero = b.create<arith::ConstantIndexOp>(loc, 0);
+      Value allTrue = createPredicatePge(b, loc, pregOrSemantic, lanes,
+                                         hivmave::PgePattern::ALL);
+      Value storeVal = source;
+      if (storeVal.getType() != semanticMaskType)
+        storeVal =
+            b.create<UnrealizedConversionCastOp>(loc, semanticMaskType, storeVal)
+                .getResult(0);
+      Value storePred = allTrue;
+      if (storePred.getType() != semanticMaskType)
+        storePred = b.create<UnrealizedConversionCastOp>(loc, semanticMaskType,
+                                                         storePred)
+                        .getResult(0);
+      b.create<hivmave::VFMaskedStoreOp>(loc, hivmave::StoreDist::NORM_B8,
+                                         *i1MemrefOr, ValueRange{zero}, storePred,
+                                         storeVal);
+      return success();
+    }
+
     Value zero = b.create<arith::ConstantIndexOp>(loc, 0);
     Value mask;
     auto sourceTy = dyn_cast<VectorType>(source.getType());
