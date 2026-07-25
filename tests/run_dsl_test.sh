@@ -10,7 +10,7 @@
 # -----------------------------------------------------------------------------------------------------------
 #
 # End-to-end validation for python/tla_dsl/examples/end_to_end/basic_mmad (basic_matmul.py, basic_mmad_ptr.py),
-# python/tla_dsl/examples/end_to_end/basic_vadd (basic_vadd.py),
+# python/tla_dsl/examples/end_to_end/basic_vadd (basic_vadd.py, basic_vadd_unknown_extent.py),
 # python/tla_dsl/examples/end_to_end/basic_mixed (basic_mixed.py), and
 # python/tla_dsl/examples/end_to_end/basic_mixed (basic_mixed_ub2l1.py, basic_mixed_store_zN.py).
 # python/tla_dsl/examples/end_to_end/vector_ops (binary_op.py, masked_binary.py,
@@ -78,6 +78,7 @@ DEVICE_ID="${DEVICE_ID:-1}"
 BASIC_MMAD_REL="examples/end_to_end/basic_mmad/basic_matmul.py"
 BASIC_MMAD_PTR_REL="examples/end_to_end/basic_mmad/basic_mmad_ptr.py"
 BASIC_VADD_REL="examples/end_to_end/basic_vadd/basic_vadd.py"
+BASIC_VADD_UNKNOWN_EXTENT_REL="examples/end_to_end/basic_vadd/basic_vadd_unknown_extent.py"
 BASIC_MIXED_REL="examples/end_to_end/basic_mixed/basic_mixed.py"
 BASIC_MIXED_UB2L1_REL="examples/end_to_end/basic_mixed/basic_mixed_ub2l1.py"
 BASIC_MIXED_STORE_ZN_REL="examples/end_to_end/basic_mixed/basic_mixed_store_zN.py"
@@ -120,6 +121,7 @@ Run end-to-end validation for:
   - basic_mmad (basic_matmul.py --run --all-layouts --all-mmad-dtypes)
   - basic_mmad_ptr (basic_mmad_ptr.py --run)
   - basic_vadd (basic_vadd.py --run --all-dtypes, plus mutex variants)
+  - basic_vadd_unknown_extent (dynamic UB base capacity as memref<?xT> with extent 0)
   - basic_mixed (basic_mixed.py --run, basic_mixed_ub2l1.py --run, basic_mixed_store_zN.py --run)
   - binary_op (binary_op.py <op> --run --all-dtypes for add/sub/mul/div/max/min/add_unalign/add_brc_b32)
   - masked_binary (masked_binary.py masked_binary --run --all-dtypes)
@@ -324,6 +326,10 @@ if [[ ! -f "${TLA_DSL_DIR}/${BASIC_VADD_REL}" ]]; then
     echo "error: missing ${BASIC_VADD_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
 fi
+if [[ ! -f "${TLA_DSL_DIR}/${BASIC_VADD_UNKNOWN_EXTENT_REL}" ]]; then
+    echo "error: missing ${BASIC_VADD_UNKNOWN_EXTENT_REL} under ${TLA_DSL_DIR}" >&2
+    exit 1
+fi
 if [[ ! -f "${TLA_DSL_DIR}/${BASIC_MIXED_REL}" ]]; then
     echo "error: missing ${BASIC_MIXED_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
@@ -433,6 +439,17 @@ _run_basic_vadd_case "all dtypes"
 _run_basic_vadd_case "mutex mode" --use-mutex
 _run_basic_vadd_case "mutex with mode" --use-mutex-with
 _run_basic_vadd_case "enable atomic add" --use-atomic-add
+
+_run_basic_vadd_unknown_extent_case() {
+    echo "==> Running basic_vadd_unknown_extent validation: --run --device ${DEVICE_ID} --force-recompile"
+    (
+        cd "${TLA_DSL_DIR}"
+        python "${BASIC_VADD_UNKNOWN_EXTENT_REL}" \
+            --run --device "${DEVICE_ID}" --force-recompile
+    )
+}
+
+_run_basic_vadd_unknown_extent_case
 
 _run_basic_mixed_case() {
     echo "==> Running basic_mixed validation [fixed shape/dtypes]: --run --device ${DEVICE_ID}"

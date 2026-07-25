@@ -128,6 +128,35 @@ def _mmad_tensor_args() -> tuple[tla.Tensor, tla.Tensor, tla.Tensor]:
         )
 
 
+def _dynamic_gm_tensor() -> tla.Tensor:
+    with runtime_mod._eager_capture():
+        tensor = tla.Tensor(
+            tla.make_shape(8),
+            tla.Float32,
+            addrspace=tla.AddressSpace.gm,
+            origin_shape=tla.make_shape(8),
+            coord=tla.make_coord(0),
+            layout_tag=tla.arch.RowMajor,
+        )
+    tensor.mark_compact_shape_dynamic(0)
+    return tensor
+
+
+def _dynamic_cube_gm_tensor() -> tla.Tensor:
+    with runtime_mod._eager_capture():
+        tensor = tla.Tensor(
+            tla.make_shape(64, 128),
+            tla.Float16,
+            addrspace=tla.AddressSpace.gm,
+            origin_shape=tla.make_shape(64, 128),
+            coord=tla.make_coord(0, 0),
+            stride=tla.make_stride(128, 1),
+            layout_tag=tla.arch.RowMajor,
+        )
+    tensor.mark_compact_shape_dynamic(0)
+    return tensor
+
+
 def _skip_if_mmad_rank2_tile_view_regression(exc: BaseException) -> None:
     if isinstance(exc, TlaLoweringError) and "rank-2 tiles only" in str(exc):
         pytest.skip(
@@ -151,6 +180,22 @@ def _cube_attr_kernel(mem_a: tla.Tensor, mem_b: tla.Tensor, mem_c: tla.Tensor) -
     )
     with tla.cube():
         tla.mmad(acc, lhs, rhs, init_c=False)
+
+
+@tla.kernel
+def _cube_dynamic_l1_pointer_join_kernel(
+    source: tla.Tensor, rows: int, offset: int
+) -> None:
+    shape = tla.make_shape(rows, 128)
+    layout = tla.make_layout(
+        shape, tla.make_stride(128, 1), origin_shape=shape
+    )
+    dynamic_source = tla.make_tensor(source.ptr, layout)
+    base = tla.allocate((128, 128), tla.Float16, tla.AddressSpace.l1, 512)
+    selected = base + offset
+    local = tla.make_tensor_like(selected, dynamic_source, tla.arch.zN)
+    with tla.cube():
+        tla.copy(local, dynamic_source)
 
 
 @tla.kernel
@@ -509,6 +554,111 @@ def _vector_dynamic_pitched_tile_view_kernel(pitch: int) -> None:
             chunk.store(value)
 
 
+@tla.kernel
+def _vector_dynamic_row_major_loop_unknown_base_kernel(
+    rows: int, ptr_offset: int
+) -> None:
+    base = tla.allocate((2, 128), tla.Float16, tla.AddressSpace.ub, 256)
+    parent = tla.make_tensor(
+        base + ptr_offset,
+        tla.make_layout(tla.make_shape(rows, 128), tla.make_stride(128, 1)),
+    )
+    with tla.vector():
+        with tla.vec.func(mode="simd"):
+            for row in tla.range(0, rows, 1):
+                chunk = tla.tile_view(
+                    parent, tla.make_shape(1, 128), tla.make_coord(row, 0)
+                )
+                chunk.store(chunk.load())
+
+
+@tla.kernel
+def _vector_static_rank_one_pointer_join_kernel(choice: int) -> None:
+    layout = tla.make_layout(tla.make_shape(128), tla.make_stride(1))
+    source = tla.make_tensor(
+        tla.allocate((128,), tla.Float16, tla.AddressSpace.ub, 256), layout
+    )
+    first_ptr = tla.allocate((128,), tla.Float16, tla.AddressSpace.ub, 256)
+    second_ptr = tla.allocate((128,), tla.Float16, tla.AddressSpace.ub, 256)
+    selected = first_ptr if choice == 0 else second_ptr
+    target = tla.make_tensor(selected, layout)
+    with tla.vector():
+        with tla.vec.func(mode="simd"):
+            target.store(source.load())
+
+
+@tla.kernel
+def _vector_dynamic_gm_descriptor_kernel(scalar_buf: tla.Tensor) -> None:
+    with tla.vector():
+        with tla.vec.func(mode="simd"):
+            scalar = scalar_buf[0]
+            scalar_buf[0] = scalar
+
+
+@tla.kernel
+def _vector_dynamic_packed_pointer_join_kernel(rows: int, choice: int) -> None:
+    _ = tla.allocate((16384,), tla.Float16, tla.AddressSpace.l1, 512)
+    _ = tla.allocate((16384,), tla.Float16, tla.AddressSpace.l1, 512)
+    _ = tla.allocate((8192,), tla.Float16, tla.AddressSpace.l1, 512)
+    _ = tla.allocate((16384,), tla.Float16, tla.AddressSpace.l1, 512)
+    with tla.cube():
+        tla.pipe_barrier(tla.pipes.CUBE)
+
+    shape = tla.make_shape(rows, 128)
+    layout = tla.make_layout(shape, tla.make_stride(128, 1))
+    _ = tla.allocate((16384,), tla.Float16, tla.AddressSpace.ub, 256)
+    _ = tla.allocate((16384,), tla.Float16, tla.AddressSpace.ub, 256)
+    source = tla.make_tensor(
+        tla.allocate((64, 128), tla.Float16, tla.AddressSpace.ub, 256), layout
+    )
+    first_ptr = tla.allocate((64, 128), tla.Float16, tla.AddressSpace.ub, 256)
+    second_ptr = tla.allocate((64, 128), tla.Float16, tla.AddressSpace.ub, 256)
+    selected = first_ptr if choice == 0 else second_ptr
+    packed = tla.make_tensor_like(selected, source, tla.arch.zN)
+    with tla.vector():
+        with tla.vec.func(mode="simd"):
+            mask = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Float16)
+            source_chunk = tla.tile_view(
+                source, tla.make_shape(1, 128), tla.make_coord(0, 0)
+            )
+            packed_chunk = tla.tile_view(
+                packed, tla.make_shape(1, 128), tla.make_coord(0, 0)
+            )
+            packed_chunk.store(source_chunk.load(), mask=mask)
+
+
+@tla.kernel
+def _vector_static_packed_pointer_join_kernel(choice: int) -> None:
+    _ = tla.allocate((16384,), tla.Float16, tla.AddressSpace.l1, 512)
+    _ = tla.allocate((16384,), tla.Float16, tla.AddressSpace.l1, 512)
+    _ = tla.allocate((8192,), tla.Float16, tla.AddressSpace.l1, 512)
+    _ = tla.allocate((16384,), tla.Float16, tla.AddressSpace.l1, 512)
+    with tla.cube():
+        tla.pipe_barrier(tla.pipes.CUBE)
+
+    shape = tla.make_shape(64, 128)
+    layout = tla.make_layout(shape, tla.make_stride(128, 1))
+    _ = tla.allocate((16384,), tla.Float16, tla.AddressSpace.ub, 256)
+    _ = tla.allocate((16384,), tla.Float16, tla.AddressSpace.ub, 256)
+    source = tla.make_tensor(
+        tla.allocate((64, 128), tla.Float16, tla.AddressSpace.ub, 256), layout
+    )
+    first_ptr = tla.allocate((64, 128), tla.Float16, tla.AddressSpace.ub, 256)
+    second_ptr = tla.allocate((64, 128), tla.Float16, tla.AddressSpace.ub, 256)
+    selected = first_ptr if choice == 0 else second_ptr
+    packed = tla.make_tensor_like(selected, source, tla.arch.zN)
+    with tla.vector():
+        with tla.vec.func(mode="simd"):
+            mask = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Float16)
+            source_chunk = tla.tile_view(
+                source, tla.make_shape(1, 128), tla.make_coord(0, 0)
+            )
+            packed_chunk = tla.tile_view(
+                packed, tla.make_shape(1, 128), tla.make_coord(0, 0)
+            )
+            packed_chunk.store(source_chunk.load(), mask=mask)
+
+
 def test_cube_tla_compile_emits_minimal_hivm_attrs_after_tla_func_to_hacc() -> None:
     ta, tb, tc = _mmad_tensor_args()
     try:
@@ -657,6 +807,40 @@ def test_loop_carried_pointer_consumed_in_body_compiles_with_safe_capacity(
     assert any(expected_type in line for line in pointer_cast_lines), output
 
 
+def test_cube_dynamic_on_chip_pointer_uses_zero_extents() -> None:
+    mlir_text = _cube_dynamic_l1_pointer_join_kernel.dump_mlir(
+        type_args=(_dynamic_cube_gm_tensor(), 64, 0)
+    )
+    assert "!tla.shape<?,128>" in mlir_text
+    assert "zN" in mlir_text
+    assert "tla.ptr_add" in mlir_text
+
+    output = _run_tla_compile_ir_after_pass(
+        mlir_text, "tla-cube-region", require_success=True
+    )
+
+    pointer_cast = re.search(
+        r"hivm\.hir\.pointer_cast\([^)]*\) \[(%[A-Za-z0-9_]+)\] "
+        r": memref<\?xf16, #hivm\.address_space<cbuf>>",
+        output,
+    )
+    assert pointer_cast is not None, output
+    unknown_extent = re.escape(pointer_cast.group(1))
+    assert re.search(
+        rf"{unknown_extent} = arith\.constant 0 : index", output
+    ), output
+    assert re.search(
+        r"hivm\.hir\.pointer_cast\([^)]*\) \[%[A-Za-z0-9_]+, "
+        r"%[A-Za-z0-9_]+\] : memref<\?x\?xf16, "
+        r"#hivm\.address_space<gm>>",
+        output,
+    ), output
+
+    assert "call @copy_gm_row_major_to_cbuf_zN_half" in output
+    assert "memref<0xf16" not in output
+    assert '"tla.copy"' not in output
+
+
 @pytest.mark.parametrize(
     ("kernel", "control_flow", "tensor_arg_count", "producer"),
     (
@@ -795,6 +979,7 @@ def test_vector_tile_view_uses_static_parent_pitch_in_flat_offset() -> None:
         mlir_text, "tla-vector-region", require_success=True
     )
     assert "arith.constant 128 : index" in output
+    assert "memref<256xf32, #hivm.address_space<ub>>" in output
 
 
 def test_vector_tile_view_captures_dynamic_parent_pitch() -> None:
@@ -815,3 +1000,142 @@ def test_vector_tile_view_captures_dynamic_parent_pitch() -> None:
         mlir_text, "tla-vector-region", require_success=True
     )
     assert "arith.muli" in output
+
+
+def test_vector_static_tile_does_not_narrow_unknown_base_capacity() -> None:
+    mlir_text = _vector_dynamic_row_major_loop_unknown_base_kernel.dump_mlir(
+        type_args=(2, 0)
+    )
+    assert "!tla.shape<?,128>" in mlir_text
+    assert "!tla.shape<1,128>" in mlir_text
+    assert "scf.for" in mlir_text
+
+    output = _run_tla_compile_ir_after_pass(
+        mlir_text, "tla-vector-region", require_success=True
+    )
+
+    pointer_cast = re.search(
+        r"hivm\.hir\.pointer_cast\([^)]*\) \[(%[A-Za-z0-9_]+)\] "
+        r": memref<\?xf16, #hivm\.address_space<ub>>",
+        output,
+    )
+    assert pointer_cast is not None, output
+    unknown_extent = re.escape(pointer_cast.group(1))
+    assert re.search(
+        rf"{unknown_extent} = arith\.constant 0 : index", output
+    ), output
+    assert re.search(
+        r"func\.func private @vector_region_[^(]+\("
+        r"%arg0: memref<\?xf16, #hivm\.address_space<ub>>",
+        output,
+    ), output
+    assert "arith.constant 128 : index" in output
+    assert "arith.muli" in output
+    assert not re.search(
+        r"hivm\.hir\.pointer_cast\([^)]*\).*"
+        r"memref<128xf16, #hivm\.address_space<ub>>",
+        output,
+    ), output
+
+
+def test_vector_dynamic_on_chip_pointer_uses_unknown_flat_extent() -> None:
+    mlir_text = _vector_dynamic_packed_pointer_join_kernel.dump_mlir(
+        type_args=(64, 0)
+    )
+    assert "zN" in mlir_text
+    assert "!tla.shape<?,128>" in mlir_text
+
+    output = _run_tla_compile_ir_after_pass(
+        mlir_text, "tla-vector-region", require_success=True
+    )
+
+    pointer_cast = re.search(
+        r"hivm\.hir\.pointer_cast\([^)]*\) \[(%[A-Za-z0-9_]+)\] "
+        r": memref<\?xf16, #hivm\.address_space<ub>>",
+        output,
+    )
+    assert pointer_cast is not None, output
+    unknown_extent = re.escape(pointer_cast.group(1))
+    assert re.search(
+        rf"{unknown_extent} = arith\.constant 0 : index", output
+    ), output
+    assert "func.func private @vector_region_" in output
+    assert "memref<?xf16, #hivm.address_space<ub>>" in output
+    assert "memref<0xf16" not in output
+    assert '"tla.vec.func"' not in output
+    assert "memref.dim" not in output
+
+
+def test_vector_static_rank_one_pointer_keeps_inferred_flat_extent() -> None:
+    mlir_text = _vector_static_rank_one_pointer_join_kernel.dump_mlir(type_args=(0,))
+    assert "!tla.shape<128>" in mlir_text
+
+    output = _run_tla_compile_ir_after_pass(
+        mlir_text, "tla-vector-region", require_success=True
+    )
+
+    expected_type = "memref<128xf16, #hivm.address_space<ub>>"
+    pointer_cast_lines = [
+        line
+        for line in output.splitlines()
+        if "hivm.hir.pointer_cast" in line
+    ]
+    assert any(expected_type in line for line in pointer_cast_lines), output
+    assert "memref<?xf16, #hivm.address_space<ub>>" not in output
+    assert "memref<0xf16" not in output
+    assert '"tla.vec.func"' not in output
+
+
+def test_vector_static_view_with_unproven_capacity_uses_unknown_extent() -> None:
+    mlir_text = _vector_static_packed_pointer_join_kernel.dump_mlir(type_args=(0,))
+    assert "zN" in mlir_text
+    assert "!tla.shape<64,128>" in mlir_text
+
+    output = _run_tla_compile_ir_after_pass(
+        mlir_text, "tla-vector-region", require_success=True
+    )
+
+    assert re.search(
+        r"hivm\.hir\.pointer_cast\([^)]*\) "
+        r": memref<8192xf16, #hivm\.address_space<ub>>",
+        output,
+    ), output
+    pointer_cast = re.search(
+        r"hivm\.hir\.pointer_cast\([^)]*\) \[(%[A-Za-z0-9_]+)\] "
+        r": memref<\?xf16, #hivm\.address_space<ub>>",
+        output,
+    )
+    assert pointer_cast is not None, output
+    unknown_extent = re.escape(pointer_cast.group(1))
+    assert re.search(
+        rf"{unknown_extent} = arith\.constant 0 : index", output
+    ), output
+    assert "memref<0xf16" not in output
+    assert '"tla.vec.func"' not in output
+
+
+def test_vector_dynamic_gm_memref_keeps_real_descriptor() -> None:
+    mlir_text = _vector_dynamic_gm_descriptor_kernel.dump_mlir(
+        type_args=(_dynamic_gm_tensor(),)
+    )
+    assert "!tla.shape<?>" in mlir_text
+    assert "!tla.ptr<f32, gm" in mlir_text
+
+    output = _run_tla_compile_ir_after_pass(
+        mlir_text, "tla-vector-region", require_success=True
+    )
+
+    assert re.search(
+        r"func\.func @_vector_dynamic_gm_descriptor_kernel\("
+        r"%arg0: memref<\?xf32, strided<\[1\], offset: \?>, "
+        r"#hivm\.address_space<gm>>",
+        output,
+    ), output
+    assert "memref.dim %arg0" in output
+    gm_pointer_cast_lines = [
+        line
+        for line in output.splitlines()
+        if "hivm.hir.pointer_cast" in line and "#hivm.address_space<gm>" in line
+    ]
+    assert not gm_pointer_cast_lines, output
+    assert '"tla.vec.func"' not in output

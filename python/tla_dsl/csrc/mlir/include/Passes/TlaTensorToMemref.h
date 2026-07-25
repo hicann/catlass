@@ -90,7 +90,10 @@ mlir::FailureOr<mlir::Value> materializePtrValueAsMemref(
     mlir::ValueRange dynamicSizes = {});
 
 /// Materialize `desc.base` as a concrete memref of `desc.bridgedBaseMemrefType`,
-/// using the pointer address in the descriptor.
+/// using the pointer address in the descriptor. Dynamic GM dimensions use
+/// descriptor shape SSA values; every dynamic dimension of a ptr-backed
+/// on-chip base uses the same zero value as an unknown-capacity ABI sentinel,
+/// without imposing a rank restriction.
 mlir::FailureOr<mlir::Value> materializeDescriptorBaseMemref(mlir::OpBuilder &builder,
                                                              mlir::Location loc,
                                                              const TensorDescriptor &desc,

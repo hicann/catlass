@@ -106,6 +106,12 @@ static bool tryGmOriginLayout(mlir::Type tensorTy, llvm::SmallVectorImpl<int64_t
   return true;
 }
 
+static bool isOnChipAddressSpace(StringRef addressSpace) {
+  return addressSpace == "l1" || addressSpace == "l0a" ||
+         addressSpace == "l0b" || addressSpace == "l0c" ||
+         addressSpace == "ub";
+}
+
 mlir::FailureOr<mlir::Value>
 materializePtrValueAsMemref(mlir::OpBuilder &builder, mlir::Location loc,
                             mlir::Value ptrValue, mlir::MemRefType memrefType,
@@ -169,6 +175,22 @@ mlir::FailureOr<mlir::Value> materializeDescriptorBaseMemref(mlir::OpBuilder &bu
           memrefType.getMemorySpace());
       return materializePtrValueAsMemref(builder, loc, desc.base,
                                          allocationType, diagnosticOp);
+    }
+
+    // A ptr-backed on-chip memref carries an address, not recoverable allocation
+    // capacity. Dynamic copy/mmad shape and layout metadata travel separately in
+    // TensorDescriptor, so use zero as an explicit unknown-capacity ABI sentinel
+    // instead of presenting origin-shape elements as backing storage capacity.
+    if (isOnChipAddressSpace(desc.addrspace) &&
+        !memrefType.hasStaticShape()) {
+      Value unknownExtent =
+          builder.create<arith::ConstantIndexOp>(loc, 0);
+      SmallVector<Value, 4> unknownExtents;
+      for (int64_t dim : memrefType.getShape())
+        if (dim == ShapedType::kDynamic)
+          unknownExtents.push_back(unknownExtent);
+      return materializePtrValueAsMemref(builder, loc, desc.base, memrefType,
+                                         diagnosticOp, unknownExtents);
     }
 
     SmallVector<Value, 2> dynamicSizes;
@@ -387,6 +409,21 @@ static Value ptrOfTensorDesc(Value tensor) {
   return {};
 }
 
+static bool isOnChipAddressSpace(::AddressSpace addressSpace) {
+  switch (addressSpace) {
+  case ::AddressSpace::l1:
+  case ::AddressSpace::l0a:
+  case ::AddressSpace::l0b:
+  case ::AddressSpace::l0c:
+  case ::AddressSpace::ub:
+    return true;
+  case ::AddressSpace::generic:
+  case ::AddressSpace::gm:
+    return false;
+  }
+  return false;
+}
+
 FailureOr<MemRefType> getVectorHelperArgMemrefType(Value operand) {
   Value ptr = ptrOfTensorDesc(operand);
   if (ptr && !ptr.getDefiningOp<::tla::IntToPtrOp>())
@@ -408,14 +445,35 @@ FailureOr<MemRefType> getVectorHelperArgMemrefType(Value operand) {
       return MemRefType::get(originDims, bridged->getElementType(),
                              stridedLayout, bridged->getMemorySpace());
     }
+
+    auto info = parseTensorInfo(operand.getType());
+    if (failed(info))
+      return failure();
+    if (isOnChipAddressSpace(info->addressSpace)) {
+      // `bridged` describes the captured tensor view, not the backing
+      // allocation. Once allocation-capacity analysis has failed, even a
+      // statically shaped tile cannot prove a static base extent. Keep the
+      // helper ABI flat and mark that capacity unknown; the call site supplies
+      // the explicit zero sentinel required by pointer_cast.
+      return MemRefType::get({ShapedType::kDynamic},
+                             bridged->getElementType(), AffineMap(),
+                             bridged->getMemorySpace());
+    }
   }
-  if (bridged->getRank() == 1)
-    return *bridged;
+
   auto viewElements = getStaticNumElements(bridged->getShape());
-  if (bridged->getRank() != 2 || failed(viewElements))
-    return failure();
-  return MemRefType::get({*viewElements}, bridged->getElementType(),
-                         AffineMap(), bridged->getMemorySpace());
+  if (succeeded(viewElements)) {
+    if (bridged->getRank() == 1)
+      return *bridged;
+    return MemRefType::get({*viewElements}, bridged->getElementType(),
+                           AffineMap(), bridged->getMemorySpace());
+  }
+
+  // A memref-backed dynamic rank-1 value already carries real descriptor
+  // metadata.
+  if (!ptr && bridged->getRank() == 1)
+    return *bridged;
+  return failure();
 }
 
 FailureOr<Value>

@@ -1855,10 +1855,10 @@ static bool requiresFullPregForControlFlow(::tla::VecFuncOp vecFuncOp) {
 }
 
 // Build a vector_region helper for a tla.vec.func body. The helper receives one
-// full-size UB memref per referenced tensor; the for/if control flow is carried
-// inside the helper, where each tla.load/store is lowered to an AVE
-// vload/masked-store over a 256-byte tile carved from the full memref at the
-// per-iteration offset.
+// flat on-chip memref per referenced tensor (or a real GM descriptor for scalar
+// accesses); the for/if control flow is carried inside the helper, where each
+// tla.load/store is lowered to an AVE vload/masked-store over a 256-byte tile
+// carved from the base address at the per-iteration offset.
 static FailureOr<func::FuncOp> buildHelperFunc(ModuleOp module, func::FuncOp parentFunc,
                                                ::tla::VecFuncOp vecFuncOp,
                                                ArrayRef<Value> helperOperands,
@@ -2156,9 +2156,13 @@ public:
     if (!funcOp)
       return rewriter.notifyMatchFailure(vecFuncOp, "expected enclosing func.func");
 
-    // The helper takes one full-size UB memref per referenced tensor, in body
-    // order. Compute that operand list once and use it for both the helper
-    // signature and the call.
+    // The helper takes one flat on-chip memref per referenced tensor, in body
+    // order. Its extent is static when known; address-backed dynamic cases use
+    // a rank-1 dynamic memref whose descriptor size is an explicit zero
+    // sentinel. The helper must only consume that value as an address-backed
+    // source for fixed-size reinterpret_cast tiles, never as capacity metadata.
+    // Compute the operand list once and use it for both the helper signature
+    // and the call.
     SmallVector<Value> helperOperands;
     collectVectorHelperOperands(body, helperOperands);
     if (helperOperands.empty())
@@ -2175,10 +2179,11 @@ public:
     auto helper = *helperOr;
 
     // The for/if control flow lives inside the helper, so this is a single
-    // call (passing the full UB memrefs) that replaces the whole vec.func region.
+    // call passing the helper memrefs that replaces the whole vec.func region.
     rewriter.setInsertionPoint(vecFuncOp);
     SmallVector<Value, 8> callOperands;
     callOperands.reserve(helperOperands.size());
+    Value unknownExtent;
     for (Value tensor : helperOperands) {
       // Bridged GM memref operands (from scalar_load/store) are passed as-is.
       if (isa<MemRefType>(tensor.getType())) {
@@ -2188,7 +2193,7 @@ public:
       auto type = getVectorHelperArgMemrefType(tensor);
       if (failed(type))
         return rewriter.notifyMatchFailure(
-            vecFuncOp, "failed to type UB memref for vector helper call");
+            vecFuncOp, "failed to type on-chip memref for vector helper call");
       // Materialize address-backed tla.tensor_desc operands at the call site.
       // tla-lower-tensor-desc is the sole descriptor producer, so every helper
       // operand here is a tensor_desc (raw memrefs were passed through above);
@@ -2203,8 +2208,20 @@ public:
         if (!ptr.getDefiningOp<::tla::IntToPtrOp>())
           return rewriter.notifyMatchFailure(
               vecFuncOp, "expected pointer lowered to tla.inttoptr boundary");
+        SmallVector<Value, 1> dynamicSizes;
+        if (!type->hasStaticShape()) {
+          if (type->getRank() != 1 ||
+              type->getDimSize(0) != ShapedType::kDynamic)
+            return rewriter.notifyMatchFailure(
+                vecFuncOp,
+                "expected flattened rank-1 dynamic vector helper memref");
+          if (!unknownExtent)
+            unknownExtent =
+                rewriter.create<arith::ConstantIndexOp>(vecFuncOp.getLoc(), 0);
+          dynamicSizes.push_back(unknownExtent);
+        }
         base = materializePtrValueAsMemref(rewriter, vecFuncOp.getLoc(), ptr, *type,
-                                           vecFuncOp.getOperation());
+                                           vecFuncOp.getOperation(), dynamicSizes);
         if (failed(base))
           return rewriter.notifyMatchFailure(
               vecFuncOp, "failed to materialize address-backed vector helper operand");
@@ -2213,7 +2230,7 @@ public:
                                      /*loweredMemrefByValue=*/nullptr);
         if (failed(base))
           return rewriter.notifyMatchFailure(
-              vecFuncOp, "failed to materialize UB memref for vector helper call");
+              vecFuncOp, "failed to materialize vector helper memref");
       }
       auto arg = castMemrefToExpected(rewriter, vecFuncOp.getLoc(), *base, *type);
       if (failed(arg))

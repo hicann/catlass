@@ -47,6 +47,10 @@ CATLASS_DEVICE uint32_t localAddr(memref_t<T, Dim> *memref) {
 
 template <typename T, size_t Dim>
 CATLASS_DEVICE uint32_t elementCount(memref_t<T, Dim> *memref) {
+    // Dynamic ptr-backed on-chip memrefs deliberately carry zero as an unknown
+    // allocation-capacity sentinel. LocalTensor consumers use the address plus
+    // the separately supplied TensorDesc shape/layout; this count is not part of
+    // the copy operation's logical-shape contract.
     uint32_t n = 1;
     for (size_t i = 0; i < Dim; ++i)
         n *= static_cast<uint32_t>(memref->sizes[i]);
