@@ -152,8 +152,8 @@ endif()
 set(TLA_TD_FILE ${CMAKE_CURRENT_SOURCE_DIR}/include/Dialect/Tla/IR/Tla.td)
 # Dialect TableGen targets (Tla dialect).
 find_package(MLIR REQUIRED CONFIG)
-# Many MLIR binary packages (e.g. conda) do not set MLIR_TBLGEN_INCLUDE_DIR; mlir-tblgen
-# still needs the installed TableGen include tree (same as MLIR_INCLUDE_DIRS).
+# Some MLIR installations do not expose MLIR_TBLGEN_INCLUDE_DIR; mlir-tblgen
+# still needs the installed TableGen include tree (fall back to MLIR_INCLUDE_DIRS).
 if(NOT DEFINED MLIR_TBLGEN_INCLUDE_DIR OR "${MLIR_TBLGEN_INCLUDE_DIR}" STREQUAL "")
   if(DEFINED MLIR_INCLUDE_DIRS AND NOT "${MLIR_INCLUDE_DIRS}" STREQUAL "")
     set(MLIR_TBLGEN_INCLUDE_DIR "${MLIR_INCLUDE_DIRS}")

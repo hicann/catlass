@@ -23,7 +23,12 @@ def pytest_sessionstart(session: pytest.Session) -> None:
     del session
     repo_root = Path(__file__).resolve().parents[1]
     bootstrap = _load_pretest_bootstrap(repo_root)
-    bootstrap.ensure_pretest_mlir_build(repo_root)
+    try:
+        bootstrap.ensure_pretest_mlir_build(repo_root)
+    except bootstrap.PretestBuildError as exc:
+        import warnings
+
+        warnings.warn(f"Skipping pretest MLIR build: {exc}", stacklevel=2)
 
 
 def _compiler_tlair(kernel: Any, *, type_args: tuple[Any, ...] | None = None) -> str:

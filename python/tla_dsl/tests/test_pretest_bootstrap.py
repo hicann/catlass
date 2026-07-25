@@ -101,8 +101,8 @@ def test_ensure_pretest_mlir_build_uses_llvm_config_fallback(
     include_dir = tmp_path / "llvm-include"
     _touch_opbase(include_dir)
     monkeypatch.delenv("MLIR_TBLGEN_INCLUDE_DIR", raising=False)
-    monkeypatch.delenv("CONDA_PREFIX", raising=False)
     monkeypatch.delenv("MLIR_DIR", raising=False)
+    monkeypatch.delenv("TLA_DSL_PREBUILT_ASCENDNPU_IR", raising=False)
     monkeypatch.delenv("TLA_DSL_SKIP_PRETEST_BUILD", raising=False)
     monkeypatch.delenv("CC", raising=False)
     monkeypatch.delenv("CXX", raising=False)
@@ -169,7 +169,7 @@ def test_ensure_pretest_mlir_build_resets_stale_compiler_cache(
     monkeypatch.setattr(
         bootstrap.shutil,
         "which",
-        lambda name, path=None: f"/conda/bin/{name}",
+        lambda name, path=None: f"/toolchain/bin/{name}",
     )
 
     seen: list[list[str]] = []
@@ -192,8 +192,8 @@ def test_ensure_pretest_mlir_build_resets_stale_compiler_cache(
         "-B",
         "csrc/mlir/build",
         f"-DMLIR_TBLGEN_INCLUDE_DIR={include_dir}",
-        "-DCMAKE_C_COMPILER=/conda/bin/gcc",
-        "-DCMAKE_CXX_COMPILER=/conda/bin/g++",
+        "-DCMAKE_C_COMPILER=/toolchain/bin/gcc",
+        "-DCMAKE_CXX_COMPILER=/toolchain/bin/g++",
         f"-DMLIR_DIR={mlir_dir}",
     ]
 

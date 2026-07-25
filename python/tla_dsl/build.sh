@@ -67,8 +67,8 @@ find_mlir_include_dir() {
     return 0
   fi
 
-  if [[ -n "${CONDA_PREFIX:-}" && -f "${CONDA_PREFIX}/include/mlir/IR/OpBase.td" ]]; then
-    printf '%s\n' "${CONDA_PREFIX}/include"
+  if [[ -n "${TLA_DSL_PREBUILT_ASCENDNPU_IR:-}" && -f "${TLA_DSL_PREBUILT_ASCENDNPU_IR}/build/install/include/mlir/IR/OpBase.td" ]]; then
+    printf '%s\n' "${TLA_DSL_PREBUILT_ASCENDNPU_IR}/build/install/include"
     return 0
   fi
 
@@ -103,7 +103,7 @@ ensure_pybind11_headers
 mlir_include_dir="$(find_mlir_include_dir)" || {
   cat <<'EOF'
 error: unable to locate MLIR includes (mlir/IR/OpBase.td).
-Set MLIR_TBLGEN_INCLUDE_DIR or CONDA_PREFIX, or ensure llvm-config is on PATH.
+Set MLIR_TBLGEN_INCLUDE_DIR or ensure llvm-config is on PATH.
 EOF
   exit 1
 }
@@ -134,8 +134,6 @@ cmake_args=(
 )
 if [[ -n "${MLIR_DIR:-}" ]]; then
   cmake_args+=(-DMLIR_DIR="${MLIR_DIR}")
-elif [[ -n "${CONDA_PREFIX:-}" && -d "${CONDA_PREFIX}/lib/cmake/mlir" ]]; then
-  cmake_args+=(-DMLIR_DIR="${CONDA_PREFIX}/lib/cmake/mlir")
 fi
 
 if [[ -z "${BISHENG_COMPILER_PATH:-}" && -n "${BISHENG_INSTALL_PATH:-}" ]]; then

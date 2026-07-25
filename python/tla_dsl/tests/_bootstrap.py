@@ -36,11 +36,12 @@ def _resolve_mlir_include_dir(
             f"`mlir/IR/OpBase.td`: {configured_path}"
         )
 
-    conda_prefix = env.get("CONDA_PREFIX")
-    if conda_prefix:
-        conda_include = Path(conda_prefix) / "include"
-        if _has_opbase(conda_include):
-            return conda_include
+    # 自动从 TLA_DSL_PREBUILT_ASCENDNPU_IR 派生 MLIR include
+    prebuilt = env.get("TLA_DSL_PREBUILT_ASCENDNPU_IR")
+    if prebuilt:
+        npu_include = Path(prebuilt) / "build" / "install" / "include"
+        if _has_opbase(npu_include):
+            return npu_include
 
     try:
         llvm_config = runner(
@@ -59,8 +60,8 @@ def _resolve_mlir_include_dir(
 
     raise PretestBuildError(
         "Unable to locate MLIR includes containing `mlir/IR/OpBase.td`. "
-        "Set `MLIR_TBLGEN_INCLUDE_DIR`, `CONDA_PREFIX`, or ensure `llvm-config` "
-        "is available with MLIR headers."
+        "Set `MLIR_TBLGEN_INCLUDE_DIR` or `TLA_DSL_PREBUILT_ASCENDNPU_IR`, "
+        "or ensure `llvm-config` is available with MLIR headers."
     )
 
 
@@ -69,13 +70,12 @@ def _resolve_mlir_dir(*, env: Mapping[str, str]) -> str | None:
     if configured:
         return configured
 
-    conda_prefix = env.get("CONDA_PREFIX")
-    if not conda_prefix:
-        return None
-
-    conda_mlir_dir = Path(conda_prefix) / "lib" / "cmake" / "mlir"
-    if conda_mlir_dir.is_dir():
-        return str(conda_mlir_dir)
+    # 自动从 TLA_DSL_PREBUILT_ASCENDNPU_IR 派生 MLIR_DIR
+    prebuilt = env.get("TLA_DSL_PREBUILT_ASCENDNPU_IR")
+    if prebuilt:
+        npu_mlir_dir = Path(prebuilt) / "build" / "install" / "lib" / "cmake" / "mlir"
+        if npu_mlir_dir.is_dir():
+            return str(npu_mlir_dir)
     return None
 
 

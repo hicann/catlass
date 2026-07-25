@@ -54,9 +54,10 @@ def _resolve_include(explicit: str | None = None) -> Path:
         raise SystemExit(
             f"MLIR_TBLGEN_INCLUDE_DIR does not contain mlir/IR/OpBase.td: {p}"
         )
-    conda_prefix = os.environ.get("CONDA_PREFIX")
-    if conda_prefix:
-        p = Path(conda_prefix) / "include"
+    # 自动从 TLA_DSL_PREBUILT_ASCENDNPU_IR 派生 include
+    prebuilt = os.environ.get("TLA_DSL_PREBUILT_ASCENDNPU_IR")
+    if prebuilt:
+        p = Path(prebuilt) / "build" / "install" / "include"
         if (p / "mlir" / "IR" / "OpBase.td").is_file():
             return p
     try:
@@ -73,7 +74,7 @@ def _resolve_include(explicit: str | None = None) -> Path:
         if (p / "mlir" / "IR" / "OpBase.td").is_file():
             return p
     raise SystemExit(
-        "Unable to resolve MLIR include dir. Set MLIR_TBLGEN_INCLUDE_DIR or CONDA_PREFIX."
+        "Unable to resolve MLIR include dir. Set MLIR_TBLGEN_INCLUDE_DIR."
     )
 
 

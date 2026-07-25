@@ -17,11 +17,6 @@ config.test_exec_root = config.tla_lit_binary_dir
 path_entries = []
 if getattr(config, "llvm_tools_dir", ""):
     path_entries.append(config.llvm_tools_dir)
-conda_prefix = os.environ.get("CONDA_PREFIX", "")
-if conda_prefix:
-    conda_llvm_libexec = os.path.join(conda_prefix, "libexec", "llvm")
-    if os.path.isdir(conda_llvm_libexec):
-        path_entries.append(conda_llvm_libexec)
 for tool in (config.tla_compile_tool,):
     parent = os.path.dirname(tool)
     if parent:
@@ -57,8 +52,7 @@ else:
                     break
         if not os.path.isabs(filecheck_tool):
             for candidate in (
-                "/opt/conda-env/libexec/llvm/FileCheck",
-                "/opt/conda-env/bin/FileCheck",
+                "/usr/lib/llvm-*/bin/FileCheck",
             ):
                 if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
                     path_entries.append(os.path.dirname(candidate))

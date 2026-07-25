@@ -1609,13 +1609,7 @@ def _resolve_tla_compile() -> Path | None:
 
 
 def _tla_compile_env() -> dict[str, str]:
-    env = os.environ.copy()
-    conda_prefix = env.get("CONDA_PREFIX")
-    if conda_prefix:
-        lib_dir = Path(conda_prefix) / "lib"
-        existing = env.get("LD_LIBRARY_PATH")
-        env["LD_LIBRARY_PATH"] = f"{lib_dir}:{existing}" if existing else str(lib_dir)
-    return env
+    return os.environ.copy()
 
 
 def _run_tla_compile_cli_to_mlir(

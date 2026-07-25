@@ -233,7 +233,6 @@ bash tests/run_dsl_test.sh --device 0
 可选：
 
 - `DEVICE_ID`（默认 `1`，也可用 `--device`）
-- `CONDA_ENV`（默认 `ascend-catlass-dsl`）
 
 ```bash
 source /path/to/ascend-toolkit/set_env.sh

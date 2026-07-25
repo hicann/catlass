@@ -17,13 +17,7 @@ def _tla_compile_path() -> pathlib.Path:
 
 
 def _tla_compile_env() -> dict[str, str]:
-    env = os.environ.copy()
-    conda_prefix = env.get("CONDA_PREFIX")
-    if conda_prefix:
-        lib_dir = pathlib.Path(conda_prefix) / "lib"
-        existing = env.get("LD_LIBRARY_PATH")
-        env["LD_LIBRARY_PATH"] = f"{lib_dir}:{existing}" if existing else str(lib_dir)
-    return env
+    return os.environ.copy()
 
 
 def _compile_mlir(mlir_text: str) -> subprocess.CompletedProcess[str]:
