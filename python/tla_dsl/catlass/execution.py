@@ -11,6 +11,7 @@ import math
 import os
 import re
 import shutil
+import struct
 import subprocess
 import sys
 import sysconfig
@@ -27,14 +28,20 @@ from .base_dsl.arch import (
     parse_arch_scope as _parse_arch_scope_impl,
 )
 from .base_dsl import BaseDSL, DSLLocation
+from .base_dsl.typing import Numeric
 from .compiler_bridge import (
     BridgeLoweringError,
     BridgeUnavailableError,
+    KernelAbiArgumentKind,
+    KernelAbiIntegerSignedness,
+    KernelAbiLayout,
+    KernelAbiScalarCategory,
+    KernelAbiScalarDescriptor,
+    kernel_abi_from_dict,
+    kernel_abi_to_dict,
     lower_tlair_module_to_mlir,
     resolve_bridge_extension_path,
 )
-from .base_dsl.typing import Numeric
-from .types import dtype_size_bytes
 
 DEFAULT_ARCH_SCOPE = "aiv.c310"
 SUPPORTED_ARCH_SCOPES = ("aiv.c310", "aic.c310")
@@ -58,6 +65,8 @@ _HIVM_TEMPLATE_BITCODE_ATTRS = {
     "meta_op.aic.c310.bc": ("hivm.aic_bitcode", "hivm.aic_bitcode"),
     "meta_op.aiv.c310.bc": ("hivm.aiv_bitcode", "hivm.aiv_bitcode"),
 }
+_MAX_KERNEL_ABI_PAYLOAD_SIZE = 1 << 20
+_ONLINE_CACHE_ABI_VERSION = 4
 
 
 class TlaExecutionError(RuntimeError):
@@ -100,6 +109,7 @@ class TlaKernelArtifact:
     kernel_binary_path: Path
     runtime: "TlaRuntimeOptions | None" = None
     pass_ir_dump: str = ""
+    kernel_abi: KernelAbiLayout | None = None
 
 
 @dataclass(frozen=True)
@@ -192,6 +202,7 @@ def compile_kernel(
 
     if runtime.cache_enabled and not runtime.force_recompile and manifest.exists():
         cached = _load_manifest(manifest)
+        cached_kernel_abi = _kernel_abi_from_manifest(cached)
         kernel_path = artifact_dir / str(cached["kernel_binary"])
         mlir_path = artifact_dir / str(cached["lowered_mlir"])
         cached_pass_dump = cached.get("pass_ir_dump")
@@ -216,6 +227,7 @@ def compile_kernel(
                 pass_ir_dump=pass_dump_path.read_text()
                 if pass_dump_path and pass_dump_path.exists()
                 else "",
+                kernel_abi=cached_kernel_abi,
             )
             _set_memory_cached_artifact(artifact)
             return artifact
@@ -292,6 +304,9 @@ def compile_kernel(
                 "arch_scope": runtime_for_hivmc.arch_scope,
                 "target_arch": runtime_for_hivmc.target_arch,
                 "core_type": runtime_for_hivmc.core_type,
+                "kernel_abi": kernel_abi_to_dict(
+                    getattr(lowering_result, "kernel_abi", None)
+                ),
             },
             indent=2,
             sort_keys=True,
@@ -309,6 +324,7 @@ def compile_kernel(
         kernel_binary_path=kernel_path,
         pass_ir_dump=lowering_result.pass_ir_dump,
         runtime=runtime_for_hivmc,
+        kernel_abi=getattr(lowering_result, "kernel_abi", None),
     )
     if runtime.cache_enabled and not runtime.force_recompile:
         _set_memory_cached_artifact(artifact)
@@ -428,9 +444,20 @@ def _build_kernel_launch_plan(
                 "tla.print_tensor v1 does not support mixed-core kernels"
             )
     logical_mixed_handoff = _extract_logical_mixed_handoff(artifact.lowered_llvm)
+    expected_abi_entrypoint = (
+        logical_mixed_handoff.entrypoint
+        if logical_mixed_handoff is not None and runtime.kernel_mode == "mix"
+        else artifact.entrypoint
+    )
+    _validate_kernel_abi_layout(
+        artifact.kernel_abi, expected_entrypoint=expected_abi_entrypoint
+    )
     if logical_mixed_handoff is not None and runtime.kernel_mode == "mix":
         payload, effective_grid = _build_logical_mixed_handoff_launch_args(
-            launch_args, grid, logical_mixed_handoff.user_arg_types
+            launch_args,
+            grid,
+            logical_mixed_handoff.user_arg_types,
+            artifact.kernel_abi,
         )
         payload = _append_debug_print_workspace_payload(payload, artifact)
         return _KernelLaunchPlan(
@@ -441,12 +468,16 @@ def _build_kernel_launch_plan(
             expects_debug_fifo=_has_debug_print_workspace(artifact),
             expects_print_tensor=False,
         )
-    payload = _pack_launch_args(launch_args) if launch_args else b""
+    payload = _pack_launch_args(launch_args, artifact.kernel_abi)
     payload = _append_debug_print_workspace_payload(payload, artifact)
     if expects_print_tensor:
         extension = bytearray(payload)
         _align_payload(extension, _POINTER_ABI_SIZE)
-        extension.extend(_pack_uint64_slot(_PRINT_TENSOR_WORKSPACE_SENTINEL))
+        extension.extend(
+            _PRINT_TENSOR_WORKSPACE_SENTINEL.to_bytes(
+                _POINTER_ABI_SIZE, byteorder="little", signed=False
+            )
+        )
         payload = bytes(extension)
     return _KernelLaunchPlan(
         entrypoint=artifact.entrypoint,
@@ -465,26 +496,20 @@ def _mark_tensor_launch_args_uploaded(args: Sequence[Any]) -> None:
 
 
 def _runtime_arg_values(arg: Any) -> list[int]:
-    if hasattr(arg, "__c_pointers__"):
-        return [int(ptr) for ptr in arg.__c_pointers__()]
-    data_ptr = getattr(arg, "data_ptr", None)
-    if callable(data_ptr):
-        return [int(data_ptr())]
-    if data_ptr is not None:
-        return [int(data_ptr)]
-    value = getattr(arg, "value", arg)
-    if isinstance(value, bool):
-        return [1 if value else 0]
-    if isinstance(value, int):
-        return [value]
+    try:
+        if hasattr(arg, "__c_pointers__"):
+            return [int(ptr) for ptr in arg.__c_pointers__()]
+        data_ptr = getattr(arg, "data_ptr", None)
+        if callable(data_ptr):
+            return [int(data_ptr())]
+        if data_ptr is not None:
+            return [int(data_ptr)]
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise TlaUnsupportedAbiError(
+            "Launch argument cannot provide exactly one concrete host value."
+        ) from exc
     raise TlaUnsupportedAbiError(
-        "Launch arguments must provide __c_pointers__(), data_ptr(), or be int."
-    )
-
-
-def _pack_uint64_slot(value: int) -> bytes:
-    return int(value & ((1 << 64) - 1)).to_bytes(
-        _POINTER_ABI_SIZE, byteorder="little", signed=False
+        "Launch arguments must provide exactly one host value."
     )
 
 
@@ -492,29 +517,198 @@ def _align_payload(payload: bytearray, alignment: int) -> None:
     payload.extend(b"\0" * (-len(payload) % alignment))
 
 
-def _pack_scalar_abi_value(payload: bytearray, scalar: Numeric) -> None:
-    dtype = scalar.dtype.strip().lower()
-    size = _POINTER_ABI_SIZE if dtype == "index" else dtype_size_bytes(dtype)
-    if size == 0:
-        raise TlaUnsupportedAbiError(f"Unsupported scalar launch ABI type: {dtype}")
-    values = scalar.__c_pointers__()
+def _scalar_storage_size(descriptor: KernelAbiScalarDescriptor) -> int:
+    if descriptor.category is KernelAbiScalarCategory.INDEX:
+        return 8
+    return max(1, descriptor.bit_width // 8)
+
+
+def _pack_scalar_argument(
+    value: Any,
+    descriptor: KernelAbiScalarDescriptor,
+    mlir_type: str,
+    storage_size: int,
+) -> bytes:
+    expected_size = _scalar_storage_size(descriptor)
+    if storage_size != expected_size:
+        raise TlaUnsupportedAbiError(
+            f"kernel ABI scalar {mlir_type} declares unsupported storage size "
+            f"{storage_size}; expected {expected_size}"
+        )
+    if not isinstance(value, Numeric):
+        value_type = type(value)
+        if (
+            value_type is bool
+            and descriptor.category is KernelAbiScalarCategory.INTEGER
+            and descriptor.bit_width == 1
+        ):
+            return bytes((int(value),))
+        if (
+            value_type is int
+            and descriptor.category is KernelAbiScalarCategory.INTEGER
+            and descriptor.bit_width == 32
+            and descriptor.integer_signedness
+            is KernelAbiIntegerSignedness.SIGNLESS
+        ):
+            lower, upper = -(1 << 31), (1 << 31) - 1
+            if value < lower or value > upper:
+                raise TlaUnsupportedAbiError(
+                    f"scalar value for {mlir_type} does not fit in its declared type"
+                )
+            return value.to_bytes(storage_size, byteorder="little", signed=True)
+        if (
+            value_type is float
+            and descriptor.category is KernelAbiScalarCategory.FLOAT
+            and descriptor.float_format is not None
+            and descriptor.float_format.value == "f32"
+        ):
+            try:
+                return struct.pack("<f", value)
+            except (OverflowError, struct.error) as exc:
+                raise TlaUnsupportedAbiError(
+                    f"scalar value for {mlir_type} does not fit in its declared type"
+                ) from exc
+        raise TlaUnsupportedAbiError(
+            f"plain Python {value_type.__name__} does not match kernel ABI type "
+            f"{mlir_type}"
+        )
+    host_type = type(value)
+    host_dtype = str(getattr(host_type, "dtype", "")).lower()
+    host_is_float = bool(getattr(host_type, "is_float", False))
+    type_matches = host_is_float == (
+        descriptor.category is KernelAbiScalarCategory.FLOAT
+    )
+    if descriptor.category is KernelAbiScalarCategory.FLOAT:
+        if descriptor.float_format is None:
+            raise TlaUnsupportedAbiError(
+                f"kernel ABI float scalar {mlir_type} has no format"
+            )
+        type_matches = type_matches and host_dtype == descriptor.float_format.value
+    elif descriptor.category is KernelAbiScalarCategory.INDEX:
+        type_matches = type_matches and host_dtype == "index"
+    else:
+        type_matches = (
+            type_matches and int(getattr(host_type, "width", 0)) == descriptor.bit_width
+        )
+        if descriptor.integer_signedness is KernelAbiIntegerSignedness.SIGNED:
+            type_matches = type_matches and bool(getattr(host_type, "signed", False))
+        elif descriptor.integer_signedness is KernelAbiIntegerSignedness.UNSIGNED:
+            type_matches = type_matches and not bool(getattr(host_type, "signed", True))
+    if not type_matches:
+        raise TlaUnsupportedAbiError(
+            f"typed host scalar {host_dtype or type(value).__name__} does not match "
+            f"kernel ABI type {mlir_type}"
+        )
+    if descriptor.category is not KernelAbiScalarCategory.FLOAT:
+        host_value = getattr(value, "value", None)
+        if not isinstance(host_value, (bool, int)):
+            raise TlaUnsupportedAbiError(
+                f"kernel ABI scalar {mlir_type} requires a concrete integer host value"
+            )
+        width = int(getattr(host_type, "width", storage_size * 8))
+        if width == 1:
+            lower, upper = 0, 1
+        elif bool(getattr(host_type, "signed", False)):
+            lower, upper = -(1 << (width - 1)), (1 << (width - 1)) - 1
+        else:
+            lower, upper = 0, (1 << width) - 1
+        if int(host_value) < lower or int(host_value) > upper:
+            raise TlaUnsupportedAbiError(
+                f"scalar value for {mlir_type} does not fit in its declared type"
+            )
+    values = _runtime_arg_values(value)
     if len(values) != 1:
         raise TlaUnsupportedAbiError(
-            f"Expected one packed value for scalar launch ABI type: {dtype}"
+            "each logical launch argument must provide exactly one host value"
         )
-    _align_payload(payload, min(size, _POINTER_ABI_SIZE))
-    payload.extend(int(values[0] & ((1 << (size * 8)) - 1)).to_bytes(size, "little"))
+    bits = int(values[0])
+    if bits < 0 or bits >= (1 << (storage_size * 8)):
+        raise TlaUnsupportedAbiError(
+            f"scalar value for {mlir_type} does not fit in {storage_size} bytes"
+        )
+    return bits.to_bytes(storage_size, byteorder="little", signed=False)
 
 
-def _pack_launch_args(args: Sequence[Any]) -> bytes:
-    payload = bytearray()
-    for arg in args:
-        if isinstance(arg, Numeric):
-            _pack_scalar_abi_value(payload, arg)
-            continue
-        for value in _runtime_arg_values(arg):
-            _align_payload(payload, _POINTER_ABI_SIZE)
-            payload.extend(_pack_uint64_slot(value))
+def _pack_launch_args(
+    args: Sequence[Any], layout: KernelAbiLayout | None
+) -> bytes:
+    _validate_kernel_abi_layout(layout)
+    if layout is None:
+        raise TlaUnsupportedAbiError("kernel ABI layout is missing")
+    if len(args) != len(layout.arguments):
+        raise TlaUnsupportedAbiError(
+            "kernel launch argument count does not match ABI layout: "
+            f"got {len(args)}, expected {len(layout.arguments)}"
+        )
+    if layout.total_size < 0:
+        raise TlaUnsupportedAbiError("kernel ABI layout has an invalid total size")
+    host_offsets: list[int] = []
+    host_size = 0
+    for argument in layout.arguments:
+        host_alignment = 8 if argument.storage_size == 8 else 4
+        host_size = ((host_size + host_alignment - 1) // host_alignment) * host_alignment
+        host_offsets.append(host_size)
+        host_size += argument.storage_size
+    host_size = ((host_size + 7) // 8) * 8
+    if host_size > _MAX_KERNEL_ABI_PAYLOAD_SIZE:
+        raise TlaUnsupportedAbiError(
+            "kernel ABI host payload exceeds the supported maximum size"
+        )
+    payload = bytearray(host_size)
+    for index, (value, argument) in enumerate(zip(args, layout.arguments)):
+        if argument.index != index:
+            raise TlaUnsupportedAbiError(
+                "kernel ABI arguments must be ordered by contiguous index"
+            )
+        start = host_offsets[index]
+        end = start + argument.storage_size
+        if (
+            start < 0
+            or argument.storage_size <= 0
+            or end < start
+            or end > host_size
+        ):
+            raise TlaUnsupportedAbiError(
+                f"kernel ABI argument {index} storage does not fit in payload"
+            )
+        if argument.kind is KernelAbiArgumentKind.POINTER:
+            if isinstance(value, Numeric) or type(value) in (bool, int, float):
+                raise TlaUnsupportedAbiError(
+                    f"kernel ABI argument {index} requires a pointer"
+                )
+            values = _runtime_arg_values(value)
+            if len(values) != 1:
+                raise TlaUnsupportedAbiError(
+                    "each logical launch argument must provide exactly one host value"
+                )
+            if argument.storage_size != _POINTER_ABI_SIZE:
+                raise TlaUnsupportedAbiError(
+                    f"unsupported pointer storage size {argument.storage_size}"
+                )
+            pointer = int(values[0])
+            if pointer < 0 or pointer >= (1 << (argument.storage_size * 8)):
+                raise TlaUnsupportedAbiError(
+                    f"pointer value does not fit in {argument.storage_size} bytes"
+                )
+            encoded = pointer.to_bytes(
+                argument.storage_size, byteorder="little", signed=False
+            )
+        elif argument.kind is KernelAbiArgumentKind.SCALAR:
+            if argument.scalar is None:
+                raise TlaUnsupportedAbiError(
+                    f"kernel ABI scalar argument {index} has no scalar descriptor"
+                )
+            encoded = _pack_scalar_argument(
+                value,
+                argument.scalar,
+                argument.mlir_type,
+                argument.storage_size,
+            )
+        else:
+            raise TlaUnsupportedAbiError(
+                f"unsupported kernel ABI argument kind {argument.kind!r}"
+            )
+        payload[start:end] = encoded
     return bytes(payload)
 
 
@@ -525,8 +719,91 @@ def _append_debug_print_workspace_payload(
         return payload
     extension = bytearray(payload)
     _align_payload(extension, _POINTER_ABI_SIZE)
-    extension.extend(_pack_uint64_slot(_DEBUG_PRINT_WORKSPACE_SENTINEL))
+    extension.extend(
+        _DEBUG_PRINT_WORKSPACE_SENTINEL.to_bytes(
+            _POINTER_ABI_SIZE, byteorder="little", signed=False
+        )
+    )
     return bytes(extension)
+
+
+def _validate_kernel_abi_layout(
+    layout: KernelAbiLayout | None, *, expected_entrypoint: str | None = None
+) -> None:
+    if layout is None or layout.schema_version != 3:
+        raise TlaUnsupportedAbiError(
+            "A supported compiler-produced kernel ABI layout is required before launch."
+        )
+    if not layout.entrypoint.strip():
+        raise TlaUnsupportedAbiError("kernel ABI layout entrypoint must be nonempty")
+    if expected_entrypoint is not None and layout.entrypoint != expected_entrypoint:
+        raise TlaUnsupportedAbiError(
+            "kernel ABI layout entrypoint does not match launch artifact: "
+            f"{layout.entrypoint!r} != {expected_entrypoint!r}"
+        )
+    if layout.total_size < 0:
+        raise TlaUnsupportedAbiError("kernel ABI layout has an invalid total size")
+    if layout.total_size > _MAX_KERNEL_ABI_PAYLOAD_SIZE:
+        raise TlaUnsupportedAbiError(
+            "kernel ABI payload exceeds the supported maximum size"
+        )
+    if layout.total_size % 8 != 0:
+        raise TlaUnsupportedAbiError(
+            "kernel ABI total size must be rounded to 8 bytes"
+        )
+    previous_end = 0
+    for index, argument in enumerate(layout.arguments):
+        if argument.index != index:
+            raise TlaUnsupportedAbiError(
+                "kernel ABI arguments must be ordered by contiguous index"
+            )
+        if argument.alignment != 4:
+            raise TlaUnsupportedAbiError(
+                f"kernel ABI argument {index} must declare 4-byte alignment"
+            )
+        if argument.offset < previous_end or argument.offset % 4 != 0:
+            raise TlaUnsupportedAbiError(
+                f"kernel ABI argument {index} offset must be ordered, "
+                "non-overlapping, and 4-byte aligned"
+            )
+        if argument.storage_size <= 0:
+            raise TlaUnsupportedAbiError(
+                f"kernel ABI argument {index} storage size must be positive"
+            )
+        if argument.kind is KernelAbiArgumentKind.POINTER:
+            if argument.scalar is not None:
+                raise TlaUnsupportedAbiError(
+                    f"kernel ABI pointer argument {index} cannot have a scalar descriptor"
+                )
+            if argument.storage_size != _POINTER_ABI_SIZE:
+                raise TlaUnsupportedAbiError(
+                    f"unsupported pointer storage size {argument.storage_size}"
+                )
+        elif argument.kind is KernelAbiArgumentKind.SCALAR:
+            if argument.scalar is None:
+                raise TlaUnsupportedAbiError(
+                    f"kernel ABI scalar argument {index} requires a scalar descriptor"
+                )
+            expected_size = _scalar_storage_size(argument.scalar)
+            if argument.storage_size != expected_size:
+                raise TlaUnsupportedAbiError(
+                    f"kernel ABI scalar {argument.mlir_type} declares unsupported "
+                    f"storage size {argument.storage_size}; expected {expected_size}"
+                )
+        else:
+            raise TlaUnsupportedAbiError(
+                f"unsupported kernel ABI argument kind {argument.kind!r}"
+            )
+        previous_end = argument.offset + argument.storage_size
+        if previous_end > layout.total_size:
+            raise TlaUnsupportedAbiError(
+                f"kernel ABI argument {index} storage does not fit in payload"
+            )
+    required_size = ((previous_end + 7) // 8) * 8
+    if layout.total_size != required_size:
+        raise TlaUnsupportedAbiError(
+            "kernel ABI total size is not exactly sufficient for its arguments"
+        )
 
 
 def _split_top_level_csv(text: str) -> list[str]:
@@ -649,13 +926,16 @@ def _build_logical_mixed_handoff_launch_args(
     launch_args: Sequence[Any],
     grid: Sequence[int],
     arg_types: Sequence[str],
+    kernel_abi: KernelAbiLayout | None,
 ) -> tuple[bytes, tuple[int, int, int]]:
     if len(launch_args) != len(arg_types):
         raise TlaUnsupportedAbiError(
             "mixed handoff launch argument count does not match split function "
             f"signature: got {len(launch_args)}, expected {len(arg_types)}"
         )
-    return _pack_launch_args(launch_args), tuple(int(item) for item in grid)
+    return _pack_launch_args(launch_args, kernel_abi), tuple(
+        int(item) for item in grid
+    )
 
 
 def _has_debug_print_workspace(artifact: TlaKernelArtifact) -> bool:
@@ -888,6 +1168,7 @@ def _cache_key(
     key_payload = {
         "debug_print_workspace_abi_revision": _DEBUG_PRINT_WORKSPACE_ABI_REVISION,
         "print_tensor_workspace_abi_revision": _PRINT_TENSOR_WORKSPACE_ABI_REVISION,
+        "cache_abi_version": _ONLINE_CACHE_ABI_VERSION,
         "entrypoint": entrypoint,
         "backend": runtime.backend,
         "kernel_mode": runtime.kernel_mode,
@@ -1429,6 +1710,31 @@ def _cache_manifest_has_current_workspace_abis(
     ) and _cache_manifest_has_current_print_tensor_workspace_abi(manifest)
 
 
+def _kernel_abi_from_manifest(manifest: Mapping[str, Any]) -> KernelAbiLayout:
+    if "kernel_abi" not in manifest or manifest["kernel_abi"] is None:
+        raise TlaKernelCompileError(
+            "Cached artifact has no compiler-produced kernel_abi descriptor; "
+            "the cache predates the current kernel ABI contract."
+        )
+    try:
+        layout = kernel_abi_from_dict(manifest["kernel_abi"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise TlaKernelCompileError(f"Invalid cached kernel ABI descriptor: {exc}") from exc
+    if layout is None:
+        raise TlaKernelCompileError(
+            "Invalid cached kernel ABI descriptor: decoded to no layout"
+        )
+    try:
+        _validate_kernel_abi_layout(
+            layout, expected_entrypoint=str(manifest.get("entrypoint", ""))
+        )
+    except TlaUnsupportedAbiError as exc:
+        raise TlaKernelCompileError(
+            f"Invalid cached kernel ABI descriptor: {exc}"
+        ) from exc
+    return layout
+
+
 def _env_truthy(name: str, *, default: str) -> bool:
     value = os.getenv(name, default).strip().lower()
     return value in {"1", "true", "yes", "on", "y"}
@@ -1750,9 +2056,8 @@ class _AscendLoader:
         # non-empty buffer (arg_size == 8); the kernel never reads it.
         if not args:
             args = b"\x00" * ctypes.sizeof(ctypes.c_uint64)
-        # Native-width Numeric arguments can make the final parameter buffer
-        # non-divisible by eight (for example, one pointer followed by i32).
-        arg_array = (ctypes.c_uint8 * len(args)).from_buffer_copy(args)
+        arg_size = len(args)
+        arg_array = (ctypes.c_uint8 * arg_size).from_buffer_copy(args)
         raw_ptr = ctypes.cast(arg_array, ctypes.POINTER(ctypes.c_uint8))
         ret = self._module.tla_runtime_launch_kernel(
             ctypes.c_uint64(int(function)),
@@ -1761,7 +2066,7 @@ class _AscendLoader:
             int(grid_y),
             int(grid_z),
             raw_ptr,
-            len(args),
+            arg_size,
             int(expects_debug_fifo),
             int(expects_print_tensor),
         )

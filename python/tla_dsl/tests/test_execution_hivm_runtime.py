@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ctypes
+from dataclasses import replace
 from pathlib import Path
 import importlib.util
 import math
@@ -774,32 +775,6 @@ def test_build_hivmc_a5_command_links_template_bitcode_for_aiv(
     ]
 
 
-@pytest.mark.parametrize(
-    ("args", "expected"),
-    (
-        ([tla.Int32(-7), tla.Float32(1.5)], struct.pack("<if", -7, 1.5)),
-        ([tla.Float32(1.0), tla.Float32(0.25)], struct.pack("<ff", 1.0, 0.25)),
-        (
-            [tla.Int16(-7), tla.Int64(9)],
-            struct.pack("<h", -7) + b"\0" * 6 + struct.pack("<q", 9),
-        ),
-    ),
-    ids=["i32-f32", "f32-f32", "i16-i64"],
-)
-def test_pack_launch_args_uses_native_scalar_layout(args, expected) -> None:
-    assert execution._pack_launch_args(args) == expected
-
-
-def test_pack_launch_args_aligns_pointer_after_scalar() -> None:
-    class _Ptr:
-        def __c_pointers__(self):
-            return [0x123456789ABCDEF0]
-
-    payload = execution._pack_launch_args([tla.Int32(5), _Ptr()])
-
-    assert payload == struct.pack("<i4xQ", 5, 0x123456789ABCDEF0)
-
-
 def test_ascend_loader_forwards_native_width_scalar_payload() -> None:
     payload = struct.pack("<Qi", 0x123456789ABCDEF0, 20)
     launches: list[tuple[bytes, int, int, int]] = []
@@ -854,7 +829,37 @@ class _TypedPointer:
         return [self._pointer]
 
 
-def _debug_print_artifact(tmp_path, *, entrypoint: str = "debug"):
+def _debug_kernel_abi(launch_args, *, entrypoint: str):
+    arguments = []
+    offset = 0
+    for arg in launch_args:
+        offset = (offset + 3) & ~3
+        if isinstance(arg, execution.Numeric):
+            abi_type = str(type(arg).dtype).lower()
+            storage_size = (
+                8
+                if abi_type == "index"
+                else max(1, int(type(arg).width) // 8)
+            )
+            arguments.append(
+                ("scalar", abi_type, abi_type, offset, storage_size, 4)
+            )
+        else:
+            storage_size = 8
+            arguments.append(
+                ("pointer", "pointer", "!llvm.ptr", offset, storage_size, 4)
+            )
+        offset += storage_size
+    return _kernel_abi(
+        *arguments,
+        total_size=(offset + 7) & ~7,
+        entrypoint=entrypoint,
+    )
+
+
+def _debug_print_artifact(
+    tmp_path, *, entrypoint: str = "debug", launch_args=(tla.Int32(7),)
+):
     return execution.TlaKernelArtifact(
         cache_key="cache",
         cache_dir=tmp_path,
@@ -867,6 +872,7 @@ def _debug_print_artifact(tmp_path, *, entrypoint: str = "debug"):
         compiler_bridge_path=None,
         hivmc_path=tmp_path / "hivmc-a5",
         kernel_binary_path=tmp_path / "kernel.o",
+        kernel_abi=_debug_kernel_abi(launch_args, entrypoint=entrypoint),
     )
 
 
@@ -895,6 +901,11 @@ def _print_tensor_artifact(
         compiler_bridge_path=None,
         hivmc_path=tmp_path / "hivmc-a5",
         kernel_binary_path=tmp_path / "kernel.o",
+        kernel_abi=_kernel_abi(
+            ("pointer", "pointer", "!llvm.ptr", 0, 8, 4),
+            total_size=8,
+            entrypoint=entrypoint,
+        ),
     )
 
 
@@ -1040,7 +1051,7 @@ def test_print_tensor_launch_rejects_unsupported_grid_or_mixed_mode(
 def test_debug_print_workspace_preserves_normal_user_argument_slots(
     tmp_path, launch_args, expected_user_payload
 ) -> None:
-    artifact = _debug_print_artifact(tmp_path)
+    artifact = _debug_print_artifact(tmp_path, launch_args=launch_args)
 
     plan = execution._build_kernel_launch_plan(
         artifact=artifact,
@@ -1056,6 +1067,7 @@ def test_debug_print_workspace_preserves_normal_user_argument_slots(
 
 
 def test_non_print_kernel_keeps_normal_pointer_payload(tmp_path) -> None:
+    launch_args = [_TypedPointer(0x1000), _TypedPointer(0x2000)]
     artifact = execution.TlaKernelArtifact(
         cache_key="cache",
         cache_dir=tmp_path,
@@ -1065,12 +1077,13 @@ def test_non_print_kernel_keeps_normal_pointer_payload(tmp_path) -> None:
         compiler_bridge_path=None,
         hivmc_path=tmp_path / "hivmc-a5",
         kernel_binary_path=tmp_path / "kernel.o",
+        kernel_abi=_debug_kernel_abi(launch_args, entrypoint="plain"),
     )
 
     plan = execution._build_kernel_launch_plan(
         artifact=artifact,
         runtime=execution.TlaRuntimeOptions(),
-        launch_args=[_TypedPointer(0x1000), _TypedPointer(0x2000)],
+        launch_args=launch_args,
         grid=(1, 1, 1),
     )
 
@@ -1198,6 +1211,547 @@ def test_print_tensor_workspace_abi_manifest_requires_current_revision(
     assert execution._cache_manifest_has_current_print_tensor_workspace_abi(manifest)
 
 
+def _kernel_abi(
+    *arguments: tuple[str, str, str, int, int, int],
+    total_size: int,
+    entrypoint: str = "kernel",
+) -> compiler_bridge.KernelAbiLayout:
+    def scalar_descriptor(
+        abi_type: str,
+    ) -> compiler_bridge.KernelAbiScalarDescriptor | None:
+        if abi_type == "pointer":
+            return None
+        if abi_type == "index":
+            return compiler_bridge.KernelAbiScalarDescriptor(
+                compiler_bridge.KernelAbiScalarCategory.INDEX, 64, None, None
+            )
+        if abi_type in {"f16", "bf16", "f32"}:
+            return compiler_bridge.KernelAbiScalarDescriptor(
+                compiler_bridge.KernelAbiScalarCategory.FLOAT,
+                int(abi_type[-2:]),
+                None,
+                compiler_bridge.KernelAbiFloatFormat(abi_type),
+            )
+        signedness = (
+            compiler_bridge.KernelAbiIntegerSignedness.SIGNED
+            if abi_type.startswith("si")
+            else compiler_bridge.KernelAbiIntegerSignedness.UNSIGNED
+            if abi_type.startswith("ui")
+            else compiler_bridge.KernelAbiIntegerSignedness.SIGNLESS
+        )
+        return compiler_bridge.KernelAbiScalarDescriptor(
+            compiler_bridge.KernelAbiScalarCategory.INTEGER,
+            int(abi_type.lstrip("sui")),
+            signedness,
+            None,
+        )
+
+    return compiler_bridge.KernelAbiLayout(
+        schema_version=3,
+        entrypoint=entrypoint,
+        total_size=total_size,
+        arguments=tuple(
+            compiler_bridge.KernelAbiArgument(
+                index=index,
+                kind=compiler_bridge.KernelAbiArgumentKind(kind),
+                scalar=scalar_descriptor(abi_type),
+                mlir_type=mlir_type,
+                offset=offset,
+                storage_size=storage_size,
+                alignment=alignment,
+            )
+            for index, (
+                kind,
+                abi_type,
+                mlir_type,
+                offset,
+                storage_size,
+                alignment,
+            ) in enumerate(arguments)
+        ),
+    )
+
+
+def test_online_cache_key_serializes_kernel_abi_version(
+    monkeypatch, tmp_path
+) -> None:
+    payloads: list[dict[str, object]] = []
+    json_dumps = execution.json.dumps
+
+    def capture_payload(payload, **kwargs):
+        payloads.append(payload)
+        return json_dumps(payload, **kwargs)
+
+    monkeypatch.setattr(execution.json, "dumps", capture_payload)
+    monkeypatch.setattr(execution, "_tool_fingerprint", lambda _path: "fingerprint")
+    monkeypatch.setattr(execution, "_tool_version", lambda _path: "version")
+
+    runtime = execution.TlaRuntimeOptions()
+    execution._cache_key(
+        tlair_mlir="module {}",
+        entrypoint="kernel",
+        runtime=runtime,
+        compiler_bridge_path=tmp_path / "bridge.so",
+        hivmc=tmp_path / "hivmc-a5",
+        target=execution.TlaKernelTarget(
+            arch_scope="aiv.c310",
+            target_arch="c310",
+            core_type="aiv",
+            cce_arch="dav-c310-vec",
+        ),
+    )
+
+    assert len(payloads) == 1
+    assert payloads[0]["cache_abi_version"] == 4
+
+
+@pytest.mark.parametrize(
+    ("scalar", "mlir_type", "storage_size", "expected"),
+    [
+        (tla.Int8(-91), "i8", 1, bytes.fromhex("a5")),
+        (tla.Int16(-16657), "i16", 2, bytes.fromhex("efbe")),
+        (tla.UInt16(0xBEEF), "i16", 2, bytes.fromhex("efbe")),
+        (tla.Int32(-559038737), "i32", 4, bytes.fromhex("efbeadde")),
+        (
+            tla.Int64(-0x112233445566778),
+            "i64",
+            8,
+            (-0x112233445566778).to_bytes(8, "little", signed=True),
+        ),
+        (tla.Float16(1.5), "f16", 2, bytes.fromhex("003e")),
+        (tla.BFloat16(1.5), "bf16", 2, bytes.fromhex("c03f")),
+        (tla.Float32(1.25), "f32", 4, bytes.fromhex("0000a03f")),
+    ],
+)
+def test_pack_launch_args_writes_typed_scalar_bits_at_declared_width(
+    scalar, mlir_type: str, storage_size: int, expected: bytes
+) -> None:
+    layout = _kernel_abi(
+        ("scalar", mlir_type, mlir_type, 0, storage_size, 4), total_size=8
+    )
+    payload = execution._pack_launch_args([scalar], layout)
+
+    assert len(payload) == 8
+    assert payload == expected + bytes(8 - storage_size)
+
+
+@pytest.mark.parametrize(
+    ("value", "abi_type", "mlir_type", "storage_size", "expected"),
+    [
+        (False, "i1", "i1", 1, bytes.fromhex("00")),
+        (True, "i1", "i1", 1, bytes.fromhex("01")),
+        (17, "i32", "i32", 4, struct.pack("<i", 17)),
+        (-17, "i32", "i32", 4, struct.pack("<i", -17)),
+        (-(1 << 31), "i32", "i32", 4, struct.pack("<i", -(1 << 31))),
+        ((1 << 31) - 1, "i32", "i32", 4, struct.pack("<i", (1 << 31) - 1)),
+        (1.25, "f32", "f32", 4, bytes.fromhex("0000a03f")),
+    ],
+)
+def test_pack_launch_args_writes_plain_python_scalar_bits_from_descriptor(
+    value,
+    abi_type: str,
+    mlir_type: str,
+    storage_size: int,
+    expected: bytes,
+) -> None:
+    layout = _kernel_abi(
+        ("scalar", abi_type, mlir_type, 0, storage_size, 4), total_size=8
+    )
+
+    payload = execution._pack_launch_args([value], layout)
+
+    assert payload == expected + bytes(8 - storage_size)
+
+
+@pytest.mark.parametrize("value", [-(1 << 31) - 1, 1 << 31])
+def test_pack_launch_args_rejects_plain_python_int32_overflow(value: int) -> None:
+    layout = _kernel_abi(
+        ("scalar", "i32", "i32", 0, 4, 4), total_size=8
+    )
+
+    with pytest.raises(execution.TlaUnsupportedAbiError, match="fit"):
+        execution._pack_launch_args([value], layout)
+
+
+@pytest.mark.parametrize(
+    ("value", "abi_type", "mlir_type", "storage_size"),
+    [
+        (1, "index", "index", 8),
+        (1, "si32", "si32", 4),
+        (1, "i64", "i64", 8),
+        (1.0, "f16", "f16", 2),
+        (1.0, "bf16", "bf16", 2),
+        (True, "index", "index", 8),
+        (1, "i1", "i1", 1),
+    ],
+)
+def test_pack_launch_args_rejects_plain_python_scalar_descriptor_mismatch(
+    value, abi_type: str, mlir_type: str, storage_size: int
+) -> None:
+    layout = _kernel_abi(
+        ("scalar", abi_type, mlir_type, 0, storage_size, 4), total_size=8
+    )
+
+    with pytest.raises(execution.TlaUnsupportedAbiError, match="does not match"):
+        execution._pack_launch_args([value], layout)
+
+
+@pytest.mark.parametrize("value", [False, 1, 1.0])
+def test_pack_launch_args_rejects_plain_python_scalar_for_pointer(value) -> None:
+    layout = _kernel_abi(
+        ("pointer", "pointer", "!llvm.ptr", 0, 8, 4), total_size=8
+    )
+
+    with pytest.raises(execution.TlaUnsupportedAbiError, match="pointer"):
+        execution._pack_launch_args([value], layout)
+
+
+def test_pack_scalar_argument_rejects_float_descriptor_without_format() -> None:
+    descriptor = compiler_bridge.KernelAbiScalarDescriptor(
+        compiler_bridge.KernelAbiScalarCategory.FLOAT,
+        32,
+        None,
+        compiler_bridge.KernelAbiFloatFormat.F32,
+    )
+    object.__setattr__(descriptor, "float_format", None)
+
+    with pytest.raises(
+        execution.TlaUnsupportedAbiError,
+        match="float scalar f32 has no format",
+    ):
+        execution._pack_scalar_argument(tla.Float32(1.0), descriptor, "f32", 4)
+
+
+def test_pack_launch_args_rejects_missing_layout_after_validation(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(execution, "_validate_kernel_abi_layout", lambda _layout: None)
+
+    with pytest.raises(
+        execution.TlaUnsupportedAbiError,
+        match="kernel ABI layout is missing",
+    ):
+        execution._pack_launch_args([], None)
+
+
+def test_pack_launch_args_rejects_scalar_argument_without_descriptor(
+    monkeypatch,
+) -> None:
+    layout = compiler_bridge.KernelAbiLayout(
+        schema_version=3,
+        entrypoint="kernel",
+        total_size=8,
+        arguments=(
+            compiler_bridge.KernelAbiArgument(
+                index=0,
+                kind=compiler_bridge.KernelAbiArgumentKind.SCALAR,
+                scalar=None,
+                mlir_type="i32",
+                offset=0,
+                storage_size=4,
+                alignment=4,
+            ),
+        ),
+    )
+    monkeypatch.setattr(execution, "_validate_kernel_abi_layout", lambda _layout: None)
+
+    with pytest.raises(
+        execution.TlaUnsupportedAbiError,
+        match="scalar argument 0 has no scalar descriptor",
+    ):
+        execution._pack_launch_args([tla.Int32(1)], layout)
+
+
+def test_pack_launch_args_naturally_aligns_trailing_host_pointer() -> None:
+    class _Ptr:
+        def __init__(self, value: int) -> None:
+            self.value = value
+
+        def __c_pointers__(self):
+            return [self.value]
+
+    layout = _kernel_abi(
+        ("pointer", "pointer", "memref<8xi32>", 0, 8, 4),
+        ("scalar", "i16", "i16", 8, 2, 4),
+        ("pointer", "pointer", "memref<8xi32>", 12, 8, 4),
+        total_size=24,
+    )
+    payload = execution._pack_launch_args(
+        [
+            _Ptr(0x1111111122222222),
+            tla.Int16(-16657),
+            _Ptr(0x3333333344444444),
+        ],
+        layout,
+    )
+
+    assert payload == (
+        struct.pack("<Q", 0x1111111122222222)
+        + bytes.fromhex("efbe000000000000")
+        + struct.pack("<Q", 0x3333333344444444)
+    )
+
+
+def test_pack_launch_args_host_payload_can_exceed_compiler_payload() -> None:
+    class _Ptr:
+        def __c_pointers__(self):
+            return [0x1111111122222222]
+
+    layout = _kernel_abi(
+        ("scalar", "i16", "i16", 0, 2, 4),
+        ("pointer", "pointer", "!llvm.ptr", 4, 8, 4),
+        ("scalar", "i16", "i16", 12, 2, 4),
+        total_size=16,
+    )
+
+    payload = execution._pack_launch_args(
+        [tla.Int16(1), _Ptr(), tla.Int16(2)], layout
+    )
+
+    assert len(payload) == 24
+    assert payload == (
+        bytes.fromhex("0100000000000000")
+        + struct.pack("<Q", 0x1111111122222222)
+        + bytes.fromhex("0200000000000000")
+    )
+
+
+@pytest.mark.parametrize(
+    ("args", "argument", "total_size", "message"),
+    [
+        (
+            [],
+            ("scalar", "i32", "i32", 0, 4, 4),
+            8,
+            "argument count",
+        ),
+        (
+            [tla.Int32(1)],
+            ("pointer", "pointer", "memref<8xi32>", 0, 8, 4),
+            8,
+            "pointer",
+        ),
+        (
+            [tla.Float32(1.0)],
+            ("scalar", "i32", "i32", 0, 4, 4),
+            8,
+            "i32",
+        ),
+        (
+            [tla.Int32(1)],
+            ("scalar", "i32", "i32", 0, 8, 4),
+            8,
+            "storage size",
+        ),
+    ],
+)
+def test_pack_launch_args_rejects_invalid_count_kind_and_type(
+    args,
+    argument: tuple[str, str, int, int, int],
+    total_size: int,
+    message: str,
+) -> None:
+    layout = _kernel_abi(argument, total_size=total_size)
+    with pytest.raises(execution.TlaUnsupportedAbiError, match=message):
+        execution._pack_launch_args(args, layout)
+
+
+def test_pack_launch_args_rejects_missing_layout() -> None:
+    with pytest.raises(execution.TlaUnsupportedAbiError, match="ABI layout"):
+        execution._pack_launch_args([tla.Int32(1)], None)
+
+
+@pytest.mark.parametrize(
+    ("mutate", "message"),
+    [
+        (lambda layout: replace(layout, entrypoint=""), "entrypoint"),
+        (
+            lambda layout: replace(
+                layout,
+                arguments=(replace(layout.arguments[0], alignment=8),),
+            ),
+            "4-byte alignment",
+        ),
+        (
+            lambda layout: replace(
+                layout,
+                arguments=(replace(layout.arguments[0], offset=2),),
+            ),
+            "4-byte aligned",
+        ),
+        (
+            lambda layout: replace(
+                layout,
+                arguments=(replace(layout.arguments[0], storage_size=0),),
+            ),
+            "positive",
+        ),
+        (
+            lambda layout: replace(
+                layout,
+                arguments=(
+                    replace(
+                        layout.arguments[0],
+                        kind=compiler_bridge.KernelAbiArgumentKind.POINTER,
+                        scalar=None,
+                        mlir_type="!llvm.ptr",
+                        storage_size=4,
+                    ),
+                ),
+            ),
+            "pointer storage size",
+        ),
+        (
+            lambda layout: replace(layout, total_size=-8),
+            "invalid total size",
+        ),
+        (
+            lambda layout: replace(layout, total_size=4),
+            "rounded to 8",
+        ),
+        (
+            lambda layout: replace(layout, total_size=16),
+            "exactly sufficient",
+        ),
+        (
+            lambda layout: replace(
+                layout, total_size=execution._MAX_KERNEL_ABI_PAYLOAD_SIZE + 8
+            ),
+            "maximum",
+        ),
+    ],
+)
+def test_pack_launch_args_rejects_malformed_layout_before_allocation(
+    mutate, message: str
+) -> None:
+    layout = _kernel_abi(
+        ("scalar", "i32", "i32", 0, 4, 4),
+        total_size=8,
+    )
+
+    with pytest.raises(execution.TlaUnsupportedAbiError, match=message):
+        execution._pack_launch_args([tla.Int32(1)], mutate(layout))
+
+
+def test_kernel_abi_layout_rejects_overlapping_arguments() -> None:
+    layout = _kernel_abi(
+        ("pointer", "pointer", "!llvm.ptr", 0, 8, 4),
+        ("scalar", "i32", "i32", 4, 4, 4),
+        total_size=8,
+    )
+    with pytest.raises(execution.TlaUnsupportedAbiError, match="non-overlapping"):
+        execution._pack_launch_args([object(), tla.Int32(1)], layout)
+
+
+def test_kernel_abi_layout_entrypoint_must_match_artifact() -> None:
+    layout = _kernel_abi(total_size=0, entrypoint="other")
+    with pytest.raises(execution.TlaUnsupportedAbiError, match="does not match"):
+        execution._validate_kernel_abi_layout(
+            layout, expected_entrypoint="kernel"
+        )
+
+
+def test_corrupt_manifest_layout_is_compile_error() -> None:
+    layout = _kernel_abi(
+        ("scalar", "i32", "i32", 0, 4, 4),
+        total_size=8,
+    )
+    descriptor = compiler_bridge.kernel_abi_to_dict(layout)
+    assert descriptor is not None
+    descriptor["total_size"] = 16
+
+    with pytest.raises(execution.TlaKernelCompileError, match="exactly sufficient"):
+        execution._kernel_abi_from_manifest(
+            {"entrypoint": "kernel", "kernel_abi": descriptor}
+        )
+
+
+def test_manifest_rejects_descriptor_decoder_returning_none(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(execution, "kernel_abi_from_dict", lambda _value: None)
+
+    with pytest.raises(
+        execution.TlaKernelCompileError,
+        match="decoded to no layout",
+    ):
+        execution._kernel_abi_from_manifest(
+            {"entrypoint": "kernel", "kernel_abi": {}}
+        )
+
+
+def test_pack_launch_args_rejects_multi_value_host_argument() -> None:
+    class _TwoPointers:
+        def __c_pointers__(self):
+            return [0x1111, 0x2222]
+
+    layout = _kernel_abi(
+        ("pointer", "pointer", "memref<8xi32>", 0, 8, 4), total_size=8
+    )
+    with pytest.raises(execution.TlaUnsupportedAbiError, match="exactly one"):
+        execution._pack_launch_args([_TwoPointers()], layout)
+
+
+def test_pack_launch_args_rejects_pointer_storage_overflow() -> None:
+    class _HugePointer:
+        def __c_pointers__(self):
+            return [1 << 64]
+
+    layout = _kernel_abi(
+        ("pointer", "pointer", "memref<8xi32>", 0, 8, 4), total_size=8
+    )
+    with pytest.raises(execution.TlaUnsupportedAbiError, match="fit"):
+        execution._pack_launch_args([_HugePointer()], layout)
+
+
+def test_ascend_loader_forwards_opaque_bytes_and_exact_byte_count() -> None:
+    calls: list[tuple[bytes, int]] = []
+
+    class _FakeLaunch:
+        def __call__(self, *_args):
+            size = int(getattr(_args[-3], "value", _args[-3]))
+            calls.append((ctypes.string_at(_args[-4], size), size))
+            return 0
+
+    class _FakeModule:
+        tla_runtime_launch_kernel = _FakeLaunch()
+
+    loader = execution._AscendLoader()
+    loader._module = _FakeModule()
+    payload = bytes.fromhex("112233445566")
+
+    loader.launch_with_args(
+        function=1,
+        stream=2,
+        grid_x=3,
+        grid_y=4,
+        grid_z=5,
+        args=payload,
+        expects_debug_fifo=False,
+        expects_print_tensor=False,
+    )
+
+    assert calls == [(payload, len(payload))]
+
+
+def test_runtime_wrapper_c_abi_is_byte_oriented() -> None:
+    source = (
+        Path(execution.__file__).resolve().parents[1]
+        / "csrc"
+        / "mlir"
+        / "lib"
+        / "Tools"
+        / "RuntimeWrapper.cpp"
+    ).read_text()
+
+    assert "const uint8_t *args, size_t arg_size" in source
+    assert "std::vector<uint64_t> values" in source
+    assert "std::memcpy(values.data(), args, arg_size)" in source
+    assert "values.assign(args" not in source
+    assert "rtKernelLaunch(function, block_num, args_array," in source
+    assert "arg_size, nullptr, stream)" in source
+
+
 def test_build_kernel_launch_plan_uses_logical_mixed_handoff(tmp_path) -> None:
     class _Tensor:
         def __init__(self, ptr: int, shape: tuple[int, int]) -> None:
@@ -1227,6 +1781,14 @@ def test_build_kernel_launch_plan_uses_logical_mixed_handoff(tmp_path) -> None:
         compiler_bridge_path=None,
         hivmc_path=tmp_path / "hivmc-a5",
         kernel_binary_path=tmp_path / "kernel.o",
+        kernel_abi=_kernel_abi(
+            ("pointer", "pointer", "memref<32x32xf32>", 0, 8, 4),
+            ("pointer", "pointer", "memref<32x32xf32>", 8, 8, 4),
+            ("pointer", "pointer", "memref<32x32xf32>", 16, 8, 4),
+            ("pointer", "pointer", "memref<32x32xf32>", 24, 8, 4),
+            total_size=32,
+            entrypoint="basic_mixed",
+        ),
     )
 
     plan = execution._build_kernel_launch_plan(
@@ -1280,6 +1842,15 @@ def test_mixed_handoff_payload_follows_split_signature_not_fixed_four_args(
         compiler_bridge_path=None,
         hivmc_path=tmp_path / "hivmc-a5",
         kernel_binary_path=tmp_path / "kernel.o",
+        kernel_abi=_kernel_abi(
+            ("scalar", "i32", "i32", 0, 4, 4),
+            ("pointer", "pointer", "memref<16x64xf32>", 4, 8, 4),
+            ("pointer", "pointer", "memref<64x48xf32>", 12, 8, 4),
+            ("pointer", "pointer", "memref<16x48xf32>", 20, 8, 4),
+            ("pointer", "pointer", "memref<16x48xf32>", 28, 8, 4),
+            total_size=40,
+            entrypoint="custom",
+        ),
     )
 
     plan = execution._build_kernel_launch_plan(
@@ -1299,7 +1870,7 @@ def test_mixed_handoff_payload_follows_split_signature_not_fixed_four_args(
     assert plan.kernel_mode == "mix"
     assert plan.grid == (5, 6, 7)
     assert plan.payload == struct.pack(
-        "<QQQQQ",
+        "<I4xQQQQ",
         7,
         0x1000,
         0x2000,
@@ -1332,6 +1903,12 @@ def test_mixed_handoff_supplies_debug_workspace_without_public_argument(
         compiler_bridge_path=None,
         hivmc_path=tmp_path / "hivmc-a5",
         kernel_binary_path=tmp_path / "kernel.o",
+        kernel_abi=_kernel_abi(
+            ("scalar", "f32", "f32", 0, 4, 4),
+            ("scalar", "f32", "f32", 4, 4, 4),
+            total_size=8,
+            entrypoint="debug_mixed",
+        ),
     )
 
     plan = execution._build_kernel_launch_plan(
@@ -1379,13 +1956,17 @@ def test_execute_kernel_uses_typed_launch_payload(monkeypatch, tmp_path) -> None
         compiler_bridge_path=None,
         hivmc_path=tmp_path / "hivmc-a5",
         kernel_binary_path=tmp_path / "kernel.o",
+        kernel_abi=_kernel_abi(
+            ("scalar", "i32", "i32", 0, 4, 4),
+            total_size=8,
+        ),
     )
     runtime = execution.TlaRuntimeOptions(shared=3)
 
     result = execution.execute_kernel(
         artifact,
         runtime=runtime,
-        launch_args=[123],
+        launch_args=[tla.Int32(123)],
         launch_kwargs={},
     )
 
@@ -1399,7 +1980,7 @@ def test_execute_kernel_uses_typed_launch_payload(monkeypatch, tmp_path) -> None
             "grid_x": 1,
             "grid_y": 1,
             "grid_z": 1,
-            "args": struct.pack("<Q", 123),
+            "args": struct.pack("<I4x", 123),
             "expects_debug_fifo": False,
             "expects_print_tensor": False,
         },
@@ -1479,6 +2060,7 @@ def test_execute_kernel_uses_empty_payload_for_zero_arg(monkeypatch, tmp_path) -
         compiler_bridge_path=None,
         hivmc_path=tmp_path / "hivmc-a5",
         kernel_binary_path=tmp_path / "kernel.o",
+        kernel_abi=_kernel_abi(total_size=0),
     )
     runtime = execution.TlaRuntimeOptions(shared=3)
 

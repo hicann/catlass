@@ -9,11 +9,16 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/Location.h"
+#include "mlir/Interfaces/FunctionInterfaces.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 #include "pybind11/stl.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/StringMap.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include <algorithm>
@@ -313,6 +318,210 @@ std::optional<std::string> tlaTypeCategory(MlirType type) {
   return std::nullopt;
 }
 
+// 0 is a scalar, 1 is a launchable GM pointer, and -1 is a pointer whose
+// address space cannot participate in the host launch ABI.
+using KernelPointerProvenance = llvm::StringMap<SmallVector<int8_t, 8>>;
+
+KernelPointerProvenance collectKernelPointerProvenance(ModuleOp module) {
+  KernelPointerProvenance result;
+  module.walk([&](FunctionOpInterface function) {
+    if (function.isExternal() || function.getOperation()->hasAttr("sym_visibility") &&
+                                     function.getOperation()
+                                             ->getAttrOfType<StringAttr>("sym_visibility")
+                                             .getValue() == "private")
+      return;
+    SmallVector<int8_t, 8> pointers;
+    for (Type type : function.getArgumentTypes()) {
+      int8_t pointerKind = 0;
+      if (auto ptr = dyn_cast<::tla::PtrType>(type))
+        pointerKind = ptr.getAddrspace() == ::AddressSpace::gm ? 1 : -1;
+      else if (auto tensor = dyn_cast<::tla::TlaTensorType>(type))
+        pointerKind =
+            tensor.getPtr().getAddrspace() == ::AddressSpace::gm ? 1 : -1;
+      pointers.push_back(pointerKind);
+    }
+    result[function.getName()] = std::move(pointers);
+  });
+  return result;
+}
+
+std::string printType(Type type) {
+  std::string text;
+  llvm::raw_string_ostream os(text);
+  type.print(os);
+  return text;
+}
+
+std::optional<unsigned> scalarStorageSize(Type type) {
+  if (type.isIndex())
+    return 8;
+  if (auto integer = dyn_cast<IntegerType>(type))
+    switch (integer.getWidth()) {
+    case 1:
+    case 8:
+      return 1;
+    case 16:
+      return 2;
+    case 32:
+      return 4;
+    case 64:
+      return 8;
+    default:
+      return std::nullopt;
+    }
+  if (type.isF16() || type.isBF16())
+    return 2;
+  if (type.isF32())
+    return 4;
+  return std::nullopt;
+}
+
+std::optional<py::dict> scalarAbiDescriptor(Type type) {
+  py::dict descriptor;
+  if (type.isIndex()) {
+    descriptor["category"] = "index";
+    descriptor["bit_width"] = 64;
+    descriptor["integer_signedness"] = py::none();
+    descriptor["float_format"] = py::none();
+    return descriptor;
+  }
+  if (auto integer = dyn_cast<IntegerType>(type)) {
+    unsigned width = integer.getWidth();
+    if (width != 1 && width != 8 && width != 16 && width != 32 && width != 64)
+      return std::nullopt;
+    descriptor["category"] = "integer";
+    descriptor["bit_width"] = width;
+    descriptor["integer_signedness"] =
+        integer.isSigned() ? "signed"
+                           : integer.isUnsigned() ? "unsigned" : "signless";
+    descriptor["float_format"] = py::none();
+    return descriptor;
+  }
+  StringRef format;
+  unsigned width = 0;
+  if (type.isF16()) {
+    format = "f16";
+    width = 16;
+  } else if (type.isBF16()) {
+    format = "bf16";
+    width = 16;
+  } else if (type.isF32()) {
+    format = "f32";
+    width = 32;
+  } else {
+    return std::nullopt;
+  }
+  descriptor["category"] = "float";
+  descriptor["bit_width"] = width;
+  descriptor["integer_signedness"] = py::none();
+  descriptor["float_format"] = format.str();
+  return descriptor;
+}
+
+std::optional<py::dict> buildKernelAbi(ModuleOp module,
+                                       const KernelPointerProvenance &provenance) {
+  SmallVector<py::dict, 2> layouts;
+  bool sawMixAic = false;
+  bool sawMixAiv = false;
+  std::optional<std::string> mixAicBase;
+  std::optional<std::string> mixAivBase;
+  for (func::FuncOp function : module.getOps<func::FuncOp>()) {
+    if (function.isDeclaration() || !function->hasAttr("hacc.entry"))
+      continue;
+    StringRef name = function.getSymName();
+    StringRef logicalName = name;
+    if (name.ends_with("_mix_aic")) {
+      sawMixAic = true;
+      mixAicBase = name.drop_back(8).str();
+    }
+    if (name.ends_with("_mix_aiv")) {
+      sawMixAiv = true;
+      mixAivBase = name.drop_back(8).str();
+    }
+    if (name.ends_with("_mix_aic") || name.ends_with("_mix_aiv"))
+      logicalName = name.drop_back(8);
+    auto provenanceIt = provenance.find(logicalName);
+    ArrayRef<int8_t> pointerArgs;
+    if (provenanceIt != provenance.end())
+      pointerArgs = provenanceIt->second;
+    if (function.getNumResults() != 0)
+      return std::nullopt;
+
+    py::list arguments;
+    uint64_t offset = 0;
+    bool supported = true;
+    unsigned logicalIndex = 0;
+    for (auto [index, type] : llvm::enumerate(function.getArgumentTypes())) {
+      if (function.getArgAttr(index, "tla.debug_print.workspace") ||
+          function.getArgAttr(index, "tla.print_tensor.workspace"))
+        continue;
+      unsigned provenanceIndex = logicalIndex;
+      offset = (offset + 3) & ~uint64_t(3);
+      if (provenanceIndex < pointerArgs.size() &&
+          pointerArgs[provenanceIndex] < 0) {
+        supported = false;
+        break;
+      }
+      bool pointer = isa<MemRefType, LLVM::LLVMPointerType>(type) ||
+                     (provenanceIndex < pointerArgs.size() &&
+                      pointerArgs[provenanceIndex] > 0);
+      unsigned size = 0;
+      std::optional<py::dict> scalar;
+      if (pointer) {
+        size = 8;
+      } else if (auto scalarSize = scalarStorageSize(type)) {
+        size = *scalarSize;
+        scalar = scalarAbiDescriptor(type);
+      } else {
+        supported = false;
+        break;
+      }
+      if (!pointer && !scalar) {
+        supported = false;
+        break;
+      }
+      py::dict argument;
+      argument["index"] = logicalIndex++;
+      argument["kind"] = pointer ? "pointer" : "scalar";
+      if (pointer)
+        argument["scalar"] = py::none();
+      else
+        argument["scalar"] = *scalar;
+      argument["mlir_type"] = printType(type);
+      argument["offset"] = offset;
+      argument["storage_size"] = size;
+      argument["alignment"] = 4;
+      arguments.append(argument);
+      offset += size;
+    }
+    if (!supported)
+      return std::nullopt;
+    offset = (offset + 7) & ~uint64_t(7);
+    py::dict layout;
+    layout["schema_version"] = 3;
+    layout["entrypoint"] = logicalName.str();
+    layout["total_size"] = offset;
+    layout["arguments"] = arguments;
+    layouts.push_back(layout);
+  }
+  if (layouts.empty())
+    return std::nullopt;
+  if (layouts.size() > 1) {
+    if (layouts.size() != 2 || !sawMixAic || !sawMixAiv ||
+        mixAicBase != mixAivBase)
+      throw std::runtime_error(
+          "Mixed kernel ABI collection expected exactly one AIC/AIV split "
+          "entrypoint pair.");
+    std::string expected = py::str(layouts.front()["arguments"]);
+    for (const py::dict &layout : llvm::drop_begin(layouts))
+      if (std::string(py::str(layout["arguments"])) != expected)
+        throw std::runtime_error(
+            "Mixed AIC/AIV kernel ABI mismatch: split entrypoints have "
+            "different logical argument layouts.");
+  }
+  return layouts.front();
+}
+
 py::dict lowerToMlir(MlirModule cModule, std::vector<std::string> printBefore,
                      std::vector<std::string> printAfter, bool printBeforeAll, bool printAfterAll) {
   ModuleOp module = moduleFromCapsule(cModule);
@@ -325,6 +534,8 @@ py::dict lowerToMlir(MlirModule cModule, std::vector<std::string> printBefore,
   PassManager tlaPm(context);
   PassManager llvmPm(context);
   tla::tools::buildTlaCompilePassManagers(*context, tlaPm, llvmPm);
+  KernelPointerProvenance pointerProvenance =
+      collectKernelPointerProvenance(module);
 
   std::string passDump;
   llvm::raw_string_ostream passDumpStream(passDump);
@@ -356,6 +567,10 @@ py::dict lowerToMlir(MlirModule cModule, std::vector<std::string> printBefore,
   result["error"] = success ? "" : (error.empty() ? "Failed to run Tla pipeline." : error);
   result["lowered_mlir"] = output;
   result["pass_ir_dump"] = passDump;
+  if (auto kernelAbi = buildKernelAbi(module, pointerProvenance))
+    result["kernel_abi"] = *kernelAbi;
+  else
+    result["kernel_abi"] = py::none();
   return result;
 }
 
