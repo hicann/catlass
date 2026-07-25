@@ -1304,6 +1304,9 @@ def _tensor_metadata_field(value: mlir_ir.Value, field: str) -> Any:
 # Layout constants aligned with ``catlass/catlass.hpp`` and ``tla/layout.hpp``.
 _CATLASS_BYTE_PER_C0 = 32
 _CATLASS_C0_NUM_PER_FRACTAL = 16
+_MAKE_TENSOR_LIKE_ON_CHIP_ADDRSPACES = frozenset(
+    {"l1", "l0a", "l0b", "l0c", "ub"}
+)
 
 
 def _ceil_div(a: int, b: int) -> int:
@@ -1314,6 +1317,22 @@ def _ceil_div(a: int, b: int) -> int:
 
 def _round_up(a: int, m: int) -> int:
     return _ceil_div(a, m) * m
+
+
+def _linear_stride_alignment_elements(
+    element_bytes: int, alignment_bytes: int | None
+) -> int:
+    if alignment_bytes is None:
+        return 1
+    if (
+        alignment_bytes <= 0
+        or element_bytes <= 0
+        or alignment_bytes % element_bytes != 0
+    ):
+        raise ValueError(
+            "linear stride byte alignment must be a positive multiple of element size"
+        )
+    return alignment_bytes // element_bytes
 
 
 def _mul_int_optional(a: int | None, b: int) -> int | None:
@@ -1422,10 +1441,23 @@ def _materialize_layout_trees_from_origin(
     )
     c0_num_per_fractal = _CATLASS_C0_NUM_PER_FRACTAL
     coord = (0, 0)
+    linear_alignment_elements = _linear_stride_alignment_elements(
+        element_bytes, _CATLASS_BYTE_PER_C0
+    )
     if layout == "row_major":
-        return ((rows, cols), (cols, 1), coord, origin_shape)
+        return (
+            (rows, cols),
+            (_round_up_expr(cols, linear_alignment_elements), 1),
+            coord,
+            origin_shape,
+        )
     if layout == "column_major":
-        return ((rows, cols), (1, rows), coord, origin_shape)
+        return (
+            (rows, cols),
+            (1, _round_up_expr(rows, linear_alignment_elements)),
+            coord,
+            origin_shape,
+        )
     if layout == "zN":
         rows_ru = _round_up_expr(rows, c0_num_per_fractal)
         return (
@@ -1477,6 +1509,8 @@ def _remap_tensor_like_prefix_fields_for_layout_trees(
     origin_shape: Any,
     dtype: str,
     layout: str,
+    *,
+    linear_stride_alignment_bytes: int | None = None,
 ) -> tuple[tuple[Any, ...], tuple[Any, ...], tuple[Any, ...], tuple[Any, ...]] | None:
     """Derive shape/stride/coord/origin as nested tuple trees for ``layout`` (TLA-style when fractal).
 
@@ -1511,10 +1545,20 @@ def _remap_tensor_like_prefix_fields_for_layout_trees(
     origin_shape_tree: tuple[Any, ...] = (rows, cols)
     coord_tree: tuple[Any, ...] = (0, 0)
 
+    linear_alignment_elements = _linear_stride_alignment_elements(
+        element_bytes, linear_stride_alignment_bytes
+    )
+
     if layout_tag == "row_major":
-        return ((rows, cols), (cols, 1), coord_tree, origin_shape_tree)
+        leading_stride = (
+            None if cols is None else _round_up(cols, linear_alignment_elements)
+        )
+        return ((rows, cols), (leading_stride, 1), coord_tree, origin_shape_tree)
     if layout_tag == "column_major":
-        return ((rows, cols), (1, rows), coord_tree, origin_shape_tree)
+        leading_stride = (
+            None if rows is None else _round_up(rows, linear_alignment_elements)
+        )
+        return ((rows, cols), (1, leading_stride), coord_tree, origin_shape_tree)
     if layout_tag == "zN":
         rows_round_up = None if rows is None else _round_up(rows, c0_num_per_fractal)
         ceil_div_rows = None if rows is None else _ceil_div(rows, c0_num_per_fractal)
@@ -3147,6 +3191,7 @@ def make_tensor_like(
     accepts a concrete
     :class:`~catlass.base_dsl.typing.Numeric` (e.g. ``tla.Float32``) or an
     ``mlir_ir.Type``; string dtype tokens are not accepted.
+    Only destination pointers in on-chip address spaces are accepted.
     The ``ptr`` operand is required by
     ``tla.make_tensor_like`` for lowering to attach backing storage.
     """
@@ -3192,6 +3237,13 @@ def make_tensor_like(
             f"tla.make_tensor_like expects a supported element type, got [{dtype}]"
         )
     addr = ptr_ty.addrspace
+    if addr not in _MAKE_TENSOR_LIKE_ON_CHIP_ADDRSPACES:
+        _op_error(
+            "make_tensor_like",
+            "invalid argument 'ptr': expected an on-chip address space "
+            "(l1, l0a, l0b, l0c, ub), "
+            f"got '{addr}'",
+        )
 
     # Infer layout if not provided
     if layoutTag is None:
@@ -3235,7 +3287,10 @@ def make_tensor_like(
 
     ptr_alignment = ptr_ty.alignment
     remapped = _remap_tensor_like_prefix_fields_for_layout_trees(
-        like_type.origin_shape, dtype, layout
+        like_type.origin_shape,
+        dtype,
+        layout,
+        linear_stride_alignment_bytes=_CATLASS_BYTE_PER_C0,
     )
     if remapped is not None:
         shape, stride, coord, origin = remapped

@@ -168,6 +168,281 @@ def test_copy_l0c_to_ub_split_mismatch_dtype_raises() -> None:
 
 
 @tla.kernel
+def copy_dynamic_l0c_to_ub_split_m_kernel(gm_c: tla.Tensor) -> None:
+    """Reproduce a dynamically clipped N extent flowing from L0C into UB."""
+    allocator = tla.utils.LocalmemAllocator()
+    l0c_ptr = allocator.allocate(128 * 128 * 4, 512, tla.AddressSpace.l0c)
+    l0c_ptr = tla.recast_ptr(l0c_ptr, dtype=tla.Float32)
+    ub_ptr = allocator.allocate(64 * 128 * 4, 512, tla.AddressSpace.ub)
+    ub_ptr = tla.recast_ptr(ub_ptr, dtype=tla.Float32)
+
+    for col in tla.range(tla.arch.block_idx(), 1, tla.arch.block_dim()):
+        gm_tile = tla.tile_view(
+            gm_c, tla.make_shape(128, 128), tla.make_coord(0, col)
+        )
+        l0c = tla.make_tensor_like(l0c_ptr, gm_tile, tla.arch.L0Clayout)
+        ub = tla.make_tensor_like(ub_ptr, l0c, tla.arch.RowMajor)
+        with tla.cube():
+            tla.copy(
+                ub,
+                l0c,
+                tla.params.CopyL0C2DstParams(
+                    l0c2ub_mode=tla.params.L0C2UBMode.SPLIT_M
+                ),
+            )
+
+
+def test_split_m_dynamic_row_major_stride_uses_child_n_extent(tmp_path) -> None:
+    """Split-M destination stride0 must be aligned N, not the L0C packing stride."""
+    tla_compile = _require_hivm_tla_compile()
+    with runtime_mod._eager_capture():
+        gm_c = tla.Tensor(
+            tla.make_shape(128, 128),
+            tla.Float32,
+            origin_shape=tla.make_shape(128, 128),
+            coord=tla.make_coord(0, 0),
+            stride=tla.make_stride(1, 128),
+            layout_tag=tla.arch.ColumnMajor,
+        )
+
+    mlir = copy_dynamic_l0c_to_ub_split_m_kernel.dump_mlir(type_args=(gm_c,))
+    assert "!tla.shape<128,?>" in mlir
+    assert "!tla.stride<?,1>" in mlir
+
+    input_path = tmp_path / "copy_dynamic_l0c_to_ub_split_m.mlir"
+    input_path.write_text(mlir)
+    result = subprocess.run(
+        [str(tla_compile), str(input_path), "-o", "-"],
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+
+    call_match = re.search(
+        r"call @copy_cc_to_ubuf_row_major_splitm_float\(([^)]*)\)",
+        result.stdout,
+    )
+    assert call_match is not None, result.stdout
+    operands = [operand.strip() for operand in call_match.group(1).split(",")]
+    assert len(operands) == 24
+    dst_shape1 = operands[15]
+    dst_stride0 = operands[16]
+    _assert_lowered_f32_dynamic_stride_is_32b_aligned(
+        result.stdout, extent=dst_shape1, stride=dst_stride0
+    )
+
+
+# Keep this list aligned with the MLIR LayoutTag enum. tla.arch.nN is exported
+# by Python but is not currently supported by TLA tensor types or descriptors.
+_MAKE_TENSOR_LIKE_LAYOUT_CASES = (
+    ("row_major", tla.arch.RowMajor),
+    ("column_major", tla.arch.ColumnMajor),
+    ("zN", tla.arch.zN),
+    ("nZ", tla.arch.nZ),
+    ("zZ", tla.arch.zZ),
+    ("L0Clayout", tla.arch.L0Clayout),
+)
+_MAKE_TENSOR_LIKE_PARENT_LAYOUT = tla.arch.RowMajor
+_MAKE_TENSOR_LIKE_CHILD_LAYOUT = tla.arch.RowMajor
+
+
+@tla.kernel
+def make_tensor_like_layout_pair_kernel(
+    mem_in: tla.Tensor, m: int, n: int
+) -> None:
+    """Build one dynamic parent->child make_tensor_like layout pair."""
+    root = tla.make_tensor(
+        mem_in.ptr,
+        tla.make_layout(
+            tla.make_shape(m, n),
+            tla.make_stride(n, 1),
+            layoutTag=tla.arch.RowMajor,
+        ),
+    )
+    allocator = tla.utils.LocalmemAllocator()
+    parent_ptr = allocator.allocate(128 * 128 * 4, 512, tla.AddressSpace.l1)
+    parent_ptr = tla.recast_ptr(parent_ptr, dtype=tla.Float32)
+    child_ptr = allocator.allocate(128 * 128 * 4, 512, tla.AddressSpace.l1)
+    child_ptr = tla.recast_ptr(child_ptr, dtype=tla.Float32)
+    with tla.cube():
+        parent = tla.make_tensor_like(
+            parent_ptr, root, _MAKE_TENSOR_LIKE_PARENT_LAYOUT
+        )
+        child = tla.make_tensor_like(
+            child_ptr, parent, _MAKE_TENSOR_LIKE_CHILD_LAYOUT
+        )
+        tla.make_shape(child.origin_shape[0], child.origin_shape[1])
+
+
+def _tensor_desc_metadata(line: str) -> tuple[list[str], list[str]]:
+    match = re.search(
+        r"tla\.tensor_desc\s+%[^\[]+\[([^\]]+)\]"
+        r"(?:\s+packed\s*\[([^\]]+)\])?\s+:",
+        line,
+    )
+    assert match is not None, line
+    common = [value.strip() for value in match.group(1).split(",")]
+    packed = (
+        [value.strip() for value in match.group(2).split(",")]
+        if match.group(2)
+        else []
+    )
+    return common, packed
+
+
+def _index_binary_operands(
+    mlir: str, result: str, op_name: str
+) -> tuple[str, str]:
+    ssa = r"%[A-Za-z0-9_]+"
+    match = re.search(
+        rf"^\s*{re.escape(result)} = arith\.{op_name} "
+        rf"(?P<lhs>{ssa}), (?P<rhs>{ssa}) : index$",
+        mlir,
+        re.MULTILINE,
+    )
+    assert match is not None, f"missing defining arith.{op_name} for {result}"
+    return match.group("lhs"), match.group("rhs")
+
+
+def _assert_f32_dynamic_stride_is_32b_aligned(
+    mlir: str, extent: str, stride: str
+) -> None:
+    quotient, alignment = _index_binary_operands(mlir, stride, "muli")
+    adjusted, divisor = _index_binary_operands(mlir, quotient, "divsi")
+    input_extent, delta = _index_binary_operands(mlir, adjusted, "addi")
+    assert input_extent == extent
+    assert divisor == alignment
+    assert re.search(
+        rf"^\s*{re.escape(alignment)} = arith\.constant 8 : index$",
+        mlir,
+        re.MULTILINE,
+    )
+    assert re.search(
+        rf"^\s*{re.escape(delta)} = arith\.constant 7 : index$",
+        mlir,
+        re.MULTILINE,
+    )
+
+
+def _llvm_i64_binary_operands(
+    mlir: str, result: str, op_name: str
+) -> tuple[str, str]:
+    ssa = r"%[A-Za-z0-9_]+"
+    match = re.search(
+        rf"^\s*{re.escape(result)} = llvm\.{op_name} "
+        rf"(?P<lhs>{ssa}), (?P<rhs>{ssa})\s*: i64$",
+        mlir,
+        re.MULTILINE,
+    )
+    assert match is not None, f"missing defining llvm.{op_name} for {result}"
+    return match.group("lhs"), match.group("rhs")
+
+
+def _assert_lowered_f32_dynamic_stride_is_32b_aligned(
+    mlir: str, extent: str, stride: str
+) -> None:
+    quotient, alignment = _llvm_i64_binary_operands(mlir, stride, "mul")
+    adjusted, divisor = _llvm_i64_binary_operands(mlir, quotient, "sdiv")
+    input_extent, delta = _llvm_i64_binary_operands(mlir, adjusted, "add")
+    assert input_extent == extent
+    assert divisor == alignment
+    assert re.search(
+        rf"^\s*{re.escape(alignment)} = llvm\.mlir\.constant\(8 : index\) : i64$",
+        mlir,
+        re.MULTILINE,
+    )
+    assert re.search(
+        rf"^\s*{re.escape(delta)} = llvm\.mlir\.constant\(7 : index\) : i64$",
+        mlir,
+        re.MULTILINE,
+    )
+
+
+@pytest.mark.parametrize(
+    ("parent_name", "parent_layout"),
+    _MAKE_TENSOR_LIKE_LAYOUT_CASES,
+)
+@pytest.mark.parametrize(
+    ("child_name", "child_layout"),
+    _MAKE_TENSOR_LIKE_LAYOUT_CASES,
+)
+def test_make_tensor_like_supports_every_layout_pair(
+    parent_name: str,
+    parent_layout: object,
+    child_name: str,
+    child_layout: object,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    """All six layouts can be the parent and child of make_tensor_like."""
+    monkeypatch.setitem(
+        globals(), "_MAKE_TENSOR_LIKE_PARENT_LAYOUT", parent_layout
+    )
+    monkeypatch.setitem(
+        globals(), "_MAKE_TENSOR_LIKE_CHILD_LAYOUT", child_layout
+    )
+    with runtime_mod._eager_capture():
+        mem_in = tla.Tensor(
+            tla.make_shape(128, 128),
+            tla.Float32,
+            origin_shape=tla.make_shape(128, 128),
+            coord=tla.make_coord(0, 0),
+            stride=tla.make_stride(128, 1),
+            layout_tag=tla.arch.RowMajor,
+        )
+
+    mlir = make_tensor_like_layout_pair_kernel.dump_mlir(
+        type_args=(mem_in, 64, 96)
+    )
+    assert f'layoutTag("{parent_name}")' in mlir
+    assert f'layoutTag("{child_name}")' in mlir
+    assert "!tla.shape<?,?>" in mlir
+
+    input_path = tmp_path / f"layout_pair_{parent_name}_to_{child_name}.mlir"
+    input_path.write_text(mlir)
+    result = subprocess.run(
+        [
+            str(_require_hivm_tla_compile()),
+            str(input_path),
+            "-o",
+            "-",
+            "--mlir-print-ir-after=tla-lower-tensor-desc",
+        ],
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+
+    desc_lines = [
+        line.strip()
+        for line in result.stderr.splitlines()
+        if " = tla.tensor_desc " in line
+    ]
+    assert len(desc_lines) >= 4, result.stderr
+    child_desc = desc_lines[-1]
+    assert child_name in child_desc
+    common, packed = _tensor_desc_metadata(child_desc)
+    assert len(common) == 8
+    assert common[4] == common[6]
+    assert common[5] == common[7]
+
+    if child_name == "row_major":
+        assert packed == []
+        _assert_f32_dynamic_stride_is_32b_aligned(
+            result.stderr, extent=common[5], stride=common[2]
+        )
+    elif child_name == "column_major":
+        assert packed == []
+        _assert_f32_dynamic_stride_is_32b_aligned(
+            result.stderr, extent=common[4], stride=common[3]
+        )
+    else:
+        assert len(packed) == 8
+        assert common[2] == packed[4]
+        assert common[3] == packed[5]
+
+
+@tla.kernel
 def nested_ub_subtile_copy_kernel(mem_in: tla.Tensor, mem_out: tla.Tensor) -> None:
     allocator = tla.utils.LocalmemAllocator()
     gm_in = tla.tile_view(mem_in, tla.make_shape(64, 64), tla.make_coord(0, 0))

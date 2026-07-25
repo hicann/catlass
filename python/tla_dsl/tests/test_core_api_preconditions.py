@@ -641,3 +641,83 @@ def test_range_rejects_bad_loop_attrs() -> None:
         _ = tla.range(0, 4, 1, unroll_full=1)
     with pytest.raises(tla.TlaCoreAPIError, match="prefetch_stages"):
         _ = tla.range(0, 4, 1, prefetch_stages=-1)
+
+
+_MAKE_TENSOR_LIKE_DEST_SPACE = tla.AddressSpace.ub
+
+
+@tla.kernel
+def _make_tensor_like_destination_space_kernel(mem: tla.Tensor) -> None:
+    ptr = tla.allocate(121 * 104, tla.Float32, _MAKE_TENSOR_LIKE_DEST_SPACE, 32)
+    _ = tla.make_tensor_like(ptr, mem, tla.arch.RowMajor)
+
+
+@tla.kernel
+def _make_tensor_like_invalid_destination_space_kernel(mem: tla.Tensor) -> None:
+    ptr = tla.make_ptr(
+        tla.Float32,
+        0,
+        mem_space=_MAKE_TENSOR_LIKE_DEST_SPACE,
+        assumed_align=32,
+    )
+    _ = tla.make_tensor_like(ptr, mem, tla.arch.RowMajor)
+
+
+@tla.kernel
+def _make_tensor_like_aligned_linear_stride_kernel(mem: tla.Tensor) -> None:
+    row_ptr = tla.allocate(121 * 104, tla.Float32, tla.AddressSpace.ub, 32)
+    col_ptr = tla.allocate(99 * 128, tla.Float32, tla.AddressSpace.ub, 32)
+    _ = tla.make_tensor_like(row_ptr, mem, tla.arch.RowMajor)
+    _ = tla.make_tensor_like(col_ptr, mem, tla.arch.ColumnMajor)
+
+
+def _make_tensor_like_static_source() -> tla.Tensor:
+    with runtime_mod._eager_capture():
+        return tla.Tensor(
+            tla.make_shape(121, 99),
+            tla.Float32,
+            origin_shape=tla.make_shape(121, 99),
+            coord=tla.make_coord(0, 0),
+            stride=tla.make_stride(99, 1),
+            layout_tag=tla.arch.RowMajor,
+        )
+
+
+@pytest.mark.parametrize(
+    ("space", "token"),
+    (
+        (tla.AddressSpace.ub, "ub"),
+        (tla.AddressSpace.l1, "l1"),
+        (tla.AddressSpace.l0a, "l0a"),
+        (tla.AddressSpace.l0b, "l0b"),
+        (tla.AddressSpace.l0c, "l0c"),
+    ),
+)
+def test_make_tensor_like_accepts_only_supported_on_chip_spaces(
+    space: AddressSpace, token: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setitem(globals(), "_MAKE_TENSOR_LIKE_DEST_SPACE", space)
+    mlir = _make_tensor_like_destination_space_kernel.dump_mlir(
+        type_args=(_make_tensor_like_static_source(),)
+    )
+    assert f"!tla.ptr<f32, {token}, 32>" in mlir
+
+
+@pytest.mark.parametrize("space", (tla.AddressSpace.gm, tla.AddressSpace.generic))
+def test_make_tensor_like_rejects_off_chip_and_generic_spaces(
+    space: AddressSpace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setitem(globals(), "_MAKE_TENSOR_LIKE_DEST_SPACE", space)
+    with pytest.raises(tla.TlaCoreAPIError, match="expected an on-chip address space"):
+        _make_tensor_like_invalid_destination_space_kernel.dump_mlir(
+            type_args=(_make_tensor_like_static_source(),)
+        )
+
+
+def test_make_tensor_like_aligns_only_the_linear_leading_stride() -> None:
+    mlir = _make_tensor_like_aligned_linear_stride_kernel.dump_mlir(
+        type_args=(_make_tensor_like_static_source(),)
+    )
+    assert "!tla.shape<121,99>, !tla.stride<104,1>" in mlir
+    assert "!tla.shape<121,99>, !tla.stride<1,128>" in mlir
+    assert mlir.count("!tla.shape<121,99>") >= 2

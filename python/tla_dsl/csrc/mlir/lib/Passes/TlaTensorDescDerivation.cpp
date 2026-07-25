@@ -682,16 +682,51 @@ mlir::LogicalResult TensorDescriptorDerivation::derive(mlir::func::FuncOp funcOp
                     materializeLeafFromTypeOrParent(childInfo->shapeDims[0], parent.shape0, "shape");
                 FailureOr<Value> shape1Or =
                     materializeLeafFromTypeOrParent(childInfo->shapeDims[1], parent.shape1, "shape");
-                FailureOr<Value> stride0Or =
-                    materializeLeafFromTypeOrParent(childInfo->strideDims[0], parent.stride0, "stride");
-                FailureOr<Value> stride1Or =
-                    materializeLeafFromTypeOrParent(childInfo->strideDims[1], parent.stride1, "stride");
-                if (failed(shape0Or) || failed(shape1Or) || failed(stride0Or) || failed(stride1Or)) {
+                if (failed(shape0Or) || failed(shape1Or)) {
                     derivationFailed = true;
                     return;
                 }
                 shape0 = *shape0Or;
                 shape1 = *shape1Or;
+                constexpr int64_t linearStrideAlignmentBytes = 32;
+                int64_t elementBytes = getByteSizeOfFixedWidthScalarType(childInfo->mlirElementType);
+                if (childInfo->mlirElementType.isInteger(1))
+                    elementBytes = 1;
+                if (elementBytes <= 0 || linearStrideAlignmentBytes % elementBytes != 0) {
+                    op->emitError() << "tla.make_tensor_like cannot derive a 32-byte-aligned stride for element type "
+                                    << childInfo->mlirElementType;
+                    derivationFailed = true;
+                    return;
+                }
+                int64_t alignmentElements = linearStrideAlignmentBytes / elementBytes;
+                auto alignLinearExtent = [&](Value extent) -> Value {
+                    Value multiple = getOrCreateConstant(op, alignmentElements, 0);
+                    Value one = getOrCreateConstant(op, 1, 0);
+                    Value adjusted = builder.createOrFold<arith::AddIOp>(
+                        op->getLoc(), extent, builder.createOrFold<arith::SubIOp>(op->getLoc(), multiple, one));
+                    Value quotient = builder.createOrFold<arith::DivSIOp>(op->getLoc(), adjusted, multiple);
+                    return builder.createOrFold<arith::MulIOp>(op->getLoc(), quotient, multiple);
+                };
+
+                // Derive dynamic linear strides from the child shape and alignment policy.
+                auto materializeLinearStride = [&](int64_t leaf, size_t idx) -> FailureOr<Value> {
+                    if (leaf != ShapedType::kDynamic)
+                        return getOrCreateConstant(op, leaf, 0);
+                    if (childInfo->layoutTag == TensorLayoutTag::RowMajor)
+                        return idx == 0 ? alignLinearExtent(shape1) : getOrCreateConstant(op, 1, 0);
+                    if (childInfo->layoutTag == TensorLayoutTag::ColumnMajor)
+                        return idx == 0 ? getOrCreateConstant(op, 1, 0) : alignLinearExtent(shape0);
+                    op->emitError() << "unsupported linear layout for dynamic stride derivation";
+                    return failure();
+                };
+                FailureOr<Value> stride0Or =
+                    materializeLinearStride(childInfo->strideDims[0], 0);
+                FailureOr<Value> stride1Or =
+                    materializeLinearStride(childInfo->strideDims[1], 1);
+                if (failed(stride0Or) || failed(stride1Or)) {
+                    derivationFailed = true;
+                    return;
+                }
                 stride0 = *stride0Or;
                 stride1 = *stride1Or;
             } else {
