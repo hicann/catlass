@@ -147,7 +147,7 @@ tests/optest/
 ### 环境要求
 
 - Python 3.11+
-- PyTorch + torch-npu（与本机 CANN/驱动版本匹配）
+- PyTorch + TorchNPU（与本机 CANN/驱动版本匹配）
 - CMake 3.16+
 - 可用昇腾 NPU 设备与环境
 

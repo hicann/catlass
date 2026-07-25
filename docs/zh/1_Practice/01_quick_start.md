@@ -4,7 +4,7 @@
 
 > **说明**：请先行确认[基础依赖](../../../README.md#-软硬件配套说明)、[NPU驱动](https://www.hiascend.com/hardware/firmware-drivers/community)和固件已安装。
 
-### 1. **安装社区版CANN toolkit包**
+### 1. **安装CANN**
 
 根据您所使用的[昇腾产品](https://www.hiascend.com/document/detail/zh/AscendFAQ/ProduTech/productform/hardwaredesc_0001.html)类别，请下载对应的CANN开发套件包`Ascend-cann-toolkit_{version}_linux-{arch}.run`，下载链接见[CANN toolkit](https://www.hiascend.com/zh/developer/download/community/result?module=cann)（有关CATLASS的版本支持情况详见[软件硬件配套说明](../../../README.md#-软硬件配套说明)）。
 

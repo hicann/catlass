@@ -1,7 +1,5 @@
 # A8W4MxMatmul Example Readme
 
-**注意：社区包暂不支持 950 能力，后续支持的版本敬请期待**
-
 ## 功能介绍
 
 - 演示 Ascend 950 上的伪量化场景下的Mx Matmul矩阵乘法：左矩阵 A与伪量化后的右矩阵 B 经 MX 缩放（`float8_e8m0`）后在 Cube 上完成乘加，输出为 FP32。

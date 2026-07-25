@@ -38,7 +38,7 @@ import torch_catlass
 
 ### `get_npu_arch()`
 
-将 torch NPU 设备名映射到 CATLASS 架构 ID：
+将 TorchNPU 设备名映射到 CATLASS 架构 ID：
 
 | 设备名      | 架构 ID |
 | ----------- | ------- |

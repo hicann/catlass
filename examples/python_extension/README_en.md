@@ -56,7 +56,7 @@ The compilation environment is identical to the main [README](../../README.md), 
   - `pybind11`
   - gcc _9.0 or later_
   - torch _2.1 or later recommended_
-  - `torch-npu` (the latest version matching your `torch` and `CANN` installation. See [Ascend/pytorch](https://gitcode.com/ascend/pytorch).
+  - `TorchNPU` (the latest version matching your `torch` and `CANN` installation. See [Ascend/pytorch](https://gitcode.com/ascend/pytorch).
 - Optional:
   - `pybind11-stubgen`
 

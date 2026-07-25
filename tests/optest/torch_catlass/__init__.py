@@ -115,7 +115,7 @@ def clear_jit_cache():
 
 
 def get_npu_arch():
-    """Return the CATLASS architecture id for the active torch-npu device."""
+    """Return the CATLASS architecture id for the active TorchNPU device."""
     device_count = torch_npu.npu.device_count()
     if device_count <= 0:
         raise RuntimeError("No Ascend NPU device is available for torch-catlass")

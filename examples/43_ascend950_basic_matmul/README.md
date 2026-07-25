@@ -1,7 +1,5 @@
 # 950BasicMatmulTla Example Readme
 
-**注意：社区包暂不支持950能力，后续支持的版本敬请期待**
-
 ## 代码组织
 
 ```text

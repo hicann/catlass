@@ -18,11 +18,11 @@
 #include <torch_npu/csrc/framework/utils/OpAdapter.h>
 
 /**
- * @brief Launch a CATLASS kernel through torch-npu's OpCommand wrapper.
+ * @brief Launch a CATLASS kernel through TorchNPU's OpCommand wrapper.
  *
  * The macro checks the function pointer before dispatch and converts C++
  * exceptions raised by the kernel launcher into ACL internal errors so the
- * torch-npu runtime can surface a consistent failure.
+ * TorchNPU runtime can surface a consistent failure.
  */
 #define RUN_NPU_FUNC(func, ...)                                                                                    \
     do {                                                                                                           \

@@ -428,7 +428,7 @@ __aicore__ inline void SplitB()
 
 #### Fixpipe
 
-通过Fixpipe指令进行搬运时，需要配置MmadParams的结构体成员，具体的含义可参考[Fixpipe-数据搬运-矩阵计算（ISASI）-基础API-Ascend C算子开发接口-API-CANN商用版8.5.0开发文档-昇腾社区](https://www.hiascend.com/document/detail/zh/canncommercial/850/API/ascendcopapi/atlasascendc_api_07_0251.html)。其中，fixpipeParams.srcStride的单位是32/sizeof(T)个元素，其含义是源NZ矩阵中相邻小分型的其实地址偏移(RowMajor)矩阵中同一行的元素在源NZ矩阵中处于相邻的Z排布，该参数的取值是L0C上C矩阵M轴向16对齐后的长度
+通过Fixpipe指令进行搬运时，需要配置MmadParams的结构体成员，具体的含义可参考[Fixpipe-数据搬运](https://www.hiascend.com/document/detail/zh/canncommercial/850/API/ascendcopapi/atlasascendc_api_07_0251.html)。其中，fixpipeParams.srcStride的单位是32/sizeof(T)个元素，其含义是源NZ矩阵中相邻小分型的其实地址偏移(RowMajor)矩阵中同一行的元素在源NZ矩阵中处于相邻的Z排布，该参数的取值是L0C上C矩阵M轴向16对齐后的长度
 
 ```cpp
 AscendC::FixpipeParamsV220 fixpipeParams;
@@ -447,7 +447,7 @@ fixpipeParams.dstNdStride = 0;
 
 ### 矩阵计算
 
-下面介绍如何配置Mmad指令的MmadParams结构体成员，各个变量的具体含义详见[Mmad-矩阵计算-矩阵计算（ISASI）-基础API-Ascend C算子开发接口-API-CANN商用版8.5.0开发文档-昇腾社区](https://www.hiascend.com/document/detail/zh/canncommercial/850/API/ascendcopapi/atlasascendc_api_07_0249.html)
+下面介绍如何配置Mmad指令的MmadParams结构体成员，各个变量的具体含义详见[Mmad-矩阵计算](https://www.hiascend.com/document/detail/zh/canncommercial/850/API/ascendcopapi/atlasascendc_api_07_0249.html)
 
 需要注意的是，当Mmad指令执行时，矩阵计算单元会从L0A/L0B连续读入多个分形参与矩阵乘计算，读入分形的数量根据MmadParams结构体的成员变量m,n,k的取值以及Mmad指令对L0A/L0B上A矩阵/B矩阵各个轴的对齐要求而来
 

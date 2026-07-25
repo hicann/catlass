@@ -63,7 +63,7 @@ CATLASS模板库中的每个样例都是在已有样例基础上的创新和扩�
 - 之后进入主循环，pingpong搬运B矩阵的K维分块到L1，同时执行L1→L0的数据搬运和Cube计算
 - A矩阵常驻L1，无需重复搬运，从而减少MTE2带宽压力
 
-![A矩阵全载流水图](https://raw.gitcode.com/user-images/assets/7631999/1de46727-7c46-411e-936c-7a437d951a3a/3e9c799e1de0405d89f07a6bfd7d7c54.png_tplv-a9rns2rl98-image-qvalue.png)
+<img src="https://raw.gitcode.com/user-images/assets/7631999/1de46727-7c46-411e-936c-7a437d951a3a/3e9c799e1de0405d89f07a6bfd7d7c54.png_tplv-a9rns2rl98-image-qvalue.png" width="60%">
 
 ### 2.3 文档设计
 
