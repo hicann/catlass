@@ -135,7 +135,8 @@ def Tla_LayoutTag_zN : I32EnumAttrCase<"zN", 2>;
 def Tla_LayoutTag_nZ : I32EnumAttrCase<"nZ", 3>;
 def Tla_LayoutTag_zZ : I32EnumAttrCase<"zZ", 4>;
 def Tla_LayoutTag_L0CLayout : I32EnumAttrCase<"L0Clayout", 5>;
-def Tla_LayoutTagEnum : Tla_I32Enum<"LayoutTag", "Tensor layout tag for tla.tensor types.", [Tla_LayoutTag_RowMajor, Tla_LayoutTag_ColumnMajor, Tla_LayoutTag_zN, Tla_LayoutTag_nZ, Tla_LayoutTag_zZ, Tla_LayoutTag_L0CLayout]>;
+def Tla_LayoutTag_zNUnAlign : I32EnumAttrCase<"zNUnAlign", 6>;
+def Tla_LayoutTagEnum : Tla_I32Enum<"LayoutTag", "Tensor layout tag for tla.tensor types.", [Tla_LayoutTag_RowMajor, Tla_LayoutTag_ColumnMajor, Tla_LayoutTag_zN, Tla_LayoutTag_nZ, Tla_LayoutTag_zZ, Tla_LayoutTag_L0CLayout, Tla_LayoutTag_zNUnAlign]>;
 
 def Tla_AddressSpace_Generic : I32EnumAttrCase<"generic", 0>;
 def Tla_AddressSpace_Gm : I32EnumAttrCase<"gm", 1>;

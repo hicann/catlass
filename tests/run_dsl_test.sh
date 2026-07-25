@@ -12,7 +12,8 @@
 # End-to-end validation for python/tla_dsl/examples/end_to_end/basic_mmad (basic_matmul.py, basic_mmad_ptr.py),
 # python/tla_dsl/examples/end_to_end/basic_vadd (basic_vadd.py, basic_vadd_unknown_extent.py),
 # python/tla_dsl/examples/end_to_end/basic_mixed (basic_mixed.py), and
-# python/tla_dsl/examples/end_to_end/basic_mixed (basic_mixed_ub2l1.py, basic_mixed_store_zN.py).
+# python/tla_dsl/examples/end_to_end/basic_mixed (basic_mixed_ub2l1.py, basic_mixed_store_zN.py,
+# basic_mixed_store_zNUnAlign.py).
 # python/tla_dsl/examples/end_to_end/vector_ops (binary_op.py, masked_binary.py,
 # bitwise_ops.py, reduction_ops.py, compare_mask.py, unary_ops.py, arange_op.py,
 # interleave_op.py, load_dintlv_op.py, load_store_mask.py, squeeze_op.py,
@@ -83,6 +84,7 @@ BASIC_VADD_UNKNOWN_EXTENT_REL="examples/end_to_end/basic_vadd/basic_vadd_unknown
 BASIC_MIXED_REL="examples/end_to_end/basic_mixed/basic_mixed.py"
 BASIC_MIXED_UB2L1_REL="examples/end_to_end/basic_mixed/basic_mixed_ub2l1.py"
 BASIC_MIXED_STORE_ZN_REL="examples/end_to_end/basic_mixed/basic_mixed_store_zN.py"
+BASIC_MIXED_STORE_ZNUNALIGN_REL="examples/end_to_end/basic_mixed/basic_mixed_store_zNUnAlign.py"
 MASKED_BINARY_REL="examples/end_to_end/vector_ops/masked_binary.py"
 BITWISE_OPS_REL="examples/end_to_end/vector_ops/bitwise_ops.py"
 BINARY_OP_REL="examples/end_to_end/vector_ops/binary_op.py"
@@ -124,7 +126,8 @@ Run end-to-end validation for:
   - basic_mmad_ptr (basic_mmad_ptr.py --run)
   - basic_vadd (basic_vadd.py --run --all-dtypes, plus mutex variants)
   - basic_vadd_unknown_extent (dynamic UB base capacity as memref<?xT> with extent 0)
-  - basic_mixed (basic_mixed.py --run, basic_mixed_ub2l1.py --run, basic_mixed_store_zN.py --run)
+  - basic_mixed (basic_mixed.py --run, basic_mixed_ub2l1.py --run, basic_mixed_store_zN.py --run,
+    basic_mixed_store_zNUnAlign.py --run for m=64/m=50)
   - binary_op (binary_op.py <op> --run --all-dtypes for add/sub/mul/div/max/min/add_unalign/add_brc_b32)
   - masked_binary (masked_binary.py masked_binary --run --all-dtypes)
   - bitwise_ops (bitwise_ops.py bitwise_ops --run --all-dtypes)
@@ -346,6 +349,10 @@ if [[ ! -f "${TLA_DSL_DIR}/${BASIC_MIXED_STORE_ZN_REL}" ]]; then
     echo "error: missing ${BASIC_MIXED_STORE_ZN_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
 fi
+if [[ ! -f "${TLA_DSL_DIR}/${BASIC_MIXED_STORE_ZNUNALIGN_REL}" ]]; then
+    echo "error: missing ${BASIC_MIXED_STORE_ZNUNALIGN_REL} under ${TLA_DSL_DIR}" >&2
+    exit 1
+fi
 if [[ ! -f "${TLA_DSL_DIR}/${MASKED_BINARY_REL}" ]]; then
     echo "error: missing ${MASKED_BINARY_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
@@ -484,6 +491,21 @@ _run_basic_mixed_store_zN_case() {
 }
 
 _run_basic_mixed_store_zN_case
+
+_run_basic_mixed_store_zNUnAlign_case() {
+    local label="$1"
+    shift
+    echo "==> Running basic_mixed_store_zNUnAlign validation [${label}]: --run --device ${DEVICE_ID} $*"
+    (
+        cd "${TLA_DSL_DIR}"
+        python "${BASIC_MIXED_STORE_ZNUNALIGN_REL}" --run --device "${DEVICE_ID}" "$@"
+    )
+}
+
+# m=64 is fractal-aligned (multiple of 16); m=50 exercises the zNUnAlign M axis
+# where the dest leaf[0] is the runtime row count and stride is runtime-varying.
+_run_basic_mixed_store_zNUnAlign_case "m=64 (fractal-aligned)" --m 64
+_run_basic_mixed_store_zNUnAlign_case "m=50 (non-aligned)" --m 50
 
 _run_masked_binary_case() {
     echo "==> Running masked_binary validation [all dtypes]: masked_binary --run --all-dtypes --device ${DEVICE_ID}"

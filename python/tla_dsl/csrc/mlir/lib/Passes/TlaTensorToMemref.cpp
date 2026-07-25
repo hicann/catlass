@@ -626,7 +626,8 @@ std::string getCopyRouteCallee(MLIRContext *ctx, StringRef srcAddrspace, StringR
     return Twine("copy_ub_row_major_to_l1_zN_").concat(suffix).str();
   }
   if (*srcSpace == hivm::AddressSpace::UB && *dstSpace == hivm::AddressSpace::L1 &&
-      srcLayout == TensorLayoutTag::zN && dstLayout == TensorLayoutTag::zN) {
+      (srcLayout == TensorLayoutTag::zN || srcLayout == TensorLayoutTag::zNUnAlign) &&
+      dstLayout == TensorLayoutTag::zN) {
     if (srcElementType != dstElem)
       return {};
     StringRef suffix = copyRuntimeElemSuffix(srcElementType);

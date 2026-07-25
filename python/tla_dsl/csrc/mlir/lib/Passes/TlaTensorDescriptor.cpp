@@ -15,7 +15,7 @@ mlir::FailureOr<mlir::MemRefType> bridgeTlaTensorType(mlir::Type tlaTensorType)
 bool isPackedLayout(TensorLayoutTag layoutTag)
 {
     return layoutTag == TensorLayoutTag::zN || layoutTag == TensorLayoutTag::zZ || layoutTag == TensorLayoutTag::nZ ||
-           layoutTag == TensorLayoutTag::L0C;
+           layoutTag == TensorLayoutTag::L0C || layoutTag == TensorLayoutTag::zNUnAlign;
 }
 
 bool isLinearLayout(TensorLayoutTag layoutTag)
@@ -40,6 +40,8 @@ llvm::StringRef stringifyTensorLayoutTag(TensorLayoutTag layoutTag)
             return "nZ";
         case TensorLayoutTag::L0C:
             return "L0Clayout";
+        case TensorLayoutTag::zNUnAlign:
+            return "zNUnAlign";
     }
     return "unknown";
 }
@@ -59,6 +61,8 @@ mlir::FailureOr<TensorLayoutTag> convertTlaLayoutTag(::LayoutTag layoutTag)
             return TensorLayoutTag::zZ;
         case LayoutTag::L0Clayout:
             return TensorLayoutTag::L0C;
+        case LayoutTag::zNUnAlign:
+            return TensorLayoutTag::zNUnAlign;
     }
     return failure();
 }

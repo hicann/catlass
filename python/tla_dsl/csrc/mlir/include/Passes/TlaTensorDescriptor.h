@@ -37,7 +37,8 @@ enum class TensorLayoutTag
     zN,
     zZ,
     nZ,
-    L0C
+    L0C,
+    zNUnAlign
 };
 
 bool isPackedLayout(TensorLayoutTag layoutTag);

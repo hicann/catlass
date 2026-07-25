@@ -991,6 +991,19 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
             Value sum01 = b.create<arith::AddIOp>(loc, t0, t1);
             Value sum23 = b.create<arith::AddIOp>(loc, t2, t3);
             flatOffset = b.create<arith::AddIOp>(loc, sum01, sum23);
+        } else if (info->layoutTag == "zNUnAlign") {
+            Value shape0Org = b.create<arith::DivSIOp>(loc, stride3, shape2);
+            Value pc0 = b.create<arith::RemSIOp>(loc, rowOff, shape0Org);
+            Value pc1 = b.create<arith::DivSIOp>(loc, rowOff, shape0Org);
+            Value pc2 = b.create<arith::RemSIOp>(loc, colOff, shape2);
+            Value pc3 = b.create<arith::DivSIOp>(loc, colOff, shape2);
+            Value t0 = b.create<arith::MulIOp>(loc, pc0, stride0);
+            Value t1 = b.create<arith::MulIOp>(loc, pc1, stride1);
+            Value t2 = b.create<arith::MulIOp>(loc, pc2, stride2);
+            Value t3 = b.create<arith::MulIOp>(loc, pc3, stride3);
+            Value sum01 = b.create<arith::AddIOp>(loc, t0, t1);
+            Value sum23 = b.create<arith::AddIOp>(loc, t2, t3);
+            flatOffset = b.create<arith::AddIOp>(loc, sum01, sum23);
         } else {
             return descOp->emitError() << "unsupported packed layout to get flatOffset";
         }
@@ -2420,7 +2433,7 @@ public:
       auto modeAttr = hivm::AtomicKindAttr::get(rewriter.getContext(), getAtomicKind(atomicModeAttr.getAtomicMode()));
       rewriter.create<hivm::SetAtomicOp>(copyOp.getLoc(), modeAttr, mlir::TypeAttr::get(dstType));
     }
-    rewriter.create<func::CallOp>(copyOp.getLoc(), callee, operands);                     
+    rewriter.create<func::CallOp>(copyOp.getLoc(), callee, operands);
     if (_enable_atomic) {
       auto modeAttr = hivm::AtomicKindAttr::get(rewriter.getContext(), hivm::AtomicKind::NONE);
       rewriter.create<hivm::SetAtomicOp>(copyOp.getLoc(), modeAttr, mlir::TypeAttr::get(dstType));

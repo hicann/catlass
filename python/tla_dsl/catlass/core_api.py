@@ -1618,6 +1618,22 @@ def _remap_tensor_like_prefix_fields_for_layout_trees(
             (1, stride_scale),
         )
         return layout_shape, layout_stride, coord_tree, origin_shape_tree
+    if layout_tag == "zNUnAlign":
+        # zNUnAlign is zN without M-axis fractal blocking: leaf[0] = rows (runtime,
+        # not the compile-time C0_NUM_PER_FRACTAL), leaf[1] = 1. stride[1] = stride[3]
+        # = rows * ele_num_per_c0 (runtime, not the compile-time ele_num_per_fractal).
+        # N axis keeps the ele_num_per_c0 sub-blocking of zN.
+        ceil_div_cols = None if cols is None else _ceil_div(cols, ele_num_per_c0)
+        layout_shape = (
+            (rows, 1),
+            (ele_num_per_c0, ceil_div_cols),
+        )
+        stride_scale = _mul_int_optional(rows, ele_num_per_c0)
+        layout_stride = (
+            (ele_num_per_c0, stride_scale),
+            (1, stride_scale),
+        )
+        return layout_shape, layout_stride, coord_tree, origin_shape_tree
     return None
 
 
@@ -5347,6 +5363,7 @@ arch._set("nN", _LayoutTagSentinel("nN"))
 arch._set("RowMajor", _LayoutTagSentinel("row_major"))
 arch._set("ColumnMajor", _LayoutTagSentinel("column_major"))
 arch._set("L0Clayout", _LayoutTagSentinel("L0Clayout"))
+arch._set("zNUnAlign", _LayoutTagSentinel("zNUnAlign"))
 
 vec = _Namespace()
 vec._set("func", _vec_func)

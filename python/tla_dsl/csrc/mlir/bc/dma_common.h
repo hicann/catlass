@@ -91,6 +91,20 @@ CATLASS_DEVICE auto makezNTlaLayout(const TensorDesc4D &desc) {
 }
 
 template <typename T>
+CATLASS_DEVICE auto makeZNUnAlignTlaLayout(const TensorDesc4D &desc) {
+    constexpr uint32_t eleNumPerC0 = Catlass::BYTE_PER_C0 / sizeof(T);
+    constexpr uint32_t eleNumPerFractal = Catlass::BYTE_PER_FRACTAL / sizeof(T);
+    return tla::MakeLayout(
+        tla::MakeShape(
+            tla::MakeShape(desc.shape0 * desc.shape1, tla::Int<1>{}),
+            tla::MakeShape(tla::Int<eleNumPerC0>{}, desc.shape3)),
+        tla::MakeStride(
+            tla::MakeStride(tla::Int<eleNumPerC0>{}, desc.stride3),
+            tla::MakeStride(tla::Int<1>{}, desc.stride3)),
+        tla::MakeShape(desc.originShape0, desc.originShape1));
+}
+
+template <typename T>
 CATLASS_DEVICE auto makeZzTlaLayout(const TensorDesc4D &desc) {
     constexpr uint32_t eleNumPerC0 = Catlass::BYTE_PER_C0 / sizeof(T);
     constexpr uint32_t eleNumPerFractal = Catlass::BYTE_PER_FRACTAL / sizeof(T);
@@ -149,7 +163,7 @@ template <typename T, size_t Dim>
 CATLASS_DEVICE auto makeUBTensor(memref_t<__ubuf__ T, Dim> *memref, const TensorDesc4D &desc) {
     return tla::MakeTensor(AscendC::LocalTensor<T>(AscendC::TPosition::VECCALC, localAddr(memref),
                                  elementCount(memref)),
-                           makezNTlaLayout<T>(desc), makeTlaTileCoord(desc),
+                           makeZNUnAlignTlaLayout<T>(desc), makeTlaTileCoord(desc),
                            Catlass::Arch::PositionUB{});
 }
 

@@ -113,6 +113,11 @@ static mlir::FailureOr<TensorDescriptor> buildTileViewResultDescriptorFromParent
                 op->emitError() << "tile_view: packed shape must have 4 leaves";
                 return failure();
             }
+            // zNUnAlign: shape[0] = tile_M = sh0. The M axis is not fractal-blocked, so leaf[0]
+            // is the runtime tile row count (zN's leaf[0] is the static C0_NUM_PER_FRACTAL).
+            if (info.layoutTag == TensorLayoutTag::zNUnAlign && idx == 0) {
+                return sh0;
+            }
             if (idx == 1) {
                 if (info.shapeDims[0] == ShapedType::kDynamic) {
                     op->emitError() << "tile_view: dynamic packed shape leaf index 1 requires static leaf index 0";
@@ -582,7 +587,8 @@ mlir::LogicalResult TensorDescriptorDerivation::derive(mlir::func::FuncOp funcOp
                 // m0 / n0 are layout constants (tile fractal factors), not runtime-varying.
                 auto supportedPackedLayout =
                     childInfo->layoutTag == TensorLayoutTag::zN || childInfo->layoutTag == TensorLayoutTag::nZ ||
-                    childInfo->layoutTag == TensorLayoutTag::zZ || childInfo->layoutTag == TensorLayoutTag::L0C;
+                    childInfo->layoutTag == TensorLayoutTag::zZ || childInfo->layoutTag == TensorLayoutTag::L0C ||
+                    childInfo->layoutTag == TensorLayoutTag::zNUnAlign;
                 if (!supportedPackedLayout) {
                     op->emitError() << "dynamic packed shape leaf at index " << idx
                                     << " has no SSA derivation rule for layout "
@@ -593,6 +599,12 @@ mlir::LogicalResult TensorDescriptorDerivation::derive(mlir::func::FuncOp funcOp
                     op->emitError() << "packed shape must have 4 leaves for layout "
                                     << stringifyTensorLayoutTag(childInfo->layoutTag);
                     return failure();
+                }
+                // zNUnAlign: shape[0] = rows = origin M. The M axis is not fractal-blocked,
+                // so leaf[0] is the runtime row count (not a compile-time divisor like zN's
+                // C0_NUM_PER_FRACTAL) and is derived directly from the logical origin M.
+                if (childInfo->layoutTag == TensorLayoutTag::zNUnAlign && idx == 0) {
+                    return parent.originShape0;
                 }
                 if (idx == 1) {
                     if (leaves[0] == ShapedType::kDynamic) {
@@ -650,6 +662,12 @@ mlir::LogicalResult TensorDescriptorDerivation::derive(mlir::func::FuncOp funcOp
                 if ((childInfo->layoutTag == TensorLayoutTag::nZ || childInfo->layoutTag == TensorLayoutTag::zZ) &&
                     idx == 1) {
                     return mulShapeLeaves(/*a=*/3, /*b=*/2, /*c=*/0);
+                }
+                // zNUnAlign: stride[1] = stride[3] = rows * ele_num_per_c0 = shape[1]*shape[0]*shape[2]
+                // (shape[1] == 1, so the product is rows*ele_num_per_c0). Both leaves are runtime-
+                // varying because rows is dynamic (M axis is not fractal-blocked).
+                if (childInfo->layoutTag == TensorLayoutTag::zNUnAlign && (idx == 1 || idx == 3)) {
+                    return mulShapeLeaves(/*a=*/1, /*b=*/0, /*c=*/2);
                 }
                 op->emitError() << "dynamic packed stride leaf at index " << idx
                                 << " has no SSA derivation rule for layout "

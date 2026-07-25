@@ -17,7 +17,7 @@ def _require_hivm_tla_compile() -> pathlib.Path:
         raise AssertionError("TlaCompile binary not found. Build csrc/mlir first.")
     prebuilt = os.environ.get("TLA_DSL_PREBUILT_ASCENDNPU_IR")
     ascendnpuir_root = pathlib.Path(
-        pathlib.Path(prebuilt) / "build" / "install" if prebuilt else repo_root / "3rdparty" / "AscendNPU-IR"
+        pathlib.Path(prebuilt) if prebuilt else repo_root / "3rdparty" / "AscendNPU-IR"
     )
     generated_inc_candidates = [
         ascendnpuir_root
