@@ -327,11 +327,14 @@ bool print_scalar_tlv(const PrintTlv *tlv, uint64_t total, uint32_t core) {
 bool print_tensor_tlv(const PrintTensorTlv *tlv, uint64_t total, uint32_t core) {
   constexpr uint32_t kFloat32DataType = 0;
   constexpr uint16_t kGlobalMemoryPosition = 0;
+  constexpr uint16_t kUnifiedBufferPosition = 1;
   constexpr uint32_t kTensorPayloadAlignment = 32;
   if (total < sizeof(PrintTensorTlv) ||
       tlv->length != total - 2 * sizeof(uint32_t) ||
       tlv->data_type != kFloat32DataType ||
-      tlv->position != kGlobalMemoryPosition || tlv->dim != 0 ||
+      (tlv->position != kGlobalMemoryPosition &&
+       tlv->position != kUnifiedBufferPosition) ||
+      tlv->dim != 0 ||
       tlv->dump_size == 0 || tlv->dump_size % sizeof(float) != 0 ||
       tlv->dump_size > 16 * sizeof(float) ||
       total != sizeof(PrintTensorTlv) +
@@ -344,9 +347,11 @@ bool print_tensor_tlv(const PrintTensorTlv *tlv, uint64_t total, uint32_t core) 
   const uint32_t count = tlv->dump_size / sizeof(float);
   auto *values = reinterpret_cast<const float *>(
       reinterpret_cast<const uint8_t *>(tlv) + sizeof(PrintTensorTlv));
+  const char *position =
+      tlv->position == kGlobalMemoryPosition ? "GM" : "UB";
   std::printf(
-      "DumpTensor: core=%u data_type=float32 position=GM dump_size=%u [", core,
-      count);
+      "DumpTensor: core=%u data_type=float32 position=%s dump_size=%u [", core,
+      position, count);
   for (uint32_t i = 0; i < count; ++i)
     std::printf("%s%.9g", i == 0 ? "" : ", ", static_cast<double>(values[i]));
   std::printf("]\n");
@@ -496,7 +501,7 @@ bool uses_asc_debug_fifo(const char *buffer, size_t buffer_size) {
 }
 
 bool uses_print_tensor(const char *buffer, size_t buffer_size) {
-  return contains_bytes(buffer, buffer_size, "__tla_print_tensor_abi_v1");
+  return contains_bytes(buffer, buffer_size, "tla_print_tensor_abi_v1");
 }
 
 bool validate_debug_print_fifo_contract(const std::vector<uint64_t> &values,

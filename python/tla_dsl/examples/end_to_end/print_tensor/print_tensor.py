@@ -1,4 +1,4 @@
-"""Compile and run the tensor form of ``tla.print`` on AIC or AIV."""
+"""Compile and run the GM or UB tensor form of ``tla.print``."""
 
 from __future__ import annotations
 
@@ -14,6 +14,14 @@ import catlass as tla
 DEFAULT_CACHE_DIR = Path(__file__).resolve().parent / "artifacts" / "runtime-cache"
 EXPECTED_VALUES = [float(value) for value in range(16)]
 SOURCE_SHAPE = (8, 4)
+UB_SHAPE = (4, 8)
+
+
+def _ub_row_major_layout() -> Any:
+    return tla.make_layout(
+        shape=tla.make_shape(*UB_SHAPE),
+        stride=tla.make_stride(UB_SHAPE[1], 1),
+    )
 
 
 @tla.kernel
@@ -28,7 +36,46 @@ def print_tensor_aic_kernel(value: tla.Tensor) -> None:
         tla.print(value, 16)
 
 
+@tla.kernel
+def print_tensor_ub_base_kernel(value: tla.Tensor) -> None:
+    loaded = tla.flag("print_ub_loaded", tla.arch.MTE2, tla.arch.VECTOR)
+    ptr = tla.allocate(32, tla.Float32, tla.AddressSpace.ub, 256)
+    layout = _ub_row_major_layout()
+    gm = tla.make_tensor(value.ptr, layout)
+    ub = tla.make_tensor(ptr, layout)
+    with tla.vector():
+        tla.copy(ub, gm)
+        tla.set_flag(loaded)
+        tla.wait_flag(loaded)
+        tla.print(ub, 16)
+
+
+@tla.kernel
+def print_tensor_ub_aligned_offset_kernel(value: tla.Tensor) -> None:
+    loaded = tla.flag("print_ub_loaded", tla.arch.MTE2, tla.arch.VECTOR)
+    allocation = tla.allocate(40, tla.Float32, tla.AddressSpace.ub, 256)
+    # Eight float32 elements make a non-zero, 32-byte-aligned effective address.
+    layout = _ub_row_major_layout()
+    gm = tla.make_tensor(value.ptr, layout)
+    ub = tla.make_tensor(allocation + 8, layout)
+    with tla.vector():
+        tla.copy(ub, gm)
+        tla.set_flag(loaded)
+        tla.wait_flag(loaded)
+        tla.print(ub, 16)
+
+
 def _kernel(args: argparse.Namespace) -> Callable[[Any], None]:
+    storage = getattr(args, "storage", "gm")
+    case = getattr(args, "case", "base")
+    if storage == "ub":
+        if args.arch_scope != "aiv.c310":
+            raise tla.TlaExecutionError("UB tensor tla.print requires --arch-scope aiv.c310")
+        if case == "base":
+            return print_tensor_ub_base_kernel
+        if case == "aligned-offset":
+            return print_tensor_ub_aligned_offset_kernel
+        raise tla.TlaExecutionError(f"unsupported UB tensor case {case!r}")
     if args.arch_scope == "aic.c310":
         return print_tensor_aic_kernel
     if args.arch_scope == "aiv.c310":
@@ -38,8 +85,8 @@ def _kernel(args: argparse.Namespace) -> Callable[[Any], None]:
     )
 
 
-def _verify_public_output(output: str) -> str:
-    expected = _format_record(EXPECTED_VALUES)
+def _verify_public_output(output: str, *, shape: tuple[int, ...] = SOURCE_SHAPE) -> str:
+    expected = _format_record(EXPECTED_VALUES, shape=shape)
     records = [
         line.strip()
         for line in output.splitlines()
@@ -53,10 +100,12 @@ def _verify_public_output(output: str) -> str:
     return expected
 
 
-def _format_record(values: list[float]) -> str:
+def _format_record(
+    values: list[float], *, shape: tuple[int, ...] = SOURCE_SHAPE
+) -> str:
     from catlass.execution import _format_print_tensor_record
 
-    return _format_print_tensor_record(values, shape=SOURCE_SHAPE)
+    return _format_print_tensor_record(values, shape=shape)
 
 
 def _compile(
@@ -93,7 +142,8 @@ def run(args: argparse.Namespace) -> int:
         captured = StringIO()
         with redirect_stdout(captured):
             executor(value, block=args.block)
-        print(_verify_public_output(captured.getvalue()))
+        output_shape = UB_SHAPE if args.storage == "ub" else SOURCE_SHAPE
+        print(_verify_public_output(captured.getvalue(), shape=output_shape))
         print("compile_ok=True")
         print("launch_ok=True")
         print("output_ok=True")
@@ -106,6 +156,10 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", action="store_true")
     parser.add_argument("--arch-scope", default="aiv.c310")
+    parser.add_argument("--storage", choices=("gm", "ub"), default="gm")
+    parser.add_argument(
+        "--case", choices=("base", "aligned-offset"), default="base"
+    )
     parser.add_argument("--device", type=int, default=0)
     parser.add_argument("--block", type=int, default=1)
     parser.add_argument("--cache-dir", default=str(DEFAULT_CACHE_DIR))

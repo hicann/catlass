@@ -118,16 +118,38 @@ static LogicalResult lowerPrintTensor(::tla::PrintTensorOp op,
     FailureOr<Value> materialized =
         materializeBaseMemref(rewriter, op.getLoc(), op.getValue());
     if (failed(materialized))
-        return op.emitError("could not materialize the GM tensor base");
+        return op.emitError("could not materialize the tensor base");
     Value tensorPtr = rewriter.create<::mlir::memref::ExtractAlignedPointerAsIndexOp>(
         op.getLoc(), *materialized);
+    SmallVector<int64_t, 4> coords;
+    SmallVector<int64_t, 4> strides;
+    auto tensorType = op.getValue().getType();
+    if (failed(::tla::getTlaIndexTreeLeaves(
+            tensorType.getCoord().getTree(), coords)) ||
+        failed(::tla::getTlaIndexTreeLeaves(
+            tensorType.getLayout().getStride().getTree(), strides)) ||
+        coords.size() != strides.size())
+        return op.emitError("could not derive the tensor effective address");
+    int64_t elementOffset = 0;
+    for (auto [coord, stride] : llvm::zip_equal(coords, strides))
+        elementOffset += coord * stride;
+    if (elementOffset != 0) {
+        Value byteOffset = rewriter.create<arith::ConstantIndexOp>(
+            op.getLoc(), elementOffset * 4);
+        tensorPtr = rewriter.create<arith::AddIOp>(
+            op.getLoc(), tensorPtr, byteOffset);
+    }
     Value tensorI64 = rewriter.create<arith::IndexCastOp>(
         op.getLoc(), rewriter.getI64Type(), tensorPtr);
     Value count = rewriter.create<arith::ConstantIntOp>(
         op.getLoc(), op.getLengthAttr().getInt(), 64);
     BlockArgument workspace = getOrPrependPrintTensorWorkspaceArg(funcOp);
+    StringRef calleeName =
+        tensorType.getPtr().getAddrspace() == AddressSpace::ub
+            ? "_mlir_ciface_tla_print_tensor_ub_f32"
+            : "_mlir_ciface_tla_print_tensor_gm_f32";
     auto callee = getOrCreateRuntimeCall(
-        module, "_mlir_ciface_tla_print_tensor_gm_f32",
+        module, calleeName,
         {workspace.getType(), tensorI64.getType(), count.getType()});
     rewriter.create<func::CallOp>(
         op.getLoc(), callee, ValueRange{workspace, tensorI64, count});

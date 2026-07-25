@@ -780,12 +780,12 @@ def Tla_DebugPrintOp : Tla_Op<"debug_print", [MemoryEffects<[MemWrite]>]> {
 }
 
 def Tla_PrintTensorOp : Tla_Op<"print_tensor", [MemoryEffects<[MemWrite]>]> {
-  let summary = "Print a prefix of one contiguous GM float32 tensor";
+  let summary = "Print a prefix of one contiguous GM or UB float32 tensor";
   let description = [{
     Side-effecting native tensor print marker. The Python API restricts v1 to a
     statically shaped, contiguous row-major GM float32 tensor in a single AIC
-    or AIV region. Length is an element count in the range 1--16 and may be
-    smaller than the source tensor's element count.
+    or AIV region, or an aligned UB float32 tensor in an AIV region. Length is
+    an element count in the range 1--16.
   }];
   let arguments = (ins Tla_TensorType:$value, DenseI64ArrayAttr:$shape,
                        I64Attr:$length);

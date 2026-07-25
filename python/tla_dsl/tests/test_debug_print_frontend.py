@@ -262,7 +262,7 @@ _SCALAR_ERROR = "expected a signless i32 or f32 scalar"
             for value in (True, tla.Int64(1), tla.UInt32(1), tla.Float16(1.0))
         ],
         (_pointer_kernel, (), _SCALAR_ERROR),
-        (_tensor_kernel, (_host_vector_tensor(),), "GM-resident"),
+        (_tensor_kernel, (_host_vector_tensor(),), "32-byte aligned"),
         (_vector_value_kernel, (_host_vector_tensor(),), _SCALAR_ERROR),
         (
             _regionless_kernel,

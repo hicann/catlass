@@ -29,7 +29,7 @@ std::vector<uint8_t> scalar_tlv(const char *format, uint64_t slot) {
   return bytes;
 }
 
-std::vector<uint8_t> tensor_tlv() {
+std::vector<uint8_t> tensor_tlv(uint16_t position = 0) {
   constexpr uint32_t kValueCount = 4;
   constexpr uint32_t kPayloadBytes = 32;
   std::vector<uint8_t> bytes(sizeof(PrintTensorTlv) + kPayloadBytes, 0);
@@ -37,7 +37,7 @@ std::vector<uint8_t> tensor_tlv() {
   tlv->type = static_cast<uint32_t>(FifoRecordType::Tensor);
   tlv->length = static_cast<uint32_t>(bytes.size() - 8);
   tlv->data_type = 0;
-  tlv->position = 0;
+  tlv->position = position;
   tlv->dump_size = kValueCount * sizeof(float);
   auto *values =
       reinterpret_cast<float *>(bytes.data() + sizeof(PrintTensorTlv));
@@ -186,6 +186,12 @@ int main() {
               reinterpret_cast<const PrintTensorTlv *>(tensor.data()),
                   tensor.size(), 0),
               "valid aligned f32x4 tensor TLV was rejected"))
+    return 1;
+  auto ub_tensor = tensor_tlv(1);
+  if (!expect(print_tensor_tlv(
+                  reinterpret_cast<const PrintTensorTlv *>(ub_tensor.data()),
+                  ub_tensor.size(), 0),
+              "valid aligned UB f32x4 tensor TLV was rejected"))
     return 1;
 
   auto *cleanup_only = new FifoData();

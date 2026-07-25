@@ -1,0 +1,26 @@
+// RUN: sed -n '/BEGIN-LOWER$/,/END-LOWER$/p' %s | %tla_compile - -o - | %filecheck %s --check-prefix=LOWER
+
+// BEGIN-LOWER
+module {
+  tla.func @print_tensor_ub(%input: !tla.tensor<!tla.layout<!tla.shape<4,4>, !tla.stride<4,1>, !tla.shape<4,4>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>) {
+    %raw = tla.alloc_ptr{size_bytes = 96} -> !tla.ptr<i8, ub, 32>
+    %ptr = tla.recast_ptr %raw : !tla.ptr<i8, ub, 32> -> !tla.ptr<f32, ub, 32>
+    %shape = tla.make_shape -> !tla.shape<4,4>
+    %stride = tla.make_stride -> !tla.stride<4,1>
+    %layout = tla.make_layout %shape, %stride : !tla.shape<4,4>, !tla.stride<4,1> -> !tla.layout<!tla.shape<4,4>, !tla.stride<4,1>, !tla.shape<4,4>, row_major>
+    %coord = tla.make_coord -> !tla.coord<0,8>
+    %x = tla.make_tensor %ptr, %layout, %coord : !tla.ptr<f32, ub, 32>, !tla.layout<!tla.shape<4,4>, !tla.stride<4,1>, !tla.shape<4,4>, row_major>, !tla.coord<0,8> -> !tla.tensor<!tla.layout<!tla.shape<4,4>, !tla.stride<4,1>, !tla.shape<4,4>, row_major>, !tla.coord<0,8>, !tla.ptr<f32, ub, 32>>
+    "tla.vector"() ({
+      tla.print_tensor %x shape = [4, 4] length = 4 : !tla.tensor<!tla.layout<!tla.shape<4,4>, !tla.stride<4,1>, !tla.shape<4,4>, row_major>, !tla.coord<0,8>, !tla.ptr<f32, ub, 32>>
+    }) : () -> ()
+    tla.return
+  }
+}
+// END-LOWER
+
+// LOWER-LABEL: func.func @print_tensor_ub(
+// LOWER-SAME: %[[WORKSPACE:arg0]]: i64 {{.*}}hacc.arg_type = #hacc.arg_type<workspace>{{.*}}tla.print_tensor.workspace
+// LOWER: %[[LENGTH:.*]] = {{(arith\.constant 4 : i64|llvm\.mlir\.constant\(4 : i64\) : i64)}}
+// LOWER: call @_mlir_ciface_tla_print_tensor_ub_f32(%[[WORKSPACE]], {{.*}}, %[[LENGTH]])
+// LOWER-NOT: _mlir_ciface_tla_print_tensor_gm_f32
+// LOWER-NOT: tla.print_tensor

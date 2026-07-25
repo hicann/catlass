@@ -55,9 +55,10 @@ _PRINT_TENSOR_WORKSPACE_SENTINEL = int.from_bytes(
     _PRINT_TENSOR_WORKSPACE_SENTINEL_TEXT, byteorder="big"
 )
 _DEBUG_PRINT_WORKSPACE_ABI_REVISION = "debug-print-workspace-i64-v1"
-_PRINT_TENSOR_WORKSPACE_ABI_REVISION = "print-tensor-workspace-i64-v1"
+_PRINT_TENSOR_WORKSPACE_ABI_REVISION = "print-tensor-workspace-i64-storage-v2"
 _NATIVE_PRINT_TENSOR_LINE = re.compile(
-    r"DumpTensor:.*?data_type=float32.*?position=GM.*?dump_size=(?P<count>\d+).*?"
+    r"DumpTensor:.*?data_type=float32.*?position=(?P<position>[A-Z0-9]+).*?"
+    r"dump_size=(?P<count>\d+).*?"
     r"\[(?P<values>[^\]]+)\]",
     re.DOTALL,
 )
@@ -396,9 +397,11 @@ def execute_kernel(
     if print_metadata is None:
         launch()
     else:
-        shape, count = print_metadata
+        shape, count, position = print_metadata
         native_output = _capture_c_stdout(launch)
-        values = _decode_native_print_tensor_output(native_output, count=count)
+        values = _decode_native_print_tensor_output(
+            native_output, count=count, position=position
+        )
         print(_format_print_tensor_record(values, shape=shape))
     return TlaExecutionResult(
         artifact=artifact,
@@ -969,7 +972,9 @@ def _capture_c_stdout(launch: Callable[[], None]) -> str:
             os.close(saved_stdout)
 
 
-def _print_tensor_static_metadata(tlair_mlir: str) -> tuple[tuple[int, ...], int]:
+def _print_tensor_static_metadata(
+    tlair_mlir: str,
+) -> tuple[tuple[int, ...], int, str]:
     op_matches = list(re.finditer(r'"tla\.print_tensor"', tlair_mlir))
     if len(op_matches) != 1:
         raise TlaExecutionError(
@@ -987,6 +992,12 @@ def _print_tensor_static_metadata(tlair_mlir: str) -> tuple[tuple[int, ...], int
         raise TlaExecutionError(
             "tla.print_tensor static length metadata is missing from the compiled artifact"
         )
+    position_match = re.search(r"!tla\.ptr<f32,\s*(gm|ub)\s*,", op_text)
+    if position_match is None:
+        raise TlaExecutionError(
+            "tla.print_tensor static storage metadata is missing from the compiled artifact"
+        )
+    position = position_match.group(1).upper()
     shape = tuple(int(item.strip()) for item in shape_match.group(1).split(","))
     if not shape or any(extent < 1 for extent in shape):
         raise TlaExecutionError(
@@ -997,10 +1008,12 @@ def _print_tensor_static_metadata(tlair_mlir: str) -> tuple[tuple[int, ...], int
         raise TlaExecutionError(
             "tla.print_tensor static length metadata is invalid for the tensor shape"
         )
-    return shape, length
+    return shape, length, position
 
 
-def _decode_native_print_tensor_output(output: str, *, count: int) -> list[float]:
+def _decode_native_print_tensor_output(
+    output: str, *, count: int, position: str = "GM"
+) -> list[float]:
     matches = list(_NATIVE_PRINT_TENSOR_LINE.finditer(output))
     if len(matches) != 1:
         raise TlaExecutionError(
@@ -1008,6 +1021,11 @@ def _decode_native_print_tensor_output(output: str, *, count: int) -> list[float
             f"expected exactly one record, got {len(matches)}"
         )
     match = matches[0]
+    if match.group("position") != position:
+        raise TlaExecutionError(
+            "tla.print_tensor native initialization or decoding failed: "
+            f"expected position={position}, got position={match.group('position')}"
+        )
     if int(match.group("count")) != count:
         raise TlaExecutionError(
             "tla.print_tensor native initialization or decoding failed: "

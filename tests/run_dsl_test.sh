@@ -20,6 +20,7 @@
 # scalar_kernel_arg.py).
 # python/tla_dsl/examples/end_to_end/debug_print (debug_print.py, debug_print_mixed.py).
 # python/tla_dsl/examples/end_to_end/scalar_arg_alignment (scalar_arg_alignment.py).
+# python/tla_dsl/examples/end_to_end/print_tensor (print_tensor.py).
 #
 # Toolchain paths (env overrides first; directory-layout fallbacks last):
 #   CANN:             ASCEND_HOME_PATH (source set_env.sh if not already in env)
@@ -101,6 +102,7 @@ SCALAR_KERNEL_ARG_REL="examples/end_to_end/tensor_index/scalar_kernel_arg.py"
 DEBUG_PRINT_REL="examples/end_to_end/debug_print/debug_print.py"
 DEBUG_PRINT_MIXED_REL="examples/end_to_end/debug_print/debug_print_mixed.py"
 SCALAR_ARG_ALIGNMENT_REL="examples/end_to_end/scalar_arg_alignment/scalar_arg_alignment.py"
+PRINT_TENSOR_REL="examples/end_to_end/print_tensor/print_tensor.py"
 
 _ascendnpu_ir_dev_is_prebuilt() {
     local root="$1"
@@ -138,6 +140,7 @@ Run end-to-end validation for:
   - debug_print (i32/f32 scalar prints on AIV and AIC)
   - debug_print_mixed (cube-only, vector-only, and combined scalar prints)
   - scalar_arg_alignment (scalar_arg_alignment.py: tensor-i16-tensor host ABI)
+  - print_tensor (print_tensor.py: AIV UB base case with a strict 16-value prefix)
 Runs basic_mmad default MNK plus m=1, n=2, k=3.
 Activates conda env "${CONDA_ENV}", sources CANN set_env.sh, exports AscendNPU-IR MLIR/LLVM
 env, runs ./build.sh, then runs the test.
@@ -383,6 +386,10 @@ if [[ ! -f "${TLA_DSL_DIR}/${DEBUG_PRINT_MIXED_REL}" ]]; then
 fi
 if [[ ! -f "${TLA_DSL_DIR}/${SCALAR_ARG_ALIGNMENT_REL}" ]]; then
     echo "error: missing ${SCALAR_ARG_ALIGNMENT_REL} under ${TLA_DSL_DIR}" >&2
+    exit 1
+fi
+if [[ ! -f "${TLA_DSL_DIR}/${PRINT_TENSOR_REL}" ]]; then
+    echo "error: missing ${PRINT_TENSOR_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
 fi
 
@@ -704,5 +711,17 @@ _run_scalar_arg_alignment_case() {
 }
 
 _run_scalar_arg_alignment_case
+
+_run_print_tensor_case() {
+    echo "==> Running print_tensor validation [AIV UB base]: --run --device ${DEVICE_ID} --storage ub --case base --arch-scope aiv.c310 --block 1"
+    (
+        cd "${TLA_DSL_DIR}"
+        python "${PRINT_TENSOR_REL}" --run --device "${DEVICE_ID}" \
+            --storage ub --case base --arch-scope aiv.c310 --block 1 \
+            --force-recompile
+    )
+}
+
+_run_print_tensor_case
 
 echo "==> run_dsl_test.sh finished successfully"

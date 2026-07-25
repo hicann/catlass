@@ -1,6 +1,7 @@
 #include "Dialect/Tla/IR/TlaOps.h"
 
 #include <limits>
+#include <numeric>
 
 #include "Dialect/Tla/IR/TlaAttrs.h"
 #include "Dialect/Tla/IR/TlaTypes.h"
@@ -593,12 +594,45 @@ mlir::LogicalResult DebugPrintOp::verify() {
 
 mlir::LogicalResult PrintTensorOp::verify() {
   auto tensorType = getValue().getType();
-  if (!tensorType.getPtr().getPointee().isF32() ||
-      tensorType.getPtr().getAddrspace() != AddressSpace::gm)
-    return emitOpError("requires a GM float32 tensor");
+  auto ptr = tensorType.getPtr();
+  if (!ptr.getPointee().isF32() ||
+      (ptr.getAddrspace() != AddressSpace::gm &&
+       ptr.getAddrspace() != AddressSpace::ub))
+    return emitOpError("requires a GM or UB float32 tensor");
   if (!hasEnclosingRegion<CubeOp>(getOperation()) &&
       !hasEnclosingRegion<VectorOp>(getOperation()))
     return emitOpError("must be nested inside a tla.cube or tla.vector region");
+  if (ptr.getAddrspace() == AddressSpace::ub) {
+    if (!hasEnclosingRegion<VectorOp>(getOperation()))
+      return emitOpError("requires UB tensors to be nested in a tla.vector region");
+    llvm::SmallVector<int64_t, 4> coords;
+    llvm::SmallVector<int64_t, 4> strides;
+    if (failed(getIndexTreeLeavesForVerify(
+            getOperation(), tensorType.getCoord(), coords, "tensor coordinates")) ||
+        failed(getIndexTreeLeavesForVerify(
+            getOperation(), tensorType.getLayout().getStride(), strides,
+            "tensor strides")))
+      return mlir::failure();
+    if (coords.size() != strides.size() ||
+        llvm::any_of(coords, [](int64_t value) { return value < 0; }) ||
+        llvm::any_of(strides, [](int64_t value) { return value < 0; }))
+      return emitOpError("requires a static effective UB address");
+    uint64_t byteOffset = 0;
+    for (auto [coord, stride] : llvm::zip_equal(coords, strides)) {
+      if (stride != 0 &&
+          static_cast<uint64_t>(coord) >
+              std::numeric_limits<uint64_t>::max() /
+                  static_cast<uint64_t>(stride))
+        return emitOpError("UB address offset overflows");
+      uint64_t term = static_cast<uint64_t>(coord) *
+                      static_cast<uint64_t>(stride);
+      if (term > (std::numeric_limits<uint64_t>::max() - byteOffset) / 4)
+        return emitOpError("UB address offset overflows");
+      byteOffset += term * 4;
+    }
+    if (std::gcd<uint64_t>(ptr.getAlignment(), byteOffset) < 32)
+      return emitOpError("requires a statically proven 32-byte aligned UB address");
+  }
   if (getShape().empty())
     return emitOpError("shape must not be empty");
   llvm::SmallVector<int64_t, 4> tensorShape;

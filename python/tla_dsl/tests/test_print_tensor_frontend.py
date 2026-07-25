@@ -15,12 +15,14 @@ def _host_tensor(
     addrspace: tla.AddressSpace = tla.AddressSpace.gm,
     layout: object = tla.arch.RowMajor,
     stride: tuple[int, ...] | None = None,
+    alignment: int | None = None,
+    coord: tuple[int, ...] | None = None,
 ) -> tla.Tensor:
     with runtime_mod._eager_capture():
         shape_value = tla.make_shape(*shape)
         stride_value = tla.make_stride(*(stride or ())) if stride is not None else None
-        coord_value = tla.make_coord(*(0 for _ in shape))
-        return tla.Tensor(
+        coord_value = tla.make_coord(*(coord or tuple(0 for _ in shape)))
+        tensor = tla.Tensor(
             shape_value,
             dtype,
             addrspace=addrspace,
@@ -29,6 +31,9 @@ def _host_tensor(
             layout_tag=layout,
             stride=stride_value,
         )
+        if alignment is not None:
+            tensor._assumed_align = alignment
+        return tensor
 
 
 @tla.kernel
@@ -47,6 +52,12 @@ def _aiv_print_tensor_prefix(value: tla.Tensor) -> None:
 def _aic_print_tensor(value: tla.Tensor) -> None:
     with tla.cube():
         tla.print(value)
+
+
+@tla.kernel
+def _aiv_print_ub_tensor(value: tla.Tensor) -> None:
+    with tla.vector():
+        tla.print(value, 4)
 
 
 @tla.kernel
@@ -119,11 +130,66 @@ def test_print_tensor_accepts_large_source_with_prefix_length() -> None:
     assert "length = 4" in mlir
 
 
+def test_print_tensor_accepts_aligned_aiv_ub_tensor() -> None:
+    mlir = _aiv_print_ub_tensor.dump_mlir(
+        type_args=(
+            _host_tensor(
+                addrspace=tla.AddressSpace.ub,
+                alignment=32,
+            ),
+        )
+    )
+
+    assert "tla.print_tensor" in mlir
+    assert "!tla.ptr<f32, ub" in mlir
+
+
+def test_print_tensor_accepts_aligned_aiv_ub_offset() -> None:
+    mlir = _aiv_print_ub_tensor.dump_mlir(
+        type_args=(
+            _host_tensor(
+                (4,),
+                addrspace=tla.AddressSpace.ub,
+                alignment=256,
+                coord=(8,),
+            ),
+        )
+    )
+
+    assert "tla.print_tensor" in mlir
+    assert "!tla.coord<8>" in mlir
+
+
+def test_print_tensor_rejects_insufficiently_aligned_ub_tensor() -> None:
+    with pytest.raises(tla.TlaCoreAPIError, match="32-byte aligned"):
+        _aiv_print_ub_tensor.dump_mlir(
+            type_args=(
+                _host_tensor(
+                    addrspace=tla.AddressSpace.ub,
+                    alignment=4,
+                ),
+            )
+        )
+
+
+def test_print_tensor_rejects_misaligned_ub_offset() -> None:
+    with pytest.raises(tla.TlaCoreAPIError, match="32-byte aligned"):
+        _aiv_print_ub_tensor.dump_mlir(
+            type_args=(
+                _host_tensor(
+                    (4,),
+                    addrspace=tla.AddressSpace.ub,
+                    alignment=256,
+                    coord=(1,),
+                ),
+            )
+        )
+
+
 @pytest.mark.parametrize(
     ("tensor", "match"),
     (
         (_host_tensor(dtype=tla.Float16), "float32"),
-        (_host_tensor(addrspace=tla.AddressSpace.ub), "GM"),
         (_host_tensor(layout=tla.arch.ColumnMajor), "row-major"),
         (_host_tensor((2, 2), stride=(1, 2)), "contiguous row-major"),
         (_host_tensor((17,)), "explicit length"),

@@ -10,7 +10,7 @@ constexpr uint32_t kPrintTensorDescriptor = 0x50524E54; // ASCII "PRNT".
 extern "C" {
 
 __attribute__((used, section(".tla_print_tensor_abi"))) const char
-    __tla_print_tensor_abi_v1[] = "__tla_print_tensor_abi_v1";
+    tla_print_tensor_abi_v1[] = "tla_print_tensor_abi_v1";
 
 #if ((defined(__NPU_ARCH__) && __NPU_ARCH__ == 3510) || \
      (defined(CATLASS_ARCH) && CATLASS_ARCH == 3510))

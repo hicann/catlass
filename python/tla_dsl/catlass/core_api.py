@@ -2594,13 +2594,11 @@ def _print_tensor_row_major_strides(shape: tuple[int, ...]) -> tuple[int, ...]:
 def _emit_tensor_print(
     value: Any, length: Any, *, loc: mlir_ir.Location | None
 ) -> None:
-    """Dump a prefix of one static, contiguous GM ``float32`` tensor.
+    """Dump a prefix of one static, contiguous GM or UB ``float32`` tensor.
 
     Version 1 supports one call in an AIC-only or AIV-only C310 kernel launched
-    with a single block. ``value`` must be GM-resident, row-major, statically
-    shaped, and contiguous. At most 16 elements may be printed. Mixed-core and
-    multi-block launches, other dtypes/locations/layouts, and dynamic shapes are
-    intentionally unsupported.
+    with a single block. UB values additionally require AIV placement and a
+    statically proven 32-byte-aligned effective address.
     """
     if _runtime._current_frontend_state() is None:
         _op_error("print", "tensor printing is only available in lowered Tla IR")
@@ -2620,8 +2618,11 @@ def _emit_tensor_print(
     descriptor = _tla_tensor_type_for_mlir_value(value)
     if descriptor.element_type != "f32":
         _op_error("print", "requires a float32 tensor")
-    if descriptor.addrspace != "gm":
-        _op_error("print", "requires a GM-resident tensor")
+    addrspace = descriptor.addrspace.lower()
+    if addrspace not in ("gm", "ub"):
+        _op_error("print", "requires a GM- or UB-resident tensor")
+    if addrspace == "ub" and not in_vector:
+        _op_error("print", "UB tensor printing requires AIV placement")
     if descriptor.layout_tag != "row_major":
         _op_error("print", "requires a row-major tensor")
 
@@ -2631,6 +2632,16 @@ def _emit_tensor_print(
         _op_error("print", "tensor element count must be positive")
     if stride != _print_tensor_row_major_strides(shape):
         _op_error("print", "requires a contiguous row-major tensor")
+    if addrspace == "ub":
+        coord = _print_tensor_static_leaves(descriptor.coord, field="coordinate")
+        if len(coord) != len(stride):
+            _op_error("print", "requires a static effective UB address")
+        byte_offset = sum(index * step for index, step in zip(coord, stride)) * 4
+        effective_alignment = math.gcd(
+            descriptor.ptr_alignment, _builtins.abs(byte_offset)
+        )
+        if effective_alignment < 32:
+            _op_error("print", "requires a statically proven 32-byte aligned UB address")
 
     element_count = math.prod(shape)
     if length is None:
