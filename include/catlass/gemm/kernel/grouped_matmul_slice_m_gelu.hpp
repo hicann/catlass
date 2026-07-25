@@ -22,8 +22,6 @@
 #include "tla/layout.hpp"
 #include "tla/tensor.hpp"
 
-using namespace AscendC::Reg;
-
 namespace Catlass::Gemm::Kernel {
 
 // Template for grouped matmul kernel. Compute grouped C = gelu(A * B)
