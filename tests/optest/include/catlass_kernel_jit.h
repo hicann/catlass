@@ -116,6 +116,17 @@ struct GemmParams : public MatmulParams {
 };
 
 /**
+ * @brief Runtime parameters for example 76_trmm.
+ */
+struct TrmmParams : public MatmulParams {
+    uint32_t side = 0;  ///< 0: left triangular input, 1: right triangular input.
+    uint32_t uplo = 0;  ///< 0: lower triangular, 1: upper triangular.
+    uint32_t trans = 0; ///< 0: no transpose, 1: transpose triangular input.
+    uint32_t diag = 0;  ///< 0: non-unit diagonal. Unit diagonal is not supported by the kernel.
+    float alpha = 1.0f; ///< Output scaling factor.
+};
+
+/**
  * @brief Runtime parameters for example 75_symm.
  */
 struct SymmParams : public MatmulParams {
@@ -538,6 +549,11 @@ void Ascend950MultiCoreSplitkMatmul(
  */
 void Ascend950TailMultiCoreSplitkMatmul(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
+
+/**
+ * @brief JIT interface for example 76_trmm.
+ */
+void Trmm(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const TrmmParams& params);
 
 /**
  * @brief JIT interface for example 80_grouped_matmul_slice_m_gelu.

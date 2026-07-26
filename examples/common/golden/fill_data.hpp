@@ -11,10 +11,11 @@
 #ifndef EXAMPLES_COMMON_GOLDEN_FILL_DATA_HPP
 #define EXAMPLES_COMMON_GOLDEN_FILL_DATA_HPP
 
-#include <stack>
-#include <vector>
+#include <cstdint>
 #include <cstdlib>
 #include <ctime>
+#include <stack>
+#include <vector>
 
 namespace Catlass::golden {
 
@@ -42,6 +43,30 @@ void FillRandomData<int8_t, int>(std::vector<int8_t>& data, int low, int high)
     for (uint64_t i = 0; i < data.size(); ++i) {
         int randomValue = low + rand() % (high - low + 1);
         data[i] = static_cast<int8_t>(randomValue);
+    }
+}
+
+template <class Element, class ElementRandom>
+void FillTriangularData(
+    std::vector<Element>& data, uint32_t rows, uint32_t columns, uint32_t uplo, uint32_t diag, ElementRandom low,
+    ElementRandom high, Element alpha = static_cast<Element>(1))
+{
+    data.resize(static_cast<std::size_t>(rows) * columns);
+    FillRandomData(data, low, high);
+
+    for (uint32_t i = 0; i < rows; ++i) {
+        for (uint32_t j = 0; j < columns; ++j) {
+            bool keep = (uplo == 0) ? (j <= i) : (j >= i);
+            auto index = static_cast<std::size_t>(i) * columns + j;
+            if (!keep) {
+                data[index] = static_cast<Element>(0);
+                continue;
+            }
+            data[index] = static_cast<Element>(data[index] * alpha);
+            if (diag != 0 && i == j) {
+                data[index] = alpha;
+            }
+        }
     }
 }
 

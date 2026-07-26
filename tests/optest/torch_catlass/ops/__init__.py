@@ -106,6 +106,7 @@ from .streamk_matmul import streamk_matmul  # example 37
 from .strided_batched_matmul_tla import strided_batched_matmul_tla  # example 45
 from .svd_quant_matmul import ascend950_svd_quant_matmul  # example 61
 from .symm import symm  # example 75
+from .trmm import trmm  # example 76
 from .tail_multi_core_splitk_matmul import ascend950_tail_multi_core_splitk_matmul  # example 69
 from .w4a4_matmul_per_token_per_channel_dequant import (
     w4a4_matmul_per_token_per_channel_dequant,  # example 38
@@ -195,5 +196,6 @@ __all__ = [
     "ascend950_basic_conv2d_tla",  # example 56
     "ascend950_matmul_full_loadA",  # example 73
     "symm",  # example 75
+    "trmm",  # example 76
     "grouped_matmul_slice_m_gelu",  # example 80
 ]

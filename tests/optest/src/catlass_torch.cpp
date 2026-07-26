@@ -48,6 +48,7 @@
 #include "template/a8w4_mx_matmul.h"
 #include "template/a8w4_grouped_mx_matmul.h"
 #include "template/svd_quant_matmul.h"
+#include "template/trmm.h"
 #include "template/conv_bias.h"
 #include "template/symm.h"
 // ── Workspace allocator bridge ──
@@ -251,6 +252,9 @@ using A2Fp8E4M3MatmulOp = MatmulLike<CatlassKernel::A2Fp8E4M3Matmul>;
 static auto& a2_fp8_e4m3_matmul = A2Fp8E4M3MatmulOp::Run;
 REGISTER_TORCH_FUNC(a2_fp8_e4m3_matmul);
 
+using TrmmOp = TrmmLike<CatlassKernel::Trmm>;
+static auto& trmm = TrmmOp::Run;
+REGISTER_TORCH_FUNC(trmm);
 static auto& basic_conv2d = BasicConv2dOp::Run;
 REGISTER_TORCH_FUNC(basic_conv2d);
 
