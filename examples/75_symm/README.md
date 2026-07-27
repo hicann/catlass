@@ -51,47 +51,45 @@
 |----------|----------|----------|--------|
 | `float` | `float` | `float` | `RowMajor` |
 
-
 ## 代码组织
 
-```
+```text
 ├── 75_symm
 │   ├── CMakeLists.txt     # CMake 编译文件
 │   ├── README.md
 │   └── symm.cpp    # 主文件（包含 host 数据生成、kernel 调度、正确性验证）
 ```
 
-
 ## 使用示例
 
 1. 编译样例代码：
 
-```bash
-bash scripts/build.sh 75_symm
-```
+    ```bash
+    bash scripts/build.sh 75_symm
+    ```
 
 2. 执行算子样例程序：
 
-```bash
-cd output/bin
+    ```bash
+    cd output/bin
 
-# 左乘 + 上三角：C = S(M×M) × B(M×N)，S 上三角有效
-./75_symm 768 4096 768 0 0 1
+    # 左乘 + 上三角：C = S(M×M) × B(M×N)，S 上三角有效
+    ./75_symm 768 4096 768 0 0 1
 
-# 左乘 + 下三角
-./75_symm 768 4096 768 0 0 0
+    # 左乘 + 下三角
+    ./75_symm 768 4096 768 0 0 0
 
-# 右乘 + 上三角：C = B(M×K) × S(K×K)，S 上三角有效
-./75_symm 4096 768 768 0 1 1
+    # 右乘 + 上三角：C = B(M×K) × S(K×K)，S 上三角有效
+    ./75_symm 4096 768 768 0 1 1
 
-# 右乘 + 下三角
-./75_symm 4096 768 768 0 1 0
-```
+    # 右乘 + 下三角
+    ./75_symm 4096 768 768 0 1 0
+    ```
 
-参数含义依次为：`m n k deviceId symmSide symmFill`。
+    参数含义依次为：`m n k deviceId symmSide symmFill`。
 
 3. 执行成功输出：
 
-```
-Compare success.
-```
+    ```text
+    Compare success.
+    ```

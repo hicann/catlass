@@ -16,7 +16,7 @@
 
 ```bash
 # 编译指定用例
-bash scripts/build.sh 67_ascend950_batched_matmul
+bash scripts/build.sh 67_ascend950_batched_matmul -DCATLASS_ARCH=3510
 cd output/bin
 # 基本用法：可执行文件名 batch轴|m轴|n轴|k轴|Device ID
 # Device ID 可选，默认为0
