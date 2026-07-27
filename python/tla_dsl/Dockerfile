@@ -47,7 +47,6 @@ RUN curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key | \
     apt-get install -y --no-install-recommends \
       "clang-${LLVM_VERSION}" \
       "clang-tools-${LLVM_VERSION}" \
-      "llvm-${LLVM_VERSION}-tools" \
       "lld-${LLVM_VERSION}"
 
 # Layer 4: clean apt cache
@@ -61,13 +60,14 @@ RUN if [ -n "${PIP_MIRROR}" ]; then \
       pip3 config set global.index-url https://${PIP_MIRROR}/pypi/web/simple; \
     fi
 
-# Layer 6: Python dependencies excluding the CANN packages supplied by the base image.
-COPY requirements.txt /tmp/requirements.txt
-RUN pip3 install --no-cache-dir -r /tmp/requirements.txt
-
-# Install PyTorch from official wheel source.
+# Layer 6: install Python packages
 RUN pip3 install --no-cache-dir \
-      "https://${TORCH_WHEEL_MIRROR:-download.pytorch.org}/pytorch/whl/cpu/torch-2.9.0%2Bcpu-${PYTHON_TAG_CP}-${PYTHON_TAG_CP}-manylinux_2_28_${TARGET_ARCH}.whl"
+      "https://${TORCH_WHEEL_MIRROR:-download.pytorch.org}/pytorch/whl/cpu/torch-2.9.0%2Bcpu-${PYTHON_TAG_CP}-${PYTHON_TAG_CP}-manylinux_2_28_${TARGET_ARCH}.whl" \
+      "https://gitcode.com/Ascend/pytorch/releases/download/v26.0.1-pytorch2.9.0/torch_npu-2.9.0.post4-${PYTHON_TAG_CP}-${PYTHON_TAG_CP}-manylinux_2_28_${TARGET_ARCH}.whl" \
+      'pybind11==2.13.6' \
+      'cmake>=3.28,>4' \
+      'ninja>=1.12,<2' \
+      pytest hatch hatchling hatch-vcs ruff
 
 RUN git clone --branch feature/regbase https://gitcode.com/Ascend/AscendNPU-IR.git /opt/AscendNPU-IR && \
   cd /opt/AscendNPU-IR && \
@@ -99,8 +99,8 @@ RUN find /opt/AscendNPU-IR \
   -exec rm -rf '{}' +
 
 ENV TLA_DSL_PREBUILT_ASCENDNPU_IR=/opt/AscendNPU-IR
-ENV MLIR_TBLGEN_INCLUDE_DIR=${TLA_DSL_PREBUILT_ASCENDNPU_IR}/build/install/include
-ENV PYTHONPATH="${TLA_DSL_PREBUILT_ASCENDNPU_IR}/build/install/python_packages/mlir_core:${PYTHONPATH:-}"
+ENV MLIR_TBLGEN_INCLUDE_DIR="$TLA_DSL_PREBUILT_ASCENDNPU_IR/build/install/include"
+ENV PYTHONPATH="$TLA_DSL_PREBUILT_ASCENDNPU_IR/build/install/python_packages/mlir_core:${PYTHONPATH:-}"
 ENV BISHENG_COMPILER_PATH=${ASCEND_HOME_PATH}/bin
-ENV MLIR_DIR=${TLA_DSL_PREBUILT_ASCENDNPU_IR}/build/install/lib/cmake/mlir
-ENV LLVM_DIR=${TLA_DSL_PREBUILT_ASCENDNPU_IR}/build/install/lib/cmake/llvm
+
+WORKDIR /opt

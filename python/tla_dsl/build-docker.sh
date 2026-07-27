@@ -6,7 +6,7 @@ DOCKERFILE="$SCRIPT_DIR/Dockerfile"
 
 usage() {
   cat <<'EOF'
-Usage: build_docker_image.sh <base_image> [options]
+Usage: build-docker.sh <base_image> [options]
 
 Arguments:
   <base_image>       Base Docker image, e.g. cann:9.1.0-beta.3-950-ubuntu22.04-py3.12
@@ -20,12 +20,10 @@ Mirror options (default: all empty = use upstream):
   --apt-llvm-mirror <url>    APT mirror for LLVM (default: apt.llvm.org)
   --pip-mirror <url>         PyPI mirror for pip index
   --torch-wheel-mirror <url> Mirror for PyTorch wheel (default: download.pytorch.org)
-  --torch-npu-wheel-url <url> Exact torch_npu wheel URL
 
 Build options:
   --llvm-version <ver>  LLVM version to install (default: 19)
   --build-jobs <num>    Parallel build jobs (default: 192)
-  --platform <platform> Target platform: linux/amd64 or linux/arm64
   -h, --help            Show this help
 EOF
 }
@@ -39,8 +37,6 @@ APT_PORTS_MIRROR=""
 APT_LLVM_MIRROR=""
 PIP_MIRROR=""
 TORCH_WHEEL_MIRROR=""
-TORCH_NPU_WHEEL_URL=""
-PLATFORM=""
 
 if [[ $# -eq 0 ]]; then
   echo "Error: missing <base_image> argument" >&2
@@ -64,6 +60,9 @@ OUTPUT_IMAGE="ascend-catlass-dsl:${IMAGE_TAG_SUFFIX}"
 PYTHON_TAG="${IMAGE_TAG_SUFFIX##*-}"
 PYTHON_TAG_CP="cp${PYTHON_TAG#py}"
 PYTHON_TAG_CP="${PYTHON_TAG_CP/./}"
+
+# Detect target architecture
+TARGET_ARCH="$(uname -m)"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -95,20 +94,12 @@ while [[ $# -gt 0 ]]; do
       TORCH_WHEEL_MIRROR="${2:-}"
       shift 2
       ;;
-    --torch-npu-wheel-url)
-      TORCH_NPU_WHEEL_URL="${2:-}"
-      shift 2
-      ;;
     --llvm-version)
       LLVM_VERSION="${2:-}"
       shift 2
       ;;
     --build-jobs)
       BUILD_JOBS="${2:-}"
-      shift 2
-      ;;
-    --platform)
-      PLATFORM="${2:-}"
       shift 2
       ;;
     -h|--help)
@@ -123,46 +114,22 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -n "$PLATFORM" ]]; then
-  case "$PLATFORM" in
-    linux/amd64) TARGET_ARCH="x86_64" ;;
-    linux/arm64) TARGET_ARCH="aarch64" ;;
-    *)
-      echo "Error: unsupported platform: $PLATFORM (supported: linux/amd64, linux/arm64)" >&2
-      exit 1
-      ;;
-  esac
-else
-  case "$(uname -m)" in
-    x86_64) TARGET_ARCH="x86_64" ;;
-    aarch64|arm64) TARGET_ARCH="aarch64" ;;
-    *)
-      echo "Error: unsupported host architecture: $(uname -m); use --platform linux/amd64 or --platform linux/arm64" >&2
-      exit 1
-      ;;
-  esac
-fi
-
 echo "==> Base image:         $BASE_IMAGE"
 echo "==> Output image:       $OUTPUT_IMAGE"
 echo "==> Python tag:         $PYTHON_TAG"
 echo "==> Python cp:          $PYTHON_TAG_CP"
 echo "==> Target arch:        $TARGET_ARCH"
-[[ -n "$PLATFORM" ]] && echo "==> Target platform:    $PLATFORM"
 echo "==> APT mirror:         ${APT_MIRROR:-<upstream>}"
 echo "==> APT ports mirror:   ${APT_PORTS_MIRROR:-<upstream>}"
 echo "==> APT LLVM mirror:    ${APT_LLVM_MIRROR:-<upstream>}"
 echo "==> PIP mirror:         ${PIP_MIRROR:-<upstream>}"
 echo "==> Torch wheel mirror: ${TORCH_WHEEL_MIRROR:-<upstream>}"
-echo "==> Torch NPU wheel:    ${TORCH_NPU_WHEEL_URL:-<upstream>}"
 echo "==> LLVM version:       $LLVM_VERSION"
 echo "==> Build jobs:         $BUILD_JOBS"
 echo ""
 
 # Build args array
 build_args=()
-platform_args=()
-[[ -n "$PLATFORM" ]] && platform_args+=(--platform "$PLATFORM")
 build_args+=(--build-arg "BASE_IMAGE=$BASE_IMAGE")
 build_args+=(--build-arg "LLVM_VERSION=$LLVM_VERSION")
 build_args+=(--build-arg "BUILD_JOBS=$BUILD_JOBS")
@@ -173,10 +140,8 @@ build_args+=(--build-arg "TARGET_ARCH=$TARGET_ARCH")
 [[ -n "$APT_LLVM_MIRROR" ]]    && build_args+=(--build-arg "APT_LLVM_MIRROR=$APT_LLVM_MIRROR")
 [[ -n "$PIP_MIRROR" ]]         && build_args+=(--build-arg "PIP_MIRROR=$PIP_MIRROR")
 [[ -n "$TORCH_WHEEL_MIRROR" ]] && build_args+=(--build-arg "TORCH_WHEEL_MIRROR=$TORCH_WHEEL_MIRROR")
-[[ -n "$TORCH_NPU_WHEEL_URL" ]] && build_args+=(--build-arg "TORCH_NPU_WHEEL_URL=$TORCH_NPU_WHEEL_URL")
 
 docker build \
-  "${platform_args[@]}" \
   "${build_args[@]}" \
   -f "$DOCKERFILE" \
   -t "$OUTPUT_IMAGE" \
