@@ -8,6 +8,7 @@ import pytest
 import catlass as tla
 import catlass.runtime as runtime_mod
 from catlass.execution_lowering import TlaLoweringError
+from catlass.params import BlockStoreParams
 
 
 def _require_hivm_tla_compile() -> pathlib.Path:
@@ -555,6 +556,33 @@ def _vector_dynamic_pitched_tile_view_kernel(pitch: int) -> None:
 
 
 @tla.kernel
+def _vector_dynamic_zn_unalign_address_kernel(rows: int) -> None:
+    shape = tla.make_shape(rows, 128)
+    layout = tla.make_layout(shape, tla.make_stride(128, 1))
+    source = tla.make_tensor(
+        tla.allocate((64, 128), tla.Float16, tla.AddressSpace.ub, 256), layout
+    )
+    packed = tla.make_tensor_like(
+        tla.allocate((64, 128), tla.Float16, tla.AddressSpace.ub, 256),
+        source,
+        tla.arch.zNUnAlign,
+    )
+    with tla.vector():
+        with tla.vec.func(mode="simd"):
+            for row in tla.range(rows):
+                source_chunk = tla.tile_view(
+                    source, tla.make_shape(1, 128), tla.make_coord(row, 0)
+                )
+                packed_chunk = tla.tile_view(
+                    packed, tla.make_shape(1, 128), tla.make_coord(row, 0)
+                )
+                packed_chunk.store(
+                    source_chunk.load(),
+                    params=BlockStoreParams(block_stride=rows + 1),
+                )
+
+
+@tla.kernel
 def _vector_dynamic_row_major_loop_unknown_base_kernel(
     rows: int, ptr_offset: int
 ) -> None:
@@ -1000,6 +1028,40 @@ def test_vector_tile_view_captures_dynamic_parent_pitch() -> None:
         mlir_text, "tla-vector-region", require_success=True
     )
     assert "arith.muli" in output
+
+
+def test_vector_zn_unalign_address_arithmetic_uses_i32() -> None:
+    mlir_text = _vector_dynamic_zn_unalign_address_kernel.dump_mlir(type_args=(50,))
+    assert "zNUnAlign" in mlir_text
+    assert "!tla.shape<?,128>" in mlir_text
+
+    output = _run_tla_compile_ir_after_pass(
+        mlir_text, "tla-vector-region", require_success=True
+    )
+    div_rem_lines = [
+        line
+        for line in output.splitlines()
+        if "arith.divsi" in line or "arith.remsi" in line
+    ]
+    assert len(div_rem_lines) >= 5, output
+    assert all(line.rstrip().endswith(": i32") for line in div_rem_lines), output
+    assert not any(line.rstrip().endswith(": index") for line in div_rem_lines), output
+    div_rem_results = [
+        re.search(r"(%[A-Za-z0-9_]+) = arith\.(?:divsi|remsi)", line).group(1)
+        for line in div_rem_lines
+    ]
+    assert all(
+        f"arith.index_cast {result} : i32 to index" not in output
+        for result in div_rem_results
+    ), output
+    assert sum(
+        "arith.muli" in line and line.rstrip().endswith(": i32")
+        for line in output.splitlines()
+    ) >= 4, output
+    assert sum(
+        "arith.addi" in line and line.rstrip().endswith(": i32")
+        for line in output.splitlines()
+    ) >= 3, output
 
 
 def test_vector_static_tile_does_not_narrow_unknown_base_capacity() -> None:

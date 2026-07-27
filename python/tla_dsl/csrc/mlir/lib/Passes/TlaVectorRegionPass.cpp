@@ -1001,18 +1001,35 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
             Value sum23 = b.create<arith::AddIOp>(loc, t2, t3);
             flatOffset = b.create<arith::AddIOp>(loc, sum01, sum23);
         } else if (info->layoutTag == "zNUnAlign") {
-            Value shape0Org = b.create<arith::DivSIOp>(loc, stride3, shape2);
-            Value pc0 = b.create<arith::RemSIOp>(loc, rowOff, shape0Org);
-            Value pc1 = b.create<arith::DivSIOp>(loc, rowOff, shape0Org);
-            Value pc2 = b.create<arith::RemSIOp>(loc, colOff, shape2);
-            Value pc3 = b.create<arith::DivSIOp>(loc, colOff, shape2);
-            Value t0 = b.create<arith::MulIOp>(loc, pc0, stride0);
-            Value t1 = b.create<arith::MulIOp>(loc, pc1, stride1);
-            Value t2 = b.create<arith::MulIOp>(loc, pc2, stride2);
-            Value t3 = b.create<arith::MulIOp>(loc, pc3, stride3);
+            // zNUnAlign only used in on-chip memory, and the scalar unit in a
+            // vf only supports integer arith to 32 bits. Keep the entire
+            // address calculation in i32, then convert its final result to the
+            // index type required by memref.reinterpret_cast.
+            Type i32Type = b.getI32Type();
+            Value rowOffI32 = b.create<arith::IndexCastOp>(loc, i32Type, rowOff);
+            Value colOffI32 = b.create<arith::IndexCastOp>(loc, i32Type, colOff);
+            Value shape2I32 = b.create<arith::IndexCastOp>(loc, i32Type, shape2);
+            Value stride0I32 = b.create<arith::IndexCastOp>(loc, i32Type, stride0);
+            Value stride1I32 = b.create<arith::IndexCastOp>(loc, i32Type, stride1);
+            Value stride2I32 = b.create<arith::IndexCastOp>(loc, i32Type, stride2);
+            Value stride3I32 = b.create<arith::IndexCastOp>(loc, i32Type, stride3);
+            Value shape0OrgI32 =
+                b.create<arith::DivSIOp>(loc, stride3I32, shape2I32);
+            Value pc0I32 =
+                b.create<arith::RemSIOp>(loc, rowOffI32, shape0OrgI32);
+            Value pc1I32 =
+                b.create<arith::DivSIOp>(loc, rowOffI32, shape0OrgI32);
+            Value pc2I32 = b.create<arith::RemSIOp>(loc, colOffI32, shape2I32);
+            Value pc3I32 = b.create<arith::DivSIOp>(loc, colOffI32, shape2I32);
+            Value t0 = b.create<arith::MulIOp>(loc, pc0I32, stride0I32);
+            Value t1 = b.create<arith::MulIOp>(loc, pc1I32, stride1I32);
+            Value t2 = b.create<arith::MulIOp>(loc, pc2I32, stride2I32);
+            Value t3 = b.create<arith::MulIOp>(loc, pc3I32, stride3I32);
             Value sum01 = b.create<arith::AddIOp>(loc, t0, t1);
             Value sum23 = b.create<arith::AddIOp>(loc, t2, t3);
-            flatOffset = b.create<arith::AddIOp>(loc, sum01, sum23);
+            Value flatOffsetI32 = b.create<arith::AddIOp>(loc, sum01, sum23);
+            flatOffset = b.create<arith::IndexCastOp>(
+                loc, b.getIndexType(), flatOffsetI32);
         } else {
             return descOp->emitError() << "unsupported packed layout to get flatOffset";
         }
