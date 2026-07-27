@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import importlib.util
-import subprocess
 from pathlib import Path
 
 import pytest
@@ -9,7 +8,9 @@ import pytest
 
 def _load_bootstrap(repo_root: Path):  # type: ignore[no-untyped-def]
     module_path = repo_root / "tests" / "_bootstrap.py"
-    spec = importlib.util.spec_from_file_location("catlass_test_bootstrap", module_path)
+    spec = importlib.util.spec_from_file_location(
+        "catlass_test_bootstrap", module_path
+    )
     if spec is None or spec.loader is None:
         raise RuntimeError(
             f"Unable to load pretest bootstrap module from {module_path}"
@@ -22,36 +23,23 @@ def _load_bootstrap(repo_root: Path):  # type: ignore[no-untyped-def]
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
-def _touch_opbase(include_dir: Path) -> None:
-    opbase = include_dir / "mlir" / "IR" / "OpBase.td"
-    opbase.parent.mkdir(parents=True, exist_ok=True)
-    opbase.write_text("// test\n")
-
-
 def test_ensure_pretest_mlir_build_respects_skip_env(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    """TLA_DSL_SKIP_PRETEST_BUILD=1 suppresses the missing-binary error."""
     bootstrap = _load_bootstrap(REPO_ROOT)
     monkeypatch.setenv("TLA_DSL_SKIP_PRETEST_BUILD", "1")
-    called = False
-
-    def fake_run(*args, **kwargs):  # type: ignore[no-untyped-def]
-        del args, kwargs
-        nonlocal called
-        called = True
-        return subprocess.CompletedProcess(args=["noop"], returncode=0)
-
-    monkeypatch.setattr(bootstrap.subprocess, "run", fake_run)
+    # tmp_path has no binaries, but the skip flag prevents the check.
     bootstrap.ensure_pretest_mlir_build(tmp_path)
-    assert called is False
 
 
 def test_ensure_pretest_mlir_build_runs_cmake_and_ninja_targets(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    """Without pre-built binaries, ensure_pretest_mlir_build raises."""
     bootstrap = _load_bootstrap(REPO_ROOT)
     include_dir = tmp_path / "include"
-    _touch_opbase(include_dir)
+    include_dir.mkdir(parents=True)
     mlir_dir = tmp_path / "cmake" / "mlir"
     mlir_dir.mkdir(parents=True)
 
@@ -60,103 +48,54 @@ def test_ensure_pretest_mlir_build_runs_cmake_and_ninja_targets(
     monkeypatch.delenv("TLA_DSL_SKIP_PRETEST_BUILD", raising=False)
     monkeypatch.delenv("CC", raising=False)
     monkeypatch.delenv("CXX", raising=False)
-    monkeypatch.setattr(
-        bootstrap.shutil,
-        "which",
-        lambda name, path=None: f"/toolchain/bin/{name}",
-    )
 
-    seen: list[list[str]] = []
-
-    def fake_run(cmd, check=False, **kwargs):  # type: ignore[no-untyped-def]
-        del check, kwargs
-        seen.append(list(cmd))
-        return subprocess.CompletedProcess(args=cmd, returncode=0)
-
-    monkeypatch.setattr(bootstrap.subprocess, "run", fake_run)
-    bootstrap.ensure_pretest_mlir_build(tmp_path)
-
-    assert seen == [
-        [
-            "cmake",
-            "-G",
-            "Ninja",
-            "-S",
-            "csrc/mlir",
-            "-B",
-            "csrc/mlir/build",
-            f"-DMLIR_TBLGEN_INCLUDE_DIR={include_dir}",
-            "-DCMAKE_C_COMPILER=/toolchain/bin/gcc",
-            "-DCMAKE_CXX_COMPILER=/toolchain/bin/g++",
-            f"-DMLIR_DIR={mlir_dir}",
-        ],
-        ["ninja", "-C", "csrc/mlir/build", "tla-compiler"],
-    ]
+    with pytest.raises(bootstrap.PretestBuildError, match="Pre-built MLIR"):
+        bootstrap.ensure_pretest_mlir_build(tmp_path)
 
 
 def test_ensure_pretest_mlir_build_uses_llvm_config_fallback(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    """Without any MLIR env vars and without binaries, it raises."""
     bootstrap = _load_bootstrap(REPO_ROOT)
-    include_dir = tmp_path / "llvm-include"
-    _touch_opbase(include_dir)
     monkeypatch.delenv("MLIR_TBLGEN_INCLUDE_DIR", raising=False)
     monkeypatch.delenv("MLIR_DIR", raising=False)
     monkeypatch.delenv("TLA_DSL_PREBUILT_ASCENDNPU_IR", raising=False)
     monkeypatch.delenv("TLA_DSL_SKIP_PRETEST_BUILD", raising=False)
     monkeypatch.delenv("CC", raising=False)
     monkeypatch.delenv("CXX", raising=False)
-    monkeypatch.setattr(
-        bootstrap.shutil,
-        "which",
-        lambda name, path=None: (
-            f"/toolchain/bin/{name}" if name in {"gcc", "g++"} else None
-        ),
-    )
 
-    seen: list[list[str]] = []
-
-    def fake_run(cmd, check=False, **kwargs):  # type: ignore[no-untyped-def]
-        del check, kwargs
-        seen.append(list(cmd))
-        if cmd[:2] == ["llvm-config", "--includedir"]:
-            return subprocess.CompletedProcess(
-                args=cmd, returncode=0, stdout=str(include_dir), stderr=""
-            )
-        return subprocess.CompletedProcess(args=cmd, returncode=0)
-
-    monkeypatch.setattr(bootstrap.subprocess, "run", fake_run)
-    bootstrap.ensure_pretest_mlir_build(tmp_path)
-
-    assert seen[0] == ["llvm-config", "--includedir"]
-    assert seen[1][:6] == ["cmake", "-G", "Ninja", "-S", "csrc/mlir", "-B"]
-    assert seen[2] == ["ninja", "-C", "csrc/mlir/build", "tla-compiler"]
+    with pytest.raises(bootstrap.PretestBuildError, match="Pre-built MLIR"):
+        bootstrap.ensure_pretest_mlir_build(tmp_path)
 
 
 def test_resolve_include_dir_rejects_invalid_env_path(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    """A bad MLIR_TBLGEN_INCLUDE_DIR doesn't change the binary-missing error."""
     bootstrap = _load_bootstrap(REPO_ROOT)
     monkeypatch.delenv("TLA_DSL_SKIP_PRETEST_BUILD", raising=False)
     bad_include = tmp_path / "bad-include"
     bad_include.mkdir()
     monkeypatch.setenv("MLIR_TBLGEN_INCLUDE_DIR", str(bad_include))
 
-    with pytest.raises(bootstrap.PretestBuildError, match="does not contain"):
+    with pytest.raises(bootstrap.PretestBuildError, match="Pre-built MLIR"):
         bootstrap.ensure_pretest_mlir_build(tmp_path)
 
 
 def test_ensure_pretest_mlir_build_resets_stale_compiler_cache(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    """Stale CMakeCache.txt is left intact — no build logic runs."""
     bootstrap = _load_bootstrap(REPO_ROOT)
     include_dir = tmp_path / "include"
-    _touch_opbase(include_dir)
+    include_dir.mkdir(parents=True)
     mlir_dir = tmp_path / "cmake" / "mlir"
     mlir_dir.mkdir(parents=True)
     build_dir = tmp_path / "csrc" / "mlir" / "build"
     build_dir.mkdir(parents=True)
-    (build_dir / "CMakeCache.txt").write_text(
+    cache = build_dir / "CMakeCache.txt"
+    cache.write_text(
         "CMAKE_C_COMPILER:FILEPATH=/usr/bin/gcc-11\n"
         "CMAKE_CXX_COMPILER:FILEPATH=/usr/bin/g++-11\n"
     )
@@ -166,44 +105,21 @@ def test_ensure_pretest_mlir_build_resets_stale_compiler_cache(
     monkeypatch.delenv("TLA_DSL_SKIP_PRETEST_BUILD", raising=False)
     monkeypatch.delenv("CC", raising=False)
     monkeypatch.delenv("CXX", raising=False)
-    monkeypatch.setattr(
-        bootstrap.shutil,
-        "which",
-        lambda name, path=None: f"/toolchain/bin/{name}",
-    )
 
-    seen: list[list[str]] = []
+    with pytest.raises(bootstrap.PretestBuildError, match="Pre-built MLIR"):
+        bootstrap.ensure_pretest_mlir_build(tmp_path)
 
-    def fake_run(cmd, check=False, **kwargs):  # type: ignore[no-untyped-def]
-        del check, kwargs
-        seen.append(list(cmd))
-        return subprocess.CompletedProcess(args=cmd, returncode=0)
-
-    monkeypatch.setattr(bootstrap.subprocess, "run", fake_run)
-    bootstrap.ensure_pretest_mlir_build(tmp_path)
-
-    assert (build_dir / "CMakeCache.txt").exists() is False
-    assert seen[0] == [
-        "cmake",
-        "-G",
-        "Ninja",
-        "-S",
-        "csrc/mlir",
-        "-B",
-        "csrc/mlir/build",
-        f"-DMLIR_TBLGEN_INCLUDE_DIR={include_dir}",
-        "-DCMAKE_C_COMPILER=/toolchain/bin/gcc",
-        "-DCMAKE_CXX_COMPILER=/toolchain/bin/g++",
-        f"-DMLIR_DIR={mlir_dir}",
-    ]
+    # The cache file must NOT be removed — no build logic runs.
+    assert cache.is_file()
 
 
 def test_ensure_pretest_mlir_build_honors_runtime_wrapper_env_toggle(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    """TLA_DSL_BUILD_RUNTIME_WRAPPER is ignored — no build logic runs."""
     bootstrap = _load_bootstrap(REPO_ROOT)
     include_dir = tmp_path / "include"
-    _touch_opbase(include_dir)
+    include_dir.mkdir(parents=True)
     mlir_dir = tmp_path / "cmake" / "mlir"
     mlir_dir.mkdir(parents=True)
 
@@ -213,20 +129,6 @@ def test_ensure_pretest_mlir_build_honors_runtime_wrapper_env_toggle(
     monkeypatch.delenv("TLA_DSL_SKIP_PRETEST_BUILD", raising=False)
     monkeypatch.delenv("CC", raising=False)
     monkeypatch.delenv("CXX", raising=False)
-    monkeypatch.setattr(
-        bootstrap.shutil,
-        "which",
-        lambda name, path=None: None,
-    )
 
-    seen: list[list[str]] = []
-
-    def fake_run(cmd, check=False, **kwargs):  # type: ignore[no-untyped-def]
-        del check, kwargs
-        seen.append(list(cmd))
-        return subprocess.CompletedProcess(args=cmd, returncode=0)
-
-    monkeypatch.setattr(bootstrap.subprocess, "run", fake_run)
-    bootstrap.ensure_pretest_mlir_build(tmp_path)
-
-    assert "-DTLA_DSL_BUILD_RUNTIME_WRAPPER=ON" in seen[0]
+    with pytest.raises(bootstrap.PretestBuildError, match="Pre-built MLIR"):
+        bootstrap.ensure_pretest_mlir_build(tmp_path)

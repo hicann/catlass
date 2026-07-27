@@ -44,6 +44,7 @@ dist/
 python/tla_dsl/catlass/_version.py
 python/tla_dsl/.artifacts/
 python/tla_dsl/site/
+python/tla_dsl/LICENSE
 # data bin
 *.bin
 *.dat
