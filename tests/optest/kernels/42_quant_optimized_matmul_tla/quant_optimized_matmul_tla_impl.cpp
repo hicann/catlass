@@ -233,7 +233,6 @@ extern "C" void run(uint32_t blockNum, aclrtStream stream, const CatlassKernel::
     {
         size_t sizeWB = GetWorkspaceLen(tagB, get<2>(L1TileShape{}), get<1>(L1TileShape{})) * sizeof(ElementB);
         deviceWB = g_catlassWorkspaceAlloc(sizeWB);
-        allocWB = true;
     }
 #endif
 
