@@ -5,6 +5,7 @@ from typing import Any
 
 import catlass as tla
 from catlass.params import MaskLoadParams, MaskStoreParams
+from catlass.types import dtype_size_bytes
 
 from vector_op_harness import (
     DirectVectorOpConfig,
@@ -13,20 +14,41 @@ from vector_op_harness import (
     vector_kernel_config,
 )
 
-# Single-VL MaskSSA load/store round-trip only:
+# MaskSSA load/store round-trip:
 #   create_mask(H) → store(..., MaskStoreParams) → load(MaskLoadParams)
 #   → masked store of src
-# Expected: first half of the VL holds src; second half stays 0.
-# Companion vector dtype is fixed to f32; this case does not sweep add/dtypes.
+#
+# Two fixed A5 widths (same number, different units):
+#   VEC_REG_BYTES = 256   # vector register bytes
+#   MASK_REG_BITS = 256   # physical MaskReg bits (DIST_NORM spill = 32B)
+#
+# --dtype is both companion and Mask UB dtype:
+#   ELE        = VEC_REG_BYTES / sizeof(dtype)   # logical lanes / !tla.mask<N>
+#   MASK_ELEMS = (MASK_REG_BITS/8) / sizeof      # typed UB slots for full physical spill
+# Logical N (e.g. 64 for f32) only sizes the predicate SSA; UB buffer covers 256bit.
 
-VECTOR_ELE = 64
-VL_ELE = 64
-MASK_BYTES = VL_ELE // 8
-ALL_DTYPES = ("f32",)
+VEC_REG_BYTES = 256
+MASK_REG_BITS = 256
+ALL_DTYPES = ("f32", "f16", "i8")
 
-_KERNEL_DTYPE = tla.Float32
-_KERNEL_SHAPE = (VECTOR_ELE,)
-_MASK_BYTES = MASK_BYTES
+_DTYPE: type[Any] = tla.Float32
+_ELE = VEC_REG_BYTES // 4
+_MASK_ELEMS = (MASK_REG_BITS // 8) // 4  # 32B / sizeof(f32) = 8
+_SHAPE = (_ELE,)
+
+
+def _apply_dtype(dtype_name: str) -> tuple[type[Any], Any, float | int]:
+    global _DTYPE, _ELE, _MASK_ELEMS, _SHAPE
+    cfg = vector_kernel_config(dtype_name, None, ALL_DTYPES)
+    elem_bytes = dtype_size_bytes(dtype_name)
+    _DTYPE = cfg.tla_dtype
+    _ELE = VEC_REG_BYTES // elem_bytes
+    _MASK_ELEMS = (MASK_REG_BITS // 8) // elem_bytes
+    _SHAPE = (_ELE,)
+    return cfg.tla_dtype, cfg.torch_dtype, 0.0
+
+
+_apply_dtype("f32")
 
 
 @tla.kernel
@@ -48,7 +70,7 @@ def load_store_mask(mem_src: tla.Tensor, mem_out: tla.Tensor) -> None:
         with tla.vec.func(mode="simd"):
             value = src_ub.load()
 
-            pattern = tla.create_mask(pattern=tla.mask.H, dtype=_KERNEL_DTYPE)
+            pattern = tla.create_mask(pattern=tla.mask.H, dtype=_DTYPE)
             mask_ub.store(pattern, MaskStoreParams())
             loaded = mask_ub.load(MaskLoadParams())
 
@@ -62,25 +84,21 @@ def load_store_mask(mem_src: tla.Tensor, mem_out: tla.Tensor) -> None:
 
 
 def _make_ub_tensor(like_tensor: Any) -> Any:
-    ptr = tla.allocate(VECTOR_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 32)
+    ptr = tla.allocate(_ELE, _DTYPE, tla.AddressSpace.ub, 32)
     return tla.make_tensor_like(ptr, like_tensor, tla.arch.RowMajor)
 
 
 def _make_mask_ub_tensor() -> Any:
-    ptr = tla.allocate(_MASK_BYTES, tla.Int8, tla.AddressSpace.ub, 32)
+    ptr = tla.allocate(_MASK_ELEMS, _DTYPE, tla.AddressSpace.ub, 32)
     layout = tla.make_layout(
-        shape=tla.make_shape(_MASK_BYTES),
+        shape=tla.make_shape(_MASK_ELEMS),
         stride=tla.make_stride(1),
     )
     return tla.make_tensor(ptr, layout)
 
 
 def _operator_specs() -> dict[str, dict[str, Any]]:
-    return {
-        "load_store_mask": {
-            "default_atol": 1e-5,
-        },
-    }
+    return {"load_store_mask": {"default_atol": 1e-5}}
 
 
 def _is_unsupported_case(op_name: str, dtype_name: str) -> bool:
@@ -90,64 +108,64 @@ def _is_unsupported_case(op_name: str, dtype_name: str) -> bool:
 
 def _print_skip(op_name: str, dtype_name: str, shape: tuple[int, ...]) -> None:
     del shape
-    print(f"skip op={op_name} dtype={dtype_name}: unsupported case")
+    print(f"skip op={op_name} dtype={dtype_name}: unsupported dtype")
 
 
 def _set_kernel_config(
     op_name: str, dtype_name: str, shape: tuple[int, ...] | None = None
 ) -> tuple[type[Any], Any, float | int]:
-    global VECTOR_ELE, VL_ELE, _KERNEL_DTYPE, _KERNEL_SHAPE, _MASK_BYTES, MASK_BYTES
     del shape
     if op_name not in _operator_specs():
         raise SystemExit("unknown load_store_mask operator")
-    config = vector_kernel_config(dtype_name, None, ALL_DTYPES)
-    VL_ELE = config.lanes
-    VECTOR_ELE = VL_ELE
-    MASK_BYTES = VL_ELE // 8
-    _MASK_BYTES = MASK_BYTES
-    _KERNEL_DTYPE = config.tla_dtype
-    _KERNEL_SHAPE = (VECTOR_ELE,)
-    return config.tla_dtype, config.torch_dtype, 0.0
+    if dtype_name not in ALL_DTYPES:
+        raise SystemExit(
+            f"unsupported dtype={dtype_name!r}; expected one of: "
+            f"{', '.join(ALL_DTYPES)}"
+        )
+    return _apply_dtype(dtype_name)
 
 
 def _compile_only_type_args(
     op_name: str, dtype_name: str, shape: tuple[int, ...] | None = None
 ) -> tuple[Any, ...]:
     tla_dtype, _, _ = _set_kernel_config(op_name, dtype_name, shape)
-    return make_type_args(tla_dtype, _KERNEL_SHAPE, 2)
+    return make_type_args(tla_dtype, _SHAPE, 2)
 
 
 def _make_inputs(args: Any, dtype_name: str, torch: Any) -> tuple[Any, ...]:
     _, dtype, _ = _set_kernel_config(args.op, dtype_name, args.shape)
-    src = torch.arange(VECTOR_ELE, dtype=dtype, device="npu") - (VECTOR_ELE // 2)
-    return (src,)
+    idx = torch.arange(_ELE, dtype=torch.int32, device="npu")
+    return (((idx % 31) - 15).to(dtype),)
 
 
 def _expected(op_name: str, inputs: tuple[Any, ...]) -> Any:
     del op_name
     (src,) = inputs
     expected = src.new_zeros(src.shape)
-    expected[: VL_ELE // 2] = src[: VL_ELE // 2]
+    expected[: _ELE // 2] = src[: _ELE // 2]
     return expected
 
 
 HARNESS = DirectVectorOpHarness(
     DirectVectorOpConfig(
-        description="Compile and run MaskLoadParams/MaskStoreParams round-trip kernels.",
+        description=(
+            "Compile and run MaskLoadParams/MaskStoreParams round-trip; "
+            "Mask UB uses the same dtype as the companion vector."
+        ),
         kernel=load_store_mask,
         all_dtypes=ALL_DTYPES,
         operator_specs=_operator_specs,
         set_kernel_config=_set_kernel_config,
         compile_only_type_args=_compile_only_type_args,
-        get_vector_elements=lambda: VECTOR_ELE,
-        get_kernel_shape=lambda: _KERNEL_SHAPE,
+        get_vector_elements=lambda: _ELE,
+        get_kernel_shape=lambda: _SHAPE,
         make_inputs=_make_inputs,
         expected=_expected,
         unsupported_case=_is_unsupported_case,
         print_skip=_print_skip,
         script_path=Path(__file__).resolve(),
         env_compile_jobs="LOAD_STORE_MASK_COMPILE_JOBS",
-        float_dtypes=frozenset({"f32"}),
+        float_dtypes=frozenset({"f32", "f16"}),
     )
 )
 

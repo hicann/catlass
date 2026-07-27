@@ -137,8 +137,9 @@ Run end-to-end validation for:
   - arange_op (arange_op.py [increase/decrease] --run --all-dtypes)
   - interleave_op (interleave_op.py interleave/deinterleave --run --all-dtypes)
   - load_dintlv_op (load_dintlv_op.py dintlv_b32 --run --all-dtypes; f32 only)
-  - load_store_mask (load_store_mask.py load_store_mask --run:
-    MaskSSA load/store round-trip via MaskLoadParams/MaskStoreParams)
+  - load_store_mask (load_store_mask.py load_store_mask --run --all-dtypes:
+    MaskSSA load/store round-trip via MaskLoadParams/MaskStoreParams for
+    b8/b16/b32 UB carriers; companion vector fixed to f32)
   - squeeze_op (squeeze_op.py squeeze --run --all-dtypes)
   - register_control_flow (register_control_flow.py register_carriers --run:
     mixed VectorSSA/MaskSSA scf.for carriers and masked store)
@@ -655,10 +656,10 @@ _run_load_dintlv_op_case() {
 _run_load_dintlv_op_case
 
 _run_load_store_mask_case() {
-    echo "==> Running load_store_mask validation [f32]: load_store_mask --run --device ${DEVICE_ID}"
+    echo "==> Running load_store_mask validation [b8/b16/b32 carriers]: load_store_mask --run --all-dtypes --device ${DEVICE_ID}"
     (
         cd "${TLA_DSL_DIR}"
-        python "${LOAD_STORE_MASK_REL}" load_store_mask --run --device "${DEVICE_ID}"
+        python "${LOAD_STORE_MASK_REL}" load_store_mask --run --all-dtypes --device "${DEVICE_ID}"
     )
 }
 

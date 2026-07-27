@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import enum
+
 from .types import TlaTensor
 from dataclasses import dataclass
 
@@ -98,7 +99,13 @@ class BlockStoreParams(StoreParams):
 
 @dataclass
 class MaskStoreParams(StoreParams):
-    """Continuous-aligned MaskSSA store (packed ``i8``/``u8`` UB / ``psts``)."""
+    """Continuous-aligned MaskSSA store (1/2/4-byte UB / ``psts``).
+
+    AscendC ``StoreAlign(__ubuf__ T*, MaskReg&)``: spill size is ``N/8`` from
+    the ``MaskSSA`` value. ``N`` must equal ``256 / sizeof(T)`` for the
+    destination UB element type (``T`` may be int or float of that width).
+    Hardware path is still ``psts.b8`` (``DIST_NORM``).
+    """
 
     store_dist: str = MaskStoreDist.DIST_NORM
 
@@ -129,10 +136,13 @@ class UnalignLoadParams(LoadParams):
 
 @dataclass
 class MaskLoadParams(LoadParams):
-    """Continuous-aligned MaskSSA load (packed ``i8``/``u8`` UB / ``plds``).
+    """Continuous-aligned MaskSSA load (1/2/4-byte UB / ``plds``).
 
-    Predicate width ``!tla.mask<N>`` is inferred from the tile byte count
-    (``N = prod(origin_shape) * 8``).
+    AscendC ``LoadAlign(MaskReg&, __ubuf__ T*)``: predicate width
+    ``!tla.mask<N>`` is ``N = 256 / sizeof(T)`` from the UB element type
+    (same rule as ``create_mask``). ``T`` may be int or float; match the
+    companion vector element width (e.g. ``f32`` UB with ``f32`` →
+    ``mask<64>``). The source tile only supplies the UB address.
     """
 
     load_dist: str = MaskLoadDist.DIST_NORM

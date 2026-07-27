@@ -655,10 +655,11 @@ def Tla_LoadOp : Tla_Op<"load", []> {
       elements), lowering to ``ave.hir.vload <DINTLV_B32>``. Unaligned path
       lowers to ``ave.hir.vload`` with ``vldas``/``vldus`` via HIVMAVE.
     * ``!tla.mask`` — continuous-aligned MaskReg load (AscendC
-      ``LoadAlign(MaskReg&)`` / ``DIST_NORM`` / ``plds``). Source must be packed
-      ``i8``/``ui8`` bytes; ``N`` on ``!tla.mask<N>`` is the semantic lane count
-      (frontend derives it as ``prod(shape) * 8``). Lowers via
-      ``ave.hir.vload <NORM>`` on an ``i1`` memref view to ``hivm.plds.b8``.
+      ``LoadAlign(MaskReg&)`` / ``DIST_NORM`` / ``plds``). Source UB element
+      type must be a 1/2/4-byte scalar (int or float). ``N`` on
+      ``!tla.mask<N>`` is ``256 / sizeof(elem)`` from the UB element type;
+      the tile supplies the address. Lowers via ``ave.hir.vload <NORM>`` on
+      an ``i1`` memref view to ``hivm.plds.b8``.
 
     Must be nested inside a ``tla.vec.func`` region.
   }];
@@ -937,10 +938,11 @@ def Tla_StoreOp : Tla_Op<"store", [AttrSizedOperandSegments]> {
       UB store (``vstas``/``vstus`` via HIVMAVE).
     * ``!tla.mask`` — continuous-aligned MaskReg store (AscendC
       ``StoreAlign(..., MaskReg&)`` / ``DIST_NORM`` / ``psts``). Destination
-      must be packed ``i8``/``ui8`` bytes. Predicate ``mask`` and
-      ``unaligned_ub_access`` are not allowed. Lowers via
-      ``ave.hir.masked_store <NORM_B8>`` on an ``i1`` memref view to
-      ``hivm.psts.b8``.
+      UB element type must be a 1/2/4-byte scalar (int or float). Spill size
+      is ``N/8`` from the ``MaskSSA`` source; the UB tile supplies the
+      address. Predicate ``mask`` and ``unaligned_ub_access`` are not
+      allowed. Lowers via ``ave.hir.masked_store <NORM_B8>`` on an ``i1``
+      memref view to ``hivm.psts.b8``.
 
     Destination must be UB. Must be nested inside a ``tla.vec.func`` region.
   }];

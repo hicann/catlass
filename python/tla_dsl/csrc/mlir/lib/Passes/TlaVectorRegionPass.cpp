@@ -74,24 +74,33 @@ static hivmave::VFLoadOp createVFLoad(OpBuilder &b, Location loc, VectorType vec
   return load;
 }
 
-// Map a packed-mask i8/ui8 UB tile memref onto an i1 view of ``lanes`` predicate
-// bits at the same byte address (AscendC MaskDist::DIST_NORM / plds/psts.b8).
-static FailureOr<Value> materializeI1MaskMemrefFromPackedBytes(OpBuilder &b, Location loc,
-                                                              Value packedMemref,
-                                                              int64_t lanes) {
+// Map a 1/2/4-byte MaskSSA UB tile memref onto an i1 view of ``lanes``
+// predicate bits at the same byte address (AscendC MaskDist::DIST_NORM /
+// plds/psts.b8). UB element width types the pointer; the hardware transfer
+// is always the bit-level plds/psts.b8 path.
+static FailureOr<Value> materializeI1MaskMemrefFromUb(OpBuilder &b, Location loc,
+                                                     Value ubMemref,
+                                                     int64_t lanes) {
   if (lanes <= 0 || lanes % 8 != 0)
     return failure();
-  auto srcTy = dyn_cast<MemRefType>(packedMemref.getType());
+  auto srcTy = dyn_cast<MemRefType>(ubMemref.getType());
   if (!srcTy)
     return failure();
-  auto elemTy = dyn_cast<IntegerType>(srcTy.getElementType());
-  if (!elemTy || elemTy.getWidth() != 8)
+  int64_t elemBytes = getByteSizeOfFixedWidthScalarType(srcTy.getElementType());
+  if (elemBytes != 1 && elemBytes != 2 && elemBytes != 4)
     return failure();
 
-  auto meta = b.create<mlir::memref::ExtractStridedMetadataOp>(loc, packedMemref);
+  auto meta = b.create<mlir::memref::ExtractStridedMetadataOp>(loc, ubMemref);
   Value basePtr =
       b.create<mlir::memref::ExtractAlignedPointerAsIndexOp>(loc, meta.getBaseBuffer());
-  Value byteAddr = b.create<arith::AddIOp>(loc, basePtr, meta.getOffset());
+  // ExtractStridedMetadata offset is in elements; convert to byte offset.
+  Value elemOffset = meta.getOffset();
+  Value byteOffset = elemOffset;
+  if (elemBytes != 1) {
+    Value scale = b.create<arith::ConstantIndexOp>(loc, elemBytes);
+    byteOffset = b.create<arith::MulIOp>(loc, elemOffset, scale);
+  }
+  Value byteAddr = b.create<arith::AddIOp>(loc, basePtr, byteOffset);
   Value addrI64 = b.create<arith::IndexCastOp>(loc, b.getI64Type(), byteAddr);
 
   auto i1Ty = IntegerType::get(b.getContext(), 1);
@@ -1018,11 +1027,11 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
     if (!source)
       return failure();
 
-    // MaskSSA result: packed i8 UB → i1 memref view → vload <NORM> (plds).
+    // MaskSSA result: 1/2/4-byte UB → i1 memref view → vload <NORM> (plds.b8).
     if (auto maskType = dyn_cast<::tla::MaskSSAType>(loadOp.getResult().getType())) {
       int64_t lanes = maskType.getPhysicalLanes();
       auto i1MemrefOr =
-          materializeI1MaskMemrefFromPackedBytes(b, loc, source, lanes);
+          materializeI1MaskMemrefFromUb(b, loc, source, lanes);
       if (failed(i1MemrefOr))
         return loadOp.emitError(
                    "failed to materialize i1 memref view for tla.load MaskSSA"),
@@ -1539,12 +1548,12 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
     if (!dest || !source)
       return failure();
 
-    // MaskSSA source: packed i8 UB ← i1 memref view ← masked_store <NORM_B8>.
+    // MaskSSA source: 1/2/4-byte UB ← i1 memref view ← masked_store <NORM_B8>.
     if (isa<::tla::MaskSSAType>(storeOp.getSource().getType())) {
       auto maskType = cast<::tla::MaskSSAType>(storeOp.getSource().getType());
       int64_t lanes = maskType.getPhysicalLanes();
       auto i1MemrefOr =
-          materializeI1MaskMemrefFromPackedBytes(b, loc, dest, lanes);
+          materializeI1MaskMemrefFromUb(b, loc, dest, lanes);
       if (failed(i1MemrefOr))
         return storeOp.emitError(
                    "failed to materialize i1 memref view for tla.store MaskSSA"),

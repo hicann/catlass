@@ -24,6 +24,11 @@ def _dynamic_metadata_values(type_tree: Any, metadata_tree: Any) -> list[Any]:
     return [metadata_tree] if type_tree is None else []
 
 
+# MaskSSA load/store UB: any 1/2/4-byte scalar (int or float).
+# ``N = 256 / sizeof(UB elem)``; hardware path is still plds/psts.b8.
+_MASK_UB_ELEM_BYTES = frozenset((1, 2, 4))
+
+
 class _Tensor(TensorABC):
     """Frontend proxy for an SSA ``!tla.tensor`` value."""
 
@@ -165,8 +170,11 @@ class _Tensor(TensorABC):
 
         Dispatch by ``params`` type:
 
-        * ``MaskLoadParams`` → ``MaskSSA`` (packed ``i8``/``u8`` UB). ``N`` on
-          ``!tla.mask<N>`` is ``prod(origin_shape) * 8``.
+        * ``MaskLoadParams`` → ``MaskSSA``. UB element type may be any
+          1/2/4-byte scalar (``i8``/``f16``/``f32``/…). ``N`` on
+          ``!tla.mask<N>`` is ``256 / sizeof(UB elem)`` (same rule as
+          ``create_mask``); match the companion vector element width.
+          The tile only supplies the UB address.
         * ``None`` / ``NormalLoadParams`` / ``UnalignLoadParams`` → ``VectorSSA``
           (or a ``(VectorSSA, VectorSSA)`` pair for ``DIST_DINTLV_B32``).
         """
@@ -175,8 +183,8 @@ class _Tensor(TensorABC):
             VectorSSA,
             _as_value,
             _coerce_type,
-            _flatten_tla_tuple,
             _full_vector_ssa_descriptor,
+            _mask_ssa_type_for_element_type,
             _op_error,
             _require_frontend_state,
             _tla_tensor_type_for_mlir_value,
@@ -191,7 +199,7 @@ class _Tensor(TensorABC):
             PostMode,
             UnalignLoadParams,
         )
-        from ..types import TlaMaskSSATypeDescriptor
+        from ..types import TlaMaskSSATypeDescriptor, dtype_size_bytes
 
         loc = _normalize_user_loc(loc)
         _require_frontend_state("load")
@@ -213,31 +221,16 @@ class _Tensor(TensorABC):
                     f"currently unsupported load_dist {params.load_dist!r}"
                 )
             elem = str(source_desc.element_type).strip().lower()
-            if elem not in ("i8", "u8", "ui8"):
+            if dtype_size_bytes(elem) not in _MASK_UB_ELEM_BYTES:
                 _op_error(
                     "load",
-                    "invalid argument 'source' (position 0): expected i8/u8 packed "
-                    f"mask bytes, got element type {source_desc.element_type}",
+                    f"invalid argument 'source': expected 1/2/4-byte scalar "
+                    f"element type for MaskSSA load, got "
+                    f"{source_desc.element_type}",
                 )
-            byte_count = 1
-            for dim in _flatten_tla_tuple(source_desc.origin_shape):
-                if dim is None or isinstance(dim, bool) or not isinstance(dim, int):
-                    _op_error(
-                        "load",
-                        "source tile origin_shape must be a static integer product "
-                        f"of packed mask bytes, got {source_desc.origin_shape!r}",
-                    )
-                byte_count *= int(dim)
-            physical_lanes = byte_count * 8
-            try:
-                mask_desc = TlaMaskSSATypeDescriptor(physical_lanes=physical_lanes)
-            except ValueError as exc:
-                _op_error(
-                    "load",
-                    f"source tile has {byte_count} packed bytes "
-                    f"(→ !tla.mask<{physical_lanes}>), which is not a supported "
-                    f"mask width: {exc}",
-                )
+            mask_desc = TlaMaskSSATypeDescriptor(
+                physical_lanes=_mask_ssa_type_for_element_type(elem).physical_lanes
+            )
             mask_ty = mask_desc.to_mlir_type(
                 loc.context if loc is not None else mlir_ir.Context.current
             )
@@ -325,14 +318,16 @@ class _Tensor(TensorABC):
 
         Dispatch by ``params`` type:
 
-        * ``MaskStoreParams`` → packed mask store (``i8``/``u8`` UB). ``value``
-          must be ``MaskSSA``; predicate ``mask=`` is not allowed.
+        * ``MaskStoreParams`` → MaskSSA store. UB element type may be any
+          1/2/4-byte scalar. ``value`` must be ``MaskSSA`` whose ``N`` matches
+          ``256 / sizeof(UB elem)``; predicate ``mask=`` is not allowed.
+          Spill size is ``N/8`` bytes; the tile only supplies the address.
         * ``None`` / ``NormalStoreParams`` / ``UnalignStoreParams`` → data store
           (``VectorSSA``), with optional predicate ``mask``.
         """
         from ..core_api import (
             _as_value,
-            _flatten_tla_tuple,
+            _mask_ssa_type_for_element_type,
             _mask_ssa_type_for_mlir_value,
             _op_error,
             _require_category,
@@ -348,6 +343,7 @@ class _Tensor(TensorABC):
             NormalStoreParams,
             UnalignStoreParams,
         )
+        from ..types import dtype_size_bytes
 
         loc = _normalize_user_loc(loc)
         _require_frontend_state("store")
@@ -375,28 +371,22 @@ class _Tensor(TensorABC):
                 )
             _require_category("store", "value", value, "mask_ssa", 1)
             elem = str(dest_desc.element_type).strip().lower()
-            if elem not in ("i8", "u8", "ui8"):
+            if dtype_size_bytes(elem) not in _MASK_UB_ELEM_BYTES:
                 _op_error(
                     "store",
-                    "invalid argument 'dest' (position 0): expected i8/u8 packed "
-                    f"mask bytes, got element type {dest_desc.element_type}",
+                    f"invalid argument 'dest': expected 1/2/4-byte scalar "
+                    f"element type for MaskSSA store, got "
+                    f"{dest_desc.element_type}",
                 )
             mask_desc = _mask_ssa_type_for_mlir_value(value_val)
-            byte_count = 1
-            for dim in _flatten_tla_tuple(dest_desc.origin_shape):
-                if dim is None or isinstance(dim, bool) or not isinstance(dim, int):
-                    _op_error(
-                        "store",
-                        "dest tile origin_shape must be a static integer product "
-                        f"of packed mask bytes, got {dest_desc.origin_shape!r}",
-                    )
-                byte_count *= int(dim)
-            expected_bytes = mask_desc.physical_lanes // 8
-            if byte_count != expected_bytes:
+            ub_lanes = _mask_ssa_type_for_element_type(elem).physical_lanes
+            if mask_desc.physical_lanes != ub_lanes:
                 _op_error(
                     "store",
-                    f"dest tile has {byte_count} packed bytes, expected "
-                    f"{expected_bytes} for !tla.mask<{mask_desc.physical_lanes}>",
+                    f"MaskSSA has {mask_desc.physical_lanes} lanes, but dest "
+                    f"element type {dest_desc.element_type} implies "
+                    f"!tla.mask<{ub_lanes}> (256/sizeof); use matching "
+                    "UB width (e.g. f32 UB with f32 / mask<64>)",
                 )
             _tla_ops_gen.store(dest, value_val, loc=loc)
             return

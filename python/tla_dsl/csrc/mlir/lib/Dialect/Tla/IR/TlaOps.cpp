@@ -272,10 +272,12 @@ mlir::LogicalResult StoreOp::verify() {
     if (getUnalignedUbAccess())
       return emitOpError(
           "unaligned_ub_access is not supported when storing !tla.mask");
-    auto destElem = mlir::dyn_cast<mlir::IntegerType>(destType.getPtr().getPointee());
-    if (!destElem || destElem.getWidth() != 8)
+    int64_t destElemBytes =
+        getByteSizeOfFixedWidthScalarType(destType.getPtr().getPointee());
+    if (destElemBytes != 1 && destElemBytes != 2 && destElemBytes != 4)
       return emitOpError(
-          "dest !tla.tensor element type must be i8 or ui8 packed mask bytes");
+          "dest !tla.tensor element type must be a 1/2/4-byte scalar "
+          "for MaskSSA store");
     return mlir::success();
   }
 
@@ -365,11 +367,12 @@ mlir::LogicalResult LoadOp::verify() {
     if (getUnalignedUbAccess())
       return emitOpError(
           "unaligned_ub_access is not supported when loading !tla.mask");
-    auto sourceElem =
-        mlir::dyn_cast<mlir::IntegerType>(sourceType.getPtr().getPointee());
-    if (!sourceElem || sourceElem.getWidth() != 8)
+    int64_t sourceElemBytes =
+        getByteSizeOfFixedWidthScalarType(sourceType.getPtr().getPointee());
+    if (sourceElemBytes != 1 && sourceElemBytes != 2 && sourceElemBytes != 4)
       return emitOpError(
-          "source !tla.tensor element type must be i8 or ui8 packed mask bytes");
+          "source !tla.tensor element type must be a 1/2/4-byte scalar "
+          "for MaskSSA load");
     int64_t lanes = maskResult.getPhysicalLanes();
     if (lanes != 32 && lanes != 64 && lanes != 128 && lanes != 256)
       return emitOpError() << "unsupported !tla.mask lane count " << lanes;
