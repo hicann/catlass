@@ -100,7 +100,7 @@ struct CopyUb2L1Tla<
             "The input parameters do not match. TensorSrc must be UB and zN, "
             "while TensorDst must be L1 and zN");
 
-        int64_t srcShape = tla::get<0, 0>(srcTensor.shape());
+        int64_t srcShape = tla::get<0, 0>(srcTensor.originShape());
         AscendC::DataCopyParams dataCopyParams(
             tla::get<1, 1>(srcTensor.shape()), srcShape,
             (tla::get<1, 1>(srcTensor.stride()) / ELE_NUM_PER_C0 - srcShape),

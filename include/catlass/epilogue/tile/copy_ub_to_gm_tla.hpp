@@ -47,9 +47,9 @@ struct CopyUb2GmTla<
             "while TensorDst must be GM and RowMajor");
 
         AscendC::DataCopyExtParams dataCopyParams(
-            tla::get<0>(dstTensor.shape()), tla::get<1>(dstTensor.shape()) * sizeof(ElementSrc),
-            (tla::get<0>(srcTensor.stride()) - tla::get<1>(srcTensor.shape())) / ELE_NUM_PER_C0,
-            (tla::get<0>(dstTensor.stride()) - tla::get<1>(dstTensor.shape())) * sizeof(ElementSrc), 0);
+            tla::get<0>(dstTensor.originShape()), tla::get<1>(dstTensor.originShape()) * sizeof(ElementSrc),
+            (tla::get<0>(srcTensor.stride()) - tla::get<1>(dstTensor.originShape())) / ELE_NUM_PER_C0,
+            (tla::get<0>(dstTensor.stride()) - tla::get<1>(dstTensor.originShape())) * sizeof(ElementSrc), 0);
         auto dstOffset = dstTensor.layout()(dstTensor.coord());
         auto srcOffset = srcTensor.layout()(srcTensor.coord());
         AscendC::DataCopyPad(dstTensor.data()[dstOffset], srcTensor.data()[srcOffset], dataCopyParams);
@@ -80,9 +80,9 @@ struct CopyUb2GmTla<
             "while TensorDst must be GM and RowMajor");
 
         AscendC::DataCopyExtParams dataCopyParams(
-            tla::get<0>(dstTensor.shape()), tla::get<1>(dstTensor.shape()) * sizeof(ElementSrc),
-            (tla::get<0>(srcTensor.stride()) - tla::get<1>(srcTensor.shape())) / ELE_NUM_PER_C0,
-            (tla::get<0>(dstTensor.stride()) - tla::get<1>(dstTensor.shape())) * sizeof(ElementSrc), 0);
+            tla::get<0>(dstTensor.originShape()), tla::get<1>(dstTensor.originShape()) * sizeof(ElementSrc),
+            (tla::get<0>(srcTensor.stride()) - tla::get<1>(dstTensor.originShape())) / ELE_NUM_PER_C0,
+            (tla::get<0>(dstTensor.stride()) - tla::get<1>(dstTensor.originShape())) * sizeof(ElementSrc), 0);
         auto dstOffset = dstTensor.layout()(dstTensor.coord());
         auto srcOffset = srcTensor.layout()(srcTensor.coord());
         AscendC::DataCopyPad(dstTensor.data()[dstOffset], srcTensor.data()[srcOffset], dataCopyParams);

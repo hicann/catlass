@@ -76,7 +76,8 @@ struct TilePerBlockQuant {
             Max((RegTensor<uint16_t>&)srcMaxReg, (RegTensor<uint16_t>&)srcMaxReg, (RegTensor<uint16_t>&)srcReg,
                 pregFullB16);
         }
-        Reduce<ReduceType::MAX>((RegTensor<uint16_t>&)srcMaxReg, (RegTensor<uint16_t>&)srcMaxReg, pregFullB16);
+        Reduce<AscendC::MicroAPI::ReduceType::MAX>(
+            (RegTensor<uint16_t>&)srcMaxReg, (RegTensor<uint16_t>&)srcMaxReg, pregFullB16);
         Cast<float, bfloat16_t, ctHalf2Fp32Zero>(srcMaxReg, (RegTensor<bfloat16_t>&)srcMaxReg, pregFullB16);
         Duplicate(srcMaxReg, srcMaxReg, pregFullB32);
         Duplicate(maxReg, FP8_E4M3FN_MAX, pregFullB32);
