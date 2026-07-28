@@ -21,6 +21,7 @@ _KERNEL_DTYPE = tla.Float32
 _KERNEL_ELEMENT_BYTES = 4
 _KERNEL_SHAPE = (VECTOR_ELE,)
 _KERNEL_OP: Literal["interleave", "deinterleave"] = "interleave"
+_BATCH_OPS = ("interleave",) * 4
 
 
 @tla.kernel
@@ -75,6 +76,78 @@ def interleave_op(
         tla.pipe_barrier(tla.pipes.ALL)
 
 
+def _batch_interleave_chunk(
+    a_t: Any, b_t: Any, out0_t: Any, out1_t: Any, op_name: str
+) -> None:
+    if op_name == "interleave":
+        r0, r1 = tla.interleave(a_t.load(), b_t.load())
+    else:
+        r0, r1 = tla.deinterleave(a_t.load(), b_t.load())
+    out0_t.store(r0)
+    out1_t.store(r1)
+
+
+@tla.kernel
+def interleave_op_batch(
+    mem_a: tla.Tensor,
+    mem_b: tla.Tensor,
+    mem_out0: tla.Tensor,
+    mem_out1: tla.Tensor,
+) -> None:
+    ub_loaded = tla.flag("ub_loaded", tla.arch.MTE2, tla.arch.VECTOR)
+    vec_done = tla.flag("vec_done", tla.arch.VECTOR, tla.arch.MTE3)
+    block_idx = tla.arch.block_idx()
+    allocator = tla.utils.LocalmemAllocator()
+    a_gm = tla.tile_view(
+        mem_a, tla.make_shape(VECTOR_ELE), tla.make_coord(block_idx)
+    )
+    b_gm = tla.tile_view(
+        mem_b, tla.make_shape(VECTOR_ELE), tla.make_coord(block_idx)
+    )
+    out0_gm = tla.tile_view(
+        mem_out0, tla.make_shape(VECTOR_ELE), tla.make_coord(block_idx)
+    )
+    out1_gm = tla.tile_view(
+        mem_out1, tla.make_shape(VECTOR_ELE), tla.make_coord(block_idx)
+    )
+    a_ub = _make_ub_tensor(allocator, a_gm)
+    b_ub = _make_ub_tensor(allocator, b_gm)
+    out0_ub = _make_ub_tensor(allocator, out0_gm)
+    out1_ub = _make_ub_tensor(allocator, out1_gm)
+    with tla.vector():
+        tla.copy(a_ub, a_gm)
+        tla.copy(b_ub, b_gm)
+        tla.set_flag(ub_loaded)
+        tla.wait_flag(ub_loaded)
+        with tla.vec.func(mode="simd"):
+            for i in tla.range(LOOPS):
+                a_t = _chunk(a_ub, i)
+                b_t = _chunk(b_ub, i)
+                out0_t = _chunk(out0_ub, i)
+                out1_t = _chunk(out1_ub, i)
+                if block_idx == 0:
+                    _batch_interleave_chunk(
+                        a_t, b_t, out0_t, out1_t, _BATCH_OPS[0]
+                    )
+                elif block_idx == 1:
+                    _batch_interleave_chunk(
+                        a_t, b_t, out0_t, out1_t, _BATCH_OPS[1]
+                    )
+                elif block_idx == 2:
+                    _batch_interleave_chunk(
+                        a_t, b_t, out0_t, out1_t, _BATCH_OPS[2]
+                    )
+                else:
+                    _batch_interleave_chunk(
+                        a_t, b_t, out0_t, out1_t, _BATCH_OPS[3]
+                    )
+        tla.set_flag(vec_done)
+        tla.wait_flag(vec_done)
+        tla.copy(out0_gm, out0_ub)
+        tla.copy(out1_gm, out1_ub)
+        tla.pipe_barrier(tla.pipes.ALL)
+
+
 def _make_ub_tensor(allocator: Any, like_tensor: Any) -> Any:
     ptr = allocator.allocate(
         VECTOR_ELE * _KERNEL_ELEMENT_BYTES, 256, tla.AddressSpace.ub
@@ -115,13 +188,14 @@ def _print_skip(op_name: str, dtype_name: str, shape: tuple[int, ...]) -> None:
 def _set_kernel_config(
     op_name: str, dtype_name: str, shape: tuple[int, ...] | None = None
 ) -> tuple[type[Any], Any, float | int]:
-    global VL_ELE, LOOPS, _KERNEL_DTYPE, _KERNEL_ELEMENT_BYTES, _KERNEL_SHAPE
+    global VECTOR_ELE, VL_ELE, LOOPS, _KERNEL_DTYPE, _KERNEL_ELEMENT_BYTES
+    global _KERNEL_SHAPE
     global _KERNEL_OP
     if op_name not in _operator_specs():
         raise SystemExit("unknown interleave operator")
 
-    del shape
-    config = vector_kernel_config(dtype_name, (VECTOR_ELE,), ALL_DTYPES)
+    config = vector_kernel_config(dtype_name, shape or (VECTOR_ELE,), ALL_DTYPES)
+    VECTOR_ELE = config.vector_elements
     _KERNEL_SHAPE = (VECTOR_ELE,)
     VL_ELE = config.lanes
     LOOPS = config.loops
@@ -136,6 +210,25 @@ def _compile_only_type_args(
 ) -> tuple[Any, ...]:
     tla_dtype, _, _ = _set_kernel_config(op_name, dtype_name, shape)
     return make_type_args(tla_dtype, _KERNEL_SHAPE, 4)
+
+
+def _configure_batch(
+    ops: tuple[str, ...], dtype_name: str, shape: tuple[int, ...]
+) -> tuple[type[Any], Any, float | int]:
+    global VECTOR_ELE, VL_ELE, LOOPS, _KERNEL_DTYPE, _KERNEL_ELEMENT_BYTES
+    global _KERNEL_SHAPE
+    global _BATCH_OPS
+    if not 1 <= len(ops) <= 4:
+        raise SystemExit("interleave batch requires one to four operations")
+    config = vector_kernel_config(dtype_name, shape, ALL_DTYPES)
+    VECTOR_ELE = config.vector_elements
+    _KERNEL_SHAPE = shape
+    VL_ELE = config.lanes
+    LOOPS = config.loops
+    _KERNEL_DTYPE = config.tla_dtype
+    _KERNEL_ELEMENT_BYTES = config.element_bytes
+    _BATCH_OPS = ops + (ops[-1],) * (4 - len(ops))
+    return config.tla_dtype, config.torch_dtype, config.default_sentinel
 
 
 def _make_inputs(args: Any, dtype_name: str, torch: Any) -> tuple[Any, Any]:
@@ -230,7 +323,10 @@ HARNESS = DirectVectorOpHarness(
         script_path=Path(__file__).resolve(),
         env_compile_jobs="INTERLEAVE_OP_COMPILE_JOBS",
         float_dtypes=frozenset({"f32", "f16", "bf16"}),
+        input_count=2,
         output_count=2,
+        batch_kernel=interleave_op_batch,
+        configure_batch=_configure_batch,
     )
 )
 

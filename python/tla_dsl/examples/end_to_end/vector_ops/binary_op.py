@@ -27,6 +27,9 @@ _X_LOAD_PARAMS: NormalLoadParams | UnalignLoadParams = NormalLoadParams()
 _X_STORE_PARAMS: NormalStoreParams | UnalignStoreParams = NormalStoreParams()
 _X_TILE_ELE = 0
 _STORE_LOADED_X_ONLY = False
+# Safe import-time placeholders. _configure_batch() replaces them before
+# compilation, and the harness launches only the number of requested blocks.
+_BATCH_OPS = ("add", "add", "add", "add")
 
 
 @tla.kernel
@@ -74,6 +77,69 @@ def binary_op(mem_x: tla.Tensor, mem_y: tla.Tensor, mem_z: tla.Tensor) -> None:
 
         tla.copy(z_gm, z_ub)
 
+        tla.pipe_barrier(tla.pipes.ALL)
+
+
+def _batch_binary_chunk(
+    x_ub: Any, y_ub: Any, z_ub: Any, chunk_idx: Any, op_name: str
+) -> None:
+    spec = _operator_specs()[op_name]
+    x_extent = spec.get("x_tile_ele", 0) or VL_ELE
+    x_tile = tla.tile_view(
+        x_ub, tla.make_shape(x_extent), tla.make_coord(chunk_idx)
+    )
+    y_tile = tla.tile_view(y_ub, tla.make_shape(VL_ELE), tla.make_coord(chunk_idx))
+    z_tile = tla.tile_view(z_ub, tla.make_shape(VL_ELE), tla.make_coord(chunk_idx))
+    x_load = spec.get("x_load", NormalLoadParams())
+    x_store = spec.get("x_store", NormalStoreParams())
+    if spec.get("store_loaded_x_only", False):
+        z_tile.store(x_tile.load(x_load), x_store)
+    else:
+        z_tile.store(spec["op"](x_tile.load(x_load), y_tile.load()), x_store)
+
+
+@tla.kernel
+def binary_op_batch(
+    mem_x: tla.Tensor, mem_y: tla.Tensor, mem_z: tla.Tensor
+) -> None:
+    ub_loaded = tla.flag("ub_loaded", tla.arch.MTE2, tla.arch.VECTOR)
+    vec_done = tla.flag("vec_done", tla.arch.VECTOR, tla.arch.MTE3)
+    block_idx = tla.arch.block_idx()
+
+    x_gm = tla.tile_view(
+        mem_x, tla.make_shape(VECTOR_ELE), tla.make_coord(block_idx)
+    )
+    y_gm = tla.tile_view(
+        mem_y, tla.make_shape(VECTOR_ELE), tla.make_coord(block_idx)
+    )
+    z_gm = tla.tile_view(
+        mem_z, tla.make_shape(VECTOR_ELE), tla.make_coord(block_idx)
+    )
+    x_ub_ptr = tla.allocate(VECTOR_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 256)
+    y_ub_ptr = tla.allocate(VECTOR_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 256)
+    z_ub_ptr = tla.allocate(VECTOR_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 256)
+    x_ub = tla.make_tensor_like(x_ub_ptr, x_gm, tla.arch.RowMajor)
+    y_ub = tla.make_tensor_like(y_ub_ptr, y_gm, tla.arch.RowMajor)
+    z_ub = tla.make_tensor_like(z_ub_ptr, z_gm, tla.arch.RowMajor)
+
+    with tla.vector():
+        tla.copy(x_ub, x_gm)
+        tla.copy(y_ub, y_gm)
+        tla.set_flag(ub_loaded)
+        tla.wait_flag(ub_loaded)
+        with tla.vec.func(mode="simd"):
+            for i in tla.range(LOOPS):
+                if block_idx == 0:
+                    _batch_binary_chunk(x_ub, y_ub, z_ub, i, _BATCH_OPS[0])
+                elif block_idx == 1:
+                    _batch_binary_chunk(x_ub, y_ub, z_ub, i, _BATCH_OPS[1])
+                elif block_idx == 2:
+                    _batch_binary_chunk(x_ub, y_ub, z_ub, i, _BATCH_OPS[2])
+                else:
+                    _batch_binary_chunk(x_ub, y_ub, z_ub, i, _BATCH_OPS[3])
+        tla.set_flag(vec_done)
+        tla.wait_flag(vec_done)
+        tla.copy(z_gm, z_ub)
         tla.pipe_barrier(tla.pipes.ALL)
 
 
@@ -186,6 +252,24 @@ def _compile_only_type_args(
     return make_type_args(tla_dtype, _KERNEL_SHAPE, 3)
 
 
+def _configure_batch(
+    ops: tuple[str, ...], dtype_name: str, shape: tuple[int, ...]
+) -> tuple[type[Any], Any, float | int]:
+    global VL_ELE, LOOPS, VECTOR_ELE, _KERNEL_DTYPE, _KERNEL_ELEMENT_BYTES
+    global _KERNEL_SHAPE, _BATCH_OPS
+    if not 1 <= len(ops) <= 4:
+        raise SystemExit("binary batch requires one to four operations")
+    config = vector_kernel_config(dtype_name, shape, ALL_DTYPES)
+    VECTOR_ELE = config.vector_elements
+    _KERNEL_SHAPE = shape
+    VL_ELE = config.lanes
+    LOOPS = config.loops
+    _KERNEL_DTYPE = config.tla_dtype
+    _KERNEL_ELEMENT_BYTES = config.element_bytes
+    _BATCH_OPS = ops + (ops[-1],) * (4 - len(ops))
+    return config.tla_dtype, config.torch_dtype, config.default_sentinel
+
+
 def _make_inputs(args: Any, dtype_name: str, torch: Any) -> tuple[Any, Any]:
     _, _, _ = _set_kernel_config(args.op, dtype_name, args.shape)
     dtype = vector_kernel_config(
@@ -247,6 +331,9 @@ HARNESS = DirectVectorOpHarness(
         script_path=Path(__file__).resolve(),
         env_compile_jobs="BINARY_OP_COMPILE_JOBS",
         float_dtypes=frozenset({"f32", "f16", "bf16"}),
+        input_count=2,
+        batch_kernel=binary_op_batch,
+        configure_batch=_configure_batch,
     )
 )
 

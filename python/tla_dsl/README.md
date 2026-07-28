@@ -224,6 +224,27 @@ bash tests/run_dsl_test.sh --device 0
 ```
 
 脚本会激活 conda、source CANN、导出 AscendNPU-IR 环境，**强制执行** `./build.sh` 后再跑上板用例。
+每个完整运行都会重新编译每个唯一 kernel。具有相同 dtype、shape 和 ABI 的
+向量 op 会合并到最多 4 个 case 的 multi-block kernel 中，每个 block 执行并
+独立校验一个 case；不同 dtype 仍使用不同的编译特化。融合 batch 和不能合并的
+dtype 矩阵都会先使用有限数量的 host compiler 进程编译，再顺序启动 batch。可通过
+`--compile-jobs`（默认 `4`）或 `TLA_DSL_COMPILE_JOBS` 调整这些 host-only
+编译进程：
+
+```bash
+bash tests/run_dsl_test.sh --device 0 --compile-jobs 2
+```
+
+也可以单独运行一个 4-case binary batch：
+
+```bash
+python examples/end_to_end/vector_ops/binary_op.py \
+  --batch-run add sub max min --dtypes f32 --shape 400 \
+  --batch-size 4 --device 0 --force-recompile
+```
+
+`--batch-size` 的有效范围为 `1..4`。一个 batch 内的 case 由不同 NPU block
+并行执行；batch 之间保持顺序启动。
 
 需要设置的环境变量：
 

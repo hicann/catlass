@@ -29,6 +29,7 @@ _UNARY_MODE: Literal[
     "unmasked_unary", "masked_unary", "masked_abs", "masked_neg"
 ] = "unmasked_unary"
 _UNARY_OP: Callable[[Any], Any] | None = None
+_BATCH_OPS = ("exp", "exp", "exp", "exp")
 
 _UNMASKED_UNARY_OPS = ("exp", "log", "sqrt", "abs", "neg")
 _OPERATOR_SPECS: dict[str, dict[str, Any]] = {
@@ -137,6 +138,169 @@ def vector_unary(
             tla.copy(rlog_gm, rlog_ub)
             tla.copy(rsqrt_gm, rsqrt_ub)
             tla.copy(rabs_gm, rabs_ub)
+        tla.pipe_barrier(tla.pipes.ALL)
+
+
+def _batch_unary_chunk(
+    x_t: Any,
+    z_t: Any,
+    rlog_t: Any,
+    rsqrt_t: Any,
+    rabs_t: Any,
+    tail: Any,
+    op_name: str,
+) -> None:
+    xv = x_t.load()
+    if op_name in _UNMASKED_UNARY_OPS:
+        z_t.store(_OPERATOR_SPECS[op_name]["op"](xv))
+    elif op_name == "masked_abs":
+        lane_mask = tla.create_mask(pattern=tla.mask.H, dtype=_KERNEL_DTYPE)
+        z_t.store(tla.abs(xv, mask=lane_mask), mask=tail)
+    elif op_name == "masked_neg":
+        lane_mask = tla.create_mask(pattern=tla.mask.H, dtype=_KERNEL_DTYPE)
+        z_t.store(tla.neg(xv, mask=lane_mask), mask=tail)
+    else:
+        m_exp = tla.create_mask(pattern=tla.mask.H, dtype=_KERNEL_DTYPE)
+        m_log = tla.create_mask(pattern=tla.mask.Q, dtype=_KERNEL_DTYPE)
+        m_sqrt = tla.create_mask(pattern=tla.mask.M4, dtype=_KERNEL_DTYPE)
+        m_abs = tla.create_mask(pattern=tla.mask.H, dtype=_KERNEL_DTYPE)
+        z_t.store(tla.exp(xv, mask=m_exp), mask=tail)
+        rlog_t.store(tla.log(xv, mask=m_log), mask=tail)
+        rsqrt_t.store(tla.sqrt(xv, mask=m_sqrt), mask=tail)
+        rabs_t.store(tla.abs(xv, mask=m_abs), mask=tail)
+
+
+def _copy_batch_unary_outputs(
+    op_name: str,
+    z_gm: Any,
+    rlog_gm: Any,
+    rsqrt_gm: Any,
+    rabs_gm: Any,
+    z_ub: Any,
+    rlog_ub: Any,
+    rsqrt_ub: Any,
+    rabs_ub: Any,
+) -> None:
+    tla.copy(z_gm, z_ub)
+    if op_name == "masked_unary":
+        tla.copy(rlog_gm, rlog_ub)
+        tla.copy(rsqrt_gm, rsqrt_ub)
+        tla.copy(rabs_gm, rabs_ub)
+
+
+@tla.kernel
+def vector_unary_batch(
+    mem_x: tla.Tensor,
+    mem_z: tla.Tensor,
+    mem_rlog: tla.Tensor,
+    mem_rsqrt: tla.Tensor,
+    mem_rabs: tla.Tensor,
+) -> None:
+    ub_loaded = tla.flag("ub_loaded", tla.arch.MTE2, tla.arch.VECTOR)
+    vec_done = tla.flag("vec_done", tla.arch.VECTOR, tla.arch.MTE3)
+    block_idx = tla.arch.block_idx()
+    allocator = tla.utils.LocalmemAllocator()
+
+    x_gm = tla.tile_view(
+        mem_x, tla.make_shape(VECTOR_ELE), tla.make_coord(block_idx)
+    )
+    z_gm = tla.tile_view(
+        mem_z, tla.make_shape(VECTOR_ELE), tla.make_coord(block_idx)
+    )
+    rlog_gm = tla.tile_view(
+        mem_rlog, tla.make_shape(VECTOR_ELE), tla.make_coord(block_idx)
+    )
+    rsqrt_gm = tla.tile_view(
+        mem_rsqrt, tla.make_shape(VECTOR_ELE), tla.make_coord(block_idx)
+    )
+    rabs_gm = tla.tile_view(
+        mem_rabs, tla.make_shape(VECTOR_ELE), tla.make_coord(block_idx)
+    )
+    x_ub = _make_ub_tensor(allocator, x_gm)
+    z_ub = _make_ub_tensor(allocator, z_gm)
+    rlog_ub = _make_ub_tensor(allocator, rlog_gm)
+    rsqrt_ub = _make_ub_tensor(allocator, rsqrt_gm)
+    rabs_ub = _make_ub_tensor(allocator, rabs_gm)
+
+    with tla.vector():
+        tla.copy(x_ub, x_gm)
+        tla.set_flag(ub_loaded)
+        tla.wait_flag(ub_loaded)
+        with tla.vec.func(mode="simd"):
+            remaining = VECTOR_ELE
+            for i in tla.range(LOOPS):
+                x_t = _chunk(x_ub, i)
+                z_t = _chunk(z_ub, i)
+                rlog_t = _chunk(rlog_ub, i)
+                rsqrt_t = _chunk(rsqrt_ub, i)
+                rabs_t = _chunk(rabs_ub, i)
+                tail, remaining = tla.update_mask(remaining, dtype=_KERNEL_DTYPE)
+                if block_idx == 0:
+                    _batch_unary_chunk(
+                        x_t, z_t, rlog_t, rsqrt_t, rabs_t, tail, _BATCH_OPS[0]
+                    )
+                elif block_idx == 1:
+                    _batch_unary_chunk(
+                        x_t, z_t, rlog_t, rsqrt_t, rabs_t, tail, _BATCH_OPS[1]
+                    )
+                elif block_idx == 2:
+                    _batch_unary_chunk(
+                        x_t, z_t, rlog_t, rsqrt_t, rabs_t, tail, _BATCH_OPS[2]
+                    )
+                else:
+                    _batch_unary_chunk(
+                        x_t, z_t, rlog_t, rsqrt_t, rabs_t, tail, _BATCH_OPS[3]
+                    )
+        tla.set_flag(vec_done)
+        tla.wait_flag(vec_done)
+        if block_idx == 0:
+            _copy_batch_unary_outputs(
+                _BATCH_OPS[0],
+                z_gm,
+                rlog_gm,
+                rsqrt_gm,
+                rabs_gm,
+                z_ub,
+                rlog_ub,
+                rsqrt_ub,
+                rabs_ub,
+            )
+        elif block_idx == 1:
+            _copy_batch_unary_outputs(
+                _BATCH_OPS[1],
+                z_gm,
+                rlog_gm,
+                rsqrt_gm,
+                rabs_gm,
+                z_ub,
+                rlog_ub,
+                rsqrt_ub,
+                rabs_ub,
+            )
+        elif block_idx == 2:
+            _copy_batch_unary_outputs(
+                _BATCH_OPS[2],
+                z_gm,
+                rlog_gm,
+                rsqrt_gm,
+                rabs_gm,
+                z_ub,
+                rlog_ub,
+                rsqrt_ub,
+                rabs_ub,
+            )
+        else:
+            _copy_batch_unary_outputs(
+                _BATCH_OPS[3],
+                z_gm,
+                rlog_gm,
+                rsqrt_gm,
+                rabs_gm,
+                z_ub,
+                rlog_ub,
+                rsqrt_ub,
+                rabs_ub,
+            )
         tla.pipe_barrier(tla.pipes.ALL)
 
 
@@ -259,6 +423,25 @@ def _compile_only_type_args(
     return make_type_args(tla_dtype, _KERNEL_SHAPE, 1 + _KERNEL_OUTPUTS)
 
 
+def _configure_batch(
+    ops: tuple[str, ...], dtype_name: str, shape: tuple[int, ...]
+) -> tuple[type[Any], Any, float | int]:
+    global VL_ELE, LOOPS, VECTOR_ELE, _KERNEL_DTYPE, _KERNEL_ELEMENT_BYTES
+    global _KERNEL_SHAPE, _DEFAULT_SENTINEL, _BATCH_OPS
+    if not 1 <= len(ops) <= 4:
+        raise SystemExit("unary batch requires one to four operations")
+    config = vector_kernel_config(dtype_name, shape, ALL_DTYPES)
+    VECTOR_ELE = config.vector_elements
+    _KERNEL_SHAPE = shape
+    VL_ELE = config.lanes
+    LOOPS = config.loops
+    _KERNEL_DTYPE = config.tla_dtype
+    _KERNEL_ELEMENT_BYTES = config.element_bytes
+    _DEFAULT_SENTINEL = config.default_sentinel
+    _BATCH_OPS = ops + (ops[-1],) * (4 - len(ops))
+    return config.tla_dtype, config.torch_dtype, config.default_sentinel
+
+
 def _make_inputs(args: Any, dtype_name: str, torch: Any) -> tuple[Any, ...]:
     _, dtype, _ = _set_kernel_config(args.op, dtype_name, args.shape)
     device = "npu"
@@ -340,7 +523,10 @@ HARNESS = DirectVectorOpHarness(
         script_path=_SCRIPT_PATH,
         env_compile_jobs="UNARY_OP_COMPILE_JOBS",
         float_dtypes=frozenset({"f16", "f32"}),
+        input_count=1,
         output_count=_KERNEL_OUTPUTS,
+        batch_kernel=vector_unary_batch,
+        configure_batch=_configure_batch,
     )
 )
 

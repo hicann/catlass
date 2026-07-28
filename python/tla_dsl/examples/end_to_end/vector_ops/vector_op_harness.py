@@ -70,8 +70,17 @@ class DirectVectorOpConfig:
     script_path: Path
     env_compile_jobs: str
     float_dtypes: frozenset[str]
+    input_count: int = 0
     output_count: int = 1
     launch_blocks: int = 1
+    batch_kernel: Any | None = None
+    configure_batch: (
+        Callable[
+            [tuple[str, ...], str, tuple[int, ...]],
+            tuple[type[Any], Any, float | int],
+        ]
+        | None
+    ) = None
 
 
 def shape_num_elements(shape: tuple[int, ...]) -> int:
@@ -175,6 +184,27 @@ def _parse_compile_jobs(value: str) -> int | str:
             "compile jobs must be a positive integer, 0 for CPU count, or 'all'"
         )
     return jobs
+
+
+def _parse_batch_size(value: str) -> int:
+    try:
+        size = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("batch size must be an integer from 1 to 4") from exc
+    if not 1 <= size <= 4:
+        raise argparse.ArgumentTypeError("batch size must be an integer from 1 to 4")
+    return size
+
+
+def operation_batches(
+    operations: tuple[str, ...], batch_size: int
+) -> tuple[tuple[str, ...], ...]:
+    if not 1 <= batch_size <= 4:
+        raise ValueError("batch_size must be between 1 and 4")
+    return tuple(
+        operations[start : start + batch_size]
+        for start in range(0, len(operations), batch_size)
+    )
 
 
 def _available_cpu_cores() -> list[int]:
@@ -455,6 +485,310 @@ class DirectVectorOpHarness:
         print(f"first mismatch={first_mismatch}")
         return 0 if first_mismatch is None else 1
 
+    def _batch_cache_dir(
+        self,
+        args: argparse.Namespace,
+        dtype_name: str,
+        shape: tuple[int, ...],
+        ops: tuple[str, ...],
+    ) -> Path:
+        descriptor = "__".join(ops)
+        return (
+            Path(args.cache_dir).expanduser()
+            / "batches"
+            / f"{dtype_name}_{shape_label(shape)}"
+            / descriptor
+        )
+
+    def _batch_type_args(
+        self, tla_dtype: type[Any], packed_shape: tuple[int, ...]
+    ) -> tuple[Any, ...]:
+        return make_type_args(
+            tla_dtype,
+            packed_shape,
+            self.config.input_count + self.config.output_count,
+        )
+
+    def _verify_batch_case(
+        self,
+        op_name: str,
+        dtype_name: str,
+        actual_outputs: tuple[Any, ...],
+        expected_outputs: tuple[Any, ...],
+    ) -> bool:
+        import torch
+
+        atol = self.config.operator_specs()[op_name]["default_atol"]
+        first_mismatch: dict[str, Any] | None = None
+        output_matches = []
+        for output_index, (actual, expected) in enumerate(
+            zip(actual_outputs, expected_outputs, strict=True)
+        ):
+            if dtype_name in self.config.float_dtypes:
+                matches = torch.isclose(actual, expected, rtol=0.0, atol=atol)
+            else:
+                matches = actual.eq(expected)
+            output_matches.append(bool(matches.all()))
+            mismatch = matches.logical_not().nonzero(as_tuple=False)
+            if first_mismatch is None and mismatch.numel():
+                index = int(mismatch[0].item())
+                first_mismatch = {
+                    "output": output_index,
+                    "index": index,
+                    "actual": actual[index].item(),
+                    "expected": expected[index].item(),
+                }
+        print(
+            f"batch_case op={op_name} dtype={dtype_name} "
+            f"passed={all(output_matches)} first_mismatch={first_mismatch}"
+        )
+        return first_mismatch is None
+
+    def _run_batch(
+        self,
+        args: argparse.Namespace,
+        ops: tuple[str, ...],
+        dtype_name: str,
+        torch: Any,
+    ) -> int:
+        batch_kernel = self.config.batch_kernel
+        configure_batch = self.config.configure_batch
+        if batch_kernel is None or configure_batch is None:
+            raise SystemExit(
+                f"{self.script_name} does not support operation batching"
+            )
+        shape = args.shape
+        case_inputs: list[tuple[Any, ...]] = []
+        case_expected: list[tuple[Any, ...]] = []
+        sentinels: list[float | int] = []
+
+        for op_name in ops:
+            case_args = argparse.Namespace(**vars(args))
+            case_args.op = op_name
+            _, _, sentinel = self.config.set_kernel_config(
+                op_name, dtype_name, shape
+            )
+            inputs = self.config.make_inputs(case_args, dtype_name, torch)
+            expected = self.config.expected(op_name, inputs)
+            expected_outputs = expected if isinstance(expected, tuple) else (expected,)
+            if len(inputs) != self.config.input_count:
+                raise SystemExit(
+                    f"{self.script_name}: op={op_name} produced {len(inputs)} inputs; "
+                    f"batch ABI requires {self.config.input_count}"
+                )
+            if len(expected_outputs) != self.config.output_count:
+                raise SystemExit(
+                    f"{self.script_name}: op={op_name} produced "
+                    f"{len(expected_outputs)} outputs; "
+                    f"batch ABI requires {self.config.output_count}"
+                )
+            case_inputs.append(inputs)
+            case_expected.append(expected_outputs)
+            sentinels.append(sentinel)
+
+        tla_dtype, batch_torch_dtype, _ = configure_batch(ops, dtype_name, shape)
+        packed_shape = (len(ops) * shape_num_elements(shape),)
+        packed_inputs = tuple(
+            torch.cat([inputs[index] for inputs in case_inputs])
+            for index in range(self.config.input_count)
+        )
+        packed_outputs = tuple(
+            torch.cat(
+                [
+                    torch.full(
+                        (shape_num_elements(shape),),
+                        sentinels[case_index],
+                        dtype=batch_torch_dtype,
+                        device="npu",
+                    )
+                    for case_index in range(len(ops))
+                ]
+            )
+            for _ in range(self.config.output_count)
+        )
+        tla_inputs = tuple(
+            make_tla_tensor(value, tla_dtype, packed_shape) for value in packed_inputs
+        )
+        tla_outputs = tuple(
+            make_tla_tensor(value, tla_dtype, packed_shape) for value in packed_outputs
+        )
+        batch_args = argparse.Namespace(**vars(args))
+        batch_args.cache_dir = str(
+            self._batch_cache_dir(args, dtype_name, shape, ops)
+        )
+        artifact = tla.compile(
+            batch_kernel,
+            *tla_inputs,
+            *tla_outputs,
+            **self._runtime_kwargs(batch_args),
+        )
+        artifact(*tla_inputs, *tla_outputs, block=len(ops))
+        torch.npu.synchronize()
+
+        extent = shape_num_elements(shape)
+        failed = 0
+        for case_index, (op_name, expected_outputs) in enumerate(
+            zip(ops, case_expected, strict=True)
+        ):
+            start = case_index * extent
+            end = start + extent
+            actual_outputs = tuple(output[start:end] for output in packed_outputs)
+            if not self._verify_batch_case(
+                op_name, dtype_name, actual_outputs, expected_outputs
+            ):
+                failed += 1
+        print(
+            f"batch_kernel_ok={failed == 0} dtype={dtype_name} "
+            f"ops={','.join(ops)} blocks={len(ops)}"
+        )
+        print(f"kernel.o path={artifact.kernel_binary_path}")
+        return failed
+
+    def build_batch(self, args: argparse.Namespace) -> int:
+        batch_kernel = self.config.batch_kernel
+        configure_batch = self.config.configure_batch
+        if batch_kernel is None or configure_batch is None:
+            raise SystemExit(
+                f"{self.script_name} does not support operation batching"
+            )
+        ops = tuple(args.batch_build)
+        tla_dtype, _, _ = configure_batch(ops, args.dtype, args.shape)
+        packed_shape = (len(ops) * shape_num_elements(args.shape),)
+        batch_args = argparse.Namespace(**vars(args))
+        batch_args.cache_dir = str(
+            self._batch_cache_dir(args, args.dtype, args.shape, ops)
+        )
+        artifact = tla.compile(
+            batch_kernel,
+            *self._batch_type_args(tla_dtype, packed_shape),
+            **self._runtime_kwargs(batch_args),
+        )
+        print(
+            f"batch_compile_ok=True dtype={args.dtype} "
+            f"ops={','.join(ops)} blocks={len(ops)}"
+        )
+        print(f"kernel.o path={artifact.kernel_binary_path}")
+        return 0
+
+    def _batch_build_command(
+        self,
+        args: argparse.Namespace,
+        ops: tuple[str, ...],
+        dtype_name: str,
+        index: int,
+    ) -> list[str]:
+        command = [
+            sys.executable,
+            str(self.config.script_path),
+            "--batch-build",
+            *ops,
+            "--dtype",
+            dtype_name,
+            "--shape",
+            shape_label(args.shape),
+            "--cache-dir",
+            str(args.cache_dir),
+            "--force-recompile",
+        ]
+        taskset = shutil.which("taskset")
+        cores = _available_cpu_cores()
+        if taskset is None or not cores:
+            return command
+        return [taskset, "-c", str(cores[index % len(cores)]), *command]
+
+    def precompile_batches(
+        self,
+        args: argparse.Namespace,
+        batches: tuple[tuple[str, tuple[str, ...]], ...],
+    ) -> int:
+        jobs = _resolve_compile_jobs(args, len(batches))
+        print("batch_precompile_enabled=True")
+        print(f"batch_precompile_jobs={jobs}")
+
+        def run_batch(
+            index: int, dtype_name: str, ops: tuple[str, ...]
+        ) -> tuple[str, tuple[str, ...], subprocess.CompletedProcess[str]]:
+            process = subprocess.run(
+                self._batch_build_command(args, ops, dtype_name, index),
+                check=False,
+                capture_output=True,
+                text=True,
+                env=os.environ.copy(),
+            )
+            return dtype_name, ops, process
+
+        failed = 0
+        start = time.perf_counter()
+        with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as executor:
+            futures = [
+                executor.submit(run_batch, index, dtype_name, ops)
+                for index, (dtype_name, ops) in enumerate(batches)
+            ]
+            for future in concurrent.futures.as_completed(futures):
+                dtype_name, ops, process = future.result()
+                label = f"dtype={dtype_name} ops={','.join(ops)}"
+                if process.returncode == 0:
+                    print(f"===== BATCH PRECOMPILE PASS {label} =====")
+                else:
+                    failed += 1
+                    print(
+                        f"===== BATCH PRECOMPILE FAIL {label} "
+                        f"rc={process.returncode} ====="
+                    )
+                    self._print_process_output(process)
+        print(f"timing.batch_precompile_seconds={time.perf_counter() - start:.6f}")
+        return 0 if failed == 0 else 1
+
+    def batch_run(self, args: argparse.Namespace) -> int:
+        if self.config.batch_kernel is None or self.config.configure_batch is None:
+            raise SystemExit(f"{self.script_name} does not support operation batching")
+        requested_ops = tuple(args.batch_run)
+        dtypes = tuple(args.dtypes)
+        skipped = 0
+        batches: list[tuple[str, tuple[str, ...]]] = []
+        for dtype_name in dtypes:
+            supported = []
+            for op_name in requested_ops:
+                if self.config.unsupported_case(op_name, dtype_name):
+                    skipped += 1
+                    self.config.print_skip(op_name, dtype_name, args.shape)
+                else:
+                    supported.append(op_name)
+            batches.extend(
+                (dtype_name, ops)
+                for ops in operation_batches(tuple(supported), args.batch_size)
+            )
+        if not batches:
+            print(f"batch summary: passed=0 failed=0 skipped={skipped} batches=0")
+            return 0
+        if self.precompile_batches(args, tuple(batches)) != 0:
+            return 1
+        launch_args = argparse.Namespace(**vars(args))
+        launch_args.force_recompile = False
+        launch_args.no_cache = False
+        tla.initialize(device=args.device)
+        try:
+            torch = require_torch_npu(args.device, self.script_name)
+            failed = 0
+            passed = 0
+            batch_count = 0
+            for dtype_name, ops in batches:
+                batch_count += 1
+                batch_failed = self._run_batch(
+                    launch_args, ops, dtype_name, torch
+                )
+                failed += batch_failed
+                passed += len(ops) - batch_failed
+                if batch_failed and args.fail_fast:
+                    break
+            print(
+                f"batch summary: passed={passed} failed={failed} skipped={skipped} "
+                f"batches={batch_count} total={passed + failed + skipped}"
+            )
+            return 0 if failed == 0 else 1
+        finally:
+            tla.finalize()
+
     def sweep(self, args: argparse.Namespace) -> int:
         if args.precompile_sweep:
             precompile_rc = self.precompile_sweep(args)
@@ -529,11 +863,26 @@ class DirectVectorOpHarness:
 
     def _build_parser(self) -> argparse.ArgumentParser:
         parser = argparse.ArgumentParser(description=self.config.description)
-        parser.add_argument("op", choices=tuple(sorted(self.config.operator_specs())))
+        parser.add_argument(
+            "op",
+            choices=tuple(sorted(self.config.operator_specs())),
+            nargs="?",
+        )
         mode = parser.add_mutually_exclusive_group()
         mode.add_argument("--build-only", action="store_true")
         mode.add_argument("--run", action="store_true")
         mode.add_argument("--sweep", action="store_true")
+        mode.add_argument(
+            "--batch-run",
+            choices=tuple(sorted(self.config.operator_specs())),
+            nargs="+",
+        )
+        mode.add_argument(
+            "--batch-build",
+            choices=tuple(sorted(self.config.operator_specs())),
+            nargs="+",
+            help=argparse.SUPPRESS,
+        )
         parser.add_argument("--device", type=int, default=2)
         parser.add_argument("--block", type=int, default=None)
         parser.add_argument("--dtype", choices=self.config.all_dtypes, default="f32")
@@ -562,6 +911,7 @@ class DirectVectorOpHarness:
             help="Operand dtypes for --sweep.",
         )
         parser.add_argument("--all-dtypes", action="store_true")
+        parser.add_argument("--batch-size", type=_parse_batch_size, default=4)
         parser.add_argument("--sentinel", type=float, default=None)
         parser.add_argument("--atol", type=float, default=None)
         parser.add_argument("--cache-dir", default=str(DEFAULT_CACHE_DIR))
@@ -591,6 +941,16 @@ class DirectVectorOpHarness:
         args = self._build_parser().parse_args()
         if args.block is None:
             args.block = self.config.launch_blocks
+        if args.batch_run is not None:
+            if args.op is not None:
+                raise SystemExit("positional op cannot be combined with --batch-run")
+            return self.batch_run(args)
+        if args.batch_build is not None:
+            if args.op is not None:
+                raise SystemExit("positional op cannot be combined with --batch-build")
+            return self.build_batch(args)
+        if args.op is None:
+            raise SystemExit("a positional op is required unless --batch-run is used")
         if args.atol is None:
             args.atol = self.config.operator_specs()[args.op]["default_atol"]
         if args.sizes is not None:

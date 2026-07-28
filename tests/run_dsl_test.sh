@@ -76,6 +76,7 @@ TLA_DSL_ASCENDNPU_IR_ROOT="${TLA_DSL_ASCENDNPU_IR_ROOT:-${TLA_DSL_PREBUILT_ASCEN
 
 CONDA_ENV="${CONDA_ENV:-ascend-catlass-dsl}"
 DEVICE_ID="${DEVICE_ID:-1}"
+COMPILE_JOBS="${TLA_DSL_COMPILE_JOBS:-4}"
 
 BASIC_MMAD_REL="examples/end_to_end/basic_mmad/basic_matmul.py"
 BASIC_MMAD_PTR_REL="examples/end_to_end/basic_mmad/basic_mmad_ptr.py"
@@ -158,6 +159,10 @@ env, runs ./build.sh, then runs the test.
 Options:
   -h, --help              Show this help
   --device ID             NPU device id (default: ${DEVICE_ID})
+  --compile-jobs N        Host-only compiler processes for vector dtype batches
+                          (default: ${COMPILE_JOBS}; env: TLA_DSL_COMPILE_JOBS)
+                          Compatible same-dtype op batches use up to four NPU
+                          blocks in one fused kernel.
 
 Paths (auto from script location):
   WORKSPACE_ROOT=${WORKSPACE_ROOT}   (override: ASCEND_CATLASS_DSL_ROOT)
@@ -195,6 +200,10 @@ while [[ $# -gt 0 ]]; do
             shift
             DEVICE_ID="${1:?--device requires an argument}"
             ;;
+        --compile-jobs)
+            shift
+            COMPILE_JOBS="${1:?--compile-jobs requires an argument}"
+            ;;
         *)
             echo "error: unknown argument: $1" >&2
             usage >&2
@@ -203,6 +212,11 @@ while [[ $# -gt 0 ]]; do
     esac
     shift
 done
+
+if [[ ! "${COMPILE_JOBS}" =~ ^[1-9][0-9]*$ ]]; then
+    echo "error: --compile-jobs must be a positive integer; got ${COMPILE_JOBS}" >&2
+    exit 2
+fi
 
 _activate_conda() {
     if [[ -n "${CONDA_EXE:-}" ]] && [[ -f "$(dirname "${CONDA_EXE}")/../etc/profile.d/conda.sh" ]]; then
@@ -417,7 +431,8 @@ _run_basic_mmad_case() {
     echo "==> Running basic_mmad validation [${label}]: --run --all-layouts --all-mmad-dtypes --device ${DEVICE_ID} $*"
     (
         cd "${TLA_DSL_DIR}"
-        python "${BASIC_MMAD_REL}" --run --all-layouts --all-mmad-dtypes --device "${DEVICE_ID}" "$@"
+        python "${BASIC_MMAD_REL}" --run --all-layouts --all-mmad-dtypes \
+            --device "${DEVICE_ID}" --force-recompile "$@"
     )
 }
 
@@ -431,7 +446,7 @@ _run_basic_mmad_ptr_case() {
     echo "==> Running basic_mmad_ptr validation [ptr + offset -> make_tensor]: --run --device ${DEVICE_ID}"
     (
         cd "${TLA_DSL_DIR}"
-        python "${BASIC_MMAD_PTR_REL}" --run --device "${DEVICE_ID}"
+        python "${BASIC_MMAD_PTR_REL}" --run --device "${DEVICE_ID}" --force-recompile
     )
 }
 
@@ -443,7 +458,8 @@ _run_basic_vadd_case() {
     echo "==> Running basic_vadd validation [${label}]: --run --all-dtypes --device ${DEVICE_ID} $*"
     (
         cd "${TLA_DSL_DIR}"
-        python "${BASIC_VADD_REL}" --run --all-dtypes --device "${DEVICE_ID}" "$@"
+        python "${BASIC_VADD_REL}" --run --all-dtypes --device "${DEVICE_ID}" \
+            --force-recompile "$@"
     )
 }
 
@@ -467,7 +483,7 @@ _run_basic_mixed_case() {
     echo "==> Running basic_mixed validation [fixed shape/dtypes]: --run --device ${DEVICE_ID}"
     (
         cd "${TLA_DSL_DIR}"
-        python "${BASIC_MIXED_REL}" --run --device "${DEVICE_ID}"
+        python "${BASIC_MIXED_REL}" --run --device "${DEVICE_ID}" --force-recompile
     )
 }
 
@@ -477,7 +493,7 @@ _run_basic_mixed_ub2l1_case() {
     echo "==> Running basic_mixed_ub2l1 validation [fixed shape/dtypes, gm->ub->l1]: --run --device ${DEVICE_ID}"
     (
         cd "${TLA_DSL_DIR}"
-        python "${BASIC_MIXED_UB2L1_REL}" --run --device "${DEVICE_ID}"
+        python "${BASIC_MIXED_UB2L1_REL}" --run --device "${DEVICE_ID}" --force-recompile
     )
 }
 
@@ -487,7 +503,7 @@ _run_basic_mixed_store_zN_case() {
     echo "==> Running basic_mixed_store_zN validation [gm->ub(row->zN)->l1]: --run --device ${DEVICE_ID}"
     (
         cd "${TLA_DSL_DIR}"
-        python "${BASIC_MIXED_STORE_ZN_REL}" --run --device "${DEVICE_ID}"
+        python "${BASIC_MIXED_STORE_ZN_REL}" --run --device "${DEVICE_ID}" --force-recompile
     )
 }
 
@@ -509,147 +525,114 @@ _run_basic_mixed_store_zNUnAlign_case "m=64 (fractal-aligned)" --m 64
 _run_basic_mixed_store_zNUnAlign_case "m=50 (non-aligned)" --m 50
 
 _run_masked_binary_case() {
-    echo "==> Running masked_binary validation [all dtypes]: masked_binary --run --all-dtypes --device ${DEVICE_ID}"
+    echo "==> Running masked_binary validation [all dtypes]: masked_binary --sweep --shapes 400 --device ${DEVICE_ID} --force-recompile"
     (
         cd "${TLA_DSL_DIR}"
-        python "${MASKED_BINARY_REL}" masked_binary --run --all-dtypes --device "${DEVICE_ID}"
+        python "${MASKED_BINARY_REL}" masked_binary --sweep --shapes 400 \
+            --device "${DEVICE_ID}" --compile-jobs "${COMPILE_JOBS}" \
+            --force-recompile
     )
 }
 
 _run_masked_binary_case
 
 _run_bitwise_ops_case() {
-    echo "==> Running bitwise_ops validation [all dtypes]: bitwise_ops --run --all-dtypes --device ${DEVICE_ID}"
+    echo "==> Running bitwise_ops validation [all dtypes]: bitwise_ops --sweep --shapes 400 --device ${DEVICE_ID} --force-recompile"
     (
         cd "${TLA_DSL_DIR}"
-        python "${BITWISE_OPS_REL}" bitwise_ops --run --all-dtypes --device "${DEVICE_ID}"
+        python "${BITWISE_OPS_REL}" bitwise_ops --sweep --shapes 400 \
+            --device "${DEVICE_ID}" --compile-jobs "${COMPILE_JOBS}" \
+            --force-recompile
     )
 }
 
 _run_bitwise_ops_case
 
-_run_binary_op_case() {
-    local op="$1"
-    echo "==> Running binary_op validation [${op} all dtypes]: ${op} --run --all-dtypes --device ${DEVICE_ID}"
+_run_binary_op_batch() {
+    echo "==> Running binary_op validation [batched ops, all dtypes]: --batch-run --device ${DEVICE_ID}"
     (
         cd "${TLA_DSL_DIR}"
-        python "${BINARY_OP_REL}" "${op}" --run --all-dtypes --device "${DEVICE_ID}"
+        python "${BINARY_OP_REL}" --batch-run \
+            add sub mul div max min add_unalign add_brc_b32 \
+            --shape 400 --batch-size 4 --device "${DEVICE_ID}" \
+            --compile-jobs "${COMPILE_JOBS}" \
+            --force-recompile
     )
 }
 
-for _binary_op in add sub mul div max min add_unalign add_brc_b32; do
-    _run_binary_op_case "${_binary_op}"
-done
+_run_binary_op_batch
 
-_run_reduction_ops_case() {
-    local op="$1"
-    echo "==> Running reduction_ops validation [${op} f32]: ${op} --run --device ${DEVICE_ID}"
+_run_reduction_ops_batch() {
+    echo "==> Running reduction_ops validation [batched add/max/min f32]: --batch-run --device ${DEVICE_ID}"
     (
         cd "${TLA_DSL_DIR}"
-        python "${REDUCTION_OPS_REL}" "${op}" --run --device "${DEVICE_ID}"
+        python "${REDUCTION_OPS_REL}" --batch-run --device "${DEVICE_ID}" \
+            --force-recompile
     )
 }
 
-for _reduce_op in add max min; do
-    _run_reduction_ops_case "${_reduce_op}"
-done
+_run_reduction_ops_batch
 
-_run_compare_mask_case() {
-    local op="$1"
-    echo "==> Running compare_mask validation [${op}]: ${op} --run --all-dtypes --device ${DEVICE_ID}"
+_run_compare_mask_batch() {
+    echo "==> Running compare_mask validation [batched ops]: --batch-run --device ${DEVICE_ID}"
     (
         cd "${TLA_DSL_DIR}"
-        python "${COMPARE_MASK_REL}" "${op}" --run --all-dtypes --device "${DEVICE_ID}"
+        python "${COMPARE_MASK_REL}" --batch-run "${COMPARE_MASK_OPS[@]}" \
+            --shape 400 --batch-size 4 --device "${DEVICE_ID}" \
+            --compile-jobs "${COMPILE_JOBS}" \
+            --force-recompile
     )
 }
 
-for _compare_mask_op in "${COMPARE_MASK_OPS[@]}"; do
-    _run_compare_mask_case "${_compare_mask_op}"
-done
+_run_compare_mask_batch
 
-_run_unary_ops_case() {
-    local op="$1"
-    echo "==> Running unary_ops validation [${op} all dtypes]: ${op} --run --all-dtypes --device ${DEVICE_ID}"
+_run_unary_ops_batch() {
+    echo "==> Running unary_ops validation [batched ops, all dtypes]: --batch-run --device ${DEVICE_ID}"
     (
         cd "${TLA_DSL_DIR}"
-        python "${UNARY_OPS_REL}" "${op}" --run --all-dtypes --device "${DEVICE_ID}"
+        python "${UNARY_OPS_REL}" --batch-run \
+            exp log sqrt abs neg masked_unary masked_abs masked_neg \
+            --shape 400 --batch-size 4 --device "${DEVICE_ID}" \
+            --compile-jobs "${COMPILE_JOBS}" \
+            --force-recompile
     )
 }
 
-for _unary_op in exp log sqrt abs neg; do
-    _run_unary_ops_case "${_unary_op}"
-done
-
-_run_masked_unary_case() {
-    echo "==> Running unary_ops validation [masked_unary all dtypes]: masked_unary --run --all-dtypes --device ${DEVICE_ID}"
-    (
-        cd "${TLA_DSL_DIR}"
-        python "${UNARY_OPS_REL}" masked_unary --run --all-dtypes --device "${DEVICE_ID}"
-    )
-}
-
-_run_masked_unary_case
-
-_run_masked_abs_case() {
-    echo "==> Running unary_ops validation [masked_abs all integer dtypes]: masked_abs --run --all-dtypes --device ${DEVICE_ID}"
-    (
-        cd "${TLA_DSL_DIR}"
-        python "${UNARY_OPS_REL}" masked_abs --run --all-dtypes --device "${DEVICE_ID}"
-    )
-}
-
-_run_masked_abs_case
-
-_run_masked_neg_case() {
-    echo "==> Running unary_ops validation [masked_neg all numeric dtypes]: masked_neg --run --all-dtypes --device ${DEVICE_ID}"
-    (
-        cd "${TLA_DSL_DIR}"
-        python "${UNARY_OPS_REL}" masked_neg --run --all-dtypes --device "${DEVICE_ID}"
-    )
-}
-
-_run_masked_neg_case
+_run_unary_ops_batch
 
 _run_arange_op_case() {
-    echo "==> Running arange_op validation [increase all dtypes]: increase --run --all-dtypes --device ${DEVICE_ID}"
+    echo "==> Running arange_op validation [batched increase/decrease, all dtypes]: --batch-run --device ${DEVICE_ID}"
     (
         cd "${TLA_DSL_DIR}"
-        python "${ARANGE_OP_REL}" increase --run --all-dtypes --device "${DEVICE_ID}"
-    )
-    echo "==> Running arange_op validation [decrease all dtypes]: decrease --run --all-dtypes --device ${DEVICE_ID}"
-    (
-        cd "${TLA_DSL_DIR}"
-        python "${ARANGE_OP_REL}" decrease --run --all-dtypes --device "${DEVICE_ID}"
+        python "${ARANGE_OP_REL}" --batch-run increase decrease \
+            --shape 400 --batch-size 4 --device "${DEVICE_ID}" \
+            --compile-jobs "${COMPILE_JOBS}" \
+            --force-recompile
     )
 }
 
 _run_arange_op_case
 
-_run_interleave_op_case() {
-    echo "==> Running interleave_op validation [interleave all dtypes]: interleave --run --all-dtypes --device ${DEVICE_ID}"
+_run_interleave_op_batch() {
+    echo "==> Running interleave_op validation [batched interleave/deinterleave, all dtypes]: --batch-run --device ${DEVICE_ID}"
     (
         cd "${TLA_DSL_DIR}"
-        python "${INTERLEAVE_OP_REL}" interleave --run --all-dtypes --device "${DEVICE_ID}"
+        python "${INTERLEAVE_OP_REL}" --batch-run interleave deinterleave \
+            --shape 512 --batch-size 4 --device "${DEVICE_ID}" \
+            --compile-jobs "${COMPILE_JOBS}" \
+            --force-recompile
     )
 }
 
-_run_interleave_op_case
-
-_run_deinterleave_op_case() {
-    echo "==> Running interleave_op validation [deinterleave all dtypes]: deinterleave --run --all-dtypes --device ${DEVICE_ID}"
-    (
-        cd "${TLA_DSL_DIR}"
-        python "${INTERLEAVE_OP_REL}" deinterleave --run --all-dtypes --device "${DEVICE_ID}"
-    )
-}
-
-_run_deinterleave_op_case
+_run_interleave_op_batch
 
 _run_load_dintlv_op_case() {
-    echo "==> Running load_dintlv_op validation [dintlv_b32 f32]: dintlv_b32 --run --all-dtypes --device ${DEVICE_ID}"
+    echo "==> Running load_dintlv_op validation [dintlv_b32 f32]: dintlv_b32 --sweep --shapes 512 --device ${DEVICE_ID} --force-recompile"
     (
         cd "${TLA_DSL_DIR}"
-        python "${LOAD_DINTLV_OP_REL}" dintlv_b32 --run --all-dtypes --device "${DEVICE_ID}"
+        python "${LOAD_DINTLV_OP_REL}" dintlv_b32 --sweep --shapes 512 \
+            --device "${DEVICE_ID}" --compile-jobs "${COMPILE_JOBS}" \
+            --force-recompile
     )
 }
 
@@ -666,10 +649,12 @@ _run_load_store_mask_case() {
 _run_load_store_mask_case
 
 _run_squeeze_op_case() {
-    echo "==> Running squeeze_op validation [squeeze all dtypes]: squeeze --run --all-dtypes --device ${DEVICE_ID}"
+    echo "==> Running squeeze_op validation [squeeze all dtypes]: squeeze --sweep --shapes 64 --device ${DEVICE_ID} --force-recompile"
     (
         cd "${TLA_DSL_DIR}"
-        python "${SQUEEZE_OP_REL}" squeeze --run --all-dtypes --device "${DEVICE_ID}"
+        python "${SQUEEZE_OP_REL}" squeeze --sweep --shapes 64 \
+            --device "${DEVICE_ID}" --compile-jobs "${COMPILE_JOBS}" \
+            --force-recompile
     )
 }
 
@@ -690,7 +675,7 @@ _run_scalar_index_control_flow_case() {
     echo "==> Running scalar_index_control_flow validation [GM scalar indexing + AST compare]: --device ${DEVICE_ID}"
     (
         cd "${TLA_DSL_DIR}"
-        python "${SCALAR_INDEX_CONTROL_FLOW_REL}" --device "${DEVICE_ID}"
+        python "${SCALAR_INDEX_CONTROL_FLOW_REL}" --device "${DEVICE_ID}" --force-recompile
     )
 }
 
@@ -700,7 +685,7 @@ _run_scalar_kernel_arg_case() {
     echo "==> Running scalar_kernel_arg validation [Numeric args arithmetic]: --device ${DEVICE_ID}"
     (
         cd "${TLA_DSL_DIR}"
-        python "${SCALAR_KERNEL_ARG_REL}" --device "${DEVICE_ID}"
+        python "${SCALAR_KERNEL_ARG_REL}" --device "${DEVICE_ID}" --force-recompile
     )
 }
 
@@ -760,7 +745,7 @@ _run_scalar_arg_alignment_case() {
     echo "==> Running scalar_arg_alignment validation [tensor + i16 + tensor]: --device ${DEVICE_ID}"
     (
         cd "${TLA_DSL_DIR}"
-        python "${SCALAR_ARG_ALIGNMENT_REL}" --device "${DEVICE_ID}"
+        python "${SCALAR_ARG_ALIGNMENT_REL}" --device "${DEVICE_ID}" --force-recompile
     )
 }
 

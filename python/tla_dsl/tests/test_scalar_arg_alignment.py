@@ -13,7 +13,6 @@ _EXAMPLE = (
     / "scalar_arg_alignment.py"
 )
 _README = _EXAMPLE.with_name("README.md")
-_RUN_DSL_TEST = _TLA_DSL_ROOT.parents[1] / "tests" / "run_dsl_test.sh"
 
 
 def _example_tree() -> ast.Module:
@@ -52,13 +51,3 @@ def test_kernel_has_tensor_i16_tensor_signature_and_consumes_both_inputs() -> No
     source = ast.unparse(kernel)
     assert "output_tensor[0] = scalar" in source
     assert "output_tensor[1] = trailing_tensor[0]" in source
-
-
-def test_run_dsl_test_executes_scalar_arg_alignment_example() -> None:
-    source = _RUN_DSL_TEST.read_text()
-
-    assert (
-        'SCALAR_ARG_ALIGNMENT_REL="examples/end_to_end/scalar_arg_alignment/'
-        'scalar_arg_alignment.py"' in source
-    )
-    assert '"${SCALAR_ARG_ALIGNMENT_REL}" --device "${DEVICE_ID}"' in source

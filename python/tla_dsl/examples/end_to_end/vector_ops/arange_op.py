@@ -22,6 +22,7 @@ _KERNEL_TORCH_DTYPE = None
 _KERNEL_ELEMENT_BYTES = 4
 _KERNEL_SHAPE = (VECTOR_ELE,)
 _ARANGE_ORDER = "increase"
+_BATCH_OPS = ("increase",) * 4
 
 
 @tla.kernel
@@ -50,6 +51,51 @@ def arange_op(mem_out: tla.Tensor) -> None:
                     tla.arange(chunk_start, order=_ARANGE_ORDER, dtype=_KERNEL_DTYPE)
                 )
 
+        tla.set_flag(vec_done)
+        tla.wait_flag(vec_done)
+        tla.copy(out_gm, out_ub)
+        tla.pipe_barrier(tla.pipes.ALL)
+
+
+def _batch_arange_store(out_tile: Any, chunk_start: Any, op_name: str) -> None:
+    out_tile.store(tla.arange(chunk_start, order=op_name, dtype=_KERNEL_DTYPE))
+
+
+@tla.kernel
+def arange_op_batch(mem_out: tla.Tensor) -> None:
+    ub_loaded = tla.flag("ub_loaded", tla.arch.MTE2, tla.arch.VECTOR)
+    vec_done = tla.flag("vec_done", tla.arch.VECTOR, tla.arch.MTE3)
+    block_idx = tla.arch.block_idx()
+    allocator = tla.utils.LocalmemAllocator()
+    out_gm = tla.tile_view(
+        mem_out, tla.make_shape(VECTOR_ELE), tla.make_coord(block_idx)
+    )
+    out_ub_ptr = allocator.allocate(
+        VECTOR_ELE * _KERNEL_ELEMENT_BYTES, 256, tla.AddressSpace.ub
+    )
+    out_ub = tla.make_tensor_like(
+        tla.recast_ptr(out_ub_ptr, dtype=_KERNEL_DTYPE),
+        out_gm,
+        tla.arch.RowMajor,
+    )
+
+    with tla.vector():
+        tla.set_flag(ub_loaded)
+        tla.wait_flag(ub_loaded)
+        with tla.vec.func(mode="simd"):
+            for i in tla.range(LOOPS):
+                out_tile = tla.tile_view(
+                    out_ub, tla.make_shape(VL_ELE), tla.make_coord(i)
+                )
+                chunk_start = i * VL_ELE
+                if block_idx == 0:
+                    _batch_arange_store(out_tile, chunk_start, _BATCH_OPS[0])
+                elif block_idx == 1:
+                    _batch_arange_store(out_tile, chunk_start, _BATCH_OPS[1])
+                elif block_idx == 2:
+                    _batch_arange_store(out_tile, chunk_start, _BATCH_OPS[2])
+                else:
+                    _batch_arange_store(out_tile, chunk_start, _BATCH_OPS[3])
         tla.set_flag(vec_done)
         tla.wait_flag(vec_done)
         tla.copy(out_gm, out_ub)
@@ -99,6 +145,25 @@ def _compile_only_type_args(
     return make_type_args(tla_dtype, _KERNEL_SHAPE, 1)
 
 
+def _configure_batch(
+    ops: tuple[str, ...], dtype_name: str, shape: tuple[int, ...]
+) -> tuple[type[Any], Any, float | int]:
+    global VL_ELE, LOOPS, VECTOR_ELE, _KERNEL_DTYPE, _KERNEL_TORCH_DTYPE
+    global _KERNEL_ELEMENT_BYTES, _KERNEL_SHAPE, _BATCH_OPS
+    if not 1 <= len(ops) <= 4:
+        raise SystemExit("arange batch requires one to four operations")
+    config = vector_kernel_config(dtype_name, shape, ALL_DTYPES)
+    VECTOR_ELE = config.vector_elements
+    _KERNEL_SHAPE = shape
+    VL_ELE = config.lanes
+    LOOPS = config.loops
+    _KERNEL_DTYPE = config.tla_dtype
+    _KERNEL_TORCH_DTYPE = config.torch_dtype
+    _KERNEL_ELEMENT_BYTES = config.element_bytes
+    _BATCH_OPS = ops + (ops[-1],) * (4 - len(ops))
+    return config.tla_dtype, config.torch_dtype, config.default_sentinel
+
+
 def _make_inputs(args: Any, dtype_name: str, _torch: Any) -> tuple[Any, ...]:
     """Arange is output-only; sync module globals and return no GM input tensors."""
     _, _, _ = _set_kernel_config(args.op, dtype_name, args.shape)
@@ -121,7 +186,7 @@ def _expected(op_name: str, _inputs: tuple[Any, ...]) -> Any:
     elif op_name == "increase":
         idx = torch.arange(VECTOR_ELE, dtype=torch.int64, device="cpu")
     else:
-        raise ValueError(f"mode can only be 'increase' or 'decrease' for tla.arange")
+        raise ValueError("mode can only be 'increase' or 'decrease' for tla.arange")
     return idx.to(dtype=_KERNEL_TORCH_DTYPE, device="npu")
 
 
@@ -142,7 +207,10 @@ HARNESS = DirectVectorOpHarness(
         script_path=Path(__file__).resolve(),
         env_compile_jobs="TLA_DSL_ARANGE_COMPILE_JOBS",
         float_dtypes=frozenset(),
+        input_count=0,
         output_count=1,
+        batch_kernel=arange_op_batch,
+        configure_batch=_configure_batch,
     )
 )
 

@@ -14,6 +14,11 @@ DEFAULT_CACHE_DIR = DEMO_DIR / "artifacts" / "runtime-cache"
 VECTOR_ELE = 128
 ELEMENT_BYTES = 4
 _REDUCE_OP = tla.ReductionOp.ADD
+_BATCH_REDUCE_OPS = (
+    tla.ReductionOp.ADD,
+    tla.ReductionOp.MAX,
+    tla.ReductionOp.MIN,
+)
 
 
 @tla.kernel
@@ -47,6 +52,76 @@ def reduction_op(mem_x: tla.Tensor, mem_z: tla.Tensor) -> None:
             x1 = tla.tile_view(x_ub, tla.make_shape(TILE_ELE), tla.make_coord(1))
             z1 = tla.tile_view(z_ub, tla.make_shape(1), tla.make_coord(1))
             z1.store(x1.load().reduce(_REDUCE_OP, mask=reduce_mask), params=UnalignStoreParams())
+        tla.set_flag(done)
+        tla.wait_flag(done)
+        tla.copy(z_gm, z_ub)
+        tla.pipe_barrier(tla.pipes.ALL)
+
+
+def _batch_reduce_value(value: Any, mask: Any, op: Any) -> Any:
+    return value.reduce(op, mask=mask)
+
+
+@tla.kernel
+def reduction_op_batch(mem_x: tla.Tensor, mem_z: tla.Tensor) -> None:
+    tile_ele = 64
+    block_idx = tla.arch.block_idx()
+    loaded = tla.flag("loaded", tla.arch.MTE2, tla.arch.VECTOR)
+    done = tla.flag("done", tla.arch.VECTOR, tla.arch.MTE3)
+    x_gm = tla.tile_view(
+        mem_x, tla.make_shape(VECTOR_ELE), tla.make_coord(block_idx)
+    )
+    z_gm = tla.tile_view(mem_z, tla.make_shape(2), tla.make_coord(block_idx))
+    x_ptr = tla.allocate(VECTOR_ELE, tla.Float32, tla.AddressSpace.ub, 256)
+    z_ptr = tla.allocate(2, tla.Float32, tla.AddressSpace.ub, 256)
+    x_ub = tla.make_tensor_like(x_ptr, x_gm, tla.arch.RowMajor)
+    z_ub = tla.make_tensor_like(z_ptr, z_gm, tla.arch.RowMajor)
+    with tla.vector():
+        tla.copy(x_ub, x_gm)
+        tla.set_flag(loaded)
+        tla.wait_flag(loaded)
+        with tla.vec.func(mode="simd"):
+            reduce_mask = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Float32)
+            x0 = tla.tile_view(x_ub, tla.make_shape(tile_ele), tla.make_coord(0))
+            z0 = tla.tile_view(z_ub, tla.make_shape(1), tla.make_coord(0))
+            x1 = tla.tile_view(x_ub, tla.make_shape(tile_ele), tla.make_coord(1))
+            z1 = tla.tile_view(z_ub, tla.make_shape(1), tla.make_coord(1))
+            if block_idx == 0:
+                z0.store(
+                    _batch_reduce_value(
+                        x0.load(), reduce_mask, _BATCH_REDUCE_OPS[0]
+                    )
+                )
+                z1.store(
+                    _batch_reduce_value(
+                        x1.load(), reduce_mask, _BATCH_REDUCE_OPS[0]
+                    ),
+                    params=UnalignStoreParams(),
+                )
+            elif block_idx == 1:
+                z0.store(
+                    _batch_reduce_value(
+                        x0.load(), reduce_mask, _BATCH_REDUCE_OPS[1]
+                    )
+                )
+                z1.store(
+                    _batch_reduce_value(
+                        x1.load(), reduce_mask, _BATCH_REDUCE_OPS[1]
+                    ),
+                    params=UnalignStoreParams(),
+                )
+            else:
+                z0.store(
+                    _batch_reduce_value(
+                        x0.load(), reduce_mask, _BATCH_REDUCE_OPS[2]
+                    )
+                )
+                z1.store(
+                    _batch_reduce_value(
+                        x1.load(), reduce_mask, _BATCH_REDUCE_OPS[2]
+                    ),
+                    params=UnalignStoreParams(),
+                )
         tla.set_flag(done)
         tla.wait_flag(done)
         tla.copy(z_gm, z_ub)
@@ -100,9 +175,20 @@ def _compile(args: argparse.Namespace, *type_args: Any) -> Any:
     )
 
 
+def _compile_batch(args: argparse.Namespace, *type_args: Any) -> Any:
+    return tla.compile(
+        reduction_op_batch,
+        *type_args,
+        arch_scope="aiv.c310",
+        cache=not args.no_cache,
+        cache_dir=str(Path(args.cache_dir).expanduser().resolve() / "batch_add_max_min"),
+        force_recompile=args.force_recompile,
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("op", choices=("add", "max", "min"))
+    parser.add_argument("op", choices=("add", "max", "min"), nargs="?")
     parser.add_argument("--run", action="store_true")
     parser.add_argument("--build-only", action="store_true")
     parser.add_argument("--dtype", choices=("f32",), default="f32")
@@ -110,8 +196,53 @@ def main() -> int:
     parser.add_argument("--cache-dir", default=str(DEFAULT_CACHE_DIR))
     parser.add_argument("--force-recompile", action="store_true")
     parser.add_argument("--no-cache", action="store_true")
+    parser.add_argument("--batch-run", action="store_true")
     args = parser.parse_args()
 
+    if args.batch_run:
+        if args.op is not None:
+            raise SystemExit("positional op cannot be combined with --batch-run")
+        tla.initialize(device=args.device)
+        try:
+            import torch
+            import torch_npu  # noqa: F401
+
+            torch.npu.set_device(args.device)
+            tile_ele = 64
+            base = torch.linspace(
+                -17.0, 46.0, VECTOR_ELE, dtype=torch.float32, device="npu"
+            )
+            x = torch.cat((base, base, base))
+            z = torch.full((6,), -999.0, dtype=torch.float32, device="npu")
+            tla_x = _runtime_tensor(x, (3 * VECTOR_ELE,))
+            tla_z = _runtime_tensor(z, (6,))
+            artifact = _compile_batch(args, tla_x, tla_z)
+            artifact(tla_x, tla_z, block=3)
+            torch.npu.synchronize()
+            failed = 0
+            for index, op_name in enumerate(("add", "max", "min")):
+                actual = z[index * 2 : index * 2 + 2]
+                expected = torch.cat(
+                    (
+                        _expected(op_name, base[:tile_ele]),
+                        _expected(op_name, base[tile_ele:]),
+                    )
+                )
+                ok = bool(
+                    torch.isclose(actual, expected, rtol=0.0, atol=1e-4).all()
+                )
+                failed += not ok
+                print(
+                    f"batch_case op={op_name} dtype=f32 passed={ok} "
+                    f"actual={actual.cpu().tolist()} expected={expected.cpu().tolist()}"
+                )
+            print(f"batch_kernel_ok={failed == 0} ops=add,max,min blocks=3")
+            print(f"kernel.o path={artifact.kernel_binary_path}")
+            return 0 if failed == 0 else 1
+        finally:
+            tla.finalize()
+    if args.op is None:
+        raise SystemExit("a positional op is required unless --batch-run is used")
     _set_op(args.op)
     if args.build_only:
         artifact = _compile(args, _tensor((VECTOR_ELE,)), _tensor((2,)))

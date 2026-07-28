@@ -30,6 +30,7 @@ _KERNEL_ELEMENT_BYTES = 4
 _KERNEL_SHAPE = (VECTOR_ELE,)
 _CMP_OP: Callable[[Any, Any], Any] | None = None
 _OP_NAME: str = ""
+_BATCH_OPS = ("vector_vector_lt",) * 4
 
 
 @tla.kernel
@@ -81,6 +82,86 @@ def compare_mask(mem_a: tla.Tensor, mem_b: tla.Tensor, mem_out: tla.Tensor) -> N
         tla.set_flag(vec_done)
         tla.wait_flag(vec_done)
 
+        tla.copy(out_gm, out_ub)
+        tla.pipe_barrier(tla.pipes.ALL)
+
+
+def _batch_compare_chunk(
+    a_ref: Any,
+    a_tile: Any,
+    b_tile: Any,
+    out_tile: Any,
+    tail: Any,
+    op_name: str,
+) -> None:
+    av = a_tile.load()
+    bv = b_tile.load()
+    zero = tla.sub(av, av)
+    if op_name == "static_dynamic_lt":
+        result = tla.where(tla.cmp(a_ref, bv, "lt"), bv, zero)
+    elif op_name == "cmp_masked_fused":
+        m_lt = tla.cmp(av, bv, "lt")
+        m_ge = tla.cmp(av, 0.0, "ge")
+        result = tla.where(m_ge, tla.add(av, bv, mask=m_lt), zero)
+    else:
+        result = _operator_specs()[op_name]["op"](av, bv)
+    out_tile.store(result, mask=tail)
+
+
+@tla.kernel
+def compare_mask_batch(
+    mem_a: tla.Tensor, mem_b: tla.Tensor, mem_out: tla.Tensor
+) -> None:
+    ub_loaded = tla.flag("ub_loaded", tla.arch.MTE2, tla.arch.VECTOR)
+    vec_done = tla.flag("vec_done", tla.arch.VECTOR, tla.arch.MTE3)
+    block_idx = tla.arch.block_idx()
+    allocator = tla.utils.LocalmemAllocator()
+
+    a_gm = tla.tile_view(
+        mem_a, tla.make_shape(VECTOR_ELE), tla.make_coord(block_idx)
+    )
+    b_gm = tla.tile_view(
+        mem_b, tla.make_shape(VECTOR_ELE), tla.make_coord(block_idx)
+    )
+    out_gm = tla.tile_view(
+        mem_out, tla.make_shape(VECTOR_ELE), tla.make_coord(block_idx)
+    )
+    a_ub = _make_ub_tensor(allocator, a_gm)
+    b_ub = _make_ub_tensor(allocator, b_gm)
+    out_ub = _make_ub_tensor(allocator, out_gm)
+
+    with tla.vector():
+        tla.copy(a_ub, a_gm)
+        tla.copy(b_ub, b_gm)
+        tla.set_flag(ub_loaded)
+        tla.wait_flag(ub_loaded)
+        with tla.vec.func(mode="simd"):
+            a_static = tla.tile_view(a_ub, tla.make_shape(VL_ELE), tla.make_coord(0))
+            a_ref = a_static.load()
+            remaining = VECTOR_ELE
+            for i in tla.range(LOOPS):
+                a_tile = _chunk(a_ub, i)
+                b_tile = _chunk(b_ub, i)
+                out_tile = _chunk(out_ub, i)
+                tail, remaining = tla.update_mask(remaining, dtype=_KERNEL_DTYPE)
+                if block_idx == 0:
+                    _batch_compare_chunk(
+                        a_ref, a_tile, b_tile, out_tile, tail, _BATCH_OPS[0]
+                    )
+                elif block_idx == 1:
+                    _batch_compare_chunk(
+                        a_ref, a_tile, b_tile, out_tile, tail, _BATCH_OPS[1]
+                    )
+                elif block_idx == 2:
+                    _batch_compare_chunk(
+                        a_ref, a_tile, b_tile, out_tile, tail, _BATCH_OPS[2]
+                    )
+                else:
+                    _batch_compare_chunk(
+                        a_ref, a_tile, b_tile, out_tile, tail, _BATCH_OPS[3]
+                    )
+        tla.set_flag(vec_done)
+        tla.wait_flag(vec_done)
         tla.copy(out_gm, out_ub)
         tla.pipe_barrier(tla.pipes.ALL)
 
@@ -185,6 +266,24 @@ def _compile_only_type_args(
     return make_type_args(tla_dtype, _KERNEL_SHAPE, 3)
 
 
+def _configure_batch(
+    ops: tuple[str, ...], dtype_name: str, shape: tuple[int, ...]
+) -> tuple[type[Any], Any, float | int]:
+    global VL_ELE, LOOPS, VECTOR_ELE, _KERNEL_DTYPE, _KERNEL_ELEMENT_BYTES
+    global _KERNEL_SHAPE, _BATCH_OPS
+    if not 1 <= len(ops) <= 4:
+        raise SystemExit("compare-mask batch requires one to four operations")
+    config = vector_kernel_config(dtype_name, shape, ALL_DTYPES)
+    VECTOR_ELE = config.vector_elements
+    _KERNEL_SHAPE = shape
+    VL_ELE = config.lanes
+    LOOPS = config.loops
+    _KERNEL_DTYPE = config.tla_dtype
+    _KERNEL_ELEMENT_BYTES = config.element_bytes
+    _BATCH_OPS = ops + (ops[-1],) * (4 - len(ops))
+    return config.tla_dtype, config.torch_dtype, config.default_sentinel
+
+
 def _make_inputs(args: Any, dtype_name: str, torch: Any) -> tuple[Any, Any]:
     _, dtype, _ = _set_kernel_config(args.op, dtype_name, args.shape)
     device = "npu"
@@ -271,6 +370,9 @@ HARNESS = DirectVectorOpHarness(
         script_path=Path(__file__).resolve(),
         env_compile_jobs="COMPARE_MASK_COMPILE_JOBS",
         float_dtypes=frozenset({"f32"}),
+        input_count=2,
+        batch_kernel=compare_mask_batch,
+        configure_batch=_configure_batch,
     )
 )
 
