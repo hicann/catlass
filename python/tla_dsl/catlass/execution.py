@@ -55,13 +55,18 @@ _PRINT_TENSOR_WORKSPACE_SENTINEL = int.from_bytes(
     _PRINT_TENSOR_WORKSPACE_SENTINEL_TEXT, byteorder="big"
 )
 _DEBUG_PRINT_WORKSPACE_ABI_REVISION = "debug-print-workspace-i64-v1"
-_PRINT_TENSOR_WORKSPACE_ABI_REVISION = "print-tensor-workspace-i64-storage-v2"
+_PRINT_TENSOR_WORKSPACE_ABI_REVISION = "print-tensor-workspace-generic-v4"
 _NATIVE_PRINT_TENSOR_LINE = re.compile(
     r"DumpTensor:.*?data_type=float32.*?position=(?P<position>[A-Z0-9]+).*?"
+    r"shape=\[(?P<shape>[\d,\s]+)\].*?"
     r"dump_size=(?P<count>\d+).*?"
     r"\[(?P<values>[^\]]+)\]",
     re.DOTALL,
 )
+# CANN's 1 MiB debug FIFO reserves 48 bytes for the shape TLV and 72 bytes
+# for the tensor TLV. Its 32-byte payload alignment leaves 262_112 f32 values:
+# floor((1 MiB - 48 - 72) / 32) * (32 / sizeof(f32)).
+_PRINT_TENSOR_MAX_F32_ELEMENTS = 262_112
 _HIVM_TEMPLATE_BITCODE_ATTRS = {
     "meta_op.aic.c310.bc": ("hivm.aic_bitcode", "hivm.aic_bitcode"),
     "meta_op.aiv.c310.bc": ("hivm.aiv_bitcode", "hivm.aiv_bitcode"),
@@ -397,12 +402,14 @@ def execute_kernel(
     if print_metadata is None:
         launch()
     else:
-        shape, count, position = print_metadata
+        shape_pattern, position = print_metadata
         native_output = _capture_c_stdout(launch)
-        values = _decode_native_print_tensor_output(
-            native_output, count=count, position=position
+        values, runtime_shape = _decode_native_print_tensor_output(
+            native_output,
+            position=position,
+            shape_pattern=shape_pattern,
         )
-        print(_format_print_tensor_record(values, shape=shape))
+        print(_format_print_tensor_record(values, shape=runtime_shape))
     return TlaExecutionResult(
         artifact=artifact,
         module_handle=module_handle,
@@ -440,11 +447,11 @@ def _build_kernel_launch_plan(
     if expects_print_tensor:
         if grid != (1, 1, 1):
             raise TlaExecutionError(
-                "tla.print_tensor v1 requires a single-block launch (block=1)"
+                "tla.print_tensor v3 requires a single-block launch (block=1)"
             )
         if runtime.kernel_mode == "mix":
             raise TlaExecutionError(
-                "tla.print_tensor v1 does not support mixed-core kernels"
+                "tla.print_tensor v3 does not support mixed-core kernels"
             )
     logical_mixed_handoff = _extract_logical_mixed_handoff(artifact.lowered_llvm)
     expected_abi_entrypoint = (
@@ -974,7 +981,7 @@ def _capture_c_stdout(launch: Callable[[], None]) -> str:
 
 def _print_tensor_static_metadata(
     tlair_mlir: str,
-) -> tuple[tuple[int, ...], int, str]:
+) -> tuple[tuple[int, ...], str]:
     op_matches = list(re.finditer(r'"tla\.print_tensor"', tlair_mlir))
     if len(op_matches) != 1:
         raise TlaExecutionError(
@@ -982,15 +989,10 @@ def _print_tensor_static_metadata(
             f"found {len(op_matches)}"
         )
     op_text = tlair_mlir[op_matches[0].start() : op_matches[0].start() + 1024]
-    shape_match = re.search(r"\bshape\s*=\s*array<i64:\s*([\d,\s]+)>", op_text)
+    shape_match = re.search(r"\bshape\s*=\s*array<i64:\s*([-\d,\s]+)>", op_text)
     if shape_match is None:
         raise TlaExecutionError(
             "tla.print_tensor static shape metadata is missing from the compiled artifact"
-        )
-    length_match = re.search(r"\blength\s*=\s*(\d+)", op_text)
-    if length_match is None:
-        raise TlaExecutionError(
-            "tla.print_tensor static length metadata is missing from the compiled artifact"
         )
     position_match = re.search(r"!tla\.ptr<f32,\s*(gm|ub)\s*,", op_text)
     if position_match is None:
@@ -999,26 +1001,30 @@ def _print_tensor_static_metadata(
         )
     position = position_match.group(1).upper()
     shape = tuple(int(item.strip()) for item in shape_match.group(1).split(","))
-    if not shape or any(extent < 1 for extent in shape):
+    if len(shape) not in (1, 2) or any(
+        extent == 0 or extent < -1 for extent in shape
+    ):
         raise TlaExecutionError(
             "tla.print_tensor static shape metadata contains an invalid extent"
         )
-    length = int(length_match.group(1))
-    if not 1 <= length <= 16 or length > math.prod(shape):
-        raise TlaExecutionError(
-            "tla.print_tensor static length metadata is invalid for the tensor shape"
-        )
-    return shape, length, position
+    return shape, position
 
 
 def _decode_native_print_tensor_output(
-    output: str, *, count: int, position: str = "GM"
-) -> list[float]:
+    output: str,
+    *,
+    count: int | None = None,
+    position: str = "GM",
+    shape_pattern: Sequence[int] | None = None,
+) -> tuple[list[float], tuple[int, ...]]:
     matches = list(_NATIVE_PRINT_TENSOR_LINE.finditer(output))
     if len(matches) != 1:
         raise TlaExecutionError(
             "tla.print_tensor native initialization or decoding failed: "
-            f"expected exactly one record, got {len(matches)}"
+            f"expected exactly one record, got {len(matches)}; "
+            "a missing record can indicate an invalid runtime length, shape, "
+            "or effective-address alignment; "
+            f"captured output={output[-1000:]!r}"
         )
     match = matches[0]
     if match.group("position") != position:
@@ -1026,10 +1032,39 @@ def _decode_native_print_tensor_output(
             "tla.print_tensor native initialization or decoding failed: "
             f"expected position={position}, got position={match.group('position')}"
         )
-    if int(match.group("count")) != count:
+    runtime_count = int(match.group("count"))
+    if not 1 <= runtime_count <= _PRINT_TENSOR_MAX_F32_ELEMENTS:
+        raise TlaExecutionError(
+            "tla.print_tensor native initialization or decoding failed: "
+            f"count={runtime_count} exceeds the FIFO-safe float32 capacity"
+        )
+    if count is not None and runtime_count != count:
         raise TlaExecutionError(
             "tla.print_tensor native initialization or decoding failed: "
             f"expected {count} values, record declares {match.group('count')}"
+        )
+    count = runtime_count
+    shape = tuple(int(item.strip()) for item in match.group("shape").split(","))
+    if (
+        len(shape) not in (1, 2)
+        or any(extent < 1 or extent > (1 << 32) - 1 for extent in shape)
+        or math.prod(shape) < count
+    ):
+        raise TlaExecutionError(
+            "tla.print_tensor native initialization or decoding failed: "
+            f"invalid runtime shape {shape!r} for count={count}"
+        )
+    if shape_pattern is not None and (
+        len(shape_pattern) != len(shape)
+        or any(
+            expected != -1 and expected != actual
+            for expected, actual in zip(shape_pattern, shape, strict=True)
+        )
+    ):
+        raise TlaExecutionError(
+            "tla.print_tensor native initialization or decoding failed: "
+            f"runtime shape {shape!r} does not match compiled pattern "
+            f"{tuple(shape_pattern)!r}"
         )
     try:
         values = [float(item.strip()) for item in match.group("values").split(",")]
@@ -1042,7 +1077,7 @@ def _decode_native_print_tensor_output(
             "tla.print_tensor native initialization or decoding failed: "
             f"expected {count} finite values, got {values!r}"
         )
-    return values
+    return values, shape
 
 
 def _format_print_tensor_record(values: Sequence[float], *, shape: Sequence[int]) -> str:
@@ -1379,7 +1414,7 @@ def _create_stamped_hivmc_input(
         }.get(runtime.core_type)
         if helper is None:
             raise TlaRuntimeUnavailableError(
-                "tla.print_tensor v1 requires an AIC-only or AIV-only kernel"
+                "tla.print_tensor v3 requires an AIC-only or AIV-only kernel"
             )
         helper_dir, helper_name = helper
         probe_candidates = [

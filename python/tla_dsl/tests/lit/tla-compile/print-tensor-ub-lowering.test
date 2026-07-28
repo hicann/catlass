@@ -10,8 +10,9 @@ module {
     %layout = tla.make_layout %shape, %stride : !tla.shape<4,4>, !tla.stride<4,1> -> !tla.layout<!tla.shape<4,4>, !tla.stride<4,1>, !tla.shape<4,4>, row_major>
     %coord = tla.make_coord -> !tla.coord<0,8>
     %x = tla.make_tensor %ptr, %layout, %coord : !tla.ptr<f32, ub, 32>, !tla.layout<!tla.shape<4,4>, !tla.stride<4,1>, !tla.shape<4,4>, row_major>, !tla.coord<0,8> -> !tla.tensor<!tla.layout<!tla.shape<4,4>, !tla.stride<4,1>, !tla.shape<4,4>, row_major>, !tla.coord<0,8>, !tla.ptr<f32, ub, 32>>
+    %c4 = arith.constant 4 : i64
     "tla.vector"() ({
-      tla.print_tensor %x shape = [4, 4] length = 4 : !tla.tensor<!tla.layout<!tla.shape<4,4>, !tla.stride<4,1>, !tla.shape<4,4>, row_major>, !tla.coord<0,8>, !tla.ptr<f32, ub, 32>>
+      tla.print_tensor %x length = %c4 shape = [4, 4] : !tla.tensor<!tla.layout<!tla.shape<4,4>, !tla.stride<4,1>, !tla.shape<4,4>, row_major>, !tla.coord<0,8>, !tla.ptr<f32, ub, 32>>, i64
     }) : () -> ()
     tla.return
   }
@@ -20,7 +21,11 @@ module {
 
 // LOWER-LABEL: func.func @print_tensor_ub(
 // LOWER-SAME: %[[WORKSPACE:arg0]]: i64 {{.*}}hacc.arg_type = #hacc.arg_type<workspace>{{.*}}tla.print_tensor.workspace
+// LOWER-DAG: %[[BYTE_OFFSET:.*]] = {{(arith\.constant 32 : index|llvm\.mlir\.constant\(32 : index\) : i64)}}
 // LOWER: %[[LENGTH:.*]] = {{(arith\.constant 4 : i64|llvm\.mlir\.constant\(4 : i64\) : i64)}}
-// LOWER: call @_mlir_ciface_tla_print_tensor_ub_f32(%[[WORKSPACE]], {{.*}}, %[[LENGTH]])
+// LOWER: %[[BASE_INDEX:.*]] = memref.extract_aligned_pointer_as_index
+// LOWER: %[[BASE_I64:.*]] = builtin.unrealized_conversion_cast %[[BASE_INDEX]]
+// LOWER: %[[ADDRESS:.*]] = llvm.add %[[BASE_I64]], %[[BYTE_OFFSET]]
+// LOWER: call @_mlir_ciface_tla_print_tensor_ub_f32(%[[WORKSPACE]], %[[ADDRESS]], %[[LENGTH]], {{.*}})
 // LOWER-NOT: _mlir_ciface_tla_print_tensor_gm_f32
 // LOWER-NOT: tla.print_tensor

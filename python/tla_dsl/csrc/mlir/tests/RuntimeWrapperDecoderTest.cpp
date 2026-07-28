@@ -11,6 +11,7 @@
 namespace {
 
 using cce::internal::AscDebugFifo::PrintTensorTlv;
+using cce::internal::AscDebugFifo::PrintShapeTlv;
 using cce::internal::AscDebugFifo::FifoRecordType;
 using cce::internal::AscDebugFifo::PrintFormatResult;
 using cce::internal::AscDebugFifo::PrintTlv;
@@ -38,12 +39,25 @@ std::vector<uint8_t> tensor_tlv(uint16_t position = 0) {
   tlv->length = static_cast<uint32_t>(bytes.size() - 8);
   tlv->data_type = 0;
   tlv->position = position;
+  tlv->dim = 2;
+  tlv->shape[0] = 2;
+  tlv->shape[1] = 2;
   tlv->dump_size = kValueCount * sizeof(float);
   auto *values =
       reinterpret_cast<float *>(bytes.data() + sizeof(PrintTensorTlv));
   for (uint32_t i = 0; i < kValueCount; ++i)
     values[i] = static_cast<float>(i);
   return bytes;
+}
+
+PrintShapeTlv shape_tlv() {
+  PrintShapeTlv tlv{};
+  tlv.type = static_cast<uint32_t>(FifoRecordType::Shape);
+  tlv.length = sizeof(PrintShapeTlv) - 8;
+  tlv.dim = 2;
+  tlv.shape[0] = 2;
+  tlv.shape[1] = 2;
+  return tlv;
 }
 
 bool expect(bool condition, const char *message) {
@@ -192,6 +206,15 @@ int main() {
                   reinterpret_cast<const PrintTensorTlv *>(ub_tensor.data()),
                   ub_tensor.size(), 0),
               "valid aligned UB f32x4 tensor TLV was rejected"))
+    return 1;
+  auto separate_shape = shape_tlv();
+  reinterpret_cast<PrintTensorTlv *>(tensor.data())->dim = 0;
+  std::memset(reinterpret_cast<PrintTensorTlv *>(tensor.data())->shape, 0,
+              sizeof(reinterpret_cast<PrintTensorTlv *>(tensor.data())->shape));
+  if (!expect(print_tensor_tlv(
+                  reinterpret_cast<const PrintTensorTlv *>(tensor.data()),
+                  tensor.size(), 0, &separate_shape),
+              "CANN shape-plus-tensor TLV pair was rejected"))
     return 1;
 
   auto *cleanup_only = new FifoData();

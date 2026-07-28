@@ -2,9 +2,11 @@
 
 #include <limits>
 #include <numeric>
+#include <optional>
 
 #include "Dialect/Tla/IR/TlaAttrs.h"
 #include "Dialect/Tla/IR/TlaTypes.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/IR/Builders.h"
@@ -635,6 +637,10 @@ mlir::LogicalResult DebugPrintOp::verify() {
 }
 
 mlir::LogicalResult PrintTensorOp::verify() {
+  // CANN's 1 MiB debug FIFO reserves 48 bytes for the shape TLV and 72 bytes
+  // for the tensor TLV. Its 32-byte payload alignment leaves 262112 f32 values:
+  // floor((1 MiB - 48 - 72) / 32) * (32 / sizeof(float)).
+  constexpr int64_t kMaxFloat32Elements = 262112;
   auto tensorType = getValue().getType();
   auto ptr = tensorType.getPtr();
   if (!ptr.getPointee().isF32() ||
@@ -647,55 +653,52 @@ mlir::LogicalResult PrintTensorOp::verify() {
   if (ptr.getAddrspace() == AddressSpace::ub) {
     if (!hasEnclosingRegion<VectorOp>(getOperation()))
       return emitOpError("requires UB tensors to be nested in a tla.vector region");
-    llvm::SmallVector<int64_t, 4> coords;
-    llvm::SmallVector<int64_t, 4> strides;
-    if (failed(getIndexTreeLeavesForVerify(
-            getOperation(), tensorType.getCoord(), coords, "tensor coordinates")) ||
-        failed(getIndexTreeLeavesForVerify(
-            getOperation(), tensorType.getLayout().getStride(), strides,
-            "tensor strides")))
-      return mlir::failure();
-    if (coords.size() != strides.size() ||
-        llvm::any_of(coords, [](int64_t value) { return value < 0; }) ||
-        llvm::any_of(strides, [](int64_t value) { return value < 0; }))
-      return emitOpError("requires a static effective UB address");
-    uint64_t byteOffset = 0;
-    for (auto [coord, stride] : llvm::zip_equal(coords, strides)) {
-      if (stride != 0 &&
-          static_cast<uint64_t>(coord) >
-              std::numeric_limits<uint64_t>::max() /
-                  static_cast<uint64_t>(stride))
-        return emitOpError("UB address offset overflows");
-      uint64_t term = static_cast<uint64_t>(coord) *
-                      static_cast<uint64_t>(stride);
-      if (term > (std::numeric_limits<uint64_t>::max() - byteOffset) / 4)
-        return emitOpError("UB address offset overflows");
-      byteOffset += term * 4;
-    }
-    if (std::gcd<uint64_t>(ptr.getAlignment(), byteOffset) < 32)
-      return emitOpError("requires a statically proven 32-byte aligned UB address");
   }
-  if (getShape().empty())
-    return emitOpError("shape must not be empty");
+  if (getShape().size() < 1 || getShape().size() > 2)
+    return emitOpError("shape must have rank 1 or 2");
   llvm::SmallVector<int64_t, 4> tensorShape;
   if (failed(getIndexTreeLeavesForVerify(
           getOperation(), tensorType.getLayout().getShape(), tensorShape,
           "tensor shape")))
     return mlir::failure();
-  if (llvm::ArrayRef<int64_t>(getShape()) !=
-      llvm::ArrayRef<int64_t>(tensorShape))
-    return emitOpError("shape must match the tensor layout shape");
-  int64_t product = 1;
-  for (int64_t extent : getShape()) {
-    if (extent < 1 || product > std::numeric_limits<int64_t>::max() / extent)
-      return emitOpError("shape must contain a valid positive element count");
-    product *= extent;
+  if (tensorShape.size() > 2) {
+    tensorShape.clear();
+    if (failed(getIndexTreeLeavesForVerify(
+            getOperation(), tensorType.getLayout().getOrigin(), tensorShape,
+            "tensor logical shape")))
+      return mlir::failure();
   }
-  int64_t length = getLengthAttr().getInt();
-  if (length < 1 || length > 16)
-    return emitOpError("length must be between 1 and 16 elements");
-  if (length > product)
-    return emitOpError("length must not exceed the tensor element count");
+  if (getShape().size() != tensorShape.size())
+    return emitOpError("shape must match the logical tensor shape");
+  for (auto [declared, actual] : llvm::zip_equal(getShape(), tensorShape)) {
+    if (declared == -1 && mlir::ShapedType::isDynamic(actual))
+      continue;
+    if (declared != actual)
+      return emitOpError("shape must match the logical tensor shape");
+  }
+  std::optional<int64_t> product = 1;
+  for (int64_t extent : getShape()) {
+    if (extent == -1) {
+      product.reset();
+      continue;
+    }
+    if (extent < 1 ||
+        (product && *product > std::numeric_limits<int64_t>::max() / extent))
+      return emitOpError("shape must contain a valid positive element count");
+    if (product)
+      *product *= extent;
+  }
+  if (auto constant = getLength().getDefiningOp<mlir::arith::ConstantOp>()) {
+    auto lengthAttr =
+        mlir::dyn_cast<mlir::IntegerAttr>(constant.getValue());
+    if (!lengthAttr)
+      return emitOpError("constant length must be an integer");
+    int64_t length = lengthAttr.getInt();
+    if (length < 1 || length > kMaxFloat32Elements)
+      return emitOpError("length must be between 1 and 262112 elements");
+    if (product && length > *product)
+      return emitOpError("length must not exceed the tensor element count");
+  }
   return mlir::success();
 }
 

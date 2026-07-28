@@ -789,17 +789,21 @@ def Tla_DebugPrintOp : Tla_Op<"debug_print", [MemoryEffects<[MemWrite]>]> {
 }
 
 def Tla_PrintTensorOp : Tla_Op<"print_tensor", [MemoryEffects<[MemWrite]>]> {
-  let summary = "Print a prefix of one contiguous GM or UB float32 tensor";
+  let summary = "Print a physical prefix of one GM or UB float32 tensor";
   let description = [{
-    Side-effecting native tensor print marker. The Python API restricts v1 to a
-    statically shaped, contiguous row-major GM float32 tensor in a single AIC
-    or AIV region, or an aligned UB float32 tensor in an AIV region. Length is
-    an element count in the range 1--16.
+    Side-effecting native tensor print marker. The Python API accepts rank-1 or
+    rank-2 GM float32 tensors in a single AIC or AIV region and UB float32
+    tensors in an AIV region. Values are read as a contiguous physical prefix
+    from the effective tensor address; ``shape`` is logical display metadata,
+    not a request to gather through tensor strides. Dynamic shape leaves use
+    ``-1`` and are materialized from the descriptor during lowering. ``length``
+    may be a runtime i64; static values are verified in the range 1--262112.
   }];
-  let arguments = (ins Tla_TensorType:$value, DenseI64ArrayAttr:$shape,
-                       I64Attr:$length);
+  let arguments = (ins Tla_TensorType:$value, I64:$length,
+                       DenseI64ArrayAttr:$shape);
   let assemblyFormat = [{
-    $value `shape` `=` $shape `length` `=` $length attr-dict `:` type($value)
+    $value `length` `=` $length `shape` `=` $shape attr-dict `:`
+    type($value) `,` type($length)
   }];
   let hasVerifier = 1;
 }

@@ -1,7 +1,6 @@
 // RUN: sed -n '/BEGIN-REGION$/,/END-REGION$/p' %s | not %tla_compile - -o - 2>&1 | %filecheck %s --check-prefix=REGION
 // RUN: sed -n '/BEGIN-SHAPE-MISMATCH$/,/END-SHAPE-MISMATCH$/p' %s | not %tla_compile - -o - 2>&1 | %filecheck %s --check-prefix=SHAPE-MISMATCH
 // RUN: sed -n '/BEGIN-F16$/,/END-F16$/p' %s | not %tla_compile - -o - 2>&1 | %filecheck %s --check-prefix=F16
-// RUN: sed -n '/BEGIN-UB$/,/END-UB$/p' %s | not %tla_compile - -o - 2>&1 | %filecheck %s --check-prefix=UB
 // RUN: sed -n '/BEGIN-EMPTY$/,/END-EMPTY$/p' %s | not %tla_compile - -o - 2>&1 | %filecheck %s --check-prefix=EMPTY
 // RUN: sed -n '/BEGIN-TOO-LARGE$/,/END-TOO-LARGE$/p' %s | not %tla_compile - -o - 2>&1 | %filecheck %s --check-prefix=TOO-LARGE
 // RUN: sed -n '/BEGIN-LENGTH-EXCEEDS-SHAPE$/,/END-LENGTH-EXCEEDS-SHAPE$/p' %s | not %tla_compile - -o - 2>&1 | %filecheck %s --check-prefix=LENGTH-EXCEEDS-SHAPE
@@ -9,7 +8,8 @@
 // BEGIN-REGION
 module {
   tla.func @regionless(%x: !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>) {
-    tla.print_tensor %x shape = [4] length = 4 : !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>
+    %c4 = arith.constant 4 : i64
+    tla.print_tensor %x length = %c4 shape = [4] : !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>, i64
     tla.return
   }
 }
@@ -19,20 +19,22 @@ module {
 // BEGIN-SHAPE-MISMATCH
 module {
   tla.func @shape_mismatch(%x: !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>) {
+    %c4 = arith.constant 4 : i64
     "tla.vector"() ({
-      tla.print_tensor %x shape = [2, 2] length = 4 : !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>
+      tla.print_tensor %x length = %c4 shape = [2, 2] : !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>, i64
     }) : () -> ()
     tla.return
   }
 }
 // END-SHAPE-MISMATCH
-// SHAPE-MISMATCH: 'tla.print_tensor' op shape must match the tensor layout shape
+// SHAPE-MISMATCH: 'tla.print_tensor' op shape must match the logical tensor shape
 
 // BEGIN-F16
 module {
   tla.func @f16(%x: !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f16, gm, 4>>) {
+    %c4 = arith.constant 4 : i64
     "tla.vector"() ({
-      tla.print_tensor %x shape = [4] length = 4 : !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f16, gm, 4>>
+      tla.print_tensor %x length = %c4 shape = [4] : !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f16, gm, 4>>, i64
     }) : () -> ()
     tla.return
   }
@@ -40,47 +42,38 @@ module {
 // END-F16
 // F16: 'tla.print_tensor' op requires a GM or UB float32 tensor
 
-// BEGIN-UB
-module {
-  tla.func @ub(%x: !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<1>, !tla.ptr<f32, ub, 32>>) {
-    "tla.vector"() ({
-      tla.print_tensor %x shape = [4] length = 4 : !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<1>, !tla.ptr<f32, ub, 32>>
-    }) : () -> ()
-    tla.return
-  }
-}
-// END-UB
-// UB: 'tla.print_tensor' op requires a statically proven 32-byte aligned UB address
-
 // BEGIN-EMPTY
 module {
   tla.func @empty(%x: !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>) {
+    %c1 = arith.constant 1 : i64
     "tla.vector"() ({
-      tla.print_tensor %x shape = [] length = 1 : !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>
+      tla.print_tensor %x length = %c1 shape = [] : !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>, i64
     }) : () -> ()
     tla.return
   }
 }
 // END-EMPTY
-// EMPTY: 'tla.print_tensor' op shape must not be empty
+// EMPTY: 'tla.print_tensor' op shape must have rank 1 or 2
 
 // BEGIN-TOO-LARGE
 module {
-  tla.func @too_large(%x: !tla.tensor<!tla.layout<!tla.shape<17>, !tla.stride<1>, !tla.shape<17>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>) {
+  tla.func @too_large(%x: !tla.tensor<!tla.layout<!tla.shape<262113>, !tla.stride<1>, !tla.shape<262113>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>) {
+    %count = arith.constant 262113 : i64
     "tla.vector"() ({
-      tla.print_tensor %x shape = [17] length = 17 : !tla.tensor<!tla.layout<!tla.shape<17>, !tla.stride<1>, !tla.shape<17>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>
+      tla.print_tensor %x length = %count shape = [262113] : !tla.tensor<!tla.layout<!tla.shape<262113>, !tla.stride<1>, !tla.shape<262113>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>, i64
     }) : () -> ()
     tla.return
   }
 }
 // END-TOO-LARGE
-// TOO-LARGE: 'tla.print_tensor' op length must be between 1 and 16 elements
+// TOO-LARGE: 'tla.print_tensor' op length must be between 1 and 262112 elements
 
 // BEGIN-LENGTH-EXCEEDS-SHAPE
 module {
   tla.func @length_exceeds_shape(%x: !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>) {
+    %c5 = arith.constant 5 : i64
     "tla.vector"() ({
-      tla.print_tensor %x shape = [4] length = 5 : !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>
+      tla.print_tensor %x length = %c5 shape = [4] : !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>, i64
     }) : () -> ()
     tla.return
   }

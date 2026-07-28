@@ -101,6 +101,7 @@ def test_print_tensor_aic_example_selects_cube_kernel() -> None:
     (
         ("base", "print_tensor_ub_base_kernel"),
         ("aligned-offset", "print_tensor_ub_aligned_offset_kernel"),
+        ("dynamic", "print_tensor_ub_dynamic_kernel"),
     ),
 )
 def test_print_tensor_ub_example_selects_aiv_case(
@@ -146,11 +147,11 @@ def test_prepare_hivmc_input_selects_aic_print_tensor_helper(
     "output",
     (
         "",
-        "DumpTensor: data_type=float32 position=GM dump_size=16 [bad]",
-        "DumpTensor: data_type=float32 position=GM dump_size=16 [0.0]",
+        "DumpTensor: data_type=float32 position=GM shape=[8,4] dump_size=16 [bad]",
+        "DumpTensor: data_type=float32 position=GM shape=[8,4] dump_size=16 [0.0]",
         "\n".join(
             [
-                "DumpTensor: data_type=float32 position=GM dump_size=16 "
+                "DumpTensor: data_type=float32 position=GM shape=[8,4] dump_size=16 "
                 "[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]"
             ]
             * 2
@@ -913,21 +914,18 @@ def _print_tensor_artifact(
     *,
     entrypoint: str = "dump",
     shape: tuple[int, ...] = (4, 4),
-    length: int | None = None,
     storage: str = "gm",
 ):
     rendered_shape = ", ".join(str(extent) for extent in shape)
-    print_length = min(16, math.prod(shape)) if length is None else length
     return execution.TlaKernelArtifact(
         cache_key="cache",
         cache_dir=tmp_path,
         tlair_mlir=(
-            'module { "tla.print_tensor"(%value) '
-            f"<{{length = {print_length} : i64, "
-            f"shape = array<i64: {rendered_shape}>}}> : "
+            'module { "tla.print_tensor"(%value, %length) '
+            f"<{{shape = array<i64: {rendered_shape}>}}> : "
             "(!tla.tensor<!tla.layout<!tla.shape<4,4>, !tla.stride<4,1>, "
             "!tla.shape<4,4>, row_major>, !tla.coord<0,0>, "
-            f"!tla.ptr<f32, {storage}, 32>>) -> () }}"
+            f"!tla.ptr<f32, {storage}, 32>>, i64) -> () }}"
         ),
         lowered_llvm=(
             f"module {{ func.func @{entrypoint}(%workspace: i64 "
@@ -989,7 +987,7 @@ def test_execute_kernel_decodes_and_formats_native_print_tensor_for_ordinary_cal
     _install_print_tensor_loader(
         monkeypatch,
         "CANN address=0xdeadbeef\n"
-        "DumpTensor: data_type=float32 position=GM dump_size=4 [0, 1.5, -2, 3]\n",
+        "DumpTensor: data_type=float32 position=GM shape=[2,2] dump_size=4 [0, 1.5, -2, 3]\n",
     )
 
     execution.execute_kernel(
@@ -1009,9 +1007,9 @@ def test_execute_kernel_decodes_and_formats_native_print_tensor_for_ordinary_cal
     "output",
     (
         "",
-        "DumpTensor: data_type=float32 position=GM dump_size=4 [bad]\n",
+        "DumpTensor: data_type=float32 position=GM shape=[2,2] dump_size=4 [bad]\n",
         "\n".join(
-            ["DumpTensor: data_type=float32 position=GM dump_size=4 [0, 1, 2, 3]"]
+            ["DumpTensor: data_type=float32 position=GM shape=[2,2] dump_size=4 [0, 1, 2, 3]"]
             * 2
         ),
     ),
@@ -1038,32 +1036,86 @@ def test_print_tensor_metadata_requires_one_static_shape() -> None:
 
 def test_print_tensor_metadata_reads_generic_tlair_shape() -> None:
     mlir = (
-        '"tla.print_tensor"(%value) '
-        "<{length = 4 : i64, shape = array<i64: 2, 3>}> : "
+        '"tla.print_tensor"(%value, %length) '
+        "<{shape = array<i64: 2, 3>}> : "
         "(!tla.tensor<!tla.layout<!tla.shape<2,3>, !tla.stride<3,1>, "
         "!tla.shape<2,3>, row_major>, !tla.coord<0,0>, "
-        "!tla.ptr<f32, gm, 4>>) -> ()"
+        "!tla.ptr<f32, gm, 4>>, i64) -> ()"
     )
 
-    assert execution._print_tensor_static_metadata(mlir) == ((2, 3), 4, "GM")
+    assert execution._print_tensor_static_metadata(mlir) == ((2, 3), "GM")
 
 
 def test_print_tensor_metadata_reads_ub_storage() -> None:
     mlir = (
-        '"tla.print_tensor"(%value) '
-        "<{length = 4 : i64, shape = array<i64: 2, 3>}> : "
+        '"tla.print_tensor"(%value, %length) '
+        "<{shape = array<i64: 2, 3>}> : "
         "(!tla.tensor<!tla.layout<!tla.shape<2,3>, !tla.stride<3,1>, "
         "!tla.shape<2,3>, row_major>, !tla.coord<0,0>, "
-        "!tla.ptr<f32, ub, 32>>) -> ()"
+        "!tla.ptr<f32, ub, 32>>, i64) -> ()"
     )
 
-    assert execution._print_tensor_static_metadata(mlir) == ((2, 3), 4, "UB")
+    assert execution._print_tensor_static_metadata(mlir) == ((2, 3), "UB")
+
+
+def test_print_tensor_metadata_reads_dynamic_shape_pattern() -> None:
+    mlir = (
+        '"tla.print_tensor"(%value, %length) '
+        "<{shape = array<i64: -1, 4>}> : "
+        "(!tla.tensor<!tla.layout<!tla.shape<?,4>, !tla.stride<4,1>, "
+        "!tla.shape<16,4>, row_major>, !tla.coord<0,0>, "
+        "!tla.ptr<f32, gm, 4>>, i64) -> ()"
+    )
+
+    assert execution._print_tensor_static_metadata(mlir) == ((-1, 4), "GM")
+
+
+def test_print_tensor_decoder_returns_runtime_shape() -> None:
+    values, shape = execution._decode_native_print_tensor_output(
+        "DumpTensor: data_type=float32 position=GM shape=[3,4] "
+        "dump_size=4 [0, 1, 2, 3]",
+        count=4,
+        shape_pattern=(-1, 4),
+    )
+
+    assert values == [0.0, 1.0, 2.0, 3.0]
+    assert shape == (3, 4)
+
+
+def test_print_tensor_decoder_infers_runtime_count() -> None:
+    values, shape = execution._decode_native_print_tensor_output(
+        "DumpTensor: data_type=float32 position=GM shape=[3,4] "
+        "dump_size=3 [0, 1, 2]",
+        shape_pattern=(-1, 4),
+    )
+
+    assert values == [0.0, 1.0, 2.0]
+    assert shape == (3, 4)
+
+
+def test_print_tensor_decoder_rejects_count_above_fifo_capacity() -> None:
+    with pytest.raises(execution.TlaExecutionError, match="FIFO-safe"):
+        execution._decode_native_print_tensor_output(
+            "DumpTensor: data_type=float32 position=GM shape=[262113] "
+            "dump_size=262113 [0]",
+            count=262_113,
+        )
+
+
+def test_print_tensor_decoder_rejects_runtime_shape_pattern_mismatch() -> None:
+    with pytest.raises(execution.TlaExecutionError, match="compiled pattern"):
+        execution._decode_native_print_tensor_output(
+            "DumpTensor: data_type=float32 position=GM shape=[3,5] "
+            "dump_size=4 [0, 1, 2, 3]",
+            count=4,
+            shape_pattern=(-1, 4),
+        )
 
 
 def test_print_tensor_decoder_rejects_wrong_storage() -> None:
     with pytest.raises(execution.TlaExecutionError, match="expected position=UB"):
         execution._decode_native_print_tensor_output(
-            "DumpTensor: data_type=float32 position=GM dump_size=4 [0, 1, 2, 3]",
+            "DumpTensor: data_type=float32 position=GM shape=[2,2] dump_size=4 [0, 1, 2, 3]",
             count=4,
             position="UB",
         )
@@ -1072,8 +1124,8 @@ def test_print_tensor_decoder_rejects_wrong_storage() -> None:
 def test_print_tensor_decoder_rejects_extra_l1_record() -> None:
     output = "\n".join(
         (
-            "DumpTensor: data_type=float32 position=UB dump_size=4 [0, 1, 2, 3]",
-            "DumpTensor: data_type=float32 position=L1 dump_size=4 [0, 1, 2, 3]",
+            "DumpTensor: data_type=float32 position=UB shape=[2,2] dump_size=4 [0, 1, 2, 3]",
+            "DumpTensor: data_type=float32 position=L1 shape=[2,2] dump_size=4 [0, 1, 2, 3]",
         )
     )
     with pytest.raises(execution.TlaExecutionError, match="exactly one record"):
@@ -1227,9 +1279,9 @@ def test_cache_key_uses_print_tensor_workspace_abi_revision(
     monkeypatch.setattr(execution, "_tool_fingerprint", lambda _path: "test")
     kwargs = {
         "tlair_mlir": (
-            'module { "tla.print_tensor"(%value) '
-            "<{length = 16 : i64, shape = array<i64: 4, 4>}> "
-            ": (!tla.tensor) -> () }"
+            'module { "tla.print_tensor"(%value, %length) '
+            "<{shape = array<i64: 4, 4>}> "
+            ": (!tla.tensor, i64) -> () }"
         ),
         "entrypoint": "kernel",
         "runtime": runtime,

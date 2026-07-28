@@ -2117,27 +2117,28 @@ class PrintTensorOp(_ods_ir.OpView):
 
   _ODS_REGIONS = (0, True)
 
-  def __init__(self, value, shape, length, *, loc=None, ip=None):
+  def __init__(self, value, length, shape, *, loc=None, ip=None):
     operands = []
     results = []
     attributes = {}
     regions = None
     operands.append(_get_op_result_or_value(value))
+    operands.append(_get_op_result_or_value(length))
     _ods_context = _ods_get_default_loc_context(loc)
     attributes["shape"] = (shape if (
     isinstance(shape, _ods_ir.Attribute) or
     not _ods_ir.AttrBuilder.contains('DenseI64ArrayAttr')) else
       _ods_ir.AttrBuilder.get('DenseI64ArrayAttr')(shape, context=_ods_context))
-    attributes["length"] = (length if (
-    isinstance(length, _ods_ir.Attribute) or
-    not _ods_ir.AttrBuilder.contains('I64Attr')) else
-      _ods_ir.AttrBuilder.get('I64Attr')(length, context=_ods_context))
     _ods_successors = None
     super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
 
   @builtins.property
   def value(self):
     return self.operation.operands[0]
+
+  @builtins.property
+  def length(self):
+    return self.operation.operands[1]
 
   @builtins.property
   def shape(self):
@@ -2149,18 +2150,8 @@ class PrintTensorOp(_ods_ir.OpView):
       raise ValueError("'None' not allowed as value for mandatory attributes")
     self.operation.attributes["shape"] = value
 
-  @builtins.property
-  def length(self):
-    return self.operation.attributes["length"]
-
-  @length.setter
-  def length(self, value):
-    if value is None:
-      raise ValueError("'None' not allowed as value for mandatory attributes")
-    self.operation.attributes["length"] = value
-
-def print_tensor(value, shape, length, *, loc=None, ip=None) -> _ods_ir.Operation:
-  return _get_op_result_or_op_results(PrintTensorOp(value=value, shape=shape, length=length, loc=loc, ip=ip))
+def print_tensor(value, length, shape, *, loc=None, ip=None) -> _ods_ir.Operation:
+  return _get_op_result_or_op_results(PrintTensorOp(value=value, length=length, shape=shape, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
 class PtrAddOp(_ods_ir.OpView):

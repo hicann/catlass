@@ -55,6 +55,7 @@ constexpr uint16_t kMagic = 0xAE86;
 enum class FifoRecordType : uint32_t {
   Scalar = 1,
   Tensor = 2,
+  Shape = 3,
   BufIn = 8,
   BufOut = 9,
 };
@@ -109,6 +110,14 @@ struct PrintTensorTlv {
   uint32_t dump_size;
 };
 
+struct PrintShapeTlv {
+  uint32_t type;
+  uint32_t length;
+  uint32_t dim;
+  uint32_t shape[8];
+  uint32_t reserved;
+};
+
 struct FifoData {
   void *device_region = nullptr;
   size_t region_size = 0;
@@ -128,6 +137,8 @@ static_assert(sizeof(PrintTlv) == 24,
               "PrintTlv must match CANN AICore scalar printf layout");
 static_assert(sizeof(PrintTensorTlv) == 72,
               "PrintTensorTlv must match CANN C310 tensor print layout");
+static_assert(sizeof(PrintShapeTlv) == 48,
+              "PrintShapeTlv must match CANN C310 shape print layout");
 
 uint32_t align_up(uint32_t value, uint32_t alignment) {
   return ((value + alignment - 1) / alignment) * alignment;
@@ -324,7 +335,8 @@ bool print_scalar_tlv(const PrintTlv *tlv, uint64_t total, uint32_t core) {
   return true;
 }
 
-bool print_tensor_tlv(const PrintTensorTlv *tlv, uint64_t total, uint32_t core) {
+bool print_tensor_tlv(const PrintTensorTlv *tlv, uint64_t total, uint32_t core,
+                      const PrintShapeTlv *shape_tlv = nullptr) {
   constexpr uint32_t kFloat32DataType = 0;
   constexpr uint16_t kGlobalMemoryPosition = 0;
   constexpr uint16_t kUnifiedBufferPosition = 1;
@@ -334,24 +346,47 @@ bool print_tensor_tlv(const PrintTensorTlv *tlv, uint64_t total, uint32_t core) 
       tlv->data_type != kFloat32DataType ||
       (tlv->position != kGlobalMemoryPosition &&
        tlv->position != kUnifiedBufferPosition) ||
-      tlv->dim != 0 ||
       tlv->dump_size == 0 || tlv->dump_size % sizeof(float) != 0 ||
-      tlv->dump_size > 16 * sizeof(float) ||
+      tlv->dump_size > 262112 * sizeof(float) ||
       total != sizeof(PrintTensorTlv) +
                    align_up(tlv->dump_size, kTensorPayloadAlignment))
     return false;
-  for (uint32_t extent : tlv->shape) {
-    if (extent != 0)
+  uint32_t dim = tlv->dim;
+  const uint32_t *shape = tlv->shape;
+  if (shape_tlv) {
+    if (shape_tlv->type != static_cast<uint32_t>(FifoRecordType::Shape) ||
+        shape_tlv->length != sizeof(PrintShapeTlv) - 2 * sizeof(uint32_t) ||
+        shape_tlv->reserved != 0)
       return false;
+    dim = shape_tlv->dim;
+    shape = shape_tlv->shape;
+  }
+  if (dim != 1 && dim != 2)
+    return false;
+  uint64_t shape_elements = 1;
+  for (uint32_t index = 0; index < 8; ++index) {
+    const uint32_t extent = shape[index];
+    if (index < dim) {
+      if (extent == 0)
+        return false;
+      shape_elements *= extent;
+    } else if (!shape_tlv && extent != 0) {
+      return false;
+    }
   }
   const uint32_t count = tlv->dump_size / sizeof(float);
+  if (shape_elements < count)
+    return false;
   auto *values = reinterpret_cast<const float *>(
       reinterpret_cast<const uint8_t *>(tlv) + sizeof(PrintTensorTlv));
   const char *position =
       tlv->position == kGlobalMemoryPosition ? "GM" : "UB";
   std::printf(
-      "DumpTensor: core=%u data_type=float32 position=%s dump_size=%u [", core,
-      position, count);
+      "DumpTensor: core=%u data_type=float32 position=%s shape=[", core,
+      position);
+  for (uint32_t i = 0; i < dim; ++i)
+    std::printf("%s%u", i == 0 ? "" : ",", shape[i]);
+  std::printf("] dump_size=%u [", count);
   for (uint32_t i = 0; i < count; ++i)
     std::printf("%s%.9g", i == 0 ? "" : ", ", static_cast<double>(values[i]));
   std::printf("]\n");
@@ -369,6 +404,7 @@ bool print_fifo_records(const char *host_mem, const FifoData *fifo) {
     auto *write = reinterpret_cast<const DebugBlockWriteInfo *>(
         ring + fifo->ring_buffer_bytes);
     uint64_t offset = 0;
+    const PrintShapeTlv *pending_shape = nullptr;
     uint64_t written =
         std::min<uint64_t>(write->bufOffset, fifo->ring_buffer_bytes);
     while (offset + 8 <= written) {
@@ -384,13 +420,23 @@ bool print_fifo_records(const char *host_mem, const FifoData *fifo) {
         break;
       }
       if (type == static_cast<uint32_t>(FifoRecordType::Scalar)) {
+        pending_shape = nullptr;
         auto *tlv = reinterpret_cast<const PrintTlv *>(ring + offset);
         printed_any_record =
             print_scalar_tlv(tlv, total, i) || printed_any_record;
       } else if (type == static_cast<uint32_t>(FifoRecordType::Tensor)) {
         auto *tlv = reinterpret_cast<const PrintTensorTlv *>(ring + offset);
         printed_any_record =
-            print_tensor_tlv(tlv, total, i) || printed_any_record;
+            print_tensor_tlv(tlv, total, i, pending_shape) ||
+            printed_any_record;
+        pending_shape = nullptr;
+      } else if (type == static_cast<uint32_t>(FifoRecordType::Shape)) {
+        pending_shape =
+            total == sizeof(PrintShapeTlv)
+                ? reinterpret_cast<const PrintShapeTlv *>(ring + offset)
+                : nullptr;
+      } else {
+        pending_shape = nullptr;
       }
       offset += total;
     }
@@ -501,7 +547,7 @@ bool uses_asc_debug_fifo(const char *buffer, size_t buffer_size) {
 }
 
 bool uses_print_tensor(const char *buffer, size_t buffer_size) {
-  return contains_bytes(buffer, buffer_size, "tla_print_tensor_abi_v1");
+  return contains_bytes(buffer, buffer_size, "tla_print_tensor_abi_v3");
 }
 
 bool validate_debug_print_fifo_contract(const std::vector<uint64_t> &values,

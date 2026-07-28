@@ -36,6 +36,24 @@ def _host_tensor(
         return tensor
 
 
+def _host_packed_tensor(layout: object) -> tla.Tensor:
+    packed_shape = {
+        "zN": ((16, 2), (8, 4)),
+        "nZ": ((8, 4), (16, 2)),
+        "zZ": ((16, 2), (8, 4)),
+        "L0Clayout": ((16, 2), (16, 2)),
+        "zNUnAlign": ((32, 1), (8, 4)),
+    }[str(layout)]
+    with runtime_mod._eager_capture():
+        return tla.Tensor(
+            tla.make_shape(*packed_shape),
+            tla.Float32,
+            addrspace=tla.AddressSpace.gm,
+            origin_shape=tla.make_shape(32, 32),
+            layout_tag=layout,
+        )
+
+
 @tla.kernel
 def _aiv_print_tensor(value: tla.Tensor) -> None:
     with tla.vector():
@@ -49,6 +67,14 @@ def _aiv_print_tensor_prefix(value: tla.Tensor) -> None:
 
 
 @tla.kernel
+def _aiv_print_tensor_runtime_length(
+    value: tla.Tensor, length: tla.Int32
+) -> None:
+    with tla.vector():
+        tla.print(value, length)
+
+
+@tla.kernel
 def _aic_print_tensor(value: tla.Tensor) -> None:
     with tla.cube():
         tla.print(value)
@@ -58,6 +84,19 @@ def _aic_print_tensor(value: tla.Tensor) -> None:
 def _aiv_print_ub_tensor(value: tla.Tensor) -> None:
     with tla.vector():
         tla.print(value, 4)
+
+
+@tla.kernel
+def _aiv_print_dynamic_internal_ub_tensor(
+    value: tla.Tensor, dim: "index"
+) -> None:
+    ptr = tla.allocate(64, tla.Float32, tla.AddressSpace.ub, 256)
+    shape = tla.make_shape(dim, 4)
+    stride = tla.make_stride(4, 1)
+    layout = tla.make_layout(shape, stride)
+    local = tla.make_tensor(ptr, layout)
+    with tla.vector():
+        tla.print(local, 4)
 
 
 @tla.kernel
@@ -93,7 +132,7 @@ def _print_tensor_length_negative(value: tla.Tensor) -> None:
 @tla.kernel
 def _print_tensor_length_too_large(value: tla.Tensor) -> None:
     with tla.vector():
-        tla.print(value, 17)
+        tla.print(value, 262_113)
 
 
 def test_print_has_positional_only_value_and_optional_length_surface() -> None:
@@ -127,7 +166,47 @@ def test_print_tensor_accepts_large_source_with_prefix_length() -> None:
 
     assert "tla.print_tensor" in mlir
     assert "shape = [1024]" in mlir or "shape = array<i64: 1024>" in mlir
-    assert "length = 4" in mlir
+    assert "length = %" in mlir
+    assert "arith.constant 4 : i64" in mlir
+
+
+def test_print_tensor_accepts_dynamic_rank_two_shape_with_explicit_length() -> None:
+    tensor = _host_tensor()
+    tensor.mark_compact_shape_dynamic(0)
+
+    mlir = _aiv_print_tensor_prefix.dump_mlir(type_args=(tensor,))
+
+    assert "tla.print_tensor" in mlir
+    assert "shape = [-1, 4]" in mlir or "shape = array<i64: -1, 4>" in mlir
+    assert "length = %" in mlir
+
+
+def test_print_tensor_accepts_runtime_integer_length() -> None:
+    mlir = _aiv_print_tensor_runtime_length.dump_mlir(
+        type_args=(_host_tensor((32,)), tla.Int32(4))
+    )
+
+    assert "tla.print_tensor" in mlir
+    assert "arith.extsi" in mlir
+    assert "length = %" in mlir
+
+
+def test_print_tensor_accepts_dynamic_rank_one_shape_with_explicit_length() -> None:
+    tensor = _host_tensor((32,))
+    tensor.mark_compact_shape_dynamic(0)
+
+    mlir = _aiv_print_tensor_prefix.dump_mlir(type_args=(tensor,))
+
+    assert "tla.print_tensor" in mlir
+    assert "shape = [-1]" in mlir or "shape = array<i64: -1>" in mlir
+
+
+def test_print_tensor_requires_explicit_length_for_dynamic_shape() -> None:
+    tensor = _host_tensor()
+    tensor.mark_compact_shape_dynamic(0)
+
+    with pytest.raises(tla.TlaCoreAPIError, match="explicit length"):
+        _aiv_print_tensor.dump_mlir(type_args=(tensor,))
 
 
 def test_print_tensor_accepts_aligned_aiv_ub_tensor() -> None:
@@ -160,39 +239,75 @@ def test_print_tensor_accepts_aligned_aiv_ub_offset() -> None:
     assert "!tla.coord<8>" in mlir
 
 
-def test_print_tensor_rejects_insufficiently_aligned_ub_tensor() -> None:
-    with pytest.raises(tla.TlaCoreAPIError, match="32-byte aligned"):
-        _aiv_print_ub_tensor.dump_mlir(
-            type_args=(
-                _host_tensor(
-                    addrspace=tla.AddressSpace.ub,
-                    alignment=4,
-                ),
-            )
+def test_print_tensor_defers_ub_base_alignment_to_runtime() -> None:
+    mlir = _aiv_print_ub_tensor.dump_mlir(
+        type_args=(
+            _host_tensor(
+                addrspace=tla.AddressSpace.ub,
+                alignment=4,
+            ),
         )
+    )
+
+    assert "tla.print_tensor" in mlir
 
 
-def test_print_tensor_rejects_misaligned_ub_offset() -> None:
-    with pytest.raises(tla.TlaCoreAPIError, match="32-byte aligned"):
-        _aiv_print_ub_tensor.dump_mlir(
-            type_args=(
-                _host_tensor(
-                    (4,),
-                    addrspace=tla.AddressSpace.ub,
-                    alignment=256,
-                    coord=(1,),
-                ),
-            )
+def test_print_tensor_defers_ub_offset_alignment_to_runtime() -> None:
+    mlir = _aiv_print_ub_tensor.dump_mlir(
+        type_args=(
+            _host_tensor(
+                (4,),
+                addrspace=tla.AddressSpace.ub,
+                alignment=256,
+                coord=(1,),
+            ),
         )
+    )
+
+    assert "tla.print_tensor" in mlir
+    assert "!tla.coord<1>" in mlir
+
+
+@pytest.mark.parametrize(
+    "layout",
+    (
+        tla.arch.zN,
+        tla.arch.nZ,
+        tla.arch.zZ,
+        tla.arch.L0Clayout,
+        tla.arch.zNUnAlign,
+    ),
+)
+def test_print_tensor_accepts_generic_layouts(layout: object) -> None:
+    mlir = _aiv_print_tensor_prefix.dump_mlir(
+        type_args=(_host_packed_tensor(layout),)
+    )
+
+    assert "tla.print_tensor" in mlir
+    assert "shape = [32, 32]" in mlir or "shape = array<i64: 32, 32>" in mlir
+
+
+def test_print_tensor_accepts_noncontiguous_linear_stride() -> None:
+    mlir = _aiv_print_tensor_prefix.dump_mlir(
+        type_args=(_host_tensor((2, 2), stride=(8, 1)),)
+    )
+
+    assert "tla.print_tensor" in mlir
+
+
+def test_print_tensor_accepts_column_major_layout() -> None:
+    mlir = _aiv_print_tensor_prefix.dump_mlir(
+        type_args=(_host_tensor((32, 32), layout=tla.arch.ColumnMajor),)
+    )
+
+    assert "tla.print_tensor" in mlir
 
 
 @pytest.mark.parametrize(
     ("tensor", "match"),
     (
         (_host_tensor(dtype=tla.Float16), "float32"),
-        (_host_tensor(layout=tla.arch.ColumnMajor), "row-major"),
-        (_host_tensor((2, 2), stride=(1, 2)), "contiguous row-major"),
-        (_host_tensor((17,)), "explicit length"),
+        (_host_tensor((262_113,)), "explicit length"),
     ),
 )
 def test_print_tensor_rejects_unsupported_tensor_contract(
@@ -207,12 +322,30 @@ def test_print_tensor_rejects_host_call() -> None:
         tla.print(_host_tensor())
 
 
-def test_print_tensor_rejects_dynamic_shape() -> None:
+def test_print_tensor_accepts_dynamic_aiv_ub_shape_at_aligned_base() -> None:
+    tensor = _host_tensor(
+        addrspace=tla.AddressSpace.ub,
+        alignment=32,
+    )
+    tensor.mark_compact_shape_dynamic(0)
+
+    mlir = _aiv_print_ub_tensor.dump_mlir(type_args=(tensor,))
+
+    assert "tla.print_tensor" in mlir
+    assert "shape = [-1, 4]" in mlir or "shape = array<i64: -1, 4>" in mlir
+
+
+def test_print_tensor_accepts_dynamic_internal_ub_shape() -> None:
     tensor = _host_tensor()
     tensor.mark_compact_shape_dynamic(0)
 
-    with pytest.raises(tla.TlaCoreAPIError, match="static shape"):
-        _aiv_print_tensor.dump_mlir(type_args=(tensor,))
+    mlir = _aiv_print_dynamic_internal_ub_tensor.dump_mlir(
+        type_args=(tensor, 4)
+    )
+
+    assert "tla.make_shape %" in mlir
+    assert "!tla.shape<?,4>" in mlir
+    assert "tla.print_tensor" in mlir
 
 
 def test_print_tensor_rejects_regionless_and_mixed_placement() -> None:
@@ -245,6 +378,17 @@ def test_print_tensor_rejects_length_above_tensor_size() -> None:
 
     with pytest.raises(tla.TlaCoreAPIError, match="element count"):
         kernel.dump_mlir(type_args=(_host_tensor((4,)),))
+
+
+def test_print_tensor_accepts_exact_fifo_capacity() -> None:
+    @tla.kernel
+    def kernel(value: tla.Tensor) -> None:
+        with tla.vector():
+            tla.print(value, 262_112)
+
+    mlir = kernel.dump_mlir(type_args=(_host_tensor((262_112,)),))
+    assert "arith.constant 262112 : i64" in mlir
+    assert "length = %" in mlir
 
 
 def test_print_tensor_rejects_keyword_argument() -> None:

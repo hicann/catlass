@@ -115,34 +115,85 @@ static LogicalResult lowerPrintTensor(::tla::PrintTensorOp op,
     if (!funcOp)
         return op.emitError("tla.print_tensor must be nested inside func.func");
 
+    auto descOp = op.getValue().getDefiningOp<::tla::TensorDescOp>();
+    if (!descOp)
+        return op.emitError("could not resolve the materialized tensor descriptor");
+    FailureOr<::tla::TensorDescriptor> descOr =
+        ::tla::descriptorFromTensorDescOp(descOp);
+    if (failed(descOr))
+        return op.emitError("could not decode the materialized tensor descriptor");
+    const ::tla::TensorDescriptor& desc = *descOr;
+    llvm::DenseMap<Value, Value> baseMemrefCache;
     FailureOr<Value> materialized =
-        materializeBaseMemref(rewriter, op.getLoc(), op.getValue());
+        ::tla::getOrMaterializeDescriptorBaseMemref(
+            rewriter, op.getLoc(), desc, op, baseMemrefCache);
     if (failed(materialized))
         return op.emitError("could not materialize the tensor base");
     Value tensorPtr = rewriter.create<::mlir::memref::ExtractAlignedPointerAsIndexOp>(
         op.getLoc(), *materialized);
-    SmallVector<int64_t, 4> coords;
-    SmallVector<int64_t, 4> strides;
     auto tensorType = op.getValue().getType();
-    if (failed(::tla::getTlaIndexTreeLeaves(
-            tensorType.getCoord().getTree(), coords)) ||
-        failed(::tla::getTlaIndexTreeLeaves(
-            tensorType.getLayout().getStride().getTree(), strides)) ||
-        coords.size() != strides.size())
-        return op.emitError("could not derive the tensor effective address");
-    int64_t elementOffset = 0;
-    for (auto [coord, stride] : llvm::zip_equal(coords, strides))
-        elementOffset += coord * stride;
-    if (elementOffset != 0) {
-        Value byteOffset = rewriter.create<arith::ConstantIndexOp>(
-            op.getLoc(), elementOffset * 4);
-        tensorPtr = rewriter.create<arith::AddIOp>(
-            op.getLoc(), tensorPtr, byteOffset);
+    Value elementOffset;
+    if (::tla::isLinearLayout(desc.layoutTag)) {
+        Value rowElements = rewriter.createOrFold<arith::MulIOp>(
+            op.getLoc(), desc.rowOffset, desc.stride0);
+        Value colElements = rewriter.createOrFold<arith::MulIOp>(
+            op.getLoc(), desc.colOffset, desc.stride1);
+        elementOffset = rewriter.createOrFold<arith::AddIOp>(
+            op.getLoc(), rowElements, colElements);
+    } else {
+        if (!::tla::isPackedLayout(desc.layoutTag) ||
+            desc.packedShape.size() != 4 || desc.packedStride.size() != 4)
+            return op.emitError("could not materialize the tensor physical offset");
+
+        Value rowDivisor = desc.packedShape[0];
+        if (desc.layoutTag == ::tla::TensorLayoutTag::zNUnAlign)
+            rowDivisor = rewriter.createOrFold<arith::DivSIOp>(
+                op.getLoc(), desc.packedStride[3], desc.packedShape[2]);
+        Value physical0 = rewriter.createOrFold<arith::RemSIOp>(
+            op.getLoc(), desc.rowOffset, rowDivisor);
+        Value physical1 = rewriter.createOrFold<arith::DivSIOp>(
+            op.getLoc(), desc.rowOffset, rowDivisor);
+        Value physical2 = rewriter.createOrFold<arith::RemSIOp>(
+            op.getLoc(), desc.colOffset, desc.packedShape[2]);
+        Value physical3 = rewriter.createOrFold<arith::DivSIOp>(
+            op.getLoc(), desc.colOffset, desc.packedShape[2]);
+        Value term0 = rewriter.createOrFold<arith::MulIOp>(
+            op.getLoc(), physical0, desc.packedStride[0]);
+        Value term1 = rewriter.createOrFold<arith::MulIOp>(
+            op.getLoc(), physical1, desc.packedStride[1]);
+        Value term2 = rewriter.createOrFold<arith::MulIOp>(
+            op.getLoc(), physical2, desc.packedStride[2]);
+        Value term3 = rewriter.createOrFold<arith::MulIOp>(
+            op.getLoc(), physical3, desc.packedStride[3]);
+        Value rowElements = rewriter.createOrFold<arith::AddIOp>(
+            op.getLoc(), term0, term1);
+        Value colElements = rewriter.createOrFold<arith::AddIOp>(
+            op.getLoc(), term2, term3);
+        elementOffset = rewriter.createOrFold<arith::AddIOp>(
+            op.getLoc(), rowElements, colElements);
     }
+    Value elementBytes = rewriter.create<arith::ConstantIndexOp>(op.getLoc(), 4);
+    Value byteOffset = rewriter.create<arith::MulIOp>(
+        op.getLoc(), elementOffset, elementBytes);
+    tensorPtr = rewriter.create<arith::AddIOp>(
+        op.getLoc(), tensorPtr, byteOffset);
     Value tensorI64 = rewriter.create<arith::IndexCastOp>(
         op.getLoc(), rewriter.getI64Type(), tensorPtr);
-    Value count = rewriter.create<arith::ConstantIntOp>(
-        op.getLoc(), op.getLengthAttr().getInt(), 64);
+    Value count = op.getLength();
+    Value shape0;
+    Value shape1;
+    if (op.getShape().size() == 1) {
+        shape0 = ::tla::castValueToI64(rewriter, op.getLoc(), desc.shape1);
+        shape1 = rewriter.create<arith::ConstantIntOp>(op.getLoc(), 0, 64);
+    } else {
+        shape0 = ::tla::castValueToI64(rewriter, op.getLoc(), desc.shape0);
+        shape1 = ::tla::castValueToI64(rewriter, op.getLoc(), desc.shape1);
+    }
+    Value shift = rewriter.create<arith::ConstantIntOp>(op.getLoc(), 32, 64);
+    Value packedShape1 = rewriter.create<arith::ShLIOp>(
+        op.getLoc(), shape1, shift);
+    Value packedShape = rewriter.create<arith::OrIOp>(
+        op.getLoc(), shape0, packedShape1);
     BlockArgument workspace = getOrPrependPrintTensorWorkspaceArg(funcOp);
     StringRef calleeName =
         tensorType.getPtr().getAddrspace() == AddressSpace::ub
@@ -150,9 +201,11 @@ static LogicalResult lowerPrintTensor(::tla::PrintTensorOp op,
             : "_mlir_ciface_tla_print_tensor_gm_f32";
     auto callee = getOrCreateRuntimeCall(
         module, calleeName,
-        {workspace.getType(), tensorI64.getType(), count.getType()});
+        {workspace.getType(), tensorI64.getType(), count.getType(),
+         packedShape.getType()});
     rewriter.create<func::CallOp>(
-        op.getLoc(), callee, ValueRange{workspace, tensorI64, count});
+        op.getLoc(), callee,
+        ValueRange{workspace, tensorI64, count, packedShape});
     rewriter.eraseOp(op);
     return success();
 }

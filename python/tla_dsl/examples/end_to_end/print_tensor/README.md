@@ -1,8 +1,8 @@
 # Tensor `tla.print` example
 
 This example compiles and launches one single-block kernel that prints a known
-16-element prefix from a GM-resident `float32[8,4]` tensor or an AIV
-UB-resident `float32[4,8]` view. The output verifier
+16-element prefix from a static or dynamic-shaped GM-resident `float32[8,4]`
+tensor, or from a static/dynamic-shaped AIV UB view. The output verifier
 requires exactly one native CANN record and prints only the stable public fields:
 
 ```text
@@ -17,6 +17,23 @@ Run GM on either supported core scope:
 ```bash
 python print_tensor.py --run --arch-scope aiv.c310 --device 0 --block 1 --force-recompile
 python print_tensor.py --run --arch-scope aic.c310 --device 0 --block 1 --force-recompile
+python print_tensor.py --run --dynamic-shape --arch-scope aiv.c310 --device 0 --block 1 --force-recompile
+python print_tensor.py --run --dynamic-shape --arch-scope aic.c310 --device 0 --block 1 --force-recompile
+```
+
+Exercise raw physical-prefix semantics with column-major GM storage. The
+logical output shape remains `[8,4]`, while values follow the contiguous
+transposed backing buffer:
+
+```bash
+python print_tensor.py --run --layout column-major --arch-scope aiv.c310 --device 0 --block 1 --force-recompile
+```
+
+Exercise the exact 262,112-element GM capacity boundary (redirect the large
+canonical record when running in automation):
+
+```bash
+python print_tensor.py --run --case capacity --arch-scope aiv.c310 --device 0 --block 1 --force-recompile > capacity.log
 ```
 
 Run the UB base-address and aligned-offset cases on AIV. The kernel explicitly
@@ -26,6 +43,7 @@ printing:
 ```bash
 python print_tensor.py --run --storage ub --case base --arch-scope aiv.c310 --device 0 --block 1 --force-recompile
 python print_tensor.py --run --storage ub --case aligned-offset --arch-scope aiv.c310 --device 0 --block 1 --force-recompile
+python print_tensor.py --run --storage ub --case dynamic --arch-scope aiv.c310 --device 0 --block 1 --force-recompile
 ```
 
 ## Support matrix
@@ -34,19 +52,31 @@ python print_tensor.py --run --storage ub --case aligned-offset --arch-scope aiv
 | --- | --- | --- |
 | Core scope | AIV-only `aiv.c310`; AIC-only `aic.c310` | Mixed AIC/AIV; regionless use |
 | Launch grid | One block | Multi-block launches |
-| Storage | GM; 32-byte-aligned UB on AIV | L1, L0, or host invocation |
+| Storage | GM; 32-byte-aligned effective UB address on AIV | L1, L0, or host invocation |
 | Dtype | `float32` | Every other dtype |
-| Shape | Any non-empty static shape | Dynamic or empty |
-| Length | 1–16 elements, no greater than tensor size | Zero, negative, over 16, or over tensor size |
-| Layout | Contiguous row-major | Strided, tiled, or column-major |
+| Shape | Rank-1/rank-2 static or runtime-shaped tensors | Empty, rank above 2, or mismatched runtime metadata |
+| Length | Static or integer-SSA 1–262,112 element prefix, no greater than runtime tensor size | Zero, negative, over 262,112, or over tensor size |
+| Layout | Row-major, column-major, padded/strided, and packed TLA layouts | Layouts outside the TLA layout enum |
 | Baseline | Ascend950PR, CANN 9.1.0-beta.3 or later | Other device/CANN combinations are not declared |
 
-`tla.print(value, length, /)` derives dtype and shape from the tensor. Length is
-an element count, not a byte count. Omitting it prints the complete tensor when
-the tensor contains at most 16 elements; larger tensors require an explicit
-length. Missing, malformed, duplicated, truncated, reordered, or extra native
-records fail the example instead of producing synthetic output.
+`tla.print(value, length, /)` derives dtype and the concrete runtime shape from
+the tensor. Length is an element count, not a byte count, and may be a Python
+integer or integer SSA value. Dynamic-shaped tensors require an explicit
+length. Static tensors may omit it when the complete tensor fits the
+262,112-element `float32` FIFO capacity. The maximum
+comes from the 1 MiB CANN ring, its 48-byte shape TLV, 72-byte tensor TLV, and
+32-byte payload alignment. Missing, malformed, duplicated, truncated,
+reordered, or extra
+native records fail the example instead of producing synthetic output.
 
-For UB, the effective address—including a pointer or view offset—must be
-statically proven 32-byte aligned. `tla.print` does not insert producer
-synchronization; callers must complete writes to UB before printing.
+The dynamic examples pass both the first extent and print length as scalar
+kernel arguments. Current pointer-only host tensor arguments do not carry
+runtime memref extents.
+
+Like Ascend C `DumpTensor`, values are read as a contiguous physical prefix
+from the effective address. The logical tensor shape controls display grouping
+but does not gather through strides or reorder packed storage. Runtime guards
+reject invalid counts and misaligned effective addresses by emitting no native
+record, which the host reports as an execution error. `tla.print` does not
+insert producer synchronization; callers must complete writes to UB before
+printing.

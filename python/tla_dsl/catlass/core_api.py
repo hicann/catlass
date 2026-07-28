@@ -2631,34 +2631,34 @@ def _emit_scalar_print(value: Any, *, loc: mlir_ir.Location | None) -> None:
     _tla_ops_gen.debug_print(_print_scalar_operand(value, loc=loc), loc=loc)
 
 
-def _print_tensor_static_leaves(tree: Any, *, field: str) -> tuple[int, ...]:
+# CANN's 1 MiB debug FIFO reserves 48 bytes for the shape TLV and 72 bytes
+# for the tensor TLV. Its 32-byte payload alignment leaves 262_112 f32 values:
+# floor((1 MiB - 48 - 72) / 32) * (32 / sizeof(f32)).
+_PRINT_TENSOR_MAX_F32_ELEMENTS = 262_112
+
+
+def _print_tensor_shape_pattern_leaves(tree: Any) -> tuple[int, ...]:
     if isinstance(tree, (tuple, list)):
         leaves: list[int] = []
         for item in tree:
-            leaves.extend(_print_tensor_static_leaves(item, field=field))
+            leaves.extend(_print_tensor_shape_pattern_leaves(item))
         return tuple(leaves)
     if isinstance(tree, int):
         return (tree,)
-    _op_error("print", f"requires a static {field}")
-
-
-def _print_tensor_row_major_strides(shape: tuple[int, ...]) -> tuple[int, ...]:
-    stride = 1
-    result: list[int] = []
-    for extent in reversed(shape):
-        result.append(stride)
-        stride *= extent
-    return tuple(reversed(result))
+    if tree is None:
+        return (-1,)
+    _op_error("print", "requires static or dynamic integer shape metadata")
 
 
 def _emit_tensor_print(
     value: Any, length: Any, *, loc: mlir_ir.Location | None
 ) -> None:
-    """Dump a prefix of one static, contiguous GM or UB ``float32`` tensor.
+    """Dump a physical prefix of one rank-1/rank-2 GM or UB ``float32`` tensor.
 
-    Version 1 supports one call in an AIC-only or AIV-only C310 kernel launched
-    with a single block. UB values additionally require AIV placement and a
-    statically proven 32-byte-aligned effective address.
+    The logical tensor shape is display metadata; values are read contiguously
+    from the effective physical address without gathering through strides.
+    Static or runtime shape leaves and static or SSA lengths are supported in
+    one AIC-only or AIV-only C310 kernel launched with a single block.
     """
     if _runtime._current_frontend_state() is None:
         _op_error("print", "tensor printing is only available in lowered Tla IR")
@@ -2683,45 +2683,59 @@ def _emit_tensor_print(
         _op_error("print", "requires a GM- or UB-resident tensor")
     if addrspace == "ub" and not in_vector:
         _op_error("print", "UB tensor printing requires AIV placement")
-    if descriptor.layout_tag != "row_major":
-        _op_error("print", "requires a row-major tensor")
-
-    shape = _print_tensor_static_leaves(descriptor.shape, field="shape")
-    stride = _print_tensor_static_leaves(descriptor.stride, field="stride")
-    if not shape or any(extent < 1 for extent in shape):
+    logical_shape = (
+        descriptor.origin_shape
+        if descriptor.layout_tag
+        in ("zN", "nZ", "zZ", "L0Clayout", "zNUnAlign")
+        else descriptor.shape
+    )
+    shape = _print_tensor_shape_pattern_leaves(logical_shape)
+    if len(shape) not in (1, 2):
+        _op_error("print", "requires a rank-1 or rank-2 tensor")
+    if any(extent == 0 or extent < -1 for extent in shape):
         _op_error("print", "tensor element count must be positive")
-    if stride != _print_tensor_row_major_strides(shape):
-        _op_error("print", "requires a contiguous row-major tensor")
-    if addrspace == "ub":
-        coord = _print_tensor_static_leaves(descriptor.coord, field="coordinate")
-        if len(coord) != len(stride):
-            _op_error("print", "requires a static effective UB address")
-        byte_offset = sum(index * step for index, step in zip(coord, stride)) * 4
-        effective_alignment = math.gcd(
-            descriptor.ptr_alignment, _builtins.abs(byte_offset)
-        )
-        if effective_alignment < 32:
-            _op_error("print", "requires a statically proven 32-byte aligned UB address")
 
-    element_count = math.prod(shape)
+    dynamic_shape = any(extent < 0 for extent in shape)
+    element_count = None if dynamic_shape else math.prod(shape)
     if length is None:
-        if element_count > 16:
+        if dynamic_shape:
+            _op_error("print", "dynamic-shaped tensors require an explicit length")
+        assert element_count is not None
+        if element_count > _PRINT_TENSOR_MAX_F32_ELEMENTS:
             _op_error(
                 "print",
-                "tensors with more than 16 elements require an explicit length",
+                "tensors exceeding the print capacity require an explicit length",
             )
-        print_length = element_count
+        static_length = element_count
     else:
         resolved_length = _resolve_bound_value(length)
-        if isinstance(resolved_length, bool) or not isinstance(resolved_length, int):
-            _op_error("print", "length must be a static Python integer")
-        print_length = resolved_length
-    if not 1 <= print_length <= 16:
-        _op_error("print", "length must be between 1 and 16 elements")
-    if print_length > element_count:
-        _op_error("print", "length must not exceed the tensor element count")
+        if isinstance(resolved_length, bool):
+            _op_error("print", "length must be an integer or integer SSA value")
+        if isinstance(resolved_length, Numeric) and not type(
+            resolved_length
+        ).is_integer:
+            _op_error("print", "length must be an integer or integer SSA value")
+        if isinstance(resolved_length, mlir_ir.Value) and (
+            not mlir_ir.IntegerType.isinstance(resolved_length.type)
+            and not isinstance(resolved_length.type, mlir_ir.IndexType)
+        ):
+            _op_error("print", "length must be an integer or integer SSA value")
+        static_length = (
+            resolved_length if isinstance(resolved_length, int) else None
+        )
+    if static_length is not None:
+        if not 1 <= static_length <= _PRINT_TENSOR_MAX_F32_ELEMENTS:
+            _op_error(
+                "print",
+                f"length must be between 1 and {_PRINT_TENSOR_MAX_F32_ELEMENTS} elements",
+            )
+        if element_count is not None and static_length > element_count:
+            _op_error("print", "length must not exceed the tensor element count")
+    length_value = _as_i64_value(
+        static_length if static_length is not None else length, loc=loc
+    )
 
-    _tla_ops_gen.print_tensor(value, shape, print_length, loc=loc)
+    _tla_ops_gen.print_tensor(value, length_value, shape, loc=loc)
 
 
 def print(*args: Any, **kwargs: Any) -> None:
