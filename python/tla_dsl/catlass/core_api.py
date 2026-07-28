@@ -86,6 +86,9 @@ _CROSS_MODE_VALUES = {"npu", "vectors_core", "single_core"}
 _MISSING = object()
 _SUPPORTED_COMPARE_ELEMENT_TYPES = frozenset({"f16", "f32", "i32", "u32"})
 _MASK_CMP_MODES = ("lt", "le", "gt", "ge", "eq", "ne")
+_MAKE_TENSOR_SUPPORTED_ELEMENT_TYPES = frozenset(
+    {"f16", "bf16", "f32", "i32", "u32", "i16", "u16", "i1", "i8", "u8"}
+)
 
 
 def _check_compare_element_type_supported(op_name: str, element_type: str) -> None:
@@ -2650,10 +2653,23 @@ def _print_tensor_shape_pattern_leaves(tree: Any) -> tuple[int, ...]:
     _op_error("print", "requires static or dynamic integer shape metadata")
 
 
+_PRINT_TENSOR_SUPPORTED_DTYPES = (
+    "f16",
+    "f32",
+    "i8",
+    "i16",
+    "i32",
+    "u8",
+    "u16",
+    "u32",
+)
+_PRINT_TENSOR_SUPPORTED_DTYPES_TEXT = ", ".join(_PRINT_TENSOR_SUPPORTED_DTYPES)
+
+
 def _emit_tensor_print(
     value: Any, length: Any, *, loc: mlir_ir.Location | None
 ) -> None:
-    """Dump a physical prefix of one rank-1/rank-2 GM or UB ``float32`` tensor.
+    """Dump a physical prefix of one rank-1/rank-2 supported GM or UB tensor.
 
     The logical tensor shape is display metadata; values are read contiguously
     from the effective physical address without gathering through strides.
@@ -2676,11 +2692,15 @@ def _emit_tensor_print(
     ):
         _op_error("print", "expected a TLA tensor")
     descriptor = _tla_tensor_type_for_mlir_value(value)
-    if descriptor.element_type != "f32":
-        _op_error("print", "requires a float32 tensor")
     addrspace = descriptor.addrspace.lower()
     if addrspace not in ("gm", "ub"):
         _op_error("print", "requires a GM- or UB-resident tensor")
+    if descriptor.element_type not in _PRINT_TENSOR_SUPPORTED_DTYPES:
+        _op_error(
+            "print",
+            f"unsupported tensor dtype {descriptor.element_type}; supported dtypes: "
+            f"{_PRINT_TENSOR_SUPPORTED_DTYPES_TEXT}",
+        )
     if addrspace == "ub" and not in_vector:
         _op_error("print", "UB tensor printing requires AIV placement")
     logical_shape = (
@@ -3100,7 +3120,7 @@ def make_tensor(
         raise TlaLoweringError(
             f"tla.make_tensor cannot derive element type from ptr pointee {ptr_ty.pointee}"
         ) from exc
-    if dtype not in {"f16", "bf16", "f32", "i32", "i16", "i1", "i8"}:
+    if dtype not in _MAKE_TENSOR_SUPPORTED_ELEMENT_TYPES:
         raise TlaLoweringError(
             f"tla.make_tensor expects a supported element type, got [{dtype}]"
         )
@@ -3262,7 +3282,7 @@ def make_tensor_like(
                 "tla.make_tensor_like cannot derive element type from ptr pointee "
                 f"{ptr_ty.pointee}"
             ) from exc
-    if dtype not in {"f16", "bf16", "f32", "i32", "i16", "i1", "i8"}:
+    if dtype not in _MAKE_TENSOR_SUPPORTED_ELEMENT_TYPES:
         raise TlaLoweringError(
             f"tla.make_tensor_like expects a supported element type, got [{dtype}]"
         )

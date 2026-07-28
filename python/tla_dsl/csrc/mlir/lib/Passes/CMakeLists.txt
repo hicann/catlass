@@ -62,3 +62,13 @@ target_link_libraries(TlaPasses
     MLIRLLVMDialect
     MLIRSCFToControlFlow
 )
+
+add_executable(tla_print_tensor_lowering_type_mapping_test EXCLUDE_FROM_ALL
+  ${PROJECT_SOURCE_DIR}/tests/PrintTensorLoweringTypeMappingTest.cpp
+)
+target_include_directories(tla_print_tensor_lowering_type_mapping_test PRIVATE
+  ${PROJECT_SOURCE_DIR}/lib
+)
+target_link_libraries(tla_print_tensor_lowering_type_mapping_test PRIVATE
+  TlaPasses
+)

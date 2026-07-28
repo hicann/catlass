@@ -13,11 +13,15 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/OpImplementation.h"
 #include "llvm/ADT/StringSwitch.h"
+#include "llvm/Support/raw_ostream.h"
 
 #define GET_OP_CLASSES
 #include "tla/Ops.cpp.inc"
 
 namespace tla {
+
+static constexpr llvm::StringLiteral kPrintTensorSupportedDtypes =
+    "f16, f32, i8, i16, i32, u8, u16, u32";
 
 template <typename TreeType>
 static mlir::LogicalResult getIndexTreeLeavesForVerify(
@@ -34,6 +38,31 @@ static bool isSupportedCmpElementType(mlir::Type elementType) {
   auto intType = mlir::dyn_cast<mlir::IntegerType>(elementType);
   return intType && (intType.isSignless() || intType.isUnsigned()) &&
          intType.getWidth() == 32;
+}
+
+static bool isSupportedPrintTensorInteger(mlir::Type elementType) {
+  auto integerType = mlir::dyn_cast<mlir::IntegerType>(elementType);
+  if (!integerType)
+    return false;
+  unsigned width = integerType.getWidth();
+  if (integerType.isSignless())
+    return width == 8 || width == 16 || width == 32;
+  return integerType.isUnsigned() &&
+         (width == 8 || width == 16 || width == 32);
+}
+
+static std::string typeToString(mlir::Type type) {
+  std::string text;
+  llvm::raw_string_ostream os(text);
+  type.print(os);
+  return os.str();
+}
+
+static std::string printTensorDiagnosticTypeToken(mlir::Type type) {
+  auto integerType = mlir::dyn_cast<mlir::IntegerType>(type);
+  if (integerType && integerType.isUnsigned())
+    return "u" + std::to_string(integerType.getWidth());
+  return typeToString(type);
 }
 
 static bool isSupportedCmpMode(llvm::StringRef mode) {
@@ -643,10 +672,17 @@ mlir::LogicalResult PrintTensorOp::verify() {
   constexpr int64_t kMaxFloat32Elements = 262112;
   auto tensorType = getValue().getType();
   auto ptr = tensorType.getPtr();
-  if (!ptr.getPointee().isF32() ||
-      (ptr.getAddrspace() != AddressSpace::gm &&
-       ptr.getAddrspace() != AddressSpace::ub))
-    return emitOpError("requires a GM or UB float32 tensor");
+  auto elementType = ptr.getPointee();
+  if (ptr.getAddrspace() != AddressSpace::gm &&
+      ptr.getAddrspace() != AddressSpace::ub)
+    return emitOpError("requires a GM- or UB-resident tensor");
+  if (!elementType.isF16() && !elementType.isF32() &&
+      !isSupportedPrintTensorInteger(elementType)) {
+    std::string diagnostic =
+        "unsupported dtype " + printTensorDiagnosticTypeToken(elementType) +
+        "; supported dtypes: " + kPrintTensorSupportedDtypes.str();
+    return emitOpError(diagnostic);
+  }
   if (!hasEnclosingRegion<CubeOp>(getOperation()) &&
       !hasEnclosingRegion<VectorOp>(getOperation()))
     return emitOpError("must be nested inside a tla.cube or tla.vector region");

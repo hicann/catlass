@@ -139,20 +139,34 @@ def test_print_has_positional_only_value_and_optional_length_surface() -> None:
     assert str(inspect.signature(tla.print)) == "(value, length=None, /)"
 
 
-def test_print_tensor_emits_dedicated_tensor_marker() -> None:
-    mlir = _aiv_print_tensor.dump_mlir(type_args=(_host_tensor(),))
+@pytest.mark.parametrize(
+    ("dtype", "token"),
+    (
+        (tla.Float16, "f16"),
+        (tla.Float32, "f32"),
+        (tla.Int8, "i8"),
+        (tla.Int16, "i16"),
+        (tla.Int32, "i32"),
+        (tla.UInt8, "ui8"),
+        (tla.UInt16, "ui16"),
+        (tla.UInt32, "ui32"),
+    ),
+    ids=("f16", "f32", "i8", "i16", "i32", "u8", "u16", "u32"),
+)
+@pytest.mark.parametrize(
+    ("kernel", "core_region"),
+    ((_aiv_print_tensor, "tla.vector"), (_aic_print_tensor, "tla.cube")),
+    ids=("aiv", "aic"),
+)
+def test_print_tensor_emits_typed_dedicated_tensor_marker(
+    dtype: type[tla.Numeric], token: str, kernel: object, core_region: str
+) -> None:
+    mlir = kernel.dump_mlir(type_args=(_host_tensor(dtype=dtype),))
 
     assert mlir.count("tla.print_tensor") == 1
     assert "tla.debug_print" not in mlir
-    assert "!tla.ptr<f32, gm" in mlir
-
-
-def test_print_tensor_emits_dedicated_tensor_marker_from_aic() -> None:
-    mlir = _aic_print_tensor.dump_mlir(type_args=(_host_tensor(),))
-
-    assert mlir.count("tla.print_tensor") == 1
-    assert "tla.debug_print" not in mlir
-    assert "tla.cube" in mlir
+    assert f"!tla.ptr<{token}, gm" in mlir
+    assert core_region in mlir
 
 
 def test_print_tensor_accepts_single_element_rank_one_tensor() -> None:
@@ -306,7 +320,7 @@ def test_print_tensor_accepts_column_major_layout() -> None:
 @pytest.mark.parametrize(
     ("tensor", "match"),
     (
-        (_host_tensor(dtype=tla.Float16), "float32"),
+        (_host_tensor(addrspace=tla.AddressSpace.l1), "GM- or UB"),
         (_host_tensor((262_113,)), "explicit length"),
     ),
 )
@@ -315,6 +329,27 @@ def test_print_tensor_rejects_unsupported_tensor_contract(
 ) -> None:
     with pytest.raises(tla.TlaCoreAPIError, match=match):
         _aiv_print_tensor.dump_mlir(type_args=(tensor,))
+
+
+@pytest.mark.parametrize(
+    ("dtype", "token"),
+    (
+        (tla.BFloat16, "bf16"),
+        (tla.Int64, "i64"),
+        (tla.UInt64, "u64"),
+        (tla.Bool, "i1"),
+    ),
+)
+def test_print_tensor_rejects_deferred_dtype_exact(
+    dtype: type[tla.Numeric], token: str
+) -> None:
+    expected = (
+        f"unsupported tensor dtype {token}; supported dtypes: "
+        "f16, f32, i8, i16, i32, u8, u16, u32"
+    )
+    with pytest.raises(tla.TlaCoreAPIError) as exc_info:
+        _aiv_print_tensor.dump_mlir(type_args=(_host_tensor(dtype=dtype),))
+    assert expected in str(exc_info.value)
 
 
 def test_print_tensor_rejects_host_call() -> None:

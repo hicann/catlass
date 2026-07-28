@@ -1,20 +1,40 @@
-// RUN: sed -n '/BEGIN-LOWER$/,/END-LOWER$/p' %s | %tla_compile - -o - | %filecheck %s --check-prefix=LOWER
+// RUN: sed -n '/BEGIN-LOWER$/,/END-LOWER$/p' %s | %tla_compile - -o - | %filecheck %s
 
 // BEGIN-LOWER
 module {
-  tla.func @print_tensor_aic(%x: !tla.tensor<!tla.layout<!tla.shape<4,4>, !tla.stride<4,1>, !tla.shape<4,4>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>) {
+  tla.func @print_tensor_aic(
+      %f16: !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f16, gm, 2>>,
+      %f32: !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>,
+      %i8: !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<i8, gm, 1>>,
+      %i16: !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<i16, gm, 2>>,
+      %i32: !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<i32, gm, 4>>,
+      %u8: !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<ui8, gm, 1>>,
+      %u16: !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<ui16, gm, 2>>,
+      %u32: !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<ui32, gm, 4>>) {
     %c4 = arith.constant 4 : i64
     "tla.cube"() ({
-      tla.print_tensor %x length = %c4 shape = [4, 4] : !tla.tensor<!tla.layout<!tla.shape<4,4>, !tla.stride<4,1>, !tla.shape<4,4>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>, i64
+      tla.print_tensor %f16 length = %c4 shape = [4] : !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f16, gm, 2>>, i64
+      tla.print_tensor %f32 length = %c4 shape = [4] : !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>, i64
+      tla.print_tensor %i8 length = %c4 shape = [4] : !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<i8, gm, 1>>, i64
+      tla.print_tensor %i16 length = %c4 shape = [4] : !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<i16, gm, 2>>, i64
+      tla.print_tensor %i32 length = %c4 shape = [4] : !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<i32, gm, 4>>, i64
+      tla.print_tensor %u8 length = %c4 shape = [4] : !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<ui8, gm, 1>>, i64
+      tla.print_tensor %u16 length = %c4 shape = [4] : !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<ui16, gm, 2>>, i64
+      tla.print_tensor %u32 length = %c4 shape = [4] : !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<ui32, gm, 4>>, i64
     }) : () -> ()
     tla.return
   }
 }
 // END-LOWER
 
-// LOWER-LABEL: func.func @print_tensor_aic(
-// LOWER-SAME: %[[WORKSPACE:arg0]]: i64 {{.*}}hacc.arg_type = #hacc.arg_type<workspace>{{.*}}tla.print_tensor.workspace
-// LOWER: %[[LENGTH:.*]] = {{(arith\.constant 4 : i64|llvm\.mlir\.constant\(4 : i64\) : i64)}}
-// LOWER: call @_mlir_ciface_tla_print_tensor_gm_f32(%[[WORKSPACE]], {{.*}}, %[[LENGTH]], {{.*}})
-// LOWER-NOT: _mlir_ciface_tla_printf
-// LOWER-NOT: tla.print_tensor
+// CHECK-LABEL: func.func @print_tensor_aic(
+// CHECK-SAME: %[[WORKSPACE:arg0]]: i64 {{.*}}hacc.arg_type = #hacc.arg_type<workspace>{{.*}}tla.print_tensor.workspace
+// CHECK-DAG: call @_mlir_ciface_tla_print_tensor_gm_f16(%[[WORKSPACE]],
+// CHECK-DAG: call @_mlir_ciface_tla_print_tensor_gm_f32(%[[WORKSPACE]],
+// CHECK-DAG: call @_mlir_ciface_tla_print_tensor_gm_i8(%[[WORKSPACE]],
+// CHECK-DAG: call @_mlir_ciface_tla_print_tensor_gm_i16(%[[WORKSPACE]],
+// CHECK-DAG: call @_mlir_ciface_tla_print_tensor_gm_i32(%[[WORKSPACE]],
+// CHECK-DAG: call @_mlir_ciface_tla_print_tensor_gm_u8(%[[WORKSPACE]],
+// CHECK-DAG: call @_mlir_ciface_tla_print_tensor_gm_u16(%[[WORKSPACE]],
+// CHECK-DAG: call @_mlir_ciface_tla_print_tensor_gm_u32(%[[WORKSPACE]],
+// CHECK-NOT: tla.print_tensor

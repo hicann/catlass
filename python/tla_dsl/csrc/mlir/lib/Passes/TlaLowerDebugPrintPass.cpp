@@ -3,10 +3,11 @@
 #include "Passes/TlaTensorToMemref.h"
 
 namespace tla {
-namespace {
 
 constexpr StringLiteral kDebugPrintWorkspaceAttrName = "tla.debug_print.workspace";
 constexpr StringLiteral kPrintTensorWorkspaceAttrName = "tla.print_tensor.workspace";
+constexpr StringLiteral kPrintTensorSupportedDtypes =
+    "f16, f32, i8, i16, i32, u8, u16, u32";
 
 static std::string typeToString(Type type)
 {
@@ -15,6 +16,36 @@ static std::string typeToString(Type type)
     type.print(os);
     return os.str();
 }
+
+static std::string printTensorDiagnosticTypeToken(Type type)
+{
+    auto integerType = dyn_cast<IntegerType>(type);
+    if (integerType && integerType.isUnsigned())
+        return "u" + std::to_string(integerType.getWidth());
+    return typeToString(type);
+}
+
+FailureOr<StringRef>
+getPrintTensorHelperSuffix(Type elementType, std::string &diagnostic)
+{
+    StringRef suffix = llvm::StringSwitch<StringRef>(typeToString(elementType))
+                           .Case("f16", "f16")
+                           .Case("f32", "f32")
+                           .Case("i8", "i8")
+                           .Case("i16", "i16")
+                           .Case("i32", "i32")
+                           .Case("ui8", "u8")
+                           .Case("ui16", "u16")
+                           .Case("ui32", "u32")
+                           .Default("");
+    if (!suffix.empty())
+        return suffix;
+    diagnostic = "unsupported dtype " + printTensorDiagnosticTypeToken(elementType) +
+                 "; supported dtypes: " + kPrintTensorSupportedDtypes.str();
+    return failure();
+}
+
+namespace {
 
 static BlockArgument getOrAppendDebugPrintWorkspaceArg(func::FuncOp funcOp)
 {
@@ -132,6 +163,7 @@ static LogicalResult lowerPrintTensor(::tla::PrintTensorOp op,
     Value tensorPtr = rewriter.create<::mlir::memref::ExtractAlignedPointerAsIndexOp>(
         op.getLoc(), *materialized);
     auto tensorType = op.getValue().getType();
+    Type elementType = tensorType.getPtr().getPointee();
     Value elementOffset;
     if (::tla::isLinearLayout(desc.layoutTag)) {
         Value rowElements = rewriter.createOrFold<arith::MulIOp>(
@@ -172,7 +204,8 @@ static LogicalResult lowerPrintTensor(::tla::PrintTensorOp op,
         elementOffset = rewriter.createOrFold<arith::AddIOp>(
             op.getLoc(), rowElements, colElements);
     }
-    Value elementBytes = rewriter.create<arith::ConstantIndexOp>(op.getLoc(), 4);
+    Value elementBytes = rewriter.create<arith::ConstantIndexOp>(
+        op.getLoc(), elementType.getIntOrFloatBitWidth() / 8);
     Value byteOffset = rewriter.create<arith::MulIOp>(
         op.getLoc(), elementOffset, elementBytes);
     tensorPtr = rewriter.create<arith::AddIOp>(
@@ -194,11 +227,18 @@ static LogicalResult lowerPrintTensor(::tla::PrintTensorOp op,
         op.getLoc(), shape1, shift);
     Value packedShape = rewriter.create<arith::OrIOp>(
         op.getLoc(), shape0, packedShape1);
+    std::string diagnostic;
+    FailureOr<StringRef> helperSuffix =
+        getPrintTensorHelperSuffix(elementType, diagnostic);
+    if (failed(helperSuffix))
+        return op.emitError(diagnostic);
+    std::string calleeName;
+    if (tensorType.getPtr().getAddrspace() == AddressSpace::ub)
+        calleeName = "_mlir_ciface_tla_print_tensor_ub_";
+    else
+        calleeName = "_mlir_ciface_tla_print_tensor_gm_";
+    calleeName.append(helperSuffix->data(), helperSuffix->size());
     BlockArgument workspace = getOrPrependPrintTensorWorkspaceArg(funcOp);
-    StringRef calleeName =
-        tensorType.getPtr().getAddrspace() == AddressSpace::ub
-            ? "_mlir_ciface_tla_print_tensor_ub_f32"
-            : "_mlir_ciface_tla_print_tensor_gm_f32";
     auto callee = getOrCreateRuntimeCall(
         module, calleeName,
         {workspace.getType(), tensorI64.getType(), count.getType(),

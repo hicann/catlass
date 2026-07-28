@@ -1,4 +1,11 @@
 // RUN: sed -n '/BEGIN-LOWER$/,/END-LOWER$/p' %s | %tla_compile - -o - | %filecheck %s --check-prefix=LOWER
+// RUN: sed -n '/BEGIN-LOWER$/,/END-LOWER$/p' %s | sed 's/f32/f16/g; s/0,8/0,16/g' | %tla_compile - -o - | %filecheck %s --check-prefix=F16
+// RUN: sed -n '/BEGIN-LOWER$/,/END-LOWER$/p' %s | sed 's/f32/i8/g; s/0,8/0,32/g' | %tla_compile - -o - | %filecheck %s --check-prefix=I8
+// RUN: sed -n '/BEGIN-LOWER$/,/END-LOWER$/p' %s | sed 's/f32/i16/g; s/0,8/0,16/g' | %tla_compile - -o - | %filecheck %s --check-prefix=I16
+// RUN: sed -n '/BEGIN-LOWER$/,/END-LOWER$/p' %s | sed 's/f32/i32/g' | %tla_compile - -o - | %filecheck %s --check-prefix=I32
+// RUN: sed -n '/BEGIN-LOWER$/,/END-LOWER$/p' %s | sed 's/f32/ui8/g; s/0,8/0,32/g' | %tla_compile - -o - | %filecheck %s --check-prefix=U8
+// RUN: sed -n '/BEGIN-LOWER$/,/END-LOWER$/p' %s | sed 's/f32/ui16/g; s/0,8/0,16/g' | %tla_compile - -o - | %filecheck %s --check-prefix=U16
+// RUN: sed -n '/BEGIN-LOWER$/,/END-LOWER$/p' %s | sed 's/f32/ui32/g' | %tla_compile - -o - | %filecheck %s --check-prefix=U32
 
 // BEGIN-LOWER
 module {
@@ -29,3 +36,10 @@ module {
 // LOWER: call @_mlir_ciface_tla_print_tensor_ub_f32(%[[WORKSPACE]], %[[ADDRESS]], %[[LENGTH]], {{.*}})
 // LOWER-NOT: _mlir_ciface_tla_print_tensor_gm_f32
 // LOWER-NOT: tla.print_tensor
+// F16: call @_mlir_ciface_tla_print_tensor_ub_f16
+// I8: call @_mlir_ciface_tla_print_tensor_ub_i8
+// I16: call @_mlir_ciface_tla_print_tensor_ub_i16
+// I32: call @_mlir_ciface_tla_print_tensor_ub_i32
+// U8: call @_mlir_ciface_tla_print_tensor_ub_u8
+// U16: call @_mlir_ciface_tla_print_tensor_ub_u16
+// U32: call @_mlir_ciface_tla_print_tensor_ub_u32

@@ -7,6 +7,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <type_traits>
 #include <unordered_map>
 #include <vector>
 
@@ -335,19 +336,101 @@ bool print_scalar_tlv(const PrintTlv *tlv, uint64_t total, uint32_t core) {
   return true;
 }
 
+struct PrintTensorDType {
+  const char *name;
+  uint32_t byte_width;
+  bool supports_unified_buffer;
+};
+
+bool get_print_tensor_dtype(uint32_t code, PrintTensorDType &dtype) {
+  // CANN DataType wire values.
+  switch (code) {
+  case 0:
+    dtype = {"float32", 4, true};
+    return true;
+  case 1:
+    dtype = {"float16", 2, true};
+    return true;
+  case 2:
+    dtype = {"int8", 1, true};
+    return true;
+  case 3:
+    dtype = {"int32", 4, true};
+    return true;
+  case 4:
+    dtype = {"uint8", 1, true};
+    return true;
+  case 6:
+    dtype = {"int16", 2, true};
+    return true;
+  case 7:
+    dtype = {"uint16", 2, true};
+    return true;
+  case 8:
+    dtype = {"uint32", 4, true};
+    return true;
+  default:
+    return false;
+  }
+}
+
+float decode_float16(uint16_t bits) {
+  uint32_t sign = static_cast<uint32_t>(bits & 0x8000) << 16;
+  uint32_t exponent = (bits >> 10) & 0x1f;
+  uint32_t mantissa = bits & 0x03ff;
+  uint32_t result = 0;
+  if (exponent == 0) {
+    if (mantissa == 0) {
+      result = sign;
+    } else {
+      exponent = 113;
+      while ((mantissa & 0x0400) == 0) {
+        mantissa <<= 1;
+        --exponent;
+      }
+      mantissa &= 0x03ff;
+      result = sign | (exponent << 23) | (mantissa << 13);
+    }
+  } else if (exponent == 0x1f) {
+    result = sign | 0x7f800000 | (mantissa << 13);
+  } else {
+    result = sign | ((exponent + 112) << 23) | (mantissa << 13);
+  }
+  float value = 0;
+  std::memcpy(&value, &result, sizeof(value));
+  return value;
+}
+
+template <typename T>
+T read_tensor_value(const uint8_t *payload, uint32_t index) {
+  T value{};
+  std::memcpy(&value, payload + static_cast<size_t>(index) * sizeof(T),
+              sizeof(T));
+  return value;
+}
+
+template <typename T>
+void print_integer_tensor_value(const uint8_t *payload, uint32_t index) {
+  T value = read_tensor_value<T>(payload, index);
+  if constexpr (std::is_signed_v<T>)
+    std::printf("%lld", static_cast<long long>(value));
+  else
+    std::printf("%llu", static_cast<unsigned long long>(value));
+}
+
 bool print_tensor_tlv(const PrintTensorTlv *tlv, uint64_t total, uint32_t core,
                       const PrintShapeTlv *shape_tlv = nullptr) {
-  constexpr uint32_t kFloat32DataType = 0;
   constexpr uint16_t kGlobalMemoryPosition = 0;
   constexpr uint16_t kUnifiedBufferPosition = 1;
   constexpr uint32_t kTensorPayloadAlignment = 32;
+  PrintTensorDType dtype{};
   if (total < sizeof(PrintTensorTlv) ||
       tlv->length != total - 2 * sizeof(uint32_t) ||
-      tlv->data_type != kFloat32DataType ||
+      !get_print_tensor_dtype(tlv->data_type, dtype) ||
       (tlv->position != kGlobalMemoryPosition &&
        tlv->position != kUnifiedBufferPosition) ||
-      tlv->dump_size == 0 || tlv->dump_size % sizeof(float) != 0 ||
-      tlv->dump_size > 262112 * sizeof(float) ||
+      tlv->dump_size == 0 || tlv->dump_size % dtype.byte_width != 0 ||
+      tlv->dump_size > 262112 * dtype.byte_width ||
       total != sizeof(PrintTensorTlv) +
                    align_up(tlv->dump_size, kTensorPayloadAlignment))
     return false;
@@ -374,21 +457,54 @@ bool print_tensor_tlv(const PrintTensorTlv *tlv, uint64_t total, uint32_t core,
       return false;
     }
   }
-  const uint32_t count = tlv->dump_size / sizeof(float);
+  const uint32_t count = tlv->dump_size / dtype.byte_width;
   if (shape_elements < count)
     return false;
-  auto *values = reinterpret_cast<const float *>(
-      reinterpret_cast<const uint8_t *>(tlv) + sizeof(PrintTensorTlv));
+  auto *payload =
+      reinterpret_cast<const uint8_t *>(tlv) + sizeof(PrintTensorTlv);
   const char *position =
       tlv->position == kGlobalMemoryPosition ? "GM" : "UB";
   std::printf(
-      "DumpTensor: core=%u data_type=float32 position=%s shape=[", core,
-      position);
+      "DumpTensor: core=%u, data_type=%s, position=%s, shape=[", core,
+      dtype.name, position);
   for (uint32_t i = 0; i < dim; ++i)
     std::printf("%s%u", i == 0 ? "" : ",", shape[i]);
-  std::printf("] dump_size=%u [", count);
-  for (uint32_t i = 0; i < count; ++i)
-    std::printf("%s%.9g", i == 0 ? "" : ", ", static_cast<double>(values[i]));
+  std::printf("], dump_size=%u [", count);
+  for (uint32_t i = 0; i < count; ++i) {
+    std::printf("%s", i == 0 ? "" : ", ");
+    switch (tlv->data_type) {
+    case 0:
+      std::printf("%.9g",
+                  static_cast<double>(read_tensor_value<float>(payload, i)));
+      break;
+    case 1:
+      std::printf(
+          "%.9g",
+          static_cast<double>(
+              decode_float16(read_tensor_value<uint16_t>(payload, i))));
+      break;
+    case 2:
+      print_integer_tensor_value<int8_t>(payload, i);
+      break;
+    case 3:
+      print_integer_tensor_value<int32_t>(payload, i);
+      break;
+    case 4:
+      print_integer_tensor_value<uint8_t>(payload, i);
+      break;
+    case 6:
+      print_integer_tensor_value<int16_t>(payload, i);
+      break;
+    case 7:
+      print_integer_tensor_value<uint16_t>(payload, i);
+      break;
+    case 8:
+      print_integer_tensor_value<uint32_t>(payload, i);
+      break;
+    default:
+      return false;
+    }
+  }
   std::printf("]\n");
   return true;
 }

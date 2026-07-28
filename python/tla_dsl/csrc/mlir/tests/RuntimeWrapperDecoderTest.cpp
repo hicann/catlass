@@ -30,23 +30,21 @@ std::vector<uint8_t> scalar_tlv(const char *format, uint64_t slot) {
   return bytes;
 }
 
-std::vector<uint8_t> tensor_tlv(uint16_t position = 0) {
+std::vector<uint8_t> tensor_tlv(uint32_t data_type = 0,
+                                uint32_t element_width = sizeof(float),
+                                uint16_t position = 0) {
   constexpr uint32_t kValueCount = 4;
   constexpr uint32_t kPayloadBytes = 32;
   std::vector<uint8_t> bytes(sizeof(PrintTensorTlv) + kPayloadBytes, 0);
   auto *tlv = reinterpret_cast<PrintTensorTlv *>(bytes.data());
   tlv->type = static_cast<uint32_t>(FifoRecordType::Tensor);
   tlv->length = static_cast<uint32_t>(bytes.size() - 8);
-  tlv->data_type = 0;
+  tlv->data_type = data_type;
   tlv->position = position;
   tlv->dim = 2;
   tlv->shape[0] = 2;
   tlv->shape[1] = 2;
-  tlv->dump_size = kValueCount * sizeof(float);
-  auto *values =
-      reinterpret_cast<float *>(bytes.data() + sizeof(PrintTensorTlv));
-  for (uint32_t i = 0; i < kValueCount; ++i)
-    values[i] = static_cast<float>(i);
+  tlv->dump_size = kValueCount * element_width;
   return bytes;
 }
 
@@ -195,19 +193,37 @@ int main() {
               "out-of-bounds format offset was not diagnosed"))
     return 1;
 
-  auto tensor = tensor_tlv();
-  if (!expect(print_tensor_tlv(
-              reinterpret_cast<const PrintTensorTlv *>(tensor.data()),
-                  tensor.size(), 0),
-              "valid aligned f32x4 tensor TLV was rejected"))
-    return 1;
-  auto ub_tensor = tensor_tlv(1);
+  constexpr struct {
+    uint32_t data_type;
+    uint32_t element_width;
+  } kRequiredTensorDTypes[] = {
+      {0, 4}, {1, 2}, {2, 1}, {3, 4},
+      {4, 1}, {6, 2}, {7, 2}, {8, 4},
+  };
+  for (const auto &dtype : kRequiredTensorDTypes) {
+    auto tensor = tensor_tlv(dtype.data_type, dtype.element_width);
+    if (!expect(
+            print_tensor_tlv(
+                reinterpret_cast<const PrintTensorTlv *>(tensor.data()),
+                tensor.size(), 0),
+            "required typed tensor TLV was rejected"))
+      return 1;
+  }
+  auto ub_tensor = tensor_tlv(0, sizeof(float), 1);
   if (!expect(print_tensor_tlv(
                   reinterpret_cast<const PrintTensorTlv *>(ub_tensor.data()),
                   ub_tensor.size(), 0),
               "valid aligned UB f32x4 tensor TLV was rejected"))
     return 1;
+  auto typed_ub_tensor = tensor_tlv(2, sizeof(int8_t), 1);
+  if (!expect(print_tensor_tlv(
+                  reinterpret_cast<const PrintTensorTlv *>(
+                      typed_ub_tensor.data()),
+                  typed_ub_tensor.size(), 0),
+              "valid typed UB tensor TLV was rejected"))
+    return 1;
   auto separate_shape = shape_tlv();
+  auto tensor = tensor_tlv();
   reinterpret_cast<PrintTensorTlv *>(tensor.data())->dim = 0;
   std::memset(reinterpret_cast<PrintTensorTlv *>(tensor.data())->shape, 0,
               sizeof(reinterpret_cast<PrintTensorTlv *>(tensor.data())->shape));
