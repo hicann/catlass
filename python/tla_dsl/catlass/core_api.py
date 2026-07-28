@@ -1307,6 +1307,10 @@ def _tensor_metadata_field(value: mlir_ir.Value, field: str) -> Any:
 # Layout constants aligned with ``catlass/catlass.hpp`` and ``tla/layout.hpp``.
 _CATLASS_BYTE_PER_C0 = 32
 _CATLASS_C0_NUM_PER_FRACTAL = 16
+_LINEAR_LAYOUT_TOKENS = frozenset({"row_major", "column_major"})
+_PACKED_LAYOUT_TOKENS = frozenset(
+    {"zN", "nZ", "zZ", "L0Clayout", "zNUnAlign"}
+)
 _MAKE_TENSOR_LIKE_ON_CHIP_ADDRSPACES = frozenset(
     {"l1", "l0a", "l0b", "l0c", "ub"}
 )
@@ -1367,6 +1371,115 @@ def _components_to_type_tree(components: Any) -> Any:
         return tuple(_components_to_type_tree(x) for x in components)
     const = _const_int_value(components)
     return int(const) if const is not None else None
+
+
+def _is_flat_pair(tree: Any) -> bool:
+    return (
+        isinstance(tree, tuple)
+        and len(tree) == 2
+        and all(not isinstance(component, tuple) for component in tree)
+    )
+
+
+def _is_packed_2x2_tree(tree: Any) -> bool:
+    return (
+        isinstance(tree, tuple)
+        and len(tree) == 2
+        and all(
+            isinstance(group, tuple)
+            and len(group) == 2
+            and all(not isinstance(leaf, tuple) for leaf in group)
+            for group in tree
+        )
+    )
+
+
+def _infer_padded_origin_tree_from_packed_shape(
+    shape_tree: Any, *, for_op: str
+) -> tuple[Any, Any]:
+    if not _is_packed_2x2_tree(shape_tree):
+        raise TlaLoweringError(
+            f"tla.{for_op} packed layout expects shape as two 2-leaf groups "
+            f"((m0, m1), (n0, n1)); got {shape_tree!r}"
+        )
+    return (
+        shape_tree[0][0] * shape_tree[0][1],
+        shape_tree[1][0] * shape_tree[1][1],
+    )
+
+
+def _validate_static_make_tensor_layout(
+    shape_tree: Any,
+    stride_tree: Any,
+    *,
+    dtype: str,
+    layout_tag: str,
+) -> None:
+    """Validate static shape/stride leaves using ``tla/layout.hpp`` traits."""
+
+    shape_const_tree = _components_to_type_tree(shape_tree)
+    stride_const_tree = _components_to_type_tree(stride_tree)
+
+    if layout_tag in _LINEAR_LAYOUT_TOKENS:
+        if len(shape_const_tree) == 1:
+            checks = ((stride_const_tree[0], 1),)
+        elif layout_tag == "row_major":
+            checks = ((stride_const_tree[1], 1),)
+        else:
+            checks = ((stride_const_tree[0], 1),)
+    else:
+        element_bytes = dtype_size_bytes(dtype)
+        ele_num_per_c0 = _CATLASS_BYTE_PER_C0 // element_bytes
+        ele_num_per_fractal = ele_num_per_c0 * _CATLASS_C0_NUM_PER_FRACTAL
+        shape00, shape01 = shape_const_tree[0]
+        shape10, _ = shape_const_tree[1]
+        stride00, stride01 = stride_const_tree[0]
+        stride10, stride11 = stride_const_tree[1]
+
+        if layout_tag == "zN":
+            checks = (
+                (shape00, _CATLASS_C0_NUM_PER_FRACTAL),
+                (shape10, ele_num_per_c0),
+                (stride10, 1),
+                (stride01, ele_num_per_fractal),
+            )
+        elif layout_tag == "nZ":
+            checks = (
+                (shape00, ele_num_per_c0),
+                (shape10, _CATLASS_C0_NUM_PER_FRACTAL),
+                (stride00, 1),
+                (stride11, ele_num_per_fractal),
+            )
+        elif layout_tag == "zZ":
+            checks = (
+                (shape00, _CATLASS_C0_NUM_PER_FRACTAL),
+                (shape10, ele_num_per_c0),
+                (stride10, 1),
+                (stride11, ele_num_per_fractal),
+            )
+        elif layout_tag == "L0Clayout":
+            checks = (
+                (shape00, _CATLASS_C0_NUM_PER_FRACTAL),
+                (shape10, _CATLASS_C0_NUM_PER_FRACTAL),
+                (stride10, 1),
+                (stride01, 256),
+            )
+        else:  # zNUnAlign
+            checks = (
+                (shape01, 1),
+                (shape10, ele_num_per_c0),
+                (stride00, ele_num_per_c0),
+                (stride10, 1),
+            )
+
+    if any(
+        actual is not None and actual != expected
+        for actual, expected in checks
+    ):
+        raise TlaLoweringError(
+            f"tla.make_tensor shape {shape_const_tree!r} and stride "
+            f"{stride_const_tree!r} do not match layout {layout_tag!r}"
+        )
 
 
 def _tree_add(a: Any, b: Any) -> Any:
@@ -2939,7 +3052,11 @@ def make_layout(
 ) -> TlaLayout:
     """Combine packed :func:`make_shape` and :func:`make_stride` into ``!tla.layout`` (``tla.make_layout``).
 
-    ``origin_shape`` defaults to ``shape``; a third operand is emitted only when its SSA differs from ``shape``'s.
+    For linear layouts, an omitted ``origin_shape`` is inferred as ``shape`` and
+    retains the same SSA. For packed layouts, it is inferred as the padded
+    logical pair ``(m0*m1, n0*n1)`` from
+    ``shape=((m0,m1),(n0,n1))``. A third operand is emitted only when its SSA
+    differs from ``shape``'s.
     """
     if not isinstance(shape, _Shape) or not isinstance(stride, _Stride):
         _op_error(
@@ -2955,6 +3072,13 @@ def make_layout(
         )
     _require_frontend_state("make_layout")
     layout_token = _resolve_arch_layout_tag(layoutTag, for_op="make_layout")
+    if origin_shape is None and layout_token in _LINEAR_LAYOUT_TOKENS:
+        origin_shape = shape
+    elif origin_shape is None and layout_token in _PACKED_LAYOUT_TOKENS:
+        inferred_origin = _infer_padded_origin_tree_from_packed_shape(
+            _components_to_index_tree(shape._components), for_op="make_layout"
+        )
+        origin_shape = make_shape(*inferred_origin, loc=loc)
     # Rank/layout consistency is enforced by C++ LayoutType::verify via LayoutType.get.
     shape_val = shape._shape_value
     stride_val = stride._stride_value
@@ -3093,10 +3217,14 @@ def make_tensor(
     come from ``ptr``'s ``!tla.ptr`` type; the layout tag, shape, stride, and origin come
     from the ``!tla.layout`` operand (origin defaults to ``shape``).
 
-    Lowering supports linear layouts (RowMajor/ColumnMajor). Like :func:`make_tensor_like`,
-    a full compile requires ``ptr`` to carry backing storage; an allocator-backed pointer
-    (from :class:`~catlass.utils.LocalmemAllocator` + :func:`recast_ptr`) is the supported
-    form for runnable kernels.
+    Lowering supports RowMajor, ColumnMajor, zN, nZ, zZ, L0Clayout, and
+    zNUnAlign. Packed layouts use a nested 2x2 physical shape/stride tree and a
+    flat logical 2-D coord/origin. If their ``origin_shape`` was omitted from
+    :func:`make_layout`, the padded logical pair is inferred from the physical
+    shape. Like :func:`make_tensor_like`, a full compile requires ``ptr`` to
+    carry backing storage; an allocator-backed pointer (from
+    :class:`~catlass.utils.LocalmemAllocator` + :func:`recast_ptr`) is the
+    supported form for runnable kernels.
     """
     _require_category("make_tensor", "ptr", ptr, "pointer", 0)
     if not isinstance(layout, _Layout):
@@ -3127,23 +3255,56 @@ def make_tensor(
 
     shape_tree = _components_to_index_tree(layout._shape._components)
     stride_tree = _components_to_index_tree(layout._stride._components)
-    origin_tree = (
-        _components_to_index_tree(layout._origin_shape._components)
-        if layout._origin_shape is not None
-        else shape_tree
-    )
+    if layout._origin_shape is not None:
+        origin_tree = _components_to_index_tree(layout._origin_shape._components)
+    elif layout._layout_tag in _PACKED_LAYOUT_TOKENS:
+        origin_tree = _infer_padded_origin_tree_from_packed_shape(
+            shape_tree, for_op="make_tensor"
+        )
+    else:
+        origin_tree = shape_tree
 
-    shape_rank = len(_flatten_tla_tuple(shape_tree))
-    stride_rank = len(_flatten_tla_tuple(stride_tree))
-    if shape_rank not in (1, 2) or stride_rank not in (1, 2):
+    shape_leaf_count = len(_flatten_tla_tuple(shape_tree))
+    stride_leaf_count = len(_flatten_tla_tuple(stride_tree))
+    if layout._layout_tag in _LINEAR_LAYOUT_TOKENS:
+        logical_rank = shape_leaf_count
+        if logical_rank not in (1, 2) or stride_leaf_count not in (1, 2):
+            raise TlaLoweringError(
+                f"tla.make_tensor supports at most 2-D linear layouts (got shape rank "
+                f"{shape_leaf_count}, stride rank {stride_leaf_count})"
+            )
+        if len(_flatten_tla_tuple(origin_tree)) != logical_rank:
+            raise TlaLoweringError(
+                "tla.make_tensor linear origin_shape rank must match layout rank"
+            )
+    elif layout._layout_tag in _PACKED_LAYOUT_TOKENS:
+        if not _is_packed_2x2_tree(shape_tree) or not _is_packed_2x2_tree(
+            stride_tree
+        ):
+            raise TlaLoweringError(
+                f"tla.make_tensor layout {layout._layout_tag!r} expects shape and "
+                "stride as two 2-leaf groups ((m0, m1), (n0, n1))"
+            )
+        if not _is_flat_pair(origin_tree):
+            raise TlaLoweringError(
+                f"tla.make_tensor layout {layout._layout_tag!r} expects a flat "
+                "logical 2-D origin_shape"
+            )
+        logical_rank = 2
+    else:
         raise TlaLoweringError(
-            f"tla.make_tensor supports at most 2-D layouts (got shape rank "
-            f"{shape_rank}, stride rank {stride_rank})"
+            f"tla.make_tensor does not support layout {layout._layout_tag!r}"
         )
 
+    _validate_static_make_tensor_layout(
+        shape_tree,
+        stride_tree,
+        dtype=dtype,
+        layout_tag=layout._layout_tag,
+    )
+
     if coord is None:
-        rank = shape_rank
-        coord = make_coord(*([0] * rank), loc=loc)
+        coord = make_coord(*([0] * logical_rank), loc=loc)
     elif not isinstance(coord, _Coord):
         _op_error(
             "make_tensor",
@@ -3152,10 +3313,17 @@ def make_tensor(
         )
     coord_tree = _components_to_index_tree(coord._components)
     coord_rank = len(_flatten_tla_tuple(coord_tree))
-    if coord_rank != shape_rank:
+    if coord_rank != logical_rank:
         raise TlaLoweringError(
             f"tla.make_tensor coord rank must match layout rank (got coord rank "
-            f"{coord_rank}, expected {shape_rank})"
+            f"{coord_rank}, expected {logical_rank})"
+        )
+    if layout._layout_tag in _PACKED_LAYOUT_TOKENS and not _is_flat_pair(
+        coord_tree
+    ):
+        raise TlaLoweringError(
+            f"tla.make_tensor layout {layout._layout_tag!r} expects a flat "
+            "logical 2-D coord"
         )
 
     # Type trees spell dynamic leaves as ``None`` (``?`` in the ``!tla.tensor`` type);

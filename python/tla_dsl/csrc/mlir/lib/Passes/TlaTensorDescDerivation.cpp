@@ -840,9 +840,8 @@ mlir::LogicalResult TensorDescriptorDerivation::derive(mlir::func::FuncOp funcOp
                 derivationFailed = true;
                 return;
             }
-            if (!isLinearLayout(childInfo->layoutTag)) {
-                op->emitError() << "tla.make_tensor currently supports only linear layouts "
-                                   "(RowMajor/ColumnMajor); packed layouts require make_tensor_like";
+            if (!isLinearLayout(childInfo->layoutTag) && !isPackedLayout(childInfo->layoutTag)) {
+                op->emitError() << "tla.make_tensor has an unsupported layout for descriptor lowering";
                 derivationFailed = true;
                 return;
             }
@@ -942,7 +941,9 @@ mlir::LogicalResult TensorDescriptorDerivation::derive(mlir::func::FuncOp funcOp
                 if (auto makeStride = makeLayout.getStride().getDefiningOp<::tla::MakeStrideOp>())
                     strideDynElems.append(makeStride.getDynElems().begin(), makeStride.getDynElems().end());
 
-                bool needsDerivedLeadingStride = strideDynLeafCount > 0 && strideDynElems.size() < strideDynLeafCount &&
+                bool needsDerivedLeadingStride = isLinearLayout(childInfo->layoutTag) &&
+                                                 strideDynLeafCount > 0 &&
+                                                 strideDynElems.size() < strideDynLeafCount &&
                                                  childInfo->shapeDims.size() == 2 &&
                                                  childInfo->strideDims.size() == 2 && childInfo->shapeDims[0] == 1 &&
                                                  childInfo->strideDims[0] == ShapedType::kDynamic;
@@ -976,16 +977,11 @@ mlir::LogicalResult TensorDescriptorDerivation::derive(mlir::func::FuncOp funcOp
                 derivationFailed = true;
                 return;
             }
-            Value shape0 = (*shapeLeaves)[0];
-            Value shape1 = (*shapeLeaves)[1];
-            Value stride0 = (*strideLeaves)[0];
-            Value stride1 = (*strideLeaves)[1];
             Value coord0 = (*coordLeaves)[0];
             Value coord1 = (*coordLeaves)[1];
 
-            // Origin defaults to shape; honor an explicit make_layout origin operand.
-            Value origin0 = shape0;
-            Value origin1 = shape1;
+            Value origin0;
+            Value origin1;
             if (Value originOperand = makeLayout.getOriginShape()) {
                 auto originLeaves = materializeLeaves(originOperand, childInfo->originShapeDims, "shape");
                 if (failed(originLeaves)) {
@@ -994,10 +990,39 @@ mlir::LogicalResult TensorDescriptorDerivation::derive(mlir::func::FuncOp funcOp
                 }
                 origin0 = (*originLeaves)[0];
                 origin1 = (*originLeaves)[1];
+            } else if (isPackedLayout(childInfo->layoutTag)) {
+                // Packed shapes flatten as (m0,m1),(n0,n1). Without an explicit
+                // logical origin, use the padded logical dimensions represented
+                // by the physical blocking.
+                OpBuilder builder(op);
+                origin0 = builder.create<arith::MulIOp>(
+                    op->getLoc(), (*shapeLeaves)[0], (*shapeLeaves)[1]);
+                origin1 = builder.create<arith::MulIOp>(
+                    op->getLoc(), (*shapeLeaves)[2], (*shapeLeaves)[3]);
+            } else {
+                origin0 = (*shapeLeaves)[0];
+                origin1 = (*shapeLeaves)[1];
             }
 
+            Value shape0;
+            Value shape1;
+            Value stride0;
+            Value stride1;
             SmallVector<Value, 4> packedShape;
             SmallVector<Value, 4> packedStride;
+            if (isPackedLayout(childInfo->layoutTag)) {
+                packedShape.append(shapeLeaves->begin(), shapeLeaves->end());
+                packedStride.append(strideLeaves->begin(), strideLeaves->end());
+                shape0 = origin0;
+                shape1 = origin1;
+                stride0 = packedStride[0];
+                stride1 = packedStride[1];
+            } else {
+                shape0 = (*shapeLeaves)[0];
+                shape1 = (*shapeLeaves)[1];
+                stride0 = (*strideLeaves)[0];
+                stride1 = (*strideLeaves)[1];
+            }
             TensorDescriptor desc{
                 typedBuffer,
                 *bridgedBaseType,

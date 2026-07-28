@@ -33,6 +33,55 @@ def make_tensor_default_coord_kernel(mem_in: tla.Tensor) -> None:
         tla.copy(tile, local)
 
 
+@tla.kernel
+def make_tensor_all_layouts_kernel() -> None:
+    ptr = tla.make_ptr(tla.Float16, 16384, mem_space=tla.AddressSpace.l1)
+
+    row = tla.make_layout(
+        tla.make_shape(32, 32),
+        tla.make_stride(32, 1),
+        layoutTag=tla.arch.RowMajor,
+    )
+    column = tla.make_layout(
+        tla.make_shape(32, 32),
+        tla.make_stride(1, 32),
+        layoutTag=tla.arch.ColumnMajor,
+    )
+    zn = tla.make_layout(
+        tla.make_shape((16, 2), (16, 2)),
+        tla.make_stride((16, 256), (1, 512)),
+        layoutTag=tla.arch.zN,
+    )
+    nz = tla.make_layout(
+        tla.make_shape((16, 2), (16, 2)),
+        tla.make_stride((1, 512), (16, 256)),
+        layoutTag=tla.arch.nZ,
+    )
+    zz = tla.make_layout(
+        tla.make_shape((16, 2), (16, 2)),
+        tla.make_stride((16, 512), (1, 256)),
+        layoutTag=tla.arch.zZ,
+    )
+    l0c = tla.make_layout(
+        tla.make_shape((16, 2), (16, 2)),
+        tla.make_stride((16, 256), (1, 512)),
+        layoutTag=tla.arch.L0Clayout,
+    )
+    zn_unalign = tla.make_layout(
+        tla.make_shape((32, 1), (16, 2)),
+        tla.make_stride((16, 512), (1, 512)),
+        layoutTag=tla.arch.zNUnAlign,
+    )
+
+    _ = tla.make_tensor(ptr, row)
+    _ = tla.make_tensor(ptr, column)
+    _ = tla.make_tensor(ptr, zn)
+    _ = tla.make_tensor(ptr, nz)
+    _ = tla.make_tensor(ptr, zz)
+    _ = tla.make_tensor(ptr, l0c)
+    _ = tla.make_tensor(ptr, zn_unalign)
+
+
 def test_make_tensor_emits_op_with_explicit_coord() -> None:
     mlir = make_tensor_makeptr_kernel.dump_mlir()
     assert "tla.make_tensor" in mlir
@@ -56,6 +105,28 @@ def test_make_tensor_coord_defaults_to_zero_matching_rank() -> None:
     assert "!tla.coord<0,0>" in mlir
 
 
+def test_make_layout_infers_linear_origin_shape_in_frontend() -> None:
+    with runtime_mod._eager_capture():
+        ptr = tla.make_ptr(tla.Float32, 4096, mem_space=tla.AddressSpace.gm)
+        row_shape = tla.make_shape(16, 32)
+        row = tla.make_layout(
+            row_shape,
+            tla.make_stride(32, 1),
+            layoutTag=tla.arch.RowMajor,
+        )
+        column_shape = tla.make_shape(16, 32)
+        column = tla.make_layout(
+            column_shape,
+            tla.make_stride(1, 16),
+            layoutTag=tla.arch.ColumnMajor,
+        )
+        _ = tla.make_tensor(ptr, row)
+        _ = tla.make_tensor(ptr, column)
+
+    assert row._origin_shape is row_shape
+    assert column._origin_shape is column_shape
+
+
 def test_make_tensor_rank1_default_coord_is_single_zero() -> None:
     @tla.kernel
     def _rank1_kernel() -> None:
@@ -71,6 +142,26 @@ def test_make_tensor_rank1_default_coord_is_single_zero() -> None:
     # in the C++ lowering); the default coord leaf is 0.
     assert "!tla.coord<0>" in mlir
     assert "!tla.coord<0,0>" not in mlir
+
+
+def test_make_tensor_accepts_every_registered_layout() -> None:
+    mlir = make_tensor_all_layouts_kernel.dump_mlir()
+    assert mlir.count("tla.make_tensor ") == 7
+    assert mlir.count("!tla.coord<0,0>") >= 7
+    assert (
+        "!tla.layout<!tla.shape<(16,2),(16,2)>, "
+        "!tla.stride<(16,256),(1,512)>, !tla.shape<32,32>, zN>"
+    ) in mlir
+    assert (
+        "!tla.layout<!tla.shape<(16,2),(16,2)>, "
+        "!tla.stride<(1,512),(16,256)>, !tla.shape<32,32>, nZ>"
+    ) in mlir
+    assert (
+        "!tla.layout<!tla.shape<(16,2),(16,2)>, "
+        "!tla.stride<(16,512),(1,256)>, !tla.shape<32,32>, zZ>"
+    ) in mlir
+    assert "L0Clayout" in mlir
+    assert "zNUnAlign" in mlir
 
 
 def test_make_tensor_accepts_dynamic_shape_leaf() -> None:
@@ -103,6 +194,47 @@ def test_make_tensor_accepts_dynamic_shape_leaf() -> None:
     # be a nullary `tla.make_shape -> ...`); the dynamic value travels here, not in the type.
     assert "tla.make_shape %" in mlir
     assert "tla.make_stride %" in mlir
+
+
+def test_make_tensor_accepts_dynamic_packed_shape_leaf() -> None:
+    @tla.kernel
+    def _dynamic_packed_kernel() -> None:
+        ptr = tla.make_ptr(tla.Float32, 4096, mem_space=tla.AddressSpace.l1)
+        for row_blocks in tla.range(1, 3, 1):
+            layout = tla.make_layout(
+                tla.make_shape((16, row_blocks), (8, 4)),
+                tla.make_stride((8, 128), (1, row_blocks * 128)),
+                layoutTag=tla.arch.zN,
+            )
+            local = tla.make_tensor(ptr, layout)
+            _ = local
+
+    mlir = _dynamic_packed_kernel.dump_mlir()
+    assert "!tla.shape<(16,?),(8,4)>" in mlir
+    assert "!tla.stride<(8,128),(1,?)>" in mlir
+    # Omitted packed origin_shape is inferred as (16*row_blocks, 8*4).
+    assert "!tla.shape<?,32>, zN>" in mlir
+    assert "!tla.coord<0,0>" in mlir
+
+
+def test_make_tensor_validates_static_trait_leaves_in_dynamic_layout() -> None:
+    @tla.kernel
+    def _dynamic_packed_kernel() -> None:
+        ptr = tla.make_ptr(tla.Float32, 4096, mem_space=tla.AddressSpace.l1)
+        for inner_rows in tla.range(1, 3, 1):
+            layout = tla.make_layout(
+                # shape[0][0] is a dynamic zN trait leaf, so only that check
+                # must be deferred.
+                tla.make_shape((inner_rows, 2), (8, 4)),
+                # The independent static trait leaf stride[1][0] must still
+                # be rejected because zN requires it to be 1.
+                tla.make_stride((8, 128), (2, 256)),
+                layoutTag=tla.arch.zN,
+            )
+            _ = tla.make_tensor(ptr, layout)
+
+    with pytest.raises(TlaLoweringError, match=r"do not match layout 'zN'"):
+        _dynamic_packed_kernel.dump_mlir()
 
 
 def test_make_tensor_rank1_dynamic_extent_emits_tlair() -> None:
@@ -182,3 +314,102 @@ def test_make_tensor_rejects_coord_rank_mismatch() -> None:
         with pytest.raises(TlaLoweringError, match="coord rank must match"):
             tla.make_tensor(ptr, layout, coord=tla.make_coord(0))
 
+
+@pytest.mark.parametrize(
+    ("dtype", "shape", "stride", "layout_tag"),
+    [
+        (
+            tla.Float16,
+            (32, 32),
+            (1, 32),
+            tla.arch.RowMajor,
+        ),
+        (
+            tla.Float16,
+            (32, 32),
+            (32, 1),
+            tla.arch.ColumnMajor,
+        ),
+        (
+            tla.Float16,
+            ((16, 2), (16, 2)),
+            ((1, 512), (16, 256)),
+            tla.arch.zN,
+        ),
+        (
+            tla.Float16,
+            ((16, 2), (16, 2)),
+            ((16, 256), (1, 512)),
+            tla.arch.nZ,
+        ),
+        (
+            tla.Float16,
+            ((16, 2), (16, 2)),
+            ((16, 256), (1, 512)),
+            tla.arch.zZ,
+        ),
+        (
+            tla.Float32,
+            ((16, 2), (8, 4)),
+            ((8, 128), (1, 256)),
+            tla.arch.L0Clayout,
+        ),
+        (
+            tla.Float16,
+            ((16, 2), (16, 2)),
+            ((16, 256), (1, 512)),
+            tla.arch.zNUnAlign,
+        ),
+    ],
+)
+def test_make_tensor_rejects_shape_stride_layout_tag_mismatch(
+    dtype: object,
+    shape: tuple[object, ...],
+    stride: tuple[object, ...],
+    layout_tag: object,
+) -> None:
+    with runtime_mod._eager_capture():
+        ptr = tla.make_ptr(dtype, 16384, mem_space=tla.AddressSpace.l1)
+        layout = tla.make_layout(
+            tla.make_shape(*shape),
+            tla.make_stride(*stride),
+            layoutTag=layout_tag,
+        )
+        with pytest.raises(
+            TlaLoweringError,
+            match=r"do not match layout",
+        ):
+            tla.make_tensor(ptr, layout)
+
+
+def test_make_tensor_packed_validation_matches_cpp_layout_traits() -> None:
+    with runtime_mod._eager_capture():
+        ptr = tla.make_ptr(tla.Float16, 16384, mem_space=tla.AddressSpace.l1)
+        layout = tla.make_layout(
+            tla.make_shape((16, 2), (16, 2)),
+            # IszN only identifies the four characteristic leaves; the other
+            # shape/stride leaves do not need to match MakeLayout's canonical result.
+            tla.make_stride((99, 256), (1, 777)),
+            origin_shape=tla.make_shape(33, 32),
+            layoutTag=tla.arch.zN,
+        )
+        _ = tla.make_tensor(ptr, layout)
+
+
+def test_make_tensor_accepts_linear_pitch_and_smaller_origin() -> None:
+    with runtime_mod._eager_capture():
+        ptr = tla.make_ptr(tla.Float32, 4096, mem_space=tla.AddressSpace.gm)
+        row_layout = tla.make_layout(
+            tla.make_shape(32, 32),
+            tla.make_stride(64, 1),
+            origin_shape=tla.make_shape(30, 31),
+            layoutTag=tla.arch.RowMajor,
+        )
+        column_layout = tla.make_layout(
+            tla.make_shape(32, 32),
+            tla.make_stride(1, 64),
+            origin_shape=tla.make_shape(30, 31),
+            layoutTag=tla.arch.ColumnMajor,
+        )
+        _ = tla.make_tensor(ptr, row_layout)
+        _ = tla.make_tensor(ptr, column_layout)

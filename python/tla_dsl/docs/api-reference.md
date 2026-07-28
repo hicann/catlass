@@ -71,6 +71,12 @@ make_tensor(ptr: Any, layout: TlaLayout, coord: CoordLike | None = None) -> TlaT
 
 Construct a ``!tla.tensor`` from an explicit pointer, layout, and coord.
 
+Supported layout tags are `RowMajor`, `ColumnMajor`, `zN`, `nZ`, `zZ`,
+`L0Clayout`, and `zNUnAlign`. Packed layouts use nested 2×2 physical
+shape/stride trees and a flat logical 2-D coord. When a packed
+`make_layout` omits `origin_shape`, the padded logical shape is inferred as
+`(m0*m1, n0*n1)` from `shape=((m0,m1),(n0,n1))`.
+
 ### `make_tensor_like`
 
 Source: [`catlass.core_api.make_tensor_like`](../catlass/core_api.py#L2373)
