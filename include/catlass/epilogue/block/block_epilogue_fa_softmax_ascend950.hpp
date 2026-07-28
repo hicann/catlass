@@ -168,18 +168,18 @@ public:
         if constexpr (AscendC::IsSameType<ElementP, float8_e4m3_t>::value) {
             if (unlikely(n > 64)) {
                 ComputeExpSubSumFp8<ElementP, ElementS, S2_BASE_SIZE, NRangeIndex::N128>(
-                    outputAddr, inputAddr, nowMaxUbAddr, expSumUbAddr, m, blockStride);
+                    outputAddr, inputAddr, nowMaxUbAddr, expSumUbAddr, pScaleValue, m, blockStride);
             } else {
                 ComputeExpSubSumFp8<ElementP, ElementS, S2_BASE_SIZE, NRangeIndex::N0_64>(
-                    outputAddr, inputAddr, nowMaxUbAddr, expSumUbAddr, m, blockStride);
+                    outputAddr, inputAddr, nowMaxUbAddr, expSumUbAddr, pScaleValue, m, blockStride);
             }
         } else {
             if (unlikely(n > 64)) {
                 ComputeExpSubSum<ElementP, ElementS, S2_BASE_SIZE, NRangeIndex::N128>(
-                    outputAddr, inputAddr, nowMaxUbAddr, expSumUbAddr, m, blockStride);
+                    outputAddr, inputAddr, nowMaxUbAddr, expSumUbAddr, pScaleValue, m, blockStride);
             } else {
                 ComputeExpSubSum<ElementP, ElementS, S2_BASE_SIZE, NRangeIndex::N0_64>(
-                    outputAddr, inputAddr, nowMaxUbAddr, expSumUbAddr, m, blockStride);
+                    outputAddr, inputAddr, nowMaxUbAddr, expSumUbAddr, pScaleValue, m, blockStride);
             }
         }
 
@@ -233,7 +233,7 @@ private:
     };
 
     template <typename ElementS, uint16_t S2BaseSize, NRangeIndex NRange, bool HasAtten = false>
-    __simd_vf__ inline void ComputeMaskandScale(
+    __simd_vf__ static inline void ComputeMaskandScale(
         __ubuf__ ElementS* srcUb, __ubuf__ uint8_t* maskUb, __ubuf__ uint8_t* maskUbUnroll, __ubuf__ ElementS* newMaxUb,
         uint16_t m, uint32_t tailN, ElementS dScale)
     {
@@ -292,7 +292,7 @@ private:
     }
 
     template <typename ElementS>
-    __simd_vf__ inline void UpdateMax(__ubuf__ ElementS* nowMaxUb, __ubuf__ ElementS* lastMaxUb, uint32_t tailM)
+    __simd_vf__ static inline void UpdateMax(__ubuf__ ElementS* nowMaxUb, __ubuf__ ElementS* lastMaxUb, uint32_t tailM)
     {
         using namespace AscendC::MicroAPI;
         RegTensor<float> nowMaxVreg;
@@ -307,9 +307,9 @@ private:
     }
 
     template <typename ElementP, typename ElementS, uint16_t S2BaseSize, NRangeIndex NRange>
-    __simd_vf__ inline void ComputeExpSubSum(
+    __simd_vf__ static inline void ComputeExpSubSum(
         __ubuf__ ElementP* expUb, __ubuf__ ElementS* srcUb, __ubuf__ ElementS* nowMaxUb, __ubuf__ ElementS* expSumUb,
-        uint16_t m, uint32_t blockStride)
+        ElementS pScaleValue, uint16_t m, uint32_t blockStride)
     {
         using namespace AscendC::MicroAPI;
         constexpr static CastTrait castTraitZero = {
@@ -376,9 +376,9 @@ private:
     }
 
     template <typename ElementP, typename ElementS, uint16_t S2BaseSize, NRangeIndex NRange>
-    __simd_vf__ inline void ComputeExpSubSumFp8(
+    __simd_vf__ static inline void ComputeExpSubSumFp8(
         __ubuf__ ElementP* expUb, __ubuf__ ElementS* srcUb, __ubuf__ ElementS* nowMaxUb, __ubuf__ ElementS* expSumUb,
-        uint16_t m, uint32_t blockStride)
+        ElementS pScaleValue, uint16_t m, uint32_t blockStride)
     {
         using namespace AscendC::MicroAPI;
         constexpr static CastTrait castTraitRintZero = {
@@ -456,7 +456,7 @@ private:
     }
 
     template <typename ElementS>
-    __simd_vf__ inline void UpdateExpSumAndExpMax(
+    __simd_vf__ static inline void UpdateExpSumAndExpMax(
         __ubuf__ ElementS* sumUb, __ubuf__ ElementS* expMaxUb, __ubuf__ ElementS* maxUb, __ubuf__ ElementS* expSumUb,
         __ubuf__ ElementS* nowMaxUb, uint32_t tailM)
     {

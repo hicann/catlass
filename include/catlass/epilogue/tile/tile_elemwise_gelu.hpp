@@ -12,6 +12,7 @@
 #define CATLASS_EPILOGUE_TILE_TILE_ELEMWISE_GELU_HPP
 
 #include "catlass/catlass.hpp"
+#include "catlass/matrix_coord.hpp"
 
 #if (defined(CATLASS_ARCH) && CATLASS_ARCH == 3510)
 using namespace AscendC::Reg;
@@ -30,8 +31,8 @@ struct TileElemWiseGelu {
     using ElementCompute = typename ComputeType_::Element;
 
     static constexpr uint32_t COMPUTE_LENGTH = COMPUTE_LENGTH_;
-    const float NEG_SQRT_EIGHT_OVER_PI = -1.595769121 * 0.044715;
-    const float TANH_APPROX_FACTOR = 1 / 0.044715;
+    static constexpr float NEG_SQRT_EIGHT_OVER_PI = -1.595769121 * 0.044715;
+    static constexpr float TANH_APPROX_FACTOR = 1 / 0.044715;
 
     CATLASS_DEVICE
     TileElemWiseGelu()
@@ -70,14 +71,14 @@ struct TileElemWiseGeluRegBase {
     static_assert(std::is_same_v<ElementSrc, float32_t>, "ElementSrc must be float32_t");
     static_assert(std::is_same_v<ElementDst, half>, "ElementDst must be half");
 
-    const float NEG_SQRT_EIGHT_OVER_PI = -1.595769121 * 0.044715;
-    const float TANH_APPROX_FACTOR = 1 / 0.044715;
+    static constexpr float NEG_SQRT_EIGHT_OVER_PI = -1.595769121 * 0.044715;
+    static constexpr float TANH_APPROX_FACTOR = 1 / 0.044715;
 
     CATLASS_DEVICE
     TileElemWiseGeluRegBase()
     {}
 
-    __simd_vf__ void GeluVf(
+    __simd_vf__ static void GeluVf(
         __ubuf__ ElementDst* dstUb, __ubuf__ ElementSrc* srcUb, uint32_t actualRowNum, uint32_t actualColumnNum,
         uint32_t dstRowStride, uint32_t srcRowStride)
     {

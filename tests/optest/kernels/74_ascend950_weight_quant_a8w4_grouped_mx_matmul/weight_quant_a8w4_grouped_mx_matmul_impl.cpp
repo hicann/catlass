@@ -45,9 +45,6 @@ using std::size_t;
 #ifndef CATLASS_JIT_LAYOUT_A
 #define CATLASS_JIT_LAYOUT_A RowMajor
 #endif
-#ifndef CATLASS_JIT_LAYOUT_B
-#define CATLASS_JIT_LAYOUT_B Weight4BitnZ
-#endif
 
 using ElementA = CATLASS_JIT_ELEMENT_A;
 using ElementPrologueB = CATLASS_JIT_ELEMENT_B;
@@ -60,7 +57,7 @@ using ElementBias = void;
 using ElementGroupList = int64_t;
 
 using LayoutTagA = Catlass::layout::CATLASS_JIT_LAYOUT_A;
-using LayoutTagPrologueB = Catlass::layout::CATLASS_JIT_LAYOUT_B;
+using LayoutTagPrologueB = Catlass::layout::Weight4BitnZ;
 using LayoutTagMxScaleB = Catlass::layout::ColumnMajor;
 using LayoutTagC = Catlass::layout::RowMajor;
 using LayoutTagB = Catlass::layout::nZ;

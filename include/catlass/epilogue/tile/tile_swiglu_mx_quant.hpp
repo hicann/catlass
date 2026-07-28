@@ -44,8 +44,16 @@ struct TileSwigluAndMxQuant {
     static constexpr int64_t OUT_ELE_NUM_ONE_BLK = 64;
 
 #if defined(__NPU_ARCH__) && (__NPU_ARCH__ == 3510)
-    CATLASS_DEVICE
-    __simd_vf__ void operator()(
+    CATLASS_DEVICE void operator()(
+        __ubuf__ int8_t* quantOut, __ubuf__ QuantScaleType* quantScaleOut, __ubuf__ GluResType* gluRes,
+        __ubuf__ uint16_t* maxExp, __ubuf__ uint16_t* halfScale, __ubuf__ ActType* actData, __ubuf__ GateType* gateData,
+        uint16_t mSize, uint32_t nSize, uint32_t nAligned)
+    {
+        tileSwigluAndMxQuantImpl(
+            quantOut, quantScaleOut, gluRes, maxExp, halfScale, actData, gateData, mSize, nSize, nAligned);
+    }
+
+    __simd_vf__ static inline void tileSwigluAndMxQuantImpl(
         __ubuf__ int8_t* quantOut, __ubuf__ QuantScaleType* quantScaleOut, __ubuf__ GluResType* gluRes,
         __ubuf__ uint16_t* maxExp, __ubuf__ uint16_t* halfScale, __ubuf__ ActType* actData, __ubuf__ GateType* gateData,
         uint16_t mSize, uint32_t nSize, uint32_t nAligned)
@@ -113,7 +121,7 @@ struct TileSwigluAndMxQuant {
     }
 
     CATLASS_DEVICE
-    __simd_callee__ void ComputeMaxExp(
+    __simd_callee__ static void ComputeMaxExp(
         __ubuf__ bfloat16_t* gluRes, __ubuf__ uint16_t* maxExp, uint32_t totalDataCount, uint16_t loopDataNum,
         uint16_t vlForHalfNumber)
     {
@@ -157,7 +165,7 @@ struct TileSwigluAndMxQuant {
     }
 
     CATLASS_DEVICE
-    __simd_callee__ void ComputeScale(
+    __simd_callee__ static void ComputeScale(
         __ubuf__ uint16_t* maxExp, __ubuf__ uint16_t* scaleWriteAddr, __ubuf__ uint16_t* halfScale,
         uint32_t totalScaleCount, uint16_t loopScaleNum, uint16_t vlForHalfNumber)
     {
@@ -211,7 +219,7 @@ struct TileSwigluAndMxQuant {
     }
 
     CATLASS_DEVICE
-    __simd_callee__ void QuantToFp8(
+    __simd_callee__ static void QuantToFp8(
         __ubuf__ bfloat16_t* gluRes, __ubuf__ uint16_t* halfScale, __ubuf__ int8_t* quantOut, uint32_t totalDataCount,
         uint16_t loopDataNum, uint16_t vlForHalfNumber)
     {

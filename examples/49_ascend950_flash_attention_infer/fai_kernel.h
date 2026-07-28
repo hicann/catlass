@@ -492,7 +492,7 @@ private:
     CubeCoordInfo coordInfo[3];
 
     // =========================================== private functions ===========================================
-    CATLASS_DEVICE inline void SetRunInfo(
+    CATLASS_DEVICE void SetRunInfo(
         RunInfo& runInfo, RunParamStr& runParam, int64_t taskId, int64_t kvSeqLoopCount, int64_t kvSeqLoopLimit,
         int64_t multiCoreInnerIdx)
     {
@@ -521,7 +521,7 @@ private:
         runInfo.batchOuterIdx = runParam.batchOuterIdx;
     }
 
-    CATLASS_DEVICE inline void ComputeBmm1Tail(RunInfo& runInfo, RunParamStr& runParam)
+    CATLASS_DEVICE void ComputeBmm1Tail(RunInfo& runInfo, RunParamStr& runParam)
     {
         // ------------------------qSeq Base Related---------------------------
         runInfo.qSeqRealSize = runParam.qSeqRealSize;
@@ -535,13 +535,13 @@ private:
         }
     }
 
-    CATLASS_DEVICE inline void CalcQSeqCoord(RunInfo& runInfo, ConstInfo& constInfo)
+    CATLASS_DEVICE void CalcQSeqCoord(RunInfo& runInfo, ConstInfo& constInfo)
     {
         // 计算qSeq方向偏移
         coordInfo[runInfo.taskIdMod3].qSeqCoord = runInfo.qSeqOuterAxisIdx * this->constInfo.qSeqlenBase;
     }
 
-    CATLASS_DEVICE inline void CalcKvSeqCoord(RunInfo& runInfo, ConstInfo& constInfo)
+    CATLASS_DEVICE void CalcKvSeqCoord(RunInfo& runInfo, ConstInfo& constInfo)
     {
         coordInfo[runInfo.taskIdMod3].kvSeqCoord =
             runInfo.kvSeqAxisStartIdx +

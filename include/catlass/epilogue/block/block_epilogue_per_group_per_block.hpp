@@ -149,17 +149,6 @@ private:
     CATLASS_DEVICE void CalcX2OffsetPerGroup(int64_t x2ScaleOffset[UB_SUB_BANK_NUM]);
     template <class T>
     CATLASS_DEVICE __ubuf__ T* GetX1ScaleUbAddrPerGroup(int64_t x1ScaleOffset, uint64_t kOffset, uint64_t kElem);
-    template <bool isFirstKLoop, uint32_t ndNum>
-    __simd_vf__ void AivPerTensor(
-        __ubuf__ CalcType* dst, __ubuf__ CType* l0cOut, __ubuf__ X1ScaleType* x1Scale, uint16_t mSize, uint32_t nSize0,
-        uint32_t nSize1, uint16_t kSize, X2ScaleType x2Scale0, X2ScaleType x2Scale1, uint64_t x1ScaleKIdxInCache);
-    template <bool isFirstKLoop, uint32_t ndNum>
-    __simd_vf__ void AivPerTensor(
-        __ubuf__ CType* dst, __ubuf__ CType* l0cOut, X1ScaleType x1Scale, uint16_t mSize, uint32_t nSize0,
-        uint32_t nSize1, X2ScaleType x2Scale0, X2ScaleType x2Scale1);
-    template <uint32_t ndNum>
-    __simd_vf__ void AddBias(
-        __ubuf__ CalcType* mmAdd, __ubuf__ BiasType* bias, uint16_t mSize, uint32_t nSize0, uint32_t nSize1);
     CATLASS_DEVICE void AivPostProcess(const AscendC::LocalTensor<CalcType>& mmAddUb);
     CATLASS_DEVICE void CopyOut(
         const AscendC::LocalTensor<YType>& ubRes, uint16_t eventId, uint16_t blkCount, uint32_t blkLen,
@@ -190,6 +179,176 @@ private:
     AscendC::LocalTensor<X1ScaleType> x1ScaleUbPong_;
     AscendC::LocalTensor<BiasType> biasUbPing_;
     AscendC::LocalTensor<BiasType> biasUbPong_;
+
+private:
+    template <bool isFirstKLoop, uint32_t ndNum>
+    __simd_vf__ static void AivPerTensor(
+        __ubuf__ CalcType* dst, __ubuf__ CType* l0cOut, __ubuf__ X1ScaleType* x1Scale, uint16_t mSize, uint32_t nSize0,
+        uint32_t nSize1, uint16_t kSize, X2ScaleType x2Scale0, X2ScaleType x2Scale1, uint64_t x1ScaleKIdxInCache)
+    {
+        uint16_t alignM = RoundUp(mSize, QBMM_UB_ALIGN_SIZE / sizeof(X1ScaleType));
+        uint16_t alignK = RoundUp(kSize, QBMM_UB_ALIGN_SIZE / sizeof(X1ScaleType));
+        AscendC::MicroAPI::RegTensor<X1ScaleType> x1ScaleReg, muledScaleReg;
+        AscendC::MicroAPI::RegTensor<CType> l0cOutReg;
+        AscendC::MicroAPI::RegTensor<CalcType> addReg;
+        AscendC::MicroAPI::RegTensor<CalcType> ResReg, mulScaleOutReg;
+        constexpr static AscendC::MicroAPI::CastTrait ctInt322Fp32 = {
+            AscendC::MicroAPI::RegLayout::UNKNOWN, AscendC::MicroAPI::SatMode::UNKNOWN,
+            AscendC::MicroAPI::MaskMergeMode::ZEROING, AscendC::RoundMode::CAST_RINT};
+        {
+            for (uint16_t mIdx = 0; mIdx < mSize; mIdx++) {
+                AscendC::MicroAPI::LoadAlign<X1ScaleType, AscendC::MicroAPI::LoadDist::DIST_BRC_B32>(
+                    x1ScaleReg, x1Scale + mIdx * alignK + x1ScaleKIdxInCache);
+
+                // 1 ND
+                uint32_t elementNum = nSize0;
+                AscendC::MicroAPI::MaskReg maskN = AscendC::MicroAPI::UpdateMask<CType>(elementNum);
+                // copy input from ub to register, addr of ub should align to 32B
+                uint32_t offset = mIdx * UB_TWO_BANK_ELEMS_B32;
+                uint32_t l0cOutOffset = offset;
+                AscendC::MicroAPI::LoadAlign(l0cOutReg, l0cOut + offset);
+                // l0c_out * scale
+                AscendC::MicroAPI::Muls(muledScaleReg, x1ScaleReg, x2Scale0, maskN);
+                if constexpr (AscendC::IsSameType<CType, int32_t>::value) {
+                    AscendC::MicroAPI::RegTensor<CalcType> l0cOutRegAfterCast{};
+                    AscendC::MicroAPI::Cast<CalcType, CType, ctInt322Fp32>(l0cOutRegAfterCast, l0cOutReg, maskN);
+                    AscendC::MicroAPI::Mul(mulScaleOutReg, l0cOutRegAfterCast, muledScaleReg, maskN);
+                } else {
+                    AscendC::MicroAPI::Mul(mulScaleOutReg, l0cOutReg, muledScaleReg, maskN);
+                }
+                uint32_t dstUbOffset = offset;
+                if constexpr (isFirstKLoop) {
+                    AscendC::MicroAPI::StoreAlign<CalcType, AscendC::MicroAPI::StoreDist::DIST_NORM_B32>(
+                        dst + dstUbOffset, mulScaleOutReg, maskN);
+                } else {
+                    AscendC::MicroAPI::LoadAlign(addReg, dst + dstUbOffset);
+                    AscendC::MicroAPI::Add(ResReg, mulScaleOutReg, addReg, maskN);
+                    // copy out from register to ub
+                    AscendC::MicroAPI::StoreAlign<CalcType, AscendC::MicroAPI::StoreDist::DIST_NORM_B32>(
+                        dst + dstUbOffset, ResReg, maskN);
+                }
+                // 2 ND
+                if constexpr (ndNum == 1) {
+                    continue;
+                }
+                elementNum = nSize1;
+                maskN = AscendC::MicroAPI::UpdateMask<CType>(elementNum);
+                // copy input from ub to register, addr of ub should align to 32B
+                l0cOutOffset = l0cOutOffset + nSize0; // + distance of 2 NDs
+                AscendC::MicroAPI::LoadAlign(l0cOutReg, l0cOut + l0cOutOffset);
+                // l0c_out * scale
+                AscendC::MicroAPI::Muls(muledScaleReg, x1ScaleReg, x2Scale1, maskN);
+                if constexpr (AscendC::IsSameType<CType, int32_t>::value) {
+                    AscendC::MicroAPI::RegTensor<CalcType> l0cOutRegAfterCast{};
+                    AscendC::MicroAPI::Cast<CalcType, CType, ctInt322Fp32>(l0cOutRegAfterCast, l0cOutReg, maskN);
+                    AscendC::MicroAPI::Mul(mulScaleOutReg, l0cOutRegAfterCast, muledScaleReg, maskN);
+                } else {
+                    AscendC::MicroAPI::Mul(mulScaleOutReg, l0cOutReg, muledScaleReg, maskN);
+                }
+                dstUbOffset = offset + nSize0;
+                if constexpr (isFirstKLoop) {
+                    AscendC::MicroAPI::StoreAlign<CalcType, AscendC::MicroAPI::StoreDist::DIST_NORM_B32>(
+                        dst + dstUbOffset, mulScaleOutReg, maskN);
+                } else {
+                    AscendC::MicroAPI::LoadAlign(addReg, dst + dstUbOffset);
+                    AscendC::MicroAPI::Add(ResReg, mulScaleOutReg, addReg, maskN);
+                    // copy out from register to ub
+                    AscendC::MicroAPI::StoreAlign<CalcType, AscendC::MicroAPI::StoreDist::DIST_NORM_B32>(
+                        dst + dstUbOffset, ResReg, maskN);
+                }
+            }
+        }
+    }
+
+    template <bool isFirstKLoop, uint32_t ndNum>
+    __simd_vf__ static void AivPerTensor(
+        __ubuf__ CType* dst, __ubuf__ CType* l0cOut, X1ScaleType x1Scale, uint16_t mSize, uint32_t nSize0,
+        uint32_t nSize1, X2ScaleType x2Scale0, X2ScaleType x2Scale1)
+    {
+        {
+            for (uint16_t mIdx = 0; mIdx < mSize; mIdx++) {
+                // 1 ND
+                X2ScaleType scaleMul = x1Scale * x2Scale0;
+                uint32_t elementNum = nSize0;
+                AscendC::MicroAPI::MaskReg maskN = AscendC::MicroAPI::UpdateMask<CType>(elementNum);
+                AscendC::MicroAPI::RegTensor<CType> l0cOutReg;
+                AscendC::MicroAPI::RegTensor<CType> addReg;
+                AscendC::MicroAPI::RegTensor<CType> ResReg, mulScaleOutReg;
+                // copy input from ub to register, addr of ub should align to 32B
+                uint32_t offset = mIdx * UB_TWO_BANK_ELEMS_B32;
+                uint32_t l0cOutOffset = offset;
+                AscendC::MicroAPI::LoadAlign(l0cOutReg, l0cOut + offset);
+                // l0c_out * scale
+                AscendC::MicroAPI::Muls(mulScaleOutReg, l0cOutReg, scaleMul, maskN);
+                uint32_t dstUbOffset = offset;
+                if constexpr (isFirstKLoop) {
+                    AscendC::MicroAPI::StoreAlign<CType, AscendC::MicroAPI::StoreDist::DIST_NORM_B32>(
+                        dst + dstUbOffset, mulScaleOutReg, maskN);
+                } else {
+                    AscendC::MicroAPI::LoadAlign(addReg, dst + dstUbOffset);
+                    AscendC::MicroAPI::Add(ResReg, mulScaleOutReg, addReg, maskN);
+                    // copy out from register to ub
+                    AscendC::MicroAPI::StoreAlign<CType, AscendC::MicroAPI::StoreDist::DIST_NORM_B32>(
+                        dst + dstUbOffset, ResReg, maskN);
+                }
+                // 2 ND
+                if constexpr (ndNum == 1) {
+                    continue;
+                }
+                scaleMul = x1Scale * x2Scale1;
+                elementNum = nSize1;
+                maskN = AscendC::MicroAPI::UpdateMask<CType>(elementNum);
+                // copy input from ub to register, addr of ub should align to 32B
+                l0cOutOffset = offset + nSize0; // + distance of 2 NDs
+                AscendC::MicroAPI::LoadAlign(l0cOutReg, l0cOut + l0cOutOffset);
+                // l0c_out * scale
+                AscendC::MicroAPI::Muls(mulScaleOutReg, l0cOutReg, scaleMul, maskN);
+                dstUbOffset = offset + nSize0;
+                if constexpr (isFirstKLoop) {
+                    AscendC::MicroAPI::StoreAlign<CType, AscendC::MicroAPI::StoreDist::DIST_NORM_B32>(
+                        dst + dstUbOffset, mulScaleOutReg, maskN);
+                } else {
+                    AscendC::MicroAPI::LoadAlign(addReg, dst + dstUbOffset);
+                    AscendC::MicroAPI::Add(ResReg, mulScaleOutReg, addReg, maskN);
+                    // copy out from register to ub
+                    AscendC::MicroAPI::StoreAlign<CType, AscendC::MicroAPI::StoreDist::DIST_NORM_B32>(
+                        dst + dstUbOffset, ResReg, maskN);
+                }
+            }
+        }
+    }
+
+    template <uint32_t ndNum>
+    __simd_vf__ static void AddBias(
+        __ubuf__ CalcType* mmAdd, __ubuf__ BiasType* bias, uint16_t mSize, uint32_t nSize0, uint32_t nSize1)
+    {
+        {
+            uint32_t mmAddOffset{};
+            for (uint16_t mIdx = 0; mIdx < mSize; mIdx++) {
+                AscendC::MicroAPI::RegTensor<BiasType> biasReg{};
+                AscendC::MicroAPI::RegTensor<CalcType> mmAddReg{};
+                AscendC::MicroAPI::DataCopy(biasReg, bias);
+                mmAddOffset = mIdx * PER_BLOCK_SIZE;
+                uint32_t elementNum = nSize0;
+                AscendC::MicroAPI::MaskReg maskN = AscendC::MicroAPI::UpdateMask<CalcType>(elementNum);
+                AscendC::MicroAPI::DataCopy(mmAddReg, mmAdd + mmAddOffset);
+                AscendC::MicroAPI::Add(mmAddReg, mmAddReg, biasReg, maskN);
+                AscendC::MicroAPI::DataCopy<CalcType, AscendC::MicroAPI::StoreDist::DIST_NORM_B32>(
+                    mmAdd + mmAddOffset, mmAddReg, maskN);
+                if constexpr (ndNum == 1) {
+                    continue;
+                }
+                elementNum = nSize1;
+                maskN = AscendC::MicroAPI::UpdateMask<CalcType>(elementNum);
+                mmAddOffset += nSize0;
+                AscendC::MicroAPI::DataCopy(biasReg, bias + nSize0);
+                AscendC::MicroAPI::DataCopy(mmAddReg, mmAdd + mmAddOffset);
+                AscendC::MicroAPI::Add(mmAddReg, mmAddReg, biasReg, maskN);
+                AscendC::MicroAPI::DataCopy<CalcType, AscendC::MicroAPI::StoreDist::DIST_NORM_B32>(
+                    mmAdd + mmAddOffset, mmAddReg, maskN);
+            }
+        }
+    }
 
 private:
     const Params* params_;
@@ -531,178 +690,6 @@ CATLASS_DEVICE void BlockEpilogue<QBMM_BLOCK_EPILOGUE_PERTILE_FUNC_LOCAL_PARAMS>
         crossPingPongID_ = (crossPingPongID_ + 1) & 1;
     }
     AivPostProcess(mmAddUb_);
-}
-
-QBMM_BLOCK_EPILOGUE_PERTILE_CLASS_LOCAL_PARAMS
-template <bool isFirstKLoop, uint32_t ndNum>
-__simd_vf__ void BlockEpilogue<QBMM_BLOCK_EPILOGUE_PERTILE_FUNC_LOCAL_PARAMS>::AivPerTensor(
-    __ubuf__ CalcType* dst, __ubuf__ CType* l0cOut, __ubuf__ X1ScaleType* x1Scale, uint16_t mSize, uint32_t nSize0,
-    uint32_t nSize1, uint16_t kSize, X2ScaleType x2Scale0, X2ScaleType x2Scale1, uint64_t x1ScaleKIdxInCache)
-{
-    uint16_t alignM = RoundUp(mSize, QBMM_UB_ALIGN_SIZE / sizeof(X1ScaleType));
-    uint16_t alignK = RoundUp(kSize, QBMM_UB_ALIGN_SIZE / sizeof(X1ScaleType));
-    AscendC::MicroAPI::RegTensor<X1ScaleType> x1ScaleReg, muledScaleReg;
-    AscendC::MicroAPI::RegTensor<CType> l0cOutReg;
-    AscendC::MicroAPI::RegTensor<CalcType> addReg;
-    AscendC::MicroAPI::RegTensor<CalcType> ResReg, mulScaleOutReg;
-    constexpr static AscendC::MicroAPI::CastTrait ctInt322Fp32 = {
-        AscendC::MicroAPI::RegLayout::UNKNOWN, AscendC::MicroAPI::SatMode::UNKNOWN,
-        AscendC::MicroAPI::MaskMergeMode::ZEROING, AscendC::RoundMode::CAST_RINT};
-    {
-        for (uint16_t mIdx = 0; mIdx < mSize; mIdx++) {
-            AscendC::MicroAPI::LoadAlign<X1ScaleType, AscendC::MicroAPI::LoadDist::DIST_BRC_B32>(
-                x1ScaleReg, x1Scale + mIdx * alignK + x1ScaleKIdxInCache);
-
-            // 1 ND
-            uint32_t elementNum = nSize0;
-            AscendC::MicroAPI::MaskReg maskN = AscendC::MicroAPI::UpdateMask<CType>(elementNum);
-            // copy input from ub to register, addr of ub should align to 32B
-            uint32_t offset = mIdx * UB_TWO_BANK_ELEMS_B32;
-            uint32_t l0cOutOffset = offset;
-            AscendC::MicroAPI::LoadAlign(l0cOutReg, l0cOut + offset);
-            // l0c_out * scale
-            AscendC::MicroAPI::Muls(muledScaleReg, x1ScaleReg, x2Scale0, maskN);
-            if constexpr (AscendC::IsSameType<CType, int32_t>::value) {
-                AscendC::MicroAPI::RegTensor<CalcType> l0cOutRegAfterCast{};
-                AscendC::MicroAPI::Cast<CalcType, CType, ctInt322Fp32>(l0cOutRegAfterCast, l0cOutReg, maskN);
-                AscendC::MicroAPI::Mul(mulScaleOutReg, l0cOutRegAfterCast, muledScaleReg, maskN);
-            } else {
-                AscendC::MicroAPI::Mul(mulScaleOutReg, l0cOutReg, muledScaleReg, maskN);
-            }
-            uint32_t dstUbOffset = offset;
-            if constexpr (isFirstKLoop) {
-                AscendC::MicroAPI::StoreAlign<CalcType, AscendC::MicroAPI::StoreDist::DIST_NORM_B32>(
-                    dst + dstUbOffset, mulScaleOutReg, maskN);
-            } else {
-                AscendC::MicroAPI::LoadAlign(addReg, dst + dstUbOffset);
-                AscendC::MicroAPI::Add(ResReg, mulScaleOutReg, addReg, maskN);
-                // copy out from register to ub
-                AscendC::MicroAPI::StoreAlign<CalcType, AscendC::MicroAPI::StoreDist::DIST_NORM_B32>(
-                    dst + dstUbOffset, ResReg, maskN);
-            }
-            // 2 ND
-            if constexpr (ndNum == 1) {
-                continue;
-            }
-            elementNum = nSize1;
-            maskN = AscendC::MicroAPI::UpdateMask<CType>(elementNum);
-            // copy input from ub to register, addr of ub should align to 32B
-            l0cOutOffset = l0cOutOffset + nSize0; // + distance of 2 NDs
-            AscendC::MicroAPI::LoadAlign(l0cOutReg, l0cOut + l0cOutOffset);
-            // l0c_out * scale
-            AscendC::MicroAPI::Muls(muledScaleReg, x1ScaleReg, x2Scale1, maskN);
-            if constexpr (AscendC::IsSameType<CType, int32_t>::value) {
-                AscendC::MicroAPI::RegTensor<CalcType> l0cOutRegAfterCast{};
-                AscendC::MicroAPI::Cast<CalcType, CType, ctInt322Fp32>(l0cOutRegAfterCast, l0cOutReg, maskN);
-                AscendC::MicroAPI::Mul(mulScaleOutReg, l0cOutRegAfterCast, muledScaleReg, maskN);
-            } else {
-                AscendC::MicroAPI::Mul(mulScaleOutReg, l0cOutReg, muledScaleReg, maskN);
-            }
-            dstUbOffset = offset + nSize0;
-            if constexpr (isFirstKLoop) {
-                AscendC::MicroAPI::StoreAlign<CalcType, AscendC::MicroAPI::StoreDist::DIST_NORM_B32>(
-                    dst + dstUbOffset, mulScaleOutReg, maskN);
-            } else {
-                AscendC::MicroAPI::LoadAlign(addReg, dst + dstUbOffset);
-                AscendC::MicroAPI::Add(ResReg, mulScaleOutReg, addReg, maskN);
-                // copy out from register to ub
-                AscendC::MicroAPI::StoreAlign<CalcType, AscendC::MicroAPI::StoreDist::DIST_NORM_B32>(
-                    dst + dstUbOffset, ResReg, maskN);
-            }
-        }
-    }
-}
-
-QBMM_BLOCK_EPILOGUE_PERTILE_CLASS_LOCAL_PARAMS
-template <bool isFirstKLoop, uint32_t ndNum>
-__simd_vf__ void BlockEpilogue<QBMM_BLOCK_EPILOGUE_PERTILE_FUNC_LOCAL_PARAMS>::AivPerTensor(
-    __ubuf__ CType* dst, __ubuf__ CType* l0cOut, X1ScaleType x1Scale, uint16_t mSize, uint32_t nSize0, uint32_t nSize1,
-    X2ScaleType x2Scale0, X2ScaleType x2Scale1)
-{
-    {
-        for (uint16_t mIdx = 0; mIdx < mSize; mIdx++) {
-            // 1 ND
-            X2ScaleType scaleMul = x1Scale * x2Scale0;
-            uint32_t elementNum = nSize0;
-            AscendC::MicroAPI::MaskReg maskN = AscendC::MicroAPI::UpdateMask<CType>(elementNum);
-            AscendC::MicroAPI::RegTensor<CType> l0cOutReg;
-            AscendC::MicroAPI::RegTensor<CType> addReg;
-            AscendC::MicroAPI::RegTensor<CType> ResReg, mulScaleOutReg;
-            // copy input from ub to register, addr of ub should align to 32B
-            uint32_t offset = mIdx * UB_TWO_BANK_ELEMS_B32;
-            uint32_t l0cOutOffset = offset;
-            AscendC::MicroAPI::LoadAlign(l0cOutReg, l0cOut + offset);
-            // l0c_out * scale
-            AscendC::MicroAPI::Muls(mulScaleOutReg, l0cOutReg, scaleMul, maskN);
-            uint32_t dstUbOffset = offset;
-            if constexpr (isFirstKLoop) {
-                AscendC::MicroAPI::StoreAlign<CType, AscendC::MicroAPI::StoreDist::DIST_NORM_B32>(
-                    dst + dstUbOffset, mulScaleOutReg, maskN);
-            } else {
-                AscendC::MicroAPI::LoadAlign(addReg, dst + dstUbOffset);
-                AscendC::MicroAPI::Add(ResReg, mulScaleOutReg, addReg, maskN);
-                // copy out from register to ub
-                AscendC::MicroAPI::StoreAlign<CType, AscendC::MicroAPI::StoreDist::DIST_NORM_B32>(
-                    dst + dstUbOffset, ResReg, maskN);
-            }
-            // 2 ND
-            if constexpr (ndNum == 1) {
-                continue;
-            }
-            scaleMul = x1Scale * x2Scale1;
-            elementNum = nSize1;
-            maskN = AscendC::MicroAPI::UpdateMask<CType>(elementNum);
-            // copy input from ub to register, addr of ub should align to 32B
-            l0cOutOffset = offset + nSize0; // + distance of 2 NDs
-            AscendC::MicroAPI::LoadAlign(l0cOutReg, l0cOut + l0cOutOffset);
-            // l0c_out * scale
-            AscendC::MicroAPI::Muls(mulScaleOutReg, l0cOutReg, scaleMul, maskN);
-            dstUbOffset = offset + nSize0;
-            if constexpr (isFirstKLoop) {
-                AscendC::MicroAPI::StoreAlign<CType, AscendC::MicroAPI::StoreDist::DIST_NORM_B32>(
-                    dst + dstUbOffset, mulScaleOutReg, maskN);
-            } else {
-                AscendC::MicroAPI::LoadAlign(addReg, dst + dstUbOffset);
-                AscendC::MicroAPI::Add(ResReg, mulScaleOutReg, addReg, maskN);
-                // copy out from register to ub
-                AscendC::MicroAPI::StoreAlign<CType, AscendC::MicroAPI::StoreDist::DIST_NORM_B32>(
-                    dst + dstUbOffset, ResReg, maskN);
-            }
-        }
-    }
-}
-
-QBMM_BLOCK_EPILOGUE_PERTILE_CLASS_LOCAL_PARAMS
-template <uint32_t ndNum>
-__simd_vf__ void BlockEpilogue<QBMM_BLOCK_EPILOGUE_PERTILE_FUNC_LOCAL_PARAMS>::AddBias(
-    __ubuf__ CalcType* mmAdd, __ubuf__ BiasType* bias, uint16_t mSize, uint32_t nSize0, uint32_t nSize1)
-{
-    {
-        uint32_t mmAddOffset{};
-        for (uint16_t mIdx = 0; mIdx < mSize; mIdx++) {
-            AscendC::MicroAPI::RegTensor<BiasType> biasReg{};
-            AscendC::MicroAPI::RegTensor<CalcType> mmAddReg{};
-            AscendC::MicroAPI::DataCopy(biasReg, bias);
-            mmAddOffset = mIdx * PER_BLOCK_SIZE;
-            uint32_t elementNum = nSize0;
-            AscendC::MicroAPI::MaskReg maskN = AscendC::MicroAPI::UpdateMask<CalcType>(elementNum);
-            AscendC::MicroAPI::DataCopy(mmAddReg, mmAdd + mmAddOffset);
-            AscendC::MicroAPI::Add(mmAddReg, mmAddReg, biasReg, maskN);
-            AscendC::MicroAPI::DataCopy<CalcType, AscendC::MicroAPI::StoreDist::DIST_NORM_B32>(
-                mmAdd + mmAddOffset, mmAddReg, maskN);
-            if constexpr (ndNum == 1) {
-                continue;
-            }
-            elementNum = nSize1;
-            maskN = AscendC::MicroAPI::UpdateMask<CalcType>(elementNum);
-            mmAddOffset += nSize0;
-            AscendC::MicroAPI::DataCopy(biasReg, bias + nSize0);
-            AscendC::MicroAPI::DataCopy(mmAddReg, mmAdd + mmAddOffset);
-            AscendC::MicroAPI::Add(mmAddReg, mmAddReg, biasReg, maskN);
-            AscendC::MicroAPI::DataCopy<CalcType, AscendC::MicroAPI::StoreDist::DIST_NORM_B32>(
-                mmAdd + mmAddOffset, mmAddReg, maskN);
-        }
-    }
 }
 
 QBMM_BLOCK_EPILOGUE_PERTILE_CLASS_LOCAL_PARAMS

@@ -485,7 +485,7 @@ private:
     };
 
     template <typename ElementS, typename ElementP, bool isUpdate>
-    __simd_vf__ inline void ComputeScaleAndMax(
+    __simd_vf__ static inline void ComputeScaleAndMax(
         __ubuf__ ElementS* srcUb, __ubuf__ ElementS* newMaxUb, __ubuf__ ElementS* newMaxUbStart,
         __ubuf__ ElementS* LastMaxUbStart, __ubuf__ ElementP* expUb, __ubuf__ ElementS* expSumUb, uint16_t m,
         uint16_t nLoops, uint32_t tailN, uint32_t nPadding, ElementInput dScale, uint16_t S2BaseSize,
@@ -595,7 +595,7 @@ private:
     }
 
     template <typename ElementS, typename ElementP, bool isUpdate>
-    __simd_vf__ inline void ComputeScaleAndMax64(
+    __simd_vf__ static inline void ComputeScaleAndMax64(
         __ubuf__ ElementS* srcUb, __ubuf__ ElementS* newMaxUb, __ubuf__ ElementS* newMaxUbStart,
         __ubuf__ ElementS* LastMaxUbStart, __ubuf__ ElementP* expUb, __ubuf__ ElementS* expSumUb, uint16_t m,
         uint16_t nLoops, uint32_t tailN, uint32_t nPadding, ElementInput dScale, uint16_t S2BaseSize,
@@ -692,7 +692,7 @@ private:
     }
 
     template <typename ElementS, typename ElementP, bool isUpdate>
-    __simd_vf__ inline void ComputeScaleAndMaxMask(
+    __simd_vf__ static inline void ComputeScaleAndMaxMask(
         __ubuf__ ElementS* srcUb, __ubuf__ ElementS* newMaxUb, __ubuf__ ElementS* newMaxUbStart,
         __ubuf__ ElementS* LastMaxUbStart, __ubuf__ ElementP* expUb, __ubuf__ ElementS* expSumUb,
         __ubuf__ ElementMask* maskUb, uint16_t m, uint16_t nLoops, uint32_t tailN, uint32_t nPadding,
@@ -832,7 +832,7 @@ private:
     }
 
     template <typename ElementS, typename ElementP, bool isUpdate>
-    __simd_vf__ inline void ComputeScaleAndMaxMask64(
+    __simd_vf__ static inline void ComputeScaleAndMaxMask64(
         __ubuf__ ElementS* srcUb, __ubuf__ ElementS* newMaxUb, __ubuf__ ElementS* newMaxUbStart,
         __ubuf__ ElementS* LastMaxUbStart, __ubuf__ ElementP* expUb, __ubuf__ ElementS* expSumUb,
         __ubuf__ ElementMask* maskUb, uint16_t m, uint16_t nLoops, uint32_t tailN, uint32_t nPadding,
@@ -939,7 +939,7 @@ private:
     }
 
     template <typename ElementS, typename ElementP, bool isUpdate, MAligendTileNum mTileNum>
-    __simd_vf__ inline void ComputeScaleAndMaxDn(
+    __simd_vf__ static inline void ComputeScaleAndMaxDn(
         __ubuf__ ElementS* srcUb, __ubuf__ ElementS* newMaxUb, __ubuf__ ElementS* LastMaxUbStart,
         __ubuf__ ElementP* expUb, __ubuf__ ElementS* expSumUb, uint16_t mRound, uint16_t m, uint32_t tailN,
         uint32_t mFirstTile, ElementInput dScale, uint16_t S2BaseSize, uint32_t blockStride, uint32_t repeatStride,
@@ -1222,7 +1222,7 @@ private:
     }
 
     template <typename ElementS>
-    __simd_vf__ inline void CastExpSumAndExpMax(
+    __simd_vf__ static inline void CastExpSumAndExpMax(
         __ubuf__ float* sumUb, __ubuf__ float* maxUb, __ubuf__ ElementS* expSumUb, __ubuf__ ElementS* nowMaxUb,
         uint16_t mLoops, uint32_t tailM)
     {
@@ -1269,7 +1269,7 @@ private:
     }
 
     template <typename ElementS>
-    __simd_vf__ inline void UpdateExpSumAndExpMax(
+    __simd_vf__ static inline void UpdateExpSumAndExpMax(
         __ubuf__ float* sumUb, __ubuf__ float* expMaxUb, __ubuf__ float* maxUb, __ubuf__ ElementS* expSumUb,
         __ubuf__ ElementS* nowMaxUb, uint16_t mLoops, uint32_t tailM)
     {

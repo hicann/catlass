@@ -317,7 +317,7 @@ public:
     }
 
     template <class TensorCastOut, class TensorCastIn>
-    __simd_vf__ inline void RegComputeNz(VfParamsNz params)
+    __simd_vf__ static inline void RegComputeNz(VfParamsNz params)
     {
         AscendC::Reg::RegTensor<int8_t> wShrReg;
         AscendC::Reg::RegTensor<int8_t> wShlReg;
@@ -396,7 +396,7 @@ public:
         RegComputeNd(wParams);
     }
 
-    __simd_vf__ inline void RegComputeNd(const VfParamsNd wParams)
+    __simd_vf__ static inline void RegComputeNd(const VfParamsNd wParams)
     {
         __ubuf__ ElementOut* weightOutUbAddr = wParams.weightOutUbAddr;
         __ubuf__ ElementOut* weightOutUbAddr1 = wParams.weightOutUbAddr1;

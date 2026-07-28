@@ -12,6 +12,8 @@ import pytest
 import torch
 import torch_npu
 
+from common import only_on_2201
+
 pytestmark = pytest.mark.skipif(
     torch_npu.npu.device_count() <= 0,
     reason="torch-catlass integration tests require an available Ascend NPU",
@@ -27,6 +29,7 @@ def _make_symm_input(size, dtype, uplo):
     return full, full
 
 
+@only_on_2201
 @pytest.mark.parametrize(
     "side,uplo,m,n",
     [
