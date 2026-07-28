@@ -23,67 +23,27 @@ struct L2CacheClearTiling {
     uint32_t aicCoreNum;
 };
 
-bool GetTiling(std::string socName, L2CacheClearTiling &tiling)
+bool GetTiling(int32_t deviceId, L2CacheClearTiling &tiling)
 {
-    const static std::unordered_map<std::string_view, L2CacheClearTiling> TILING_MAP = {
-        {"Ascend910B1", {8388608, 24}},
-        {"Ascend910B2", {8388608, 24}},
-        {"Ascend910B2C", {8388608, 24}},
-        {"Ascend910B3", {10485760, 20}},
-        {"Ascend910B4", {5242880, 20}},
-        {"Ascend910B4-1", {10485760, 20}},
-
-        {"Ascend910_9391", {8388608, 24}},
-        {"Ascend910_9392", {8388608, 24}},
-        {"Ascend910_9381", {8388608, 24}},
-        {"Ascend910_9382", {8388608, 24}},
-        {"Ascend910_9372", {10485760, 20}},
-        {"Ascend910_9362", {10485760, 20}},
-
-        {"Ascend950DT_950x", {4194304, 8}},
-        {"Ascend950DT_950y", {4194304, 8}},
-        {"Ascend950DT_9571", {4794880, 28}},
-        {"Ascend950DT_9572", {4794880, 28}},
-        {"Ascend950DT_9573", {4194304, 28}},
-        {"Ascend950DT_9574", {4194304, 28}},
-        {"Ascend950DT_9575", {4794880, 28}},
-        {"Ascend950DT_9576", {4794880, 28}},
-        {"Ascend950DT_9577", {4194304, 28}},
-        {"Ascend950DT_9578", {4194304, 28}},
-        {"Ascend950DT_9581", {4194304, 32}},
-        {"Ascend950DT_9582", {4194304, 32}},
-        {"Ascend950DT_9583", {3670016, 32}},
-        {"Ascend950DT_9584", {3670016, 32}},
-        {"Ascend950DT_9585", {4194304, 32}},
-        {"Ascend950DT_9586", {4194304, 32}},
-        {"Ascend950DT_9587", {3670016, 32}},
-        {"Ascend950DT_9588", {3670016, 32}},
-        {"Ascend950DT_9591", {3729920, 36}},
-        {"Ascend950DT_9592", {3729920, 36}},
-        {"Ascend950DT_9595", {3729920, 36}},
-        {"Ascend950DT_9596", {3729920, 36}},
-        {"Ascend950DT_95A1", {3728280, 36}},
-        {"Ascend950DT_95A2", {3728280, 36}},
-
-        {"Ascend950PR_950z", {2097152, 8}},
-        {"Ascend950PR_9579", {4794880, 28}},
-        {"Ascend950PR_957b", {4194304, 28}},
-        {"Ascend950PR_957c", {4194304, 28}},
-        {"Ascend950PR_957d", {3596800, 28}},
-        {"Ascend950PR_9589", {4194304, 32}},
-        {"Ascend950PR_958b", {3670016, 32}},
-        {"Ascend950PR_9599", {3729920, 36}},
-    };
-    if (socName == "") {
-        LOGW("cannot find corresponding L2 cache clear tiling for empty soc name");
+    int64_t aicCoreNum = 0;
+    int64_t l2CacheSize = 0;
+    auto err = aclrtGetDeviceInfo(static_cast<uint32_t>(deviceId), ACL_DEV_ATTR_AICORE_CORE_NUM, &aicCoreNum);
+    if (err != ACL_SUCCESS) {
+        LOGW("Get AICore count failed, err %d", err);
         return false;
     }
-    auto it = TILING_MAP.find(socName);
-    if (it == TILING_MAP.end()) {
-        LOGW("Cannot get l2cache clear params for current soc: %s", socName.c_str());
+    err = aclrtGetDeviceInfo(static_cast<uint32_t>(deviceId), ACL_DEV_ATTR_L2_CACHE_SIZE, &l2CacheSize);
+    if (err != ACL_SUCCESS) {
+        LOGW("Get L2 cache size failed, err %d", err);
         return false;
     }
-    tiling = it->second;
+    if (aicCoreNum <= 0 || l2CacheSize <= 0) {
+        LOGW("Invalid AICore count %lld or L2 cache size %lld", static_cast<long long>(aicCoreNum),
+             static_cast<long long>(l2CacheSize));
+        return false;
+    }
+    tiling.aicCoreNum = static_cast<uint32_t>(aicCoreNum);
+    tiling.clearSizePerCore = static_cast<uint64_t>(l2CacheSize) / tiling.aicCoreNum;
     return true;
 }
 
@@ -92,7 +52,6 @@ ArchTag GetArchTag(std::string socName)
     static std::map<std::string, ArchTag> socNameMap = {
         {"Ascend910B", ArchTag::A2},
         {"Ascend910_93", ArchTag::A3},
-        {"Ascend910_95", ArchTag::Ascend950},
         {"Ascend950", ArchTag::Ascend950},
     };
 
@@ -237,7 +196,7 @@ bool DeviceMemoryManager::Free(void *addr)
 bool DeviceMemoryManager::InitCacheClear()
 {
     L2CacheClearTiling tiling{};
-    if (!GetTiling(socName_, tiling)) {
+    if (!GetTiling(deviceId_, tiling)) {
         return false;
     }
     cacheClear_.cacheSize = tiling.clearSizePerCore * tiling.aicCoreNum;
