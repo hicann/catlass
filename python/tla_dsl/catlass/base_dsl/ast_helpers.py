@@ -29,9 +29,6 @@ class FrontendRange:
     start: Any
     end: Any
     step: Any
-    unroll: int = -1
-    unroll_full: bool = False
-    prefetch_stages: int | None = None
 
     def __iter__(self) -> Any:
         raise RuntimeError("tla.range is only iterable during lowering")
@@ -41,18 +38,14 @@ def range(
     start: Any,
     end: Any | None = None,
     step: Any | None = None,
-    *,
-    unroll: int = -1,
-    unroll_full: bool = False,
-    prefetch_stages: int | None = None,
 ) -> FrontendRange:
     """Create a frontend-only dynamic range descriptor."""
 
     if end is None and step is None:
-        return FrontendRange(0, start, 1, unroll, unroll_full, prefetch_stages)
+        return FrontendRange(0, start, 1)
     if step is None:
-        return FrontendRange(start, end, 1, unroll, unroll_full, prefetch_stages)
-    return FrontendRange(start, end, step, unroll, unroll_full, prefetch_stages)
+        return FrontendRange(start, end, 1)
+    return FrontendRange(start, end, step)
 
 
 def range_constexpr(
@@ -73,8 +66,7 @@ def _checked_range_constexpr(*args: int) -> builtins.range:
     if range_length >= _RANGE_CONSTEXPR_WARNING_THRESHOLD:
         warnings.warn(
             f"This static loop has {range_length} iterations, which may be very "
-            "slow to compile, consider using `tla.range(..., unroll_full=True)` "
-            "instead.",
+            "slow to compile, consider using `tla.range(...)` instead.",
             category=DSLOptimizationWarning,
             stacklevel=3,
         )

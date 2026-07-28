@@ -21,14 +21,6 @@ class FrontendIfTreeSpec:
     metadata: Any = field(default=None, compare=False, repr=False)
 
 
-def normalize_frontend_if_result(result: Any, carried_values: tuple[Any, ...]) -> Any:
-    carried_names = normalize_frontend_if_carried_names(None, len(carried_values))
-    carried_specs = [frontend_if_tree_spec(value) for value in carried_values]
-    return normalize_frontend_if_result_with_names(
-        result, carried_values, carried_names, carried_specs
-    )
-
-
 def normalize_frontend_if_result_with_names(
     result: Any,
     carried_values: tuple[Any, ...],

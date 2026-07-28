@@ -308,7 +308,7 @@ def _build_tla_func(
             category_bindings=category_bindings,
             tensor_host_by_value=tensor_host_by_value,
             module=module,
-        ) as emit_state:
+        ):
             try:
                 fn(*call_args_for_fn)
             except runtime_mod.TlaCoreAPIError:

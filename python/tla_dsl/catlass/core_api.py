@@ -3805,76 +3805,23 @@ def range(
     end: IndexLike | None = None,
     step: IndexLike | None = None,
     *,
-    unroll: int = -1,
-    unroll_full: bool = False,
-    prefetch_stages: int | None = None,
-    pipelining: int | None = None,
     loc: mlir_ir.Location | None = None,
 ) -> _ast_helpers.FrontendRange:
     """Create a frontend Tla dynamic range. Supports Python range arities."""
     del loc
-    if pipelining is not None:
-        if prefetch_stages is not None:
-            _op_error(
-                "range",
-                "cannot specify both prefetch_stages and pipelining",
-            )
-        prefetch_stages = pipelining
-    _validate_range_loop_attrs(
-        unroll=unroll,
-        unroll_full=unroll_full,
-        prefetch_stages=prefetch_stages,
-    )
     if end is None and step is None:
         _require_index_or_numeric("range", "end", start, 0)
-        return _ast_helpers.range(
-            start,
-            unroll=unroll,
-            unroll_full=unroll_full,
-            prefetch_stages=prefetch_stages,
-        )
+        return _ast_helpers.range(start)
     if step is None:
         _require_index_or_numeric("range", "start", start, 0)
         _require_index_or_numeric("range", "end", end, 1)
-        return _ast_helpers.range(
-            start,
-            end,
-            unroll=unroll,
-            unroll_full=unroll_full,
-            prefetch_stages=prefetch_stages,
-        )
+        return _ast_helpers.range(start, end)
     if end is None:
         _op_error("range", "expected 1, 2, or 3 arguments")
     _require_index_or_numeric("range", "start", start, 0)
     _require_index_or_numeric("range", "end", end, 1)
     _require_index_or_numeric("range", "step", step, 2)
-    return _ast_helpers.range(
-        start,
-        end,
-        step,
-        unroll=unroll,
-        unroll_full=unroll_full,
-        prefetch_stages=prefetch_stages,
-    )
-
-
-def _validate_range_loop_attrs(
-    *,
-    unroll: int,
-    unroll_full: bool,
-    prefetch_stages: int | None,
-) -> None:
-    if isinstance(unroll, bool) or not isinstance(unroll, int):
-        _op_error("range", "unroll must be a compile-time Python int")
-    if not isinstance(unroll_full, bool):
-        _op_error("range", "unroll_full must be a compile-time Python bool")
-    if prefetch_stages is not None:
-        if isinstance(prefetch_stages, bool) or not isinstance(prefetch_stages, int):
-            _op_error(
-                "range", "prefetch_stages must be a compile-time Python int or None"
-            )
-        if prefetch_stages < 0:
-            _op_error("range", "prefetch_stages must be non-negative")
+    return _ast_helpers.range(start, end, step)
 
 
 def _require_constexpr_range_bound(op_name: str, name: str, value: Any) -> int:

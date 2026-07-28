@@ -130,30 +130,6 @@ def bare_range_constexpr_kernel(mem_a: tla.Tensor) -> None:
 
 
 @tla.kernel
-def range_attrs_kernel(mem_a: tla.Tensor) -> None:
-    for i in tla.range(
-        0,
-        4,
-        1,
-        unroll=4,
-        prefetch_stages=2,
-    ):
-        tla.tile_view(mem_a, tla.make_shape(4, 4), tla.make_coord(i, 0))
-
-
-@tla.kernel
-def range_pipelining_alias_kernel(mem_a: tla.Tensor) -> None:
-    for i in tla.range(0, 4, 1, pipelining=2):
-        tla.tile_view(mem_a, tla.make_shape(4, 4), tla.make_coord(i, 0))
-
-
-@tla.kernel
-def range_unroll_full_kernel(mem_a: tla.Tensor) -> None:
-    for i in tla.range(0, 4, 1, unroll_full=True):
-        tla.tile_view(mem_a, tla.make_shape(4, 4), tla.make_coord(i, 0))
-
-
-@tla.kernel
 def range_negative_step_kernel(mem_a: tla.Tensor) -> None:
     for i in tla.range(4, 0, -1):
         tla.tile_view(mem_a, tla.make_shape(4, 4), tla.make_coord(i, 0))
@@ -231,50 +207,6 @@ def bad_range_active_closure_call_kernel(limit: int) -> None:
 
     for i in tla.range(0, limit, 1):
         helper(i)
-
-
-@tla.kernel
-def bad_range_keyword_bounds_kernel(mem_a: tla.Tensor) -> None:
-    for i in tla.range(start=0, end=4, step=1):
-        tla.tile_view(mem_a, tla.make_shape(4, 4), tla.make_coord(i, 0))
-
-
-@tla.kernel
-def bad_range_alias_keyword_bounds_kernel(mem_a: tla.Tensor) -> None:
-    loop_range = tla.range(start=0, end=4, step=1)
-    for i in loop_range:
-        tla.tile_view(mem_a, tla.make_shape(4, 4), tla.make_coord(i, 0))
-
-
-@tla.kernel
-def bad_range_unknown_keyword_kernel(mem_a: tla.Tensor) -> None:
-    for i in tla.range(0, 4, 1, unknown=True):
-        tla.tile_view(mem_a, tla.make_shape(4, 4), tla.make_coord(i, 0))
-
-
-@tla.kernel
-def bad_range_kwargs_kernel(mem_a: tla.Tensor) -> None:
-    opts = {"unroll": 1}
-    for i in tla.range(0, 4, 1, **opts):
-        tla.tile_view(mem_a, tla.make_shape(4, 4), tla.make_coord(i, 0))
-
-
-@tla.kernel
-def bad_range_pipelining_prefetch_kernel(mem_a: tla.Tensor) -> None:
-    for i in tla.range(0, 4, 1, prefetch_stages=2, pipelining=3):
-        tla.tile_view(mem_a, tla.make_shape(4, 4), tla.make_coord(i, 0))
-
-
-@tla.kernel
-def bad_range_no_bounds_kernel(mem_a: tla.Tensor) -> None:
-    for i in tla.range():
-        tla.tile_view(mem_a, tla.make_shape(4, 4), tla.make_coord(i, 0))
-
-
-@tla.kernel
-def bad_range_too_many_bounds_kernel(mem_a: tla.Tensor) -> None:
-    for i in tla.range(0, 1, 2, 3):
-        tla.tile_view(mem_a, tla.make_shape(4, 4), tla.make_coord(i, 0))
 
 
 def test_make_coord_accepts_for_loop_index_var() -> None:
@@ -448,45 +380,6 @@ def test_imported_bare_range_constexpr_unrolls_as_python_loop() -> None:
     assert mlir.count("tla.tile_view") == 2
 
 
-def test_range_loop_attrs_attach_to_scf_for() -> None:
-    with runtime_mod._eager_capture():
-        mem = tla.Tensor(
-            tla.make_shape(16, 16),
-            tla.Float16,
-            origin_shape=tla.make_shape(16, 16),
-        )
-    mlir = range_attrs_kernel.dump_mlir(type_args=(mem,))
-    assert "scf.for" in mlir
-    assert "loop_annotation" in mlir
-    assert "count = 4 : i32" in mlir
-    assert "cutlass.pipelining = 2 : i32" in mlir
-
-
-def test_range_pipelining_alias_attaches_prefetch_attr() -> None:
-    with runtime_mod._eager_capture():
-        mem = tla.Tensor(
-            tla.make_shape(16, 16),
-            tla.Float16,
-            origin_shape=tla.make_shape(16, 16),
-        )
-    mlir = range_pipelining_alias_kernel.dump_mlir(type_args=(mem,))
-    assert "scf.for" in mlir
-    assert "cutlass.pipelining = 2 : i32" in mlir
-
-
-def test_range_loop_unroll_full_attr_attaches_to_scf_for() -> None:
-    with runtime_mod._eager_capture():
-        mem = tla.Tensor(
-            tla.make_shape(16, 16),
-            tla.Float16,
-            origin_shape=tla.make_shape(16, 16),
-        )
-    mlir = range_unroll_full_kernel.dump_mlir(type_args=(mem,))
-    assert "scf.for" in mlir
-    assert "loop_annotation" in mlir
-    assert "full = true" in mlir
-
-
 def test_range_negative_step_rewrites_at_ast_level() -> None:
     with runtime_mod._eager_capture():
         mem = tla.Tensor(
@@ -551,66 +444,6 @@ def test_range_rejects_active_object_method_structure_change() -> None:
 def test_range_rejects_active_closure_call() -> None:
     with pytest.raises(SyntaxError, match="active local callable"):
         _ = bad_range_active_closure_call_kernel.dump_mlir(type_args=(2,))
-
-
-def test_dynamic_tla_range_rejects_keyword_bounds() -> None:
-    with runtime_mod._eager_capture():
-        mem = tla.Tensor(
-            tla.make_shape(16, 16),
-            tla.Float16,
-            origin_shape=tla.make_shape(16, 16),
-        )
-    for kernel in (
-        bad_range_keyword_bounds_kernel,
-        bad_range_alias_keyword_bounds_kernel,
-    ):
-        with pytest.raises(SyntaxError, match="bounds must be positional"):
-            _ = kernel.dump_mlir(type_args=(mem,))
-
-
-def test_dynamic_tla_range_rejects_unknown_keyword() -> None:
-    with runtime_mod._eager_capture():
-        mem = tla.Tensor(
-            tla.make_shape(16, 16),
-            tla.Float16,
-            origin_shape=tla.make_shape(16, 16),
-        )
-    with pytest.raises(SyntaxError, match="unsupported keyword 'unknown'"):
-        _ = bad_range_unknown_keyword_kernel.dump_mlir(type_args=(mem,))
-
-
-def test_dynamic_tla_range_rejects_kwargs_unpacking() -> None:
-    with runtime_mod._eager_capture():
-        mem = tla.Tensor(
-            tla.make_shape(16, 16),
-            tla.Float16,
-            origin_shape=tla.make_shape(16, 16),
-        )
-    with pytest.raises(SyntaxError, match=r"\*\*kwargs"):
-        _ = bad_range_kwargs_kernel.dump_mlir(type_args=(mem,))
-
-
-def test_dynamic_tla_range_rejects_prefetch_and_pipelining_together() -> None:
-    with runtime_mod._eager_capture():
-        mem = tla.Tensor(
-            tla.make_shape(16, 16),
-            tla.Float16,
-            origin_shape=tla.make_shape(16, 16),
-        )
-    with pytest.raises(SyntaxError, match="prefetch_stages.*pipelining"):
-        _ = bad_range_pipelining_prefetch_kernel.dump_mlir(type_args=(mem,))
-
-
-def test_dynamic_tla_range_rejects_invalid_bound_arity() -> None:
-    with runtime_mod._eager_capture():
-        mem = tla.Tensor(
-            tla.make_shape(16, 16),
-            tla.Float16,
-            origin_shape=tla.make_shape(16, 16),
-        )
-    for kernel in (bad_range_no_bounds_kernel, bad_range_too_many_bounds_kernel):
-        with pytest.raises(SyntaxError, match="expects 1, 2, or 3 positional bounds"):
-            _ = kernel.dump_mlir(type_args=(mem,))
 
 
 def test_execution_only_mode_lowers_tla_range_loop() -> None:
@@ -825,4 +658,3 @@ def test_dynamic_for_body_error_reports_original_source_location() -> None:
     assert "source: values[i]" in message
     assert "cannot be used as a Python index" in message or "list indices" in message
     assert "Int32" in message
-

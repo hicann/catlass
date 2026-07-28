@@ -628,19 +628,10 @@ def test_range_constexpr_returns_python_range() -> None:
 def test_range_constexpr_warns_for_large_static_loop() -> None:
     with pytest.warns(
         ast_helpers.DSLOptimizationWarning,
-        match="This static loop has 64 iterations",
+        match=r"This static loop has 64 iterations.*`tla\.range\(\.\.\.\)`",
     ):
         result = tla.range_constexpr(64)
     assert len(result) == 64
-
-
-def test_range_rejects_bad_loop_attrs() -> None:
-    with pytest.raises(tla.TlaCoreAPIError, match="unroll"):
-        _ = tla.range(0, 4, 1, unroll=True)
-    with pytest.raises(tla.TlaCoreAPIError, match="unroll_full"):
-        _ = tla.range(0, 4, 1, unroll_full=1)
-    with pytest.raises(tla.TlaCoreAPIError, match="prefetch_stages"):
-        _ = tla.range(0, 4, 1, prefetch_stages=-1)
 
 
 _MAKE_TENSOR_LIKE_DEST_SPACE = tla.AddressSpace.ub

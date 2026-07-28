@@ -90,39 +90,6 @@ def _call_with_control_flow_source(fn: Callable[..., Any], *args: Any) -> Any:
         raise wrapped from exc
 
 
-def _loop_unroll_attr(**kwargs: Any) -> Any:
-    from mlir import ir as mlir_ir  # type: ignore[assignment]
-
-    def to_mlir_attr(value: Any) -> str:
-        if isinstance(value, bool):
-            return "true" if value else "false"
-        if isinstance(value, int):
-            return f"{value} : i32"
-        raise TlaCoreAPIError(f"Unsupported loop unroll value: {type(value).__name__}")
-
-    cfg = {key: to_mlir_attr(kwargs[key]) for key in ("count", "full") if key in kwargs}
-    if kwargs.get("count") == 1:
-        cfg["disable"] = "true"
-    unroll = "<" + ", ".join(f"{key} = {value}" for key, value in cfg.items()) + ">"
-    return mlir_ir.Attribute.parse(f"#llvm.loop_annotation<unroll = {unroll}>")
-
-
-def _attach_range_loop_attrs(for_op: Any, range_value: FrontendRange) -> None:
-    from mlir import ir as mlir_ir  # type: ignore[assignment]
-
-    if range_value.unroll_full:
-        for_op.attributes["loop_annotation"] = _loop_unroll_attr(full=True)
-    elif range_value.unroll != -1:
-        for_op.attributes["loop_annotation"] = _loop_unroll_attr(
-            count=range_value.unroll
-        )
-    if range_value.prefetch_stages is not None:
-        i32 = mlir_ir.IntegerType.get_signless(32)
-        for_op.attributes["cutlass.pipelining"] = mlir_ir.IntegerAttr.get(
-            i32, range_value.prefetch_stages
-        )
-
-
 class ScfGenerator:
     """Shared SCF construction helper for AST-preprocessed Tla control flow."""
 
@@ -310,9 +277,7 @@ def _internal_frontend_for(
     generator = ScfGenerator()
 
     def create_for_op(ir_values: list[Any]) -> Any:
-        for_op = scf.ForOp(start, end, step, ir_values, loc=mlir_loc)
-        _attach_range_loop_attrs(for_op, range_value)
-        return for_op
+        return scf.ForOp(start, end, step, ir_values, loc=mlir_loc)
 
     def build_body(
         _op: Any,

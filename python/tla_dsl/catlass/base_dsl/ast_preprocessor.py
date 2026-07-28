@@ -105,15 +105,6 @@ class ScopeManager:
             self.callables.pop()
             self.scopes.pop()
 
-    @contextlib.contextmanager
-    def enter_control_flow_scope(self) -> Iterator[None]:
-        self.scopes.append(set())
-        try:
-            yield
-        finally:
-            self.scopes.pop()
-
-
 class _FrontendControlFlowTransformer(ast.NodeTransformer):
     def __init__(
         self,
@@ -343,13 +334,6 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
             self._local_scope(),
         )
         if is_tla_range:
-            if _is_tla_range_call(
-                node.iter,
-                self._tla_range_names,
-                self._tla_module_aliases,
-                self._local_scope(),
-            ):
-                _validate_dynamic_range_call_syntax(node.iter)
             _reject_unsupported_dynamic_for_control_flow(node)
             if node.orelse:
                 raise SyntaxError("dynamic Tla for does not support for-else")
@@ -567,7 +551,6 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
             ast.Name(id=stop_name, ctx=ast.Load()),
             ast.Name(id=step_name, ctx=ast.Load()),
         ]
-        node.iter.keywords = bounds.loop_keywords
 
         target_name = node.target.id
         remap = _assign_name(
@@ -1199,10 +1182,7 @@ def maybe_transform_for_lowering(
 
     if (
         "tla.range" not in source
-        and "tla.range" not in source
         and "tla.cube" not in source
-        and "tla.cube" not in source
-        and "tla.vector" not in source
         and "tla.vector" not in source
         and "tla.vec.func" not in source
         and "range(" not in source
@@ -1397,47 +1377,11 @@ class _RangeCallBounds:
         end: ast.expr,
         step: ast.expr,
         has_explicit_step: bool,
-        loop_keywords: list[ast.keyword],
     ) -> None:
         self.start = start
         self.end = end
         self.step = step
         self.has_explicit_step = has_explicit_step
-        self.loop_keywords = loop_keywords
-
-
-_RANGE_LOOP_KEYWORDS = {
-    "unroll",
-    "unroll_full",
-    "prefetch_stages",
-    "pipelining",
-}
-
-
-def _validate_dynamic_range_call_syntax(node: ast.Call) -> None:
-    seen: set[str] = set()
-    for keyword in node.keywords:
-        if keyword.arg is None:
-            raise SyntaxError("dynamic Tla range does not support **kwargs")
-        if keyword.arg in {"start", "stop", "end", "step"}:
-            raise SyntaxError(
-                "dynamic Tla range bounds must be positional, matching standard range(start[, stop[, step]]) bounds"
-            )
-        if keyword.arg not in _RANGE_LOOP_KEYWORDS:
-            raise SyntaxError(
-                f"dynamic Tla range got unsupported keyword {keyword.arg!r}"
-            )
-        if keyword.arg in seen:
-            raise SyntaxError(
-                f"dynamic Tla range got duplicate keyword {keyword.arg!r}"
-            )
-        seen.add(keyword.arg)
-    if "prefetch_stages" in seen and "pipelining" in seen:
-        raise SyntaxError(
-            "dynamic Tla range cannot specify both 'prefetch_stages' and 'pipelining'"
-        )
-    if len(node.args) not in {1, 2, 3}:
-        raise SyntaxError("dynamic Tla range expects 1, 2, or 3 positional bounds")
 
 
 def _extract_range_call_bounds(node: ast.Call) -> _RangeCallBounds | None:
@@ -1469,7 +1413,6 @@ def _extract_range_call_bounds(node: ast.Call) -> _RangeCallBounds | None:
         end=end,
         step=step,
         has_explicit_step=has_explicit_step,
-        loop_keywords=node.keywords,
     )
 
 
@@ -1565,7 +1508,6 @@ def _update_range_aliases(
     if not isinstance(target, ast.Name):
         return
     if _is_tla_range_call(stmt.value, tla_range_names, tla_module_aliases, local_names):
-        _validate_dynamic_range_call_syntax(stmt.value)
         aliases.add(target.id)
     else:
         aliases.discard(target.id)
@@ -1636,10 +1578,6 @@ def _is_constexpr_cf_test(
             return True
         return func.id in tla_const_expr_names and func.id not in local_names
     return False
-
-
-def _is_const_expr_call(node: ast.AST) -> bool:
-    return _is_constexpr_cf_test(node, {"const_expr"}, {"tla"}, set())
 
 
 def _is_static_python_if_test(
