@@ -13,7 +13,7 @@ Do not edit manually. Update catlass.core_api public exports, type annotations, 
 
 ### `make_shape`
 
-Source: [`catlass.core_api.make_shape`](../catlass/core_api.py#L2077)
+Source: [`catlass.core_api.make_shape`](../catlass/core_api.py#L3005)
 
 ```python
 make_shape(*components: IndexTree) -> TlaShape
@@ -23,7 +23,7 @@ Build a packed Tla shape from nested tuple components.
 
 ### `make_coord`
 
-Source: [`catlass.core_api.make_coord`](../catlass/core_api.py#L2090)
+Source: [`catlass.core_api.make_coord`](../catlass/core_api.py#L3018)
 
 ```python
 make_coord(*components: IndexTree) -> TlaCoord
@@ -33,7 +33,7 @@ Build a packed Tla coordinate from nested tuple components.
 
 ### `make_stride`
 
-Source: [`catlass.core_api.make_stride`](../catlass/core_api.py#L2103)
+Source: [`catlass.core_api.make_stride`](../catlass/core_api.py#L3031)
 
 ```python
 make_stride(*components: IndexTree) -> TlaStride
@@ -43,7 +43,7 @@ Build a packed Tla stride from nested tuple components.
 
 ### `make_layout`
 
-Source: [`catlass.core_api.make_layout`](../catlass/core_api.py#L2116)
+Source: [`catlass.core_api.make_layout`](../catlass/core_api.py#L3044)
 
 ```python
 make_layout(shape: _Shape, stride: _Stride, *, origin_shape: _Shape | None = None, layoutTag: Any | None = None) -> TlaLayout
@@ -53,7 +53,7 @@ Combine packed :func:`make_shape` and :func:`make_stride` into ``!tla.layout`` (
 
 ### `tile_view`
 
-Source: [`catlass.core_api.tile_view`](../catlass/core_api.py#L2232)
+Source: [`catlass.core_api.tile_view`](../catlass/core_api.py#L3172)
 
 ```python
 tile_view(source: Any, shape: _Shape, coord: _Coord) -> TlaTensor
@@ -63,7 +63,7 @@ Create a tile view using tile-coordinate granularity on a ``!tla.tensor`` source
 
 ### `make_tensor`
 
-Source: [`catlass.core_api.make_tensor`](../catlass/core_api.py#L2259)
+Source: [`catlass.core_api.make_tensor`](../catlass/core_api.py#L3199)
 
 ```python
 make_tensor(ptr: Any, layout: TlaLayout, coord: CoordLike | None = None) -> TlaTensor
@@ -71,15 +71,9 @@ make_tensor(ptr: Any, layout: TlaLayout, coord: CoordLike | None = None) -> TlaT
 
 Construct a ``!tla.tensor`` from an explicit pointer, layout, and coord.
 
-Supported layout tags are `RowMajor`, `ColumnMajor`, `zN`, `nZ`, `zZ`,
-`L0Clayout`, and `zNUnAlign`. Packed layouts use nested 2×2 physical
-shape/stride trees and a flat logical 2-D coord. When a packed
-`make_layout` omits `origin_shape`, the padded logical shape is inferred as
-`(m0*m1, n0*n1)` from `shape=((m0,m1),(n0,n1))`.
-
 ### `make_tensor_like`
 
-Source: [`catlass.core_api.make_tensor_like`](../catlass/core_api.py#L2373)
+Source: [`catlass.core_api.make_tensor_like`](../catlass/core_api.py#L3387)
 
 ```python
 make_tensor_like(ptr: Any, like: TileLike, layoutTag: Any | None = None, dst_dtype: DTypeLike | None = None) -> TlaTensor
@@ -89,7 +83,7 @@ Create a tensor over ``ptr`` from ``like`` using structured Tla tensor metadata.
 
 ### `copy`
 
-Source: [`catlass.core_api.copy`](../catlass/core_api.py#L2539)
+Source: [`catlass.core_api.copy`](../catlass/core_api.py#L3590)
 
 ```python
 copy(dst: TileLike, src: TileLike, params: CopyParams | None = None) -> None
@@ -99,7 +93,7 @@ Copy between Tla tensor/view values.
 
 ### `flag`
 
-Source: [`catlass.core_api.flag`](../catlass/core_api.py#L2588)
+Source: [`catlass.core_api.flag`](../catlass/core_api.py#L3686)
 
 ```python
 flag(name: str, src_pipe: PipeLike | None = None, dst_pipe: PipeLike | None = None) -> TlaFlag
@@ -109,37 +103,37 @@ Materialize a synchronization flag. Legacy one-arg form is supported.
 
 ### `cross_flag`
 
-Source: [`catlass.core_api.cross_flag`](../catlass/core_api.py#L2635)
+Source: [`catlass.core_api.cross_flag`](../catlass/core_api.py#L3733)
 
 ```python
-cross_flag(name: str, src_pipe: PipeLike, dst_pipe: PipeLike, *, mode: int = 2) -> TlaCrossFlag
+cross_flag(name: str, *, mode: int = 2) -> TlaCrossFlag
 ```
 
-Materialize a cross-core synchronization flag.
+Materialize a named cross-core synchronization flag. Source and destination pipes are specified by the corresponding set and wait operations. Mode 4 selects 1:1 AIC-to-AIV synchronization, addressing AIV0 and AIV1 independently.
 
 ### `cross_core_set_flag`
 
-Source: [`catlass.core_api.cross_core_set_flag`](../catlass/core_api.py#L2678)
+Source: [`catlass.core_api.cross_core_set_flag`](../catlass/core_api.py#L3791)
 
 ```python
-cross_core_set_flag(cross_flag_value: CrossFlagLike) -> None
+cross_core_set_flag(cross_flag_value: CrossFlagLike, pipe: PipeLike, aiv_id: int | None = None) -> None
 ```
 
-Set a cross-core synchronization flag.
+Set a cross-core synchronization flag from ``pipe``.
 
 ### `cross_core_wait_flag`
 
-Source: [`catlass.core_api.cross_core_wait_flag`](../catlass/core_api.py#L2691)
+Source: [`catlass.core_api.cross_core_wait_flag`](../catlass/core_api.py#L3817)
 
 ```python
-cross_core_wait_flag(cross_flag_value: CrossFlagLike) -> None
+cross_core_wait_flag(cross_flag_value: CrossFlagLike, pipe: PipeLike, aiv_id: int | None = None) -> None
 ```
 
-Wait on a cross-core synchronization flag.
+Wait on a cross-core synchronization flag on ``pipe``.
 
 ### `set_flag`
 
-Source: [`catlass.core_api.set_flag`](../catlass/core_api.py#L2704)
+Source: [`catlass.core_api.set_flag`](../catlass/core_api.py#L3843)
 
 ```python
 set_flag(flag_value: FlagLike) -> None
@@ -149,7 +143,7 @@ Set a synchronization flag.
 
 ### `wait_flag`
 
-Source: [`catlass.core_api.wait_flag`](../catlass/core_api.py#L2712)
+Source: [`catlass.core_api.wait_flag`](../catlass/core_api.py#L3852)
 
 ```python
 wait_flag(flag_value: FlagLike) -> None
@@ -159,7 +153,7 @@ Wait on a synchronization flag.
 
 ### `pipe_barrier`
 
-Source: [`catlass.core_api.pipe_barrier`](../catlass/core_api.py#L2720)
+Source: [`catlass.core_api.pipe_barrier`](../catlass/core_api.py#L3861)
 
 ```python
 pipe_barrier(pipe: PipeLike) -> None
@@ -169,7 +163,7 @@ Insert a pipe barrier for a specific pipe.
 
 ### `mutex`
 
-Source: [`catlass.core_api.mutex`](../catlass/core_api.py#L2731)
+Source: [`catlass.core_api.mutex`](../catlass/core_api.py#L3879)
 
 ```python
 mutex(resource: str, id: int = -1) -> TlaMutex
@@ -179,7 +173,7 @@ Materialize a mutex associated with a semantic resource.
 
 ### `mutex_guard`
 
-Source: [`catlass.core_api.mutex_guard`](../catlass/core_api.py#L2762)
+Source: [`catlass.core_api.mutex_guard`](../catlass/core_api.py#L3910)
 
 ```python
 mutex_guard(*mutexes: MutexLike) -> _MutexGuard
@@ -189,7 +183,7 @@ Create a context manager that wraps a block with inferred mutex access.
 
 ### `mutex_lock`
 
-Source: [`catlass.core_api.mutex_lock`](../catlass/core_api.py#L2786)
+Source: [`catlass.core_api.mutex_lock`](../catlass/core_api.py#L3934)
 
 ```python
 mutex_lock(mutex_value: MutexLike, *, pipe: PipeLike) -> None
@@ -199,7 +193,7 @@ Acquire a mutex from the specified pipe.
 
 ### `mutex_unlock`
 
-Source: [`catlass.core_api.mutex_unlock`](../catlass/core_api.py#L2798)
+Source: [`catlass.core_api.mutex_unlock`](../catlass/core_api.py#L3947)
 
 ```python
 mutex_unlock(mutex_value: MutexLike, *, pipe: PipeLike) -> None
@@ -209,17 +203,17 @@ Release a mutex from the specified pipe.
 
 ### `range`
 
-Source: [`catlass.core_api.range`](../catlass/core_api.py#L2810)
+Source: [`catlass.core_api.range`](../catlass/core_api.py#L3990)
 
 ```python
-range(start: IndexLike, end: IndexLike | None = None, step: IndexLike | None = None, *, unroll: int = -1, unroll_full: bool = False, prefetch_stages: int | None = None, pipelining: int | None = None) -> _ast_helpers.FrontendRange
+range(start: IndexLike, end: IndexLike | None = None, step: IndexLike | None = None) -> _ast_helpers.FrontendRange
 ```
 
 Create a frontend Tla dynamic range. Supports Python range arities.
 
 ### `range_constexpr`
 
-Source: [`catlass.core_api.range_constexpr`](../catlass/core_api.py#L2894)
+Source: [`catlass.core_api.range_constexpr`](../catlass/core_api.py#L4021)
 
 ```python
 range_constexpr(start: int, end: int | None = None, step: int | None = None) -> Any
@@ -229,7 +223,7 @@ Create a frontend-time static range for unrolled Python loops.
 
 ### `cube`
 
-Source: [`catlass.core_api.cube`](../catlass/core_api.py#L2922)
+Source: [`catlass.core_api.cube`](../catlass/core_api.py#L4049)
 
 ```python
 cube() -> TlaRegion
@@ -239,7 +233,7 @@ Create a cube region stub for lowering-only usage.
 
 ### `vector`
 
-Source: [`catlass.core_api.vector`](../catlass/core_api.py#L2928)
+Source: [`catlass.core_api.vector`](../catlass/core_api.py#L4055)
 
 ```python
 vector() -> TlaRegion
@@ -249,83 +243,293 @@ Create a vector region stub for lowering-only usage.
 
 ### `mmad`
 
-Source: [`catlass.core_api.mmad`](../catlass/core_api.py#L2953)
+Source: [`catlass.core_api.mmad`](../catlass/core_api.py#L4080)
 
 ```python
-mmad(acc: TileLike, lhs: TileLike, rhs: TileLike, init_c: bool | ValueLike | None = None, unit_flag: int | ValueLike | None = None, acc_type: DTypeLike | None = None, **extra_kwargs: Any) -> TlaValue
+mmad(acc: TileLike, lhs: TileLike, rhs: TileLike, init_c: bool | Bool | None = None, unit_flag: IndexLike | None = None, acc_type: DTypeLike | None = None, **extra_kwargs: Any) -> None
 ```
 
 Emit a matrix-multiply-accumulate operation over Tla tiles.
 
-### `broadcast`
+### `full`
 
-Source: [`catlass.core_api.broadcast`](../catlass/core_api.py#L3022)
+Source: [`catlass.core_api.full`](../catlass/core_api.py#L4153)
 
 ```python
-broadcast(value: ValueLike, shape: _Shape) -> TlaValue
+full(value: Any, dtype: Any) -> VectorSSA
 ```
 
-Broadcast a Tla value to a 2D shape.
+Create a 1-D vector SSA filled with a Python scalar literal.
+
+### `arange`
+
+Source: [`catlass.core_api.arange`](../catlass/core_api.py#L4209)
+
+```python
+arange(base: Any = 0, *, order: str = increase, dtype: Any) -> VectorSSA
+```
+
+Create a 1-D vector SSA with monotonically increasing or decreasing values.
+
+### `exp`
+
+Source: [`catlass.core_api.exp`](../catlass/core_api.py#L4604)
+
+```python
+exp(operand: VectorSSA, *, mask: MaskSSA | None = None) -> VectorSSA
+```
+
+> TODO: 补充 API 说明。该占位由生成器发现 docstring 缺失后自动生成。
+
+### `log`
+
+Source: [`catlass.core_api.log`](../catlass/core_api.py#L4604)
+
+```python
+log(operand: VectorSSA, *, mask: MaskSSA | None = None) -> VectorSSA
+```
+
+> TODO: 补充 API 说明。该占位由生成器发现 docstring 缺失后自动生成。
+
+### `sqrt`
+
+Source: [`catlass.core_api.sqrt`](../catlass/core_api.py#L4604)
+
+```python
+sqrt(operand: VectorSSA, *, mask: MaskSSA | None = None) -> VectorSSA
+```
+
+> TODO: 补充 API 说明。该占位由生成器发现 docstring 缺失后自动生成。
+
+### `abs`
+
+Source: [`catlass.core_api.abs`](../catlass/core_api.py#L4604)
+
+```python
+abs(operand: VectorSSA, *, mask: MaskSSA | None = None) -> VectorSSA
+```
+
+> TODO: 补充 API 说明。该占位由生成器发现 docstring 缺失后自动生成。
+
+### `neg`
+
+Source: [`catlass.core_api.neg`](../catlass/core_api.py#L4604)
+
+```python
+neg(operand: VectorSSA, *, mask: MaskSSA | None = None) -> VectorSSA
+```
+
+> TODO: 补充 API 说明。该占位由生成器发现 docstring 缺失后自动生成。
+
+### `interleave`
+
+Source: [`catlass.core_api.interleave`](../catlass/core_api.py#L4642)
+
+```python
+interleave(src0: VectorSSA, src1: VectorSSA) -> tuple[VectorSSA, VectorSSA]
+```
+
+> TODO: 补充 API 说明。该占位由生成器发现 docstring 缺失后自动生成。
+
+### `deinterleave`
+
+Source: [`catlass.core_api.deinterleave`](../catlass/core_api.py#L4678)
+
+```python
+deinterleave(src0: VectorSSA, src1: VectorSSA) -> tuple[VectorSSA, VectorSSA]
+```
+
+> TODO: 补充 API 说明。该占位由生成器发现 docstring 缺失后自动生成。
+
+### `bitwise_not`
+
+Source: [`catlass.core_api.bitwise_not`](../catlass/core_api.py#L4714)
+
+```python
+bitwise_not(operand: Any, *, mask: MaskSSA | None = None) -> MaskSSA | VectorSSA
+```
+
+> TODO: 补充 API 说明。该占位由生成器发现 docstring 缺失后自动生成。
 
 ### `add`
 
-Source: [`catlass.core_api.add`](../catlass/core_api.py#L3067)
+Source: [`catlass.core_api.add`](../catlass/core_api.py#L4730)
 
 ```python
-add(lhs: VectorSSA, rhs: VectorSSA) -> VectorSSA
+add(lhs: Any, rhs: Any, *, mask: MaskSSA | None = None) -> VectorSSA
 ```
 
 Emit element-wise add for loaded vector SSA values.
 
 ### `sub`
 
-Source: [`catlass.core_api.sub`](../catlass/core_api.py#L3078)
+Source: [`catlass.core_api.sub`](../catlass/core_api.py#L4751)
 
 ```python
-sub(lhs: VectorSSA, rhs: VectorSSA) -> VectorSSA
+sub(lhs: Any, rhs: Any, *, mask: MaskSSA | None = None) -> VectorSSA
 ```
 
 Emit element-wise subtract for loaded vector SSA values.
 
 ### `mul`
 
-Source: [`catlass.core_api.mul`](../catlass/core_api.py#L3089)
+Source: [`catlass.core_api.mul`](../catlass/core_api.py#L4765)
 
 ```python
-mul(lhs: VectorSSA, rhs: VectorSSA) -> VectorSSA
+mul(lhs: Any, rhs: Any, *, mask: MaskSSA | None = None) -> VectorSSA
 ```
 
 Emit element-wise multiply for loaded vector SSA values.
 
-### `div`
+### `max`
 
-Source: [`catlass.core_api.div`](../catlass/core_api.py#L3100)
+Source: [`catlass.core_api.max`](../catlass/core_api.py#L4786)
 
 ```python
-div(lhs: VectorSSA, rhs: VectorSSA) -> VectorSSA
+max(lhs: Any, rhs: Any, *, mask: MaskSSA | None = None) -> VectorSSA
+```
+
+Emit element-wise maximum for loaded vector SSA values.
+
+### `min`
+
+Source: [`catlass.core_api.min`](../catlass/core_api.py#L4807)
+
+```python
+min(lhs: Any, rhs: Any, *, mask: MaskSSA | None = None) -> VectorSSA
+```
+
+Emit element-wise minimum for loaded vector SSA values.
+
+### `div`
+
+Source: [`catlass.core_api.div`](../catlass/core_api.py#L4828)
+
+```python
+div(lhs: Any, rhs: Any, *, mask: MaskSSA | None = None) -> VectorSSA
 ```
 
 Emit element-wise divide for loaded vector SSA values.
 
-### `make_ptr`
+### `where`
 
-Source: [`catlass.core_api.make_ptr`](../catlass/core_api.py#L3135)
+Source: [`catlass.core_api.where`](../catlass/core_api.py#L4889)
 
 ```python
-make_ptr(dtype: type[Numeric] | None, value: int | mlir_ir.Value, mem_space: AddressSpace = <AddressSpace.gm: 1>, *, assumed_align: int | None = None) -> PointerTypeHint
+where(mask: MaskSSA, x: VectorSSA, y: VectorSSA) -> VectorSSA
+```
+
+Emit element-wise select for loaded vector SSA values.
+
+### `squeeze`
+
+Source: [`catlass.core_api.squeeze`](../catlass/core_api.py#L4930)
+
+```python
+squeeze(src: VectorSSA, mask: MaskSSA) -> VectorSSA
+```
+
+Pack lanes of ``src`` selected by ``mask`` into low indices of the result.
+
+### `cmp`
+
+Source: [`catlass.core_api.cmp`](../catlass/core_api.py#L5071)
+
+```python
+cmp(lhs: VectorSSA, rhs: Any, mode: str, *, mask: MaskSSA | None = None) -> MaskSSA
+```
+
+Return a mask for element-wise vector compare.
+
+### `bitwise_and`
+
+Source: [`catlass.core_api.bitwise_and`](../catlass/core_api.py#L5130)
+
+```python
+bitwise_and(src0_reg: Any, src1_reg: Any, *, mask: Any | None = None) -> MaskSSA | VectorSSA
+```
+
+Emit element-wise bitwise AND for MaskSSA or VectorSSA values.
+
+### `bitwise_or`
+
+Source: [`catlass.core_api.bitwise_or`](../catlass/core_api.py#L5149)
+
+```python
+bitwise_or(src0_reg: Any, src1_reg: Any, *, mask: Any | None = None) -> MaskSSA | VectorSSA
+```
+
+Emit element-wise bitwise OR for MaskSSA or VectorSSA values.
+
+### `bitwise_xor`
+
+Source: [`catlass.core_api.bitwise_xor`](../catlass/core_api.py#L5168)
+
+```python
+bitwise_xor(src0_reg: Any, src1_reg: Any, *, mask: Any | None = None) -> MaskSSA | VectorSSA
+```
+
+Emit element-wise bitwise XOR for MaskSSA or VectorSSA values.
+
+### `gather`
+
+Source: [`catlass.core_api.gather`](../catlass/core_api.py#L5187)
+
+```python
+gather(x: TileLike, y: VectorSSA, *, mask: MaskSSA | None = None) -> VectorSSA
+```
+
+Gather elements from a UB tensor according to vector indices.
+
+### `allocate`
+
+Source: [`catlass.core_api.allocate`](../catlass/core_api.py#L5313)
+
+```python
+allocate(shape: ShapeLike, dtype: type[Numeric], mem_scope: AddressSpace, byte_alignment: int) -> PointerTypeHint
+```
+
+Allocate static on-chip scratch memory and return a typed ``!tla.ptr``.
+
+### `make_ptr`
+
+Source: [`catlass.core_api.make_ptr`](../catlass/core_api.py#L5357)
+
+```python
+make_ptr(dtype: type[Numeric] | None, value: int | mlir_ir.Value | Numeric, mem_space: AddressSpace = <AddressSpace.gm: 1>, *, assumed_align: int | None = None) -> PointerTypeHint
 ```
 
 Build a :class:`Pointer` from an integer bit pattern via ``tla.inttoptr``.
 
 ### `recast_ptr`
 
-Source: [`catlass.core_api.recast_ptr`](../catlass/core_api.py#L3169)
+Source: [`catlass.core_api.recast_ptr`](../catlass/core_api.py#L5391)
 
 ```python
 recast_ptr(ptr: PointerTypeHint, *, dtype: type[Numeric]) -> Any
 ```
 
 Change the logical pointee type of a ``!tla.ptr`` (dtype-only; no swizzle).
+
+### `create_mask`
+
+Source: [`catlass.core_api.create_mask`](../catlass/core_api.py#L5576)
+
+```python
+create_mask(*, pattern: Any | None = None, dtype: Any = <class catlass.base_dsl.typing.Float32>) -> MaskSSA
+```
+
+Create a vector mask inside a vector region from a fixed pattern.
+
+### `update_mask`
+
+Source: [`catlass.core_api.update_mask`](../catlass/core_api.py#L5608)
+
+```python
+update_mask(true_shape: Any, dtype: Any = <class catlass.base_dsl.typing.Float32>) -> tuple[MaskSSA, Any]
+```
+
+Create a tail mask and the remaining element count.
 
 ## Core Support Objects
 
@@ -337,7 +541,7 @@ Source: `catlass.core_api.arch`
 _Namespace object
 ```
 
-Core namespace exported by `catlass.core_api`; available members: `CUBE`, `ColumnMajor`, `FIX`, `L0A`, `L0B`, `L0C`, `L0Clayout`, `L1`, `MTE1`, `MTE2`, `MTE3`, `RowMajor`, `SCALAR`, `UB`, `VECTOR`, `block_dim`, `block_idx`, `nN`, `nZ`, `sub_block_idx`, `zN`, `zZ`.
+Core namespace exported by `catlass.core_api`; available members: `CUBE`, `ColumnMajor`, `FIX`, `L0A`, `L0B`, `L0C`, `L0Clayout`, `L1`, `MTE1`, `MTE2`, `MTE3`, `RowMajor`, `SCALAR`, `UB`, `VECTOR`, `block_dim`, `block_idx`, `nN`, `nZ`, `sub_block_idx`, `zN`, `zNUnAlign`, `zZ`.
 
 ### `LocalmemAllocator`
 
@@ -351,7 +555,7 @@ Allocator object compatible with the HQ-style frontend surface.
 
 ### `TlaCoreAPIError`
 
-Source: [`catlass.runtime.TlaCoreAPIError`](../catlass/runtime.py#L38)
+Source: [`catlass.runtime.TlaCoreAPIError`](../catlass/runtime.py#L41)
 
 ```python
 class TlaCoreAPIError(RuntimeError)
