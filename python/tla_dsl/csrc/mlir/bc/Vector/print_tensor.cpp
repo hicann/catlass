@@ -5,7 +5,8 @@
 #include "../print_tensor_workspace.h"
 
 namespace {
-constexpr uint32_t kPrintTensorDescriptor = 0x50524E54; // ASCII "PRNT".
+constexpr uint32_t kPrintTensorSubblock0Descriptor = 0x50525630; // "PRV0".
+constexpr uint32_t kPrintTensorSubblock1Descriptor = 0x50525631; // "PRV1".
 constexpr uint64_t kMaxFloat32Elements = 262112;
 
 __aicore__ inline AscendC::ShapeInfo MakeShapeInfo(uint32_t shape0,
@@ -37,7 +38,10 @@ void printTensor(uint64_t print_workspace, uint64_t tensor_address,
   AscendC::GlobalTensor<ElementType> tensor;
   tensor.SetGlobalBuffer(
       reinterpret_cast<__gm__ ElementType *>(tensor_address), count);
-  AscendC::DumpTensor(tensor[0], kPrintTensorDescriptor,
+  uint32_t descriptor = AscendC::GetSubBlockIdx() == 0U
+                            ? kPrintTensorSubblock0Descriptor
+                            : kPrintTensorSubblock1Descriptor;
+  AscendC::DumpTensor(tensor[0], descriptor,
                       static_cast<uint32_t>(count), shapeInfo);
 
   pipe_barrier(PIPE_ALL);
@@ -63,7 +67,10 @@ void printLocalTensor(uint64_t print_workspace, uint64_t tensor_address,
                     static_cast<uint32_t>(signedShape1));
   AscendC::LocalTensor<ElementType> tensor(
       AscendC::TPosition::VECCALC, static_cast<uint32_t>(tensor_address), count);
-  AscendC::DumpTensor(tensor, kPrintTensorDescriptor,
+  uint32_t descriptor = AscendC::GetSubBlockIdx() == 0U
+                            ? kPrintTensorSubblock0Descriptor
+                            : kPrintTensorSubblock1Descriptor;
+  AscendC::DumpTensor(tensor, descriptor,
                       static_cast<uint32_t>(count), shapeInfo);
 
   pipe_barrier(PIPE_ALL);
@@ -76,7 +83,7 @@ void printLocalTensor(uint64_t print_workspace, uint64_t tensor_address,
 extern "C" {
 
 __attribute__((used, section(".tla_print_tensor_abi"))) const char
-    tla_print_tensor_abi_v3[] = "tla_print_tensor_abi_v3";
+    tla_print_tensor_abi_v4[] = "tla_print_tensor_abi_v4";
 
 #if ((defined(__NPU_ARCH__) && __NPU_ARCH__ == 3510) || \
      (defined(CATLASS_ARCH) && CATLASS_ARCH == 3510))

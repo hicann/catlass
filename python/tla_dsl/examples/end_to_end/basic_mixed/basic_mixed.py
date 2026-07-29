@@ -11,6 +11,9 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import redirect_stdout
+from io import StringIO
+import re
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +33,12 @@ L0C_BYTES = 32 * 32 * 4
 
 DEMO_DIR = Path(__file__).resolve().parent
 DEFAULT_CACHE_DIR = DEMO_DIR / "artifacts" / "runtime-cache"
+_PRINT_RECORD = re.compile(
+    r"^tla\.print dtype=float32 position=(?P<position>[A-Z0-9]+) "
+    r"subblock=(?P<subblock>[01]) "
+    r"shape=\[(?P<shape>[0-9,]+)\] count=(?P<count>[0-9]+) "
+    r"values=\[(?P<values>.*)\]$"
+)
 
 
 @tla.kernel
@@ -120,6 +129,7 @@ def basic_mixed(
         tla.copy(ub_addend, gm_addend)
         tla.set_flag(ub_loaded)
         tla.wait_flag(ub_loaded)
+        tla.print(ub_addend, 16)
 
         ub_c = tla.make_tensor_like(c_ub_ptr, gm_result, tla.arch.RowMajor)
         tla.cross_core_wait_flag(fix_done, tla.arch.VECTOR)
@@ -248,6 +258,60 @@ def _create_tla_tensor(dev_buf: Any) -> Any:
     return tensor
 
 
+def _verify_mixed_print_output(output: str) -> list[str]:
+    records = [
+        line
+        for line in output.splitlines()
+        if line.startswith("tla.print ")
+    ]
+    if len(records) != 2:
+        raise tla.TlaExecutionError(
+            "mixed tensor tla.print validation failed: "
+            f"expected two AIV records, got {records!r}"
+        )
+    records_by_subblock: dict[int, str] = {}
+    for record in records:
+        match = _PRINT_RECORD.fullmatch(record)
+        if match is None:
+            raise tla.TlaExecutionError(
+                f"mixed tensor tla.print validation failed: malformed record {record!r}"
+            )
+        shape = tuple(int(extent) for extent in match.group("shape").split(","))
+        try:
+            values = [
+                float(value.strip())
+                for value in match.group("values").split(",")
+            ]
+        except ValueError as exc:
+            raise tla.TlaExecutionError(
+                f"mixed tensor tla.print validation failed: malformed record {record!r}"
+            ) from exc
+        subblock = int(match.group("subblock"))
+        if subblock in records_by_subblock:
+            raise tla.TlaExecutionError(
+                "mixed tensor tla.print validation failed: "
+                f"duplicate subblock={subblock}"
+            )
+        records_by_subblock[subblock] = record
+        if (
+            match.group("position") != "UB"
+            or shape != (VECTOR_TILE_M, VECTOR_TILE_N)
+            or int(match.group("count")) != 16
+            or values != [3.0] * 16
+        ):
+            raise tla.TlaExecutionError(
+                "mixed tensor tla.print validation failed: expected position=UB, "
+                f"shape=[{VECTOR_TILE_M},{VECTOR_TILE_N}], count=16, and sixteen "
+                f"3.0 values; got {record!r}"
+            )
+    if set(records_by_subblock) != {0, 1}:
+        raise tla.TlaExecutionError(
+            "mixed tensor tla.print validation failed: expected records from "
+            f"subblocks 0 and 1, got {sorted(records_by_subblock)}"
+        )
+    return records
+
+
 def run(args: argparse.Namespace) -> int:
     tla.initialize(device=args.device)
     try:
@@ -277,7 +341,10 @@ def run(args: argparse.Namespace) -> int:
             **_runtime_kwargs(args),
         )
         block = max(1, args.block if args.block != -1 else tla.get_aicore_num(args.device))
-        artifact(tla_lhs, tla_rhs, tla_out, tla_addend, block=block)
+        captured = StringIO()
+        with redirect_stdout(captured):
+            artifact(tla_lhs, tla_rhs, tla_out, tla_addend, block=block)
+        print_records = _verify_mixed_print_output(captured.getvalue())
 
         torch.npu.synchronize()
         expected_match = torch.isclose(out, expected, rtol=0.0, atol=args.atol)
@@ -293,6 +360,8 @@ def run(args: argparse.Namespace) -> int:
 
         print("compile_ok=True")
         print(f"kernel.o path={artifact.kernel_binary_path}")
+        for record in print_records:
+            print(record)
         print("launch_ok=True")
         print(f"out equals expected mixed result? {bool(expected_match.all())}")
         print(f"first mismatch={first_mismatch}")

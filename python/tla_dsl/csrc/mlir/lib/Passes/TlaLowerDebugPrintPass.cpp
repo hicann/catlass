@@ -89,6 +89,54 @@ static BlockArgument getOrPrependPrintTensorWorkspaceArg(func::FuncOp funcOp)
     return workspaceArg;
 }
 
+static BlockArgument getOrAppendPrintTensorWorkspaceArg(func::FuncOp funcOp)
+{
+    MLIRContext* ctx = funcOp.getContext();
+    for (BlockArgument arg : funcOp.getArguments()) {
+        if (funcOp.getArgAttr(arg.getArgNumber(), kPrintTensorWorkspaceAttrName))
+            return arg;
+    }
+
+    FunctionType oldType = funcOp.getFunctionType();
+    SmallVector<Type, 8> inputs(oldType.getInputs().begin(), oldType.getInputs().end());
+    Type workspaceType = IntegerType::get(ctx, 64);
+    inputs.push_back(workspaceType);
+    funcOp.setType(FunctionType::get(ctx, inputs, oldType.getResults()));
+
+    Block& entry = funcOp.getBody().front();
+    unsigned argIndex = entry.getNumArguments();
+    BlockArgument workspaceArg = entry.addArgument(workspaceType, funcOp.getLoc());
+    funcOp.setArgAttr(argIndex, kPrintTensorWorkspaceAttrName, UnitAttr::get(ctx));
+    funcOp.setArgAttr(
+        argIndex, hacc::KernelArgTypeAttr::name,
+        hacc::KernelArgTypeAttr::get(ctx, hacc::KernelArgType::kWorkspace));
+    return workspaceArg;
+}
+
+static bool isMixedSplitFunction(func::FuncOp funcOp)
+{
+    return funcOp->hasAttr(hivm::TPartOfMixAttr::name);
+}
+
+static BlockArgument getOrCreatePrintTensorWorkspaceArg(func::FuncOp funcOp,
+                                                        ModuleOp module)
+{
+    if (!isMixedSplitFunction(funcOp)) {
+        return getOrPrependPrintTensorWorkspaceArg(funcOp);
+    }
+
+    StringRef name = funcOp.getSymName();
+    constexpr StringLiteral aicSuffix = "_mix_aic";
+    constexpr StringLiteral aivSuffix = "_mix_aiv";
+    StringRef suffix = name.ends_with(aicSuffix) ? aicSuffix : aivSuffix;
+    StringRef peerSuffix = suffix == aicSuffix ? aivSuffix : aicSuffix;
+    std::string peerName =
+        (name.drop_back(suffix.size()) + peerSuffix).str();
+    if (auto peer = module.lookupSymbol<func::FuncOp>(peerName))
+        (void)getOrAppendPrintTensorWorkspaceArg(peer);
+    return getOrAppendPrintTensorWorkspaceArg(funcOp);
+}
+
 static void annotatePrintfRuntimeCall(func::FuncOp funcOp)
 {
     MLIRContext* ctx = funcOp.getContext();
@@ -238,7 +286,8 @@ static LogicalResult lowerPrintTensor(::tla::PrintTensorOp op,
     else
         calleeName = "_mlir_ciface_tla_print_tensor_gm_";
     calleeName.append(helperSuffix->data(), helperSuffix->size());
-    BlockArgument workspace = getOrPrependPrintTensorWorkspaceArg(funcOp);
+    BlockArgument workspace =
+        getOrCreatePrintTensorWorkspaceArg(funcOp, module);
     auto callee = getOrCreateRuntimeCall(
         module, calleeName,
         {workspace.getType(), tensorI64.getType(), count.getType(),

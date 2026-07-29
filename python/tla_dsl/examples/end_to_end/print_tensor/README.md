@@ -6,11 +6,14 @@ tensor, or from a static/dynamic-shaped AIV UB view. The output verifier
 requires exactly one native CANN record and prints only the stable public fields:
 
 ```text
-tla.print dtype=float32 shape=[8,4] count=16 values=[0.0, ..., 15.0]
+tla.print dtype=float32 subblock=0 shape=[8,4] count=16 values=[0.0, ..., 15.0]
 compile_ok=True
 launch_ok=True
 output_ok=True
 ```
+
+Vector-core output includes the logical C310 vector `subblock` (`0` or `1`).
+Cube-core output keeps the same format without a `subblock` field.
 
 Run GM on either supported core scope:
 

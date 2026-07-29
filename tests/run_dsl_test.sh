@@ -480,14 +480,17 @@ _run_basic_vadd_unknown_extent_case() {
 _run_basic_vadd_unknown_extent_case
 
 _run_basic_mixed_case() {
-    echo "==> Running basic_mixed validation [fixed shape/dtypes]: --run --device ${DEVICE_ID}"
+    local cache_mode="$1"
+    shift
+    echo "==> Running basic_mixed validation [fixed shape/dtypes, tensor print, ${cache_mode}]: --run --device ${DEVICE_ID} --block 1 $*"
     (
         cd "${TLA_DSL_DIR}"
-        python "${BASIC_MIXED_REL}" --run --device "${DEVICE_ID}" --force-recompile
+        python "${BASIC_MIXED_REL}" --run --device "${DEVICE_ID}" --block 1 "$@"
     )
 }
 
-_run_basic_mixed_case
+_run_basic_mixed_case "forced compilation" --force-recompile
+_run_basic_mixed_case "cache reuse"
 
 _run_basic_mixed_ub2l1_case() {
     echo "==> Running basic_mixed_ub2l1 validation [fixed shape/dtypes, gm->ub->l1]: --run --device ${DEVICE_ID}"

@@ -50,7 +50,7 @@ void printTensor(uint64_t print_workspace, uint64_t tensor_address,
 extern "C" {
 
 __attribute__((used, section(".tla_print_tensor_abi"))) const char
-    tla_print_tensor_abi_v3[] = "tla_print_tensor_abi_v3";
+    tla_print_tensor_abi_v4[] = "tla_print_tensor_abi_v4";
 
 #if ((defined(__NPU_ARCH__) && __NPU_ARCH__ == 3510) || \
      (defined(CATLASS_ARCH) && CATLASS_ARCH == 3510))

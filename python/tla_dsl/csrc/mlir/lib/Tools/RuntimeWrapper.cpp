@@ -374,6 +374,37 @@ bool get_print_tensor_dtype(uint32_t code, PrintTensorDType &dtype) {
   }
 }
 
+int32_t decode_print_tensor_subblock(uint32_t descriptor) {
+  constexpr uint32_t kCubeDescriptor = 0x50524E54; // "PRNT".
+  constexpr uint32_t kVectorSubblock0Descriptor = 0x50525630; // "PRV0".
+  constexpr uint32_t kVectorSubblock1Descriptor = 0x50525631; // "PRV1".
+  switch (descriptor) {
+  case kCubeDescriptor:
+    return -1;
+  case kVectorSubblock0Descriptor:
+    return 0;
+  case kVectorSubblock1Descriptor:
+    return 1;
+  default:
+    return -2;
+  }
+}
+
+std::string format_print_tensor_header(uint32_t core,
+                                       const PrintTensorTlv *tlv) {
+  PrintTensorDType dtype{};
+  int32_t subblock = decode_print_tensor_subblock(tlv->desc);
+  if (!get_print_tensor_dtype(tlv->data_type, dtype) || subblock < -1)
+    return {};
+  const char *position = tlv->position == 0 ? "GM" : "UB";
+  std::string header = "DumpTensor: core=" + std::to_string(core) + ", ";
+  if (subblock >= 0)
+    header += "subblock=" + std::to_string(subblock) + ", ";
+  header += "data_type=" + std::string(dtype.name) + ", position=" + position +
+            ", shape=[";
+  return header;
+}
+
 float decode_float16(uint16_t bits) {
   uint32_t sign = static_cast<uint32_t>(bits & 0x8000) << 16;
   uint32_t exponent = (bits >> 10) & 0x1f;
@@ -424,9 +455,12 @@ bool print_tensor_tlv(const PrintTensorTlv *tlv, uint64_t total, uint32_t core,
   constexpr uint16_t kUnifiedBufferPosition = 1;
   constexpr uint32_t kTensorPayloadAlignment = 32;
   PrintTensorDType dtype{};
-  if (total < sizeof(PrintTensorTlv) ||
-      tlv->length != total - 2 * sizeof(uint32_t) ||
+  if (total < sizeof(PrintTensorTlv))
+    return false;
+  int32_t subblock = decode_print_tensor_subblock(tlv->desc);
+  if (tlv->length != total - 2 * sizeof(uint32_t) ||
       !get_print_tensor_dtype(tlv->data_type, dtype) ||
+      subblock < -1 ||
       (tlv->position != kGlobalMemoryPosition &&
        tlv->position != kUnifiedBufferPosition) ||
       tlv->dump_size == 0 || tlv->dump_size % dtype.byte_width != 0 ||
@@ -462,11 +496,8 @@ bool print_tensor_tlv(const PrintTensorTlv *tlv, uint64_t total, uint32_t core,
     return false;
   auto *payload =
       reinterpret_cast<const uint8_t *>(tlv) + sizeof(PrintTensorTlv);
-  const char *position =
-      tlv->position == kGlobalMemoryPosition ? "GM" : "UB";
-  std::printf(
-      "DumpTensor: core=%u, data_type=%s, position=%s, shape=[", core,
-      dtype.name, position);
+  std::string header = format_print_tensor_header(core, tlv);
+  std::printf("%s", header.c_str());
   for (uint32_t i = 0; i < dim; ++i)
     std::printf("%s%u", i == 0 ? "" : ",", shape[i]);
   std::printf("], dump_size=%u [", count);
@@ -663,7 +694,7 @@ bool uses_asc_debug_fifo(const char *buffer, size_t buffer_size) {
 }
 
 bool uses_print_tensor(const char *buffer, size_t buffer_size) {
-  return contains_bytes(buffer, buffer_size, "tla_print_tensor_abi_v3");
+  return contains_bytes(buffer, buffer_size, "tla_print_tensor_abi_v4");
 }
 
 bool validate_debug_print_fifo_contract(const std::vector<uint64_t> &values,
@@ -704,6 +735,15 @@ bool move_print_tensor_workspace_to_first_argument(
     return false;
   values.pop_back();
   values.insert(values.begin(), workspace);
+  return true;
+}
+
+bool replace_print_tensor_workspace_marker(std::vector<uint64_t> &values,
+                                           uint64_t workspace) {
+  if (values.empty() ||
+      values.back() != cce::internal::kPrintTensorWorkspaceSentinel)
+    return false;
+  values.back() = workspace;
   return true;
 }
 
@@ -871,9 +911,13 @@ extern "C" int tla_runtime_launch_kernel(uint64_t function_handle, uint64_t stre
     print_tensor_fifo = cce::internal::AscDebugFifo::open(block_num);
     if (!print_tensor_fifo)
       return -1;
-    if (!move_print_tensor_workspace_to_first_argument(
-            values,
-            reinterpret_cast<uint64_t>(print_tensor_fifo->device_region))) {
+    const uint64_t workspace =
+        reinterpret_cast<uint64_t>(print_tensor_fifo->device_region);
+    const bool workspace_replaced =
+        expects_print_tensor == 2
+            ? replace_print_tensor_workspace_marker(values, workspace)
+            : move_print_tensor_workspace_to_first_argument(values, workspace);
+    if (!workspace_replaced) {
       cce::internal::AscDebugFifo::destroy(print_tensor_fifo);
       g_last_error =
           "tensor print FIFO marker must occupy the final packed kernel argument";

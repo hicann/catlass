@@ -33,6 +33,7 @@ std::vector<uint8_t> scalar_tlv(const char *format, uint64_t slot) {
 std::vector<uint8_t> tensor_tlv(uint32_t data_type = 0,
                                 uint32_t element_width = sizeof(float),
                                 uint16_t position = 0) {
+  constexpr uint32_t kCubePrintTensorDescriptor = 0x50524E54;
   constexpr uint32_t kValueCount = 4;
   constexpr uint32_t kPayloadBytes = 32;
   std::vector<uint8_t> bytes(sizeof(PrintTensorTlv) + kPayloadBytes, 0);
@@ -40,6 +41,7 @@ std::vector<uint8_t> tensor_tlv(uint32_t data_type = 0,
   tlv->type = static_cast<uint32_t>(FifoRecordType::Tensor);
   tlv->length = static_cast<uint32_t>(bytes.size() - 8);
   tlv->data_type = data_type;
+  tlv->desc = kCubePrintTensorDescriptor;
   tlv->position = position;
   tlv->dim = 2;
   tlv->shape[0] = 2;
@@ -87,6 +89,18 @@ int main() {
                 "last-error ABI pointer changed with string storage"))
       return 1;
   }
+  {
+    constexpr char kPrintTensorAbiV4[] = "prefix\0tla_print_tensor_abi_v4";
+    constexpr char kStalePrintTensorAbiV3[] =
+        "prefix\0tla_print_tensor_abi_v3";
+    if (!expect(uses_print_tensor(kPrintTensorAbiV4,
+                                  sizeof(kPrintTensorAbiV4)),
+                "tensor print ABI v4 marker was not recognized") ||
+        !expect(!uses_print_tensor(kStalePrintTensorAbiV3,
+                                   sizeof(kStalePrintTensorAbiV3)),
+                "stale tensor print ABI v3 marker was accepted"))
+      return 1;
+  }
 
   {
     constexpr char kOrdinaryKernelMetadata[] =
@@ -116,6 +130,25 @@ int main() {
                 "final debug FIFO marker was not replaced") ||
         !expect(values == std::vector<uint64_t>{kMarker, 17, kWorkspace},
                 "debug FIFO replacement changed a user sentinel"))
+      return 1;
+  }
+  {
+    constexpr uint64_t kPrintMarker =
+        cce::internal::kPrintTensorWorkspaceSentinel;
+    std::vector<uint64_t> pure_values{17, kPrintMarker};
+    if (!expect(
+            move_print_tensor_workspace_to_first_argument(pure_values,
+                                                          kWorkspace),
+            "pure tensor print workspace was not moved to argument zero") ||
+        !expect(pure_values == std::vector<uint64_t>{kWorkspace, 17},
+                "pure tensor print workspace placement is incorrect"))
+      return 1;
+
+    std::vector<uint64_t> mixed_values{17, kPrintMarker};
+    if (!expect(replace_print_tensor_workspace_marker(mixed_values, kWorkspace),
+                "mixed tensor print workspace marker was not replaced") ||
+        !expect(mixed_values == std::vector<uint64_t>{17, kWorkspace},
+                "mixed tensor print workspace was not kept trailing"))
       return 1;
   }
   {
@@ -215,6 +248,45 @@ int main() {
                   ub_tensor.size(), 0),
               "valid aligned UB f32x4 tensor TLV was rejected"))
     return 1;
+  {
+    constexpr uint32_t kCubeDescriptor = 0x50524E54;
+    constexpr uint32_t kVectorSubblock0Descriptor = 0x50525630;
+    constexpr uint32_t kVectorSubblock1Descriptor = 0x50525631;
+    constexpr uint32_t kInvalidVectorDescriptor = 0x50525632;
+    auto descriptor_tensor = tensor_tlv();
+    auto *descriptor_tlv =
+        reinterpret_cast<PrintTensorTlv *>(descriptor_tensor.data());
+
+    descriptor_tlv->desc = kVectorSubblock0Descriptor;
+    if (!expect(print_tensor_tlv(descriptor_tlv, descriptor_tensor.size(), 3),
+                "vector subblock 0 descriptor was rejected") ||
+        !expect(format_print_tensor_header(3, descriptor_tlv) ==
+                    "DumpTensor: core=3, subblock=0, data_type=float32, "
+                    "position=GM, shape=[",
+                "vector subblock 0 header is incorrect"))
+      return 1;
+
+    descriptor_tlv->desc = kVectorSubblock1Descriptor;
+    if (!expect(print_tensor_tlv(descriptor_tlv, descriptor_tensor.size(), 5),
+                "vector subblock 1 descriptor was rejected") ||
+        !expect(format_print_tensor_header(5, descriptor_tlv) ==
+                    "DumpTensor: core=5, subblock=1, data_type=float32, "
+                    "position=GM, shape=[",
+                "vector subblock 1 header is incorrect"))
+      return 1;
+
+    descriptor_tlv->desc = kCubeDescriptor;
+    if (!expect(format_print_tensor_header(7, descriptor_tlv) ==
+                    "DumpTensor: core=7, data_type=float32, position=GM, "
+                    "shape=[",
+                "cube tensor header gained a subblock annotation"))
+      return 1;
+
+    descriptor_tlv->desc = kInvalidVectorDescriptor;
+    if (!expect(!print_tensor_tlv(descriptor_tlv, descriptor_tensor.size(), 0),
+                "invalid vector descriptor was accepted"))
+      return 1;
+  }
   auto typed_ub_tensor = tensor_tlv(2, sizeof(int8_t), 1);
   if (!expect(print_tensor_tlv(
                   reinterpret_cast<const PrintTensorTlv *>(

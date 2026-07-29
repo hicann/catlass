@@ -179,6 +179,7 @@ def _format_record(
     *,
     values: tuple[float | int, ...] | None = None,
     shape: tuple[int, ...] = SHAPE,
+    arch_scope: str = "aiv.c310",
 ) -> str:
     from catlass.execution import _format_print_tensor_record
 
@@ -186,6 +187,7 @@ def _format_record(
         spec.values if values is None else values,
         shape=shape,
         dtype=spec.token,
+        subblock=0 if arch_scope.startswith("aiv.") else None,
     )
 
 
@@ -195,8 +197,11 @@ def _verify_public_output(
     *,
     values: tuple[float | int, ...] | None = None,
     shape: tuple[int, ...] = SHAPE,
+    arch_scope: str = "aiv.c310",
 ) -> str:
-    expected = _format_record(spec, values=values, shape=shape)
+    expected = _format_record(
+        spec, values=values, shape=shape, arch_scope=arch_scope
+    )
     records = [
         line.strip()
         for line in output.splitlines()
@@ -307,7 +312,11 @@ def _run_case(args: argparse.Namespace, torch: Any, spec: _DTypeSpec) -> None:
     captured = StringIO()
     with redirect_stdout(captured):
         executor(runtime_input.value, block=args.block)
-    print(_verify_public_output(captured.getvalue(), spec))
+    print(
+        _verify_public_output(
+            captured.getvalue(), spec, arch_scope=args.arch_scope
+        )
+    )
     print(f"case dtype={spec.token} core={args.arch_scope} launch_ok=True")
     print(f"case dtype={spec.token} core={args.arch_scope} output_ok=True")
 
@@ -329,7 +338,10 @@ def _run_ub_case(
         executor(runtime_input.value, block=args.block)
     print(
         _verify_public_output(
-            captured.getvalue(), spec, shape=UB_SHAPE
+            captured.getvalue(),
+            spec,
+            shape=UB_SHAPE,
+            arch_scope=args.arch_scope,
         )
     )
     print(

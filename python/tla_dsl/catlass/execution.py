@@ -55,7 +55,7 @@ _PRINT_TENSOR_WORKSPACE_SENTINEL = int.from_bytes(
     _PRINT_TENSOR_WORKSPACE_SENTINEL_TEXT, byteorder="big"
 )
 _DEBUG_PRINT_WORKSPACE_ABI_REVISION = "debug-print-workspace-i64-v1"
-_PRINT_TENSOR_WORKSPACE_ABI_REVISION = "print-tensor-workspace-generic-typed-v5"
+_PRINT_TENSOR_WORKSPACE_ABI_REVISION = "print-tensor-workspace-generic-typed-v7"
 _NATIVE_PRINT_TENSOR_HEADER = re.compile(
     r"^DumpTensor:\s*"
     r"(?:(?!(?:data_type|position|dump_size)=)"
@@ -132,9 +132,20 @@ class _PrintTensorMetadata:
 class _NativePrintTensorRecord:
     native_dtype: str
     position: str
+    subblock: int | None
     shape: tuple[int, ...] | None
     declared_count: int
     values_text: str
+
+
+@dataclass(frozen=True)
+class _DecodedPrintTensorRecord:
+    values: list[float | int]
+    shape: tuple[int, ...]
+    subblock: int | None
+
+    def legacy_pair(self) -> tuple[list[float | int], tuple[int, ...]]:
+        return self.values, self.shape
 
 
 _PRINT_TENSOR_DTYPES = {
@@ -204,7 +215,9 @@ class _KernelLaunchPlan:
     grid: tuple[int, int, int]
     payload: bytes
     expects_debug_fifo: bool
-    expects_print_tensor: bool
+    # 0: absent, 1: pure kernel (workspace is moved to arg 0), 2: mixed
+    # kernel (the trailing workspace marker is replaced in place).
+    expects_print_tensor: bool | int
 
 
 @dataclass(frozen=True)
@@ -272,16 +285,19 @@ def compile_kernel(
             and kernel_path.exists()
             and mlir_path.exists()
         ):
+            lowered_llvm = mlir_path.read_text()
             artifact = TlaKernelArtifact(
                 cache_key=cache_key,
                 cache_dir=artifact_dir,
                 tlair_mlir=tlair_mlir,
-                lowered_llvm=mlir_path.read_text(),
+                lowered_llvm=lowered_llvm,
                 entrypoint=entrypoint,
                 compiler_bridge_path=compiler_bridge_path,
                 hivmc_path=hivmc,
                 kernel_binary_path=kernel_path,
-                runtime=runtime,
+                runtime=_runtime_options_from_lowered_mlir(
+                    runtime, lowered_llvm
+                ),
                 pass_ir_dump=pass_dump_path.read_text()
                 if pass_dump_path and pass_dump_path.exists()
                 else "",
@@ -455,20 +471,34 @@ def execute_kernel(
         launch()
     else:
         native_output = _capture_c_stdout(launch)
-        values, runtime_shape = _decode_native_print_tensor_output(
+        helper_core = (
+            _mixed_print_tensor_helper_core(artifact.lowered_llvm)
+            if plan.kernel_mode == "mix"
+            else runtime.core_type
+        )
+        records = _decode_native_print_tensor_records(
             native_output,
             count=print_metadata.count,
             dtype=print_metadata.dtype,
             position=print_metadata.position,
             shape_pattern=print_metadata.shape,
+            allow_multiple=plan.kernel_mode == "mix",
+            require_subblock=helper_core == "aiv",
         )
-        print(
-            _format_print_tensor_record(
-                values,
-                shape=runtime_shape,
-                dtype=print_metadata.dtype,
+        for record in records:
+            print(
+                _format_print_tensor_record(
+                    record.values,
+                    shape=record.shape,
+                    dtype=print_metadata.dtype,
+                    position=(
+                        print_metadata.position
+                        if plan.kernel_mode == "mix"
+                        else None
+                    ),
+                    subblock=record.subblock,
+                )
             )
-        )
     return TlaExecutionResult(
         artifact=artifact,
         module_handle=module_handle,
@@ -508,10 +538,6 @@ def _build_kernel_launch_plan(
             raise TlaExecutionError(
                 "tla.print_tensor v3 requires a single-block launch (block=1)"
             )
-        if runtime.kernel_mode == "mix":
-            raise TlaExecutionError(
-                "tla.print_tensor v3 does not support mixed-core kernels"
-            )
     logical_mixed_handoff = _extract_logical_mixed_handoff(artifact.lowered_llvm)
     expected_abi_entrypoint = (
         logical_mixed_handoff.entrypoint
@@ -529,13 +555,22 @@ def _build_kernel_launch_plan(
             artifact.kernel_abi,
         )
         payload = _append_debug_print_workspace_payload(payload, artifact)
+        if expects_print_tensor:
+            extension = bytearray(payload)
+            _align_payload(extension, _POINTER_ABI_SIZE)
+            extension.extend(
+                _PRINT_TENSOR_WORKSPACE_SENTINEL.to_bytes(
+                    _POINTER_ABI_SIZE, byteorder="little", signed=False
+                )
+            )
+            payload = bytes(extension)
         return _KernelLaunchPlan(
             entrypoint=logical_mixed_handoff.entrypoint,
             kernel_mode="mix",
             grid=effective_grid,
             payload=payload,
             expects_debug_fifo=_has_debug_print_workspace(artifact),
-            expects_print_tensor=False,
+            expects_print_tensor=2 if expects_print_tensor else False,
         )
     payload = _pack_launch_args(launch_args, artifact.kernel_abi)
     payload = _append_debug_print_workspace_payload(payload, artifact)
@@ -939,17 +974,20 @@ def _extract_named_func_args(mlir_text: str, func_name: str) -> list[str]:
 
 
 def _mixed_handoff_user_arg_types(params: Sequence[str]) -> tuple[str, ...]:
-    """Exclude compiler-owned debug workspace operands from a mixed handoff.
+    """Exclude compiler-owned print workspace operands from a mixed handoff.
 
-    The split functions carry the same user ABI plus an internal dynamic GM
-    workspace when ``tla.debug_print`` is present.  That workspace is supplied
-    by the marker-backed FIFO descriptor below, never by a public launch
+    The split functions carry the same user ABI plus an internal workspace
+    when scalar debug or tensor printing is present. That workspace is
+    supplied by a marker-backed FIFO descriptor, never by a public launch
     argument.
     """
 
     user_arg_types: list[str] = []
     for param in params:
-        if "tla.debug_print.workspace" in param:
+        if (
+            "tla.debug_print.workspace" in param
+            or "tla.print_tensor.workspace" in param
+        ):
             continue
         if ":" in param:
             user_arg_types.append(param.split(":", 1)[1].strip())
@@ -1089,7 +1127,7 @@ def _parse_native_print_tensor_records(
     output: str, *, dtype: str
 ) -> list[_NativePrintTensorRecord]:
     records: list[_NativePrintTensorRecord] = []
-    pending: tuple[str, str, tuple[int, ...] | None, int] | None = None
+    pending: tuple[str, str, int | None, tuple[int, ...] | None, int] | None = None
     for raw_line in output.splitlines():
         line = raw_line.strip()
         if not line:
@@ -1106,6 +1144,22 @@ def _parse_native_print_tensor_records(
                 )
             native_dtype = header.group("dtype")
             position = header.group("position")
+            prefix = line[: header.start("dtype")]
+            subblock_values = re.findall(r"\bsubblock=([A-Za-z0-9_:+.-]+)", prefix)
+            if len(subblock_values) > 1:
+                raise _print_tensor_decode_error(dtype, "duplicate subblock metadata")
+            subblock = None
+            if subblock_values:
+                try:
+                    subblock = int(subblock_values[0], 10)
+                except ValueError as exc:
+                    raise _print_tensor_decode_error(
+                        dtype, "invalid subblock metadata"
+                    ) from exc
+                if subblock not in (0, 1):
+                    raise _print_tensor_decode_error(
+                        dtype, f"invalid subblock metadata {subblock}"
+                    )
             declared_count = int(header.group("count"))
             inline_payload = header.group("payload")
             shape_text = header.group("shape")
@@ -1121,13 +1175,20 @@ def _parse_native_print_tensor_records(
                     _NativePrintTensorRecord(
                         native_dtype=native_dtype,
                         position=position,
+                        subblock=subblock,
                         shape=shape,
                         declared_count=declared_count,
                         values_text=inline_payload[1:-1],
                     )
                 )
             else:
-                pending = (native_dtype, position, shape, declared_count)
+                pending = (
+                    native_dtype,
+                    position,
+                    subblock,
+                    shape,
+                    declared_count,
+                )
             continue
         payload = _NATIVE_PRINT_TENSOR_PAYLOAD.fullmatch(line)
         if payload is not None:
@@ -1137,8 +1198,9 @@ def _parse_native_print_tensor_records(
                 _NativePrintTensorRecord(
                     native_dtype=pending[0],
                     position=pending[1],
-                    shape=pending[2],
-                    declared_count=pending[3],
+                    subblock=pending[2],
+                    shape=pending[3],
+                    declared_count=pending[4],
                     values_text=payload.group("values"),
                 )
             )
@@ -1148,6 +1210,8 @@ def _parse_native_print_tensor_records(
             raise _print_tensor_decode_error(
                 dtype, "header is not immediately followed by its payload"
             )
+        if "DumpTensor:" in line:
+            raise _print_tensor_decode_error(dtype, "malformed native record header")
     if pending is not None:
         raise _print_tensor_decode_error(dtype, "header has no payload")
     return records
@@ -1171,15 +1235,60 @@ def _decode_native_print_tensor_output(
     position: str = "GM",
     shape_pattern: Sequence[int] | None = None,
 ) -> tuple[list[float | int], tuple[int, ...]]:
+    return _decode_native_print_tensor_records(
+        output,
+        count=count,
+        dtype=dtype,
+        position=position,
+        shape_pattern=shape_pattern,
+        allow_multiple=False,
+        require_subblock=False,
+    )[0].legacy_pair()
+
+
+def _decode_native_print_tensor_records(
+    output: str,
+    *,
+    count: int | None = None,
+    dtype: str = "f32",
+    position: str = "GM",
+    shape_pattern: Sequence[int] | None = None,
+    allow_multiple: bool,
+    require_subblock: bool = False,
+) -> list[_DecodedPrintTensorRecord]:
     spec = _PRINT_TENSOR_DTYPES.get(dtype)
     if spec is None:
         raise _print_tensor_decode_error(dtype, "unsupported runtime dtype")
     records = _parse_native_print_tensor_records(output, dtype=dtype)
-    if len(records) != 1:
+    if not records or (not allow_multiple and len(records) != 1):
+        expected = "one or more" if allow_multiple else "exactly one"
         raise _print_tensor_decode_error(
-            dtype, f"expected exactly one record, got {len(records)}"
+            dtype, f"expected {expected} record, got {len(records)}"
         )
-    record = records[0]
+    return [
+        _decode_native_print_tensor_record(
+            record,
+            count=count,
+            dtype=dtype,
+            spec=spec,
+            position=position,
+            shape_pattern=shape_pattern,
+            require_subblock=require_subblock,
+        )
+        for record in records
+    ]
+
+
+def _decode_native_print_tensor_record(
+    record: _NativePrintTensorRecord,
+    *,
+    count: int | None,
+    dtype: str,
+    spec: _PrintTensorDTypeSpec,
+    position: str,
+    shape_pattern: Sequence[int] | None,
+    require_subblock: bool,
+) -> _DecodedPrintTensorRecord:
     if record.native_dtype != spec.native_name:
         raise _print_tensor_decode_error(
             dtype,
@@ -1189,6 +1298,8 @@ def _decode_native_print_tensor_output(
         raise _print_tensor_decode_error(
             dtype, f"expected position {position!r}, got {record.position!r}"
         )
+    if require_subblock and record.subblock is None:
+        raise _print_tensor_decode_error(dtype, "missing subblock metadata")
     if count is not None and record.declared_count != count:
         raise _print_tensor_decode_error(
             dtype, f"expected {count} values, record declares {record.declared_count}"
@@ -1241,11 +1352,16 @@ def _decode_native_print_tensor_output(
             f"runtime shape {shape!r} does not match compiled pattern "
             f"{tuple(shape_pattern)!r}",
         )
-    return values, shape
+    return _DecodedPrintTensorRecord(values, shape, record.subblock)
 
 
 def _format_print_tensor_record(
-    values: Sequence[float | int], *, shape: Sequence[int], dtype: str = "f32"
+    values: Sequence[float | int],
+    *,
+    shape: Sequence[int],
+    dtype: str = "f32",
+    position: str | None = None,
+    subblock: int | None = None,
 ) -> str:
     spec = _PRINT_TENSOR_DTYPES.get(dtype)
     if spec is None:
@@ -1272,8 +1388,11 @@ def _format_print_tensor_record(
             )
         rendered_values = ", ".join(str(value) for value in values)
     public_dtype = "float32" if dtype == "f32" else dtype
+    rendered_position = f" position={position}" if position is not None else ""
+    rendered_subblock = f" subblock={subblock}" if subblock is not None else ""
     return (
-        f"tla.print dtype={public_dtype} shape=[{rendered_shape}] count={count} "
+        f"tla.print dtype={public_dtype}{rendered_position}{rendered_subblock} "
+        f"shape=[{rendered_shape}] count={count} "
         f"values=[{rendered_values}]"
     )
 
@@ -1596,13 +1715,18 @@ def _create_stamped_hivmc_input(
     compiler_input.write_text(mlir_path.read_text())
     template_bitcode = _resolve_hivm_template_bitcode(runtime)
     if "tla.print_tensor.workspace" in compiler_text:
+        helper_core_type = (
+            _mixed_print_tensor_helper_core(compiler_text)
+            if runtime.kernel_mode == "mix"
+            else runtime.core_type
+        )
         helper = {
             "aic": ("Cube", "print_tensor.aic.c310.bc"),
             "aiv": ("Vector", "print_tensor.aiv.c310.bc"),
-        }.get(runtime.core_type)
+        }.get(helper_core_type)
         if helper is None:
             raise TlaRuntimeUnavailableError(
-                "tla.print_tensor v3 requires an AIC-only or AIV-only kernel"
+                "tla.print_tensor helper split could not be determined"
             )
         helper_dir, helper_name = helper
         probe_candidates = [
@@ -1614,11 +1738,42 @@ def _create_stamped_hivmc_input(
         )
         if probe_bitcode is None:
             raise TlaRuntimeUnavailableError(
-                f"C310 {runtime.core_type} print tensor bitcode was not built"
+                f"C310 {helper_core_type} print tensor bitcode was not built"
             )
         template_bitcode = f"{template_bitcode},{probe_bitcode}"
     _stamp_hivm_template_bitcode_attrs(compiler_input, template_bitcode)
     return compiler_input, template_bitcode
+
+
+def _mixed_print_tensor_helper_core(compiler_text: str) -> str:
+    helper_call = re.search(
+        r"\bcall\s+@_mlir_ciface_tla_print_tensor_", compiler_text
+    )
+    if helper_call is None:
+        raise TlaRuntimeUnavailableError(
+            "mixed tla.print_tensor helper call is missing from lowered MLIR"
+        )
+    functions = list(
+        re.finditer(
+            r"func\.func(?:\s+private)?\s+@(?P<name>[^\s(]+)\s*\(",
+            compiler_text,
+        )
+    )
+    containing_function = [
+        match
+        for match in functions
+        if match.start() < helper_call.start()
+    ]
+    if not containing_function:
+        raise TlaRuntimeUnavailableError(
+            "mixed tla.print_tensor helper split could not be determined"
+        )
+    split = re.search(r"_mix_(aic|aiv)$", containing_function[-1].group("name"))
+    if split is None:
+        raise TlaRuntimeUnavailableError(
+            "mixed tla.print_tensor helper call is not inside a split function"
+        )
+    return split.group(1)
 
 
 def _stamp_hivm_template_bitcode_attrs(mlir_path: Path, template_bitcode: str) -> None:
