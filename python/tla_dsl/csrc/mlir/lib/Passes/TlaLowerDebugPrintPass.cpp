@@ -1,6 +1,7 @@
 #include "PassesCommon.h"
 #include "PassesInternal.h"
 #include "Passes/TlaTensorToMemref.h"
+#include "llvm/ADT/DenseMap.h"
 
 namespace tla {
 
@@ -46,6 +47,23 @@ getPrintTensorHelperSuffix(Type elementType, std::string &diagnostic)
 }
 
 namespace {
+
+static constexpr bool isPrintTensorCallIdRepresentable(uint32_t ordinal)
+{
+    return ordinal <= 0xffff;
+}
+
+static_assert(isPrintTensorCallIdRepresentable(0xffff));
+static_assert(!isPrintTensorCallIdRepresentable(0x10000));
+
+static FailureOr<uint16_t>
+getPrintTensorCallId(uint32_t ordinal, std::string &diagnostic)
+{
+    if (isPrintTensorCallIdRepresentable(ordinal))
+        return static_cast<uint16_t>(ordinal);
+    diagnostic = "call ID exceeds the 16-bit descriptor range";
+    return failure();
+}
 
 static BlockArgument getOrAppendDebugPrintWorkspaceArg(func::FuncOp funcOp)
 {
@@ -188,7 +206,8 @@ static LogicalResult lowerDebugPrint(::tla::DebugPrintOp op, PatternRewriter& re
 
 static LogicalResult lowerPrintTensor(::tla::PrintTensorOp op,
                                      PatternRewriter& rewriter,
-                                     ModuleOp module)
+                                     ModuleOp module,
+                                     uint32_t callId)
 {
     auto funcOp = op->getParentOfType<func::FuncOp>();
     if (!funcOp)
@@ -275,26 +294,27 @@ static LogicalResult lowerPrintTensor(::tla::PrintTensorOp op,
         op.getLoc(), shape1, shift);
     Value packedShape = rewriter.create<arith::OrIOp>(
         op.getLoc(), shape0, packedShape1);
+    Value encodedCallId = rewriter.create<arith::ConstantIntOp>(
+        op.getLoc(), callId, 64);
     std::string diagnostic;
     FailureOr<StringRef> helperSuffix =
         getPrintTensorHelperSuffix(elementType, diagnostic);
     if (failed(helperSuffix))
         return op.emitError(diagnostic);
-    std::string calleeName;
-    if (tensorType.getPtr().getAddrspace() == AddressSpace::ub)
-        calleeName = "_mlir_ciface_tla_print_tensor_ub_";
-    else
-        calleeName = "_mlir_ciface_tla_print_tensor_gm_";
+    std::string calleeName =
+        tensorType.getPtr().getAddrspace() == AddressSpace::ub
+            ? "_mlir_ciface_tla_print_tensor_ub_"
+            : "_mlir_ciface_tla_print_tensor_gm_";
     calleeName.append(helperSuffix->data(), helperSuffix->size());
     BlockArgument workspace =
         getOrCreatePrintTensorWorkspaceArg(funcOp, module);
     auto callee = getOrCreateRuntimeCall(
         module, calleeName,
         {workspace.getType(), tensorI64.getType(), count.getType(),
-         packedShape.getType()});
+         packedShape.getType(), encodedCallId.getType()});
     rewriter.create<func::CallOp>(
         op.getLoc(), callee,
-        ValueRange{workspace, tensorI64, count, packedShape});
+        ValueRange{workspace, tensorI64, count, packedShape, encodedCallId});
     rewriter.eraseOp(op);
     return success();
 }
@@ -334,12 +354,54 @@ public:
         }
         SmallVector<::tla::PrintTensorOp, 8> printOps;
         module.walk([&](::tla::PrintTensorOp op) { printOps.push_back(op); });
+        llvm::DenseMap<Operation *, uint32_t> nextCallId;
         for (::tla::PrintTensorOp op : printOps) {
             if (!op || !op->getBlock())
                 continue;
+            auto funcOp = op->getParentOfType<func::FuncOp>();
+            if (!funcOp || funcOp.isPrivate()) {
+                op.emitError("tla.print_tensor requires a non-private kernel entrypoint");
+                signalPassFailure();
+                return;
+            }
+            if (!funcOp.getBody().hasOneBlock()) {
+                op.emitError("tla.print_tensor requires a single-block kernel CFG");
+                signalPassFailure();
+                return;
+            }
+            if (op->getBlock() != &op->getParentRegion()->front()) {
+                op.emitError("tla.print_tensor must be in an entry CFG block");
+                signalPassFailure();
+                return;
+            }
+            for (Operation *ancestor = op->getParentOp();
+                 ancestor && ancestor != funcOp.getOperation();
+                 ancestor = ancestor->getParentOp()) {
+                StringRef name = ancestor->getName().getStringRef();
+                if (name == "scf.if" || name == "scf.for" ||
+                    name == "scf.while") {
+                    op.emitError("tla.print_tensor cannot be nested in dynamic SCF");
+                    signalPassFailure();
+                    return;
+                }
+                if (ancestor->getNumRegions() != 0) {
+                    op.emitError("tla.print_tensor has an unrecognized multi-execution ancestor");
+                    signalPassFailure();
+                    return;
+                }
+            }
+            uint32_t ordinal = nextCallId[funcOp.getOperation()]++;
+            std::string callIdDiagnostic;
+            FailureOr<uint16_t> callId =
+                getPrintTensorCallId(ordinal, callIdDiagnostic);
+            if (failed(callId)) {
+                op.emitError(callIdDiagnostic);
+                signalPassFailure();
+                return;
+            }
             PatternRewriter rewriter(op.getContext());
             rewriter.setInsertionPoint(op);
-            if (failed(lowerPrintTensor(op, rewriter, module))) {
+            if (failed(lowerPrintTensor(op, rewriter, module, *callId))) {
                 signalPassFailure();
                 return;
             }

@@ -799,7 +799,8 @@ def Tla_PrintTensorOp : Tla_Op<"print_tensor", [MemoryEffects<[MemWrite]>]> {
     display metadata, not a request to gather through tensor strides. Dynamic
     shape leaves use ``-1`` and are materialized from the descriptor during
     lowering. ``length`` may be a runtime i64; static values are verified in
-    the FIFO-safe range.
+    the FIFO-safe range. Multiple static call sites and multiple launch blocks
+    are supported.
   }];
   let arguments = (ins Tla_TensorType:$value, I64:$length,
                        DenseI64ArrayAttr:$shape);

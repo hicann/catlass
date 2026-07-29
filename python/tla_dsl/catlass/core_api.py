@@ -2787,7 +2787,7 @@ def _emit_tensor_print(
     The logical tensor shape is display metadata; values are read contiguously
     from the effective physical address without gathering through strides.
     Static or runtime shape leaves and static or SSA lengths are supported in
-    one AIC-only or AIV-only C310 kernel launched with a single block.
+    AIC-only or AIV-only C310 kernels across one or more launch blocks.
     """
     if _runtime._current_frontend_state() is None:
         _op_error("print", "tensor printing is only available in lowered Tla IR")
@@ -2796,7 +2796,7 @@ def _emit_tensor_print(
     if not in_cube and not in_vector:
         _op_error("print", "must be nested inside tla.cube() or tla.vector()")
     if in_cube and in_vector:
-        _op_error("print", "mixed cube/vector placement is unsupported in v1")
+        _op_error("print", "mixed cube/vector placement is unsupported")
 
     if hasattr(value, "value") and _tla_type_bridge.type_is_tensor(value.value.type):
         value = value.value

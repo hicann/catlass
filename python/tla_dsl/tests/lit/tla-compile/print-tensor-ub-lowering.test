@@ -18,8 +18,10 @@ module {
     %coord = tla.make_coord -> !tla.coord<0,8>
     %x = tla.make_tensor %ptr, %layout, %coord : !tla.ptr<f32, ub, 32>, !tla.layout<!tla.shape<4,4>, !tla.stride<4,1>, !tla.shape<4,4>, row_major>, !tla.coord<0,8> -> !tla.tensor<!tla.layout<!tla.shape<4,4>, !tla.stride<4,1>, !tla.shape<4,4>, row_major>, !tla.coord<0,8>, !tla.ptr<f32, ub, 32>>
     %c4 = arith.constant 4 : i64
+    %c2 = arith.constant 2 : i64
     "tla.vector"() ({
       tla.print_tensor %x length = %c4 shape = [4, 4] : !tla.tensor<!tla.layout<!tla.shape<4,4>, !tla.stride<4,1>, !tla.shape<4,4>, row_major>, !tla.coord<0,8>, !tla.ptr<f32, ub, 32>>, i64
+      tla.print_tensor %x length = %c2 shape = [4, 4] : !tla.tensor<!tla.layout<!tla.shape<4,4>, !tla.stride<4,1>, !tla.shape<4,4>, row_major>, !tla.coord<0,8>, !tla.ptr<f32, ub, 32>>, i64
     }) : () -> ()
     tla.return
   }
@@ -28,12 +30,14 @@ module {
 
 // LOWER-LABEL: func.func @print_tensor_ub(
 // LOWER-SAME: %[[WORKSPACE:arg0]]: i64 {{.*}}hacc.arg_type = #hacc.arg_type<workspace>{{.*}}tla.print_tensor.workspace
+// LOWER-DAG: %[[CALL0:.*]] = {{(arith\.constant 0 : i64|llvm\.mlir\.constant\(0 : i64\) : i64)}}
+// LOWER-DAG: %[[CALL1:.*]] = {{(arith\.constant 1 : i64|llvm\.mlir\.constant\(1 : i64\) : i64)}}
 // LOWER-DAG: %[[BYTE_OFFSET:.*]] = {{(arith\.constant 32 : index|llvm\.mlir\.constant\(32 : index\) : i64)}}
-// LOWER: %[[LENGTH:.*]] = {{(arith\.constant 4 : i64|llvm\.mlir\.constant\(4 : i64\) : i64)}}
 // LOWER: %[[BASE_INDEX:.*]] = memref.extract_aligned_pointer_as_index
 // LOWER: %[[BASE_I64:.*]] = builtin.unrealized_conversion_cast %[[BASE_INDEX]]
 // LOWER: %[[ADDRESS:.*]] = llvm.add %[[BASE_I64]], %[[BYTE_OFFSET]]
-// LOWER: call @_mlir_ciface_tla_print_tensor_ub_f32(%[[WORKSPACE]], %[[ADDRESS]], %[[LENGTH]], {{.*}})
+// LOWER: call @_mlir_ciface_tla_print_tensor_ub_f32(%[[WORKSPACE]], %[[ADDRESS]], {{.*}}, {{.*}}, %[[CALL0]])
+// LOWER: call @_mlir_ciface_tla_print_tensor_ub_f32(%[[WORKSPACE]], {{.*}}, {{.*}}, {{.*}}, %[[CALL1]])
 // LOWER-NOT: _mlir_ciface_tla_print_tensor_gm_f32
 // LOWER-NOT: tla.print_tensor
 // F16: call @_mlir_ciface_tla_print_tensor_ub_f16

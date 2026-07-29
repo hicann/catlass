@@ -1,7 +1,13 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <functional>
+#include <limits>
+#include <string>
+#include <utility>
 #include <vector>
+
+#include <unistd.h>
 
 // The decoder intentionally remains implementation-local to RuntimeWrapper.
 // Include it here to exercise its byte-level CANN-compatible TLV contract
@@ -13,6 +19,7 @@ namespace {
 using cce::internal::AscDebugFifo::PrintTensorTlv;
 using cce::internal::AscDebugFifo::PrintShapeTlv;
 using cce::internal::AscDebugFifo::FifoRecordType;
+using cce::internal::AscDebugFifo::kPrintTensorDescriptorNamespace;
 using cce::internal::AscDebugFifo::PrintFormatResult;
 using cce::internal::AscDebugFifo::PrintTlv;
 
@@ -32,8 +39,9 @@ std::vector<uint8_t> scalar_tlv(const char *format, uint64_t slot) {
 
 std::vector<uint8_t> tensor_tlv(uint32_t data_type = 0,
                                 uint32_t element_width = sizeof(float),
-                                uint16_t position = 0) {
-  constexpr uint32_t kCubePrintTensorDescriptor = 0x50524E54;
+                                uint16_t call = 0, uint16_t block = 0,
+                                uint16_t position = 0,
+                                int32_t subblock = -1) {
   constexpr uint32_t kValueCount = 4;
   constexpr uint32_t kPayloadBytes = 32;
   std::vector<uint8_t> bytes(sizeof(PrintTensorTlv) + kPayloadBytes, 0);
@@ -41,12 +49,19 @@ std::vector<uint8_t> tensor_tlv(uint32_t data_type = 0,
   tlv->type = static_cast<uint32_t>(FifoRecordType::Tensor);
   tlv->length = static_cast<uint32_t>(bytes.size() - 8);
   tlv->data_type = data_type;
-  tlv->desc = kCubePrintTensorDescriptor;
+  const uint32_t subblockTag =
+      subblock < 0 ? 0U : static_cast<uint32_t>(subblock + 1);
+  tlv->desc =
+      kPrintTensorDescriptorNamespace | (subblockTag << 16) | call;
+  tlv->block_idx = block;
   tlv->position = position;
-  tlv->dim = 2;
-  tlv->shape[0] = 2;
-  tlv->shape[1] = 2;
   tlv->dump_size = kValueCount * element_width;
+  if (data_type == 0) {
+    auto *values =
+        reinterpret_cast<float *>(bytes.data() + sizeof(PrintTensorTlv));
+    for (uint32_t i = 0; i < kValueCount; ++i)
+      values[i] = static_cast<float>(i);
+  }
   return bytes;
 }
 
@@ -60,6 +75,15 @@ PrintShapeTlv shape_tlv() {
   return tlv;
 }
 
+std::vector<uint8_t> tensor_record(
+    std::vector<uint8_t> tensor = tensor_tlv(),
+    PrintShapeTlv shape = shape_tlv()) {
+  std::vector<uint8_t> bytes(sizeof(shape));
+  std::memcpy(bytes.data(), &shape, sizeof(shape));
+  bytes.insert(bytes.end(), tensor.begin(), tensor.end());
+  return bytes;
+}
+
 bool expect(bool condition, const char *message) {
   if (condition)
     return true;
@@ -67,11 +91,125 @@ bool expect(bool condition, const char *message) {
   return false;
 }
 
+std::string capture_stdout(const std::function<bool()> &callback,
+                           bool *result = nullptr) {
+  int descriptors[2];
+  if (pipe(descriptors) != 0)
+    return {};
+  std::fflush(stdout);
+  const int saved_stdout = dup(STDOUT_FILENO);
+  if (saved_stdout < 0 || dup2(descriptors[1], STDOUT_FILENO) < 0) {
+    close(descriptors[0]);
+    close(descriptors[1]);
+    if (saved_stdout >= 0)
+      close(saved_stdout);
+    return {};
+  }
+  close(descriptors[1]);
+  const bool callback_result = callback();
+  if (result)
+    *result = callback_result;
+  std::fflush(stdout);
+  dup2(saved_stdout, STDOUT_FILENO);
+  close(saved_stdout);
+  std::string output;
+  char buffer[256];
+  for (ssize_t count; (count = read(descriptors[0], buffer, sizeof(buffer))) > 0;)
+    output.append(buffer, static_cast<size_t>(count));
+  close(descriptors[0]);
+  return output;
+}
+
+struct SyntheticFifo {
+  cce::internal::AscDebugFifo::FifoData fifo;
+  std::vector<char> bytes;
+};
+
+SyntheticFifo tensor_fifo(const std::vector<uint8_t> &ring_bytes,
+                          uint64_t write_offset =
+                              std::numeric_limits<uint64_t>::max(),
+                          uint32_t launch_blocks = 1,
+                          uint32_t record_slot = 0,
+                          bool mixed_handoff = false) {
+  using namespace cce::internal::AscDebugFifo;
+  SyntheticFifo result;
+  result.fifo.record_count = record_slot + 1;
+  result.fifo.launch_block_count = launch_blocks;
+  result.fifo.mixed_handoff = mixed_handoff;
+  result.fifo.ring_buffer_offset = debug_fifo_ring_offset();
+  result.fifo.ring_buffer_bytes = kRingBufferBytes;
+  result.fifo.block_length =
+      result.fifo.ring_buffer_offset + result.fifo.ring_buffer_bytes +
+      sizeof(DebugBlockWriteInfo);
+  result.fifo.region_size =
+      static_cast<size_t>(result.fifo.block_length) * result.fifo.record_count;
+  result.bytes.resize(result.fifo.region_size, 0);
+  for (uint32_t i = 0; i < result.fifo.record_count; ++i) {
+    auto *record = result.bytes.data() +
+                   static_cast<size_t>(i) * result.fifo.block_length;
+    auto *head = reinterpret_cast<DebugBlockHeadInfo *>(record);
+    head->magic = kMagic;
+    head->coreId = i;
+    auto *write = reinterpret_cast<DebugBlockWriteInfo *>(
+        record + result.fifo.ring_buffer_offset +
+        result.fifo.ring_buffer_bytes);
+    write->type = static_cast<uint32_t>(FifoRecordType::BufIn);
+    write->length = 16;
+  }
+  auto *record = result.bytes.data() +
+                 static_cast<size_t>(record_slot) * result.fifo.block_length;
+  auto *ring = record + result.fifo.ring_buffer_offset;
+  if (ring_bytes.size() <= result.fifo.ring_buffer_bytes)
+    std::memcpy(ring, ring_bytes.data(), ring_bytes.size());
+  auto *write = reinterpret_cast<DebugBlockWriteInfo *>(
+      ring + result.fifo.ring_buffer_bytes);
+  write->bufOffset =
+      write_offset == std::numeric_limits<uint64_t>::max()
+          ? ring_bytes.size()
+          : write_offset;
+  return result;
+}
+
+bool render_tensor_fifo(SyntheticFifo &fifo, std::string &output) {
+  bool result = false;
+  output = capture_stdout(
+      [&] { return print_fifo_records(fifo.bytes.data(), &fifo.fifo, true); },
+      &result);
+  return result;
+}
+
+bool expect_rejected_without_output(SyntheticFifo &fifo,
+                                    const char *message) {
+  g_last_error.clear();
+  std::string output;
+  const bool result = render_tensor_fifo(fifo, output);
+  return expect(!result, message) &&
+         expect(output.empty(), "malformed FIFO emitted partial output") &&
+         expect(!g_last_error.empty(), "malformed FIFO did not set last error");
+}
+
+bool expect_rejected_ring(
+    const std::vector<uint8_t> &bytes, const char *message,
+    uint64_t write_offset = std::numeric_limits<uint64_t>::max(),
+    uint32_t launch_blocks = 1) {
+  auto fifo = tensor_fifo(bytes, write_offset, launch_blocks);
+  return expect_rejected_without_output(fifo, message);
+}
+
+template <typename Mutator>
+bool expect_rejected_tensor(const char *message, Mutator mutate) {
+  auto bytes = tensor_tlv();
+  mutate(*reinterpret_cast<PrintTensorTlv *>(bytes.data()));
+  return expect_rejected_ring(tensor_record(std::move(bytes)), message);
+}
+
 bool validate_debug_print_fifo_contract(const std::vector<uint64_t> &values,
                                         bool expects_debug_fifo,
                                         bool binary_uses_debug_fifo);
 bool replace_debug_print_workspace_marker(std::vector<uint64_t> &values,
                                           uint64_t workspace);
+bool replace_print_tensor_workspace_marker(std::vector<uint64_t> &values,
+                                           uint64_t workspace);
 
 } // namespace
 
@@ -90,15 +228,15 @@ int main() {
       return 1;
   }
   {
-    constexpr char kPrintTensorAbiV4[] = "prefix\0tla_print_tensor_abi_v4";
-    constexpr char kStalePrintTensorAbiV3[] =
-        "prefix\0tla_print_tensor_abi_v3";
-    if (!expect(uses_print_tensor(kPrintTensorAbiV4,
-                                  sizeof(kPrintTensorAbiV4)),
-                "tensor print ABI v4 marker was not recognized") ||
-        !expect(!uses_print_tensor(kStalePrintTensorAbiV3,
-                                   sizeof(kStalePrintTensorAbiV3)),
-                "stale tensor print ABI v3 marker was accepted"))
+    constexpr char kOrdinary[] = "ordinary";
+    constexpr char kLegacy[] = "__tla_print_tensor_legacy_abi";
+    constexpr char kCurrent[] = "__tla_print_tensor_abi";
+    if (!expect(!uses_print_tensor(kOrdinary, sizeof(kOrdinary)),
+                "ordinary binary was classified as tensor print") ||
+        !expect(!uses_print_tensor(kLegacy, sizeof(kLegacy)),
+                "legacy tensor metadata satisfied the current contract") ||
+        !expect(uses_print_tensor(kCurrent, sizeof(kCurrent)),
+                "current tensor metadata was not recognized"))
       return 1;
   }
 
@@ -135,20 +273,19 @@ int main() {
   {
     constexpr uint64_t kPrintMarker =
         cce::internal::kPrintTensorWorkspaceSentinel;
-    std::vector<uint64_t> pure_values{17, kPrintMarker};
-    if (!expect(
-            move_print_tensor_workspace_to_first_argument(pure_values,
-                                                          kWorkspace),
-            "pure tensor print workspace was not moved to argument zero") ||
-        !expect(pure_values == std::vector<uint64_t>{kWorkspace, 17},
-                "pure tensor print workspace placement is incorrect"))
+    std::vector<uint64_t> pureValues{17, kPrintMarker};
+    if (!expect(move_print_tensor_workspace_to_first_argument(pureValues,
+                                                              kWorkspace),
+                "pure tensor workspace was not moved to argument zero") ||
+        !expect(pureValues == std::vector<uint64_t>{kWorkspace, 17},
+                "pure tensor workspace placement is incorrect"))
       return 1;
 
-    std::vector<uint64_t> mixed_values{17, kPrintMarker};
-    if (!expect(replace_print_tensor_workspace_marker(mixed_values, kWorkspace),
-                "mixed tensor print workspace marker was not replaced") ||
-        !expect(mixed_values == std::vector<uint64_t>{17, kWorkspace},
-                "mixed tensor print workspace was not kept trailing"))
+    std::vector<uint64_t> mixedValues{17, kPrintMarker};
+    if (!expect(replace_print_tensor_workspace_marker(mixedValues, kWorkspace),
+                "mixed tensor workspace marker was not replaced") ||
+        !expect(mixedValues == std::vector<uint64_t>{17, kWorkspace},
+                "mixed tensor workspace was not kept trailing"))
       return 1;
   }
   {
@@ -226,84 +363,138 @@ int main() {
               "out-of-bounds format offset was not diagnosed"))
     return 1;
 
+  {
+    std::vector<uint8_t> records;
+    for (auto tensor : {
+             tensor_tlv(0, sizeof(float), 3, 1),
+             tensor_tlv(0, sizeof(float), 4, 0),
+             tensor_tlv(0, sizeof(float), 4, 1, 1, 1),
+         }) {
+      auto record = tensor_record(std::move(tensor));
+      records.insert(records.end(), record.begin(), record.end());
+    }
+    auto fifo = tensor_fifo(records, records.size(), 2, 1);
+    std::string output;
+    if (!expect(render_tensor_fifo(fifo, output),
+                "valid multi-record float32 tensor FIFO was rejected") ||
+        !expect(output.find("call=3, block=1") != std::string::npos,
+                "valid tensor FIFO lost record identity") ||
+        !expect(output.find("call=4, block=0") != std::string::npos,
+                "valid tensor FIFO lost a second record") ||
+        !expect(output.find("call=4, block=1, subblock=1, data_type=float32, "
+                           "position=UB") != std::string::npos,
+                "valid tensor FIFO lost UB subblock metadata"))
+      return 1;
+  }
+  {
+    auto bytes =
+        tensor_record(tensor_tlv(0, sizeof(float), 0, 1, 1, 1));
+    auto fifo = tensor_fifo(bytes, bytes.size(), 1, 1, true);
+    std::string output;
+    if (!expect(render_tensor_fifo(fifo, output),
+                "valid mixed AIV subblock record was rejected") ||
+        !expect(output.find("call=0, block=0, subblock=1") !=
+                    std::string::npos,
+                "mixed AIV native block index was not normalized"))
+      return 1;
+  }
+
   constexpr struct {
     uint32_t data_type;
     uint32_t element_width;
+    const char *name;
   } kRequiredTensorDTypes[] = {
-      {0, 4}, {1, 2}, {2, 1}, {3, 4},
-      {4, 1}, {6, 2}, {7, 2}, {8, 4},
+      {0, 4, "float32"}, {1, 2, "float16"}, {2, 1, "int8"},
+      {3, 4, "int32"},   {4, 1, "uint8"},   {6, 2, "int16"},
+      {7, 2, "uint16"},  {8, 4, "uint32"},
   };
   for (const auto &dtype : kRequiredTensorDTypes) {
-    auto tensor = tensor_tlv(dtype.data_type, dtype.element_width);
-    if (!expect(
-            print_tensor_tlv(
-                reinterpret_cast<const PrintTensorTlv *>(tensor.data()),
-                tensor.size(), 0),
-            "required typed tensor TLV was rejected"))
+    auto bytes = tensor_record(
+        tensor_tlv(dtype.data_type, dtype.element_width, 2, 0, 1));
+    auto fifo = tensor_fifo(bytes);
+    std::string output;
+    if (!expect(render_tensor_fifo(fifo, output),
+                "required typed tensor FIFO was rejected") ||
+        !expect(output.find(dtype.name) != std::string::npos,
+                "required typed tensor FIFO lost its dtype") ||
+        !expect(output.find("call=2, block=0") != std::string::npos,
+                "typed tensor FIFO lost record identity"))
       return 1;
   }
-  auto ub_tensor = tensor_tlv(0, sizeof(float), 1);
-  if (!expect(print_tensor_tlv(
-                  reinterpret_cast<const PrintTensorTlv *>(ub_tensor.data()),
-                  ub_tensor.size(), 0),
-              "valid aligned UB f32x4 tensor TLV was rejected"))
+
+  if (!expect_rejected_tensor("bad descriptor was accepted",
+                              [](auto &tlv) { tlv.desc = 0x50524e54; }) ||
+      !expect_rejected_tensor(
+          "invalid tensor subblock tag was accepted",
+          [](auto &tlv) {
+            tlv.desc = kPrintTensorDescriptorNamespace | (3U << 16);
+          }) ||
+      !expect_rejected_tensor("unsupported tensor dtype was accepted",
+                              [](auto &tlv) { tlv.data_type = 5; }) ||
+      !expect_rejected_tensor("invalid TLV length was accepted",
+                              [](auto &tlv) { tlv.length = 0; }) ||
+      !expect_rejected_tensor("invalid tensor position was accepted",
+                              [](auto &tlv) { tlv.position = 2; }) ||
+      !expect_rejected_tensor("invalid tensor dimension was accepted",
+                              [](auto &tlv) { tlv.dim = 1; }) ||
+      !expect_rejected_tensor("invalid tensor shape was accepted",
+                              [](auto &tlv) { tlv.shape[0] = 1; }) ||
+      !expect_rejected_tensor("zero tensor dump size was accepted",
+                              [](auto &tlv) { tlv.dump_size = 0; }) ||
+      !expect_rejected_tensor("misaligned tensor dump size was accepted",
+                              [](auto &tlv) { tlv.dump_size = 3; }) ||
+      !expect_rejected_tensor("oversized tensor dump was accepted",
+                              [](auto &tlv) { tlv.dump_size = 17 * 4; }))
+    return 1;
+
+  if (!expect_rejected_ring(std::vector<uint8_t>(4, 0),
+                            "truncated TLV header was accepted"))
     return 1;
   {
-    constexpr uint32_t kCubeDescriptor = 0x50524E54;
-    constexpr uint32_t kVectorSubblock0Descriptor = 0x50525630;
-    constexpr uint32_t kVectorSubblock1Descriptor = 0x50525631;
-    constexpr uint32_t kInvalidVectorDescriptor = 0x50525632;
-    auto descriptor_tensor = tensor_tlv();
-    auto *descriptor_tlv =
-        reinterpret_cast<PrintTensorTlv *>(descriptor_tensor.data());
-
-    descriptor_tlv->desc = kVectorSubblock0Descriptor;
-    if (!expect(print_tensor_tlv(descriptor_tlv, descriptor_tensor.size(), 3),
-                "vector subblock 0 descriptor was rejected") ||
-        !expect(format_print_tensor_header(3, descriptor_tlv) ==
-                    "DumpTensor: core=3, subblock=0, data_type=float32, "
-                    "position=GM, shape=[",
-                "vector subblock 0 header is incorrect"))
-      return 1;
-
-    descriptor_tlv->desc = kVectorSubblock1Descriptor;
-    if (!expect(print_tensor_tlv(descriptor_tlv, descriptor_tensor.size(), 5),
-                "vector subblock 1 descriptor was rejected") ||
-        !expect(format_print_tensor_header(5, descriptor_tlv) ==
-                    "DumpTensor: core=5, subblock=1, data_type=float32, "
-                    "position=GM, shape=[",
-                "vector subblock 1 header is incorrect"))
-      return 1;
-
-    descriptor_tlv->desc = kCubeDescriptor;
-    if (!expect(format_print_tensor_header(7, descriptor_tlv) ==
-                    "DumpTensor: core=7, data_type=float32, position=GM, "
-                    "shape=[",
-                "cube tensor header gained a subblock annotation"))
-      return 1;
-
-    descriptor_tlv->desc = kInvalidVectorDescriptor;
-    if (!expect(!print_tensor_tlv(descriptor_tlv, descriptor_tensor.size(), 0),
-                "invalid vector descriptor was accepted"))
+    auto bytes = tensor_tlv();
+    bytes.resize(sizeof(PrintTensorTlv) + 4);
+    if (!expect_rejected_ring(tensor_record(std::move(bytes)),
+                              "truncated tensor payload was accepted"))
       return 1;
   }
-  auto typed_ub_tensor = tensor_tlv(2, sizeof(int8_t), 1);
-  if (!expect(print_tensor_tlv(
-                  reinterpret_cast<const PrintTensorTlv *>(
-                      typed_ub_tensor.data()),
-                  typed_ub_tensor.size(), 0),
-              "valid typed UB tensor TLV was rejected"))
+  {
+    auto bytes = tensor_tlv();
+    reinterpret_cast<uint32_t *>(bytes.data())[0] = 99;
+    if (!expect_rejected_ring(bytes,
+                              "unknown tensor FIFO record was accepted"))
+      return 1;
+  }
+  {
+    auto bytes = tensor_record(tensor_tlv(0, sizeof(float), 0, 2));
+    if (!expect_rejected_ring(bytes, "out-of-range tensor block was accepted",
+                              bytes.size(), 2))
+      return 1;
+  }
+  {
+    auto bytes =
+        tensor_record(tensor_tlv(0, sizeof(float), 0, 0, 1, 1));
+    auto fifo = tensor_fifo(bytes, bytes.size(), 1, 0, true);
+    if (!expect_rejected_without_output(
+            fifo, "mixed AIV block/subblock mismatch was accepted"))
+      return 1;
+  }
+  if (!expect_rejected_ring(
+          {}, "ring buffer overflow was accepted",
+          static_cast<uint64_t>(kRingBufferBytes) + 1))
     return 1;
-  auto separate_shape = shape_tlv();
-  auto tensor = tensor_tlv();
-  reinterpret_cast<PrintTensorTlv *>(tensor.data())->dim = 0;
-  std::memset(reinterpret_cast<PrintTensorTlv *>(tensor.data())->shape, 0,
-              sizeof(reinterpret_cast<PrintTensorTlv *>(tensor.data())->shape));
-  if (!expect(print_tensor_tlv(
-                  reinterpret_cast<const PrintTensorTlv *>(tensor.data()),
-                  tensor.size(), 0, &separate_shape),
-              "CANN shape-plus-tensor TLV pair was rejected"))
-    return 1;
+  {
+    auto valid_record =
+        tensor_record(tensor_tlv(0, sizeof(float), 0, 0));
+    auto malformed_record = tensor_tlv(0, sizeof(float), 1, 0);
+    reinterpret_cast<PrintTensorTlv *>(malformed_record.data())->shape[3] = 1;
+    auto malformed_pair = tensor_record(std::move(malformed_record));
+    valid_record.insert(valid_record.end(), malformed_pair.begin(),
+                        malformed_pair.end());
+    if (!expect_rejected_ring(
+            valid_record,
+            "valid record before malformed record was partially accepted"))
+      return 1;
+  }
 
   auto *cleanup_only = new FifoData();
   destroy(cleanup_only);

@@ -7,6 +7,10 @@
 // RUN: sed -n '/BEGIN-EMPTY$/,/END-EMPTY$/p' %s | not %tla_compile - -o - 2>&1 | %filecheck %s --check-prefix=EMPTY
 // RUN: sed -n '/BEGIN-TOO-LARGE$/,/END-TOO-LARGE$/p' %s | not %tla_compile - -o - 2>&1 | %filecheck %s --check-prefix=TOO-LARGE
 // RUN: sed -n '/BEGIN-LENGTH-EXCEEDS-SHAPE$/,/END-LENGTH-EXCEEDS-SHAPE$/p' %s | not %tla_compile - -o - 2>&1 | %filecheck %s --check-prefix=LENGTH-EXCEEDS-SHAPE
+// RUN: sed -n '/BEGIN-DYNAMIC-SCF$/,/END-DYNAMIC-SCF$/p' %s | not %tla_compile - -o - 2>&1 | %filecheck %s --check-prefix=DYNAMIC-SCF
+// RUN: sed -n '/BEGIN-SCF-FOR$/,/END-SCF-FOR$/p' %s | not %tla_compile - -o - 2>&1 | %filecheck %s --check-prefix=SCF-FOR
+// RUN: sed -n '/BEGIN-PRIVATE$/,/END-PRIVATE$/p' %s | not %tla_compile - -o - 2>&1 | %filecheck %s --check-prefix=PRIVATE
+// RUN: sed -n '/BEGIN-CFG$/,/END-CFG$/p' %s | not %tla_compile - -o - 2>&1 | %filecheck %s --check-prefix=CFG
 
 // BEGIN-REGION
 module {
@@ -86,3 +90,61 @@ module {
 }
 // END-LENGTH-EXCEEDS-SHAPE
 // LENGTH-EXCEEDS-SHAPE: 'tla.print_tensor' op length must not exceed the tensor element count
+
+// BEGIN-DYNAMIC-SCF
+module {
+  tla.func @dynamic_scf(%cond: i1, %x: !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>) {
+    %c4 = arith.constant 4 : i64
+    "tla.vector"() ({
+      scf.if %cond {
+        tla.print_tensor %x length = %c4 shape = [4] : !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>, i64
+      }
+    }) : () -> ()
+    tla.return
+  }
+}
+// END-DYNAMIC-SCF
+// DYNAMIC-SCF: error: tla.print_tensor cannot be nested in dynamic SCF
+
+// BEGIN-SCF-FOR
+module {
+  tla.func @scf_for(%lb: index, %ub: index, %step: index, %x: !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>) {
+    %c4 = arith.constant 4 : i64
+    "tla.vector"() ({
+      scf.for %i = %lb to %ub step %step {
+        tla.print_tensor %x length = %c4 shape = [4] : !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>, i64
+      }
+    }) : () -> ()
+    tla.return
+  }
+}
+// END-SCF-FOR
+// SCF-FOR: error: tla.print_tensor cannot be nested in dynamic SCF
+
+// BEGIN-PRIVATE
+module {
+  func.func private @private_helper(%x: !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>) {
+    %c4 = arith.constant 4 : i64
+    "tla.vector"() ({
+      tla.print_tensor %x length = %c4 shape = [4] : !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>, i64
+    }) : () -> ()
+    func.return
+  }
+}
+// END-PRIVATE
+// PRIVATE: tla.tensor function arguments are supported only on non-private device entries
+
+// BEGIN-CFG
+module {
+  func.func @cfg(%x: !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>) {
+    %c4 = arith.constant 4 : i64
+    cf.br ^bb1
+  ^bb1:
+    "tla.vector"() ({
+      tla.print_tensor %x length = %c4 shape = [4] : !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>, i64
+    }) : () -> ()
+    func.return
+  }
+}
+// END-CFG
+// CFG: error: tla.print_tensor requires a single-block kernel CFG

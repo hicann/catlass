@@ -22,7 +22,8 @@
 # scalar_kernel_arg.py).
 # python/tla_dsl/examples/end_to_end/debug_print (debug_print.py, debug_print_mixed.py).
 # python/tla_dsl/examples/end_to_end/scalar_arg_alignment (scalar_arg_alignment.py).
-# python/tla_dsl/examples/end_to_end/print_tensor (print_tensor.py: AIV UB base and aligned-offset cases for all eight dtypes).
+# python/tla_dsl/examples/end_to_end/print_tensor (print_tensor.py: all eight
+# supported GM/UB dtypes plus multi-block and multi-call cases).
 #
 # Toolchain paths (env overrides first; directory-layout fallbacks last):
 #   CANN:             ASCEND_HOME_PATH (source set_env.sh if not already in env)
@@ -151,7 +152,8 @@ Run end-to-end validation for:
   - debug_print (i32/f32 scalar prints on AIV and AIC)
   - debug_print_mixed (cube-only, vector-only, and combined scalar prints)
   - scalar_arg_alignment (scalar_arg_alignment.py: tensor-i16-tensor host ABI)
-  - tensor tla.print (all supported GM dtypes on AIV and AIC, plus AIV UB f32)
+  - print_tensor (print_tensor.py: all supported GM/UB dtypes with AIV/AIC
+    multi-block and multi-call coverage)
 Runs basic_mmad default MNK plus m=1, n=2, k=3.
 Activates conda env "${CONDA_ENV}", sources CANN set_env.sh, exports AscendNPU-IR MLIR/LLVM
 env, runs ./build.sh, then runs the test.
@@ -696,16 +698,28 @@ _run_scalar_kernel_arg_case
 
 _run_print_tensor_gm_case() {
     local arch_scope="$1"
-    echo "==> Running tensor tla.print validation [${arch_scope} all dtypes]"
+    local calls="$2"
+    local block_count="$3"
+    local dtype_mode="${4:-f32}"
+    local dtype_args=(--dtype f32)
+    if [[ "${dtype_mode}" == "all" ]]; then
+        dtype_args=(--all-dtypes)
+    fi
+    echo "==> Running tensor tla.print validation [${arch_scope} calls=${calls} blocks=${block_count}]"
     (
         cd "${TLA_DSL_DIR}"
-        python "${PRINT_TENSOR_REL}" --run --all-dtypes --device "${DEVICE_ID}" \
-            --arch-scope "${arch_scope}" --force-recompile
+        python "${PRINT_TENSOR_REL}" --run --device "${DEVICE_ID}" \
+            --arch-scope "${arch_scope}" \
+            --block "${block_count}" --calls "${calls}" \
+            "${dtype_args[@]}" --force-recompile
     )
 }
 
 for _print_tensor_arch_scope in aiv.c310 aic.c310; do
-    _run_print_tensor_gm_case "${_print_tensor_arch_scope}"
+    _run_print_tensor_gm_case "${_print_tensor_arch_scope}" 1 1 all
+    _run_print_tensor_gm_case "${_print_tensor_arch_scope}" 1 2
+    _run_print_tensor_gm_case "${_print_tensor_arch_scope}" 2 1
+    _run_print_tensor_gm_case "${_print_tensor_arch_scope}" 2 2 all
 done
 
 _run_debug_print_case() {
@@ -770,18 +784,28 @@ _run_scalar_arg_alignment_case() {
 _run_scalar_arg_alignment_case
 
 _run_print_tensor_ub_case() {
-    local case="$1"
-    echo "==> Running print_tensor validation [AIV UB ${case} all dtypes]"
+    local case_name="$1"
+    local calls="$2"
+    local block_count="$3"
+    local dtype_mode="${4:-f32}"
+    local dtype_args=(--dtype f32)
+    if [[ "${dtype_mode}" == "all" ]]; then
+        dtype_args=(--all-dtypes)
+    fi
+    echo "==> Running print_tensor validation [AIV UB ${case_name} calls=${calls} blocks=${block_count}]"
     (
         cd "${TLA_DSL_DIR}"
-        python "${PRINT_TENSOR_REL}" --run --all-dtypes --device "${DEVICE_ID}" \
-            --storage ub --case "${case}" --arch-scope aiv.c310 --block 1 \
-            --force-recompile
+        python "${PRINT_TENSOR_REL}" --run --device "${DEVICE_ID}" \
+            --storage ub --case "${case_name}" --arch-scope aiv.c310 \
+            --block "${block_count}" --calls "${calls}" \
+            "${dtype_args[@]}" --force-recompile
     )
 }
 
-for _print_tensor_ub_case in base aligned-offset; do
-    _run_print_tensor_ub_case "${_print_tensor_ub_case}"
-done
+_run_print_tensor_ub_case "base" 1 1 all
+_run_print_tensor_ub_case "base" 1 2
+_run_print_tensor_ub_case "base" 2 1
+_run_print_tensor_ub_case "base" 2 2 all
+_run_print_tensor_ub_case "aligned-offset" 1 1 all
 
 echo "==> run_dsl_test.sh finished successfully"
