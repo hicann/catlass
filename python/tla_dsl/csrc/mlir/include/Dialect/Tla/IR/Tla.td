@@ -1095,11 +1095,13 @@ def Tla_TileViewOp : Tla_Op<"tile_view", []> {
   }];
 }
 
-def Tla_ScalarLoadOp : Tla_Op<"scalar_load", []> {
-  let summary = "Scalar tensor element read (GM)";
+def Tla_ScalarLoadOp : Tla_Op<"scalar_load", [MemoryEffects<[MemRead]>]> {
+  let summary = "Scalar tensor element read";
   let description = [{
-    Read one GM scalar from ``!tla.tensor``. Lowered from a materialized tensor
-    descriptor by ``tla-lower-scalar-access``; indices match logical rank 1 or 2.
+    Read one scalar from a GM or UB ``!tla.tensor``. Indices are relative to the
+    tensor view; its coordinate is applied while the descriptor is materialized
+    as a memref. GM and UB support logical rank 1 or 2. UB accesses must be
+    nested inside ``tla.vector`` and may also be nested inside ``tla.vec.func``.
   }];
   let arguments = (ins Tla_TensorType:$source, Variadic<Index>:$indices);
   let results = (outs AnyType:$result);
@@ -1109,11 +1111,13 @@ def Tla_ScalarLoadOp : Tla_Op<"scalar_load", []> {
   }];
 }
 
-def Tla_ScalarStoreOp : Tla_Op<"scalar_store", []> {
-  let summary = "Scalar tensor element write (GM)";
+def Tla_ScalarStoreOp : Tla_Op<"scalar_store", [MemoryEffects<[MemWrite]>]> {
+  let summary = "Scalar tensor element write";
   let description = [{
-    Write one GM scalar to ``!tla.tensor``. Lowered from a materialized tensor
-    descriptor by ``tla-lower-scalar-access``; indices match logical rank 1 or 2.
+    Write one scalar to a GM or UB ``!tla.tensor``. Indices are relative to the
+    tensor view; its coordinate is applied while the descriptor is materialized
+    as a memref. GM and UB support logical rank 1 or 2. UB accesses must be
+    nested inside ``tla.vector`` and may also be nested inside ``tla.vec.func``.
   }];
   let arguments = (ins Tla_TensorType:$dest, Variadic<Index>:$indices, AnyType:$value);
   let hasVerifier = 1;

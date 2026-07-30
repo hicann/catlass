@@ -17,7 +17,7 @@
 # python/tla_dsl/examples/end_to_end/vector_ops (binary_op.py, masked_binary.py,
 # bitwise_ops.py, reduction_ops.py, compare_mask.py, unary_ops.py, arange_op.py,
 # interleave_op.py, load_dintlv_op.py, load_store_mask.py, squeeze_op.py,
-# register_control_flow.py).
+# register_control_flow.py, load_and_store_scalar_after_reduction.py).
 # python/tla_dsl/examples/end_to_end/tensor_index (scalar_index_control_flow.py,
 # scalar_kernel_arg.py).
 # python/tla_dsl/examples/end_to_end/debug_print (debug_print.py, debug_print_mixed.py).
@@ -91,6 +91,7 @@ MASKED_BINARY_REL="examples/end_to_end/vector_ops/masked_binary.py"
 BITWISE_OPS_REL="examples/end_to_end/vector_ops/bitwise_ops.py"
 BINARY_OP_REL="examples/end_to_end/vector_ops/binary_op.py"
 REDUCTION_OPS_REL="examples/end_to_end/vector_ops/reduction_ops.py"
+LOAD_STORE_SCALAR_AFTER_REDUCTION_REL="examples/end_to_end/vector_ops/load_and_store_scalar_after_reduction.py"
 COMPARE_MASK_REL="examples/end_to_end/vector_ops/compare_mask.py"
 COMPARE_MASK_OPS=(
     vector_vector_lt vector_vector_le vector_vector_gt vector_vector_ge vector_vector_eq vector_vector_ne
@@ -134,6 +135,7 @@ Run end-to-end validation for:
   - masked_binary (masked_binary.py masked_binary --run --all-dtypes)
   - bitwise_ops (bitwise_ops.py bitwise_ops --run --all-dtypes)
   - reduction_ops (reduction_ops.py <op> --run for add/max/min)
+  - load_and_store_scalar_after_reduction (UB scalar load/store in tla.vector and outlined tla.vec.func)
   - compare_mask (compare_mask.py <op> --run --all-dtypes for each compare-mask op)
   - unary_ops (unary_ops.py <op> --run --all-dtypes for exp/log/sqrt/abs/neg/masked_unary/masked_abs/masked_neg)
   - arange_op (arange_op.py [increase/decrease] --run --all-dtypes)
@@ -386,6 +388,10 @@ if [[ ! -f "${TLA_DSL_DIR}/${REDUCTION_OPS_REL}" ]]; then
     echo "error: missing ${REDUCTION_OPS_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
 fi
+if [[ ! -f "${TLA_DSL_DIR}/${LOAD_STORE_SCALAR_AFTER_REDUCTION_REL}" ]]; then
+    echo "error: missing ${LOAD_STORE_SCALAR_AFTER_REDUCTION_REL} under ${TLA_DSL_DIR}" >&2
+    exit 1
+fi
 if [[ ! -f "${TLA_DSL_DIR}/${COMPARE_MASK_REL}" ]]; then
     echo "error: missing ${COMPARE_MASK_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
@@ -577,6 +583,17 @@ _run_reduction_ops_batch() {
 }
 
 _run_reduction_ops_batch
+
+_run_load_store_scalar_after_reduction_case() {
+    echo "==> Running load_and_store_scalar_after_reduction validation [f32]: --device ${DEVICE_ID}"
+    (
+        cd "${TLA_DSL_DIR}"
+        python "${LOAD_STORE_SCALAR_AFTER_REDUCTION_REL}" \
+            --device "${DEVICE_ID}" --force-recompile
+    )
+}
+
+_run_load_store_scalar_after_reduction_case
 
 _run_compare_mask_batch() {
     echo "==> Running compare_mask validation [batched ops]: --batch-run --device ${DEVICE_ID}"

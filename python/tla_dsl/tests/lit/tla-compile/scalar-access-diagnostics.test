@@ -1,0 +1,67 @@
+// RUN: sed -n '/^\/\/ BEGIN_LOAD$/,/^\/\/ END_LOAD$/p' %s | sed '1d;$d;s|^// ||' > %t.load.mlir && not %tla_compile %t.load.mlir -o %t 2>&1 | %filecheck %s --check-prefix=LOAD
+// RUN: sed -n '/^\/\/ BEGIN_STORE$/,/^\/\/ END_STORE$/p' %s | sed '1d;$d;s|^// ||' > %t.store.mlir && not %tla_compile %t.store.mlir -o %t 2>&1 | %filecheck %s --check-prefix=STORE
+// RUN: sed -n '/^\/\/ BEGIN_LOAD_SCOPE$/,/^\/\/ END_LOAD_SCOPE$/p' %s | sed '1d;$d;s|^// ||' > %t.load-scope.mlir && not %tla_compile %t.load-scope.mlir -o %t 2>&1 | %filecheck %s --check-prefix=LOAD-SCOPE
+// RUN: sed -n '/^\/\/ BEGIN_STORE_SCOPE$/,/^\/\/ END_STORE_SCOPE$/p' %s | sed '1d;$d;s|^// ||' > %t.store-scope.mlir && not %tla_compile %t.store-scope.mlir -o %t 2>&1 | %filecheck %s --check-prefix=STORE-SCOPE
+
+// LOAD: error:
+// LOAD-SAME: 'tla.scalar_load' op index 1 is out of bounds for length 1
+// STORE: error:
+// STORE-SAME: 'tla.scalar_store' op index 1 is out of bounds for length 1
+// LOAD-SCOPE: error:
+// LOAD-SCOPE-SAME: 'tla.scalar_load' op UB scalar access must be nested inside a tla.vector region
+// STORE-SCOPE: error:
+// STORE-SCOPE-SAME: 'tla.scalar_store' op UB scalar access must be nested inside a tla.vector region
+
+// BEGIN_LOAD
+// !slot = !tla.tensor<!tla.layout<!tla.shape<1>, !tla.stride<1>, !tla.shape<1>, row_major>, !tla.coord<0>, !tla.ptr<f32, ub, 4>>
+// module {
+//   func.func @scalar_load_past_end(%slot_memref: memref<1xf32, #hivm.address_space<ub>>) {
+//     %slot = builtin.unrealized_conversion_cast %slot_memref : memref<1xf32, #hivm.address_space<ub>> to !slot
+//     %index = arith.constant 1 : index
+//     "tla.vector"() ({
+//       %value = tla.scalar_load %slot[%index] : !slot -> f32
+//     }) : () -> ()
+//     return
+//   }
+// }
+// END_LOAD
+
+// BEGIN_STORE
+// !slot = !tla.tensor<!tla.layout<!tla.shape<1>, !tla.stride<1>, !tla.shape<1>, row_major>, !tla.coord<0>, !tla.ptr<f32, ub, 4>>
+// module {
+//   func.func @scalar_store_past_end(%slot_memref: memref<1xf32, #hivm.address_space<ub>>) {
+//     %slot = builtin.unrealized_conversion_cast %slot_memref : memref<1xf32, #hivm.address_space<ub>> to !slot
+//     %index = arith.constant 1 : index
+//     %value = arith.constant 1.000000e+00 : f32
+//     "tla.vector"() ({
+//       tla.scalar_store %slot[%index], %value : !slot, f32
+//     }) : () -> ()
+//     return
+//   }
+// }
+// END_STORE
+
+// BEGIN_LOAD_SCOPE
+// !slot = !tla.tensor<!tla.layout<!tla.shape<1>, !tla.stride<1>, !tla.shape<1>, row_major>, !tla.coord<0>, !tla.ptr<f32, ub, 4>>
+// module {
+//   func.func @scalar_load_outside_vector(%slot_memref: memref<1xf32, #hivm.address_space<ub>>) {
+//     %slot = builtin.unrealized_conversion_cast %slot_memref : memref<1xf32, #hivm.address_space<ub>> to !slot
+//     %index = arith.constant 0 : index
+//     %value = tla.scalar_load %slot[%index] : !slot -> f32
+//     return
+//   }
+// }
+// END_LOAD_SCOPE
+
+// BEGIN_STORE_SCOPE
+// !slot = !tla.tensor<!tla.layout<!tla.shape<1>, !tla.stride<1>, !tla.shape<1>, row_major>, !tla.coord<0>, !tla.ptr<f32, ub, 4>>
+// module {
+//   func.func @scalar_store_outside_vector(%slot_memref: memref<1xf32, #hivm.address_space<ub>>) {
+//     %slot = builtin.unrealized_conversion_cast %slot_memref : memref<1xf32, #hivm.address_space<ub>> to !slot
+//     %index = arith.constant 0 : index
+//     %value = arith.constant 1.000000e+00 : f32
+//     tla.scalar_store %slot[%index], %value : !slot, f32
+//     return
+//   }
+// }
+// END_STORE_SCOPE
