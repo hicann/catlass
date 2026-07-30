@@ -276,10 +276,12 @@ def Tla_L0C2UBModeAttr : Tla_EnumAttr<"L0C2UBMode", "l0c2ub_mode"> {
 def Tla_LoadDist_Norm : I32EnumAttrCase<"norm", 0>;
 def Tla_LoadDist_BrcB32 : I32EnumAttrCase<"brc_b32", 1>;
 def Tla_LoadDist_DintlvB32 : I32EnumAttrCase<"dintlv_b32", 2>;
+def Tla_LoadDist_UsB8 : I32EnumAttrCase<"us_b8", 3>;
 def Tla_LoadDistEnum : Tla_I32Enum<"LoadDist", "Load distribution for tla.load.", [
   Tla_LoadDist_Norm,
   Tla_LoadDist_BrcB32,
-  Tla_LoadDist_DintlvB32
+  Tla_LoadDist_DintlvB32,
+  Tla_LoadDist_UsB8
 ]>;
 def Tla_LoadDistAttr : Tla_EnumAttr<"LoadDist", "load_dist"> {
   let parameters = (ins EnumParameter<Tla_LoadDistEnum>:$load_dist);
@@ -288,6 +290,9 @@ def Tla_LoadDistAttr : Tla_EnumAttr<"LoadDist", "load_dist"> {
     Broadcast/load distribution pattern for tla.load.
     ``dintlv_b32`` is dual-destination de-interleave load (even/odd b32
     elements into two vector registers); requires a second result.
+    ``us_b8`` is single-destination 2x up-sample load (AscendC
+    ``LoadDist::DIST_US_B8``): loads ``VL/2`` b8 elements and repeats each
+    twice to fill a VL-wide ``b8`` register; b8 element type only.
   }];
 }
 

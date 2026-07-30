@@ -48,6 +48,7 @@ class LoadDist:
     DIST_NORM = "norm"
     DIST_BRC_B32 = "brc_b32"
     DIST_DINTLV_B32 = "dintlv_b32"
+    DIST_US_B8 = "us_b8"
 
 
 class MaskLoadDist:

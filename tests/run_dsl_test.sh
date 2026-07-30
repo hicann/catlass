@@ -17,7 +17,7 @@
 # python/tla_dsl/examples/end_to_end/vector_ops (binary_op.py, masked_binary.py,
 # bitwise_ops.py, reduction_ops.py, compare_mask.py, unary_ops.py, arange_op.py,
 # interleave_op.py, load_dintlv_op.py, load_store_mask.py, squeeze_op.py,
-# register_control_flow.py, load_and_store_scalar_after_reduction.py).
+# register_control_flow.py, load_and_store_scalar_after_reduction.py, load_us_b8_op.py).
 # python/tla_dsl/examples/end_to_end/tensor_index (scalar_index_control_flow.py,
 # scalar_kernel_arg.py).
 # python/tla_dsl/examples/end_to_end/debug_print (debug_print.py, debug_print_mixed.py).
@@ -102,6 +102,7 @@ UNARY_OPS_REL="examples/end_to_end/vector_ops/unary_ops.py"
 ARANGE_OP_REL="examples/end_to_end/vector_ops/arange_op.py"
 INTERLEAVE_OP_REL="examples/end_to_end/vector_ops/interleave_op.py"
 LOAD_DINTLV_OP_REL="examples/end_to_end/vector_ops/load_dintlv_op.py"
+LOAD_US_B8_OP_REL="examples/end_to_end/vector_ops/load_us_b8_op.py"
 LOAD_STORE_MASK_REL="examples/end_to_end/vector_ops/load_store_mask.py"
 SQUEEZE_OP_REL="examples/end_to_end/vector_ops/squeeze_op.py"
 REGISTER_CONTROL_FLOW_REL="examples/end_to_end/vector_ops/register_control_flow.py"
@@ -141,6 +142,8 @@ Run end-to-end validation for:
   - arange_op (arange_op.py [increase/decrease] --run --all-dtypes)
   - interleave_op (interleave_op.py interleave/deinterleave --run --all-dtypes)
   - load_dintlv_op (load_dintlv_op.py dintlv_b32 --run --all-dtypes; f32 only)
+  - load_us_b8_op (load_us_b8_op.py us_b8 --sweep --shapes 512; i8 only:
+    DIST_US_B8 2x up-sample load of b8 elements)
   - load_store_mask (load_store_mask.py load_store_mask --run --all-dtypes:
     MaskSSA load/store round-trip via MaskLoadParams/MaskStoreParams for
     b8/b16/b32 UB carriers; companion vector fixed to f32)
@@ -659,6 +662,18 @@ _run_load_dintlv_op_case() {
 }
 
 _run_load_dintlv_op_case
+
+_run_load_us_b8_op_case() {
+    echo "==> Running load_us_b8_op validation [us_b8 i8]: us_b8 --sweep --shapes 512 --device ${DEVICE_ID} --force-recompile"
+    (
+        cd "${TLA_DSL_DIR}"
+        python "${LOAD_US_B8_OP_REL}" us_b8 --sweep --shapes 512 \
+            --device "${DEVICE_ID}" --compile-jobs "${COMPILE_JOBS}" \
+            --force-recompile
+    )
+}
+
+_run_load_us_b8_op_case
 
 _run_load_store_mask_case() {
     echo "==> Running load_store_mask validation [b8/b16/b32 carriers]: load_store_mask --run --all-dtypes --device ${DEVICE_ID}"

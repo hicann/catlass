@@ -45,6 +45,8 @@ static hivmave::LoadDist mapTlaLoadDistToAve(::LoadDist dist) {
     return hivmave::LoadDist::BRC_B32;
   case ::LoadDist::dintlv_b32:
     return hivmave::LoadDist::DINTLV_B32;
+  case ::LoadDist::us_b8:
+    return hivmave::LoadDist::US_B8;
   }
   llvm_unreachable("unsupported tla.load load_dist");
 }

@@ -311,6 +311,10 @@ class _Tensor(TensorABC):
             isinstance(params, NormalLoadParams)
             and params.load_dist == LoadDist.DIST_DINTLV_B32
         )
+        is_us_b8 = (
+            isinstance(params, NormalLoadParams)
+            and params.load_dist == LoadDist.DIST_US_B8
+        )
 
         load_kwargs: dict[str, Any] = {"loc": loc}
         if isinstance(params, UnalignLoadParams):
@@ -339,6 +343,18 @@ class _Tensor(TensorABC):
             isinstance(params, NormalLoadParams)
             and params.load_dist == LoadDist.DIST_BRC_B32
         ):
+            result_desc = _full_vector_ssa_descriptor(source_desc.element_type)
+        elif is_us_b8:
+            # AscendC LoadDist::DIST_US_B8: 2x up-sample of b8 elements. The
+            # transfer reads VL/2 b8 elements and repeats each twice to fill a
+            # VL-wide b8 register, so the result is a full VL vector (i8/u8 ->
+            # 256 lanes) regardless of the source origin_shape.
+            elem = str(source_desc.element_type).strip().lower()
+            if dtype_size_bytes(elem) != 1:
+                raise TlaLoweringError(
+                    "DIST_US_B8 requires a 1-byte (b8: i8/u8) element type "
+                    f"(got {source_desc.element_type})"
+                )
             result_desc = _full_vector_ssa_descriptor(source_desc.element_type)
         else:
             result_desc = _vector_ssa_type_from_tensor_descriptor(source_desc)
