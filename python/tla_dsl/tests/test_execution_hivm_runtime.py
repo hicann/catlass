@@ -27,15 +27,33 @@ def _load_debug_print_example(*, mixed: bool = False):
         fake_catlass.Float32 = float
     previous = sys.modules.get("catlass")
     sys.modules["catlass"] = fake_catlass
+    example_dir = Path(__file__).parents[1] / "examples/end_to_end/debug_print"
+    previous_debug_print = sys.modules.get("debug_print")
     try:
+        if mixed:
+            dependency_path = example_dir / "debug_print.py"
+            dependency_spec = importlib.util.spec_from_file_location(
+                "debug_print", dependency_path
+            )
+            assert dependency_spec and dependency_spec.loader
+            dependency = importlib.util.module_from_spec(dependency_spec)
+            sys.modules["debug_print"] = dependency
+            dependency_spec.loader.exec_module(dependency)
         filename = "debug_print_mixed.py" if mixed else "debug_print.py"
-        path = Path(__file__).parents[1] / "examples/end_to_end/debug_print" / filename
-        spec = importlib.util.spec_from_file_location(path.stem, path)
+        path = example_dir / filename
+        spec = importlib.util.spec_from_file_location(
+            f"{path.stem}_example", path
+        )
         assert spec and spec.loader
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         return module
     finally:
+        if mixed:
+            if previous_debug_print is None:
+                del sys.modules["debug_print"]
+            else:
+                sys.modules["debug_print"] = previous_debug_print
         if previous is None:
             del sys.modules["catlass"]
         else:
@@ -290,6 +308,92 @@ def test_debug_print_output_rejects_duplicate_multiblock_records() -> None:
         )
 
 
+def test_debug_print_example_exposes_full_scalar_matrix() -> None:
+    example = _load_debug_print_example()
+
+    assert tuple(example.DTYPE_SPECS) == (
+        "i8",
+        "i16",
+        "i32",
+        "u8",
+        "u16",
+        "u32",
+        "f16",
+        "f32",
+    )
+    assert example._parser().parse_args(["--all-dtypes"]).all_dtypes is True
+    assert {
+        token: (
+            spec.parser,
+            spec.value,
+            spec.expected,
+        )
+        for token, spec in example.DTYPE_SPECS.items()
+    } == {
+        "i8": ("signed8", -128, "-128"),
+        "i16": ("signed16", -32768, "-32768"),
+        "i32": ("signed32", -37, "-37"),
+        "u8": ("unsigned8", 255, "255"),
+        "u16": ("unsigned16", 65535, "65535"),
+        "u32": ("unsigned32", 4294967295, "4294967295"),
+        "f16": ("float16", 1.25, "1.250000"),
+        "f32": ("float32", 1.25, "1.250000"),
+    }
+
+
+def test_debug_print_expression_matrix_excludes_unsigned_arithmetic() -> None:
+    example = _load_debug_print_example()
+    args = example._parser().parse_args(["--all-dtypes", "--expression"])
+
+    assert tuple(example.EXPRESSION_DTYPES) == ("i8", "i16", "i32", "f16", "f32")
+    assert dict(example.EXPRESSION_SPECS) == {
+        "i8": (-37, 5, "-32"),
+        "i16": (-30000, 123, "-29877"),
+        "i32": (-37, 5, "-32"),
+        "f16": (1.25, 0.75, "2.000000"),
+        "f32": (1.25, 0.75, "2.000000"),
+    }
+    assert [dtype for dtype, _, _ in example._selected_cases(args)] == list(
+        example.EXPRESSION_DTYPES
+    )
+
+
+@pytest.mark.parametrize("dtype", ("u8", "u16", "u32"))
+def test_debug_print_expression_rejects_unsigned_arithmetic(dtype: str) -> None:
+    example = _load_debug_print_example()
+    args = example._parser().parse_args(["--dtype", dtype, "--expression"])
+
+    with pytest.raises(
+        ValueError,
+        match=rf"--expression does not support {dtype}; expected one of "
+        r"i8, i16, i32, f16, f32",
+    ):
+        example._kernel(args)
+
+
+@pytest.mark.parametrize(
+    ("dtype", "expected_value", "line"),
+    (
+        ("i8", "-128", "TLA printf: core=0 block=0 x=-128"),
+        ("i16", "-32768", "TLA printf: core=0 block=0 x=-32768"),
+        ("i32", "-37", "TLA printf: core=0 block=0 x=-37"),
+        ("u8", "255", "TLA printf: core=0 block=0 x=255"),
+        ("u16", "65535", "TLA printf: core=0 block=0 x=65535"),
+        ("u32", "4294967295", "TLA printf: core=0 block=0 x=4294967295"),
+        ("f16", "1.250000", "TLA printf: core=0 block=0 v=1.250000"),
+        ("f32", "1.250000", "TLA printf: core=0 block=0 v=1.250000"),
+    ),
+)
+def test_debug_print_output_accepts_full_scalar_matrix(
+    dtype: str, expected_value: str, line: str
+) -> None:
+    example = _load_debug_print_example()
+
+    example._verify_debug_output(
+        line, dtype=dtype, expected_value=expected_value, expect_count=1
+    )
+
+
 @pytest.mark.parametrize(
     ("print_region", "output"),
     (
@@ -344,6 +448,65 @@ def test_debug_print_mixed_defaults_to_both_regions() -> None:
     example = _load_debug_print_example(mixed=True)
 
     assert example._parser().parse_args([]).print_region == "both"
+
+
+def test_debug_print_mixed_exposes_full_scalar_matrix() -> None:
+    example = _load_debug_print_example(mixed=True)
+
+    assert example._parser().parse_args(["--all-dtypes"]).all_dtypes is True
+    assert tuple(example.DTYPE_SPECS) == (
+        "i8",
+        "i16",
+        "i32",
+        "u8",
+        "u16",
+        "u32",
+        "f16",
+        "f32",
+    )
+
+
+@pytest.mark.parametrize(
+    ("print_region", "dtype", "expected_value", "output"),
+    (
+        ("cube", "u32", "4294967295",
+         "TLA printf: core=0 block=0 x=4294967295"),
+        (
+            "vector",
+            "i8",
+            "-128",
+            "\n".join(
+                (
+                    "TLA printf: core=1 block=0 x=-128",
+                    "TLA printf: core=2 block=0 x=-128",
+                )
+            ),
+        ),
+        (
+            "both",
+            "f16",
+            "1.250000",
+            "\n".join(
+                (
+                    "TLA printf: core=1 block=0 v=1.250000",
+                    "TLA printf: core=2 block=0 v=1.250000",
+                    "TLA printf: core=0 block=0 v=1.250000",
+                )
+            ),
+        ),
+    ),
+)
+def test_debug_print_mixed_output_accepts_typed_matrix(
+    print_region: str, dtype: str, expected_value: str, output: str
+) -> None:
+    example = _load_debug_print_example(mixed=True)
+
+    example._verify_mixed_debug_output(
+        output,
+        print_region=print_region,
+        dtype=dtype,
+        expected_value=expected_value,
+    )
 
 
 @pytest.mark.parametrize(

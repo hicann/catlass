@@ -154,8 +154,8 @@ Run end-to-end validation for:
     loop/dynamic-if/constexpr-if, vec.func, AST Numeric / index-vs-Int32 compare)
   - scalar_kernel_arg (scalar_kernel_arg.py: host Numeric kernel args used in
     same-type scalar arithmetic)
-  - debug_print (i32/f32 scalar prints on AIV and AIC)
-  - debug_print_mixed (cube-only, vector-only, and combined scalar prints)
+  - debug_print (all direct scalar dtypes, supported computed values, and two-block prints on AIV and AIC)
+  - debug_print_mixed (all scalar dtypes in cube-only, vector-only, and combined regions)
   - scalar_arg_alignment (scalar_arg_alignment.py: tensor-i16-tensor host ABI)
   - print_tensor (print_tensor.py: all supported GM/UB dtypes with AIV/AIC
     multi-block and multi-call coverage)
@@ -755,41 +755,53 @@ for _print_tensor_arch_scope in aiv.c310 aic.c310; do
     _run_print_tensor_gm_case "${_print_tensor_arch_scope}" 2 2 all
 done
 
-_run_debug_print_case() {
+_run_debug_print_matrix_case() {
     local arch_scope="$1"
-    local dtype="$2"
-    local value="$3"
-    echo "==> Running debug_print validation [${arch_scope} ${dtype}]: --run --device ${DEVICE_ID} --arch-scope ${arch_scope} --dtype ${dtype} --value ${value}"
+    echo "==> Running debug_print validation [${arch_scope} all dtypes, two blocks]"
     (
         cd "${TLA_DSL_DIR}"
         python "${DEBUG_PRINT_REL}" --run --device "${DEVICE_ID}" \
-            --arch-scope "${arch_scope}" --dtype "${dtype}" --value "${value}" \
+            --arch-scope "${arch_scope}" --all-dtypes --block 2 \
+            --expect-count 2 --force-recompile
+    )
+}
+
+for _debug_arch_scope in aiv.c310 aic.c310; do
+    _run_debug_print_matrix_case "${_debug_arch_scope}"
+done
+
+_run_debug_print_f16_special_case() {
+    local arch_scope="$1"
+    local value="$2"
+    echo "==> Running f16 debug_print special value [${arch_scope} ${value}]"
+    (
+        cd "${TLA_DSL_DIR}"
+        python "${DEBUG_PRINT_REL}" --run --device "${DEVICE_ID}" \
+            --arch-scope "${arch_scope}" --dtype f16 --value="${value}" \
             --force-recompile
     )
 }
 
 for _debug_arch_scope in aiv.c310 aic.c310; do
-    _run_debug_print_case "${_debug_arch_scope}" i32 -37
-    _run_debug_print_case "${_debug_arch_scope}" f32 1.25
+    for _debug_f16_value in -0.0 nan inf -inf; do
+        _run_debug_print_f16_special_case \
+            "${_debug_arch_scope}" "${_debug_f16_value}"
+    done
 done
 
-_run_debug_print_expression_case() {
+_run_debug_print_expression_matrix_case() {
     local arch_scope="$1"
-    local dtype="$2"
-    local lhs="$3"
-    local rhs="$4"
-    echo "==> Running computed debug_print validation [${arch_scope} ${dtype}]: ${lhs} + ${rhs}"
+    echo "==> Running computed debug_print validation [${arch_scope} i8/i16/i32/f16/f32]"
     (
         cd "${TLA_DSL_DIR}"
         python "${DEBUG_PRINT_REL}" --run --device "${DEVICE_ID}" \
-            --arch-scope "${arch_scope}" --dtype "${dtype}" --value "${lhs}" \
-            --expression --rhs "${rhs}" --force-recompile
+            --arch-scope "${arch_scope}" --all-dtypes --expression \
+            --force-recompile
     )
 }
 
 for _debug_arch_scope in aiv.c310 aic.c310; do
-    _run_debug_print_expression_case "${_debug_arch_scope}" i32 -37 5
-    _run_debug_print_expression_case "${_debug_arch_scope}" f32 1.25 0.75
+    _run_debug_print_expression_matrix_case "${_debug_arch_scope}"
 done
 
 _run_debug_print_mixed_case() {
@@ -798,7 +810,7 @@ _run_debug_print_mixed_case() {
     (
         cd "${TLA_DSL_DIR}"
         python "${DEBUG_PRINT_MIXED_REL}" --run --device "${DEVICE_ID}" \
-            --print-region "${print_region}" --force-recompile
+            --all-dtypes --print-region "${print_region}" --force-recompile
     )
 }
 

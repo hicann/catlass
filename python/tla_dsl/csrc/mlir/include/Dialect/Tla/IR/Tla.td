@@ -785,8 +785,9 @@ def Tla_PipeBarrierOp : Tla_Op<"pipe_barrier", []> {
 def Tla_DebugPrintOp : Tla_Op<"debug_print", [MemoryEffects<[MemWrite]>]> {
   let summary = "Typed frontend debug print op";
   let description = [{
-    Side-effecting TLA IR for exactly one builtin signless i32 or f32 value.
-    Backend lowering is intentionally unsupported.
+    Side-effecting TLA IR for one f16, f32, i8, i16, i32, u8, u16, or u32
+    scalar operand. Backend lowering preserves the operand type and selects its
+    device print helper.
   }];
   let arguments = (ins AnyType:$value);
   let assemblyFormat = "$value attr-dict `:` type($value)";

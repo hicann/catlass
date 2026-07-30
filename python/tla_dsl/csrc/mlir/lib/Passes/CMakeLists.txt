@@ -72,3 +72,13 @@ target_include_directories(tla_print_tensor_lowering_type_mapping_test PRIVATE
 target_link_libraries(tla_print_tensor_lowering_type_mapping_test PRIVATE
   TlaPasses
 )
+
+add_executable(tla_debug_print_lowering_type_mapping_test EXCLUDE_FROM_ALL
+  ${PROJECT_SOURCE_DIR}/tests/DebugPrintLoweringTypeMappingTest.cpp
+)
+target_include_directories(tla_debug_print_lowering_type_mapping_test PRIVATE
+  ${PROJECT_SOURCE_DIR}/lib
+)
+target_link_libraries(tla_debug_print_lowering_type_mapping_test PRIVATE
+  TlaPasses
+)

@@ -277,10 +277,15 @@ float load_print_slot_float(uint64_t slot) {
   return value;
 }
 
+uint32_t load_print_slot_unsigned(uint64_t slot) {
+  return static_cast<uint32_t>(slot);
+}
+
 enum class PrintFormatResult { Printed, Malformed, Unsupported };
 
 bool is_supported_scalar_printf_format(const char *fmt, size_t fmt_length) {
   return (fmt_length == 4 && std::memcmp(fmt, "x=%d", 4) == 0) ||
+         (fmt_length == 4 && std::memcmp(fmt, "x=%u", 4) == 0) ||
          (fmt_length == 4 && std::memcmp(fmt, "v=%f", 4) == 0);
 }
 
@@ -296,6 +301,13 @@ PrintFormatResult format_scalar_printf(const char *fmt, size_t fmt_length,
     if (!read_print_slot(args, arg_bytes, arg_offset, slot))
       return PrintFormatResult::Malformed;
     std::printf("x=%d", static_cast<int32_t>(slot));
+    return PrintFormatResult::Printed;
+  }
+
+  if (fmt_length == 4 && std::memcmp(fmt, "x=%u", 4) == 0) {
+    if (!read_print_slot(args, arg_bytes, arg_offset, slot))
+      return PrintFormatResult::Malformed;
+    std::printf("x=%u", load_print_slot_unsigned(slot));
     return PrintFormatResult::Printed;
   }
 

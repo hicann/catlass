@@ -46,6 +46,38 @@ getPrintTensorHelperSuffix(Type elementType, std::string &diagnostic)
     return failure();
 }
 
+FailureOr<DebugPrintHelperSpec>
+getDebugPrintHelperSpec(Type type, DebugPrintPlacement placement,
+                        std::string &diagnostic)
+{
+    if (placement == DebugPrintPlacement::Invalid) {
+        diagnostic =
+            "unsupported tla.debug_print placement invalid for dtype " +
+            printTensorDiagnosticTypeToken(type) + "; expected cube or vector";
+        return failure();
+    }
+
+    FailureOr<StringRef> suffix = getPrintTensorHelperSuffix(type, diagnostic);
+    if (failed(suffix))
+        return failure();
+    StringRef callee = llvm::StringSwitch<StringRef>(*suffix)
+                           .Case("i8", "_mlir_ciface_tla_printf_x_i8")
+                           .Case("i16", "_mlir_ciface_tla_printf_x_i16")
+                           .Case("i32", "_mlir_ciface_tla_printf_x_i32")
+                           .Case("u8", "_mlir_ciface_tla_printf_x_u8")
+                           .Case("u16", "_mlir_ciface_tla_printf_x_u16")
+                           .Case("u32", "_mlir_ciface_tla_printf_x_u32")
+                           .Case("f16", "_mlir_ciface_tla_printf_v_f16")
+                           .Case("f32", "_mlir_ciface_tla_printf_v_f32")
+                           .Default("");
+    if (callee.empty()) {
+        diagnostic = "missing tla.debug_print helper for dtype " +
+                     printTensorDiagnosticTypeToken(type);
+        return failure();
+    }
+    return DebugPrintHelperSpec{callee};
+}
+
 namespace {
 
 static constexpr bool isPrintTensorCallIdRepresentable(uint32_t ordinal)
@@ -183,22 +215,26 @@ static LogicalResult lowerDebugPrint(::tla::DebugPrintOp op, PatternRewriter& re
 
     Value value = op.getValue();
     Type valueType = value.getType();
-    StringRef calleeName;
-    auto intType = dyn_cast<IntegerType>(valueType);
-    if (intType && intType.getWidth() == 32 && intType.isSignless()) {
-        calleeName = "_mlir_ciface_tla_printf_x_i32";
-    } else if (valueType.isF32()) {
-        calleeName = "_mlir_ciface_tla_printf_v_f32";
-    }
-    if (calleeName.empty())
-        return op.emitError() << "unsupported tla.debug_print operand type " << typeToString(valueType);
-
     auto funcOp = op->getParentOfType<func::FuncOp>();
     if (!funcOp)
         return op.emitError("tla.debug_print must be nested inside func.func");
+    DebugPrintPlacement placement = DebugPrintPlacement::Invalid;
+    if (std::optional<HivmCoreKind> coreKind =
+            getExpectedFunctionCoreKind(funcOp)) {
+        if (*coreKind == HivmCoreKind::AIC)
+            placement = DebugPrintPlacement::Cube;
+        else if (*coreKind == HivmCoreKind::AIV)
+            placement = DebugPrintPlacement::Vector;
+    }
+    std::string diagnostic;
+    FailureOr<DebugPrintHelperSpec> helper =
+        getDebugPrintHelperSpec(valueType, placement, diagnostic);
+    if (failed(helper))
+        return op.emitError() << diagnostic;
+
     BlockArgument workspace = getOrAppendDebugPrintWorkspaceArg(funcOp);
     auto callee = getOrCreateRuntimeCall(
-        module, calleeName, {value.getType(), workspace.getType()});
+        module, helper->callee, {value.getType(), workspace.getType()});
     rewriter.create<func::CallOp>(op.getLoc(), callee, ValueRange{value, workspace});
     rewriter.eraseOp(op);
     return success();

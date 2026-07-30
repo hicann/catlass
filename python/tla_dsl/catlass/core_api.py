@@ -8,7 +8,7 @@ import math
 import warnings
 from enum import Enum
 from itertools import chain
-from typing import Any, Callable, Iterable, Sequence, TypeAlias
+from typing import Any, Callable, Iterable, NoReturn, Sequence, TypeAlias
 
 from mlir import ir as mlir_ir  # type: ignore[assignment]
 from mlir._mlir_libs._mlir import (  # type: ignore[import-not-found]
@@ -2901,15 +2901,33 @@ def _require_bool(op_name: str, name: str, value: Any, position: int) -> None:
 
 _DEBUG_PRINT_I32_MIN = -(2**31)
 _DEBUG_PRINT_I32_MAX = 2**31 - 1
+_PRINT_TENSOR_SUPPORTED_DTYPES = (
+    "f16",
+    "f32",
+    "i8",
+    "i16",
+    "i32",
+    "u8",
+    "u16",
+    "u32",
+)
+_PRINT_TENSOR_SUPPORTED_DTYPES_TEXT = ", ".join(_PRINT_TENSOR_SUPPORTED_DTYPES)
+_DEBUG_PRINT_SUPPORTED_DTYPES = _PRINT_TENSOR_SUPPORTED_DTYPES
+_DEBUG_PRINT_SUPPORTED_DTYPES_TEXT = _PRINT_TENSOR_SUPPORTED_DTYPES_TEXT
+
+
+def _print_scalar_type_error(value_type: Any) -> NoReturn:
+    _op_error(
+        "print",
+        f"unsupported value type {value_type}; expected one of "
+        f"{_DEBUG_PRINT_SUPPORTED_DTYPES_TEXT} scalar",
+    )
 
 
 def _print_scalar_operand(value: Any, *, loc: mlir_ir.Location | None) -> mlir_ir.Value:
     resolved = _resolve_bound_value(value)
     if isinstance(resolved, bool):
-        _op_error(
-            "print",
-            "unsupported value type bool; expected a signless i32 or f32 scalar",
-        )
+        _print_scalar_type_error("bool")
     if isinstance(resolved, int):
         if not _DEBUG_PRINT_I32_MIN <= resolved <= _DEBUG_PRINT_I32_MAX:
             _op_error(
@@ -2919,44 +2937,32 @@ def _print_scalar_operand(value: Any, *, loc: mlir_ir.Location | None) -> mlir_i
     if isinstance(resolved, float):
         return _const_f32(resolved, loc=loc)
     if isinstance(resolved, Numeric):
-        if isinstance(resolved.value, (int, float, bool)):
-            dtype = type(resolved).dtype.lower()
-            if dtype == "i32":
-                return _const_i32(int(resolved.value), loc=loc)
-            if dtype == "f32":
-                return _const_f32(float(resolved.value), loc=loc)
-            _op_error(
-                "print",
-                f"unsupported value type {dtype}; expected a signless i32 or f32 scalar",
-            )
-        resolved = _resolve_bound_value(resolved.value)
+        dtype = type(resolved).dtype.lower()
+        if dtype not in _DEBUG_PRINT_SUPPORTED_DTYPES:
+            _print_scalar_type_error(dtype)
+        return resolved.ir_value(loc=loc)
     if isinstance(resolved, VectorSSA):
         resolved = _resolve_bound_value(resolved.value)
     if not isinstance(resolved, mlir_ir.Value):
-        _op_error(
-            "print",
-            f"unsupported value type {_type_name(value)}; expected a signless i32 or f32 scalar",
-        )
+        _print_scalar_type_error(_type_name(value))
 
     value_type = resolved.type
+    if isinstance(value_type, mlir_ir.F16Type):
+        return resolved
     if isinstance(value_type, mlir_ir.F32Type):
         return resolved
     if mlir_ir.IntegerType.isinstance(value_type):
         int_type = mlir_ir.IntegerType(value_type)
-        if int_type.width == 32 and int_type.is_signless:
+        if int_type.width in (8, 16, 32) and (
+            int_type.is_signless or int_type.is_unsigned
+        ):
             return resolved
-    _op_error(
-        "print",
-        f"unsupported value type {value_type}; expected a signless i32 or f32 scalar",
-    )
+    _print_scalar_type_error(value_type)
 
 
 def _emit_scalar_print(value: Any, *, loc: mlir_ir.Location | None) -> None:
     if isinstance(value, bool):
-        _op_error(
-            "print",
-            "unsupported value type bool; expected a signless i32 or f32 scalar",
-        )
+        _print_scalar_type_error("bool")
     if (
         isinstance(value, int)
         and not _DEBUG_PRINT_I32_MIN <= value <= _DEBUG_PRINT_I32_MAX
@@ -2984,19 +2990,6 @@ def _print_tensor_shape_pattern_leaves(tree: Any) -> tuple[int, ...]:
     if tree is None:
         return (-1,)
     _op_error("print", "requires static or dynamic integer shape metadata")
-
-
-_PRINT_TENSOR_SUPPORTED_DTYPES = (
-    "f16",
-    "f32",
-    "i8",
-    "i16",
-    "i32",
-    "u8",
-    "u16",
-    "u32",
-)
-_PRINT_TENSOR_SUPPORTED_DTYPES_TEXT = ", ".join(_PRINT_TENSOR_SUPPORTED_DTYPES)
 
 
 def _emit_tensor_print(

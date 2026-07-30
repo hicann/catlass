@@ -3,15 +3,50 @@ from __future__ import annotations
 import argparse
 import ctypes
 import os
+import struct
 import tempfile
 from pathlib import Path
 import re
-from typing import Any, Callable
+from typing import Any, Callable, NamedTuple
 
 import catlass as tla
 
-
 DEFAULT_CACHE_DIR = Path(__file__).resolve().parent / "artifacts" / "runtime-cache"
+
+
+class ScalarSpec(NamedTuple):
+    scalar_type: str
+    parser: str
+    value: int | float
+    expected: str
+
+
+DTYPE_SPECS = {
+    "i8": ScalarSpec("Int8", "signed8", -128, "-128"),
+    "i16": ScalarSpec("Int16", "signed16", -32768, "-32768"),
+    "i32": ScalarSpec("Int32", "signed32", -37, "-37"),
+    "u8": ScalarSpec("UInt8", "unsigned8", 255, "255"),
+    "u16": ScalarSpec("UInt16", "unsigned16", 65535, "65535"),
+    "u32": ScalarSpec("UInt32", "unsigned32", 4294967295, "4294967295"),
+    "f16": ScalarSpec("Float16", "float16", 1.25, "1.250000"),
+    "f32": ScalarSpec("Float32", "float32", 1.25, "1.250000"),
+}
+
+
+class ExpressionSpec(NamedTuple):
+    lhs: int | float
+    rhs: int | float
+    expected: str
+
+
+EXPRESSION_SPECS = {
+    "i8": ExpressionSpec(-37, 5, "-32"),
+    "i16": ExpressionSpec(-30000, 123, "-29877"),
+    "i32": ExpressionSpec(-37, 5, "-32"),
+    "f16": ExpressionSpec(1.25, 0.75, "2.000000"),
+    "f32": ExpressionSpec(1.25, 0.75, "2.000000"),
+}
+EXPRESSION_DTYPES = tuple(EXPRESSION_SPECS)
 
 
 @tla.kernel
@@ -40,6 +75,11 @@ def debug_print_expression_aic_kernel(lhs: object, rhs: object) -> None:
 
 def _kernel(args: argparse.Namespace) -> Any:
     if args.expression:
+        if args.dtype not in EXPRESSION_DTYPES:
+            supported = ", ".join(EXPRESSION_DTYPES)
+            raise ValueError(
+                f"--expression does not support {args.dtype}; expected one of {supported}"
+            )
         if args.arch_scope.startswith("aic."):
             return debug_print_expression_aic_kernel
         return debug_print_expression_aiv_kernel
@@ -49,11 +89,21 @@ def _kernel(args: argparse.Namespace) -> Any:
 
 
 def dump_tlair(args: argparse.Namespace) -> str:
-    return _kernel(args).dump_mlir(type_args=_type_args(args))
+    if not args.all_dtypes:
+        return _kernel(args).dump_mlir(type_args=_type_args(args))
+    dumps = []
+    for dtype, value, rhs in _selected_cases(args):
+        case_args = _case_args(args, dtype=dtype, value=value, rhs=rhs)
+        dumps.append(
+            f"// dtype={dtype}\n"
+            f"{_kernel(case_args).dump_mlir(type_args=_type_args(case_args))}"
+        )
+    return "\n".join(dumps)
 
 
 def _scalar_value(args: argparse.Namespace, value: int | float) -> Any:
-    return tla.Int32(value) if args.dtype == "i32" else tla.Float32(value)
+    scalar_type = getattr(tla, DTYPE_SPECS[args.dtype].scalar_type)
+    return scalar_type(value)
 
 
 def _type_args(args: argparse.Namespace) -> tuple[Any, ...]:
@@ -98,7 +148,7 @@ def _capture_c_stdout(launch: Callable[[], None]) -> str:
 def _verify_debug_output(
     output: str, *, dtype: str, expected_value: str, expect_count: int
 ) -> None:
-    tag = "x" if dtype == "i32" else "v"
+    tag = "v" if dtype in {"f16", "f32"} else "x"
     pattern = re.compile(
         rf"^TLA printf: core=[0-9]+ block=([0-9]+) {tag}={re.escape(expected_value)}$"
     )
@@ -121,24 +171,63 @@ def _verify_debug_output(
         raise RuntimeError(f"invalid device debug output: {output!r}")
 
 
+def _expected_value(dtype: str, value: int | float) -> str:
+    if dtype == "f16":
+        value = _round_to_f16(float(value))
+    return f"{value:.6f}" if dtype in {"f16", "f32"} else str(value)
+
+
+def _case_args(
+    args: argparse.Namespace, *, dtype: str, value: int | float, rhs: int | float
+) -> argparse.Namespace:
+    values = vars(args).copy()
+    values.update(dtype=dtype, value=value, rhs=rhs)
+    return argparse.Namespace(**values)
+
+
+def _selected_cases(
+    args: argparse.Namespace,
+) -> list[tuple[str, int | float, int | float]]:
+    if not args.all_dtypes:
+        return [(args.dtype, args.value, args.rhs)]
+    if args.expression:
+        return [
+            (dtype, EXPRESSION_SPECS[dtype].lhs, EXPRESSION_SPECS[dtype].rhs)
+            for dtype in EXPRESSION_DTYPES
+        ]
+    return [(dtype, spec.value, 0) for dtype, spec in DTYPE_SPECS.items()]
+
+
 def run(args: argparse.Namespace) -> int:
     tla.initialize(device=args.device)
     try:
-        executor = _compile(args)
-        output = _capture_c_stdout(
-            lambda: executor(*_type_args(args), block=args.block)
-        )
-        result = args.value + args.rhs if args.expression else args.value
-        expected_value = str(result) if args.dtype == "i32" else f"{result:.6f}"
-        _verify_debug_output(
-            output,
-            dtype=args.dtype,
-            expected_value=expected_value,
-            expect_count=args.expect_count,
-        )
-        print(output, end="" if output.endswith("\n") else "\n")
+        kernel_paths = []
+        for dtype, value, rhs in _selected_cases(args):
+            case_args = _case_args(args, dtype=dtype, value=value, rhs=rhs)
+            executor = _compile(case_args)
+            output = _capture_c_stdout(
+                lambda: executor(*_type_args(case_args), block=args.block)
+            )
+            result = value + rhs if args.expression else value
+            if args.all_dtypes:
+                expected_value = (
+                    EXPRESSION_SPECS[dtype].expected
+                    if args.expression
+                    else DTYPE_SPECS[dtype].expected
+                )
+            else:
+                expected_value = _expected_value(dtype, result)
+            _verify_debug_output(
+                output,
+                dtype=dtype,
+                expected_value=expected_value,
+                expect_count=args.expect_count,
+            )
+            print(output, end="" if output.endswith("\n") else "\n")
+            kernel_paths.append(executor.kernel_binary_path)
         print("compile_ok=True")
-        print(f"kernel.o path={executor.kernel_binary_path}")
+        for path in kernel_paths:
+            print(f"kernel.o path={path}")
         print("launch_ok=True")
         print("output_ok=True")
         return 0
@@ -152,7 +241,12 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--run", action="store_true")
     parser.add_argument("--dump-tlair", action="store_true")
-    parser.add_argument("--dtype", choices=("i32", "f32"), default="i32")
+    parser.add_argument("--all-dtypes", action="store_true")
+    parser.add_argument(
+        "--dtype",
+        choices=("i8", "i16", "i32", "u8", "u16", "u32", "f16", "f32"),
+        default="i32",
+    )
     parser.add_argument("--value", default="3")
     parser.add_argument("--expression", action="store_true")
     parser.add_argument("--rhs", default="0")
@@ -168,10 +262,17 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _i32(text: str) -> int:
+def _signed_integer(text: str, width: int) -> int:
     value = int(text, 0)
-    if not -(1 << 31) <= value < (1 << 31):
-        raise argparse.ArgumentTypeError("expected a signed 32-bit integer")
+    if not -(1 << (width - 1)) <= value < (1 << (width - 1)):
+        raise argparse.ArgumentTypeError(f"expected a signed {width}-bit integer")
+    return value
+
+
+def _unsigned_integer(text: str, width: int) -> int:
+    value = int(text, 0)
+    if not 0 <= value < (1 << width):
+        raise argparse.ArgumentTypeError(f"expected an unsigned {width}-bit integer")
     return value
 
 
@@ -179,11 +280,33 @@ def _f32(text: str) -> float:
     return float(text)
 
 
+def _round_to_f16(value: float) -> float:
+    return struct.unpack("e", struct.pack("e", value))[0]
+
+
+def _f16(text: str) -> float:
+    try:
+        return _round_to_f16(float(text))
+    except OverflowError as error:
+        raise argparse.ArgumentTypeError("expected an f16 value") from error
+
+
+def _parse_scalar(dtype: str, text: str) -> int | float:
+    parser = DTYPE_SPECS[dtype].parser
+    if parser.startswith("signed"):
+        return _signed_integer(text, int(parser.removeprefix("signed")))
+    if parser.startswith("unsigned"):
+        return _unsigned_integer(text, int(parser.removeprefix("unsigned")))
+    if parser == "float16":
+        return _f16(text)
+    return _f32(text)
+
+
 def main() -> int:
     args = _parser().parse_args()
-    parse_scalar = _i32 if args.dtype == "i32" else _f32
-    args.value = parse_scalar(args.value)
-    args.rhs = parse_scalar(args.rhs)
+    if not args.all_dtypes:
+        args.value = _parse_scalar(args.dtype, args.value)
+        args.rhs = _parse_scalar(args.dtype, args.rhs)
     if args.dump_tlair:
         print(dump_tlair(args))
         return 0
