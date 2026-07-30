@@ -10,15 +10,43 @@ using ConstantMaterializer =
 
 static func::FuncOp getOrCreateRuntimeCall(ModuleOp module, StringRef name,
                                            ArrayRef<Type> operandTypes,
+                                           Operation *callSite,
                                            ArrayRef<Type> resultTypes = {}) {
-  if (auto existing = module.lookupSymbol<func::FuncOp>(name))
+  auto setCoreTypeFromCaller = [&](func::FuncOp callee) {
+    auto caller = callSite ? callSite->getParentOfType<func::FuncOp>()
+                           : func::FuncOp();
+    if (!caller)
+      return;
+    auto callerCore = caller->getAttrOfType<hivm::TFuncCoreTypeAttr>(
+        hivm::TFuncCoreTypeAttr::name);
+    if (!callerCore)
+      return;
+
+    auto calleeCore = callee->getAttrOfType<hivm::TFuncCoreTypeAttr>(
+        hivm::TFuncCoreTypeAttr::name);
+    if (!calleeCore) {
+      callee->setAttr(hivm::TFuncCoreTypeAttr::name, callerCore);
+      return;
+    }
+    if (calleeCore.getFuncCoreType() != callerCore.getFuncCoreType()) {
+      callee->setAttr(
+          hivm::TFuncCoreTypeAttr::name,
+          hivm::TFuncCoreTypeAttr::get(module.getContext(),
+                                       hivm::TFuncCoreType::AIC_OR_AIV));
+    }
+  };
+
+  if (auto existing = module.lookupSymbol<func::FuncOp>(name)) {
+    setCoreTypeFromCaller(existing);
     return existing;
+  }
 
   OpBuilder builder(module.getBodyRegion());
   builder.setInsertionPointToStart(module.getBody());
   auto funcType = builder.getFunctionType(operandTypes, resultTypes);
   auto func = builder.create<func::FuncOp>(module.getLoc(), name, funcType);
   func.setPrivate();
+  setCoreTypeFromCaller(func);
   return func;
 }
 
@@ -615,7 +643,8 @@ struct LowerTlaMutexAccessPattern : public OpRewritePattern<MutexOpT> {
     auto i8Type = rewriter.getI8Type();
     SmallVector<Type, 1> operandTypes = {i8Type};
     auto callee = getOrCreateRuntimeCall(
-        module, calleePrefix + "_" + *pipeSuffix, operandTypes);
+        module, calleePrefix + "_" + *pipeSuffix, operandTypes,
+        op.getOperation());
     rewriter.create<func::CallOp>(op.getLoc(), callee, ValueRange{*mutexId});
     return success();
   }

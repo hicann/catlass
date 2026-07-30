@@ -11,7 +11,7 @@
 #
 # End-to-end validation for python/tla_dsl/examples/end_to_end/basic_mmad (basic_matmul.py, basic_mmad_ptr.py),
 # python/tla_dsl/examples/end_to_end/basic_vadd (basic_vadd.py, basic_vadd_unknown_extent.py),
-# python/tla_dsl/examples/end_to_end/basic_mixed (basic_mixed.py), and
+# python/tla_dsl/examples/end_to_end/basic_mixed (basic_mixed.py, including mutex mode), and
 # python/tla_dsl/examples/end_to_end/basic_mixed (basic_mixed_ub2l1.py, basic_mixed_store_zN.py,
 # basic_mixed_store_zNUnAlign.py).
 # python/tla_dsl/examples/end_to_end/vector_ops (binary_op.py, masked_binary.py,
@@ -130,8 +130,8 @@ Run end-to-end validation for:
   - basic_mmad_ptr (basic_mmad_ptr.py --run)
   - basic_vadd (basic_vadd.py --run --all-dtypes, plus mutex variants)
   - basic_vadd_unknown_extent (dynamic UB base capacity as memref<?xT> with extent 0)
-  - basic_mixed (basic_mixed.py --run dynamic GM mnk list, basic_mixed_ub2l1.py --run, basic_mixed_store_zN.py --run,
-    basic_mixed_store_zNUnAlign.py --run for m=64/m=50)
+  - basic_mixed (basic_mixed.py --run dynamic GM mnk list, including --use-mutex; basic_mixed_ub2l1.py --run,
+    basic_mixed_store_zN.py --run, basic_mixed_store_zNUnAlign.py --run for m=64/m=50)
   - binary_op (binary_op.py <op> --run --all-dtypes for add/sub/mul/div/max/min/add_unalign/add_brc_b32)
   - masked_binary (masked_binary.py masked_binary --run --all-dtypes)
   - bitwise_ops (bitwise_ops.py bitwise_ops --run --all-dtypes)
@@ -502,6 +502,7 @@ _run_basic_mixed_case() {
 
 _run_basic_mixed_case "forced compilation" --force-recompile
 _run_basic_mixed_case "cache reuse"
+_run_basic_mixed_case "mutex mode, forced compilation" --use-mutex --force-recompile
 
 _run_basic_mixed_ub2l1_case() {
     echo "==> Running basic_mixed_ub2l1 validation [fixed shape/dtypes, gm->ub->l1]: --run --device ${DEVICE_ID}"
