@@ -62,6 +62,7 @@ from .types import (
     TlaTensor,
     TlaTile,
     dtype_size_bytes,
+    _replace_flat_leaves_in_tree,
 )
 from .params import CopyParams, CopyL0C2DstParams, QuantMode, L0C2UBMode, AtomicMode, MemType
 
@@ -729,13 +730,16 @@ def _as_i1_value(value: Any) -> mlir_ir.Value:
     raise TlaLoweringError(f"value expected to be a bool, got {type(value).__name__}")
 
 
-def _const_index(value: int) -> mlir_ir.Value:
+def _const_index(
+    value: int, *, loc: mlir_ir.Location | None = None
+) -> mlir_ir.Value:
     op = mlir_ir.Operation.create(
         "arith.constant",
         results=[mlir_ir.IndexType.get()],
         attributes={
             "value": mlir_ir.IntegerAttr.get(mlir_ir.IndexType.get(), int(value))
         },
+        loc=loc,
     )
     return op.results[0]
 
@@ -1295,13 +1299,229 @@ def _tensor_metadata_field(value: mlir_ir.Value, field: str) -> Any:
     if st is not None:
         cached = st.tensor_metadata_by_value.get(value)
         if cached is not None and field in cached:
-            return cached[field]
+            materialized = _require_resolved_metadata_leaves(
+                value, cached[field], field
+            )
+            if materialized is not cached[field]:
+                cached = dict(cached)
+                cached[field] = materialized
+                st.tensor_metadata_by_value[value] = cached
+            return materialized
     metadata = _tla_tensor_type_for_mlir_value(value).metadata()
-    if st is not None:
-        st.tensor_metadata_by_value[value] = metadata
     if field not in metadata:
         raise TlaLoweringError(f"unknown tensor metadata field: {field}")
-    return metadata[field]
+    materialized = _require_resolved_metadata_leaves(value, metadata[field], field)
+    if st is not None:
+        stored = dict(metadata)
+        stored[field] = materialized
+        st.tensor_metadata_by_value[value] = stored
+    return materialized
+
+
+def is_dynamic_gm_tensor_arg(host: Any) -> bool:
+    """True when a host ``Tensor`` enters the kernel as a dynamic GM ``memref`` arg.
+
+    Matches the Approach A split: GM tensor + any dynamic shape/stride/origin leaf
+    uses the bridged memref entry ABI; static GM stays ``!tla.tensor``.
+    """
+    from .tla.runtime import _Tensor as HostTensor
+
+    if not isinstance(host, HostTensor):
+        return False
+    addr = str(getattr(host, "addrspace", None) or "gm").strip().lower()
+    if addr != "gm":
+        return False
+    desc = host.tla_tensor_type_descriptor()
+    return (
+        _tree_contains_dynamic(desc.shape)
+        or _tree_contains_dynamic(desc.stride)
+        or _tree_contains_dynamic(desc.origin_shape)
+    )
+
+
+def _materialize_dynamic_gm_root_tensor_descriptor(
+    memref_arg: mlir_ir.Value,
+    origin0_arg: mlir_ir.Value,
+    origin1_arg: mlir_ir.Value,
+    tensor_ty: Any,
+    *,
+    loc: mlir_ir.Location | None = None,
+) -> tuple[mlir_ir.Value, dict[str, Any]]:
+    """Emit ``memref.dim`` / strided metadata + ``tla.tensor_desc`` for a dynamic GM tensor.
+
+    ``memref_arg`` is the schema-v4 unified GM memref. ``origin0_arg`` / ``origin1_arg``
+    are the companion index ABI args (no shape→origin derivation).
+    """
+    from mlir.dialects import arith, memref
+
+    from .base_dsl.typing import as_numeric
+
+    if not isinstance(tensor_ty, TlaTensorTypeDescriptor):
+        raise TlaLoweringError(
+            "dynamic GM prologue expects a TlaTensorTypeDescriptor"
+        )
+
+    shape_leaves = list(_flatten_tla_tuple(tensor_ty.shape))
+    stride_leaves = list(_flatten_tla_tuple(tensor_ty.stride))
+    origin_leaves = list(_flatten_tla_tuple(tensor_ty.origin_shape))
+    coord_leaves = list(_flatten_tla_tuple(tensor_ty.coord))
+    rank = len(shape_leaves)
+    if (
+        rank not in (1, 2)
+        or len(stride_leaves) != rank
+        or len(origin_leaves) != rank
+        or len(coord_leaves) != rank
+    ):
+        raise TlaLoweringError(
+            "dynamic GM prologue supports rank-1 or rank-2 logical tensors with matching "
+            f"shape/stride/origin/coord leaves; got ranks shape={rank}, "
+            f"stride={len(stride_leaves)}, origin={len(origin_leaves)}, "
+            f"coord={len(coord_leaves)}"
+        )
+    # Same root-coord rule as TlaLowerFuncPass::validateKernelTensorArg: prologue
+    # and launch ABI hard-code coord/offset to 0.
+    if any(leaf is None for leaf in coord_leaves) or not all(
+        int(leaf) == 0 for leaf in coord_leaves
+    ):
+        raise TlaLoweringError(
+            "dynamic GM root must be a root tensor with zero coordinates; "
+            f"got {tensor_ty.coord!r}"
+        )
+
+    # Unified ABI memref exposes 4 size/stride slots; logical leaves map to the leading axes.
+    abi_rank = 4
+    shape_vals: list[mlir_ir.Value] = []
+    for axis, extent in enumerate(shape_leaves):
+        if extent is None:
+            axis_v = _const_index(axis, loc=loc)
+            shape_vals.append(memref.DimOp(memref_arg, axis_v, loc=loc).result)
+        else:
+            shape_vals.append(_const_index(int(extent), loc=loc))
+
+    layout_tag = str(tensor_ty.layout_tag)
+    abi_strides: list[mlir_ir.Value] | None = None
+    if layout_tag == "row_major" and any(leaf is None for leaf in stride_leaves):
+        meta = memref.ExtractStridedMetadataOp(memref_arg, loc=loc)
+        results = list(meta.results)
+        stride_start = 2 + abi_rank
+        if len(results) < stride_start + abi_rank:
+            raise TlaLoweringError(
+                "extract_strided_metadata returned unexpected result count "
+                f"{len(results)} for ABI rank {abi_rank}"
+            )
+        abi_strides = list(results[stride_start : stride_start + abi_rank])
+
+    stride_vals: list[mlir_ir.Value] = []
+    if layout_tag == "row_major":
+        for axis, leaf in enumerate(stride_leaves):
+            if leaf is None:
+                if abi_strides is None:
+                    raise TlaLoweringError(
+                        "row_major dynamic stride requires extract_strided_metadata"
+                    )
+                stride_vals.append(abi_strides[axis])
+            else:
+                stride_vals.append(_const_index(int(leaf), loc=loc))
+    elif rank == 1:
+        stride_vals.append(_const_index(1, loc=loc))
+    else:
+        stride_vals.append(_const_index(1, loc=loc))
+        stride_vals.append(shape_vals[0])
+
+    def origin_abi_value(axis: int) -> mlir_ir.Value:
+        """Use companion ABI origin args when the type leaf is dynamic."""
+        leaf = origin_leaves[axis]
+        if leaf is None:
+            return origin0_arg if axis == 0 else origin1_arg
+        return _const_index(int(leaf), loc=loc)
+
+    zero = _const_index(0, loc=loc)
+    if rank == 1:
+        shape0 = _const_index(1, loc=loc)
+        shape1 = shape_vals[0]
+        stride1 = stride_vals[0]
+        stride0 = arith.MulIOp(shape1, stride1, loc=loc).result
+        # Internal desc keeps origin0=1; user-facing origin is ABI originShape0.
+        origin0 = _const_index(1, loc=loc)
+        origin1 = origin_abi_value(0)
+        meta_shape = shape_vals[0]
+        meta_stride = stride_vals[0]
+        meta_origin = origin1
+        metadata = {
+            "shape": _replace_flat_leaves_in_tree(
+                tensor_ty.shape, (as_numeric(meta_shape),)
+            ),
+            "stride": _replace_flat_leaves_in_tree(
+                tensor_ty.stride, (as_numeric(meta_stride),)
+            ),
+            "coord": tensor_ty.coord,
+            "origin_shape": _replace_flat_leaves_in_tree(
+                tensor_ty.origin_shape, (as_numeric(meta_origin),)
+            ),
+            "dtype": tensor_ty.element_type,
+            "addrspace": tensor_ty.addrspace,
+            "layout_tag": layout_tag,
+        }
+    else:
+        shape0 = shape_vals[0]
+        shape1 = shape_vals[1]
+        stride0 = stride_vals[0]
+        stride1 = stride_vals[1]
+        origin0 = origin_abi_value(0)
+        origin1 = origin_abi_value(1)
+        metadata = {
+            "shape": _replace_flat_leaves_in_tree(
+                tensor_ty.shape, (as_numeric(shape0), as_numeric(shape1))
+            ),
+            "stride": _replace_flat_leaves_in_tree(
+                tensor_ty.stride, (as_numeric(stride0), as_numeric(stride1))
+            ),
+            "coord": tensor_ty.coord,
+            "origin_shape": _replace_flat_leaves_in_tree(
+                tensor_ty.origin_shape, (as_numeric(origin0), as_numeric(origin1))
+            ),
+            "dtype": tensor_ty.element_type,
+            "addrspace": tensor_ty.addrspace,
+            "layout_tag": layout_tag,
+        }
+
+    result_ty = tensor_ty.to_mlir_type(memref_arg.type.context)
+    desc = _tla_ops_gen.tensor_desc(
+        result_ty,
+        memref_arg,
+        zero,
+        zero,
+        stride0,
+        stride1,
+        shape0,
+        shape1,
+        origin0,
+        origin1,
+        [],
+        loc=loc,
+    )
+    _register_tla_tensor_type(desc, tensor_ty)
+    _register_tla_tensor_metadata(desc, metadata)
+    return desc, metadata
+
+
+def _require_resolved_metadata_leaves(
+    tensor: mlir_ir.Value, tree: Any, field: str
+) -> Any:
+    """Assert metadata leaves are resolved; dynamic ``None`` is a lowering bug."""
+
+    def walk(node: Any) -> Any:
+        if isinstance(node, tuple):
+            return tuple(walk(child) for child in node)
+        if node is not None:
+            return node
+        raise TlaLoweringError(
+            f"dynamic tensor metadata field {field!r} was not resolved at "
+            "kernel entry; dynamic GM arguments must materialize a root "
+            f"descriptor first (value={tensor})"
+        )
+
+    return walk(tree)
 
 
 # Layout constants aligned with ``catlass/catlass.hpp`` and ``tla/layout.hpp``.

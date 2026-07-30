@@ -128,7 +128,7 @@ Run end-to-end validation for:
   - basic_mmad_ptr (basic_mmad_ptr.py --run)
   - basic_vadd (basic_vadd.py --run --all-dtypes, plus mutex variants)
   - basic_vadd_unknown_extent (dynamic UB base capacity as memref<?xT> with extent 0)
-  - basic_mixed (basic_mixed.py --run, basic_mixed_ub2l1.py --run, basic_mixed_store_zN.py --run,
+  - basic_mixed (basic_mixed.py --run dynamic GM mnk list, basic_mixed_ub2l1.py --run, basic_mixed_store_zN.py --run,
     basic_mixed_store_zNUnAlign.py --run for m=64/m=50)
   - binary_op (binary_op.py <op> --run --all-dtypes for add/sub/mul/div/max/min/add_unalign/add_brc_b32)
   - masked_binary (masked_binary.py masked_binary --run --all-dtypes)
@@ -484,7 +484,7 @@ _run_basic_vadd_unknown_extent_case
 _run_basic_mixed_case() {
     local cache_mode="$1"
     shift
-    echo "==> Running basic_mixed validation [fixed shape/dtypes, tensor print, ${cache_mode}]: --run --device ${DEVICE_ID} --block 1 $*"
+    echo "==> Running basic_mixed validation [dynamic GM mnk list, tensor print, ${cache_mode}]: --run --device ${DEVICE_ID} --block 1 $*"
     (
         cd "${TLA_DSL_DIR}"
         python "${BASIC_MIXED_REL}" --run --device "${DEVICE_ID}" --block 1 "$@"

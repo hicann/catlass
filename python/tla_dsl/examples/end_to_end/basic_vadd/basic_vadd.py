@@ -11,6 +11,9 @@ VL_ELE = 64
 LOOPS = (VECTOR_ELE + VL_ELE - 1) // VL_ELE
 ALL_DTYPES = ("i8", "i16", "i32", "f16", "f32")
 
+# Minimal dynamic-GM smoke: same compiled kernel, different launch extents (≤ UB).
+DEFAULT_N_SHAPES = (VECTOR_ELE, 1)
+
 DEMO_DIR = Path(__file__).resolve().parent
 DEFAULT_CACHE_DIR = DEMO_DIR / "artifacts" / "runtime-cache"
 _KERNEL_DTYPE = tla.Float32
@@ -19,12 +22,13 @@ _KERNEL_ELEMENT_BYTES = 4
 
 @tla.kernel
 def basic_vadd(mem_x: tla.Tensor, mem_y: tla.Tensor, mem_z: tla.Tensor) -> None:
+    n_ele = mem_x.origin_shape[0]
     ub_loaded = tla.flag("ub_loaded", tla.arch.MTE2, tla.arch.VECTOR)
     vec_done = tla.flag("vec_done", tla.arch.VECTOR, tla.arch.MTE3)
 
-    x_gm = tla.tile_view(mem_x, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
-    y_gm = tla.tile_view(mem_y, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
-    z_gm = tla.tile_view(mem_z, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
+    x_gm = tla.tile_view(mem_x, tla.make_shape(n_ele), tla.make_coord(0))
+    y_gm = tla.tile_view(mem_y, tla.make_shape(n_ele), tla.make_coord(0))
+    z_gm = tla.tile_view(mem_z, tla.make_shape(n_ele), tla.make_coord(0))
 
     x_ub_ptr = tla.allocate(VECTOR_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 256)
     y_ub_ptr = tla.allocate(VECTOR_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 256)
@@ -41,7 +45,7 @@ def basic_vadd(mem_x: tla.Tensor, mem_y: tla.Tensor, mem_z: tla.Tensor) -> None:
         tla.set_flag(ub_loaded)
         tla.wait_flag(ub_loaded)
         with tla.vec.func(mode="simd"):
-            for i in tla.range(LOOPS):
+            for i in tla.range((n_ele + VL_ELE - 1) // VL_ELE):
                 x_tile = tla.tile_view(
                     x_ub, tla.make_shape(VL_ELE), tla.make_coord(i)
                 )
@@ -66,13 +70,14 @@ def basic_vadd(mem_x: tla.Tensor, mem_y: tla.Tensor, mem_z: tla.Tensor) -> None:
 
 @tla.kernel
 def basic_vadd_mutex(mem_x: tla.Tensor, mem_y: tla.Tensor, mem_z: tla.Tensor) -> None:
+    n_ele = mem_x.origin_shape[0]
     mutex_x_ub = tla.mutex(resource="x_ub", id=0)
     mutex_y_ub = tla.mutex(resource="y_ub", id=1)
     mutex_z_ub = tla.mutex(resource="z_ub", id=2)
 
-    x_gm = tla.tile_view(mem_x, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
-    y_gm = tla.tile_view(mem_y, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
-    z_gm = tla.tile_view(mem_z, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
+    x_gm = tla.tile_view(mem_x, tla.make_shape(n_ele), tla.make_coord(0))
+    y_gm = tla.tile_view(mem_y, tla.make_shape(n_ele), tla.make_coord(0))
+    z_gm = tla.tile_view(mem_z, tla.make_shape(n_ele), tla.make_coord(0))
 
     x_ub_ptr = tla.allocate(VECTOR_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 256)
     y_ub_ptr = tla.allocate(VECTOR_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 256)
@@ -95,7 +100,7 @@ def basic_vadd_mutex(mem_x: tla.Tensor, mem_y: tla.Tensor, mem_z: tla.Tensor) ->
         mutex_y_ub.lock(pipe=tla.arch.VECTOR)
         mutex_z_ub.lock(pipe=tla.arch.VECTOR)
         with tla.vec.func(mode="simd"):
-            for i in tla.range(LOOPS):
+            for i in tla.range((n_ele + VL_ELE - 1) // VL_ELE):
                 x_tile = tla.tile_view(
                     x_ub, tla.make_shape(VL_ELE), tla.make_coord(i)
                 )
@@ -122,13 +127,14 @@ def basic_vadd_mutex(mem_x: tla.Tensor, mem_y: tla.Tensor, mem_z: tla.Tensor) ->
 
 @tla.kernel
 def basic_vadd_mutex_with(mem_x: tla.Tensor, mem_y: tla.Tensor, mem_z: tla.Tensor) -> None:
+    n_ele = mem_x.origin_shape[0]
     mutex_x_ub = tla.mutex(resource="x_ub", id=0)
     mutex_y_ub = tla.mutex(resource="y_ub", id=1)
     mutex_z_ub = tla.mutex(resource="z_ub", id=2)
 
-    x_gm = tla.tile_view(mem_x, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
-    y_gm = tla.tile_view(mem_y, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
-    z_gm = tla.tile_view(mem_z, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
+    x_gm = tla.tile_view(mem_x, tla.make_shape(n_ele), tla.make_coord(0))
+    y_gm = tla.tile_view(mem_y, tla.make_shape(n_ele), tla.make_coord(0))
+    z_gm = tla.tile_view(mem_z, tla.make_shape(n_ele), tla.make_coord(0))
 
     x_ub_ptr = tla.allocate(VECTOR_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 256)
     y_ub_ptr = tla.allocate(VECTOR_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 256)
@@ -147,7 +153,7 @@ def basic_vadd_mutex_with(mem_x: tla.Tensor, mem_y: tla.Tensor, mem_z: tla.Tenso
 
         with tla.mutex_guard(mutex_x_ub, mutex_y_ub, mutex_z_ub):
             with tla.vec.func(mode="simd"):
-                for i in tla.range(LOOPS):
+                for i in tla.range((n_ele + VL_ELE - 1) // VL_ELE):
                     x_tile = tla.tile_view(
                         x_ub, tla.make_shape(VL_ELE), tla.make_coord(i)
                     )
@@ -170,11 +176,12 @@ def basic_vadd_mutex_with(mem_x: tla.Tensor, mem_y: tla.Tensor, mem_z: tla.Tenso
 @tla.kernel
 def basic_vadd_atomic_add(mem_x: tla.Tensor, mem_y: tla.Tensor, mem_z: tla.Tensor) -> None:
     """This demo use one AIV to compute Z = X + Y, which is done by setting the atomic add operation."""
+    n_ele = mem_x.origin_shape[0]
     ub_loaded = tla.flag("ub_loaded", tla.arch.MTE2, tla.arch.MTE3)
 
-    x_gm = tla.tile_view(mem_x, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
-    y_gm = tla.tile_view(mem_y, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
-    z_gm = tla.make_tensor(mem_z.ptr, tla.make_layout(shape=tla.make_shape(VECTOR_ELE),stride=tla.make_stride(1)))
+    x_gm = tla.tile_view(mem_x, tla.make_shape(n_ele), tla.make_coord(0))
+    y_gm = tla.tile_view(mem_y, tla.make_shape(n_ele), tla.make_coord(0))
+    z_gm = tla.make_tensor(mem_z.ptr, tla.make_layout(shape=tla.make_shape(n_ele),stride=tla.make_stride(1)))
 
     x_ub_ptr = tla.allocate(VECTOR_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 256)
     y_ub_ptr = tla.allocate(VECTOR_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 256)
@@ -246,7 +253,7 @@ def _compile_only_type_args(dtype_name: str = "f32") -> tuple[Any, Any, Any]:
                 coord=tla.make_coord(0),
                 stride=tla.make_stride(1),
                 layout_tag=tla.arch.RowMajor,
-            ),
+            ).mark_compact_shape_dynamic(0),
             tla.Tensor(
                 tla.make_shape(VECTOR_ELE),
                 tla_dtype,
@@ -254,7 +261,7 @@ def _compile_only_type_args(dtype_name: str = "f32") -> tuple[Any, Any, Any]:
                 coord=tla.make_coord(0),
                 stride=tla.make_stride(1),
                 layout_tag=tla.arch.RowMajor,
-            ),
+            ).mark_compact_shape_dynamic(0),
             tla.Tensor(
                 tla.make_shape(VECTOR_ELE),
                 tla_dtype,
@@ -262,7 +269,7 @@ def _compile_only_type_args(dtype_name: str = "f32") -> tuple[Any, Any, Any]:
                 coord=tla.make_coord(0),
                 stride=tla.make_stride(1),
                 layout_tag=tla.arch.RowMajor,
-            ),
+            ).mark_compact_shape_dynamic(0),
         )
 
 
@@ -315,29 +322,33 @@ def _require_torch_npu(device_id: int) -> Any:
     return torch
 
 
-def _create_tla_tensor(dev_buf: Any, tla_dtype: type[Any]) -> Any:
+def _create_tla_tensor(dev_buf: Any, tla_dtype: type[Any], n_ele: int) -> Any:
     from catlass import runtime as runtime_mod
 
     contiguous = dev_buf.contiguous()
     with runtime_mod._eager_capture():
         tensor = tla.Tensor(
-            tla.make_shape(VECTOR_ELE),
+            tla.make_shape(n_ele),
             tla_dtype,
-            origin_shape=tla.make_shape(VECTOR_ELE),
+            origin_shape=tla.make_shape(n_ele),
             coord=tla.make_coord(0),
             stride=tla.make_stride(1),
             data_ptr=int(contiguous.data_ptr()),
-        )
+        ).mark_compact_shape_dynamic(0)
     tensor._external_binding = True
     return tensor
 
 
-def _run_single_case(args: argparse.Namespace, dtype_name: str, torch: Any) -> int:
+def _run_single_case(
+    args: argparse.Namespace, dtype_name: str, torch: Any, n_ele: int
+) -> int:
+    if n_ele <= 0 or n_ele > VECTOR_ELE:
+        raise ValueError(f"n_ele must be in 1..{VECTOR_ELE}; got {n_ele}")
     tla_dtype, torch_dtype, default_sentinel = _set_kernel_dtype(dtype_name)
     device = "npu"
     sentinel = args.sentinel if args.sentinel is not None else default_sentinel
     if dtype_name in {"i8", "i16"}:
-        arange = torch.arange(VECTOR_ELE, dtype=torch.int32, device=device)
+        arange = torch.arange(n_ele, dtype=torch.int32, device=device)
         if dtype_name == "i8":
             x = ((arange % 50) - 25).to(torch_dtype)
             y = ((arange % 30) - 15).to(torch_dtype)
@@ -345,14 +356,14 @@ def _run_single_case(args: argparse.Namespace, dtype_name: str, torch: Any) -> i
             x = arange.to(torch_dtype)
             y = ((arange * 2) - 3).to(torch_dtype)
     else:
-        x = torch.arange(VECTOR_ELE, dtype=torch_dtype, device=device)
-        y = (torch.arange(VECTOR_ELE, dtype=torch_dtype, device=device) * 2) - 3
-    z = torch.full((VECTOR_ELE,), sentinel, dtype=torch_dtype, device=device)
+        x = torch.arange(n_ele, dtype=torch_dtype, device=device)
+        y = (torch.arange(n_ele, dtype=torch_dtype, device=device) * 2) - 3
+    z = torch.full((n_ele,), sentinel, dtype=torch_dtype, device=device)
     expected = x + y
 
-    tla_x = _create_tla_tensor(x, tla_dtype)
-    tla_y = _create_tla_tensor(y, tla_dtype)
-    tla_z = _create_tla_tensor(z, tla_dtype)
+    tla_x = _create_tla_tensor(x, tla_dtype, n_ele)
+    tla_y = _create_tla_tensor(y, tla_dtype, n_ele)
+    tla_z = _create_tla_tensor(z, tla_dtype, n_ele)
 
     kernel = _select_kernel(args)
     artifact = tla.compile(
@@ -384,8 +395,11 @@ def _run_single_case(args: argparse.Namespace, dtype_name: str, torch: Any) -> i
             "expected": expected[index].item(),
         }
 
-    print(f"compile_ok=True host=torch_npu dtype={dtype_name} layout=row")
+    print(
+        f"compile_ok=True host=torch_npu dtype={dtype_name} layout=row n={n_ele}"
+    )
     print(f"kernel.o path={artifact.kernel_binary_path}")
+    print(f"cache_key={artifact.cache_key}")
     print("launch_ok=True")
     print(f"Z unchanged? {bool(unchanged.all())}")
     print(f"Z equals expected add? {bool(expected_match.all())}")
@@ -405,9 +419,12 @@ def run(args: argparse.Namespace) -> int:
     try:
         torch = _require_torch_npu(args.device)
         failed = 0
-        for dtype_name in _dtype_cases(args):
-            print("---", f"dtype={dtype_name}", "---")
-            failed += _run_single_case(args, dtype_name, torch)
+        # Plain `--run` sweeps DEFAULT_N_SHAPES; `--all-dtypes` keeps one n for CI cost.
+        n_shapes = (VECTOR_ELE,) if args.all_dtypes else DEFAULT_N_SHAPES
+        for n_ele in n_shapes:
+            for dtype_name in _dtype_cases(args):
+                print("---", f"n={n_ele}", f"dtype={dtype_name}", "---")
+                failed += _run_single_case(args, dtype_name, torch, n_ele)
         return 0 if failed == 0 else 1
     finally:
         tla.finalize()

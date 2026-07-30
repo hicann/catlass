@@ -31,6 +31,12 @@ L0A_BYTES = 32 * 32 * 4
 L0B_BYTES = 32 * 32 * 4
 L0C_BYTES = 32 * 32 * 4
 
+# Minimal dynamic-GM smoke for mix kernel: M/N stay 32 (AIV tile split), vary K.
+DEFAULT_MNK_SHAPES = (
+    (M_DIM, N_DIM, K_DIM),
+    (M_DIM, N_DIM, 16),
+)
+
 DEMO_DIR = Path(__file__).resolve().parent
 DEFAULT_CACHE_DIR = DEMO_DIR / "artifacts" / "runtime-cache"
 _PRINT_RECORD = re.compile(
@@ -48,6 +54,10 @@ def basic_mixed(
     out: tla.Tensor,
     addend: tla.Tensor,
 ) -> None:
+    m = lhs.origin_shape[0]
+    k = lhs.origin_shape[1]
+    n = rhs.origin_shape[1]
+
     mmad_done = tla.flag("mmad_done", tla.arch.CUBE, tla.arch.FIX)
     l1_loaded = tla.flag("l1_loaded", tla.arch.MTE2, tla.arch.MTE1)
     l0_loaded = tla.flag("l0_loaded", tla.arch.MTE1, tla.arch.CUBE)
@@ -69,9 +79,9 @@ def basic_mixed(
     result_ub_ptr = tla.allocate(UB_TILE_BYTES // 4, tla.Float32, tla.AddressSpace.ub, 256)
 
     with tla.cube():
-        gm_a = tla.tile_view(lhs, tla.make_shape(M_DIM, K_DIM), tla.make_coord(0, 0))
-        gm_b = tla.tile_view(rhs, tla.make_shape(K_DIM, N_DIM), tla.make_coord(0, 0))
-        gm_c = tla.tile_view(out, tla.make_shape(M_DIM, N_DIM), tla.make_coord(0, 0))
+        gm_a = tla.tile_view(lhs, tla.make_shape(m, k), tla.make_coord(0, 0))
+        gm_b = tla.tile_view(rhs, tla.make_shape(k, n), tla.make_coord(0, 0))
+        gm_c = tla.tile_view(out, tla.make_shape(m, n), tla.make_coord(0, 0))
         l1_a = tla.make_tensor_like(l1a_ptr, gm_a, tla.arch.zN)
         l1_b = tla.make_tensor_like(l1b_ptr, gm_b, tla.arch.zN)
         tla.copy(l1_a, gm_a)
@@ -81,10 +91,10 @@ def basic_mixed(
         tla.wait_flag(l1_loaded)
 
         l1_a_l0 = tla.tile_view(
-            l1_a, tla.make_shape(M_DIM, K_DIM), tla.make_coord(0, 0)
+            l1_a, tla.make_shape(m, k), tla.make_coord(0, 0)
         )
         l1_b_l0 = tla.tile_view(
-            l1_b, tla.make_shape(K_DIM, N_DIM), tla.make_coord(0, 0)
+            l1_b, tla.make_shape(k, n), tla.make_coord(0, 0)
         )
         l0_a = tla.make_tensor_like(l0a_ptr, l1_a_l0, tla.arch.zN)
         l0_b = tla.make_tensor_like(l0b_ptr, l1_b_l0, tla.arch.nZ)
@@ -176,7 +186,7 @@ def _compile_only_type_args() -> tuple[Any, Any, Any, Any]:
                 coord=tla.make_coord(0, 0),
                 stride=tla.make_stride(K_DIM, 1),
                 layout_tag=tla.arch.RowMajor,
-            ),
+            ).mark_layout_dynamic(),
             tla.Tensor(
                 rhs_shape,
                 tla.Float32,
@@ -184,7 +194,7 @@ def _compile_only_type_args() -> tuple[Any, Any, Any, Any]:
                 coord=tla.make_coord(0, 0),
                 stride=tla.make_stride(N_DIM, 1),
                 layout_tag=tla.arch.RowMajor,
-            ),
+            ).mark_layout_dynamic(),
             tla.Tensor(
                 out_shape,
                 tla.Float32,
@@ -192,7 +202,7 @@ def _compile_only_type_args() -> tuple[Any, Any, Any, Any]:
                 coord=tla.make_coord(0, 0),
                 stride=out_stride,
                 layout_tag=tla.arch.RowMajor,
-            ),
+            ).mark_layout_dynamic(),
             tla.Tensor(
                 out_shape,
                 tla.Float32,
@@ -200,7 +210,7 @@ def _compile_only_type_args() -> tuple[Any, Any, Any, Any]:
                 coord=tla.make_coord(0, 0),
                 stride=out_stride,
                 layout_tag=tla.arch.RowMajor,
-            ),
+            ).mark_layout_dynamic(),
         )
 
 
@@ -241,19 +251,19 @@ def _require_torch_npu(device_id: int) -> Any:
     return torch
 
 
-def _create_tla_tensor(dev_buf: Any) -> Any:
+def _create_tla_tensor(dev_buf: Any, rows: int, cols: int) -> Any:
     from catlass import runtime as runtime_mod
 
     contiguous = dev_buf.contiguous()
     with runtime_mod._eager_capture():
         tensor = tla.Tensor(
-            tla.make_shape(M_DIM, N_DIM),
+            tla.make_shape(rows, cols),
             tla.Float32,
-            origin_shape=tla.make_shape(M_DIM, N_DIM),
+            origin_shape=tla.make_shape(rows, cols),
             coord=tla.make_coord(0, 0),
-            stride=tla.make_stride(N_DIM, 1),
+            stride=tla.make_stride(cols, 1),
             data_ptr=int(contiguous.data_ptr()),
-        )
+        ).mark_layout_dynamic()
     tensor._external_binding = True
     return tensor
 
@@ -312,60 +322,74 @@ def _verify_mixed_print_output(output: str) -> list[str]:
     return records
 
 
+def _run_single_case(
+    args: argparse.Namespace, torch: Any, m: int, n: int, k: int
+) -> int:
+    if (m, n) != (M_DIM, N_DIM):
+        raise ValueError(
+            f"basic_mixed AIV path expects m=={M_DIM}, n=={N_DIM}; got m={m}, n={n}"
+        )
+    if k <= 0 or k > K_DIM:
+        raise ValueError(f"k must be in 1..{K_DIM}; got {k}")
+
+    device = "npu"
+    lhs = torch.arange(m * k, dtype=torch.float32, device=device).reshape(m, k)
+    rhs = torch.arange(k * n, dtype=torch.float32, device=device).reshape(k, n)
+    addend = torch.full((m, n), 3.0, dtype=torch.float32, device=device)
+    out = torch.full((m, n), -9.0, dtype=torch.float32, device=device)
+    expected = lhs @ rhs + addend
+
+    tla_lhs = _create_tla_tensor(lhs, m, k)
+    tla_rhs = _create_tla_tensor(rhs, k, n)
+    tla_out = _create_tla_tensor(out, m, n)
+    tla_addend = _create_tla_tensor(addend, m, n)
+
+    artifact = tla.compile(
+        basic_mixed,
+        tla_lhs,
+        tla_rhs,
+        tla_out,
+        tla_addend,
+        **_runtime_kwargs(args),
+    )
+    block = max(1, args.block if args.block != -1 else tla.get_aicore_num(args.device))
+    captured = StringIO()
+    with redirect_stdout(captured):
+        artifact(tla_lhs, tla_rhs, tla_out, tla_addend, block=block)
+    print_records = _verify_mixed_print_output(captured.getvalue())
+
+    torch.npu.synchronize()
+    expected_match = torch.isclose(out, expected, rtol=0.0, atol=args.atol)
+    mismatch = expected_match.logical_not().nonzero(as_tuple=False)
+    first_mismatch: dict[str, Any] | None = None
+    if mismatch.numel():
+        i, j = (int(v) for v in mismatch[0].tolist())
+        first_mismatch = {
+            "index": [i, j],
+            "actual": out[i, j].item(),
+            "expected": expected[i, j].item(),
+        }
+
+    print(f"compile_ok=True mnk={m}x{n}x{k}")
+    print(f"kernel.o path={artifact.kernel_binary_path}")
+    print(f"cache_key={artifact.cache_key}")
+    for record in print_records:
+        print(record)
+    print("launch_ok=True")
+    print(f"out equals expected mixed result? {bool(expected_match.all())}")
+    print(f"first mismatch={first_mismatch}")
+    return 0 if first_mismatch is None else 1
+
+
 def run(args: argparse.Namespace) -> int:
     tla.initialize(device=args.device)
     try:
         torch = _require_torch_npu(args.device)
-        device = "npu"
-        lhs = torch.arange(M_DIM * K_DIM, dtype=torch.float32, device=device).reshape(
-            M_DIM, K_DIM
-        )
-        rhs = torch.arange(K_DIM * N_DIM, dtype=torch.float32, device=device).reshape(
-            K_DIM, N_DIM
-        )
-        addend = torch.full((M_DIM, N_DIM), 3.0, dtype=torch.float32, device=device)
-        out = torch.full((M_DIM, N_DIM), -9.0, dtype=torch.float32, device=device)
-        expected = lhs @ rhs + addend
-
-        tla_lhs = _create_tla_tensor(lhs)
-        tla_rhs = _create_tla_tensor(rhs)
-        tla_out = _create_tla_tensor(out)
-        tla_addend = _create_tla_tensor(addend)
-
-        artifact = tla.compile(
-            basic_mixed,
-            tla_lhs,
-            tla_rhs,
-            tla_out,
-            tla_addend,
-            **_runtime_kwargs(args),
-        )
-        block = max(1, args.block if args.block != -1 else tla.get_aicore_num(args.device))
-        captured = StringIO()
-        with redirect_stdout(captured):
-            artifact(tla_lhs, tla_rhs, tla_out, tla_addend, block=block)
-        print_records = _verify_mixed_print_output(captured.getvalue())
-
-        torch.npu.synchronize()
-        expected_match = torch.isclose(out, expected, rtol=0.0, atol=args.atol)
-        mismatch = expected_match.logical_not().nonzero(as_tuple=False)
-        first_mismatch: dict[str, Any] | None = None
-        if mismatch.numel():
-            i, j = (int(v) for v in mismatch[0].tolist())
-            first_mismatch = {
-                "index": [i, j],
-                "actual": out[i, j].item(),
-                "expected": expected[i, j].item(),
-            }
-
-        print("compile_ok=True")
-        print(f"kernel.o path={artifact.kernel_binary_path}")
-        for record in print_records:
-            print(record)
-        print("launch_ok=True")
-        print(f"out equals expected mixed result? {bool(expected_match.all())}")
-        print(f"first mismatch={first_mismatch}")
-        return 0 if first_mismatch is None else 1
+        failed = 0
+        for m, n, k in DEFAULT_MNK_SHAPES:
+            print("---", f"mnk={m}x{n}x{k}", "---")
+            failed += _run_single_case(args, torch, m, n, k)
+        return 0 if failed == 0 else 1
     finally:
         tla.finalize()
 

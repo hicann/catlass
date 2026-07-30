@@ -2018,7 +2018,7 @@ def test_online_cache_key_serializes_kernel_abi_version(monkeypatch, tmp_path) -
     )
 
     assert len(payloads) == 1
-    assert payloads[0]["cache_abi_version"] == 4
+    assert payloads[0]["cache_abi_version"] == 5
 
 
 @pytest.mark.parametrize(

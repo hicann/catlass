@@ -23,6 +23,12 @@ n = _kernels.n
 k = _kernels.k
 basic_mmad_kernel = _kernels.basic_mmad_kernel
 
+# Minimal dynamic-GM smoke: same compiled kernel, different launch extents.
+DEFAULT_MNK_SHAPES = [
+    (_kernels.m, _kernels.n, _kernels.k),
+    (1, 2, 3),
+]
+
 
 def _parse_layout_choice(name: str) -> LayoutChoice:
     key = name.strip().lower().replace("_", "")
@@ -183,19 +189,19 @@ def _compile_only_type_args(
                 ta,
                 origin_shape=tla.make_shape(m, k),
                 layout_tag=_gm_layout_tag(layout_a),
-            ),
+            ).mark_layout_dynamic(),
             tla.Tensor(
                 tla.make_shape(k, n),
                 tb,
                 origin_shape=tla.make_shape(k, n),
                 layout_tag=_gm_layout_tag(layout_b),
-            ),
+            ).mark_layout_dynamic(),
             tla.Tensor(
                 tla.make_shape(m, n),
                 tc,
                 origin_shape=tla.make_shape(m, n),
                 layout_tag=tla.arch.RowMajor,
-            ),
+            ).mark_layout_dynamic(),
         )
 
 
@@ -211,7 +217,7 @@ def _create_tla_tensor(dev_buf: Any, layout: LayoutChoice) -> Any:
     return from_dlpack(
         _device_buffer_for_layout(dev_buf, layout),
         layout_tag=_gm_layout_tag(layout),
-    )
+    ).mark_layout_dynamic()
 
 
 def dump_tlair(
@@ -279,9 +285,11 @@ def _print_case_result(
     print(
         "compile_ok=True "
         f"host={host} layout_a={layout_a} layout_b={layout_b} "
-        f"dtype_a={dtype_a} dtype_b={dtype_b} dtype_c={dtype_c}"
+        f"dtype_a={dtype_a} dtype_b={dtype_b} dtype_c={dtype_c} "
+        f"mnk={m}x{n}x{k}"
     )
     print(f"kernel.o path={artifact.kernel_binary_path}")
+    print(f"cache_key={artifact.cache_key}")
     print("launch_ok=True")
     print(f"C unchanged? {unchanged_all}")
     print(f"C equals expected matmul? {expected_match_all}")
@@ -401,26 +409,39 @@ def _dtype_triples(
     return [(args.dtype_a, args.dtype_b, args.dtype_c)]
 
 
+def _mnk_shapes(args: argparse.Namespace) -> list[tuple[int, int, int]]:
+    default = (_kernels.m, _kernels.n, _kernels.k)
+    if (args.m, args.n, args.k) != default:
+        return [(args.m, args.n, args.k)]
+    # Plain `--run` sweeps the list; `--all-*` CI paths keep a single MNK.
+    if args.all_layouts or args.all_mmad_dtypes:
+        return [default]
+    return list(DEFAULT_MNK_SHAPES)
+
+
 def run(args: argparse.Namespace) -> int:
     tla.initialize(device=args.device)
     try:
         failed = 0
-        for dtype_a, dtype_b, dtype_c in _dtype_triples(args):
-            _validate_mmad_dtype_triple(dtype_a, dtype_b, dtype_c)
-            for layout_a, layout_b in _layout_pairs(args):
-                print(
-                    "---",
-                    "backend=torch_npu",
-                    f"dtype_a={dtype_a}",
-                    f"dtype_b={dtype_b}",
-                    f"dtype_c={dtype_c}",
-                    f"layout_a={layout_a}",
-                    f"layout_b={layout_b}",
-                    "---",
-                )
-                failed += run_single_case(
-                    args, layout_a, layout_b, dtype_a, dtype_b, dtype_c
-                )
+        for mi, ni, ki in _mnk_shapes(args):
+            _apply_problem_size(mi, ni, ki)
+            for dtype_a, dtype_b, dtype_c in _dtype_triples(args):
+                _validate_mmad_dtype_triple(dtype_a, dtype_b, dtype_c)
+                for layout_a, layout_b in _layout_pairs(args):
+                    print(
+                        "---",
+                        "backend=torch_npu",
+                        f"mnk={mi}x{ni}x{ki}",
+                        f"dtype_a={dtype_a}",
+                        f"dtype_b={dtype_b}",
+                        f"dtype_c={dtype_c}",
+                        f"layout_a={layout_a}",
+                        f"layout_b={layout_b}",
+                        "---",
+                    )
+                    failed += run_single_case(
+                        args, layout_a, layout_b, dtype_a, dtype_b, dtype_c
+                    )
         return 0 if failed == 0 else 1
     finally:
         tla.finalize()
