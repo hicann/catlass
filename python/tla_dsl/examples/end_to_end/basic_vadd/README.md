@@ -20,3 +20,9 @@ python examples/end_to_end/basic_vadd/basic_vadd.py --run --device 2 --force-rec
 The runtime path uses `torch` and `torch_npu` tensors on NPU, wraps them through
 `catlass.runtime.from_dlpack`, compiles with `arch_scope="aiv.c310"`, launches the
 kernel, and compares `z` with `x + y`.
+
+### Dynamic GM (this PR)
+
+- Host tensors use `mark_compact_shape_dynamic(0)` so GM extents are `?` at compile time.
+- Kernel working length is `mem_x.origin_shape[0]`; UB capacity remains `VECTOR_ELE`.
+- `--run` sweeps `DEFAULT_N_SHAPES` (`VECTOR_ELE`, `1`); `--all-dtypes` keeps one `n`. Same dtype should reuse `cache_key`.

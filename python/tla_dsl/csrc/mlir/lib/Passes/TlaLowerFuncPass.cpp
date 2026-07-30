@@ -39,10 +39,10 @@ static LogicalResult validateKernelTensorArg(Operation *funcOp, unsigned argInde
   if (!llvm::all_of(info->coord, [](int64_t value) { return value == 0; }))
     return funcOp->emitError() << "kernel tensor argument " << argIndex
                                << " must be a root tensor with zero coordinates";
-  if (llvm::any_of(info->originShape, [](int64_t value) { return value == ShapedType::kDynamic; }))
-    return funcOp->emitError() << "kernel tensor argument " << argIndex
-                               << " cannot have dynamic origin_shape";
-  if (llvm::any_of(info->originShape, [](int64_t value) { return value <= 0; }))
+  // Dynamic origin_shape is allowed (origin tracks runtime shape).
+  if (llvm::any_of(info->originShape, [](int64_t value) {
+        return value != ShapedType::kDynamic && value <= 0;
+      }))
     return funcOp->emitError() << "kernel tensor argument " << argIndex
                                << " origin_shape must contain positive extents";
   if (llvm::any_of(info->shape,
@@ -193,20 +193,26 @@ static FailureOr<Value> materializeRootTensorDescriptor(OpBuilder &builder, Loca
   Value stride1;
   Value origin0;
   Value origin1;
+  auto originValue = [&](unsigned axis, Value shapeAxis) -> Value {
+    int64_t extent = rawInfo->originShape[axis];
+    if (extent == ShapedType::kDynamic)
+      return shapeAxis;
+    return constant(extent);
+  };
   if (rawInfo->shape.size() == 1) {
     shape0 = constant(1);
     shape1 = shape[0];
     stride1 = stride[0];
     stride0 = builder.createOrFold<arith::MulIOp>(loc, shape1, stride1);
     origin0 = constant(1);
-    origin1 = constant(rawInfo->originShape[0]);
+    origin1 = originValue(0, shape1);
   } else {
     shape0 = shape[0];
     shape1 = shape[1];
     stride0 = stride[0];
     stride1 = stride[1];
-    origin0 = constant(rawInfo->originShape[0]);
-    origin1 = constant(rawInfo->originShape[1]);
+    origin0 = originValue(0, shape0);
+    origin1 = originValue(1, shape1);
   }
 
   return builder
@@ -218,6 +224,8 @@ static FailureOr<Value> materializeRootTensorDescriptor(OpBuilder &builder, Loca
 static LogicalResult materializeKernelTensorEntryAbi(ModuleOp module) {
   for (func::FuncOp funcOp : module.getOps<func::FuncOp>()) {
     FunctionType originalType = funcOp.getFunctionType();
+    // Dynamic GM args may already be memref (frontend Approach A prologue with
+    // tensor_desc). Only !tla.tensor args still need bridge + root descriptor.
     if (!llvm::any_of(originalType.getInputs(),
                       [](Type type) { return isa<::tla::TlaTensorType>(type); }))
       continue;
@@ -244,7 +252,7 @@ static LogicalResult materializeKernelTensorEntryAbi(ModuleOp module) {
       arg.setType(type);
 
     Block &entry = funcOp.getBody().front();
-    OpBuilder builder(&entry, entry.begin());
+    OpBuilder builder = OpBuilder::atBlockBegin(&entry);
     for (auto [index, originalArgType] : llvm::enumerate(originalType.getInputs())) {
       auto tensorType = dyn_cast<::tla::TlaTensorType>(originalArgType);
       if (!tensorType)
@@ -254,10 +262,15 @@ static LogicalResult materializeKernelTensorEntryAbi(ModuleOp module) {
       originalUses.reserve(std::distance(arg.use_begin(), arg.use_end()));
       for (OpOperand &use : arg.getUses())
         originalUses.push_back(&use);
+      builder.setInsertionPointToStart(&entry);
       FailureOr<Value> descriptor =
           materializeRootTensorDescriptor(builder, funcOp.getLoc(), arg, tensorType);
       if (failed(descriptor))
         return funcOp.emitError() << "failed to materialize root descriptor for argument " << index;
+      auto descOp = descriptor->getDefiningOp<::tla::TensorDescOp>();
+      if (!descOp)
+        return funcOp.emitError() << "root descriptor for argument " << index
+                                  << " is not a tla.tensor_desc";
       for (OpOperand *use : originalUses)
         use->set(*descriptor);
     }

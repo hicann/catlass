@@ -176,7 +176,10 @@ static GMFunctionArgMap collectGMFunctionArgInfo(ModuleOp module) {
     for (Type input : funcOp.getArgumentTypes()) {
       GMRank1ArgInfo info;
       auto memrefType = llvm::dyn_cast<MemRefType>(input);
-      if (memrefType && memrefType.getRank() == 1 && memrefType.getMemorySpaceAsInt() == 1 &&
+      // Only static rank-1 GM may be collapsed to a raw pointer. Dynamic GM
+      // (and rank-2) keep the full unpacked memref descriptor so host ABI can
+      // supply sizes/strides for memref.dim / extract_strided_metadata.
+      if (memrefType && memrefType.getRank() == 1 && ::tla::isGmMemRef(memrefType) &&
           memrefType.hasStaticShape()) {
         info.isGMRank1Static = true;
         info.staticSize = memrefType.getShape()[0];

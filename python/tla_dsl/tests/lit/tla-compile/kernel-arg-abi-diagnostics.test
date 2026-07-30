@@ -17,7 +17,7 @@
 // COORD: error:
 // COORD-SAME: kernel tensor argument 0 cannot have dynamic coordinates
 // ORIGIN: error:
-// ORIGIN-SAME: kernel tensor argument 0 cannot have dynamic origin_shape
+// ORIGIN-SAME: kernel tensor argument 0 origin_shape must contain positive extents
 // ROW-STRIDE: error:
 // ROW-STRIDE-SAME: row_major kernel tensor argument 0 must have non-overlapping rows
 // COL-STRIDE: error:
@@ -55,7 +55,8 @@ module {
 
 //--- origin.mlir
 module {
-  tla.func @bad_origin(%arg0: !tla.tensor<!tla.layout<!tla.shape<?,8>, !tla.stride<?,1>, !tla.shape<?,8>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>) {
+  // Dynamic origin_shape is allowed; reject non-positive static extents.
+  tla.func @bad_origin(%arg0: !tla.tensor<!tla.layout<!tla.shape<8,8>, !tla.stride<8,1>, !tla.shape<0,8>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>) {
     tla.return
   }
 }

@@ -1182,6 +1182,9 @@ def test_vector_dynamic_gm_memref_keeps_real_descriptor() -> None:
     )
     assert "!tla.shape<?>" in mlir_text
     assert "!tla.ptr<f32, gm" in mlir_text
+    assert "tla.tensor_extent" not in mlir_text
+    assert "memref.dim" in mlir_text
+    assert "tla.tensor_desc" in mlir_text
 
     output = _run_tla_compile_ir_after_pass(
         mlir_text, "tla-vector-region", require_success=True
@@ -1189,8 +1192,8 @@ def test_vector_dynamic_gm_memref_keeps_real_descriptor() -> None:
 
     assert re.search(
         r"func\.func @_vector_dynamic_gm_descriptor_kernel\("
-        r"%arg0: memref<\?xf32, strided<\[1\], offset: \?>, "
-        r"#hivm\.address_space<gm>>",
+        r"%arg0: memref<\?x\?x\?x\?xf32, strided<\[\?, \?, \?, \?\], offset: \?>, "
+        r"#hivm\.address_space<gm>>, %arg1: index, %arg2: index",
         output,
     ), output
     assert "memref.dim %arg0" in output

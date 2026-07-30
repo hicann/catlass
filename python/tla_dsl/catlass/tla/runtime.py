@@ -17,7 +17,7 @@ from ..types import (
     _TENSOR_DTYPE_SIZES,
     _coerce_host_tensor_addrspace,
     _coerce_host_tensor_dtype,
-    _deduce_leading_dim,
+    _deduce_compact_stride_order,
     _flat_layout_leaves,
     _flatten_int_leaves_tree,
     _replace_flat_leaves_in_tree,
@@ -114,6 +114,7 @@ class _Tensor(TensorABC):
         self._shape_components: tuple[Any, ...] | None = None
         self._shape_tuple: tuple[int, ...] | None = None
         self._dynamic_shape_tree: Any | None = None
+        self._dynamic_origin_shape_tree: Any | None = None
         self._dynamic_stride_tree: Any | None = None
 
         self.data_ptr = data_ptr
@@ -227,11 +228,36 @@ class _Tensor(TensorABC):
             )
 
     def mark_layout_dynamic(self, leading_dim: int | None = None) -> "_Tensor":
-        """Mark stride metadata dynamic."""
+        """Mark shape/stride layout metadata dynamic.
+
+        All shape modes become dynamic. Strides become dynamic except the leading
+        dimension, which keeps stride ``1``. Broadcast strides of ``0`` are
+        preserved. Matching ``origin_shape`` leaves become dynamic as well so the
+        compile type no longer depends on concrete DLPack extents.
+        """
+        # Dynamic GM ABI hard-codes root coord/offset 0 (same rule as
+        # TlaLowerFuncPass::validateKernelTensorArg).
+        coord_leaves = _flat_layout_leaves(self.coord, allow_dynamic=True)
+        if any(leaf is None for leaf in coord_leaves) or not all(
+            int(leaf) == 0 for leaf in coord_leaves
+        ):
+            raise RuntimeTensorError(
+                "mark_*_dynamic requires a root tensor with zero coordinates; "
+                f"got coord={self.coord!r}"
+            )
         flat_strides = _flat_layout_leaves(self.stride)
         shape_tuple = self._shape_tuple or ()
         if leading_dim is None:
-            leading_dim = _deduce_leading_dim(shape_tuple, flat_strides)
+            # Prefer layout-tag semantics when unit strides are ambiguous
+            # (e.g. column_major with shape[0]==1 → strides (1,1)).
+            if self.layout_tag == "column_major":
+                leading_dim = 0
+            elif self.layout_tag == "row_major":
+                leading_dim = len(flat_strides) - 1
+            else:
+                leading_dim = _deduce_compact_stride_order(
+                    shape_tuple, flat_strides, strict_unit_stride=True
+                )[-1]
         if leading_dim < 0 or leading_dim >= len(flat_strides):
             raise RuntimeTensorError(
                 f"leading_dim={leading_dim} out of range for rank {len(flat_strides)}"
@@ -241,43 +267,148 @@ class _Tensor(TensorABC):
                 f"leading_dim={leading_dim} has stride {flat_strides[leading_dim]}, expected 1"
             )
         new_stride_leaves = [
-            1 if index == leading_dim else None for index in range(len(flat_strides))
+            1
+            if index == leading_dim
+            else (0 if int(flat_strides[index]) == 0 else None)
+            for index in range(len(flat_strides))
         ]
         self._dynamic_stride_tree = _replace_flat_leaves_in_tree(
             self.stride, new_stride_leaves
         )
+        self._mark_shape_modes_dynamic(range(len(shape_tuple)))
         return self
 
     def mark_compact_shape_dynamic(
         self,
         mode: int,
         stride_order: tuple[int, ...] | None = None,
-        divisibility: int = 1,
     ) -> "_Tensor":
-        """Mark a shape mode dynamic."""
+        """Mark one compact shape mode dynamic.
+
+        Propagates dynamic extents to strides of modes that are major to ``mode``
+        (their stride is a product that includes the marked extent).
+
+        Matching ``origin_shape`` leaves become dynamic with the shape modes so
+        the compile type stays independent of concrete problem sizes.
+        """
+        coord_leaves = _flat_layout_leaves(self.coord, allow_dynamic=True)
+        if any(leaf is None for leaf in coord_leaves) or not all(
+            int(leaf) == 0 for leaf in coord_leaves
+        ):
+            raise RuntimeTensorError(
+                "mark_*_dynamic requires a root tensor with zero coordinates; "
+                f"got coord={self.coord!r}"
+            )
         flat_shape = list(self._shape_tuple or ())
-        if mode < 0 or mode >= len(flat_shape):
+        rank = len(flat_shape)
+        if mode < 0 or mode >= rank:
             raise RuntimeTensorError(
-                f"mode={mode} out of range for rank {len(flat_shape)}"
+                f"mode={mode} out of range for rank {rank}"
             )
-        if int(divisibility) < 1:
+        if stride_order is None:
+            stride_order = _deduce_compact_stride_order(
+                flat_shape, _flat_layout_leaves(self.stride)
+            )
+        elif len(stride_order) != rank or sorted(stride_order) != list(range(rank)):
             raise RuntimeTensorError(
-                f"divisibility must be positive, got {divisibility}"
+                f"stride_order {stride_order!r} is not a permutation of "
+                f"range({rank})"
             )
-        if stride_order is not None:
-            expected = len(flat_shape)
-            if len(stride_order) != expected or sorted(stride_order) != list(
-                range(expected)
-            ):
-                raise RuntimeTensorError(
-                    f"stride_order {stride_order!r} is not a permutation of "
-                    f"range({expected})"
-                )
-        flat_shape[mode] = None
-        self._dynamic_shape_tree = _replace_flat_leaves_in_tree(
-            self._shape_components, flat_shape
+
+        self._mark_shape_modes_dynamic((mode,))
+
+        # Modes major to ``mode`` (appear before it outer→inner) include its size
+        # in their compact stride product → mark those strides dynamic.
+        mode_pos = stride_order.index(mode)
+        major_modes = set(stride_order[:mode_pos])
+        flat_strides = _flat_layout_leaves(
+            self._layout_stride_components(),
+            allow_dynamic=True,
+            expected_rank=rank,
+        )
+        for index in major_modes:
+            if int(flat_strides[index] or 0) != 0:
+                flat_strides[index] = None
+        self._dynamic_stride_tree = _replace_flat_leaves_in_tree(
+            self.stride, flat_strides
         )
         return self
+
+    def _mark_shape_modes_dynamic(self, modes: Any) -> None:
+        shape_components = self._shape_components
+        if shape_components is None:
+            raise TypeError(
+                "Tensor metadata is incomplete; construct tensors with tla.make_shape, "
+                "origin_shape, coord, and stride metadata"
+            )
+        rank = len(self._shape_tuple or ())
+        shape_leaves = _flat_layout_leaves(
+            self._layout_shape_components(),
+            allow_dynamic=True,
+            expected_rank=rank,
+        )
+        origin_leaves = _flat_layout_leaves(
+            self._layout_origin_shape_components(),
+            allow_dynamic=True,
+            expected_rank=rank,
+        )
+        for mode in modes:
+            shape_leaves[int(mode)] = None
+            origin_leaves[int(mode)] = None
+        self._dynamic_shape_tree = _replace_flat_leaves_in_tree(
+            shape_components, shape_leaves
+        )
+        self._dynamic_origin_shape_tree = _replace_flat_leaves_in_tree(
+            self.origin_shape, origin_leaves
+        )
+
+    def build_memref_launch_fields(self) -> dict[str, int]:
+        """Build unified schema-v4 GM launch fields (13 slots, pad unused with 1)."""
+        self._require_bound()
+        shape = tuple(int(dim) for dim in (self._shape_tuple or ()))
+        if not shape:
+            raise RuntimeTensorError(
+                "build_memref_launch_fields requires a concrete DLPack shape"
+            )
+        strides = [int(s) for s in _flat_layout_leaves(self.stride)]
+        if len(strides) != len(shape):
+            raise RuntimeTensorError(
+                "build_memref_launch_fields shape/stride rank mismatch"
+            )
+        # Concrete origin from construction (mark_* only shadows the type tree).
+        origin_leaves = [int(v) for v in _flat_layout_leaves(self.origin_shape)]
+        if not origin_leaves:
+            origin_leaves = list(shape)
+
+        def _pad4(values: list[int]) -> list[int]:
+            if len(values) > 4:
+                raise RuntimeTensorError(
+                    f"build_memref_launch_fields supports at most 4 shape/stride "
+                    f"leaves, got {len(values)}"
+                )
+            return list(values) + [1] * (4 - len(values))
+
+        sizes = _pad4(list(shape))
+        stride_vals = _pad4(list(strides))
+        origin0 = int(origin_leaves[0]) if len(origin_leaves) >= 1 else 1
+        origin1 = int(origin_leaves[1]) if len(origin_leaves) >= 2 else 1
+
+        data_ptr = int(self.data_ptr)
+        return {
+            "allocated": data_ptr,
+            "aligned": data_ptr,
+            "offset": 0,
+            "size0": sizes[0],
+            "size1": sizes[1],
+            "size2": sizes[2],
+            "size3": sizes[3],
+            "stride0": stride_vals[0],
+            "stride1": stride_vals[1],
+            "stride2": stride_vals[2],
+            "stride3": stride_vals[3],
+            "originShape0": origin0,
+            "originShape1": origin1,
+        }
 
     def _layout_shape_components(self) -> tuple[Any, ...]:
         shape_components = self._shape_components
@@ -287,6 +418,9 @@ class _Tensor(TensorABC):
                 "origin_shape, coord, and stride metadata"
             )
         return self._dynamic_shape_tree or shape_components
+
+    def _layout_origin_shape_components(self) -> Any:
+        return self._dynamic_origin_shape_tree or self.origin_shape
 
     def _layout_stride_components(self) -> Any:
         return self._dynamic_stride_tree or self.stride
@@ -310,7 +444,9 @@ class _Tensor(TensorABC):
             layout=TlaLayoutDescriptor(
                 shape=TlaIndexTreeType("shape", self._layout_shape_components()),
                 stride=TlaIndexTreeType("stride", self._layout_stride_components()),
-                origin_shape=TlaIndexTreeType("shape", self.origin_shape),
+                origin_shape=TlaIndexTreeType(
+                    "shape", self._layout_origin_shape_components()
+                ),
                 layout_tag=str(self.layout_tag),
             ),
             coord=self.coord,

@@ -131,3 +131,11 @@ python examples/end_to_end/basic_mmad/basic_matmul.py --help
 **`--build-only`** 仅打印 `compile_ok=True` 与 `kernel.o path=...`。
 
 若失败，请检查 **`TLA_DSL_HIVM_TEMPLATE_BC`**、`ASCEND_HOME_PATH`（run 路径）、**`torch_npu`** 及 **`--device`**。
+
+---
+
+## 动态 GM（本 PR 增量）
+
+- Host：`from_dlpack(...).mark_layout_dynamic()`，编译类型为 `?`，launch 走 schema v4 memref 字段。
+- Kernel：工作 M/N/K 取自 `mem_*.origin_shape[...]`；L1/L0 分块常量不变。
+- `--run` 默认扫 `DEFAULT_MNK_SHAPES`（如 `333×444×555` 与 `1×2×3`）；显式 `--m/--n/--k` 或 `--all-layouts` / `--all-mmad-dtypes` 时只跑一组。同一 dtype/layout 下 `cache_key` 应相同。

@@ -2,6 +2,8 @@
 #include "Dialect/Tla/IR/TlaDialect.h"
 #include "Dialect/Tla/IR/TlaTypes.h"
 #include "Passes.h"
+#include "Passes/TlaTensorDescriptor.h"
+#include "Tools/AddressSpaceConversion.h"
 #include "Tools/CompilePipeline.h"
 
 #include "mlir/Bindings/Python/PybindAdaptors.h"
@@ -20,6 +22,8 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/Support/raw_ostream.h"
+
+#include "bishengir/Dialect/HIVM/IR/HIVM.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -44,6 +48,9 @@ MLIRContext *bridgeContext(MlirContext context) {
   if (!ctx)
     throw py::value_error("expected a non-null mlir.ir.Context");
   ctx->getOrLoadDialect<::tla::TlaDialect>();
+  // Bridged GM memref types carry #hivm.address_space; Attribute storage requires
+  // HIVMDialect to be loaded before AddressSpaceAttr::get.
+  ctx->getOrLoadDialect<hivm::HIVMDialect>();
   return ctx;
 }
 
@@ -289,6 +296,25 @@ MlirType tensorTypeGet(MlirContext context, const std::vector<int64_t> &shapeTre
   return toMlirType(type, "tla.tensor");
 }
 
+/// Unified dynamic GM ABI memref from ``!tla.tensor`` (schema-v4: 4 size/stride slots).
+MlirType dynamicGmMemrefTypeGet(MlirType tensorType) {
+  Type tlaTensor = bridgeType(tensorType, "tla.tensor type");
+  if (!tlaTensor.getContext())
+    throw py::value_error("expected tla.tensor type with a live MLIRContext");
+  (void)bridgeContext(wrap(tlaTensor.getContext()));
+  FailureOr<MemRefType> bridged = ::tla::bridgeTlaTensorType(tlaTensor);
+  if (failed(bridged))
+    throw py::value_error("failed to bridge tla.tensor storage type to memref");
+  Type elem = bridged->getElementType();
+  MLIRContext *ctx = elem.getContext();
+  Attribute gmSpace = hivm::AddressSpaceAttr::get(ctx, hivm::AddressSpace::GM);
+  SmallVector<int64_t, 4> dynShape(4, ShapedType::kDynamic);
+  SmallVector<int64_t, 4> dynStrides(4, ShapedType::kDynamic);
+  auto layout = StridedLayoutAttr::get(ctx, ShapedType::kDynamic, dynStrides);
+  Type memref = MemRefType::get(dynShape, elem, layout, gmSpace);
+  return toMlirType(memref, "dynamic GM memref type");
+}
+
 std::optional<std::string> tlaTypeCategory(MlirType type) {
   Type unwrapped = bridgeType(type);
   if (isa<::tla::TlaTensorType>(unwrapped))
@@ -418,6 +444,48 @@ std::optional<py::dict> scalarAbiDescriptor(Type type) {
   return descriptor;
 }
 
+static void appendAbiArgument(py::list &arguments, unsigned abiIndex,
+                              unsigned logicalIndex, const char *kind,
+                              std::optional<py::dict> scalar, const std::string &mlirType,
+                              uint64_t &offset, unsigned storageSize,
+                              const char *field = nullptr) {
+  offset = (offset + 3) & ~uint64_t(3);
+  py::dict argument;
+  argument["index"] = abiIndex;
+  argument["logical_index"] = logicalIndex;
+  argument["kind"] = kind;
+  argument["scalar"] = scalar.has_value() ? py::object(*scalar) : py::none();
+  argument["mlir_type"] = mlirType;
+  argument["offset"] = offset;
+  argument["storage_size"] = storageSize;
+  argument["alignment"] = 4;
+  if (field != nullptr)
+    argument["field"] = field;
+  else
+    argument["field"] = py::none();
+  arguments.append(argument);
+  offset += storageSize;
+}
+
+static bool appendDynamicGmMemrefFields(py::list &arguments, unsigned &abiIndex,
+                                        unsigned logicalIndex, MemRefType memrefType,
+                                        uint64_t &offset) {
+  // Schema v4: unified 13-slot descriptor for all dynamic GM ranks.
+  // Device signature is unified dynamic GM memref + originShape0/1 index args.
+  if (memrefType.getRank() != 4)
+    return false;
+  std::string mlirType = printType(memrefType);
+  static constexpr const char *kFields[] = {
+      "allocated", "aligned", "offset", "size0",        "size1",
+      "size2",     "size3",   "stride0", "stride1",     "stride2",
+      "stride3",   "originShape0", "originShape1"};
+  for (const char *field : kFields) {
+    appendAbiArgument(arguments, abiIndex++, logicalIndex, "memref_field", std::nullopt,
+                      mlirType, offset, /*storageSize=*/8, field);
+  }
+  return true;
+}
+
 std::optional<py::dict> buildKernelAbi(ModuleOp module,
                                        const KernelPointerProvenance &provenance) {
   SmallVector<py::dict, 2> layouts;
@@ -425,6 +493,7 @@ std::optional<py::dict> buildKernelAbi(ModuleOp module,
   bool sawMixAiv = false;
   std::optional<std::string> mixAicBase;
   std::optional<std::string> mixAivBase;
+  bool anyMemrefField = false;
   for (func::FuncOp function : module.getOps<func::FuncOp>()) {
     if (function.isDeclaration() || !function->hasAttr("hacc.entry"))
       continue;
@@ -451,16 +520,46 @@ std::optional<py::dict> buildKernelAbi(ModuleOp module,
     uint64_t offset = 0;
     bool supported = true;
     unsigned logicalIndex = 0;
-    for (auto [index, type] : llvm::enumerate(function.getArgumentTypes())) {
+    unsigned abiIndex = 0;
+    unsigned skipOriginIndexArgs = 0;
+    ArrayRef<Type> argTypes = function.getArgumentTypes();
+    for (auto [index, type] : llvm::enumerate(argTypes)) {
       if (function.getArgAttr(index, "tla.debug_print.workspace") ||
           function.getArgAttr(index, "tla.print_tensor.workspace"))
         continue;
+      // originShape0/1 are already folded into the 13-slot memref_field list.
+      if (skipOriginIndexArgs > 0) {
+        if (!type.isIndex()) {
+          supported = false;
+          break;
+        }
+        --skipOriginIndexArgs;
+        continue;
+      }
       unsigned provenanceIndex = logicalIndex;
-      offset = (offset + 3) & ~uint64_t(3);
       if (provenanceIndex < pointerArgs.size() &&
           pointerArgs[provenanceIndex] < 0) {
         supported = false;
         break;
+      }
+      if (auto memrefType = dyn_cast<MemRefType>(type);
+          memrefType && ::tla::isGmMemRef(memrefType) &&
+          !memrefType.hasStaticShape()) {
+        if (!appendDynamicGmMemrefFields(arguments, abiIndex, logicalIndex, memrefType,
+                                         offset)) {
+          supported = false;
+          break;
+        }
+        // Expect the next two function args to be originShape index companions.
+        if (index + 2 >= argTypes.size() || !argTypes[index + 1].isIndex() ||
+            !argTypes[index + 2].isIndex()) {
+          supported = false;
+          break;
+        }
+        skipOriginIndexArgs = 2;
+        anyMemrefField = true;
+        ++logicalIndex;
+        continue;
       }
       bool pointer = isa<MemRefType, LLVM::LLVMPointerType>(type) ||
                      (provenanceIndex < pointerArgs.size() &&
@@ -480,25 +579,17 @@ std::optional<py::dict> buildKernelAbi(ModuleOp module,
         supported = false;
         break;
       }
-      py::dict argument;
-      argument["index"] = logicalIndex++;
-      argument["kind"] = pointer ? "pointer" : "scalar";
-      if (pointer)
-        argument["scalar"] = py::none();
-      else
-        argument["scalar"] = *scalar;
-      argument["mlir_type"] = printType(type);
-      argument["offset"] = offset;
-      argument["storage_size"] = size;
-      argument["alignment"] = 4;
-      arguments.append(argument);
-      offset += size;
+      appendAbiArgument(arguments, abiIndex++, logicalIndex++,
+                        pointer ? "pointer" : "scalar", scalar, printType(type), offset,
+                        size);
     }
-    if (!supported)
+    if (!supported || skipOriginIndexArgs != 0)
       return std::nullopt;
     offset = (offset + 7) & ~uint64_t(7);
     py::dict layout;
-    layout["schema_version"] = 3;
+    // schema v4 when any dynamic GM memref_field is present; otherwise keep v3
+    // for backward-compatible static pointer/scalar layouts.
+    layout["schema_version"] = anyMemrefField ? 4 : 3;
     layout["entrypoint"] = logicalName.str();
     layout["total_size"] = offset;
     layout["arguments"] = arguments;
@@ -525,15 +616,15 @@ std::optional<py::dict> buildKernelAbi(ModuleOp module,
 py::dict lowerToMlir(MlirModule cModule, std::vector<std::string> printBefore,
                      std::vector<std::string> printAfter, bool printBeforeAll, bool printAfterAll) {
   ModuleOp module = moduleFromCapsule(cModule);
-  tla::registerTlaPasses();
+  ::tla::registerTlaPasses();
   MLIRContext *context = module.getContext();
   context->allowUnregisteredDialects(true);
   context->disableMultithreading();
-  tla::tools::loadTlaCompileDialects(*context);
+  ::tla::tools::loadTlaCompileDialects(*context);
 
   PassManager tlaPm(context);
   PassManager llvmPm(context);
-  tla::tools::buildTlaCompilePassManagers(*context, tlaPm, llvmPm);
+  ::tla::tools::buildTlaCompilePassManagers(*context, tlaPm, llvmPm);
   KernelPointerProvenance pointerProvenance =
       collectKernelPointerProvenance(module);
 
@@ -558,7 +649,7 @@ py::dict lowerToMlir(MlirModule cModule, std::vector<std::string> printBefore,
 
   std::string output;
   std::string error;
-  bool success = tla::tools::runTlaCompilePipelinesWithManagers(
+  bool success = ::tla::tools::runTlaCompilePipelinesWithManagers(
       module, StringRef("mlir"), tlaPm, llvmPm, output, error,
       /*rewriteTileSignaturesToLLVMPointer=*/true);
   passDumpStream.flush();
@@ -594,6 +685,8 @@ PYBIND11_MODULE(_tla_type_bridge_native, m) {
   m.def("tensor_type_get", &tensorTypeGet, py::arg("context"), py::arg("shape_tree"),
         py::arg("stride_tree"), py::arg("coord_tree"), py::arg("origin_shape_tree"),
         py::arg("element_type"), py::arg("addrspace"), py::arg("layout"), py::arg("ptr_alignment"));
+  m.def("dynamic_gm_memref_type", &dynamicGmMemrefTypeGet, py::arg("tensor_type"),
+        "Build the unified dynamic GM memref type for schema-v4 ABI from a !tla.tensor.");
   m.def("ptr_type_get", &ptrTypeGet, py::arg("context"), py::arg("pointee"), py::arg("addrspace"),
         py::arg("alignment"));
   m.def("vector_ssa_type_get", &vectorSSATypeGet, py::arg("context"),

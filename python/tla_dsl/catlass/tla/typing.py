@@ -72,7 +72,7 @@ class Tensor(ABC):
         raise NotImplementedError(f"{type(self).__name__} does not expose stride")
 
     def mark_layout_dynamic(self, leading_dim: int | None = None) -> Tensor:
-        """Mark stride metadata dynamic (runtime/host tensors only)."""
+        """Mark layout shape/stride metadata dynamic (runtime/host tensors only)."""
         raise NotImplementedError(
             f"{type(self).__name__} does not support mark_layout_dynamic"
         )
@@ -81,9 +81,8 @@ class Tensor(ABC):
         self,
         mode: int,
         stride_order: tuple[int, ...] | None = None,
-        divisibility: int = 1,
     ) -> Tensor:
-        """Mark a shape mode dynamic (runtime/host tensors only)."""
+        """Mark one compact shape mode dynamic (runtime/host tensors only)."""
         raise NotImplementedError(
             f"{type(self).__name__} does not support mark_compact_shape_dynamic"
         )

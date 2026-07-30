@@ -195,9 +195,44 @@ def _build_tla_func(
     fn_loc: mlir_ir.Location,
 ) -> None:
     runtime_arg_names = [name for name in arg_names if name not in constexpr_names]
-    mlir_arg_types = [
-        _coerce_type(ctx, arg_types.get(name)) for name in runtime_arg_names
-    ]
+
+    # Dynamic GM host tensors enter as unified GM memref + originShape0/1 index args.
+    from .core_api import (
+        is_dynamic_gm_tensor_arg,
+        _materialize_dynamic_gm_root_tensor_descriptor,
+    )
+
+    resolved_arg_types: dict[str, Any] = dict(arg_types)
+    dynamic_gm_tensor_tys: dict[str, Any] = {}
+    for name in runtime_arg_names:
+        host = None
+        for i, arg_name in enumerate(arg_names):
+            if arg_name == name:
+                host = call_args[i]
+                break
+        if host is not None and is_dynamic_gm_tensor_arg(host):
+            tensor_ty = host.tla_tensor_type_descriptor()
+            dynamic_gm_tensor_tys[name] = tensor_ty
+            resolved_arg_types[name] = ("dynamic_gm", tensor_ty)
+
+    bridge_ext = _tla_type_bridge._load_bridge_extension()
+    index_ty = mlir_ir.IndexType.get(ctx)
+    mlir_arg_types: list[Any] = []
+    # name -> (memref_block_idx, origin0_idx, origin1_idx) or (single_idx,)
+    block_slots: dict[str, tuple[int, ...]] = {}
+    for name in runtime_arg_names:
+        spec = resolved_arg_types.get(name)
+        if isinstance(spec, tuple) and len(spec) == 2 and spec[0] == "dynamic_gm":
+            tensor_ty = spec[1]
+            gm_memref = bridge_ext.dynamic_gm_memref_type(tensor_ty.to_mlir_type(ctx))
+            start = len(mlir_arg_types)
+            mlir_arg_types.extend([gm_memref, index_ty, index_ty])
+            block_slots[name] = (start, start + 1, start + 2)
+        else:
+            start = len(mlir_arg_types)
+            mlir_arg_types.append(_coerce_type(ctx, resolved_arg_types.get(name)))
+            block_slots[name] = (start,)
+
     fn_type = mlir_ir.FunctionType.get(mlir_arg_types, [])
     func_op = mlir_ir.Operation.create(
         "tla.func",
@@ -234,6 +269,23 @@ def _build_tla_func(
             )
             return _emit_tensor_ptr(_as_value(self), loc)
 
+        def _metadata(self, field: str) -> Any:
+            from .core_api import _as_value, _tensor_metadata_field
+
+            return _tensor_metadata_field(_as_value(self), field)
+
+        @property
+        def shape(self) -> Any:
+            return self._metadata("shape")
+
+        @property
+        def stride(self) -> Any:
+            return self._metadata("stride")
+
+        @property
+        def origin_shape(self) -> Any:
+            return self._metadata("origin_shape")
+
         def __getitem__(self, crd: Any) -> Any:
             """Tensor indexing for kernel-argument proxies."""
             from .base_dsl.op import _capture_user_loc
@@ -261,11 +313,11 @@ def _build_tla_func(
     call_args_for_fn = list(call_args)
     arg_bindings: dict[int, Any] = {}
     category_bindings: dict[int, str] = {}
-    runtime_idx = 0
     for i, name in enumerate(arg_names):
         if name in constexpr_names:
             continue
-        ssa = entry.arguments[runtime_idx]
+        slots = block_slots[name]
+        ssa = entry.arguments[slots[0]]
         host_arg = call_args[i]
         # Numeric host args must stay typed Numeric around the block SSA so
         # operators (``a + b``, ``a // 2``, …) lower via Numeric.__*__.
@@ -286,11 +338,15 @@ def _build_tla_func(
             proxy = _ArgProxy()
             call_args_for_fn[i] = proxy
             arg_bindings[id(proxy)] = ssa
-            category = _category_from_type_like(ctx, arg_types.get(name))
+            # Dynamic GM proxies bind to tensor_desc after prologue (below).
+            category = _category_from_type_like(
+                ctx, arg_types.get(name) if name not in dynamic_gm_tensor_tys else None
+            )
+            if name in dynamic_gm_tensor_tys:
+                category = "tensor"
             if category is not None:
                 category_bindings[id(proxy)] = category
                 category_bindings[id(ssa)] = category
-        runtime_idx += 1
     call_args_for_fn = tuple(call_args_for_fn)
 
     tensor_host_by_value: dict[Any, Any] = {}
@@ -298,17 +354,53 @@ def _build_tla_func(
         if name in constexpr_names:
             continue
         v = call_args[pos]
-        if isinstance(v, Tensor):
-            j = runtime_arg_names.index(name)
-            tensor_host_by_value[entry.arguments[j]] = v
+        if isinstance(v, Tensor) and name not in dynamic_gm_tensor_tys:
+            tensor_host_by_value[entry.arguments[block_slots[name][0]]] = v
 
     with mlir_ir.InsertionPoint(entry):
+        # Materialize dynamic GM root descriptors before the user body so
+        # origin_shape/shape/stride reads hit side-table SSA (memref.dim).
+        pending_dynamic_gm: list[tuple[Any, Any, dict[str, Any]]] = []
+        for name in runtime_arg_names:
+            tensor_ty = dynamic_gm_tensor_tys.get(name)
+            if tensor_ty is None:
+                continue
+            mem_i, o0_i, o1_i = block_slots[name]
+            desc, metadata = _materialize_dynamic_gm_root_tensor_descriptor(
+                entry.arguments[mem_i],
+                entry.arguments[o0_i],
+                entry.arguments[o1_i],
+                tensor_ty,
+                loc=fn_loc,
+            )
+            # Rebind the matching ArgProxy to the tensor_desc result.
+            for i, arg_name in enumerate(arg_names):
+                if arg_name != name:
+                    continue
+                proxy = call_args_for_fn[i]
+                arg_bindings[id(proxy)] = desc
+                category_bindings[id(desc)] = "tensor"
+                host = call_args[i]
+                if isinstance(host, Tensor):
+                    tensor_host_by_value[desc] = host
+                pending_dynamic_gm.append((desc, tensor_ty, metadata))
+                break
+
         with runtime_mod._frontend_emission(
             arg_bindings=arg_bindings,
             category_bindings=category_bindings,
             tensor_host_by_value=tensor_host_by_value,
             module=module,
         ):
+            from .core_api import (
+                _register_tla_tensor_metadata,
+                _register_tla_tensor_type,
+            )
+
+            # Descriptor emission ran before emission state existed; register now.
+            for desc, tensor_ty, metadata in pending_dynamic_gm:
+                _register_tla_tensor_type(desc, tensor_ty)
+                _register_tla_tensor_metadata(desc, metadata)
             try:
                 fn(*call_args_for_fn)
             except runtime_mod.TlaCoreAPIError:
@@ -400,7 +492,7 @@ def _resolve_execution_arg_types(
 
 def _load_execution_dialects(ctx: mlir_ir.Context) -> None:
     _tla_type_bridge.load_tla_dialect(ctx)
-    for dialect in ("arith", "scf"):
+    for dialect in ("arith", "scf", "memref"):
         ctx.dialects[dialect]
 
 

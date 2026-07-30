@@ -552,6 +552,78 @@ def test_mark_layout_dynamic_updates_stride_metadata() -> None:
     )
     updated = tensor.mark_layout_dynamic(leading_dim=1)
     assert updated._dynamic_stride_tree == (None, 1)
+    assert updated._dynamic_shape_tree == (None, None)
+    # Dynamic modes keep origin dynamic (no capacity placeholder).
+    assert updated._dynamic_origin_shape_tree == (None, None)
+    type_str = updated.__tla_type__()
+    assert "!tla.shape<?,?>" in type_str
+    assert "!tla.stride<?,1>" in type_str
+    # layout embeds origin as the third shape component: shape, stride, origin
+    assert type_str.count("!tla.shape<?,?>") == 2
+
+
+def test_mark_layout_dynamic_column_major_keeps_leading_when_rows_are_one() -> None:
+    """Ambiguous unit strides (1,1) must still follow column_major leading=0."""
+    # Physical buffer is permute(1,0).contiguous() of logical (1,3) → shape (3,1).
+    tensor = _from_dlpack_with_parsed(
+        _device_dlpack_fields(shape=(3, 1), strides=(1, 1)),
+        layout_tag=tla.arch.ColumnMajor,
+    )
+    updated = tensor.mark_layout_dynamic()
+    assert updated._dynamic_stride_tree == (1, None)
+    type_str = updated.__tla_type__()
+    assert "column_major" in type_str
+    assert "!tla.stride<1,?>" in type_str
+
+
+def test_mark_compact_shape_dynamic_marks_origin_and_major_strides() -> None:
+    tensor = _from_dlpack_with_parsed(
+        _device_dlpack_fields(shape=(4, 8), strides=(8, 1)),
+        layout_tag=tla.arch.RowMajor,
+    )
+    updated = tensor.mark_compact_shape_dynamic(mode=1)
+    assert updated._dynamic_shape_tree == (4, None)
+    assert updated._dynamic_origin_shape_tree == (4, None)
+    # Cols is innermost; marking it makes the row stride dynamic.
+    assert updated._dynamic_stride_tree == (None, 1)
+    type_str = updated.__tla_type__()
+    assert "!tla.shape<4,?>" in type_str
+    assert "!tla.stride<?,1>" in type_str
+    assert type_str.count("!tla.shape<4,?>") == 2
+
+    rows_only = _from_dlpack_with_parsed(
+        _device_dlpack_fields(shape=(4, 8), strides=(8, 1)),
+        layout_tag=tla.arch.RowMajor,
+    ).mark_compact_shape_dynamic(mode=0)
+    assert rows_only._dynamic_shape_tree == (None, 8)
+    assert rows_only._dynamic_origin_shape_tree == (None, 8)
+    assert rows_only._dynamic_stride_tree == (8, 1)
+    rows_type = rows_only.__tla_type__()
+    assert "!tla.shape<?,8>" in rows_type
+    assert "!tla.stride<8,1>" in rows_type
+    assert rows_type.count("!tla.shape<?,8>") == 2
+
+
+def test_mark_dynamic_rejects_nonzero_root_coord() -> None:
+    """Dynamic GM ABI hard-codes coord/offset 0; non-zero coord must fail early."""
+    with runtime_mod._eager_capture():
+        tensor = tla.Tensor(
+            tla.make_shape(8),
+            tla.Int32,
+            addrspace=tla.AddressSpace.gm,
+            origin_shape=tla.make_shape(8),
+            coord=tla.make_coord(1),
+            stride=tla.make_stride(1),
+            layout_tag=tla.arch.RowMajor,
+        )
+    with pytest.raises(
+        tla.types.RuntimeTensorError, match="zero coordinates"
+    ):
+        tensor.mark_compact_shape_dynamic(0)
+    with pytest.raises(
+        tla.types.RuntimeTensorError, match="zero coordinates"
+    ):
+        tensor.mark_layout_dynamic()
 
 
 def test_manual_tensor_can_bind_device_view() -> None:

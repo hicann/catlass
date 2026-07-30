@@ -29,6 +29,7 @@ class BridgeLoweringError(RuntimeError):
 class KernelAbiArgumentKind(str, Enum):
     POINTER = "pointer"
     SCALAR = "scalar"
+    MEMREF_FIELD = "memref_field"
 
 
 class KernelAbiScalarCategory(str, Enum):
@@ -100,6 +101,8 @@ class KernelAbiArgument:
     offset: int
     storage_size: int
     alignment: int
+    logical_index: int | None = None
+    field: str | None = None
 
 
 @dataclass(frozen=True)
@@ -113,7 +116,8 @@ class KernelAbiLayout:
 def kernel_abi_from_dict(value: Mapping[str, Any] | None) -> KernelAbiLayout | None:
     if value is None:
         return None
-    if int(value.get("schema_version", -1)) != 3:
+    schema_version = int(value.get("schema_version", -1))
+    if schema_version not in (3, 4):
         raise ValueError("Unsupported kernel ABI schema version.")
     arguments: list[KernelAbiArgument] = []
     for arg in value["arguments"]:
@@ -149,9 +153,24 @@ def kernel_abi_from_dict(value: Mapping[str, Any] | None) -> KernelAbiLayout | N
             )
         if kind is KernelAbiArgumentKind.SCALAR and scalar is None:
             raise ValueError("Kernel ABI scalar argument requires a scalar descriptor.")
+        if kind is KernelAbiArgumentKind.MEMREF_FIELD and scalar is not None:
+            raise ValueError(
+                "Kernel ABI memref_field argument cannot have a scalar descriptor."
+            )
         storage_size = int(arg["storage_size"])
         if kind is KernelAbiArgumentKind.POINTER and storage_size != 8:
             raise ValueError("Kernel ABI pointer argument has invalid storage size.")
+        if kind is KernelAbiArgumentKind.MEMREF_FIELD and storage_size != 8:
+            raise ValueError(
+                "Kernel ABI memref_field argument has invalid storage size."
+            )
+        field_value = arg.get("field")
+        if kind is KernelAbiArgumentKind.MEMREF_FIELD:
+            if field_value is None:
+                raise ValueError("Kernel ABI memref_field requires a field name.")
+            field = str(field_value)
+        else:
+            field = None
         if scalar is not None:
             expected_size = (
                 8
@@ -162,19 +181,24 @@ def kernel_abi_from_dict(value: Mapping[str, Any] | None) -> KernelAbiLayout | N
                 raise ValueError(
                     "Kernel ABI scalar descriptor and storage size are inconsistent."
                 )
+        abi_index = int(arg["index"])
+        logical_raw = arg.get("logical_index")
+        logical_index = abi_index if logical_raw is None else int(logical_raw)
         arguments.append(
             KernelAbiArgument(
-                index=int(arg["index"]),
+                index=abi_index,
                 kind=kind,
                 scalar=scalar,
                 mlir_type=str(arg["mlir_type"]),
                 offset=int(arg["offset"]),
                 storage_size=storage_size,
                 alignment=int(arg["alignment"]),
+                logical_index=logical_index,
+                field=field,
             )
         )
     return KernelAbiLayout(
-        schema_version=3,
+        schema_version=schema_version,
         entrypoint=str(value["entrypoint"]),
         total_size=int(value["total_size"]),
         arguments=tuple(arguments),
@@ -191,7 +215,11 @@ def kernel_abi_to_dict(layout: KernelAbiLayout | None) -> dict[str, Any] | None:
         "arguments": [
             {
                 "index": arg.index,
+                "logical_index": (
+                    arg.index if arg.logical_index is None else arg.logical_index
+                ),
                 "kind": arg.kind.value,
+                "field": arg.field,
                 "scalar": (
                     None
                     if arg.scalar is None

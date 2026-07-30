@@ -574,7 +574,9 @@ def test_compile_artifact_propagates_and_persists_kernel_abi(
         "arguments": [
             {
                 "index": 0,
+                "logical_index": 0,
                 "kind": "pointer",
+                "field": None,
                 "scalar": None,
                 "mlir_type": "!llvm.ptr",
                 "offset": 0,
@@ -583,7 +585,9 @@ def test_compile_artifact_propagates_and_persists_kernel_abi(
             },
             {
                 "index": 1,
+                "logical_index": 1,
                 "kind": "scalar",
+                "field": None,
                 "scalar": {
                     "category": "integer",
                     "bit_width": 32,
@@ -631,3 +635,122 @@ def test_cached_older_kernel_abi_schema_is_stale(schema_version: int) -> None:
                 },
             }
         )
+
+
+def _dynamic_gm_rank1_tensor() -> tla.Tensor:
+    with runtime_mod._eager_capture():
+        tensor = tla.Tensor(
+            tla.make_shape(8),
+            tla.Int32,
+            addrspace=tla.AddressSpace.gm,
+            origin_shape=tla.make_shape(8),
+            coord=tla.make_coord(0),
+            stride=tla.make_stride(1),
+            layout_tag=tla.arch.RowMajor,
+        )
+    return tensor.mark_compact_shape_dynamic(0)
+
+
+def _dynamic_gm_rank2_tensor() -> tla.Tensor:
+    with runtime_mod._eager_capture():
+        tensor = tla.Tensor(
+            tla.make_shape(16, 32),
+            tla.Float16,
+            addrspace=tla.AddressSpace.gm,
+            origin_shape=tla.make_shape(16, 32),
+            coord=tla.make_coord(0, 0),
+            stride=tla.make_stride(32, 1),
+            layout_tag=tla.arch.RowMajor,
+        )
+    return tensor.mark_layout_dynamic()
+
+
+@tla.kernel
+def _native_dynamic_rank1_gm_abi(buf: tla.Tensor) -> None:
+    pass
+
+
+@tla.kernel
+def _native_dynamic_rank1_gm_reads_origin(buf: tla.Tensor) -> None:
+    _ = buf.origin_shape[0]
+
+
+@tla.kernel
+def _native_dynamic_rank2_gm_abi(buf: tla.Tensor) -> None:
+    pass
+
+
+def test_native_bridge_dynamic_rank1_gm_emits_memref_fields() -> None:
+    type_args = (_dynamic_gm_rank1_tensor(),)
+    tlair = _native_dynamic_rank1_gm_abi.dump_mlir(type_args=type_args)
+    assert "tla.tensor_extent" not in tlair
+    assert "memref.dim" in tlair
+    assert "tla.tensor_desc" in tlair
+    assert "memref<?x?x?x?" in tlair
+
+    result = _native_lower(_native_dynamic_rank1_gm_abi, type_args=type_args)
+
+    assert result.kernel_abi is not None
+    assert result.kernel_abi.schema_version == 4
+    assert [
+        (argument.kind, argument.field, argument.logical_index, argument.storage_size)
+        for argument in result.kernel_abi.arguments
+    ] == [
+        ("memref_field", "allocated", 0, 8),
+        ("memref_field", "aligned", 0, 8),
+        ("memref_field", "offset", 0, 8),
+        ("memref_field", "size0", 0, 8),
+        ("memref_field", "size1", 0, 8),
+        ("memref_field", "size2", 0, 8),
+        ("memref_field", "size3", 0, 8),
+        ("memref_field", "stride0", 0, 8),
+        ("memref_field", "stride1", 0, 8),
+        ("memref_field", "stride2", 0, 8),
+        ("memref_field", "stride3", 0, 8),
+        ("memref_field", "originShape0", 0, 8),
+        ("memref_field", "originShape1", 0, 8),
+    ]
+    assert result.kernel_abi.total_size == 104
+
+
+def test_native_dynamic_gm_origin_shape_uses_prologue_metadata() -> None:
+    type_args = (_dynamic_gm_rank1_tensor(),)
+    tlair = _native_dynamic_rank1_gm_reads_origin.dump_mlir(type_args=type_args)
+    assert "tla.tensor_extent" not in tlair
+    assert "memref.dim" in tlair
+    assert "tla.tensor_desc" in tlair
+    # origin_shape read is a side-table Numeric; no second extent op.
+    assert tlair.count("memref.dim") >= 1
+
+
+def test_native_bridge_dynamic_rank2_gm_emits_memref_fields() -> None:
+    type_args = (_dynamic_gm_rank2_tensor(),)
+    tlair = _native_dynamic_rank2_gm_abi.dump_mlir(type_args=type_args)
+    assert "tla.tensor_extent" not in tlair
+    assert "memref.dim" in tlair
+    assert "tla.tensor_desc" in tlair
+
+    result = _native_lower(_native_dynamic_rank2_gm_abi, type_args=type_args)
+
+    assert result.kernel_abi is not None
+    assert result.kernel_abi.schema_version == 4
+    assert [
+        (argument.kind, argument.field, argument.logical_index)
+        for argument in result.kernel_abi.arguments
+    ] == [
+        ("memref_field", "allocated", 0),
+        ("memref_field", "aligned", 0),
+        ("memref_field", "offset", 0),
+        ("memref_field", "size0", 0),
+        ("memref_field", "size1", 0),
+        ("memref_field", "size2", 0),
+        ("memref_field", "size3", 0),
+        ("memref_field", "stride0", 0),
+        ("memref_field", "stride1", 0),
+        ("memref_field", "stride2", 0),
+        ("memref_field", "stride3", 0),
+        ("memref_field", "originShape0", 0),
+        ("memref_field", "originShape1", 0),
+    ]
+    assert result.kernel_abi.total_size == 104
+    assert all(argument.storage_size == 8 for argument in result.kernel_abi.arguments)

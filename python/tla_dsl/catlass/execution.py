@@ -86,7 +86,7 @@ _HIVM_TEMPLATE_BITCODE_ATTRS = {
     "meta_op.aiv.c310.bc": ("hivm.aiv_bitcode", "hivm.aiv_bitcode"),
 }
 _MAX_KERNEL_ABI_PAYLOAD_SIZE = 1 << 20
-_ONLINE_CACHE_ABI_VERSION = 4
+_ONLINE_CACHE_ABI_VERSION = 5
 
 
 class TlaExecutionError(RuntimeError):
@@ -805,14 +805,44 @@ def _pack_scalar_argument(
     return bits.to_bytes(storage_size, byteorder="little", signed=False)
 
 
-def _pack_launch_args(args: Sequence[Any], layout: KernelAbiLayout | None) -> bytes:
+def _logical_launch_arg_count(layout: KernelAbiLayout) -> int:
+    if not layout.arguments:
+        return 0
+    return 1 + max(
+        (
+            argument.index
+            if argument.logical_index is None
+            else argument.logical_index
+        )
+        for argument in layout.arguments
+    )
+
+
+def _memref_launch_field_value(tensor: Any, field: str) -> int:
+    builder = getattr(tensor, "build_memref_launch_fields", None)
+    if not callable(builder):
+        raise TlaUnsupportedAbiError(
+            "dynamic GM memref launch requires Tensor.build_memref_launch_fields()"
+        )
+    fields = builder()
+    if field not in fields:
+        raise TlaUnsupportedAbiError(
+            f"memref launch field {field!r} missing from tensor descriptor"
+        )
+    return int(fields[field])
+
+
+def _pack_launch_args(
+    args: Sequence[Any], layout: KernelAbiLayout | None
+) -> bytes:
     _validate_kernel_abi_layout(layout)
     if layout is None:
         raise TlaUnsupportedAbiError("kernel ABI layout is missing")
-    if len(args) != len(layout.arguments):
+    logical_count = _logical_launch_arg_count(layout)
+    if len(args) != logical_count:
         raise TlaUnsupportedAbiError(
             "kernel launch argument count does not match ABI layout: "
-            f"got {len(args)}, expected {len(layout.arguments)}"
+            f"got {len(args)}, expected {logical_count}"
         )
     if layout.total_size < 0:
         raise TlaUnsupportedAbiError("kernel ABI layout has an invalid total size")
@@ -831,11 +861,19 @@ def _pack_launch_args(args: Sequence[Any], layout: KernelAbiLayout | None) -> by
             "kernel ABI host payload exceeds the supported maximum size"
         )
     payload = bytearray(host_size)
-    for index, (value, argument) in enumerate(zip(args, layout.arguments)):
+    for index, argument in enumerate(layout.arguments):
         if argument.index != index:
             raise TlaUnsupportedAbiError(
                 "kernel ABI arguments must be ordered by contiguous index"
             )
+        logical_index = (
+            argument.index if argument.logical_index is None else argument.logical_index
+        )
+        if logical_index < 0 or logical_index >= len(args):
+            raise TlaUnsupportedAbiError(
+                f"kernel ABI argument {index} logical_index {logical_index} is out of range"
+            )
+        value = args[logical_index]
         start = host_offsets[index]
         end = start + argument.storage_size
         if start < 0 or argument.storage_size <= 0 or end < start or end > host_size:
@@ -862,6 +900,24 @@ def _pack_launch_args(args: Sequence[Any], layout: KernelAbiLayout | None) -> by
                     f"pointer value does not fit in {argument.storage_size} bytes"
                 )
             encoded = pointer.to_bytes(
+                argument.storage_size, byteorder="little", signed=False
+            )
+        elif argument.kind is KernelAbiArgumentKind.MEMREF_FIELD:
+            if argument.field is None:
+                raise TlaUnsupportedAbiError(
+                    f"kernel ABI memref_field argument {index} has no field name"
+                )
+            if argument.storage_size != _POINTER_ABI_SIZE:
+                raise TlaUnsupportedAbiError(
+                    f"unsupported memref_field storage size {argument.storage_size}"
+                )
+            field_value = _memref_launch_field_value(value, argument.field)
+            if field_value < 0 or field_value >= (1 << (argument.storage_size * 8)):
+                raise TlaUnsupportedAbiError(
+                    f"memref field {argument.field!r} does not fit in "
+                    f"{argument.storage_size} bytes"
+                )
+            encoded = field_value.to_bytes(
                 argument.storage_size, byteorder="little", signed=False
             )
         elif argument.kind is KernelAbiArgumentKind.SCALAR:
@@ -901,7 +957,7 @@ def _append_debug_print_workspace_payload(
 def _validate_kernel_abi_layout(
     layout: KernelAbiLayout | None, *, expected_entrypoint: str | None = None
 ) -> None:
-    if layout is None or layout.schema_version != 3:
+    if layout is None or layout.schema_version not in (3, 4):
         raise TlaUnsupportedAbiError(
             "A supported compiler-produced kernel ABI layout is required before launch."
         )
@@ -947,6 +1003,19 @@ def _validate_kernel_abi_layout(
             if argument.storage_size != _POINTER_ABI_SIZE:
                 raise TlaUnsupportedAbiError(
                     f"unsupported pointer storage size {argument.storage_size}"
+                )
+        elif argument.kind is KernelAbiArgumentKind.MEMREF_FIELD:
+            if argument.scalar is not None:
+                raise TlaUnsupportedAbiError(
+                    f"kernel ABI memref_field argument {index} cannot have a scalar descriptor"
+                )
+            if argument.field is None:
+                raise TlaUnsupportedAbiError(
+                    f"kernel ABI memref_field argument {index} requires a field name"
+                )
+            if argument.storage_size != _POINTER_ABI_SIZE:
+                raise TlaUnsupportedAbiError(
+                    f"unsupported memref_field storage size {argument.storage_size}"
                 )
         elif argument.kind is KernelAbiArgumentKind.SCALAR:
             if argument.scalar is None:
@@ -1100,10 +1169,18 @@ def _build_logical_mixed_handoff_launch_args(
     arg_types: Sequence[str],
     kernel_abi: KernelAbiLayout | None,
 ) -> tuple[bytes, tuple[int, int, int]]:
-    if len(launch_args) != len(arg_types):
+    # Host still passes one object per logical kernel argument. Dynamic GM expands
+    # each Tensor into many device params / memref_field slots in the ABI, so do
+    # not compare against the raw split-function parameter count.
+    expected = (
+        _logical_launch_arg_count(kernel_abi)
+        if kernel_abi is not None
+        else len(arg_types)
+    )
+    if len(launch_args) != expected:
         raise TlaUnsupportedAbiError(
-            "mixed handoff launch argument count does not match split function "
-            f"signature: got {len(launch_args)}, expected {len(arg_types)}"
+            "mixed handoff launch argument count does not match ABI layout: "
+            f"got {len(launch_args)}, expected {expected}"
         )
     return _pack_launch_args(launch_args, kernel_abi), tuple(int(item) for item in grid)
 

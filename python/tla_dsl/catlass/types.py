@@ -650,27 +650,96 @@ def _try_remap_stride_coord_trees(
 class RuntimeTensorError(RuntimeError):
     """Raised when tensor buffer binding or layout validation fails."""
 
-def _flat_layout_leaves(tree: Any) -> tuple[int, ...]:
-    """Preorder flatten of positive-int leaves from a shape/stride component tree."""
-    return tuple(int(x) for x in _flatten_int_leaves_tree(tree))
+def _flat_layout_leaves(
+    tree: Any,
+    *,
+    allow_dynamic: bool = False,
+    expected_rank: int | None = None,
+) -> list[Any]:
+    """Preorder flatten of layout shape/stride/origin leaves.
 
-def _deduce_leading_dim(
-    shape: tuple[int, ...],
-    strides: tuple[int, ...],
-) -> int:
-    unit_dims = [index for index, stride in enumerate(strides) if int(stride) == 1]
-    if not unit_dims:
-        raise RuntimeTensorError(
-            "cannot deduce leading_dim: no dimension has stride 1"
+    By default leaves must be ``int`` (concrete layout). Pass
+    ``allow_dynamic=True`` to preserve ``None`` dynamic markers after
+    ``mark_*_dynamic``. Optionally require ``len(leaves) == expected_rank``.
+    """
+
+    def _visit(node: Any) -> list[Any]:
+        if isinstance(node, (tuple, list)):
+            out: list[Any] = []
+            for child in node:
+                out.extend(_visit(child))
+            return out
+        if node is None:
+            if not allow_dynamic:
+                raise TypeError(
+                    "layout tree expects int leaves; pass allow_dynamic=True "
+                    "to accept None dynamic markers"
+                )
+            return [None]
+        if isinstance(node, int):
+            return [node]
+        raise TypeError(
+            "layout tree expects int"
+            + (" or None" if allow_dynamic else "")
+            + f" leaves, got {type(node).__name__}"
         )
+
+    leaves = _visit(tree)
+    if expected_rank is not None and len(leaves) != expected_rank:
+        raise RuntimeTensorError(
+            f"layout tree rank mismatch: expected {expected_rank} leaves, "
+            f"got {len(leaves)}"
+        )
+    return leaves
+
+
+def _deduce_compact_stride_order(
+    shape: tuple[int, ...] | list[int],
+    strides: tuple[int, ...] | list[int],
+    *,
+    strict_unit_stride: bool = False,
+) -> tuple[int, ...]:
+    """Deduce outer→inner mode order for a compact layout.
+
+    When ``strict_unit_stride`` is False (default, ``mark_compact_shape_dynamic``):
+    prefer a unique ``stride==1`` mode as innermost; otherwise sort by ascending
+    stride and reverse to outer→inner.
+
+    When ``strict_unit_stride`` is True (``mark_layout_dynamic`` leading-dim
+    deduction): require a resolvable unit-stride mode (unique, or unique among
+    modes with ``shape>1``); otherwise raise. The unit-stride mode is innermost.
+    """
+    rank = len(shape)
+    if rank == 0:
+        return ()
+    if len(strides) != rank:
+        raise RuntimeTensorError(
+            f"stride rank {len(strides)} does not match shape rank {rank}"
+        )
+
+    unit_dims = [index for index, stride in enumerate(strides) if int(stride) == 1]
+    innermost: int | None = None
     if len(unit_dims) == 1:
-        return unit_dims[0]
-    sized = [index for index in unit_dims if int(shape[index]) > 1]
-    if len(sized) == 1:
-        return sized[0]
-    raise RuntimeTensorError(
-        "cannot deduce leading_dim: multiple dimensions have stride 1"
-    )
+        innermost = unit_dims[0]
+    elif strict_unit_stride:
+        if not unit_dims:
+            raise RuntimeTensorError(
+                "cannot deduce leading_dim: no dimension has stride 1"
+            )
+        sized = [index for index in unit_dims if int(shape[index]) > 1]
+        if len(sized) != 1:
+            raise RuntimeTensorError(
+                "cannot deduce leading_dim: multiple dimensions have stride 1"
+            )
+        innermost = sized[0]
+    else:
+        order = sorted(range(rank), key=lambda index: (int(strides[index]), index))
+        return tuple(reversed(order))
+
+    remaining = [index for index in range(rank) if index != innermost]
+    remaining.sort(key=lambda index: int(strides[index]), reverse=True)
+    return tuple(remaining + [innermost])
+
 
 def _replace_flat_leaves_in_tree(tree: Any, new_leaves: Iterable[Any]) -> Any:
     iterator = iter(new_leaves)

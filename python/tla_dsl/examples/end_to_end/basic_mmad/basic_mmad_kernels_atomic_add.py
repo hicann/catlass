@@ -40,6 +40,9 @@ l0_tk = 32
 def basic_mmad_kernel(mem_a: tla.Tensor, mem_b: tla.Tensor, mem_c: tla.Tensor) -> None:
     c0 = 0
     c1 = 1
+    m = mem_a.origin_shape[0]
+    n = mem_b.origin_shape[1]
+    k = mem_a.origin_shape[1]
 
     l1a0_copy_end = tla.flag("l1a0_copy_end", tla.arch.MTE2, tla.arch.MTE1)
     l1a1_copy_end = tla.flag("l1a1_copy_end", tla.arch.MTE2, tla.arch.MTE1)
