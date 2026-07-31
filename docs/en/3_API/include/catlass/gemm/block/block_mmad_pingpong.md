@@ -23,7 +23,7 @@ When `ENABLE_UNIT_FLAG_` is set to `true`, concurrent read-out and write-in for 
 
 ### Block Assembly
 
-See [basic_matmul ](../../../../../../../ examples/00_basic_matmul/basic_matmul.cpp).
+See [basic_matmul](../../../../../../../examples/00_basic_matmul/basic_matmul.cpp).
 
 ```cpp
 constexpr bool enableUnitFlag = true;

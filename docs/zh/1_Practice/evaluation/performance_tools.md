@@ -12,7 +12,7 @@ CANN对算子开发的两个场景——单算子与整网开发，分别提供�
 
 当前支持基于不同运行模式（上板或仿真）和不同文件形式（可执行文件或算子二进制`.o`文件）进行性能数据的采集和自动解析。
 
-### Profiling简介
+### Profiling简介 { #profiling-introduction }
 
 [Profiling](https://www.hiascend.com/document/redirect/CannCommunitymsopprofuserguide)是整网性能分析工具，对应的指令为`msprof`。
 
@@ -20,7 +20,7 @@ CANN对算子开发的两个场景——单算子与整网开发，分别提供�
 
 其中，`msprof`采集通用命令是性能数据采集的基础，用于提供性能数据采集时的基本信息，包括参数说明、AI任务文件、数据存放路径、自定义环境变量等。
 
-## 用`msProf`进行单算子性能分析
+## 用`msProf`进行单算子性能分析 { #msprof-single-operator-analysis }
 
 以`00_basic_matmul`为例，演示基于[msProf](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/devaids/optool/atlasopdev_16_0082.html)的性能分析过程。
 
@@ -76,11 +76,11 @@ msprof op ./00_basic_matmul 256 512 1024 0
 └──ResourceConflictRatio.csv  # UB上的 bank group、bank conflict和资源冲突率在所有指令中的占比，建议减少/避免对于同一个bank读写冲突或bank group的读读冲突
 ```
 
-### 性能流水仿真
+### 性能流水仿真 { #performance-pipeline-simulation }
 
 通过仿真，可以获得**流水图**、**指令与代码行映射**、**代码热点图**、**内存热点图**等可视化数据，以便进一步分析优化算子计算瓶颈。
 
-#### msprof op simulator使用示例
+#### msprof op simulator使用示例 { #msprof-op-simulator-example }
 
 1. 编译脚本增加选项`--simulator`， 以`simulator`模式编译算子。
 
@@ -160,7 +160,7 @@ msProf工具采集到的数据，可导入可视化工具[MindStudio Insight](ht
 
 ![MindStudio Insight Cache](https://www.hiascend.com/doc_center/source/zh/mindstudio/80RC1/GUI_baseddevelopmenttool/msascendinsightug/figure/zh-cn_image_0000002274870637.png)
 
-## 用Profiling进行整网性能分析
+## 用Profiling进行整网性能分析 { #profiling-network-analysis }
 
 虽然CATLASS只提供单算子的调用示例，但单算子调用示例也可使用[Profiling](https://www.hiascend.com/document/redirect/CannCommunitymsopprofuserguide)工具进行性能分析。
 

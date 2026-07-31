@@ -62,8 +62,8 @@ bash scripts/build.sh [options] <target>
   - `--clean`：清理此前编译及输出目录（默认路径分别为`/build`，`/output`）。
   - `--debug`：以Debug模式进行编译。
   - `--msdebug`：使能[msDebug](https://www.hiascend.com/document/redirect/CannCommunityToolMsdebug)工具，详见[在 CATLASS样例工程使用msDebug](./evaluation/msdebug.md)。
-  - `--simulator`：启用仿真器模式，该选项启用后将不在实际NPU上执行，详见[CATLASS样例仿真](./evaluation/performance_tools.md#msprof-op-simulator使用示例)。
-  - `--enable_profiling`：使能Profiling工具，详见[CATLASS样例性能调优](./evaluation/performance_tools.md#profiling简介)。
+  - `--simulator`：启用仿真器模式，该选项启用后将不在实际NPU上执行，详见[CATLASS样例仿真](./evaluation/performance_tools.md#msprof-op-simulator-example)。
+  - `--enable_profiling`：使能Profiling工具，详见[CATLASS样例性能调优](./evaluation/performance_tools.md#profiling-introduction)。
   - `--enable_print`：启用编译器的打印功能，详见[基于`cce::printf`进行设备侧打印](./evaluation/print.md)。
   - `--enable_ascendc_dump`：启用`AscendC`相关算子调测API，详见[CATLASS样例使用AscendC算子调测API](./evaluation/ascendc_dump.md)。
   - `-DCATLASS_ARCH`：指明NPU架构，当前支持`2201`和`3510`，不指明则默认为2201（Atlas A2/Atlas A3产品）。

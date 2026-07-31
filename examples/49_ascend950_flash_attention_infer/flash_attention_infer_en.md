@@ -28,7 +28,7 @@ Where:
 - **mask**: Attention mask (optional)
 - **O**: Output tensor with shape `[batch, qSeqlen, qHeads, headDim]`
 
-<img src="../../docs/zh/figures/flash_attention_infer_operator.png" width="40%">
+<img src="../../docs/assets/images/flash_attention_infer_operator.png" width="40%">
 
 - Supports **GQA** (Grouped Query Attention) functionality.
 
@@ -40,7 +40,7 @@ Where:
 
 - The current template Kernel does not support the variable-length ActualSeq feature.
 
-<img src="../../docs/zh/figures/flash_attention_infer_cv_pipeline.png" width="50%">
+<img src="../../docs/assets/images/flash_attention_infer_cv_pipeline.png" width="50%">
 
 ---
 
@@ -659,7 +659,7 @@ for (int64_t kvSeqLoopCount = runParam.kvSeqLoopStartIdx; kvSeqLoopCount <= kvSe
 
 ### 6.1 Pipeline Timing Diagram
 
-<img src="../../docs/zh/figures/flash_attention_infer_cv_pipeline.png" width="50%">
+<img src="../../docs/assets/images/flash_attention_infer_cv_pipeline.png" width="50%">
 
 ### 6.2 Synchronization Mechanism
 

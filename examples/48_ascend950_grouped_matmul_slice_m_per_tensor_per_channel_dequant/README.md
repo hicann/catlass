@@ -21,11 +21,11 @@ A/B矩阵为int8类型，scale为float，输出结果为half。
 
 - Matmul量化场景：Matmul计算时左矩阵A、右矩阵B为half数据类型，输出C矩阵为int8_t数据类型。该场景下，C矩阵的数据从CO1搬出到Global Memory时，会执行量化操作，将最终结果量化为int8_t类型，如下图所示。
 
-  ![alt text](../../docs/zh/figures/fixpipe_quant.png)
+  ![alt text](../../docs/assets/images/fixpipe_quant.png)
 
 - Matmul反量化场景：Matmul计算时左矩阵A、右矩阵B为int8_t数据类型，输出C矩阵为half数据类型。该场景下，C矩阵的数据从CO1搬出到Global Memory时，会执行反量化操作，将最终结果反量化为对应的half类型，如下图所示。
 
-  ![alt text](../../docs/zh/figures/fixpipe_dequant.png)
+  ![alt text](../../docs/assets/images/fixpipe_dequant.png)
 
 Fixpipe提供了两种不同粒度的随路量化/反量化模式，即per_tensor和per_channel。
 

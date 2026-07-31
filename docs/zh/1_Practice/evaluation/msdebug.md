@@ -294,7 +294,7 @@ Quitting LLDB will kill one or more processes. Do you really want to proceed: [Y
 | continue                                   | c                                 | 继续运行                                                                                                                                          | c                                      |
 | print                                      | p                                 | 打印变量                                                                                                                                          | p zLocal                               |
 | frame variable                             | var                               | 打印当前帧所有变量                                                                                                                                | var                                    |
-| memory read                                | x                                 | 读内存<br>-m 指定内存位置，支持GM/UB/L0A/L0B/L0C<br>-f 指定[字节转换格式](#附录)<br>-s 指定每行打印字节数<br>-c 指定打印的行数                    | x -m GM -f float16[] 1000 -c 2 -s 128  |
+| memory read                                | x                                 | 读内存<br>-m 指定内存位置，支持GM/UB/L0A/L0B/L0C<br>-f 指定[字节转换格式](#appendix)<br>-s 指定每行打印字节数<br>-c 指定打印的行数                    | x -m GM -f float16[] 1000 -c 2 -s 128  |
 | register read                              | re r                              | 读取寄存器值<br/>-a 读取所有寄存器值<br/>\$REG\_NAME 读取指定名称的寄存器值                                                                         | register read -are r \$PC              |
 | thread step-over                           | next<br>n                         | 在同一个调用栈中，移动到下一个可执行的代码行                                                                                                      | n                                      |
 | ascend info devices                        | /                                 | 查询device信息                                                                                                                                    | ascend info devices                    |
@@ -307,7 +307,7 @@ Quitting LLDB will kill one or more processes. Do you really want to proceed: [Y
 | target modules addkernel.o                 | image addkernel.o                 | Pybind框架拉起算子时，导入算子调试信息 <br>（注：当程序执行run命令后再执行本命令导入调试信息，<br>则还需额外执行image load命令以使调试信息生效） | image addCustom\_xxx.o              |
 | target modules load -f kernel.o -s address | image load -f kernel.o -s address | 在程序运行后，使导入的调试信息生效                                                                                                                | image load -f AddCustom\_xxx.o -s 0    |
 
-## 附录
+## 附录 { #appendix }
 
 ### msdebug支持的数据格式
 

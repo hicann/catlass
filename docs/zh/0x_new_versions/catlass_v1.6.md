@@ -25,7 +25,7 @@ $$C=(\mathrm{ScaleA}\otimes A)*(\mathrm{ScaleB}\otimes B)+C$$
 
 如下左图所示，一个group内的两个蓝色的element对应量化参数的一个蓝色的scale输入。以蓝色块为例，一个L0A的(16,32)和L0B的(32, 16)分别叠加上scaleA的(16,1)和scaleB的(1, 16)，相乘计算得到(16, 16)的计算结果
 
-![](<../figures/catlass_v1.6/CATLASS 新版本能力介绍-image-10.png>)
+![](<../../assets/images/CATLASS 新版本能力介绍-image-10.png>)
 
 **搬运部分：**
 
@@ -42,9 +42,9 @@ $$C=(\mathrm{ScaleA}\otimes A)*(\mathrm{ScaleB}\otimes B)+C$$
 
 对于数据搬运来说，GMToL1是两个fp4打包成一个int8进行搬运，对应封装由指令接口完成
 
-![mxFP8在L0A和L0B的排布](<../figures/catlass_v1.6/CATLASS 新版本能力介绍-image-9.png>)
+![mxFP8在L0A和L0B的排布](<../../assets/images/CATLASS 新版本能力介绍-image-9.png>)
 
-![scale在GM和L1上的对应排布(RowMajor情况)](<../figures/catlass_v1.6/CATLASS 新版本能力介绍-image-8.png>)
+![scale在GM和L1上的对应排布(RowMajor情况)](<../../assets/images/CATLASS 新版本能力介绍-image-8.png>)
 
 针对这部分，CATLASS的新增接口设计主要包括
 
@@ -152,7 +152,7 @@ mxmmad的指令接口对累加轴的大小有要求，需要是K是64的倍数�
 1. rowmajor下，K方向是内轴，(32, 30)下的最后两个数据会自动补0，只需对后半段补0
 
 2. columnmajor下，M方向是内轴，(32, 30)搬到L1的时候，K方向就不会自动置0了，所以K方向有34列数据要置零
-   ![左图为RowMajor示意图，K轴自动补0; 右图为ColumnMajor示意图，K轴需显示补0|697](<../figures/catlass_v1.6/CATLASS 新版本能力介绍-zeropadding.png>)
+   ![左图为RowMajor示意图，K轴自动补0; 右图为ColumnMajor示意图，K轴需显示补0|697](<../../assets/images/CATLASS 新版本能力介绍-zeropadding.png>)
 
 ```c++
 // Init Zero for k axis
@@ -163,7 +163,7 @@ InitZeroInL1A(tensorL1A, tla::MakeShape(mL1Actual, kL1ActualNext));
 
 因为CATLASS是分层设计，故按照CATLASS分层的Tile->Block->Kernel->Device介绍新增特性
 
-![](<../figures/catlass_v1.6/CATLASS 新版本能力介绍-image.png>)
+![](<../../assets/images/CATLASS 新版本能力介绍-image.png>)
 
 ### Tile层新增特性
 
@@ -171,7 +171,7 @@ InitZeroInL1A(tensorL1A, tla::MakeShape(mL1Actual, kL1ActualNext));
 
 1. 数据搬运：新增支持DN2NZ的搬运
 
-    ![](<../figures/catlass_v1.6/CATLASS 新版本能力介绍-image-1.png>)
+    ![](<../../assets/images/CATLASS 新版本能力介绍-image-1.png>)
 
     ```c++
     /// Partial specialization for CopyGmToL1, Ascend950, fp8_e8m0_t, MxScaleA RowMajor in and zZ out.
@@ -249,7 +249,7 @@ InitZeroInL1A(tensorL1A, tla::MakeShape(mL1Actual, kL1ActualNext));
 
 1. 增加Coord描述：指令能力上，L1上新增支持按Coord坐标描述tensor的能力。以L12L0A为例。在Coord方式下，通过BuiltinTensor+Coord来表示实际的内存地址。如下图所示，左边Tensor的大矩阵和小矩阵的BuiltinTensor(dataptr)指向同一个地址，通过Coord的差别获取偏移
 
-    ![](<../figures/catlass_v1.6/CATLASS 新版本能力介绍-image-2.png>)
+    ![](<../../assets/images/CATLASS 新版本能力介绍-image-2.png>)
 
     | 参数名称       | 含义（以M\*K矩阵为例）                                                                                                                         |
     | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -392,7 +392,7 @@ struct CopyUb2L1Tla<Arch::Ascend950,
 
 指令接口上L0A输入格式由zZ转变为zN，CATLASS进行了相关适配
 
-![](<../figures/catlass_v1.6/CATLASS 新版本能力介绍-image-3.png>)
+![](<../../assets/images/CATLASS 新版本能力介绍-image-3.png>)
 
 在代码中对少量代际差异使用宏进行隔离
 
@@ -636,7 +636,7 @@ TLA(Tensor Layout Abstraction)作为CATLASS的一种数据结构，提供了对�
 
 自950平台起，CATLASS**所有新增样例基于TLA实现**
 
-![Layout中的shape和originShape的区别。shape表示布局语义，包含对齐信息。originShape表示矩阵原始的逻辑语义，指有效数据范围。图中一个小格子是4个element](<../figures/catlass_v1.6/CATLASS 新版本能力介绍-image-4.png>)
+![Layout中的shape和originShape的区别。shape表示布局语义，包含对齐信息。originShape表示矩阵原始的逻辑语义，指有效数据范围。图中一个小格子是4个element](<../../assets/images/CATLASS 新版本能力介绍-image-4.png>)
 
 ### TLA新增接口及其设计目标
 
@@ -677,7 +677,7 @@ auto v1024 = tla::MakeLayout<float, Catlass::layout::VectorLayout>(1024);
 Tensor vec = MakeTensor(A, v1024, Arch::PositionGM{});
 ```
 
-![](<../figures/catlass_v1.6/CATLASS 新版本能力介绍-image-5.png>)
+![](<../../assets/images/CATLASS 新版本能力介绍-image-5.png>)
 
 #### 下划线语义(\_)
 
@@ -695,7 +695,7 @@ auto A2 = A3(b, tla::_, tla::_);  // 3D -> 2D，得到 (M, K) 视图
 auto A1 = A2(r, tla::_) // 2D -> 1D，得到 (K)视图
 ```
 
-![](<../figures/catlass_v1.6/CATLASS 新版本能力介绍-image-6.png>)
+![](<../../assets/images/CATLASS 新版本能力介绍-image-6.png>)
 
 #### MakeTensorLike
 
@@ -879,7 +879,7 @@ EVG主要支持的数据结构有两类，包括TreeVisitor，TopologicalVisitor
 - **TreeVisitor**：支持树形结构的节点组合，编写和维护更简单，适合没有共享子表达式的场景
 - **TopologicalVisitor**：支持DAG拓扑结构，当一个中间结果被后续多个节点使用时使用DAG表达，适合有共享子表达式的场景
 
-![](<../figures/catlass_v1.6/CATLASS 新版本能力介绍-image-7.png>)
+![](<../../assets/images/CATLASS 新版本能力介绍-image-7.png>)
 
 EVG在UB支持的语义上更抽象的节点，在不同阶段支持的节点如下
 

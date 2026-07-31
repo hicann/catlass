@@ -1,7 +1,7 @@
 # CATLASS Gemm API
 
 CATLASS provides a unified programming model for Matrix Multiply-Accumulate (MMAD) operations executed across different hierarchy levels on the NPU. The CATLASS GEMM API maps to the following layered abstraction structure, ordered from highest to lowest.
-![image](../figures/api_level.png)
+![image](../../assets/images/api_level_en.png)
 
 # CATLASS Gemm Model
 

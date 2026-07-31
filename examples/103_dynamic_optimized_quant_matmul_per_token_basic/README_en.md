@@ -18,7 +18,7 @@ Generally, the left matrix represents activation (A), and the right matrix repre
 
 ### 2.1 Project Description
 
-For the structure of the generalized quantized Matmul project, see [Project Structure Description](../102_dynamic_optimized_matmul/docs/en/Project Structure_en.md). This project follows processes similar to example 102, such as template generation, Tiling computation, and template selection, and adapts them based on the compute characteristics of quantized Matmul.
+For the structure of the generalized quantized Matmul project, see [Project Structure Description](<../102_dynamic_optimized_matmul/docs/en/Project Structure_en.md>). This project follows processes similar to example 102, such as template generation, Tiling computation, and template selection, and adapts them based on the compute characteristics of quantized Matmul.
 
 Before project compilation, a Python script is called to generate code, including the wrapper code for each template and launch_map.h, which contains the mapping between tilingKey and specific Kernels.
 

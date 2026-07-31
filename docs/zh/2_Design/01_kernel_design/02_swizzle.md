@@ -12,7 +12,7 @@ Swizzle策略决定了AI Core计算基本块的顺序。调整Swizzle策略有�
  using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<>;
 ```
 
-<img src="../../figures/swizzle10.png" width="60%">
+<img src="../../../assets/images/swizzle10.png" width="60%">
 
 ## 示例2
 
@@ -22,7 +22,7 @@ SwizzleOffset=3、SwizzleDirection=0
  using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
 ```
 
-<img src="../../figures/swizzle30.png" width="60%">
+<img src="../../../assets/images/swizzle30.png" width="60%">
 
 ## 示例3
 
@@ -32,7 +32,7 @@ SwizzleOffset=3、SwizzleDirection=1
  using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
 ```
 
-<img src="../../figures/swizzle31.png" width="60%">
+<img src="../../../assets/images/swizzle31.png" width="60%">
 
 ## Swizzle策略选择
 

@@ -139,7 +139,7 @@ The following describes the specific execution steps performed by the AIV and AI
   - Perform inter-core synchronization and [wait for the AIV completion flag](../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#255) (`CrossCoreWaitFlag`).
   - [Initialize GlobalTensor](../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#270): `gmWA`, `gmWB`.
 
-- [Initialize `GlobalTensor`]((../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#270): `gmA`, `gmB`, `gmC`)
+- [Initialize `GlobalTensor`](../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#L270): `gmA`, `gmB`, `gmC`
 - Initialize the [`BlockScheduler`](../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#260) and [`BlockMmad`](../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#300) objects.
 - Fetch the current AIC identifier `coreIdx`, total AIC count `coreNum` (resolved within the [swizzle policy](../../include/catlass/gemm/block/block_swizzle.hpp)), and the required `coreLoops`.
 - Enter the main loop (loop times `coreLoops`).

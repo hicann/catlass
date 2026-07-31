@@ -8,7 +8,7 @@ In the field of high-performance computing and deep learning, matrix multiplicat
 
 ### 2.1 Project Description
 
-For details about the generalized Matmul project structure, see [Project Structure Description](./docs/en/Project Structure_en.md).
+For details about the generalized Matmul project structure, see [Project Structure Description](<./docs/en/Project Structure_en.md>).
 
 By default, the project is compiled into a static library. To compile the project into a dynamic library, change `STATIC` in `CMakeLists.txt` to `SHARED` and manually export the dynamic library path.
 Before compilation, the build system invokes a Python script to generate code, which includes the boilerplate wrapper code for each template and `launch_map.h` (which defines the mapping between the tilingKey and specific kernels).

@@ -1,40 +1,43 @@
-# CATLASS
+<h1 align="center">CATLASS</h1>
 
----
+<p align="center">
+  <a href="https://deepwiki.com/ascend-catlass/catlass"><img src="https://deepwiki.com/badge.svg" alt="Ask AI on DeepWiki"></a>
+</p>
 
-## ⚠ Important Changes
+<p align="center">
+  <a href="README.md"><strong>中文</strong></a> |
+  <a href="README_en.md"><strong>English</strong></a>
+</p>
 
-At the first community meeting in March 2026, we officially confirmed that the CATLASS community mainline will add support for the next-generation Ascend hardware Ascend 950PR/Ascend 950DT. To distinguish the underlying interface implementations on different platforms, this new support will introduce a new compilation macro. Users need to adapt the corresponding build commands accordingly.
-
-- New macro: `CATLASS_ARCH`, used to specify the target architecture. You can query its value in [SIMD BuiltIn Keywords](https://www.hiascend.com/document/detail/en/canncommercial/900beta2/opdevg/Ascendcopdevg/atlas_ascendc_10_10053.html) (the `__NPU_ARCH__` column).
-  - `Atlas A2 Training Series Products / Atlas A2 Inference Series Products`: `2201`
-  - `Atlas A3 Training Series Products / Atlas A3 Inference Series Products`: `2201`
-  - `Ascend 950PR/Ascend 950DT`: `3510`
-
-- Related scenario descriptions:
-  - `bisheng` command-line scenario: `bisheng ... -DCATLASS_ARCH=2201 ...`
-  - `cmake` scenario: `add_compile_definitions(CATLASS_ARCH=2201)`
-  - `msopgen/aclnn` project scenario:
-    - Old usage: `add_ops_compile_options(ALL OPTIONS -DCATLASS_ARCH=2201 ...)`
-    - New usage: `npu_op_kernel_options(ascendc_kernels ALL OPTIONS -DCATLASS_ARCH=2201)` (in an msopgen project, the first parameter defaults to `ascendc_kernels` and can be adjusted as needed)
-  - CATLASS source repository: `bash scripts/build.sh -DCATLASS_ARCH=2201 ...`
-  - Code reference in the library: [examples/CMakeLists.txt](https://gitcode.com/cann/catlass/blob/master/examples/CMakeLists.txt)
+<p align="center">
+  <a href="https://catlass.readthedocs.io/zh-cn/latest/"><strong>Official Documentation</strong></a> |
+  <a href="https://www.hiascend.com/cn/developer/operator?tag=catlass&amp;tab=catlass"><strong>Operator Development Journey</strong></a> |
+  <a href="https://etherpad-cann.meeting.osinfra.cn/p/sig-catlass"><strong>Community Meetings</strong></a> |
+  <a href="https://www.hiascend.com/"><strong>About Ascend</strong></a>
+</p>
 
 ## Latest News
 
-- [2026/04] Community edition [v1.5.0](https://gitcode.com/cann/catlass/releases/v1.5.0) released: added **Ascend 950** series examples, such as [Basic Matmul](https://gitcode.com/cann/catlass/blob/v1.5.0/examples/43_ascend950_basic_matmul/README.md), [Flash Attention Inference](https://gitcode.com/cann/catlass/blob/v1.5.0/examples/49_ascend950_flash_attention_infer/README.md), and [Per-Group & Per-Block Quant Matmul TLA](https://gitcode.com/cann/catlass/blob/v1.5.0/examples/51_ascend950_quant_matmul_per_group_per_block_tla/README.md); enhanced **TLA** capabilities, including `origin_shape`, `TileView`, and more; added [103 Dynamic W8A8 Per-Token Quantization](https://gitcode.com/cann/catlass/tree/v1.5.0/examples/103_dynamic_optimized_quant_matmul_per_token_basic/README.md) to the [Matmul Generalization Project](https://gitcode.com/cann/catlass/tree/v1.5.0/examples/102_dynamic_optimized_matmul/README.md).
+- [2026/06] [v1.6.0](https://gitcode.com/cann/catlass/releases/v1.6.0) released: added [**MXFP8/MXFP4 quantization templates**](https://gitcode.com/cann/catlass/blob/v1.6.0/examples/53_ascend950_fp8_mx_matmul/README.md), the [**EVG declarative post-processing framework**](https://gitcode.com/cann/catlass/blob/v1.6.0/examples/64_ascend950_matmul_evg/README.md), and [**BlockMmad based on Mutex synchronization primitives**](https://gitcode.com/cann/catlass/blob/v1.6.0/include/catlass/gemm/block/block_mmad_pingpong_mutex_tla.hpp); added [Ascend 950 Tile components](https://gitcode.com/cann/catlass/tree/v1.6.0/include/catlass/gemm/tile/ascend950), a complete set of [unit tests](https://gitcode.com/cann/catlass/blob/v1.6.0/tests/unittest/catlass/gemm/tile/README.md), and the [operator-level test framework (optest)](https://gitcode.com/cann/catlass/blob/v1.6.0/tests/optest/README.md); and added 16 **Ascend 950** operator examples, including [StreamK Matmul](https://gitcode.com/cann/catlass/blob/v1.6.0/examples/66_ascend950_streamk_matmul/README.md), [Flash Attention Chunk Prefill](https://gitcode.com/cann/catlass/blob/v1.6.0/examples/70_ascend950_flash_attention_chunk_prefill/README.md), and [Conv2d](https://gitcode.com/cann/catlass/blob/v1.6.0/examples/56_ascend950_basic_conv2d_tla/README.md).
 
-- [2026/03] The community mainline officially started to add support for the next-generation Ascend hardware Ascend 950PR/Ascend 950DT.
+- [2026/04] [v1.5.0](https://gitcode.com/cann/catlass/releases/v1.5.0) released: added **Ascend 950** series examples, such as [Basic Matmul](https://gitcode.com/cann/catlass/blob/v1.5.0/examples/43_ascend950_basic_matmul/README.md), [Flash Attention Inference](https://gitcode.com/cann/catlass/blob/v1.5.0/examples/49_ascend950_flash_attention_infer/README.md), and [Per-Group & Per-Block Quant Matmul TLA](https://gitcode.com/cann/catlass/blob/v1.5.0/examples/51_ascend950_quant_matmul_per_group_per_block_tla/README.md); enhanced **TLA** capabilities, including `origin_shape`, `TileView`, and more; and added [103 Dynamic W8A8 Per-Token Quantization](https://gitcode.com/cann/catlass/tree/v1.5.0/examples/103_dynamic_optimized_quant_matmul_per_token_basic/README.md) to the [Matmul Generalization Project](https://gitcode.com/cann/catlass/tree/v1.5.0/examples/102_dynamic_optimized_matmul/README.md).
 
-- [2026/02] Community edition [v1.4.0](https://gitcode.com/cann/catlass/releases/v1.4.0) released, adding examples such as [StreamK Matmul](https://gitcode.com/cann/catlass/blob/v1.4.0/examples/37_streamk_matmul/README.md), [W4A4 Matmul](https://gitcode.com/cann/catlass/blob/v1.4.0/examples/38_w4a4_matmul_per_token_per_channel_dequant/README.md), and [Sparse Matmul](https://gitcode.com/cann/catlass/blob/v1.4.0/examples/41_sparse_matmul_tla/README.md).
+<details>
+<summary>More news</summary>
 
-- [2025/12] Community edition [v1.3.0](https://gitcode.com/cann/catlass/releases/v1.3.0) released, supporting [`FixPipe` Inline Quantization](https://gitcode.com/cann/catlass/tree/v1.3.0/include/catlass/gemm/tile/tile_copy.hpp#L373), adding multiple templates to the [Matmul Generalization Project](https://gitcode.com/cann/catlass/tree/v1.3.0/examples/102_dynamic_optimized_matmul/README.md), and adding examples such as [INT4 Dequantization](https://gitcode.com/cann/catlass/tree/v1.3.0/examples/32_w4a8_matmul/README.md) and [2D Convolution](https://gitcode.com/cann/catlass/tree/v1.3.0/examples/33_basic_conv2d/README.md).
+- [2026/03] The mainline officially started adding support for the next-generation Ascend hardware Ascend 950PR/Ascend 950DT.
 
-- [2025/10] Community edition [v1.2.0](https://gitcode.com/cann/catlass/releases/v1.2.0) released, adding examples such as [Matmul Operator Generalization](https://gitcode.com/cann/catlass/tree/v1.2.0/examples/102_dynamic_optimized_matmul/README.md).
+- [2026/02] [v1.4.0](https://gitcode.com/cann/catlass/releases/v1.4.0) released, adding examples such as [StreamK Matmul](https://gitcode.com/cann/catlass/blob/v1.4.0/examples/37_streamk_matmul/README.md), [W4A4 Matmul](https://gitcode.com/cann/catlass/blob/v1.4.0/examples/38_w4a4_matmul_per_token_per_channel_dequant/README.md), and [Sparse Matmul](https://gitcode.com/cann/catlass/blob/v1.4.0/examples/41_sparse_matmul_tla/README.md).
+
+- [2025/12] [v1.3.0](https://gitcode.com/cann/catlass/releases/v1.3.0) released, supporting [`FixPipe` inline quantization](https://gitcode.com/cann/catlass/tree/v1.3.0/include/catlass/gemm/tile/tile_copy.hpp#L373), adding multiple templates to the [Matmul Generalization Project](https://gitcode.com/cann/catlass/tree/v1.3.0/examples/102_dynamic_optimized_matmul/README.md), and adding examples such as [INT4 Dequantization](https://gitcode.com/cann/catlass/tree/v1.3.0/examples/32_w4a8_matmul/README.md) and [2D Convolution](https://gitcode.com/cann/catlass/tree/v1.3.0/examples/33_basic_conv2d/README.md).
+
+- [2025/10] [v1.2.0](https://gitcode.com/cann/catlass/releases/v1.2.0) released, adding examples such as [Matmul Operator Generalization](https://gitcode.com/cann/catlass/tree/v1.2.0/examples/102_dynamic_optimized_matmul/README.md).
 
 - [2025/09] The CATLASS template library was officially open sourced.
 
-See [CHANGELOG](CHANGELOG.md) for detailed updates in current and historical versions.
+</details>
+
+See [CHANGELOG](CHANGELOG_en.md) for detailed updates in current and historical versions.
 
 ---
 
@@ -46,17 +49,13 @@ CATLASS templates matrix operator code through layered abstraction. Therefore, i
 
 The template library enables fast development for custom scenarios. It provides performance optimization modules for different scenarios, so developers can assemble and customize them. Under custom shapes, its performance can reach 0.98 to 1.2 times the benchmark performance of the corresponding operator.
 
-<div align="center">
+<p align="center">
+  <img src="docs/assets/images/Matmul_en.png" alt="Matmul Performance Comparison" width="70%">
+</p>
 
-<img src="docs/en/figures/Matmul.png" alt="Matmul Performance Comparison" style="width: 70%; max-width: 700px;">
-
-</div>
-
-<div align="center">
-
-<img src="docs/en/figures/Grouped.png" alt="GroupedMatmul Performance Comparison" style="width: 90%; max-width: 900px;">
-
-</div>
+<p align="center">
+  <img src="docs/assets/images/Grouped_en.png" alt="GroupedMatmul Performance Comparison" width="90%">
+</p>
 
 This repository is the co-created repository for CATLASS. It combines the strengths of the Ascend ecosystem to jointly design and develop operator templates, and provides high-performance implementation code examples for typical operators. For an overview, see [here](./docs/en/2_Design/00_project_overview.md#catlass-project-introduction).
 
@@ -68,13 +67,13 @@ To quickly try CATLASS operator development and usage, see the following content
 
 - [Basic Development Guide](./docs/en/1_Practice/02_host_example_assembly.md): Uses the basic Matmul operator as an example to introduce CATLASS-based operator development practices.
 
-- [Developer Practices](./docs/en/README.md#1-practice): Provides practice examples from writing code at each operator layer to compilation and testing, then to Tiling tuning and operator optimization, from beginner to advanced levels.
+- [Developer Practices](./docs/en/README.md#1-practices): Provides practice examples from writing code at each operator layer to compilation and testing, then to Tiling tuning and operator optimization, from beginner to advanced levels.
 
 ## 📚 Advanced References
 
 The following materials can help you further develop and tune CATLASS operators and implement GEMM-class operators with better performance.
 
-- [CATLASS API](./docs/en/README.md#3-api): Introduces the layered features of CATLASS and the general matrix multiplication GEMM API.
+- [CATLASS API](./docs/en/README.md#3-api-documentation): Introduces the layered features of CATLASS and the general matrix multiplication GEMM API.
 
 - [CATLASS Design Summary](./docs/en/README.md#2-design): Summarizes documents such as example algorithm design, swizzle strategies, and TLA design in the CATLASS project.
 
@@ -84,23 +83,15 @@ The key directories are as follows. For the detailed directory structure, see [P
 
 ```bash
 catlass
-├── cmake                     # cmake project files
-├── docs                      # Documentation directory
-├── examples                  # Root directory for kernel operator examples
-|   ├── 00_basic_matmul       # Single-operator example
-|   |   ├── basic_matmul.cpp  # Host-side operator invocation
-|   |   ├── CMakeLists.txt
-|   |   └── README.md         # Operator description example
-|   ├── ...  
-|   └── python_extension      # Project component for calling CATLASS operators from Python
-├── include                   # Template header file set
-|   ├── catlass               # Operator implementation logic at different layers
-|   └── tla                   # Basic data structures related to computation
-├── scripts                   # Build scripts
-|   └── build.sh              # Operator example build script
-├── tests                     # Test cases
-└── tools                     # Related tools
-    └── tuner                 # Tiling auto-tuning tool
+├── 3rdparty                     # Third-party deps
+├── cmake                        # Build config
+├── docs                         # Documentation
+├── examples                     # Operator examples
+├── include                      # Template headers
+├── python                       # Python related codes
+├── scripts                      # Scripts
+├── tests                        # Tests
+└── tools                        # Tools
 
 ```
 
@@ -146,6 +137,6 @@ The following environments have been tested and support building [current CATLAS
 
 ## 📝 Related Information
 
-- [Contribution Guide](CONTRIBUTING.md)
-- [Security Statement](SECURITYNOTE.md)
+- [Contribution Guide](CONTRIBUTING_en.md)
+- [Security Statement](SECURITYNOTE_en.md)
 - [License](LICENSE)

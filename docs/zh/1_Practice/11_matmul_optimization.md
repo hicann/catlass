@@ -154,7 +154,7 @@ struct MmadAtlasA2Preload : public MmadAtlasA2 {
 使用21_basic_matmul_preload_zN，按照默认的L1TileShape<128,256,256>、L0TileShape<128,256,64>，swizzle设置为<3, 1>，耗时为**40.6us**。swizzle设置为<4, 1>，耗时为**35.3us**。
 
 分析基本块情况，M轴方向划分为长度128和32的两块，N方向切24个长256的块，共48个基本块。swizzle<3, 1>和swizzle<4, 1>的基本块分配AIC情况如下图。swizzle<3, 1>时，1、2、5、6号核在M方向有最大任务量为（128 + 128 + 32）；swizzle<4, 1>时，12、13、14、15号核在M方向有最大任务量为（128 + 128），负载更加均衡。
-<img src="../figures/catlass_optimize_guidance/swizzle_case.png" width="100%">
+<img src="../../assets/images/swizzle_case.png" width="100%">
 
 ### 浅述定制调优
 

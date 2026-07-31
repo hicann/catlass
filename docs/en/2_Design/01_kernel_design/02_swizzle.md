@@ -12,7 +12,7 @@ The default Swizzle policy is SwizzleOffset=1 and SwizzleDirection=0, that is:
  using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<>;
 ```
 
-<img src="../../figures/swizzle10.png" width="60%">
+<img src="../../../assets/images/swizzle10_en.png" width="60%">
 
 ## Example 2
 
@@ -22,7 +22,7 @@ SwizzleOffset=3, SwizzleDirection=0
  using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
 ```
 
-<img src="../../figures/swizzle30.png" width="60%">
+<img src="../../../assets/images/swizzle30_en.png" width="60%">
 
 ## Example 3
 
@@ -32,7 +32,7 @@ SwizzleOffset=3, SwizzleDirection=1
  using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
 ```
 
-<img src="../../figures/swizzle31.png" width="60%">
+<img src="../../../assets/images/swizzle31_en.png" width="60%">
 
 ## Swizzle Policy Selection
 

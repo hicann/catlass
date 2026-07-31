@@ -25,7 +25,7 @@ CATLASS [`46_ascend950_matmul_fixpipe_opti`样例](./README.md)算子是基于CA
 
 当前Fixpipe存在N轴非对齐写入性能不佳的问题，在K值较小、MN值较大的Matmul场景中，易引发Fixpipe Bound。针对上述问题，Fixpipe可基于Ascend 950硬件新特性（Ascend 950新增了L0C Buffer到UB的数据通路），通过使能dualDstCtrl，将Cube核L0C Buffer中的结果数据拆分为两路，并行写入两个Vector核（一个Cube核对应两个Vector核）的专属UB中，再使用DataCopyPad基础指令将UB中的数据搬运到Global Memory中。每个Vector核的UB支持独立开启Double Buffer以实现数据读写的流水线重叠，在向Global Memory传输数据的同时，持续接收来自L0C Buffer的数据，有效提升数据吞吐效率。
 
-<img src="../../docs/zh/figures/fixpipe-opti.png" width="50%">
+<img src="../../docs/assets/images/fixpipe-opti.png" width="50%">
 
 ## 性能收益
 

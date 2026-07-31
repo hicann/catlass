@@ -25,7 +25,7 @@ The CATLASS [`46_ascend950_matmul_fixpipe_opti` example](./README.md) operator i
 
 Currently, Fixpipe has a performance issue with misaligned writes along the N axis. In Matmul scenarios with small K and large M/N values, this can easily lead to a Fixpipe-bound situation. To address this issue, Fixpipe can leverage new features of the Ascend 950 hardware (Ascend 950 adds a new data path from the L0C Buffer to UB). By enabling dualDstCtrl, the result data in the Cube core's L0C Buffer is split into two paths and written in parallel to the dedicated UBs of two Vector cores (one Cube core corresponds to two Vector cores). Then, the DataCopyPad basic instruction is used to transfer data from UB to Global Memory. The UB of each Vector core independently supports Double Buffering to achieve pipeline overlap between read and write operations. While transferring data to Global Memory, it continuously receives data from the L0C Buffer, effectively improving data throughput efficiency.
 
-<img src="../../docs/zh/figures/fixpipe-opti.png" width="50%">
+<img src="../../docs/assets/images/fixpipe-opti.png" width="50%">
 
 ## Performance Benefits
 

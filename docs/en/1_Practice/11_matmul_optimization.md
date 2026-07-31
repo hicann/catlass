@@ -154,7 +154,7 @@ Context: Matrix A RowMajor, matrix B zN, M: 160, N: 6144, K: 2048, FP16 input an
 Using 21_basic_matmul_preload_zN with default L1TileShape<128,256,256> and L0TileShape<128,256,64>, and swizzle set to <3, 1>, the execution time is **40.6 µs**. Setting swizzle to <4, 1> results in an execution time of **35.3 µs**.
 
 Basic block analysis: The M-axis is tiled into two blocks of lengths 128 and 32, and the N-axis is tiled into 24 blocks of length 256, resulting in a total of 48 basic blocks. The figure below shows the assignment of basic blocks to AIC cores for swizzle <3, 1> and swizzle <4, 1>. With swizzle <3, 1>, cores 1, 2, 5, and 6 have a maximum task size along the M-axis of (128 + 128 + 32). With swizzle <4, 1>, cores 12, 13, 14, and 15 have a maximum task size along the M-axis of (128 + 128), achieving better load balance.
-<img src="../../zh/figures/catlass_optimize_guidance/swizzle_case.png" width="100%">
+<img src="../../assets/images/swizzle_case.png" width="100%">
 
 ### Brief Overview of Custom Tuning
 

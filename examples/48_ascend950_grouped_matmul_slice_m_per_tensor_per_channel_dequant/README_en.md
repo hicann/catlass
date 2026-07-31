@@ -21,11 +21,11 @@ For specific input and output data types, Fixpipe allows you to configure the qu
 
 - Matmul quantization scenario: During Matmul computation, the left matrix A and right matrix B are of the `half` type, and the output C matrix is of the `int8_t` type. In this scenario, when the data of the C matrix is moved from CO1 to Global Memory, the quantization operation is performed to quantize the final result into the `int8_t` type, as shown in the following figure.
 
-  ![alt text](../../docs/en/figures/fixpipe_quant.png)
+  ![alt text](../../docs/assets/images/fixpipe_quant_en.png)
 
 - Matmul dequantization scenario: During Matmul computation, the left matrix A and right matrix B are of the `int8_t` type, and the output C matrix is of the `half` type. In this scenario, when the data of the C matrix is moved from CO1 to Global Memory, the dequantization operation is performed to dequantize the final result into the corresponding half type, as shown in the following figure.
 
-  ![alt text](../../docs/en/figures/fixpipe_dequant.png)
+  ![alt text](../../docs/assets/images/fixpipe_dequant_en.png)
 
 Fixpipe provides two different granularities of quantization/dequantization modes: per_tensor and per_channel.
 

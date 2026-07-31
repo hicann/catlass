@@ -8,13 +8,13 @@ CATLASS算子模板库采用分层抽象的设计理念，通过分析硬件架�
 
 ## 算子实现分层模块化设计
 
-![](../figures/api_level.png)
+![](../../assets/images/api_level.png)
 
 ## 算子流水自定义灵活配置
 
 模板库提供了灵活的开发方式，开发者可以复用预置的范式来快速实现基础功能，也能够针对特定需求修改模块进行定制开发，还可以通过更换组件来实现自定义的流水组合。这种设计在保证计算性能的同时，为开发者提供了充分的灵活性和拓展空间。
 
-![](../figures/api_custom.png)
+![](../../assets/images/api_custom.png)
 
 ## 项目目录
 
@@ -22,22 +22,33 @@ CATLASS算子模板库采用分层抽象的设计理念，通过分析硬件架�
 
 ```bash
 catlass
-├── cmake                     # cmake工程文件
-├── docs                      # 文档存放目录
-├── examples                  # kernel算子样例总目录
-|   ├── 00_basic_matmul       # 单算子样例
-|   |   ├── basic_matmul.cpp  # Host侧算子调用
+├── 3rdparty                     # 三方依赖库
+|   └── googletest               # GoogleTest测试框架
+├── cmake                        # cmake公共函数
+├── docs                         # 文档存放目录
+├── examples                     # kernel算子样例总目录
+|   ├── 00_basic_matmul          # 单算子样例
+|   |   ├── basic_matmul.cpp     # Host侧算子调用
 |   |   ├── CMakeLists.txt
-|   |   └── README.md         # 算子说明示例
+|   |   └── README.md            # 算子说明示例
 |   ├── ...
-|   └── python_extension      # Python调用CATLASS算子
-|                             # 的工程组件
-├── include                   # 模板头文件集
-|   ├── catlass               # 不同层级的算子实现逻辑
-|   └── tla                   # 计算关联的基础数据结构
-├── scripts                   # 编译脚本
-|   └── build.sh              # 算子样例编译脚本
-├── tests                     # 测试用例
-└── tools                     # 相关工具
-    └── tuner                 # Tiling自动寻优工具
+|   ├── advanced                 # 进阶样例
+|   └── common                   # 样例公共组件（golden、helper等）
+├── include                      # 模板头文件集
+|   ├── catlass                  # 不同层级的算子实现逻辑
+|   |   ├── arch                 # 硬件架构抽象层
+|   |   ├── conv                 # 卷积算子模板
+|   |   ├── epilogue             # 后处理模板
+|   |   ├── gemm                 # GEMM算子模板
+|   |   ├── gemv                 # GEMV算子模板
+|   |   └── layout               # 数据布局定义
+|   └── tla                      # TLA框架
+├── python                       # Python代码生成框架
+|   └── catlass_cppgen           # 基于Python的C++核函数代码生成框架
+├── scripts                      # 相关脚本
+├── tests                        # 测试用例
+|   ├── optest                   # Python算子功能测试
+|   ├── unittest                 # C++单元测试
+|   └── self_contained_includes  # 头文件自包含检查
+└── tools                        # 调优工具
 ```

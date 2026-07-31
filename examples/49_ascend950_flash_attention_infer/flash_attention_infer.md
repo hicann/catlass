@@ -28,7 +28,7 @@ O = FlashAttention(Q, K, V, mask)
 - mask: Attention mask（可选）
 - O: Output tensor，形状 [batch, qSeqlen, qHeads, headDim]
 
-<img src="../../docs/zh/figures/flash_attention_infer_operator.png" width="40%">
+<img src="../../docs/assets/images/flash_attention_infer_operator.png" width="40%">
 
 - 支持GQA功能。
 - 支持Paged Attention模式，通过blockTable实现KV Cache的分页管理。
@@ -36,7 +36,7 @@ O = FlashAttention(Q, K, V, mask)
 - CV流水preload，AIC和AIV多级流水并行，提高计算效率。
 - 当前模板Kernel暂未支持ActualSeq可变长特性。
 
-<img src="../../docs/zh/figures/flash_attention_infer_cv_pipeline.png" width="50%">
+<img src="../../docs/assets/images/flash_attention_infer_cv_pipeline.png" width="50%">
 
 ---
 
@@ -655,7 +655,7 @@ for (int64_t kvSeqLoopCount = runParam.kvSeqLoopStartIdx; kvSeqLoopCount <= kvSe
 
 ### 6.1 流水线时序图
 
-<img src="../../docs/zh/figures/flash_attention_infer_cv_pipeline.png" width="50%">
+<img src="../../docs/assets/images/flash_attention_infer_cv_pipeline.png" width="50%">
 
 ### 6.2 同步机制
 
