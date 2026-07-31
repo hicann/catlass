@@ -120,6 +120,13 @@ class BasicMatmulKernel(GemmKernelBase):
                 512 // element_max_size,
                 128 // element_max_size,
             )
+        else:
+            l1_m, l1_n, l1_k, l0_k = (
+                128,
+                128,
+                512 // element_max_size,
+                128 // element_max_size,
+            )
         if self.element_Bias is not None and self.element_Bias != "void":
             l1_m -= 16
         return GemmShape(l1_m, l1_n, l1_k), GemmShape(l1_m, l1_n, l0_k)

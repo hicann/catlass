@@ -17,6 +17,7 @@ from catlass_cppgen.common.utils import get_type_name
 from catlass_cppgen.catlass.gemm.dispatch_policy import (
     MmadPingpong,
 )
+from catlass_cppgen.catlass.arch.arch import Arch
 
 
 class GroupedMatmulSliceMKernel(GemmKernelBase):
@@ -116,11 +117,33 @@ class GroupedMatmulSliceMKernel(GemmKernelBase):
     def get_default_tile_shape(self) -> Tuple[GemmShape, GemmShape]:
         """获取默认的 tile shape.
 
-        根据 grouped_matmul_slice_m.cpp 中的设置：
+        默认fp16，L1, L0 STAGES均为2：
         L1TileShape = Shape<Int<256>, Int<256>, Int<256>>
         L0TileShape = Shape<Int<256>, Int<256>, Int<64>>
         """
-        return GemmShape(256, 256, 256), GemmShape(256, 256, 64)
+        element_max_size = max(self.element_A.data_size(), self.element_B.data_size())
+        if self.arch_tag == Arch.AtlasA2:
+            l1m, l1n, l1k, l0k = (
+                256,
+                128,
+                512 // element_max_size,
+                128 // element_max_size,
+            )
+        elif self.arch_tag == Arch.Ascend950:
+            l1m, l1n, l1k, l0k = (
+                256,
+                256,
+                512 // element_max_size,
+                128 // element_max_size,
+            )
+        else:
+            l1m, l1n, l1k, l0k = (
+                128,
+                128,
+                512 // element_max_size,
+                128 // element_max_size,
+            )
+        return GemmShape(l1m, l1n, l1k), GemmShape(l1m, l1n, l0k)
 
     def get_default_dispatch_policy_list(self) -> List:
         """获取 GroupedMatmulSliceMKernel 的默认 dispatch_policy 列表.
