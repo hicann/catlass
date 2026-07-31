@@ -2712,11 +2712,10 @@ public:
       if (funcOp->hasAttr(kHivmVectorFunctionAttrName))
         continue;
       // Only AIV (and not-yet-split MIX) functions hold vector work. Their core
-      // kind is the func_core_type set by the infer pass, falling back to the
-      // module core type for pure-vector entries (whose func_core_type is
-      // intentionally stripped by the HACC attr convention).
-      std::optional<HivmCoreKind> coreKind = getExpectedFunctionCoreKind(funcOp.getOperation());
-      if (coreKind != HivmCoreKind::AIV && coreKind != HivmCoreKind::MIX)
+      // kind is the func_core_type stamped by tla-lower-func (pure-vector
+      // entries retain func_core_type = AIV).
+      std::optional<hivm::TFuncCoreType> coreType = getFunctionCoreType(funcOp.getOperation());
+      if (coreType != hivm::TFuncCoreType::AIV && coreType != hivm::TFuncCoreType::MIX)
         continue;
       if (failed(checkNoArchOpsInVecFunc(funcOp))) {
         signalPassFailure();
@@ -2732,7 +2731,7 @@ public:
       populateTlaToVectorPatterns(patterns, module, nextVectorRegionId,
                                   lowering.loweredMemrefByValue,
                                   invalidScalarAccessBase);
-      if (failed(mlir::applyPatternsAndFoldGreedily(funcOp, std::move(patterns)))) {
+      if (failed(mlir::applyPatternsGreedily(funcOp, std::move(patterns)))) {
         signalPassFailure();
         return;
       }

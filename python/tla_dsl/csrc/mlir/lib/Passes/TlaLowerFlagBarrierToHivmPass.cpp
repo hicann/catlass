@@ -75,25 +75,6 @@ private:
     return hivm::PipeAttr::get(ctx, *pipe);
   }
 
-  static FailureOr<hivm::TCoreType> inferCrossCoreFlagCore(Operation *op) {
-    // Derive the core from the enclosing function's hivm.func_core_type attribute
-    // (set by tla-lower-func and carried onto the AIC/AIV fragments by
-    // tla-split-mixed-func). This pass runs after tla-vector-region, so the
-    // frontend tla.cube/tla.vector regions no longer exist to inspect.
-    if (auto funcOp = op->getParentOfType<func::FuncOp>()) {
-      auto coreType =
-          funcOp->getAttrOfType<hivm::TFuncCoreTypeAttr>(hivm::TFuncCoreTypeAttr::name);
-      if (coreType && coreType.getFuncCoreType() == hivm::TFuncCoreType::AIC)
-        return hivm::TCoreType::CUBE;
-      if (coreType && coreType.getFuncCoreType() == hivm::TFuncCoreType::AIV)
-        return hivm::TCoreType::VECTOR;
-    }
-    op->emitError() << "expected " << op->getName().getStringRef()
-                    << " to be in a function with an AIC/AIV hivm.func_core_type "
-                       "attribute (set by tla-lower-func or tla-split-mixed-func)";
-    return failure();
-  }
-
   static FailureOr<StringRef> resolveFlagName(Operation *op, Value flagOperand) {
     if (auto flagAttr = op->getAttrOfType<StringAttr>("flag"))
       return flagAttr.getValue();
@@ -236,12 +217,13 @@ private:
       if (!flagType)
         return rewriter.notifyMatchFailure(op, "expected a mode-parameterized cross flag type");
       int64_t mode = flagType.getMode();
-      auto core = inferCrossCoreFlagCore(op);
+      std::optional<hivm::TFuncCoreType> coreType =
+          getFunctionCoreType(op->getParentOfType<func::FuncOp>());
       auto pipeAttr = op->getAttrOfType<PipeAttr>("pipe");
       FailureOr<hivm::PIPE> pipe =
           pipeAttr ? getHivmPipe(pipeAttr.getPipe()) : FailureOr<hivm::PIPE>(failure());
-      if (failed(core) || failed(pipe))
-        return rewriter.notifyMatchFailure(op, "unsupported core or pipe");
+      if (!coreType || failed(pipe))
+        return rewriter.notifyMatchFailure(op, "unsupported coreType or pipe");
       uint64_t pipeValue = static_cast<uint64_t>(*pipe);
       Value flagId = operands.front();
       IntegerAttr staticIdAttr;
@@ -300,7 +282,7 @@ private:
       if (mode == 2) {
         auto base = offsetId(0);
         emitIntraBlock(rewriter, op->getLoc(), base.first, base.second);
-        if (*core == hivm::TCoreType::CUBE) {
+        if (*coreType == hivm::TFuncCoreType::AIC) {
           auto upper = offsetId(16);
           emitIntraBlock(rewriter, op->getLoc(), upper.first, upper.second);
         }
@@ -311,7 +293,7 @@ private:
       auto aivIdAttr = op->getAttrOfType<IntegerAttr>("aiv_id");
       if (!aivIdAttr || (aivIdAttr.getInt() != 0 && aivIdAttr.getInt() != 1))
         return op->emitError("mode 4 requires aiv_id to be 0 or 1");
-      if (*core == hivm::TCoreType::CUBE) {
+      if (*coreType == hivm::TFuncCoreType::AIC) {
         auto selected = offsetId(16 * aivIdAttr.getInt());
         emitIntraBlock(rewriter, op->getLoc(), selected.first, selected.second);
       } else {

@@ -278,53 +278,31 @@ static LogicalResult materializeKernelTensorEntryAbi(ModuleOp module) {
   return success();
 }
 
-// Aggregate two core kinds: same kind stays; differing non-MIX kinds (or any
+// Aggregate two core types: same type stays; differing non-MIX types (or any
 // MIX) promote to MIX.
-HivmCoreKind promoteCoreKind(std::optional<HivmCoreKind> current, HivmCoreKind observed) {
+hivm::TFuncCoreType promoteCoreType(std::optional<hivm::TFuncCoreType> current,
+                                   hivm::TFuncCoreType observed) {
   if (!current)
     return observed;
-  if (*current == observed || *current == HivmCoreKind::MIX)
+  if (*current == observed || *current == hivm::TFuncCoreType::MIX)
     return *current;
-  return HivmCoreKind::MIX;
-}
-
-// A pure-vector entry keeps only the HACC entry attrs in the final IR (no
-// func_core_type / mix_mode / parallel_mode), per the pure-vector-entry
-// attribute convention.
-bool shouldOmitPureVectorEntryCoreAttrs(Operation *op, HivmCoreKind coreKind) {
-  if (!op || coreKind != HivmCoreKind::AIV)
-    return false;
-  if (op->hasAttr("hivm.part_of_mix"))
-    return false;
-  if (isPrivateSymbol(op))
-    return false;
-  return true;
+  return hivm::TFuncCoreType::MIX;
 }
 
 // Materialize the final HACC/HIVM entry attributes for a device function from
-// its core kind (hacc.entry, function_kind, hivm.func_core_type, mix_mode,
-// parallel_mode, and the C310 regbase target). Pure-vector entries are stripped
-// back to just the entry attrs (plus the target). This is the single place that
+// its core type (hacc.entry, function_kind, hivm.func_core_type, mix_mode,
+// parallel_mode, and the C310 regbase target). This is the single place that
 // stamps the per-device-function HACC/HIVM entry metadata.
-void stampFunctionHaccHivmAttrs(Operation *op, HivmCoreKind coreKind) {
+void stampFunctionHaccHivmAttrs(Operation *op, hivm::TFuncCoreType coreType) {
   if (isPrivateSymbol(op))
     return;
   MLIRContext *ctx = op->getContext();
   setC310RegbaseTargetAttr(op, ctx);
-  if (shouldOmitPureVectorEntryCoreAttrs(op, coreKind)) {
-    setRequiredHaccEntryAttrs(op, ctx);
-    op->removeAttr(hivm::TFuncCoreTypeAttr::name);
-    op->removeAttr(kMixModeAttrName);
-    op->removeAttr(kParallelModeAttrName);
-    return;
-  }
-  StringRef mixMode =
-      coreKind == HivmCoreKind::AIV && !op->hasAttr("hivm.part_of_mix") ? "aiv" : "mix";
-  op->setAttr(hacc::stringifyEnum(hacc::HACCToLLVMIRTranslateAttr::ENTRY), UnitAttr::get(ctx));
-  op->setAttr(hacc::HACCFuncTypeAttr::name,
-              hacc::HACCFuncTypeAttr::get(ctx, hacc::HACCFuncType::DEVICE));
+  setRequiredHaccEntryAttrs(op, ctx);
   op->setAttr(hivm::TFuncCoreTypeAttr::name,
-              hivm::TFuncCoreTypeAttr::get(ctx, toFuncCoreType(coreKind)));
+              hivm::TFuncCoreTypeAttr::get(ctx, coreType));
+  StringRef mixMode =
+      coreType == hivm::TFuncCoreType::AIV && !op->hasAttr("hivm.part_of_mix") ? "aiv" : "mix";
   op->setAttr(kMixModeAttrName, StringAttr::get(ctx, mixMode));
   op->setAttr(kParallelModeAttrName, StringAttr::get(ctx, "simd"));
 }
@@ -385,7 +363,7 @@ public:
     return isKernelEntryCandidate(funcOp, body);
   }
 
-  HivmCoreKind inferFuncCoreKind(Operation *funcOp) {
+  hivm::TFuncCoreType inferFuncCoreType(Operation *funcOp) {
     bool hasVector = false, hasCube = false;
     funcOp->walk([&](Operation *op) {
       if (isa<::tla::VectorOp>(op))
@@ -399,11 +377,11 @@ public:
     });
 
     if (hasVector && hasCube)
-      return HivmCoreKind::MIX;
+      return hivm::TFuncCoreType::MIX;
     if (hasCube)
-      return HivmCoreKind::AIC;
+      return hivm::TFuncCoreType::AIC;
     // tla.vector only, or a region-less (empty / sync-only) function -> AIV.
-    return HivmCoreKind::AIV;
+    return hivm::TFuncCoreType::AIV;
   }
 
   void runOnOperation() override {
@@ -420,13 +398,13 @@ public:
     // 1. Classify + stamp each device function, aggregating the module core type.
     //    Done on the tla.func containers so the attrs are carried onto func.func
     //    by the CopyNonSignatureAttrs lowering below.
-    std::optional<HivmCoreKind> moduleKind;
+    std::optional<hivm::TFuncCoreType> moduleCoreType;
     auto classify = [&](Operation *funcOp, Region &body) {
       if (!isInferableFunc(funcOp, body))
         return;
-      HivmCoreKind funcKind = inferFuncCoreKind(funcOp);
-      stampFunctionHaccHivmAttrs(funcOp, funcKind);
-      moduleKind = promoteCoreKind(moduleKind, funcKind);
+      hivm::TFuncCoreType funcCoreType = inferFuncCoreType(funcOp);
+      stampFunctionHaccHivmAttrs(funcOp, funcCoreType);
+      moduleCoreType = promoteCoreType(moduleCoreType, funcCoreType);
     };
     for (::tla::FuncOp funcOp : module.getOps<::tla::FuncOp>())
       classify(funcOp, funcOp.getBody());
@@ -434,10 +412,10 @@ public:
       classify(funcOp, funcOp.getBody());
 
     // Always tag the module core type, defaulting an empty / region-less module
-    // to AIV -- the same fallback inferFuncCoreKind applies per function.
-    HivmCoreKind resolvedModuleKind = moduleKind.value_or(HivmCoreKind::AIV);
+    // to AIV -- the same fallback inferFuncCoreType applies per function.
+    hivm::TFuncCoreType resolvedModuleCoreType = moduleCoreType.value_or(hivm::TFuncCoreType::AIV);
     module->setAttr(hivm::TModuleCoreTypeAttr::name,
-                    hivm::TModuleCoreTypeAttr::get(ctx, toModuleCoreType(resolvedModuleKind)));
+                    hivm::TModuleCoreTypeAttr::get(ctx, toModuleCoreType(resolvedModuleCoreType)));
 
     // 2. Lower the tla.func containers to func.func and attach the C310 module
     //    target attributes.

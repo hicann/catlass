@@ -438,7 +438,7 @@ public:
     // Drive one function at a time so the cube lowering only touches the cube
     // (AIC) function's ops, not a sibling vector (AIV) function in a mixed kernel.
     // Mirrors tla-vector-region, which iterates the module's functions and filters
-    // by core kind. Snapshot the functions up front: lowering appends runtime-call
+    // by core type. Snapshot the functions up front: lowering appends runtime-call
     // declarations to the module, which must not be fed back through the loop.
     SmallVector<func::FuncOp, 4> funcOps(module.getOps<func::FuncOp>());
     for (func::FuncOp funcOp : funcOps) {
@@ -450,8 +450,8 @@ public:
         continue;
       // Only AIC (and not-yet-split MIX) functions hold cube work. Pure vector
       // (AIV) functions have no tla.cube / tla.copy / tla.mmad to lower.
-      std::optional<HivmCoreKind> coreKind = getExpectedFunctionCoreKind(funcOp.getOperation());
-      if (coreKind != HivmCoreKind::AIC && coreKind != HivmCoreKind::MIX)
+      std::optional<hivm::TFuncCoreType> coreType = getFunctionCoreType(funcOp.getOperation());
+      if (coreType != hivm::TFuncCoreType::AIC && coreType != hivm::TFuncCoreType::MIX)
         continue;
       if (failed(runOnCubeFunction(funcOp))) {
         signalPassFailure();

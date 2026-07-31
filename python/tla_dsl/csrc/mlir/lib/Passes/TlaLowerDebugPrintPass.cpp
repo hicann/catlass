@@ -219,11 +219,11 @@ static LogicalResult lowerDebugPrint(::tla::DebugPrintOp op, PatternRewriter& re
     if (!funcOp)
         return op.emitError("tla.debug_print must be nested inside func.func");
     DebugPrintPlacement placement = DebugPrintPlacement::Invalid;
-    if (std::optional<HivmCoreKind> coreKind =
-            getExpectedFunctionCoreKind(funcOp)) {
-        if (*coreKind == HivmCoreKind::AIC)
+    if (std::optional<hivm::TFuncCoreType> coreType =
+            getFunctionCoreType(funcOp)) {
+        if (*coreType == hivm::TFuncCoreType::AIC)
             placement = DebugPrintPlacement::Cube;
-        else if (*coreKind == HivmCoreKind::AIV)
+        else if (*coreType == hivm::TFuncCoreType::AIV)
             placement = DebugPrintPlacement::Vector;
     }
     std::string diagnostic;

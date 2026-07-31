@@ -42,7 +42,7 @@ public:
       builder.setInsertionPointToStart(&entry);
       builder.create<hivm::SetCtrlOp>(loc, false, OverrideSaturationBit);
       builder.create<hivm::SetCtrlOp>(loc, true, SaturationControlBit);
-      if (getExpectedFunctionCoreKind(funcOp) == HivmCoreKind::AIV)
+      if (getFunctionCoreType(funcOp) == hivm::TFuncCoreType::AIV)
         builder.create<hivm::SetCtrlOp>(loc, false, MaskControlBit);
 
       Operation *terminator = entry.getTerminator();

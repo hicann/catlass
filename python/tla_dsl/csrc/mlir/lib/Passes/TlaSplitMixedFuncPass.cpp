@@ -155,11 +155,12 @@ static func::FuncOp createSplitFunction(func::FuncOp source, StringRef newName,
   newFunc.setSymName(newName);
 
   MLIRContext *ctx = source.getContext();
-  HivmCoreKind coreKind = side == SplitSide::AIC ? HivmCoreKind::AIC : HivmCoreKind::AIV;
+  hivm::TFuncCoreType coreType =
+      side == SplitSide::AIC ? hivm::TFuncCoreType::AIC : hivm::TFuncCoreType::AIV;
   setRequiredHaccEntryAttrs(newFunc, ctx);
   setC310RegbaseTargetAttr(newFunc, ctx);
   newFunc->setAttr(hivm::TFuncCoreTypeAttr::name,
-                   hivm::TFuncCoreTypeAttr::get(ctx, toFuncCoreType(coreKind)));
+                   hivm::TFuncCoreTypeAttr::get(ctx, coreType));
   newFunc->setAttr(kMixModeAttrName, StringAttr::get(ctx, "mix"));
   newFunc->setAttr(kParallelModeAttrName, StringAttr::get(ctx, "simd"));
   newFunc->setAttr(hivm::TPartOfMixAttr::name, UnitAttr::get(ctx));
