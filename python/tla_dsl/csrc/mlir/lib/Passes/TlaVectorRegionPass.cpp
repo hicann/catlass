@@ -51,10 +51,28 @@ static hivmave::LoadDist mapTlaLoadDistToAve(::LoadDist dist) {
   llvm_unreachable("unsupported tla.load load_dist");
 }
 
+static hivmave::StoreDist mapTlaStoreDistToAve(::StoreDist dist) {
+  switch (dist) {
+    case ::StoreDist::pack_b32:
+      return hivmave::StoreDist::PK_B32;
+    case ::StoreDist::pack_b16:
+      return hivmave::StoreDist::PK_B16;
+    // If other StoreDist added, complete here
+    default:
+      return hivmave::StoreDist::NORM_B8;
+  }
+}
+
 static bool isDualDestLoadDist(hivmave::LoadDist pattern) {
   return pattern == hivmave::LoadDist::DINTLV_B8 ||
          pattern == hivmave::LoadDist::DINTLV_B16 ||
          pattern == hivmave::LoadDist::DINTLV_B32;
+}
+
+static bool isDualDestStoreDist(hivmave::StoreDist pattern) {
+  return pattern == hivmave::StoreDist::INTLV_B8 ||
+         pattern == hivmave::StoreDist::INTLV_B16 ||
+         pattern == hivmave::StoreDist::INTLV_B32;
 }
 
 static hivmave::VFLoadOp createVFLoad(OpBuilder &b, Location loc, VectorType vecType,
@@ -1568,6 +1586,8 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
     if (!dest || !source)
       return failure();
 
+
+
     // MaskSSA source: 1/2/4-byte UB ← i1 memref view ← masked_store <NORM_B8>.
     if (isa<::tla::MaskSSAType>(storeOp.getSource().getType())) {
       auto maskType = cast<::tla::MaskSSAType>(storeOp.getSource().getType());
@@ -1644,7 +1664,18 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
       Value pregMask = castMaskToPregType(b, loc, mask, pregVecType);
       b.create<func::CallOp>(loc, callee, ValueRange{source, dest, blockStrideVal, pregMask});
     } else {
-      b.create<hivmave::VFMaskedStoreOp>(loc, dest, ValueRange{zero}, mask, source);
+      auto storeDistAttr = storeOp.getStoreDist();
+      if (storeDistAttr && storeDistAttr->getStoreDist() != ::StoreDist::norm) {
+        hivmave::StoreDist pattern = mapTlaStoreDistToAve(storeDistAttr->getStoreDist());
+        bool isDual = isDualDestStoreDist(pattern);
+        if (isDual) {
+          return storeOp.emitError("dual mode not implemented.");
+        }
+        b.create<hivmave::VFMaskedStoreOp>(loc, pattern, dest, ValueRange{zero}, mask, source);
+      } else {
+        // NORM mode
+        b.create<hivmave::VFMaskedStoreOp>(loc, dest, ValueRange{zero}, mask, source);
+      }
     }
     return success();
   }

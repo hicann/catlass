@@ -309,6 +309,8 @@ mlir::LogicalResult StoreOp::verify() {
       return emitOpError(
           "dest !tla.tensor element type must be a 1/2/4-byte scalar "
           "for MaskSSA store");
+
+    // If `storeDistAttr` supports intlv mode, check here if `getResult2()` is None
     return mlir::success();
   }
 

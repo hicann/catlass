@@ -59,14 +59,14 @@ class MaskLoadDist:
 
 class StoreDist:
     DIST_NORM = "norm"
-    DIST_BRC_B32 = "brc_b32"
+    DIST_PACK_B32 = "pack_b32"
+    DIST_PACK_B16 = "pack_b16"
 
 
 class MaskStoreDist:
     """Mask store distribution modes (AscendC ``MaskDist`` / ``psts``)."""
 
     DIST_NORM = "norm"
-
 
 class StoreParams:
     """Marker annotation for tensor tile store params."""

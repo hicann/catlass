@@ -104,6 +104,7 @@ INTERLEAVE_OP_REL="examples/end_to_end/vector_ops/interleave_op.py"
 LOAD_DINTLV_OP_REL="examples/end_to_end/vector_ops/load_dintlv_op.py"
 LOAD_US_B8_OP_REL="examples/end_to_end/vector_ops/load_us_b8_op.py"
 LOAD_STORE_MASK_REL="examples/end_to_end/vector_ops/load_store_mask.py"
+STORE_PACK_REL="examples/end_to_end/vector_ops/store_pack.py"
 SQUEEZE_OP_REL="examples/end_to_end/vector_ops/squeeze_op.py"
 REGISTER_CONTROL_FLOW_REL="examples/end_to_end/vector_ops/register_control_flow.py"
 SCALAR_INDEX_CONTROL_FLOW_REL="examples/end_to_end/tensor_index/scalar_index_control_flow.py"
@@ -147,6 +148,7 @@ Run end-to-end validation for:
   - load_store_mask (load_store_mask.py load_store_mask --run --all-dtypes:
     MaskSSA load/store round-trip via MaskLoadParams/MaskStoreParams for
     b8/b16/b32 UB carriers; companion vector fixed to f32)
+  - store_pack (store_pack.py store_pack --run --all-dtypes; i32/i16 only)
   - squeeze_op (squeeze_op.py squeeze --run --all-dtypes)
   - register_control_flow (register_control_flow.py register_carriers --run:
     mixed VectorSSA/MaskSSA scf.for carriers and masked store)
@@ -685,6 +687,16 @@ _run_load_store_mask_case() {
 }
 
 _run_load_store_mask_case
+
+_run_store_pack_case() {
+    echo "==> Running store_pack validation [i32/i16 only]: store_pack --run --all-dtypes --device ${DEVICE_ID}"
+    (
+        cd "${TLA_DSL_DIR}"
+        python "${STORE_PACK_REL}" store_pack --run --all-dtypes --device "${DEVICE_ID}"
+    )
+}
+
+_run_store_pack_case
 
 _run_squeeze_op_case() {
     echo "==> Running squeeze_op validation [squeeze all dtypes]: squeeze --sweep --shapes 64 --device ${DEVICE_ID} --force-recompile"

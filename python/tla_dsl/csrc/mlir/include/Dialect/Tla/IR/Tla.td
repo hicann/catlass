@@ -296,6 +296,27 @@ def Tla_LoadDistAttr : Tla_EnumAttr<"LoadDist", "load_dist"> {
   }];
 }
 
+// StoreDist Enum Attr
+def Tla_StoreDist_Norm : I32EnumAttrCase<"norm", 0>;
+def Tla_StoreDist_PackB32: I32EnumAttrCase<"pack_b32", 1>;
+def Tla_StoreDist_PackB16: I32EnumAttrCase<"pack_b16", 2>;
+def Tla_StoreDistEnum : Tla_I32Enum<"StoreDist", "Store distribution for tla.store.", [
+  Tla_StoreDist_Norm,
+  Tla_StoreDist_PackB32,
+  Tla_StoreDist_PackB16
+]>;
+def Tla_StoreDistAttr : Tla_EnumAttr<"StoreDist", "store_dist"> {
+  let parameters = (ins EnumParameter<Tla_StoreDistEnum>:$store_dist);
+  let assemblyFormat = "`<` params `>`";
+  let description = [{
+    Store distribution for tla.store.
+     - DIST_NORM: Normal mode, support b8/b16/b32, with a fixed datacopy VL, should be aligned with 32B.
+     - DIST_PACK_B16: Compact mode, store the low half data (b16) to dst, should be aligned with 32B, or VL/2.
+     - DIST_PACK_B32: Compact mode, store the low half data (b32) to dst.
+  }];
+}
+
+
 // ---------------------------------------------------------------------------
 // CastParams: the four knobs of a tla.cast, matching CastParams in the Python
 // front-end (catlass/params.py). The enum keywords are the MLIR-asm tokens.
@@ -963,6 +984,7 @@ def Tla_StoreOp : Tla_Op<"store", [AttrSizedOperandSegments]> {
                        AnyTypeOf<[Tla_VectorSSAType, Tla_MaskSSAType]>:$source,
                        Optional<Tla_MaskSSAType>:$mask,
                        Optional<Tla_IntegerOrIndexType>:$block_stride,
+                       OptionalAttr<Tla_StoreDistAttr>:$store_dist,
                        OptionalAttr<UnitAttr>:$unaligned_ub_access);
   let assemblyFormat = [{
     $dest `,` $source (`mask` $mask^)? (`stride` $block_stride^)? attr-dict `:`

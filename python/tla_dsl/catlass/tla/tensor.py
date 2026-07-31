@@ -402,6 +402,7 @@ class _Tensor(TensorABC):
         from ..execution_lowering import TlaLoweringError
         from ..params import (
             BlockStoreParams,
+            StoreDist,
             MaskStoreDist,
             MaskStoreParams,
             NormalStoreParams,
@@ -430,6 +431,7 @@ class _Tensor(TensorABC):
                     "store(..., MaskStoreParams) does not accept predicate mask="
                 )
             if params.store_dist != MaskStoreDist.DIST_NORM:
+                # TODO: Once all `StoreDist` mode supported, remove this guard.
                 raise NotImplementedError(
                     f"currently unsupported store_dist {params.store_dist!r}"
                 )
@@ -476,6 +478,12 @@ class _Tensor(TensorABC):
         if mask_val is not None:
             _require_mask_matches_vector("store", mask_val, value_val)
         store_kwargs: dict[str, Any] = {"loc": loc}
+        if isinstance(params, NormalStoreParams) and params.store_dist != StoreDist.DIST_NORM:
+            ctx = loc.context if loc is not None else mlir_ir.Context.current
+            store_kwargs["store_dist"] = mlir_ir.Attribute.parse(
+                f"#tla.store_dist<{params.store_dist}>",
+                context=ctx,
+            )
         if isinstance(params, UnalignStoreParams):
             store_kwargs["unaligned_ub_access"] = True
         if isinstance(params, BlockStoreParams):
