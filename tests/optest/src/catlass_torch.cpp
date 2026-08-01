@@ -51,6 +51,7 @@
 #include "template/trmm.h"
 #include "template/conv_bias.h"
 #include "template/symm.h"
+#include "template/matrix_inverse.h"
 // ── Workspace allocator bridge ──
 // 通过 dlsym 注入到 g_catlassWorkspaceAlloc，使 JIT 模板分配 NPU tensor
 // 而非裸 aclrtMalloc。tensor 保存在静态池中，kernel 执行期间有效。
@@ -414,5 +415,9 @@ REGISTER_TORCH_FUNC(symm);
 using GroupedMatmulSliceMGeluOp = GroupedMatmulLike<CatlassKernel::GroupedMatmulSliceMGelu, GmmSliceDir::M>;
 static auto& grouped_matmul_slice_m_gelu = GroupedMatmulSliceMGeluOp::Run;
 REGISTER_TORCH_FUNC(grouped_matmul_slice_m_gelu);
+
+// ── example 78_matrix_inverse ──
+static auto& matrix_inverse = MatrixInverseOp::Run;
+REGISTER_TORCH_FUNC(matrix_inverse);
 
 } // namespace CatlassKernelWrapper

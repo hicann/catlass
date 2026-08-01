@@ -279,6 +279,7 @@ add_subdirectory(56_ascend950_basic_conv2d_tla)
 add_subdirectory(72_ascend950_fp8_mx_flash_attention_infer)
 add_subdirectory(75_symm)
 add_subdirectory(76_trmm)
+add_subdirectory(78_matrix_inverse)
 add_subdirectory(80_grouped_matmul_slice_m_gelu)
 
 if(_JIT_KERNEL_ENTRIES)

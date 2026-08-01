@@ -114,6 +114,7 @@ from .w4a4_matmul_per_token_per_channel_dequant import (
 from .w4a8_matmul import w4a8_matmul  # example 32
 from .w8a16_matmul import w8a16_matmul  # example 30
 from .grouped_matmul_slice_m_gelu import grouped_matmul_slice_m_gelu  # example 80
+from .matrix_inverse import matrix_inverse  # example 78
 
 __all__ = [
     "basic_matmul",  # example 00
@@ -198,4 +199,5 @@ __all__ = [
     "symm",  # example 75
     "trmm",  # example 76
     "grouped_matmul_slice_m_gelu",  # example 80
+    "matrix_inverse",  # example 78
 ]
