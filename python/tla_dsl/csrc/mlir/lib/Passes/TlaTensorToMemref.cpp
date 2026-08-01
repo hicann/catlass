@@ -811,7 +811,7 @@ static void annotateAicTemplateRuntimeCall(func::FuncOp func) {
   func->setAttr(hacc::stringifyEnum(hacc::HACCToLLVMIRTranslateAttr::ALWAYS_INLINE),
                 UnitAttr::get(ctx));
   func->setAttr(hivm::TFuncCoreTypeAttr::name,
-                hivm::TFuncCoreTypeAttr::get(ctx, toFuncCoreType(HivmCoreKind::AIC)));
+                hivm::TFuncCoreTypeAttr::get(ctx, hivm::TFuncCoreType::AIC));
   func->setAttr("llvm.emit_c_interface", UnitAttr::get(ctx));
 }
 
@@ -820,7 +820,7 @@ static void annotateAivTemplateRuntimeCall(func::FuncOp func) {
   func->setAttr(hacc::stringifyEnum(hacc::HACCToLLVMIRTranslateAttr::ALWAYS_INLINE),
                 UnitAttr::get(ctx));
   func->setAttr(hivm::TFuncCoreTypeAttr::name,
-                hivm::TFuncCoreTypeAttr::get(ctx, toFuncCoreType(HivmCoreKind::AIV)));
+                hivm::TFuncCoreTypeAttr::get(ctx, hivm::TFuncCoreType::AIV));
   func->setAttr("llvm.emit_c_interface", UnitAttr::get(ctx));
 }
 

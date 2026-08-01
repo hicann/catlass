@@ -32,6 +32,20 @@ std::unique_ptr<mlir::Pass> createTlaLowerMutexToStdPass();
 std::unique_ptr<mlir::Pass> createTlaLowerAVEToRegbaseIntrinsPass();
 mlir::FailureOr<llvm::StringRef>
 getPrintTensorHelperSuffix(mlir::Type elementType, std::string &diagnostic);
+
+enum class DebugPrintPlacement {
+    Cube,
+    Vector,
+    Invalid,
+};
+
+struct DebugPrintHelperSpec {
+    llvm::StringRef callee;
+};
+
+mlir::FailureOr<DebugPrintHelperSpec>
+getDebugPrintHelperSpec(mlir::Type type, DebugPrintPlacement placement,
+                        std::string &diagnostic);
 mlir::LogicalResult lowerTlaMutexToStd(
     mlir::ModuleOp module,
     std::function<mlir::Value(mlir::Operation *, int64_t, unsigned)>

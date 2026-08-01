@@ -8,6 +8,7 @@ import pytest
 import catlass as tla
 import catlass.runtime as runtime_mod
 from catlass.base_dsl import BaseDSL
+from examples.end_to_end.debug_print import debug_print as debug_print_example
 
 
 @tla.kernel
@@ -29,6 +30,18 @@ def _computed_i32_kernel(x: object, y: object) -> None:
 @tla.kernel
 def _computed_f32_kernel(x: object, y: object) -> None:
     with tla.cube():
+        tla.print(x + y)
+
+
+@tla.kernel
+def _computed_f16_kernel(x: object, y: object) -> None:
+    with tla.vector():
+        tla.print(x + y)
+
+
+@tla.kernel
+def _computed_narrow_integer_kernel(x: object, y: object) -> None:
+    with tla.vector():
         tla.print(x + y)
 
 
@@ -138,6 +151,51 @@ def test_debug_print_emits_computed_runtime_scalar(
     assert "arith.add" in mlir
 
 
+def test_debug_print_preserves_computed_f16_type() -> None:
+    mlir = _computed_f16_kernel.dump_mlir(
+        type_args=(tla.Float16(1.25), tla.Float16(0.75))
+    )
+
+    debug_line = next(line for line in mlir.splitlines() if "tla.debug_print" in line)
+    assert "arith.addf" in mlir
+    assert re.search(r"(?:\(f16\)|: f16(?:\s|$))", debug_line)
+    assert "arith.extf" not in mlir
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    (
+        ("1.25", "1.250000"),
+        ("1.1", "1.099609"),
+        ("-0.0", "-0.000000"),
+        ("nan", "nan"),
+        ("inf", "inf"),
+        ("-inf", "-inf"),
+    ),
+)
+def test_debug_print_f16_example_expected_spelling(text: str, expected: str) -> None:
+    value = debug_print_example._f16(text)
+
+    assert f"{value:.6f}" == expected
+
+
+@pytest.mark.parametrize(
+    ("dtype", "type_args"),
+    (
+        pytest.param("i8", (tla.Int8(-37), tla.Int8(5)), id="i8"),
+        pytest.param("i16", (tla.Int16(-30000), tla.Int16(123)), id="i16"),
+    ),
+)
+def test_debug_print_preserves_computed_narrow_signed_type(
+    dtype: str, type_args: tuple[object, object]
+) -> None:
+    mlir = _computed_narrow_integer_kernel.dump_mlir(type_args=type_args)
+
+    debug_line = next(line for line in mlir.splitlines() if "tla.debug_print" in line)
+    assert "arith.addi" in mlir
+    assert re.search(rf"(?:\({dtype}\)|: {dtype}(?:\s|$))", debug_line)
+
+
 def test_debug_print_f32_literal_preserves_source_location() -> None:
     source_lines, first_lineno = inspect.getsourcelines(_f32_literal_location_kernel.fn)
     line = next(
@@ -217,16 +275,28 @@ _DEBUG_PRINT_MATRIX_KERNELS = {
 
 
 @pytest.mark.parametrize("region", ("cube", "vector"))
-@pytest.mark.parametrize("dtype", ("i32", "f32"))
+@pytest.mark.parametrize(
+    "dtype", ("i8", "i16", "i32", "u8", "u16", "u32", "f16", "f32")
+)
 @pytest.mark.parametrize("guarded", (False, True))
 def test_debug_print_backend_matrix(region: str, dtype: str, guarded: bool) -> None:
     """Preserve canonical static debug-print region shapes."""
 
-    scalar = tla.Int32(7) if dtype == "i32" else tla.Float32(1.25)
+    scalar = {
+        "i8": tla.Int8(-7),
+        "i16": tla.Int16(-300),
+        "i32": tla.Int32(7),
+        "u8": tla.UInt8(255),
+        "u16": tla.UInt16(65535),
+        "u32": tla.UInt32(4294967295),
+        "f16": tla.Float16(1.25),
+        "f32": tla.Float32(1.25),
+    }[dtype]
     kernel = _DEBUG_PRINT_MATRIX_KERNELS[(region, guarded)]
     mlir = kernel.dump_mlir(type_args=(scalar,))
     assert mlir.count("tla.debug_print") == 1
-    assert dtype in mlir
+    expected_type = f"ui{dtype[1:]}" if dtype.startswith("u") else dtype
+    assert expected_type in mlir
 
 
 @pytest.mark.parametrize(
@@ -251,7 +321,7 @@ def test_debug_print_rejects_invalid_public_calls(
         tla.print(*args, **kwargs)
 
 
-_SCALAR_ERROR = "expected a signless i32 or f32 scalar"
+_SCALAR_ERROR = "expected one of f16, f32, i8, i16, i32, u8, u16, u32 scalar"
 
 
 @pytest.mark.parametrize(
@@ -259,7 +329,7 @@ _SCALAR_ERROR = "expected a signless i32 or f32 scalar"
     [
         *[
             (_typed_scalar_kernel, (value,), _SCALAR_ERROR)
-            for value in (True, tla.Int64(1), tla.UInt32(1), tla.Float16(1.0))
+            for value in (True, tla.Int64(1), tla.UInt64(1))
         ],
         (_pointer_kernel, (), _SCALAR_ERROR),
         (_vector_value_kernel, (_host_vector_tensor(),), _SCALAR_ERROR),

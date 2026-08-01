@@ -284,7 +284,7 @@ def test_tensor_indexing_allows_vector_region_frontend() -> None:
     assert "tla.scalar_load" in mlir
 
 
-def test_scalar_load_rejects_ub_tensor() -> None:
+def test_scalar_load_accepts_ub_tensor_with_canonical_op() -> None:
     with runtime_mod._eager_capture():
         ub = tla.Tensor(
             tla.make_shape(8),
@@ -296,10 +296,12 @@ def test_scalar_load_rejects_ub_tensor() -> None:
 
     @tla.kernel
     def k(x: tla.Tensor) -> None:
-        _ = x[0]
+        with tla.vector():
+            _ = x[0]
 
-    with pytest.raises(ValueError, match="doesn't support scalar_load"):
-        k.dump_mlir(type_args=(ub,))
+    mlir = k.dump_mlir(type_args=(ub,))
+    assert "tla.scalar_load" in mlir
+    assert "tla.load_scalar" not in mlir
 
 
 def _run_tla_compile_ir_after_pass(mlir_text: str, pass_name: str) -> str:

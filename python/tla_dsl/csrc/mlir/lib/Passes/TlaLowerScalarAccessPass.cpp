@@ -8,10 +8,10 @@
 namespace tla {
 namespace {
 
-// Build the logical rank-1/rank-2 GM view described by tla.tensor_desc. This is
-// intentionally independent of the ABI memref's physical layout: column-major
-// tensors use a physically contiguous external buffer while the descriptor
-// carries the logical column-major strides.
+// Build the logical scalar-access view described by tla.tensor_desc. This is
+// intentionally independent of the ABI memref's physical layout: the
+// descriptor carries the logical offset, shape, and strides for both GM and UB
+// tensors.
 static FailureOr<Value> materializeScalarView(OpBuilder &builder, Operation *diagnosticOp,
                                               Value tensor,
                                               llvm::DenseMap<Value, Value> &baseMemrefCache) {
@@ -25,8 +25,9 @@ static FailureOr<Value> materializeScalarView(OpBuilder &builder, Operation *dia
   if (failed(descOr) || failed(rawInfo))
     return failure();
   TensorDescriptor &desc = *descOr;
-  if (desc.addrspace != "gm")
-    return diagnosticOp->emitError("scalar access supports only GM tensor descriptors"), failure();
+  if (desc.addrspace != "gm" && desc.addrspace != "ub")
+    return diagnosticOp->emitError("scalar access requires a GM or UB tensor descriptor"),
+           failure();
   if (!isLinearLayout(desc.layoutTag) || !desc.packedShape.empty() || !desc.packedStride.empty())
     return diagnosticOp->emitError(
                "scalar access supports only linear row_major/column_major descriptors"),
@@ -88,7 +89,7 @@ public:
   StringRef getArgument() const override { return "tla-lower-scalar-access"; }
   StringRef getName() const override { return "TlaLowerScalarAccessPass"; }
   StringRef getDescription() const override {
-    return "Lower descriptor-based GM scalar tensor accesses to memref.load/store.";
+    return "Lower descriptor-based GM and UB scalar tensor accesses to memref.load/store.";
   }
 
   void getDependentDialects(DialectRegistry &registry) const override {

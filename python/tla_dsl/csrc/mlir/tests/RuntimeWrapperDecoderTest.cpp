@@ -323,6 +323,8 @@ int main() {
 
   if (!expect(is_supported_scalar_printf_format("x=%d", 4),
               "i32 format was rejected") ||
+      !expect(is_supported_scalar_printf_format("x=%u", 4),
+              "unsigned format was rejected") ||
       !expect(is_supported_scalar_printf_format("v=%f", 4),
               "f32 format was rejected") ||
       !expect(!is_supported_scalar_printf_format("ptr=%p", 6),
@@ -335,6 +337,18 @@ int main() {
                   sizeof(i32_slot)) == PrintFormatResult::Printed,
               "valid i32 slot did not print"))
     return 1;
+  constexpr uint32_t kUnsignedMaxima[] = {0, 255, 65535, 4294967295U};
+  for (uint32_t value : kUnsignedMaxima) {
+    uint64_t unsigned_slot = value;
+    if (!expect(load_print_slot_unsigned(unsigned_slot) == value,
+                "unsigned slot changed its value") ||
+        !expect(format_scalar_printf(
+                    "x=%u", 4,
+                    reinterpret_cast<const uint8_t *>(&unsigned_slot),
+                    sizeof(unsigned_slot)) == PrintFormatResult::Printed,
+                "valid unsigned slot did not print"))
+      return 1;
+  }
   float f32_value = 1.25f;
   uint64_t f32_slot = 0;
   std::memcpy(&f32_slot, &f32_value, sizeof(f32_value));
@@ -344,13 +358,21 @@ int main() {
               "valid f32 slot did not print") ||
       !expect(format_scalar_printf("x=%d", 4, nullptr, 0) ==
                   PrintFormatResult::Malformed,
-              "truncated scalar slot was accepted"))
+              "truncated signed scalar slot was accepted") ||
+      !expect(format_scalar_printf("x=%u", 4, nullptr, 0) ==
+                  PrintFormatResult::Malformed,
+              "truncated unsigned scalar slot was accepted"))
     return 1;
 
   auto valid = scalar_tlv("x=%d", i32_slot);
+  auto valid_unsigned = scalar_tlv("x=%u", 4294967295U);
   if (!expect(print_scalar_tlv(reinterpret_cast<const PrintTlv *>(valid.data()),
                                valid.size(), 7),
               "valid scalar TLV was rejected") ||
+      !expect(print_scalar_tlv(
+                  reinterpret_cast<const PrintTlv *>(valid_unsigned.data()),
+                  valid_unsigned.size(), 7),
+              "valid unsigned scalar TLV was rejected") ||
       !expect(print_scalar_tlv(reinterpret_cast<const PrintTlv *>(valid.data()),
                                sizeof(PrintTlv) - 1, 7),
               "short scalar TLV was not diagnosed"))

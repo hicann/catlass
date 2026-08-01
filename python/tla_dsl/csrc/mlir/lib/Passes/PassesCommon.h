@@ -50,111 +50,38 @@ inline constexpr StringLiteral kMixModeAttrName = "mix_mode";
 inline constexpr StringLiteral kParallelModeAttrName = "parallel_mode";
 inline constexpr StringLiteral kHivmVectorFunctionAttrName = "hivm.vector_function";
 
-enum class HivmCoreKind { AIC, AIV, MIX };
-
-inline hivm::TModuleCoreType toModuleCoreType(HivmCoreKind coreKind) {
-  switch (coreKind) {
-  case HivmCoreKind::AIC:
-    return hivm::TModuleCoreType::AIC;
-  case HivmCoreKind::AIV:
-    return hivm::TModuleCoreType::AIV;
-  case HivmCoreKind::MIX:
-    return hivm::TModuleCoreType::MIX;
-  }
-  llvm_unreachable("unknown HIVM core kind");
-}
-
-inline hivm::TFuncCoreType toFuncCoreType(HivmCoreKind coreKind) {
-  switch (coreKind) {
-  case HivmCoreKind::AIC:
-    return hivm::TFuncCoreType::AIC;
-  case HivmCoreKind::AIV:
-    return hivm::TFuncCoreType::AIV;
-  case HivmCoreKind::MIX:
-    return hivm::TFuncCoreType::MIX;
-  }
-  llvm_unreachable("unknown HIVM core kind");
-}
-
-inline HivmCoreKind fromModuleCoreType(hivm::TModuleCoreType coreType) {
-  switch (coreType) {
-  case hivm::TModuleCoreType::AIC:
-    return HivmCoreKind::AIC;
-  case hivm::TModuleCoreType::AIV:
-    return HivmCoreKind::AIV;
-  case hivm::TModuleCoreType::MIX:
-    return HivmCoreKind::MIX;
-  }
-  llvm_unreachable("unknown HIVM module core type");
-}
-
-inline HivmCoreKind fromFuncCoreType(hivm::TFuncCoreType coreType) {
+inline hivm::TModuleCoreType toModuleCoreType(hivm::TFuncCoreType coreType) {
   switch (coreType) {
   case hivm::TFuncCoreType::AIC:
-    return HivmCoreKind::AIC;
+    return hivm::TModuleCoreType::AIC;
   case hivm::TFuncCoreType::AIV:
-    return HivmCoreKind::AIV;
+    return hivm::TModuleCoreType::AIV;
   case hivm::TFuncCoreType::MIX:
-    return HivmCoreKind::MIX;
+    return hivm::TModuleCoreType::MIX;
+  case hivm::TFuncCoreType::AIC_OR_AIV:
+    break;
   }
-  llvm_unreachable("unknown HIVM func core type");
+  llvm_unreachable("AIC_OR_AIV has no module core type equivalent");
 }
 
-inline std::optional<HivmCoreKind> getModuleCoreKind(ModuleOp module) {
-  if (!module)
-    return std::nullopt;
-  auto attr = module->getAttrOfType<hivm::TModuleCoreTypeAttr>(hivm::TModuleCoreTypeAttr::name);
-  if (!attr)
-    return std::nullopt;
-  return fromModuleCoreType(attr.getModuleCoreType());
-}
-
-// Single source of truth: classify the execution unit a tla op requires.
-// Returns std::nullopt for ops that do not constrain the core type.
-//  - cube core (AIC): tla.cube / tla.mmad, or on-chip scratch allocated in L1.
-//  - vector core (AIV): tla.vector / tla.vec.func, or on-chip scratch allocated
-//    in UB.
-inline std::optional<HivmCoreKind> getTlaOpCoreKind(Operation *op) {
-  if (!op)
-    return std::nullopt;
-  if (isa<::tla::CubeOp, ::tla::MmadOp>(op))
-    return HivmCoreKind::AIC;
-  if (isa<::tla::VectorOp, ::tla::VecFuncOp>(op))
-    return HivmCoreKind::AIV;
-  if (auto alloc = dyn_cast<::tla::AllocPtrOp>(op)) {
-    if (auto ptrTy = dyn_cast<::tla::PtrType>(alloc.getResult().getType())) {
-      if (ptrTy.getAddrspace() == AddressSpace::ub)
-        return HivmCoreKind::AIV;
-      if (ptrTy.getAddrspace() == AddressSpace::l1)
-        return HivmCoreKind::AIC;
-    }
-  }
-  return std::nullopt;
-}
-
-// The function's core-type hint, persisted as the typed hivm.func_core_type
-// attribute by TlaLowerFuncPass. This is the single carrier of the
-// per-function AIC/AIV/MIX classification through the lowering pipeline.
-inline std::optional<HivmCoreKind> funcCoreKindHint(Operation *op) {
+// The function's effective core type, resolved from the hivm.func_core_type
+// attribute stamped by TlaLowerFuncPass (and carried onto outlined fragments
+// by tla-vector-region / tla-cube-region / tla-split-mixed-func). This is the
+// single carrier of the per-function AIC/AIV/MIX classification through the
+// lowering pipeline;
+inline std::optional<hivm::TFuncCoreType> getFunctionCoreType(Operation *op) {
   if (!op)
     return std::nullopt;
   auto attr = op->getAttrOfType<hivm::TFuncCoreTypeAttr>(hivm::TFuncCoreTypeAttr::name);
   if (!attr)
     return std::nullopt;
-  return fromFuncCoreType(attr.getFuncCoreType());
+  return attr.getFuncCoreType();
 }
-
 
 inline bool isPrivateSymbol(Operation *op) {
   if (auto visibility = op->getAttrOfType<StringAttr>(SymbolTable::getVisibilityAttrName()))
     return visibility.getValue() == "private";
   return false;
-}
-
-inline std::optional<HivmCoreKind> getExpectedFunctionCoreKind(Operation *op) {
-  if (std::optional<HivmCoreKind> hinted = funcCoreKindHint(op))
-    return hinted;
-  return getModuleCoreKind(op->getParentOfType<ModuleOp>());
 }
 
 inline bool hasC310TargetAttrs(ModuleOp module) {

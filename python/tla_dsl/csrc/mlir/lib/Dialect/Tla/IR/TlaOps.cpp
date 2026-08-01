@@ -309,6 +309,8 @@ mlir::LogicalResult StoreOp::verify() {
       return emitOpError(
           "dest !tla.tensor element type must be a 1/2/4-byte scalar "
           "for MaskSSA store");
+
+    // If `storeDistAttr` supports intlv mode, check here if `getResult2()` is None
     return mlir::success();
   }
 
@@ -425,6 +427,23 @@ mlir::LogicalResult LoadOp::verify() {
     return emitOpError(
         "second result is only valid with load_dist dintlv_b32");
   }
+  return mlir::success();
+}
+
+static mlir::LogicalResult verifyConstantScalarIndexInBounds(
+    mlir::Operation *op, mlir::Value index, int64_t length) {
+  if (length == mlir::ShapedType::kDynamic)
+    return mlir::success();
+  auto constantOp = index.getDefiningOp<mlir::arith::ConstantOp>();
+  if (!constantOp)
+    return mlir::success();
+  auto indexAttr = mlir::dyn_cast<mlir::IntegerAttr>(constantOp.getValue());
+  if (!indexAttr)
+    return mlir::success();
+  int64_t constantIndex = indexAttr.getInt();
+  if (constantIndex < 0 || constantIndex >= length)
+    return op->emitOpError() << "index " << constantIndex
+                             << " is out of bounds for length " << length;
   return mlir::success();
 }
 
@@ -654,11 +673,10 @@ mlir::LogicalResult CmpOp::verify() {
 
 mlir::LogicalResult DebugPrintOp::verify() {
   auto type = getValue().getType();
-  auto integerType = mlir::dyn_cast<mlir::IntegerType>(type);
-  bool isSignlessI32 = integerType && integerType.isSignless() &&
-                       integerType.getWidth() == 32;
-  if (!isSignlessI32 && !type.isF32())
-    return emitOpError("expected a signless i32 or f32 scalar, got ") << type;
+  bool isSupportedInteger = isSupportedPrintTensorInteger(type);
+  if (!isSupportedInteger && !type.isF16() && !type.isF32())
+    return emitOpError("expected one of ")
+           << kPrintTensorSupportedDtypes << " scalar, got " << type;
   if (!hasEnclosingRegion<CubeOp>(getOperation()) &&
       !hasEnclosingRegion<VectorOp>(getOperation()))
     return emitOpError("must be nested inside a tla.cube or tla.vector region");
@@ -857,67 +875,69 @@ void FuncOp::print(mlir::OpAsmPrinter &printer) {
   printer.printRegion(getBody(), /*printEntryBlockArgs=*/false);
 }
 
-mlir::LogicalResult ScalarLoadOp::verify() {
-  auto srcTy = mlir::dyn_cast<TlaTensorType>(getSource().getType());
-  if (!srcTy)
-    return emitOpError("source must be !tla.tensor");
-  if (srcTy.getPtr().getAddrspace() != AddressSpace::gm)
-    return emitOpError("source !tla.tensor must be in gm address space");
-  auto layoutTag = srcTy.getLayout().getLayoutTag();
+static mlir::LogicalResult verifyScalarTensorAccess(
+    mlir::Operation *op, TlaTensorType tensorType, mlir::ValueRange indices,
+    mlir::Type scalarType, llvm::StringRef tensorRole) {
+  PtrType ptrType = tensorType.getPtr();
+  AddressSpace addrspace = ptrType.getAddrspace();
+  if (addrspace != AddressSpace::gm && addrspace != AddressSpace::ub)
+    return op->emitOpError() << tensorRole << " must be in gm or ub address space";
+
+  if (addrspace == AddressSpace::ub) {
+    if (!hasEnclosing<VectorOp>(op))
+      return op->emitOpError("UB scalar access must be nested inside a tla.vector region");
+  }
+
+  auto layoutTag = tensorType.getLayout().getLayoutTag();
   if (layoutTag != LayoutTag::row_major && layoutTag != LayoutTag::column_major)
-    return emitOpError("source !tla.tensor layout must be row_major or column_major");
-  mlir::Type expected = srcTy.getPtr().getPointee();
+    return op->emitOpError() << tensorRole << " layout must be row_major or column_major";
+
+  mlir::Type expected = ptrType.getPointee();
+  if (scalarType != expected)
+    return op->emitOpError("scalar type must match tensor element type, expected ")
+           << expected << ", got " << scalarType;
+
   llvm::SmallVector<int64_t, 4> shapeLeaves;
-  if (failed(getIndexTreeLeavesForVerify(getOperation(), srcTy.getLayout().getShape(), shapeLeaves,
-                                         "shape")))
+  if (failed(getIndexTreeLeavesForVerify(
+          op, tensorType.getLayout().getShape(), shapeLeaves, "shape")))
     return mlir::failure();
   size_t rank = shapeLeaves.size();
+  if (rank != 1 && rank != 2)
+    return op->emitOpError("scalar access requires a rank-1 or rank-2 tensor view");
+  if (indices.size() != rank)
+    return op->emitOpError() << "scalar access index count must match tensor logical rank " << rank;
+  for (mlir::Value index : indices) {
+    if (!index.getType().isIndex())
+      return op->emitOpError("scalar access indices must be index-typed");
+  }
 
-  if (getResult().getType() != expected)
-    return emitOpError("result type must match tensor element type, expected ")
-           << expected << ", got " << getResult().getType();
-
-  auto indexCount = getIndices().size();
-  // Indices must match the logical rank: no row-omitted shorthand for rank-2.
-  if (!((rank == 1 && indexCount == 1) || (rank == 2 && indexCount == 2)))
-    return emitOpError(
-        "scalar_load expects rank-1/2 source with matching indices (rank-1: 1; rank-2: 2)");
-  for (mlir::Value idx : getIndices()) {
-    if (!idx.getType().isIndex())
-      return emitOpError("indices must be index-typed");
+  if (addrspace != AddressSpace::ub)
+    return mlir::success();
+  ShapeType origin = tensorType.getLayout().getOrigin();
+  if (!origin)
+    return op->emitOpError("UB scalar access requires tensor origin shape metadata");
+  llvm::SmallVector<int64_t, 4> originShape;
+  if (failed(getIndexTreeLeavesForVerify(op, origin, originShape, "origin shape")))
+    return mlir::failure();
+  if (originShape.size() != rank)
+    return op->emitOpError("UB scalar access origin rank must match tensor rank");
+  for (auto [index, length] : llvm::zip_equal(indices, originShape)) {
+    if (length != mlir::ShapedType::kDynamic && length <= 0)
+      return op->emitOpError("UB scalar access requires a non-empty tensor view");
+    if (failed(verifyConstantScalarIndexInBounds(op, index, length)))
+      return mlir::failure();
   }
   return mlir::success();
 }
 
+mlir::LogicalResult ScalarLoadOp::verify() {
+  return verifyScalarTensorAccess(getOperation(), getSource().getType(), getIndices(),
+                                  getResult().getType(), "source !tla.tensor");
+}
+
 mlir::LogicalResult ScalarStoreOp::verify() {
-  auto destTy = mlir::dyn_cast<TlaTensorType>(getDest().getType());
-  if (!destTy)
-    return emitOpError("dest must be !tla.tensor");
-  if (destTy.getPtr().getAddrspace() != AddressSpace::gm)
-    return emitOpError("dest !tla.tensor must be in gm address space");
-  auto layoutTag = destTy.getLayout().getLayoutTag();
-  if (layoutTag != LayoutTag::row_major && layoutTag != LayoutTag::column_major)
-    return emitOpError("dest !tla.tensor layout must be row_major or column_major");
-  mlir::Type expected = destTy.getPtr().getPointee();
-  llvm::SmallVector<int64_t, 4> shapeLeaves;
-  if (failed(getIndexTreeLeavesForVerify(getOperation(), destTy.getLayout().getShape(), shapeLeaves,
-                                         "shape")))
-    return mlir::failure();
-  size_t rank = shapeLeaves.size();
-
-  if (getValue().getType() != expected)
-    return emitOpError("value type must match tensor element type, expected ")
-           << expected << ", got " << getValue().getType();
-
-  auto indexCount = getIndices().size();
-  if (!((rank == 1 && indexCount == 1) || (rank == 2 && indexCount == 2)))
-    return emitOpError(
-        "scalar_store expects rank-1/2 dest with matching indices (rank-1: 1; rank-2: 2)");
-  for (mlir::Value idx : getIndices()) {
-    if (!idx.getType().isIndex())
-      return emitOpError("indices must be index-typed");
-  }
-  return mlir::success();
+  return verifyScalarTensorAccess(getOperation(), getDest().getType(), getIndices(),
+                                  getValue().getType(), "destination !tla.tensor");
 }
 
 } // namespace tla

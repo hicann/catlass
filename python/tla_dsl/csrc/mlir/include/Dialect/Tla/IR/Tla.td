@@ -276,10 +276,12 @@ def Tla_L0C2UBModeAttr : Tla_EnumAttr<"L0C2UBMode", "l0c2ub_mode"> {
 def Tla_LoadDist_Norm : I32EnumAttrCase<"norm", 0>;
 def Tla_LoadDist_BrcB32 : I32EnumAttrCase<"brc_b32", 1>;
 def Tla_LoadDist_DintlvB32 : I32EnumAttrCase<"dintlv_b32", 2>;
+def Tla_LoadDist_UsB8 : I32EnumAttrCase<"us_b8", 3>;
 def Tla_LoadDistEnum : Tla_I32Enum<"LoadDist", "Load distribution for tla.load.", [
   Tla_LoadDist_Norm,
   Tla_LoadDist_BrcB32,
-  Tla_LoadDist_DintlvB32
+  Tla_LoadDist_DintlvB32,
+  Tla_LoadDist_UsB8
 ]>;
 def Tla_LoadDistAttr : Tla_EnumAttr<"LoadDist", "load_dist"> {
   let parameters = (ins EnumParameter<Tla_LoadDistEnum>:$load_dist);
@@ -288,8 +290,32 @@ def Tla_LoadDistAttr : Tla_EnumAttr<"LoadDist", "load_dist"> {
     Broadcast/load distribution pattern for tla.load.
     ``dintlv_b32`` is dual-destination de-interleave load (even/odd b32
     elements into two vector registers); requires a second result.
+    ``us_b8`` is single-destination 2x up-sample load (AscendC
+    ``LoadDist::DIST_US_B8``): loads ``VL/2`` b8 elements and repeats each
+    twice to fill a VL-wide ``b8`` register; b8 element type only.
   }];
 }
+
+// StoreDist Enum Attr
+def Tla_StoreDist_Norm : I32EnumAttrCase<"norm", 0>;
+def Tla_StoreDist_PackB32: I32EnumAttrCase<"pack_b32", 1>;
+def Tla_StoreDist_PackB16: I32EnumAttrCase<"pack_b16", 2>;
+def Tla_StoreDistEnum : Tla_I32Enum<"StoreDist", "Store distribution for tla.store.", [
+  Tla_StoreDist_Norm,
+  Tla_StoreDist_PackB32,
+  Tla_StoreDist_PackB16
+]>;
+def Tla_StoreDistAttr : Tla_EnumAttr<"StoreDist", "store_dist"> {
+  let parameters = (ins EnumParameter<Tla_StoreDistEnum>:$store_dist);
+  let assemblyFormat = "`<` params `>`";
+  let description = [{
+    Store distribution for tla.store.
+     - DIST_NORM: Normal mode, support b8/b16/b32, with a fixed datacopy VL, should be aligned with 32B.
+     - DIST_PACK_B16: Compact mode, store the low half data (b16) to dst, should be aligned with 32B, or VL/2.
+     - DIST_PACK_B32: Compact mode, store the low half data (b32) to dst.
+  }];
+}
+
 
 // ---------------------------------------------------------------------------
 // CastParams: the four knobs of a tla.cast, matching CastParams in the Python
@@ -780,8 +806,9 @@ def Tla_PipeBarrierOp : Tla_Op<"pipe_barrier", []> {
 def Tla_DebugPrintOp : Tla_Op<"debug_print", [MemoryEffects<[MemWrite]>]> {
   let summary = "Typed frontend debug print op";
   let description = [{
-    Side-effecting TLA IR for exactly one builtin signless i32 or f32 value.
-    Backend lowering is intentionally unsupported.
+    Side-effecting TLA IR for one f16, f32, i8, i16, i32, u8, u16, or u32
+    scalar operand. Backend lowering preserves the operand type and selects its
+    device print helper.
   }];
   let arguments = (ins AnyType:$value);
   let assemblyFormat = "$value attr-dict `:` type($value)";
@@ -957,6 +984,7 @@ def Tla_StoreOp : Tla_Op<"store", [AttrSizedOperandSegments]> {
                        AnyTypeOf<[Tla_VectorSSAType, Tla_MaskSSAType]>:$source,
                        Optional<Tla_MaskSSAType>:$mask,
                        Optional<Tla_IntegerOrIndexType>:$block_stride,
+                       OptionalAttr<Tla_StoreDistAttr>:$store_dist,
                        OptionalAttr<UnitAttr>:$unaligned_ub_access);
   let assemblyFormat = [{
     $dest `,` $source (`mask` $mask^)? (`stride` $block_stride^)? attr-dict `:`
@@ -1095,11 +1123,13 @@ def Tla_TileViewOp : Tla_Op<"tile_view", []> {
   }];
 }
 
-def Tla_ScalarLoadOp : Tla_Op<"scalar_load", []> {
-  let summary = "Scalar tensor element read (GM)";
+def Tla_ScalarLoadOp : Tla_Op<"scalar_load", [MemoryEffects<[MemRead]>]> {
+  let summary = "Scalar tensor element read";
   let description = [{
-    Read one GM scalar from ``!tla.tensor``. Lowered from a materialized tensor
-    descriptor by ``tla-lower-scalar-access``; indices match logical rank 1 or 2.
+    Read one scalar from a GM or UB ``!tla.tensor``. Indices are relative to the
+    tensor view; its coordinate is applied while the descriptor is materialized
+    as a memref. GM and UB support logical rank 1 or 2. UB accesses must be
+    nested inside ``tla.vector`` and may also be nested inside ``tla.vec.func``.
   }];
   let arguments = (ins Tla_TensorType:$source, Variadic<Index>:$indices);
   let results = (outs AnyType:$result);
@@ -1109,11 +1139,13 @@ def Tla_ScalarLoadOp : Tla_Op<"scalar_load", []> {
   }];
 }
 
-def Tla_ScalarStoreOp : Tla_Op<"scalar_store", []> {
-  let summary = "Scalar tensor element write (GM)";
+def Tla_ScalarStoreOp : Tla_Op<"scalar_store", [MemoryEffects<[MemWrite]>]> {
+  let summary = "Scalar tensor element write";
   let description = [{
-    Write one GM scalar to ``!tla.tensor``. Lowered from a materialized tensor
-    descriptor by ``tla-lower-scalar-access``; indices match logical rank 1 or 2.
+    Write one scalar to a GM or UB ``!tla.tensor``. Indices are relative to the
+    tensor view; its coordinate is applied while the descriptor is materialized
+    as a memref. GM and UB support logical rank 1 or 2. UB accesses must be
+    nested inside ``tla.vector`` and may also be nested inside ``tla.vec.func``.
   }];
   let arguments = (ins Tla_TensorType:$dest, Variadic<Index>:$indices, AnyType:$value);
   let hasVerifier = 1;

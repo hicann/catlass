@@ -8,6 +8,7 @@
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
+#include "mlir/IR/Dominance.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
@@ -44,14 +45,34 @@ static hivmave::LoadDist mapTlaLoadDistToAve(::LoadDist dist) {
     return hivmave::LoadDist::BRC_B32;
   case ::LoadDist::dintlv_b32:
     return hivmave::LoadDist::DINTLV_B32;
+  case ::LoadDist::us_b8:
+    return hivmave::LoadDist::US_B8;
   }
   llvm_unreachable("unsupported tla.load load_dist");
+}
+
+static hivmave::StoreDist mapTlaStoreDistToAve(::StoreDist dist) {
+  switch (dist) {
+    case ::StoreDist::pack_b32:
+      return hivmave::StoreDist::PK_B32;
+    case ::StoreDist::pack_b16:
+      return hivmave::StoreDist::PK_B16;
+    // If other StoreDist added, complete here
+    default:
+      return hivmave::StoreDist::NORM_B8;
+  }
 }
 
 static bool isDualDestLoadDist(hivmave::LoadDist pattern) {
   return pattern == hivmave::LoadDist::DINTLV_B8 ||
          pattern == hivmave::LoadDist::DINTLV_B16 ||
          pattern == hivmave::LoadDist::DINTLV_B32;
+}
+
+static bool isDualDestStoreDist(hivmave::StoreDist pattern) {
+  return pattern == hivmave::StoreDist::INTLV_B8 ||
+         pattern == hivmave::StoreDist::INTLV_B16 ||
+         pattern == hivmave::StoreDist::INTLV_B32;
 }
 
 static hivmave::VFLoadOp createVFLoad(OpBuilder &b, Location loc, VectorType vecType,
@@ -1565,6 +1586,8 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
     if (!dest || !source)
       return failure();
 
+
+
     // MaskSSA source: 1/2/4-byte UB ← i1 memref view ← masked_store <NORM_B8>.
     if (isa<::tla::MaskSSAType>(storeOp.getSource().getType())) {
       auto maskType = cast<::tla::MaskSSAType>(storeOp.getSource().getType());
@@ -1641,7 +1664,18 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
       Value pregMask = castMaskToPregType(b, loc, mask, pregVecType);
       b.create<func::CallOp>(loc, callee, ValueRange{source, dest, blockStrideVal, pregMask});
     } else {
-      b.create<hivmave::VFMaskedStoreOp>(loc, dest, ValueRange{zero}, mask, source);
+      auto storeDistAttr = storeOp.getStoreDist();
+      if (storeDistAttr && storeDistAttr->getStoreDist() != ::StoreDist::norm) {
+        hivmave::StoreDist pattern = mapTlaStoreDistToAve(storeDistAttr->getStoreDist());
+        bool isDual = isDualDestStoreDist(pattern);
+        if (isDual) {
+          return storeOp.emitError("dual mode not implemented.");
+        }
+        b.create<hivmave::VFMaskedStoreOp>(loc, pattern, dest, ValueRange{zero}, mask, source);
+      } else {
+        // NORM mode
+        b.create<hivmave::VFMaskedStoreOp>(loc, dest, ValueRange{zero}, mask, source);
+      }
     }
     return success();
   }
@@ -1789,7 +1823,7 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
     return success();
   }
 
-  // GM scalar accesses lowered by tla-lower-scalar-access before outlining.
+  // GM/UB scalar accesses lowered by tla-lower-scalar-access before outlining.
   if (auto memLoad = dyn_cast<mlir::memref::LoadOp>(op)) {
     Value mem = valueMap.lookup(memLoad.getMemRef());
     if (!mem)
@@ -1820,6 +1854,24 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
       indices.push_back(mapped);
     }
     b.create<mlir::memref::StoreOp>(loc, val, mem, indices);
+    return success();
+  }
+
+  // Rebuild the descriptor view used by a scalar access from the base memref
+  // passed to the helper.
+  if (isa<mlir::memref::ExtractStridedMetadataOp,
+          mlir::memref::ReinterpretCastOp>(op)) {
+    IRMapping mapper;
+    for (Value operand : op.getOperands()) {
+      Value mapped = lookupOrCloneScalarValue(b, operand, valueMap);
+      if (!mapped)
+        return failure();
+      mapper.map(operand, mapped);
+    }
+    Operation *cloned = b.clone(op, mapper);
+    for (auto [oldResult, newResult] :
+         llvm::zip(op.getResults(), cloned->getResults()))
+      valueMap[oldResult] = newResult;
     return success();
   }
 
@@ -1863,54 +1915,129 @@ static LogicalResult lowerNestedVectorBlock(Block *sourceBlock, OpBuilder &b, Mo
   return success();
 }
 
-// Add `source` as a helper operand unless one already covers it. A tla.tensor_desc
-// tile is covered by another tensor_desc sharing the same base (different per-lane
-// tiles of one root share a single helper memref arg); a raw memref is covered by
-// itself. tla-lower-tensor-desc is the sole descriptor producer, so every tile
-// source is a tensor_desc (or a raw memref for bridged GM scalar accesses).
-static void addVectorHelperOperand(Value source, SmallVectorImpl<Value> &operands) {
-  if (auto descOp = source.getDefiningOp<::tla::TensorDescOp>()) {
-    Value base = descOp.getBase();
-    for (Value v : operands)
-      if (auto d = v.getDefiningOp<::tla::TensorDescOp>(); d && d.getBase() == base)
-        return;
-    operands.push_back(source);
-    return;
+static Value stripHelperAddressCasts(Value address) {
+  while (Operation *def = address.getDefiningOp()) {
+    if (!isa<arith::IndexCastOp, arith::ExtSIOp, arith::TruncIOp>(def))
+      break;
+    address = def->getOperand(0);
   }
-  if (!llvm::is_contained(operands, source))
-    operands.push_back(source);
+  return address;
+}
+
+// Return the allocation identity used to deduplicate tensor descriptors and
+// scalar-access memrefs that point at the same storage.
+static Value getVectorHelperStorageIdentity(Value source) {
+  if (auto descOp = source.getDefiningOp<::tla::TensorDescOp>()) {
+    source = descOp.getBase();
+    if (auto intToPtr = source.getDefiningOp<::tla::IntToPtrOp>())
+      return stripHelperAddressCasts(intToPtr.getAddr());
+  }
+  while (auto castOp = source.getDefiningOp<mlir::memref::CastOp>())
+    source = castOp.getSource();
+  if (auto pointerCast = source.getDefiningOp<hivm::PointerCastOp>())
+    return stripHelperAddressCasts(pointerCast.getSingleAddr());
+  return source;
+}
+
+static FailureOr<MemRefType> getVectorHelperOperandType(Value source) {
+  if (auto type = dyn_cast<MemRefType>(source.getType()))
+    return type;
+  return getVectorHelperArgMemrefType(source);
+}
+
+// Add `source` as a helper operand unless another operand already represents
+// the same allocation with the same helper memref type. Record every source's
+// representative so scalar views can reuse a tensor operand's helper argument.
+static void addVectorHelperOperand(Value source, SmallVectorImpl<Value> &operands,
+                                   DenseMap<Value, Value> &aliases) {
+  Value identity = getVectorHelperStorageIdentity(source);
+  FailureOr<MemRefType> sourceType = getVectorHelperOperandType(source);
+  for (Value operand : operands) {
+    FailureOr<MemRefType> operandType = getVectorHelperOperandType(operand);
+    if (succeeded(sourceType) && succeeded(operandType) &&
+        *sourceType == *operandType &&
+        identity == getVectorHelperStorageIdentity(operand)) {
+      aliases[source] = operand;
+      return;
+    }
+  }
+  operands.push_back(source);
+  aliases[source] = source;
+}
+
+// Scalar access lowering builds extract_strided_metadata + reinterpret_cast
+// inside vec.func. Pass the first memref defined outside the outlined region to
+// the helper and rebuild that view inside the helper.
+static FailureOr<Value>
+getScalarAccessHelperMemref(Value source, Region &outlinedRegion,
+                            Operation *callSite,
+                            DominanceInfo &dominanceInfo) {
+  while (Operation *def = source.getDefiningOp()) {
+    Region *defRegion = source.getParentRegion();
+    if (!defRegion || !outlinedRegion.isAncestor(defRegion))
+      break;
+    if (!isa<mlir::memref::ExtractStridedMetadataOp,
+             mlir::memref::ReinterpretCastOp>(def))
+      break;
+    source = def->getOperand(0);
+  }
+
+  // A dynamic inttoptr descriptor can materialize its hivm.pointer_cast at the
+  // scalar access insertion point, which may be inside vec.func. Such a value
+  // cannot be passed to the helper call that replaces the enclosing vec.func.
+  if (!dominanceInfo.dominates(source, callSite))
+    return failure();
+  return source;
 }
 
 // Collect, in body order, the unique base memrefs that tla.load/tla.store/
-// tla.gather chunks and bridged GM scalar accesses reference. These become the
+// tla.gather chunks and bridged scalar accesses reference. These become the
 // helper's arguments.
-static void collectVectorHelperOperands(Block *block, SmallVectorImpl<Value> &operands) {
+static LogicalResult
+collectVectorHelperOperands(Block *block, Region &outlinedRegion,
+                            Operation *callSite,
+                            DominanceInfo &dominanceInfo,
+                            SmallVectorImpl<Value> &operands,
+                            DenseMap<Value, Value> &aliases) {
   for (Operation &op : block->getOperations()) {
     if (auto loadOp = dyn_cast<::tla::LoadOp>(op)) {
-      addVectorHelperOperand(loadOp.getSource(), operands);
+      addVectorHelperOperand(loadOp.getSource(), operands, aliases);
       continue;
     }
     if (auto storeOp = dyn_cast<::tla::StoreOp>(op)) {
-      addVectorHelperOperand(storeOp.getDest(), operands);
+      addVectorHelperOperand(storeOp.getDest(), operands, aliases);
       continue;
     }
     if (auto gatherOp = dyn_cast<::tla::GatherOp>(op)) {
-      addVectorHelperOperand(gatherOp.getX(), operands);
+      addVectorHelperOperand(gatherOp.getX(), operands, aliases);
       continue;
     }
-    // Bridged GM scalar accesses (after tla-lower-scalar-access) appear as memref.load/store.
+    // Bridged scalar accesses (after tla-lower-scalar-access) appear as
+    // memref.load/store.
     if (auto memLoad = dyn_cast<mlir::memref::LoadOp>(op)) {
-      addVectorHelperOperand(memLoad.getMemRef(), operands);
+      FailureOr<Value> source = getScalarAccessHelperMemref(
+          memLoad.getMemRef(), outlinedRegion, callSite, dominanceInfo);
+      if (failed(source))
+        return failure();
+      addVectorHelperOperand(*source, operands, aliases);
       continue;
     }
     if (auto memStore = dyn_cast<mlir::memref::StoreOp>(op)) {
-      addVectorHelperOperand(memStore.getMemRef(), operands);
+      FailureOr<Value> source = getScalarAccessHelperMemref(
+          memStore.getMemRef(), outlinedRegion, callSite, dominanceInfo);
+      if (failed(source))
+        return failure();
+      addVectorHelperOperand(*source, operands, aliases);
       continue;
     }
     for (Region &region : op.getRegions())
       for (Block &nested : region)
-        collectVectorHelperOperands(&nested, operands);
+        if (failed(collectVectorHelperOperands(
+                &nested, outlinedRegion, callSite, dominanceInfo, operands,
+                aliases)))
+          return failure();
   }
+  return success();
 }
 
 // Collect unique scalar values used inside the region but defined outside it
@@ -1978,13 +2105,14 @@ static bool requiresFullPregForControlFlow(::tla::VecFuncOp vecFuncOp) {
 }
 
 // Build a vector_region helper for a tla.vec.func body. The helper receives one
-// flat on-chip memref per referenced tensor (or a real GM descriptor for scalar
+// flat on-chip memref per referenced tensor (or a concrete memref for scalar
 // accesses); the for/if control flow is carried inside the helper, where each
 // tla.load/store is lowered to an AVE vload/masked-store over a 256-byte tile
 // carved from the base address at the per-iteration offset.
 static FailureOr<func::FuncOp> buildHelperFunc(ModuleOp module, func::FuncOp parentFunc,
                                                ::tla::VecFuncOp vecFuncOp,
                                                ArrayRef<Value> helperOperands,
+                                               const DenseMap<Value, Value> &helperOperandAliases,
                                                ArrayRef<Value> scalarOperands,
                                                int &nextVectorRegionId,
                                                DenseMap<Value, Value> &loweredMemrefByValue) {
@@ -2000,7 +2128,7 @@ static FailureOr<func::FuncOp> buildHelperFunc(ModuleOp module, func::FuncOp par
   SmallVector<Type> functionInputs;
   functionInputs.reserve(helperOperands.size());
   for (Value operand : helperOperands) {
-    // Already-bridged GM memrefs (scalar_load/store) keep their concrete type.
+    // Already-bridged scalar-access memrefs keep their concrete type.
     if (auto mt = dyn_cast<MemRefType>(operand.getType())) {
       functionInputs.push_back(mt);
       continue;
@@ -2046,6 +2174,9 @@ static FailureOr<func::FuncOp> buildHelperFunc(ModuleOp module, func::FuncOp par
   DenseMap<Value, Value> valueMap;
   for (auto [i, operand] : llvm::enumerate(helperOperands))
     valueMap[operand] = entry->getArgument(i);
+  for (auto [source, representative] : helperOperandAliases)
+    if (Value argument = valueMap.lookup(representative))
+      valueMap[source] = argument;
   // Captured scalars map to their trailing block arguments.
   for (auto [j, scalar] : llvm::enumerate(scalarOperands))
     valueMap[scalar] = entry->getArgument(helperOperands.size() + j);
@@ -2075,9 +2206,12 @@ static FailureOr<func::FuncOp> buildHelperFunc(ModuleOp module, func::FuncOp par
 class LowerVecFuncRegionPattern : public OpRewritePattern<::tla::VecFuncOp> {
 public:
   LowerVecFuncRegionPattern(MLIRContext *context, ModuleOp module, int &nextVectorRegionId,
-                            DenseMap<Value, Value> &loweredMemrefByValue)
+                            DenseMap<Value, Value> &loweredMemrefByValue,
+                            bool &invalidScalarAccessBase)
       : OpRewritePattern<::tla::VecFuncOp>(context, /*benefit=*/2), module(module),
-        nextVectorRegionId(nextVectorRegionId), loweredMemrefByValue(loweredMemrefByValue) {}
+        nextVectorRegionId(nextVectorRegionId),
+        loweredMemrefByValue(loweredMemrefByValue),
+        invalidScalarAccessBase(invalidScalarAccessBase) {}
 
   LogicalResult matchAndRewrite(::tla::VecFuncOp vecFuncOp,
                                 PatternRewriter &rewriter) const override {
@@ -2116,7 +2250,7 @@ public:
     if (stores.empty()) {
       // Scalar-only (or empty) VF cannot be outlined as a BiSheng helper — that
       // path requires tla.store. If there is also no tile load/compute, inline
-      // the body into the parent (same as tla.vector flattening) so GM
+      // the body into the parent (same as tla.vector flattening) so
       // scalar_load/store + scf stay legal for later convert-scf-to-cf.
       if (!loads.empty() || !fulls.empty() || !createMasks.empty() ||
           !updateMasks.empty() || !aranges.empty() || !computeOps.empty())
@@ -2287,7 +2421,19 @@ public:
     // Compute the operand list once and use it for both the helper signature
     // and the call.
     SmallVector<Value> helperOperands;
-    collectVectorHelperOperands(body, helperOperands);
+    DenseMap<Value, Value> helperOperandAliases;
+    DominanceInfo dominanceInfo(funcOp);
+    if (failed(collectVectorHelperOperands(
+            body, vecFuncOp.getBody(), vecFuncOp, dominanceInfo,
+            helperOperands, helperOperandAliases))) {
+      if (!invalidScalarAccessBase)
+        vecFuncOp.emitOpError(
+            "cannot outline scalar access because its base memref does not "
+            "dominate the vector helper call site; materialize dynamic "
+            "pointer-backed storage outside tla.vec.func");
+      invalidScalarAccessBase = true;
+      return failure();
+    }
     if (helperOperands.empty())
       return rewriter.notifyMatchFailure(vecFuncOp, "expected vector region tensor operands");
     // Scalars captured from outside the region (e.g. a sub_block_idx computed at
@@ -2295,8 +2441,10 @@ public:
     SmallVector<Value> scalarOperands;
     collectVectorHelperScalarOperands(vecFuncOp, scalarOperands);
 
-    auto helperOr = buildHelperFunc(module, funcOp, vecFuncOp, helperOperands, scalarOperands,
-                                    nextVectorRegionId, loweredMemrefByValue);
+    auto helperOr =
+        buildHelperFunc(module, funcOp, vecFuncOp, helperOperands,
+                        helperOperandAliases, scalarOperands,
+                        nextVectorRegionId, loweredMemrefByValue);
     if (failed(helperOr))
       return rewriter.notifyMatchFailure(vecFuncOp, "failed to build vector helper function");
     auto helper = *helperOr;
@@ -2308,7 +2456,7 @@ public:
     callOperands.reserve(helperOperands.size());
     Value unknownExtent;
     for (Value tensor : helperOperands) {
-      // Bridged GM memref operands (from scalar_load/store) are passed as-is.
+      // Bridged scalar-access memref operands are passed as-is.
       if (isa<MemRefType>(tensor.getType())) {
         callOperands.push_back(tensor);
         continue;
@@ -2377,6 +2525,7 @@ private:
   ModuleOp module;
   int &nextVectorRegionId;
   DenseMap<Value, Value> &loweredMemrefByValue;
+  bool &invalidScalarAccessBase;
 };
 
 class LowerCopyPattern : public OpRewritePattern<::tla::CopyOp> {
@@ -2510,11 +2659,13 @@ static void inlineVectorRegionWrappers(func::FuncOp funcOp) {
 
 static void populateTlaToVectorPatterns(RewritePatternSet &patterns, ModuleOp module,
                                         int &nextVectorRegionId,
-                                        DenseMap<Value, Value> &loweredMemrefByValue) {
+                                        DenseMap<Value, Value> &loweredMemrefByValue,
+                                        bool &invalidScalarAccessBase) {
   MLIRContext *ctx = patterns.getContext();
   patterns.add<InlineVectorRegionWrapperPattern>(ctx);
   patterns.add<LowerVecFuncRegionPattern>(ctx, module, nextVectorRegionId,
-                                          loweredMemrefByValue);
+                                          loweredMemrefByValue,
+                                          invalidScalarAccessBase);
   patterns.add<LowerCopyPattern>(ctx, loweredMemrefByValue);
   // NOTE: no dead-tla-scaffolding DCE here. tla-vector-region lowers ops but
   // deliberately leaves the momentary tensor / ptr-bridge scaffolding and
@@ -2592,11 +2743,10 @@ public:
       if (funcOp->hasAttr(kHivmVectorFunctionAttrName))
         continue;
       // Only AIV (and not-yet-split MIX) functions hold vector work. Their core
-      // kind is the func_core_type set by the infer pass, falling back to the
-      // module core type for pure-vector entries (whose func_core_type is
-      // intentionally stripped by the HACC attr convention).
-      std::optional<HivmCoreKind> coreKind = getExpectedFunctionCoreKind(funcOp.getOperation());
-      if (coreKind != HivmCoreKind::AIV && coreKind != HivmCoreKind::MIX)
+      // kind is the func_core_type stamped by tla-lower-func (pure-vector
+      // entries retain func_core_type = AIV).
+      std::optional<hivm::TFuncCoreType> coreType = getFunctionCoreType(funcOp.getOperation());
+      if (coreType != hivm::TFuncCoreType::AIV && coreType != hivm::TFuncCoreType::MIX)
         continue;
       if (failed(checkNoArchOpsInVecFunc(funcOp))) {
         signalPassFailure();
@@ -2608,9 +2758,15 @@ public:
       // vec.func helper operand materialization.
       ::tla::TlaTensorMemrefLowering lowering;
       RewritePatternSet patterns(&getContext());
+      bool invalidScalarAccessBase = false;
       populateTlaToVectorPatterns(patterns, module, nextVectorRegionId,
-                                  lowering.loweredMemrefByValue);
-      if (failed(mlir::applyPatternsAndFoldGreedily(funcOp, std::move(patterns)))) {
+                                  lowering.loweredMemrefByValue,
+                                  invalidScalarAccessBase);
+      if (failed(mlir::applyPatternsGreedily(funcOp, std::move(patterns)))) {
+        signalPassFailure();
+        return;
+      }
+      if (invalidScalarAccessBase) {
         signalPassFailure();
         return;
       }

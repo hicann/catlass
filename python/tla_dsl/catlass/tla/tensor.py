@@ -159,6 +159,54 @@ class _Tensor(TensorABC):
         )
         return _emit_tensor_ptr(_as_value(self), loc)
 
+    @staticmethod
+    def _prepare_scalar_indices(
+        crd: Any,
+        desc: Any,
+        *,
+        addrspace: str,
+        action: str,
+    ) -> list[mlir_ir.Value]:
+        """Validate and materialize indices used by GM or UB scalar access."""
+        from ..core_api import _as_index_value, _flatten_tla_tuple
+        from ..execution_lowering import TlaLoweringError
+
+        indices = crd if isinstance(crd, tuple) else (crd,)
+        shape = _flatten_tla_tuple(desc.shape)
+        if addrspace == "ub":
+            _runtime._require_enclosing_region(f"scalar_{action}", "vector")
+        if len(shape) not in (1, 2) or len(indices) != len(shape):
+            raise TlaLoweringError(
+                f"tla.scalar_{action} index rank must match tensor logical rank "
+                f"(shape rank {len(shape)}, index rank {len(indices)})"
+            )
+
+        if addrspace == "ub":
+            if any(isinstance(index, bool) for index in indices):
+                raise TlaLoweringError(
+                    "scalar tensor index must be an integer or index SSA"
+                )
+            origin_shape = _flatten_tla_tuple(desc.origin_shape)
+            if len(origin_shape) != len(shape):
+                raise TlaLoweringError(
+                    f"scalar tensor {action} origin rank must match tensor rank"
+                )
+            for index, dim in zip(indices, origin_shape):
+                if isinstance(index, int) and isinstance(dim, int):
+                    if dim <= 0 or index < 0 or index >= dim:
+                        raise TlaLoweringError(
+                            f"scalar tensor index {index} is out of bounds for length {dim}"
+                        )
+
+        try:
+            return [_as_index_value(index) for index in indices]
+        except TlaLoweringError as exc:
+            if addrspace == "ub":
+                raise TlaLoweringError(
+                    "scalar tensor index must be an integer or index SSA"
+                ) from exc
+            raise
+
     @dsl_user_op
     def load(
         self,
@@ -263,6 +311,10 @@ class _Tensor(TensorABC):
             isinstance(params, NormalLoadParams)
             and params.load_dist == LoadDist.DIST_DINTLV_B32
         )
+        is_us_b8 = (
+            isinstance(params, NormalLoadParams)
+            and params.load_dist == LoadDist.DIST_US_B8
+        )
 
         load_kwargs: dict[str, Any] = {"loc": loc}
         if isinstance(params, UnalignLoadParams):
@@ -291,6 +343,18 @@ class _Tensor(TensorABC):
             isinstance(params, NormalLoadParams)
             and params.load_dist == LoadDist.DIST_BRC_B32
         ):
+            result_desc = _full_vector_ssa_descriptor(source_desc.element_type)
+        elif is_us_b8:
+            # AscendC LoadDist::DIST_US_B8: 2x up-sample of b8 elements. The
+            # transfer reads VL/2 b8 elements and repeats each twice to fill a
+            # VL-wide b8 register, so the result is a full VL vector (i8/u8 ->
+            # 256 lanes) regardless of the source origin_shape.
+            elem = str(source_desc.element_type).strip().lower()
+            if dtype_size_bytes(elem) != 1:
+                raise TlaLoweringError(
+                    "DIST_US_B8 requires a 1-byte (b8: i8/u8) element type "
+                    f"(got {source_desc.element_type})"
+                )
             result_desc = _full_vector_ssa_descriptor(source_desc.element_type)
         else:
             result_desc = _vector_ssa_type_from_tensor_descriptor(source_desc)
@@ -338,6 +402,7 @@ class _Tensor(TensorABC):
         from ..execution_lowering import TlaLoweringError
         from ..params import (
             BlockStoreParams,
+            StoreDist,
             MaskStoreDist,
             MaskStoreParams,
             NormalStoreParams,
@@ -366,6 +431,7 @@ class _Tensor(TensorABC):
                     "store(..., MaskStoreParams) does not accept predicate mask="
                 )
             if params.store_dist != MaskStoreDist.DIST_NORM:
+                # TODO: Once all `StoreDist` mode supported, remove this guard.
                 raise NotImplementedError(
                     f"currently unsupported store_dist {params.store_dist!r}"
                 )
@@ -412,6 +478,12 @@ class _Tensor(TensorABC):
         if mask_val is not None:
             _require_mask_matches_vector("store", mask_val, value_val)
         store_kwargs: dict[str, Any] = {"loc": loc}
+        if isinstance(params, NormalStoreParams) and params.store_dist != StoreDist.DIST_NORM:
+            ctx = loc.context if loc is not None else mlir_ir.Context.current
+            store_kwargs["store_dist"] = mlir_ir.Attribute.parse(
+                f"#tla.store_dist<{params.store_dist}>",
+                context=ctx,
+            )
         if isinstance(params, UnalignStoreParams):
             store_kwargs["unaligned_ub_access"] = True
         if isinstance(params, BlockStoreParams):
@@ -423,8 +495,8 @@ class _Tensor(TensorABC):
         )
 
     def _check_can_scalar_load_store(self) -> None:
-        """Phase-1 ``scalar_load``/``scalar_store`` preconditions (GM only; not ``tla.load``/``tla.store``)."""
-        if self.addrspace not in ("gm",):
+        """Phase-1 GM/UB scalar access preconditions."""
+        if self.addrspace not in ("gm", "ub"):
             raise ValueError(f"{self!r} doesn't support scalar_load/store")
         if self.layout_tag not in ("row_major", "column_major"):
             raise ValueError(
@@ -479,11 +551,9 @@ class _Tensor(TensorABC):
         *,
         loc: mlir_ir.Location | None = None,
     ) -> Any:
-        """Access tensor elements at scalar coordinates."""
+        """Load one scalar tensor element, dispatching by address space."""
         from ..core_api import (
-            _as_index_value,
             _as_value,
-            _flatten_tla_tuple,
             _op_error,
             _require_category,
             _require_frontend_state,
@@ -505,11 +575,12 @@ class _Tensor(TensorABC):
 
         source_value = _as_value(self)
         parent = _tla_tensor_descriptor_from_type_or_value(source_value)
+        addrspace = parent.addrspace.lower()
         if isinstance(self, _Tensor):
             self._check_can_scalar_load_store()
             self._check_can_dereference()
         else:
-            if parent.addrspace not in ("gm",):
+            if addrspace not in ("gm", "ub"):
                 raise ValueError("tensor doesn't support scalar_load")
             elem_numeric = Numeric.from_mlir_type(parent.element_mlir_type())
             sub_byte_types = (Bool,)
@@ -523,15 +594,9 @@ class _Tensor(TensorABC):
                 "tla.scalar_load currently supports row_major/column_major only"
             )
 
-        flat_shape = _flatten_tla_tuple(parent.shape)
-        index_values = [
-            _as_index_value(part) for part in (crd if type(crd) is tuple else (crd,))
-        ]
-        if len(index_values) != len(flat_shape) or len(flat_shape) not in (1, 2):
-            raise TlaLoweringError(
-                "tla.scalar_load index rank must match tensor logical rank "
-                f"(shape rank {len(flat_shape)}, index rank {len(index_values)})"
-            )
+        index_values = _Tensor._prepare_scalar_indices(
+            crd, parent, addrspace=addrspace, action="load"
+        )
 
         elem_type = parent.element_mlir_type()
         result = _tla_ops_gen.scalar_load(
@@ -567,9 +632,7 @@ class _Tensor(TensorABC):
         """
         from ..base_dsl.typing import as_numeric
         from ..core_api import (
-            _as_index_value,
             _as_value,
-            _flatten_tla_tuple,
             _op_error,
             _require_category,
             _require_frontend_state,
@@ -594,26 +657,28 @@ class _Tensor(TensorABC):
 
         dest_value = _as_value(self)
         parent = _tla_tensor_descriptor_from_type_or_value(dest_value)
+        addrspace = parent.addrspace.lower()
         if isinstance(self, _Tensor):
             self._check_can_scalar_load_store()
             self._check_can_dereference()
         else:
-            if parent.addrspace not in ("gm",):
+            if addrspace not in ("gm", "ub"):
                 raise ValueError("tensor doesn't support scalar_store")
+            elem_numeric = Numeric.from_mlir_type(parent.element_mlir_type())
+            sub_byte_types = (Bool,)
+            if elem_numeric.width % 8 != 0 and elem_numeric not in sub_byte_types:
+                raise ValueError(
+                    "Sub-byte scalar dereference not supported for type "
+                    f"{elem_numeric.__name__}"
+                )
         if parent.layout_tag not in ("row_major", "column_major"):
             raise TlaLoweringError(
                 "tla.scalar_store currently supports row_major/column_major only"
             )
 
-        flat_shape = _flatten_tla_tuple(parent.shape)
-        index_values = [
-            _as_index_value(part) for part in (crd if type(crd) is tuple else (crd,))
-        ]
-        if len(index_values) != len(flat_shape) or len(flat_shape) not in (1, 2):
-            raise TlaLoweringError(
-                "tla.scalar_store index rank must match tensor logical rank "
-                f"(shape rank {len(flat_shape)}, index rank {len(index_values)})"
-            )
+        index_values = _Tensor._prepare_scalar_indices(
+            crd, parent, addrspace=addrspace, action="store"
+        )
 
         elem_type = parent.element_mlir_type()
         # Canonicalize to Numeric, then _cvt_to_dest → ir_value.

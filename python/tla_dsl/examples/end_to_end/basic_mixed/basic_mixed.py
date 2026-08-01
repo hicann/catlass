@@ -170,6 +170,154 @@ def basic_mixed(
         tla.pipe_barrier(tla.pipes.ALL)
 
 
+@tla.kernel
+def basic_mixed_mutex(
+    lhs: tla.Tensor,
+    rhs: tla.Tensor,
+    out: tla.Tensor,
+    addend: tla.Tensor,
+) -> None:
+    m = lhs.origin_shape[0]
+    k = lhs.origin_shape[1]
+    n = rhs.origin_shape[1]
+
+    mutex_l1a = tla.mutex(resource="l1a", id=0)
+    mutex_l1b = tla.mutex(resource="l1b", id=1)
+    mutex_l0a = tla.mutex(resource="l0a", id=2)
+    mutex_l0b = tla.mutex(resource="l0b", id=3)
+    mutex_l0c = tla.mutex(resource="l0c", id=4)
+    mutex_c_ub = tla.mutex(resource="c_ub", id=5)
+    mutex_addend_ub = tla.mutex(resource="addend_ub", id=6)
+    mutex_result_ub = tla.mutex(resource="result_ub", id=7)
+
+    fix_done = tla.cross_flag("fix_done")
+
+    l1a_ptr = tla.allocate(L1_STAGE_BYTES // 4, tla.Float32, tla.AddressSpace.l1, 512)
+    l1b_ptr = tla.allocate(L1_STAGE_BYTES // 4, tla.Float32, tla.AddressSpace.l1, 512)
+    l0a_ptr = tla.allocate(L0A_BYTES // 4, tla.Float32, tla.AddressSpace.l0a, 512)
+    l0b_ptr = tla.allocate(L0B_BYTES // 4, tla.Float32, tla.AddressSpace.l0b, 512)
+    l0c_ptr = tla.allocate(L0C_BYTES // 4, tla.Float32, tla.AddressSpace.l0c, 512)
+
+    c_ub_ptr = tla.allocate(UB_TILE_BYTES // 4, tla.Float32, tla.AddressSpace.ub, 256)
+    addend_ub_ptr = tla.allocate(UB_TILE_BYTES // 4, tla.Float32, tla.AddressSpace.ub, 256)
+    result_ub_ptr = tla.allocate(UB_TILE_BYTES // 4, tla.Float32, tla.AddressSpace.ub, 256)
+
+    with tla.cube():
+        gm_a = tla.tile_view(lhs, tla.make_shape(m, k), tla.make_coord(0, 0))
+        gm_b = tla.tile_view(rhs, tla.make_shape(k, n), tla.make_coord(0, 0))
+        gm_c = tla.tile_view(out, tla.make_shape(m, n), tla.make_coord(0, 0))
+        l1_a = tla.make_tensor_like(l1a_ptr, gm_a, tla.arch.zN)
+        l1_b = tla.make_tensor_like(l1b_ptr, gm_b, tla.arch.zN)
+
+        mutex_l1a.lock(pipe=tla.arch.MTE2)
+        tla.copy(l1_a, gm_a)
+        mutex_l1a.unlock(pipe=tla.arch.MTE2)
+
+        mutex_l1b.lock(pipe=tla.arch.MTE2)
+        tla.copy(l1_b, gm_b)
+        mutex_l1b.unlock(pipe=tla.arch.MTE2)
+
+        l1_a_l0 = tla.tile_view(
+            l1_a, tla.make_shape(m, k), tla.make_coord(0, 0)
+        )
+        l1_b_l0 = tla.tile_view(
+            l1_b, tla.make_shape(k, n), tla.make_coord(0, 0)
+        )
+        l0_a = tla.make_tensor_like(l0a_ptr, l1_a_l0, tla.arch.zN)
+        l0_b = tla.make_tensor_like(l0b_ptr, l1_b_l0, tla.arch.nZ)
+        l0_c = tla.make_tensor_like(l0c_ptr, gm_c, tla.arch.L0Clayout)
+
+        mutex_l1a.lock(pipe=tla.arch.MTE1)
+        mutex_l0a.lock(pipe=tla.arch.MTE1)
+        tla.copy(l0_a, l1_a_l0)
+        mutex_l0a.unlock(pipe=tla.arch.MTE1)
+        mutex_l1a.unlock(pipe=tla.arch.MTE1)
+
+        mutex_l1b.lock(pipe=tla.arch.MTE1)
+        mutex_l0b.lock(pipe=tla.arch.MTE1)
+        tla.copy(l0_b, l1_b_l0)
+        mutex_l0b.unlock(pipe=tla.arch.MTE1)
+        mutex_l1b.unlock(pipe=tla.arch.MTE1)
+
+        mutex_l0a.lock(pipe=tla.arch.CUBE)
+        mutex_l0b.lock(pipe=tla.arch.CUBE)
+        mutex_l0c.lock(pipe=tla.arch.CUBE)
+        tla.mmad(l0_c, l0_a, l0_b, init_c=True)
+        mutex_l0c.unlock(pipe=tla.arch.CUBE)
+        mutex_l0b.unlock(pipe=tla.arch.CUBE)
+        mutex_l0a.unlock(pipe=tla.arch.CUBE)
+
+        ub_c = tla.make_tensor_like(c_ub_ptr, l0_c, tla.arch.RowMajor)
+        mutex_l0c.lock(pipe=tla.arch.FIX)
+        mutex_c_ub.lock(pipe=tla.arch.FIX)
+        tla.copy(ub_c, l0_c, tla.params.CopyL0C2DstParams(
+            l0c2ub_mode=tla.params.L0C2UBMode.SPLIT_M
+        ))
+        mutex_c_ub.unlock(pipe=tla.arch.FIX)
+        mutex_l0c.unlock(pipe=tla.arch.FIX)
+
+        tla.cross_core_set_flag(fix_done, tla.arch.FIX)
+        tla.pipe_barrier(tla.pipes.ALL)
+
+    with tla.vector():
+        vec_idx = tla.arch.sub_block_idx()
+
+        gm_result = tla.tile_view(
+            out,
+            tla.make_shape(VECTOR_TILE_M, VECTOR_TILE_N),
+            tla.make_coord(vec_idx, 0)
+        )
+        gm_addend = tla.tile_view(
+            addend,
+            tla.make_shape(VECTOR_TILE_M, VECTOR_TILE_N),
+            tla.make_coord(vec_idx, 0)
+        )
+        ub_result = tla.make_tensor_like(result_ub_ptr, gm_result, tla.arch.RowMajor)
+        ub_addend = tla.make_tensor_like(addend_ub_ptr, gm_addend, tla.arch.RowMajor)
+
+        mutex_addend_ub.lock(pipe=tla.arch.MTE2)
+        tla.copy(ub_addend, gm_addend)
+        mutex_addend_ub.unlock(pipe=tla.arch.MTE2)
+
+        mutex_addend_ub.lock(pipe=tla.arch.VECTOR)
+        tla.print(ub_addend, 16)
+        mutex_addend_ub.unlock(pipe=tla.arch.VECTOR)
+
+        ub_c = tla.make_tensor_like(c_ub_ptr, gm_result, tla.arch.RowMajor)
+        tla.cross_core_wait_flag(fix_done, tla.arch.VECTOR)
+
+        for row_tile_idx in tla.range(0, VECTOR_TILE_M//VECTOR_REG_TILE_M, 1):
+            mutex_c_ub.lock(pipe=tla.arch.VECTOR)
+            mutex_addend_ub.lock(pipe=tla.arch.VECTOR)
+            mutex_result_ub.lock(pipe=tla.arch.VECTOR)
+            with tla.vec.func(mode="simd"):
+                c_chunk = tla.tile_view(
+                    ub_c,
+                    tla.make_shape(VECTOR_REG_TILE_M, VECTOR_TILE_N),
+                    tla.make_coord(row_tile_idx, 0)
+                )
+                addend_chunk = tla.tile_view(
+                    ub_addend,
+                    tla.make_shape(VECTOR_REG_TILE_M, VECTOR_TILE_N),
+                    tla.make_coord(row_tile_idx, 0)
+                )
+                result_chunk = tla.tile_view(
+                    ub_result,
+                    tla.make_shape(VECTOR_REG_TILE_M, VECTOR_TILE_N),
+                    tla.make_coord(row_tile_idx, 0)
+                )
+                result_chunk.store(c_chunk.load() + addend_chunk.load())
+            mutex_result_ub.unlock(pipe=tla.arch.VECTOR)
+            mutex_addend_ub.unlock(pipe=tla.arch.VECTOR)
+            mutex_c_ub.unlock(pipe=tla.arch.VECTOR)
+
+        mutex_result_ub.lock(pipe=tla.arch.MTE3)
+        tla.copy(gm_result, ub_result)
+        mutex_result_ub.unlock(pipe=tla.arch.MTE3)
+
+        tla.pipe_barrier(tla.pipes.ALL)
+
+
 def _compile_only_type_args() -> tuple[Any, Any, Any, Any]:
     from catlass import runtime as runtime_mod
 
@@ -223,13 +371,20 @@ def _runtime_kwargs(args: argparse.Namespace) -> dict[str, Any]:
     }
 
 
-def dump_tlair() -> str:
-    return basic_mixed.dump_mlir(type_args=_compile_only_type_args())
+def _select_kernel(args: argparse.Namespace) -> Any:
+    if getattr(args, "use_mutex", False):
+        return basic_mixed_mutex
+    return basic_mixed
+
+
+def dump_tlair(args: argparse.Namespace | None = None) -> str:
+    return _select_kernel(args).dump_mlir(type_args=_compile_only_type_args())
 
 
 def build_only(args: argparse.Namespace) -> int:
+    kernel = _select_kernel(args)
     artifact = tla.compile(
-        basic_mixed,
+        kernel,
         *_compile_only_type_args(),
         **_runtime_kwargs(args),
     )
@@ -344,8 +499,9 @@ def _run_single_case(
     tla_out = _create_tla_tensor(out, m, n)
     tla_addend = _create_tla_tensor(addend, m, n)
 
+    kernel = _select_kernel(args)
     artifact = tla.compile(
-        basic_mixed,
+        kernel,
         tla_lhs,
         tla_rhs,
         tla_out,
@@ -405,6 +561,11 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--cache-dir", default=str(DEFAULT_CACHE_DIR))
     parser.add_argument("--force-recompile", action="store_true")
     parser.add_argument("--no-cache", action="store_true")
+    parser.add_argument(
+        "--use-mutex",
+        action="store_true",
+        help="Use explicit mutex lock/unlock for local on-chip synchronization.",
+    )
     parser.add_argument("--dump-tlair", action="store_true")
     return parser
 
@@ -412,7 +573,7 @@ def _build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     args = _build_parser().parse_args()
     if args.dump_tlair:
-        print(dump_tlair())
+        print(dump_tlair(args))
         return 0
     if args.build_only:
         return build_only(args)

@@ -11,13 +11,13 @@
 #
 # End-to-end validation for python/tla_dsl/examples/end_to_end/basic_mmad (basic_matmul.py, basic_mmad_ptr.py),
 # python/tla_dsl/examples/end_to_end/basic_vadd (basic_vadd.py, basic_vadd_unknown_extent.py),
-# python/tla_dsl/examples/end_to_end/basic_mixed (basic_mixed.py), and
+# python/tla_dsl/examples/end_to_end/basic_mixed (basic_mixed.py, including mutex mode), and
 # python/tla_dsl/examples/end_to_end/basic_mixed (basic_mixed_ub2l1.py, basic_mixed_store_zN.py,
 # basic_mixed_store_zNUnAlign.py).
 # python/tla_dsl/examples/end_to_end/vector_ops (binary_op.py, masked_binary.py,
 # bitwise_ops.py, reduction_ops.py, compare_mask.py, unary_ops.py, arange_op.py,
 # interleave_op.py, load_dintlv_op.py, load_store_mask.py, squeeze_op.py,
-# register_control_flow.py).
+# register_control_flow.py, load_and_store_scalar_after_reduction.py, load_us_b8_op.py).
 # python/tla_dsl/examples/end_to_end/tensor_index (scalar_index_control_flow.py,
 # scalar_kernel_arg.py).
 # python/tla_dsl/examples/end_to_end/debug_print (debug_print.py, debug_print_mixed.py).
@@ -91,6 +91,7 @@ MASKED_BINARY_REL="examples/end_to_end/vector_ops/masked_binary.py"
 BITWISE_OPS_REL="examples/end_to_end/vector_ops/bitwise_ops.py"
 BINARY_OP_REL="examples/end_to_end/vector_ops/binary_op.py"
 REDUCTION_OPS_REL="examples/end_to_end/vector_ops/reduction_ops.py"
+LOAD_STORE_SCALAR_AFTER_REDUCTION_REL="examples/end_to_end/vector_ops/load_and_store_scalar_after_reduction.py"
 COMPARE_MASK_REL="examples/end_to_end/vector_ops/compare_mask.py"
 COMPARE_MASK_OPS=(
     vector_vector_lt vector_vector_le vector_vector_gt vector_vector_ge vector_vector_eq vector_vector_ne
@@ -101,7 +102,9 @@ UNARY_OPS_REL="examples/end_to_end/vector_ops/unary_ops.py"
 ARANGE_OP_REL="examples/end_to_end/vector_ops/arange_op.py"
 INTERLEAVE_OP_REL="examples/end_to_end/vector_ops/interleave_op.py"
 LOAD_DINTLV_OP_REL="examples/end_to_end/vector_ops/load_dintlv_op.py"
+LOAD_US_B8_OP_REL="examples/end_to_end/vector_ops/load_us_b8_op.py"
 LOAD_STORE_MASK_REL="examples/end_to_end/vector_ops/load_store_mask.py"
+STORE_PACK_REL="examples/end_to_end/vector_ops/store_pack.py"
 SQUEEZE_OP_REL="examples/end_to_end/vector_ops/squeeze_op.py"
 REGISTER_CONTROL_FLOW_REL="examples/end_to_end/vector_ops/register_control_flow.py"
 SCALAR_INDEX_CONTROL_FLOW_REL="examples/end_to_end/tensor_index/scalar_index_control_flow.py"
@@ -134,14 +137,18 @@ Run end-to-end validation for:
   - masked_binary (masked_binary.py masked_binary --run --all-dtypes)
   - bitwise_ops (bitwise_ops.py bitwise_ops --run --all-dtypes)
   - reduction_ops (reduction_ops.py <op> --run for add/max/min)
+  - load_and_store_scalar_after_reduction (UB scalar load/store in tla.vector and outlined tla.vec.func)
   - compare_mask (compare_mask.py <op> --run --all-dtypes for each compare-mask op)
   - unary_ops (unary_ops.py <op> --run --all-dtypes for exp/log/sqrt/abs/neg/masked_unary/masked_abs/masked_neg)
   - arange_op (arange_op.py [increase/decrease] --run --all-dtypes)
   - interleave_op (interleave_op.py interleave/deinterleave --run --all-dtypes)
   - load_dintlv_op (load_dintlv_op.py dintlv_b32 --run --all-dtypes; f32 only)
+  - load_us_b8_op (load_us_b8_op.py us_b8 --sweep --shapes 512; i8 only:
+    DIST_US_B8 2x up-sample load of b8 elements)
   - load_store_mask (load_store_mask.py load_store_mask --run --all-dtypes:
     MaskSSA load/store round-trip via MaskLoadParams/MaskStoreParams for
     b8/b16/b32 UB carriers; companion vector fixed to f32)
+  - store_pack (store_pack.py store_pack --run --all-dtypes; i32/i16 only)
   - squeeze_op (squeeze_op.py squeeze --run --all-dtypes)
   - register_control_flow (register_control_flow.py register_carriers --run:
     mixed VectorSSA/MaskSSA scf.for carriers and masked store)
@@ -149,8 +156,8 @@ Run end-to-end validation for:
     loop/dynamic-if/constexpr-if, vec.func, AST Numeric / index-vs-Int32 compare)
   - scalar_kernel_arg (scalar_kernel_arg.py: host Numeric kernel args used in
     same-type scalar arithmetic)
-  - debug_print (i32/f32 scalar prints on AIV and AIC)
-  - debug_print_mixed (cube-only, vector-only, and combined scalar prints)
+  - debug_print (all direct scalar dtypes, supported computed values, and two-block prints on AIV and AIC)
+  - debug_print_mixed (all scalar dtypes in cube-only, vector-only, and combined regions)
   - scalar_arg_alignment (scalar_arg_alignment.py: tensor-i16-tensor host ABI)
   - print_tensor (print_tensor.py: all supported GM/UB dtypes with AIV/AIC
     multi-block and multi-call coverage)
@@ -386,6 +393,10 @@ if [[ ! -f "${TLA_DSL_DIR}/${REDUCTION_OPS_REL}" ]]; then
     echo "error: missing ${REDUCTION_OPS_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
 fi
+if [[ ! -f "${TLA_DSL_DIR}/${LOAD_STORE_SCALAR_AFTER_REDUCTION_REL}" ]]; then
+    echo "error: missing ${LOAD_STORE_SCALAR_AFTER_REDUCTION_REL} under ${TLA_DSL_DIR}" >&2
+    exit 1
+fi
 if [[ ! -f "${TLA_DSL_DIR}/${COMPARE_MASK_REL}" ]]; then
     echo "error: missing ${COMPARE_MASK_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
@@ -493,6 +504,7 @@ _run_basic_mixed_case() {
 
 _run_basic_mixed_case "forced compilation" --force-recompile
 _run_basic_mixed_case "cache reuse"
+_run_basic_mixed_case "mutex mode, forced compilation" --use-mutex --force-recompile
 
 _run_basic_mixed_ub2l1_case() {
     echo "==> Running basic_mixed_ub2l1 validation [fixed shape/dtypes, gm->ub->l1]: --run --device ${DEVICE_ID}"
@@ -578,6 +590,17 @@ _run_reduction_ops_batch() {
 
 _run_reduction_ops_batch
 
+_run_load_store_scalar_after_reduction_case() {
+    echo "==> Running load_and_store_scalar_after_reduction validation [f32]: --device ${DEVICE_ID}"
+    (
+        cd "${TLA_DSL_DIR}"
+        python "${LOAD_STORE_SCALAR_AFTER_REDUCTION_REL}" \
+            --device "${DEVICE_ID}" --force-recompile
+    )
+}
+
+_run_load_store_scalar_after_reduction_case
+
 _run_compare_mask_batch() {
     echo "==> Running compare_mask validation [batched ops]: --batch-run --device ${DEVICE_ID}"
     (
@@ -643,6 +666,18 @@ _run_load_dintlv_op_case() {
 
 _run_load_dintlv_op_case
 
+_run_load_us_b8_op_case() {
+    echo "==> Running load_us_b8_op validation [us_b8 i8]: us_b8 --sweep --shapes 512 --device ${DEVICE_ID} --force-recompile"
+    (
+        cd "${TLA_DSL_DIR}"
+        python "${LOAD_US_B8_OP_REL}" us_b8 --sweep --shapes 512 \
+            --device "${DEVICE_ID}" --compile-jobs "${COMPILE_JOBS}" \
+            --force-recompile
+    )
+}
+
+_run_load_us_b8_op_case
+
 _run_load_store_mask_case() {
     echo "==> Running load_store_mask validation [b8/b16/b32 carriers]: load_store_mask --run --all-dtypes --device ${DEVICE_ID}"
     (
@@ -652,6 +687,16 @@ _run_load_store_mask_case() {
 }
 
 _run_load_store_mask_case
+
+_run_store_pack_case() {
+    echo "==> Running store_pack validation [i32/i16 only]: store_pack --run --all-dtypes --device ${DEVICE_ID}"
+    (
+        cd "${TLA_DSL_DIR}"
+        python "${STORE_PACK_REL}" store_pack --run --all-dtypes --device "${DEVICE_ID}"
+    )
+}
+
+_run_store_pack_case
 
 _run_squeeze_op_case() {
     echo "==> Running squeeze_op validation [squeeze all dtypes]: squeeze --sweep --shapes 64 --device ${DEVICE_ID} --force-recompile"
@@ -722,41 +767,53 @@ for _print_tensor_arch_scope in aiv.c310 aic.c310; do
     _run_print_tensor_gm_case "${_print_tensor_arch_scope}" 2 2 all
 done
 
-_run_debug_print_case() {
+_run_debug_print_matrix_case() {
     local arch_scope="$1"
-    local dtype="$2"
-    local value="$3"
-    echo "==> Running debug_print validation [${arch_scope} ${dtype}]: --run --device ${DEVICE_ID} --arch-scope ${arch_scope} --dtype ${dtype} --value ${value}"
+    echo "==> Running debug_print validation [${arch_scope} all dtypes, two blocks]"
     (
         cd "${TLA_DSL_DIR}"
         python "${DEBUG_PRINT_REL}" --run --device "${DEVICE_ID}" \
-            --arch-scope "${arch_scope}" --dtype "${dtype}" --value "${value}" \
+            --arch-scope "${arch_scope}" --all-dtypes --block 2 \
+            --expect-count 2 --force-recompile
+    )
+}
+
+for _debug_arch_scope in aiv.c310 aic.c310; do
+    _run_debug_print_matrix_case "${_debug_arch_scope}"
+done
+
+_run_debug_print_f16_special_case() {
+    local arch_scope="$1"
+    local value="$2"
+    echo "==> Running f16 debug_print special value [${arch_scope} ${value}]"
+    (
+        cd "${TLA_DSL_DIR}"
+        python "${DEBUG_PRINT_REL}" --run --device "${DEVICE_ID}" \
+            --arch-scope "${arch_scope}" --dtype f16 --value="${value}" \
             --force-recompile
     )
 }
 
 for _debug_arch_scope in aiv.c310 aic.c310; do
-    _run_debug_print_case "${_debug_arch_scope}" i32 -37
-    _run_debug_print_case "${_debug_arch_scope}" f32 1.25
+    for _debug_f16_value in -0.0 nan inf -inf; do
+        _run_debug_print_f16_special_case \
+            "${_debug_arch_scope}" "${_debug_f16_value}"
+    done
 done
 
-_run_debug_print_expression_case() {
+_run_debug_print_expression_matrix_case() {
     local arch_scope="$1"
-    local dtype="$2"
-    local lhs="$3"
-    local rhs="$4"
-    echo "==> Running computed debug_print validation [${arch_scope} ${dtype}]: ${lhs} + ${rhs}"
+    echo "==> Running computed debug_print validation [${arch_scope} i8/i16/i32/f16/f32]"
     (
         cd "${TLA_DSL_DIR}"
         python "${DEBUG_PRINT_REL}" --run --device "${DEVICE_ID}" \
-            --arch-scope "${arch_scope}" --dtype "${dtype}" --value "${lhs}" \
-            --expression --rhs "${rhs}" --force-recompile
+            --arch-scope "${arch_scope}" --all-dtypes --expression \
+            --force-recompile
     )
 }
 
 for _debug_arch_scope in aiv.c310 aic.c310; do
-    _run_debug_print_expression_case "${_debug_arch_scope}" i32 -37 5
-    _run_debug_print_expression_case "${_debug_arch_scope}" f32 1.25 0.75
+    _run_debug_print_expression_matrix_case "${_debug_arch_scope}"
 done
 
 _run_debug_print_mixed_case() {
@@ -765,7 +822,7 @@ _run_debug_print_mixed_case() {
     (
         cd "${TLA_DSL_DIR}"
         python "${DEBUG_PRINT_MIXED_REL}" --run --device "${DEVICE_ID}" \
-            --print-region "${print_region}" --force-recompile
+            --all-dtypes --print-region "${print_region}" --force-recompile
     )
 }
 

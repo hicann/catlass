@@ -3,22 +3,40 @@
 
 // BEGIN-LOWER
 module {
-  tla.func @debug_print_scalars(%v: i32, %f: f32) {
+  tla.func @debug_print_scalars(%i8: i8, %i16: i16, %v: i32, %u8: ui8, %u16: ui16, %u32: ui32, %h: f16, %f: f32) {
+    "tla.cube"() ({ tla.debug_print %i8 : i8 }) : () -> ()
+    "tla.vector"() ({ tla.debug_print %i16 : i16 }) : () -> ()
     "tla.cube"() ({ tla.debug_print %v : i32 }) : () -> ()
+    "tla.vector"() ({ tla.debug_print %u8 : ui8 }) : () -> ()
+    "tla.cube"() ({ tla.debug_print %u16 : ui16 }) : () -> ()
+    "tla.vector"() ({ tla.debug_print %u32 : ui32 }) : () -> ()
+    "tla.vector"() ({ tla.debug_print %h : f16 }) : () -> ()
     "tla.cube"() ({ tla.debug_print %f : f32 }) : () -> ()
     tla.return
   }
 }
 // END-LOWER
+// LOWER-DAG: func.func private @_mlir_ciface_tla_printf_x_i8(i8, i64)
+// LOWER-DAG: func.func private @_mlir_ciface_tla_printf_x_i16(i16, i64)
 // LOWER-DAG: func.func private @_mlir_ciface_tla_printf_x_i32(i32, i64)
+// LOWER-DAG: func.func private @_mlir_ciface_tla_printf_x_u8(ui8, i64)
+// LOWER-DAG: func.func private @_mlir_ciface_tla_printf_x_u16(ui16, i64)
+// LOWER-DAG: func.func private @_mlir_ciface_tla_printf_x_u32(ui32, i64)
+// LOWER-DAG: func.func private @_mlir_ciface_tla_printf_v_f16(f16, i64)
 // LOWER-DAG: func.func private @_mlir_ciface_tla_printf_v_f32(f32, i64)
 // LOWER-LABEL: func.func @debug_print_scalars
 // LOWER-SAME: %[[WORKSPACE:arg[0-9]+]]: i64 {{.*}}hacc.arg_type = #hacc.arg_type<workspace>{{.*}}tla.debug_print.workspace
 // LOWER-NOT: func_dyn_memref_args
 // LOWER-NOT: memref.extract_aligned_pointer_as_index
 // LOWER-NOT: arith.index_cast
-// LOWER: call @_mlir_ciface_tla_printf_x_i32(%{{.*}}, %[[WORKSPACE]])
-// LOWER: call @_mlir_ciface_tla_printf_v_f32(%{{.*}}, %[[WORKSPACE]])
+// LOWER-DAG: call @_mlir_ciface_tla_printf_x_i8(%{{.*}}, %{{.*}})
+// LOWER-DAG: call @_mlir_ciface_tla_printf_x_i16(%{{.*}}, %{{.*}})
+// LOWER-DAG: call @_mlir_ciface_tla_printf_x_i32(%{{.*}}, %{{.*}})
+// LOWER-DAG: call @_mlir_ciface_tla_printf_x_u8(%{{.*}}, %{{.*}})
+// LOWER-DAG: call @_mlir_ciface_tla_printf_x_u16(%{{.*}}, %{{.*}})
+// LOWER-DAG: call @_mlir_ciface_tla_printf_x_u32(%{{.*}}, %{{.*}})
+// LOWER-DAG: call @_mlir_ciface_tla_printf_v_f16(%{{.*}}, %{{.*}})
+// LOWER-DAG: call @_mlir_ciface_tla_printf_v_f32(%{{.*}}, %{{.*}})
 // LOWER-NOT: tla.debug_print
 
 // BEGIN-NOOP

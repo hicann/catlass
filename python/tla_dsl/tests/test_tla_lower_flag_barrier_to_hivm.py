@@ -153,7 +153,10 @@ def _assert_fully_lowered(result: subprocess.CompletedProcess[str]) -> None:
     assert "tla.cross_core_" not in result.stdout
 
 
-def test_tla_sync_to_hivm_requires_cross_flag_function_core_type() -> None:
+def test_tla_sync_to_hivm_lowers_cross_flag_in_pure_vector_entry() -> None:
+    # A pure-vector entry retains hivm.func_core_type = AIV (it is no longer
+    # stripped by tla-lower-func), so a cross_flag inside it lowers directly
+    # instead of erroring on a missing core type.
     result = _compile_mlir(
         """module {
   tla.func @flags() {
@@ -166,8 +169,8 @@ def test_tla_sync_to_hivm_requires_cross_flag_function_core_type() -> None:
 }
 """
     )
-    assert result.returncode != 0
-    assert "AIC/AIV hivm.func_core_type" in result.stderr
+    _assert_fully_lowered(result)
+    assert "hivm.func_core_type = #hivm.func_core_type<AIV>" in result.stdout
 
 
 @pytest.mark.parametrize(("mode", "config"), [(0, 257), (1, 273)])
