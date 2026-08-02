@@ -556,6 +556,12 @@ void Ascend950TailMultiCoreSplitkMatmul(
 void Trmm(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const TrmmParams& params);
 
 /**
+ * @brief JIT interface for example 77_planar_complex_matmul.
+ */
+void PlanarComplexMatmul(
+    const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
+
+/**
  * @brief JIT interface for example 80_grouped_matmul_slice_m_gelu.
  */
 void GroupedMatmulSliceMGelu(

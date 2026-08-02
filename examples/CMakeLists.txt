@@ -143,6 +143,7 @@ set(EXAMPLE_ATLASA2
     52_quant_multi_core_splitk_matmul_tla
     75_symm
     76_trmm
+    77_planar_complex_matmul
     102_dynamic_optimized_matmul
     103_dynamic_optimized_quant_matmul_per_token_basic
 )
