@@ -271,6 +271,7 @@ def run(args: argparse.Namespace) -> int:
     try:
         torch.npu.set_device(args.device)
         print(f"--- mnk=({mi},{ni},{ki}) layout={la}/{lb} dtype={da}/{db}/{dc} ---")
+        torch.npu.manual_seed(0)
         a = torch.rand(mi, ki, dtype=torch_of[da], device="npu") * 10.0 - 5.0
         b = torch.rand(ki, ni, dtype=torch_of[db], device="npu") * 10.0 - 5.0
         c = torch.full((mi, ni), args.sentinel, dtype=torch_of[dc], device="npu")
@@ -294,6 +295,7 @@ def run(args: argparse.Namespace) -> int:
         artifact(ta, tb, tc, block_dim=block_dim)
         torch.npu.synchronize()
 
+        # bf16: rtol 1/128 (K<2048) or 1/64, floor 1/256; else f16/f32: rtol 1/256 or 1/128, floor 1.
         if dc == "bf16":
             rtol = (1.0 / 128.0) if ki < 2048 else (1.0 / 64.0)
             floor = 1.0 / 256.0

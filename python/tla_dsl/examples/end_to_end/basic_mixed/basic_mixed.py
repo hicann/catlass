@@ -486,6 +486,7 @@ def _run_single_case(
         raise ValueError(f"k must be in 1..{K_DIM}; got {k}")
 
     device = "npu"
+    torch.npu.manual_seed(0)
     lhs = torch.rand(m, k, dtype=torch.float32, device=device) * 10.0 - 5.0
     rhs = torch.rand(k, n, dtype=torch.float32, device=device) * 10.0 - 5.0
     addend = torch.full((m, n), 3.0, dtype=torch.float32, device=device)

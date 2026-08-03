@@ -135,6 +135,7 @@ def run(args: argparse.Namespace) -> int:
     tla.initialize(device=args.device)
     try:
         torch.npu.set_device(args.device)
+        torch.manual_seed(0)
         lhs = torch.rand(M_DIM, K_DIM, dtype=torch.float32, device="cpu") * 10.0 - 5.0
         rhs = torch.rand(K_DIM, N_DIM, dtype=torch.float32, device="cpu") * 10.0 - 5.0
         out = torch.full((L1_M_DIM, L1_N_DIM), -9.0, dtype=torch.float32, device="npu")

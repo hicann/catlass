@@ -269,10 +269,11 @@ def run(args: argparse.Namespace) -> int:
     try:
         torch = _require_torch_npu(args.device)
         device = "npu"
-        lhs = torch.randn(M_DIM * K_DIM, dtype=torch.float32, device="cpu").reshape(
+        torch.manual_seed(0)
+        lhs = (torch.rand(M_DIM * K_DIM, dtype=torch.float32, device="cpu") * 10.0 - 5.0).reshape(
             M_DIM, K_DIM
         )
-        rhs = torch.randn(K_DIM * N_DIM, dtype=torch.float32, device="cpu").reshape(
+        rhs = (torch.rand(K_DIM * N_DIM, dtype=torch.float32, device="cpu") * 10.0 - 5.0).reshape(
             K_DIM, N_DIM
         )
         out = torch.full((M_DIM, N_DIM), -9.0, dtype=torch.float32, device="cpu").to(device)

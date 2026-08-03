@@ -71,14 +71,14 @@ def foo(mem: tla.Tensor) -> None:
 torch.npu.set_device(0)
 tla.initialize(device=0)
 
-a = torch.randn(4, 8, dtype=torch.float32, device="npu")
+a = torch.rand(4, 8, dtype=torch.float32, device="npu")
 ta = from_dlpack(a.contiguous(), layout_tag=tla.arch.RowMajor).mark_layout_dynamic()
 # 类型示意：shape<?,?>  stride<?,1>  origin<?,?>
 
 artifact = tla.compile(foo, ta, arch_scope="aiv.c310")
 artifact(ta, block_dim=1)
 
-b = torch.randn(16, 32, dtype=torch.float32, device="npu")
+b = torch.rand(16, 32, dtype=torch.float32, device="npu")
 tb = from_dlpack(b.contiguous(), layout_tag=tla.arch.RowMajor).mark_layout_dynamic()
 artifact(tb, block_dim=1)  # 同一份编译产物可服务不同具体 shape
 ```

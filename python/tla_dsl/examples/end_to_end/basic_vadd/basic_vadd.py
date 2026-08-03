@@ -284,6 +284,7 @@ def run(args: argparse.Namespace) -> int:
                 a = torch.randint(-1000, 1001, (n_ele,), dtype=torch_dtype, device="npu")
                 b = torch.randint(-1000, 1001, (n_ele,), dtype=torch_dtype, device="npu")
         else:
+            torch.npu.manual_seed(0)
             a = torch.rand(n_ele, dtype=torch_dtype, device="npu") * 10.0 - 5.0
             b = torch.rand(n_ele, dtype=torch_dtype, device="npu") * 10.0 - 5.0
         c = torch.full((n_ele,), sentinel, dtype=torch_dtype, device="npu")

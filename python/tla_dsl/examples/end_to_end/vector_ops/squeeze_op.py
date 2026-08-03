@@ -52,12 +52,15 @@ def squeeze_op(mem_src: tla.Tensor, mem_dst: tla.Tensor) -> None:
         tla.set_flag(ub_loaded)
         tla.wait_flag(ub_loaded)
         with tla.vec.func(mode="simd"):
+            remaining = VECTOR_ELE
             for i in tla.range(LOOPS):
                 src_tile = tla.tile_view(src_ub, tla.make_shape(VL_ELE), tla.make_coord(i))
                 dst_tile = tla.tile_view(dst_ub, tla.make_shape(VL_ELE), tla.make_coord(i))
                 src_vec = src_tile.load()
-                mask = tla.create_mask(pattern=_MASK_PATTERN, dtype=_KERNEL_DTYPE)
-                dst_tile.store(tla.squeeze(src_vec, mask))
+                tail, remaining = tla.update_mask(remaining, dtype=_KERNEL_DTYPE)
+                m4 = tla.create_mask(pattern=_MASK_PATTERN, dtype=_KERNEL_DTYPE)
+                active = tla.bitwise_and(m4, tail)
+                dst_tile.store(tla.squeeze(src_vec, active), mask=tail)
 
         tla.set_flag(vec_done)
         tla.wait_flag(vec_done)
