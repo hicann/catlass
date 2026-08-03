@@ -11,6 +11,27 @@ from catlass.base_dsl.ast_helpers import while_executor
 const_expr = tla.const_expr
 
 
+def _operation_is_nested_in_scf_if(mlir: str, operation: str) -> bool:
+    operation_offset = mlir.index(operation)
+    stack: list[str] = []
+    last_closed = ""
+    for offset, token in enumerate(mlir[:operation_offset]):
+        if token == "{":
+            header_start = mlir.rfind("\n", 0, offset) + 1
+            header = mlir[header_start:offset]
+            if "scf.if" in header:
+                kind = "scf.if"
+            elif "else" in header and last_closed == "scf.if":
+                kind = "scf.if"
+            else:
+                kind = "other"
+            stack.append(kind)
+            last_closed = ""
+        elif token == "}" and stack:
+            last_closed = stack.pop()
+    return "scf.if" in stack
+
+
 class CustomWhileState:
     def __init__(self, coord: Any, offset: Any) -> None:
         self.coord = coord
@@ -29,6 +50,18 @@ class CustomWhileState:
             core_api_mod._wrap_frontend_value(values[0]),
             core_api_mod._wrap_frontend_value(values[1]),
         )
+
+
+class _WhileProtocolSpy:
+    calls = 0
+
+    def __getitem__(self, key):
+        del key
+        type(self).calls += 1
+        raise AssertionError("unreachable subscription dispatched")
+
+
+_while_protocol_spy = _WhileProtocolSpy()
 
 
 @tla.kernel
@@ -51,6 +84,28 @@ def statement_while_compound_bool_kernel(limit: int) -> None:
     ):
         i = i + 1
     tla.make_coord(i, 0)
+
+
+@tla.kernel
+def statement_while_guarded_division_kernel(limit: int) -> None:
+    i = 0
+    while i != 0 and 10 // i > 2 and i < limit:
+        i = i + 1
+    tla.make_coord(i, 0)
+
+
+@tla.kernel
+def statement_while_guarded_division_or_kernel(limit: int) -> None:
+    i = 0
+    while (i == 0 or 10 // i > 2) and i < limit:
+        i = i + 1
+    tla.make_coord(i, 0)
+
+
+@tla.kernel
+def staged_false_while_skips_custom_protocol_kernel() -> None:
+    while [] and _while_protocol_spy[0]:
+        tla.make_coord(1, 0)
 
 
 @tla.kernel
@@ -246,7 +301,30 @@ def test_statement_while_compound_bool_condition_is_lowered_once() -> None:
     mlir = statement_while_compound_bool_kernel.dump_mlir(type_args=(4,))
     assert "scf.while" in mlir
     assert mlir.count("arith.cmpi") == 5
-    assert mlir.count("arith.andi") == 4
+    assert mlir.count("scf.if") == 4
+
+
+def test_statement_while_boolean_rhs_is_lowered_in_lazy_region() -> None:
+    mlir = statement_while_guarded_division_kernel.dump_mlir(type_args=(4,))
+    division = max(mlir.find("arith.divsi"), mlir.find("arith.divui"))
+    assert division != -1
+    division_op = "arith.divsi" if "arith.divsi" in mlir else "arith.divui"
+    assert _operation_is_nested_in_scf_if(mlir, division_op)
+    assert "scf.while" in mlir
+
+
+def test_statement_while_or_rhs_is_lowered_in_lazy_region() -> None:
+    mlir = statement_while_guarded_division_or_kernel.dump_mlir(type_args=(4,))
+    division_op = "arith.divsi" if "arith.divsi" in mlir else "arith.divui"
+    assert _operation_is_nested_in_scf_if(mlir, division_op)
+    assert "scf.while" in mlir
+
+
+def test_staged_false_while_skips_custom_protocol_without_dispatch() -> None:
+    _WhileProtocolSpy.calls = 0
+    mlir = staged_false_while_skips_custom_protocol_kernel.dump_mlir()
+    assert _WhileProtocolSpy.calls == 0
+    assert "arith.constant false" in mlir
 
 
 def test_statement_while_structured_carried_value_lowers_to_scf_while() -> None:

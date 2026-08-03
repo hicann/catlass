@@ -222,6 +222,7 @@ class TlaJitFunction:
 def jit(fn: Callable[..., Any]) -> TlaJitFunction:
     """Decorate a helper for Tla DSL lowering."""
 
+    _reject_async_dsl_function(fn, kind="jit")
     return TlaJitFunction(
         fn,
         kind="jit",
@@ -233,12 +234,35 @@ def jit(fn: Callable[..., Any]) -> TlaJitFunction:
 def kernel(fn: Callable[..., Any]) -> TlaJitFunction:
     """Decorate a Tla kernel entry point."""
 
+    _reject_async_dsl_function(fn, kind="kernel")
     return TlaJitFunction(
         fn,
         kind="kernel",
         options={},
         decorator_location=_capture_decorator_location(),
     )
+
+
+def _reject_async_dsl_function(fn: Callable[..., Any], *, kind: str) -> None:
+    unwrapped = inspect.unwrap(fn)
+    if not (
+        inspect.iscoroutinefunction(unwrapped)
+        or inspect.isasyncgenfunction(unwrapped)
+    ):
+        return
+    filename = inspect.getsourcefile(unwrapped) or "<unknown>"
+    try:
+        source_lines, lineno = inspect.getsourcelines(unwrapped)
+    except (OSError, IOError, TypeError):
+        source_lines, lineno = [], 1
+    text = source_lines[0] if source_lines else None
+    offset = len(text) - len(text.lstrip()) + 1 if text is not None else None
+    error = SyntaxError(f"async Tla {kind} functions are not supported")
+    error.filename = filename
+    error.lineno = lineno
+    error.offset = offset
+    error.text = text
+    raise error
 
 
 

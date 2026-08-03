@@ -12,9 +12,32 @@ import catlass as tla
 import catlass.runtime as runtime_mod
 
 
+def _operation_is_nested_in_scf_if(mlir: str, operation: str) -> bool:
+    operation_offset = mlir.index(operation)
+    stack: list[str] = []
+    last_closed = ""
+    for offset, token in enumerate(mlir[:operation_offset]):
+        if token == "{":
+            header_start = mlir.rfind("\n", 0, offset) + 1
+            header = mlir[header_start:offset]
+            if "scf.if" in header:
+                kind = "scf.if"
+            elif "else" in header and last_closed == "scf.if":
+                kind = "scf.if"
+            else:
+                kind = "other"
+            stack.append(kind)
+            last_closed = ""
+        elif token == "}" and stack:
+            last_closed = stack.pop()
+    return "scf.if" in stack
+
+
 def _require_tla_compile() -> pathlib.Path:
     repo_root = pathlib.Path(__file__).resolve().parents[1]
-    tla_compile = repo_root / "csrc" / "mlir" / "build" / "tools" / "tla-compile" / "TlaCompile"
+    tla_compile = (
+        repo_root / "csrc" / "mlir" / "build" / "tools" / "tla-compile" / "TlaCompile"
+    )
     if not tla_compile.is_file():
         raise AssertionError("TlaCompile binary not found. Build csrc/mlir first.")
     return tla_compile
@@ -29,7 +52,8 @@ def _kernel_scalar_load_1d(meta: tla.Tensor) -> None:
 def _kernel_bool_flag_in_if(flags: tla.Tensor) -> None:
     """Host bool / tla.Bool element used as ``if`` predicate (fag_75-style)."""
     is_valid = flags[0, 1]
-    if is_valid and tla.arch.block_idx() == 0:
+    block_idx = tla.arch.block_idx()
+    if is_valid and block_idx == 0:
         tla.make_coord(1, 0)
 
 
@@ -47,6 +71,108 @@ def _kernel_scalar_store_1d(out: tla.Tensor, meta: tla.Tensor) -> None:
 @tla.kernel
 def _kernel_scalar_store_float_literal(out: tla.Tensor) -> None:
     out[0] = 1.1125
+
+
+@tla.kernel
+def _kernel_scalar_store_dynamic_if(out: tla.Tensor, selector: int) -> None:
+    if selector == 0:
+        out[0] = 1
+    else:
+        out[1] = 2
+
+
+@tla.kernel
+def _kernel_scalar_store_nested_python_for(
+    out: tla.Tensor, selector: int
+) -> None:
+    if selector == 0:
+        for _ in range(1):
+            out[0] = 1
+
+
+@tla.kernel
+def _kernel_list_store_nested_python_for(selector: int) -> None:
+    values = [0]
+    if selector == 0:
+        for _ in range(1):
+            values[0] = 1
+
+
+@tla.kernel
+def _kernel_tensor_store_helper_name_collision(
+    out: tla.Tensor, selector: int, __tladsl_tensor_store_1: int
+) -> None:
+    if selector == 0:
+        out[0] = __tladsl_tensor_store_1
+
+
+@tla.kernel
+def _kernel_scalar_store_dynamic_for(out: tla.Tensor, limit: int) -> None:
+    for i in tla.range(0, limit, 1):
+        out[i] = i
+
+
+@tla.kernel
+def _kernel_scalar_store_dynamic_while(out: tla.Tensor, limit: int) -> None:
+    i = 0
+    while i < limit:
+        out[i] = i
+        i = i + 1
+
+
+@tla.kernel
+def _kernel_scalar_store_local_view(out: tla.Tensor, selector: int) -> None:
+    view = tla.tile_view(out, tla.make_shape(4), tla.make_coord(0))
+    if selector == 0:
+        view[1] = 7
+
+
+_assignment_evaluation_log: list[str] = []
+
+
+def _logged_value() -> int:
+    _assignment_evaluation_log.append("value")
+    return 3
+
+
+def _logged_target(target: tla.Tensor) -> tla.Tensor:
+    _assignment_evaluation_log.append("target")
+    return target
+
+
+def _logged_index() -> int:
+    _assignment_evaluation_log.append("index")
+    return 0
+
+
+@tla.kernel
+def _kernel_scalar_store_evaluation_order(out: tla.Tensor, selector: int) -> None:
+    if selector == 0:
+        _logged_target(out)[_logged_index()] = _logged_value()
+
+
+@tla.kernel
+def _kernel_bad_augmented_tensor_store(out: tla.Tensor, selector: int) -> None:
+    if selector == 0:
+        out[0] += 1
+
+
+@tla.kernel
+def _kernel_bad_deleted_tensor_store(out: tla.Tensor, selector: int) -> None:
+    if selector == 0:
+        del out[0]
+
+
+@tla.kernel
+def _kernel_bad_sliced_tensor_store(out: tla.Tensor, selector: int) -> None:
+    if selector == 0:
+        out[0:1] = 1
+
+
+@tla.kernel
+def _kernel_bad_chained_tensor_store(out: tla.Tensor, selector: int) -> None:
+    if selector == 0:
+        out[0] = out[1] = 1
 
 
 def _gm_tensor_1d(length: int, *, dtype: type = tla.Int32) -> tla.Tensor:
@@ -89,7 +215,7 @@ def test_bool_tensor_load_usable_in_if_and() -> None:
     mlir = _kernel_bool_flag_in_if.dump_mlir(type_args=(flags,))
     assert "tla.scalar_load" in mlir
     assert "scf.if" in mlir
-    assert "arith.andi" in mlir
+    assert _operation_is_nested_in_scf_if(mlir, "arith.cmpi")
     assert "!tla.ptr<i1" in mlir
     assert "-> i1" in mlir
 
@@ -136,6 +262,87 @@ def test_tensor_scalar_store_emits_tla_scalar_store_1d() -> None:
     mlir = _kernel_scalar_store_1d.dump_mlir(type_args=(out, meta))
     assert "tla.scalar_store" in mlir
     assert "tla.scalar_load" in mlir
+
+
+def test_tensor_scalar_store_supported_in_all_runtime_control_flow() -> None:
+    out = _gm_tensor_1d(8)
+
+    if_mlir = _kernel_scalar_store_dynamic_if.dump_mlir(type_args=(out, 0))
+    assert "scf.if" in if_mlir
+    assert if_mlir.count("tla.scalar_store") == 2
+    if_header = next(line for line in if_mlir.splitlines() if "scf.if" in line)
+    assert "->" not in if_header
+
+    for_mlir = _kernel_scalar_store_dynamic_for.dump_mlir(type_args=(out, 4))
+    assert "scf.for" in for_mlir
+    assert for_mlir.count("tla.scalar_store") == 1
+
+    while_mlir = _kernel_scalar_store_dynamic_while.dump_mlir(type_args=(out, 4))
+    assert "scf.while" in while_mlir
+    assert while_mlir.count("tla.scalar_store") == 1
+
+
+def test_tensor_scalar_store_nested_in_python_loop_is_rewritten() -> None:
+    out = _gm_tensor_1d(8)
+    mlir = _kernel_scalar_store_nested_python_for.dump_mlir(type_args=(out, 0))
+    assert "scf.if" in mlir
+    assert mlir.count("tla.scalar_store") == 1
+
+
+def test_nested_python_list_store_is_not_misclassified_as_tensor_store() -> None:
+    with pytest.raises(tla.TlaCoreAPIError, match="tensor_store.*target.*tensor"):
+        _kernel_list_store_nested_python_for.dump_mlir(type_args=(0,))
+
+
+def test_tensor_store_helper_does_not_collide_with_user_name() -> None:
+    out = _gm_tensor_1d(8)
+    mlir = _kernel_tensor_store_helper_name_collision.dump_mlir(
+        type_args=(out, 0, 7)
+    )
+    assert mlir.count("tla.scalar_store") == 1
+
+
+def test_tensor_scalar_store_accepts_local_tensor_view() -> None:
+    out = _gm_tensor_1d(8)
+    mlir = _kernel_scalar_store_local_view.dump_mlir(type_args=(out, 0))
+    assert "scf.if" in mlir
+    assert mlir.count("tla.scalar_store") == 1
+
+
+def test_tensor_scalar_store_preserves_python_assignment_evaluation_order() -> None:
+    out = _gm_tensor_1d(8)
+    _assignment_evaluation_log.clear()
+    mlir = _kernel_scalar_store_evaluation_order.dump_mlir(type_args=(out, 0))
+    assert "tla.scalar_store" in mlir
+    assert _assignment_evaluation_log == ["value", "target", "index"]
+
+
+@pytest.mark.parametrize(
+    ("kernel", "message"),
+    [
+        (_kernel_bad_augmented_tensor_store, "augmented tensor stores"),
+        (_kernel_bad_deleted_tensor_store, "does not support deletion"),
+        (_kernel_bad_sliced_tensor_store, "tensor slice assignment"),
+        (_kernel_bad_chained_tensor_store, "chained tensor stores"),
+    ],
+)
+def test_tensor_scalar_store_rejects_unsupported_assignment_forms(
+    kernel, message: str
+) -> None:
+    out = _gm_tensor_1d(8)
+    with pytest.raises(SyntaxError, match=message):
+        kernel.dump_mlir(type_args=(out, 0))
+
+
+def test_tensor_scalar_store_diagnostic_points_to_source_assignment() -> None:
+    out = _gm_tensor_1d(8)
+    with pytest.raises(SyntaxError, match="tensor slice assignment") as exc_info:
+        _kernel_bad_sliced_tensor_store.dump_mlir(type_args=(out, 0))
+
+    assert exc_info.value.filename == __file__
+    assert exc_info.value.lineno is not None
+    assert exc_info.value.text is not None
+    assert "out[0:1] = 1" in exc_info.value.text
 
 
 def test_tensor_scalar_store_python_literals() -> None:
@@ -231,9 +438,7 @@ def _kernel_scalar_value_through_dynamic_if(
 def test_scalar_value_through_dynamic_if_emits_scf_and_store() -> None:
     out = _gm_tensor_1d(1)
     meta = _gm_tensor_1d(8)
-    mlir = _kernel_scalar_value_through_dynamic_if.dump_mlir(
-        type_args=(out, meta, 0)
-    )
+    mlir = _kernel_scalar_value_through_dynamic_if.dump_mlir(type_args=(out, meta, 0))
     assert "tla.scalar_load" in mlir
     assert "tla.scalar_store" in mlir
     assert "scf.if" in mlir
@@ -323,7 +528,10 @@ def _run_tla_compile_ir_after_pass(mlir_text: str, pass_name: str) -> str:
             text=True,
         )
         output = result.stdout + result.stderr
-        if result.returncode != 0 and "unregistered operation 'tla.scalar_load'" in output:
+        if (
+            result.returncode != 0
+            and "unregistered operation 'tla.scalar_load'" in output
+        ):
             raise AssertionError(
                 "TlaCompile binary is stale and does not register tla.scalar_load. "
                 "Rebuild from catlass_DSL_vector/python/tla_dsl/csrc/mlir/build: "

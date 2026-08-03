@@ -5965,3 +5965,44 @@ __all__ = [
     "MaskSSA",
     "LocalmemAllocator",
 ]
+
+
+# Capture the genuine frontend identities before user staging code can mutate
+# public module namespaces.  The consumers retain these immutable snapshots.
+from .base_dsl import ast_preprocessor as _ast_preprocessor  # noqa: E402
+from .base_dsl import typing as _dsl_typing  # noqa: E402
+from . import tla_ast_decorators as _tla_ast_decorators  # noqa: E402
+
+_TRUSTED_DSL_TYPE_MODULES = frozenset(
+    {
+        "catlass.address_space",
+        "catlass.base_dsl.typing",
+        "catlass.core_api",
+        "catlass.execution_lowering",
+        "catlass.params",
+        "catlass.runtime",
+        "catlass.tla.tensor",
+        "catlass.tla.typing",
+        "catlass.types",
+        "catlass.utils.localmem_allocator",
+    }
+)
+_ast_preprocessor._register_trusted_lazy_callables(
+    tuple(
+        value
+        for value in globals().values()
+        if callable(value)
+        and getattr(value, "__module__", None) == __name__
+        and not inspect.isclass(value)
+    )
+    + (_runtime.const_expr,)
+)
+_tla_ast_decorators._register_trusted_dsl_types(
+    frozenset(
+        candidate
+        for namespace in (globals(), vars(_dsl_typing))
+        for candidate in namespace.values()
+        if isinstance(candidate, type)
+        and getattr(candidate, "__module__", None) in _TRUSTED_DSL_TYPE_MODULES
+    )
+)

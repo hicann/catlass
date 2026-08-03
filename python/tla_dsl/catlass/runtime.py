@@ -337,11 +337,21 @@ def _coerce_bool_value(value: Any) -> Any:
         return _const_i1(int(bool(value.value)))
     if isinstance(value, bool):
         return _const_i1(int(value))
+    def require_scalar_i1(candidate: Any) -> Any:
+        if not (
+            isinstance(candidate.type, mlir_ir.IntegerType)
+            and candidate.type.width == 1
+        ):
+            raise TlaCoreAPIError(
+                f"Expected scalar Bool predicate, got {candidate.type}"
+            )
+        return candidate
+
     if isinstance(value, mlir_ir.Value):
-        return value
+        return require_scalar_i1(value)
     resolved = _resolve_frontend_bound_value(value)
     if isinstance(resolved, mlir_ir.Value):
-        return resolved
+        return require_scalar_i1(resolved)
     # Other Numerics / host scalars: as_numeric then require Bool.
     try:
         num = as_numeric(value) if not isinstance(value, Numeric) else value
@@ -642,12 +652,6 @@ def const_expr(value: Any) -> bool:
     return bool(value)
 
 
-def constexpr(value: Any) -> Any:
-    """Mark a value as constexpr for folding during lowering."""
-
-    return value
-
-
 def jit(fn: Callable[..., Any]) -> Any:
     """Compat wrapper for the Tla DSL jit decorator."""
 
@@ -708,7 +712,6 @@ __all__ = [
     "_Tensor",
     "arch",
     "const_expr",
-    "constexpr",
     "current_device_id",
     "current_stream",
     "get_aicore_num",

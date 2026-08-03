@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import builtins
+import contextlib
+import contextvars
 import linecache
 import operator
 import types
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 
 from . import runtime as _runtime
 from .base_dsl.ast_helpers import FrontendRange
@@ -18,6 +20,176 @@ _coerce_bool_value = _runtime._coerce_bool_value
 _const_i1 = _runtime._const_i1
 _resolve_frontend_bound_value = _runtime._resolve_frontend_bound_value
 _SOURCE_INFO_ATTR = "__tladsl_source_info__"
+_IN_DYNAMIC_LAZY_REGION: contextvars.ContextVar[bool] = contextvars.ContextVar(
+    "tla_in_dynamic_lazy_region", default=False
+)
+
+
+@contextlib.contextmanager
+def _dynamic_lazy_region() -> Iterator[None]:
+    token = _IN_DYNAMIC_LAZY_REGION.set(True)
+    try:
+        yield
+    finally:
+        _IN_DYNAMIC_LAZY_REGION.reset(token)
+
+
+def _internal_unknown_effect_call(thunk: Callable[[], Any]) -> Any:
+    if not _IN_DYNAMIC_LAZY_REGION.get():
+        return thunk()
+    info = _source_info_for(thunk) or {}
+    error = SyntaxError("trace-time effect unknown for call in runtime-lazy operand")
+    error.filename = str(info.get("filename") or "<unknown>")
+    error.lineno = int(info.get("lineno") or 0)
+    error.offset = int(info.get("col_offset") or 0) + 1
+    error.text = str(info.get("source") or "")
+    raise error
+
+
+_SAFE_ATOMIC_TYPES = (type(None), bool, int, float, complex, str, bytes)
+_SAFE_CONTAINER_TYPES = (tuple, list, dict, set, frozenset, range)
+_TRUSTED_DSL_TYPES: frozenset[type] = frozenset()
+
+
+def _exact_class(value: Any) -> type:
+    """Return an object's class without invoking an overridden protocol."""
+
+    return object.__getattribute__(value, "__class__")
+
+
+def _register_trusted_dsl_types(types_: frozenset[type]) -> None:
+    """Freeze genuine DSL value types once core_api has initialized."""
+
+    global _TRUSTED_DSL_TYPES
+    if _TRUSTED_DSL_TYPES:
+        raise RuntimeError("trusted DSL types are already registered")
+    _TRUSTED_DSL_TYPES = types_
+
+
+def _is_exact_builtin_value(value: Any) -> bool:
+    """Whether basic operations on the object cannot reach user overrides."""
+
+    return _exact_class(value) in (*_SAFE_ATOMIC_TYPES, *_SAFE_CONTAINER_TYPES, slice)
+
+
+def _is_safe_python_value(value: Any, seen: set[int] | None = None) -> bool:
+    """Whether Python may inspect *value* without dispatching to user code."""
+
+    value_class = _exact_class(value)
+    if value_class in _SAFE_ATOMIC_TYPES:
+        return True
+    if value_class is slice:
+        return all(
+            item is None or _exact_class(item) is int
+            for item in (value.start, value.stop, value.step)
+        )
+    if value_class not in _SAFE_CONTAINER_TYPES:
+        return False
+    seen = seen or set()
+    identity = id(value)
+    if identity in seen:
+        return True
+    seen.add(identity)
+    items = value.items() if value_class is dict else value
+    if value_class is dict:
+        return all(
+            _is_safe_python_value(key, seen) and _is_safe_python_value(item, seen)
+            for key, item in items
+        )
+    return all(_is_safe_python_value(item, seen) for item in items)
+
+
+def _is_trusted_dsl_value(value: Any) -> bool:
+    from mlir import ir as mlir_ir  # type: ignore[assignment]
+
+    if isinstance(value, mlir_ir.Value):
+        return True
+    return _exact_class(value) in _TRUSTED_DSL_TYPES
+
+
+def _raise_unknown_protocol(kind: str, value: Any) -> None:
+    raise SyntaxError(
+        f"trace-time effect unknown for {kind} on {_exact_class(value).__name__} "
+        "in runtime-lazy operand"
+    )
+
+
+def _internal_lazy_attribute(value: Any, name: str) -> Any:
+    if not _IN_DYNAMIC_LAZY_REGION.get():
+        return getattr(value, name)
+    if not (_is_trusted_dsl_value(value) or _is_exact_builtin_value(value)):
+        _raise_unknown_protocol("attribute read", value)
+    return getattr(value, name)
+
+
+def _internal_lazy_subscript(value: Any, index: Any) -> Any:
+    if not _IN_DYNAMIC_LAZY_REGION.get():
+        return value[index]
+    if _is_trusted_dsl_value(value):
+        def is_safe_dsl_index(candidate: Any) -> bool:
+            if _exact_class(candidate) is tuple:
+                return all(is_safe_dsl_index(item) for item in candidate)
+            return _is_safe_python_value(candidate) or _is_trusted_dsl_value(candidate)
+
+        if not is_safe_dsl_index(index):
+            _raise_unknown_protocol("subscription index", index)
+        return value[index]
+    sequence_types = (tuple, list, str, bytes, range)
+    if _exact_class(value) in sequence_types and (
+        _exact_class(index) is int
+        or (_exact_class(index) is slice and _is_safe_python_value(index))
+    ):
+        return value[index]
+    if (
+        _exact_class(value) is dict
+        and _is_safe_python_value(value)
+        and _is_safe_python_value(index)
+    ):
+        return value[index]
+    _raise_unknown_protocol("subscription", value)
+
+
+_LAZY_BINOPS = {
+    "Add": operator.add,
+    "Sub": operator.sub,
+    "Mult": operator.mul,
+    "MatMult": operator.matmul,
+    "Div": operator.truediv,
+    "FloorDiv": operator.floordiv,
+    "Mod": operator.mod,
+    "Pow": operator.pow,
+    "LShift": operator.lshift,
+    "RShift": operator.rshift,
+    "BitOr": operator.or_,
+    "BitXor": operator.xor,
+    "BitAnd": operator.and_,
+}
+_LAZY_UNARYOPS = {
+    "Invert": operator.invert,
+    "UAdd": operator.pos,
+    "USub": operator.neg,
+}
+
+
+def _internal_lazy_binop(op: str, left: Any, right: Any) -> Any:
+    operation = _LAZY_BINOPS[op]
+    if _IN_DYNAMIC_LAZY_REGION.get() and not (
+        (_is_safe_python_value(left) and _is_safe_python_value(right))
+        or (_is_trusted_dsl_value(left) and _is_trusted_dsl_value(right))
+        or (_is_trusted_dsl_value(left) and _is_safe_python_value(right))
+        or (_is_safe_python_value(left) and _is_trusted_dsl_value(right))
+    ):
+        _raise_unknown_protocol(f"binary {op}", left)
+    return operation(left, right)
+
+
+def _internal_lazy_unary(op: str, value: Any) -> Any:
+    operation = _LAZY_UNARYOPS[op]
+    if _IN_DYNAMIC_LAZY_REGION.get() and not (
+        _is_safe_python_value(value) or _is_trusted_dsl_value(value)
+    ):
+        _raise_unknown_protocol(f"unary {op}", value)
+    return operation(value)
 
 
 class FrontendControlFlowLoweringError(RuntimeError):
@@ -57,7 +229,7 @@ def _format_control_flow_error(fn: Callable[..., Any], exc: Exception) -> str | 
     message = f"Execution-mode lowering failed in {construct} {region} at {filename}:{lineno}"
     if source:
         message += f"\n  source: {source}"
-    message += f"\n  reason: {type(exc).__name__}: {exc}"
+    message += f"\n  reason: {_exact_class(exc).__name__}: {exc}"
     return message
 
 
@@ -367,7 +539,11 @@ def _while_execute_dynamic(
         full_write_args_count: int,
     ) -> None:
         cond, before_results = _normalize_while_before_result(cond_and_results)
-        ir_cond = _coerce_bool_value(cond)
+        ir_cond = (
+            _const_i1(int(bool(cond)))
+            if _is_safe_python_value(cond)
+            else _coerce_bool_value(cond)
+        )
         result_values, result_pytree_def = _core_api.unpack_to_irvalue(
             before_results,
             "while",
@@ -520,8 +696,10 @@ def _internal_frontend_bool_not(value: Any) -> Any:
 
     from .base_dsl.typing import Bool
 
-    if isinstance(value, bool):
-        return not value
+    if _is_safe_python_value(value):
+        return not bool(value)
+    if not _is_trusted_dsl_value(value):
+        _raise_unknown_protocol("truth testing", value)
     operand = _coerce_bool_value(value)
     one = _const_i1(1)
     op = mlir_ir.Operation.create(
@@ -619,10 +797,10 @@ def _select_minmax_numeric(kind: str, left: Any, right: Any) -> Any:
 
     lhs = left if isinstance(left, Numeric) else as_numeric(left)
     rhs = right if isinstance(right, Numeric) else as_numeric(right)
-    if type(lhs) is not type(rhs):
+    if _exact_class(lhs) is not _exact_class(rhs):
         raise TlaCoreAPIError(
             f"{kind}() Numeric operands must share a type, "
-            f"got {type(lhs).__name__} and {type(rhs).__name__}"
+            f"got {_exact_class(lhs).__name__} and {_exact_class(rhs).__name__}"
         )
     if isinstance(lhs.value, (int, bool)) and isinstance(rhs.value, (int, bool)):
         pick_left = (
@@ -637,7 +815,7 @@ def _select_minmax_numeric(kind: str, left: Any, right: Any) -> Any:
         lhs.ir_value(),
         rhs.ir_value(),
     ).result
-    return type(lhs)(selected)
+    return _exact_class(lhs)(selected)
 
 
 def _internal_frontend_compare(
@@ -668,6 +846,13 @@ def _internal_frontend_compare(
 def _internal_frontend_compare_pair(left: Any, right: Any, op: str) -> Any:
     from mlir.dialects import arith  # type: ignore[import-not-found]
 
+    if op not in {"is", "is not"} and _IN_DYNAMIC_LAZY_REGION.get() and not (
+        (_is_safe_python_value(left) and _is_safe_python_value(right))
+        or (_is_trusted_dsl_value(left) and _is_trusted_dsl_value(right))
+        or (_is_trusted_dsl_value(left) and _is_safe_python_value(right))
+        or (_is_safe_python_value(left) and _is_trusted_dsl_value(right))
+    ):
+        _raise_unknown_protocol(f"comparison {op}", left)
     if op == "==":
         return _compare_index_or_python(left, right, arith.CmpIPredicate.eq, op)
     if op == "!=":
@@ -748,7 +933,7 @@ def _internal_frontend_if(
     carried_specs = [
         tree_utils.frontend_if_tree_spec(value) for value in carried_values
     ]
-    if isinstance(condition, bool):
+    if _is_safe_python_value(condition):
         selected = then_fn if condition else else_fn
         if selected is None:
             return tree_utils.return_carried_values(carried_values)
@@ -756,6 +941,9 @@ def _internal_frontend_if(
         return tree_utils.normalize_frontend_if_result_with_names(
             result, carried_values, carried_names_tuple, carried_specs
         )
+
+    if not _is_trusted_dsl_value(condition):
+        _raise_unknown_protocol("truth testing", condition)
 
     cond = _coerce_bool_value(condition)
     carried_mlir, carried_pytree_def = _core_api.unpack_to_irvalue(
@@ -845,22 +1033,27 @@ def _internal_frontend_if_expr(
     from mlir.dialects import scf  # type: ignore[import-not-found]
     from . import core_api as _core_api
 
-    if isinstance(condition, bool):
-        selected = true_fn if condition else false_fn
+    if _is_safe_python_value(condition):
+        selected = true_fn if bool(condition) else false_fn
         return _call_with_control_flow_source(selected)
+
+    if not _is_trusted_dsl_value(condition):
+        _raise_unknown_protocol("truth testing", condition)
 
     cond = _coerce_bool_value(condition)
 
     execution_region = scf.ExecuteRegionOp(result=[])
     execution_region.region.blocks.append()
     with mlir_ir.InsertionPoint(execution_region.region.blocks[0]):
-        true_probe = _call_with_control_flow_source(true_fn)
+        with _dynamic_lazy_region():
+            true_probe = _call_with_control_flow_source(true_fn)
         true_mlir, result_pytree_def = _core_api.unpack_to_irvalue(
             [true_probe], "if expression", 1, ["if expression"]
         )
         result_spec = result_pytree_def[0][0]
         true_leaf_names = result_pytree_def[1]
-        false_probe = _call_with_control_flow_source(false_fn)
+        with _dynamic_lazy_region():
+            false_probe = _call_with_control_flow_source(false_fn)
         false_mlir, false_pytree_def = _core_api.unpack_to_irvalue(
             [false_probe], "if expression", 1, ["if expression"]
         )
@@ -893,7 +1086,8 @@ def _internal_frontend_if_expr(
         _mix_iter_args: list[Any] | tuple[Any, ...],
         _full_write_args_count: int,
     ) -> list[Any]:
-        true_result = _call_with_control_flow_source(true_fn)
+        with _dynamic_lazy_region():
+            true_result = _call_with_control_flow_source(true_fn)
         true_values, true_pytree_def = _core_api.unpack_to_irvalue(
             [true_result], "if expression", 1, ["if expression"]
         )
@@ -918,7 +1112,8 @@ def _internal_frontend_if_expr(
         _mix_iter_args: list[Any] | tuple[Any, ...],
         _full_write_args_count: int,
     ) -> list[Any]:
-        false_result = _call_with_control_flow_source(false_fn)
+        with _dynamic_lazy_region():
+            false_result = _call_with_control_flow_source(false_fn)
         false_values, false_pytree_def = _core_api.unpack_to_irvalue(
             [false_result], "if expression", 1, ["if expression"]
         )
