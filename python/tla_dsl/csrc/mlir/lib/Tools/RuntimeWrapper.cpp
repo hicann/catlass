@@ -161,11 +161,11 @@ uint32_t debug_fifo_ring_offset() {
   return align_up(payload_offset, data_block_size) - tlv_alignment_reserve;
 }
 
-FifoData *open(unsigned block_num, bool mixed_handoff = false) {
+FifoData *open(unsigned block_dim, bool mixed_handoff = false) {
   auto fifo = std::make_unique<FifoData>();
   // Blocks reuse the fixed 1 MiB ring owned by the core that executes them.
   fifo->record_count = kDebugCoreRecords;
-  fifo->launch_block_count = block_num;
+  fifo->launch_block_count = block_dim;
   fifo->mixed_handoff = mixed_handoff;
   fifo->ring_buffer_bytes = kRingBufferBytes;
   fifo->ring_buffer_offset = debug_fifo_ring_offset();
@@ -1008,7 +1008,7 @@ extern "C" int tla_runtime_launch_kernel(uint64_t function_handle, uint64_t stre
                                          int expects_print_tensor) {
   const void *function = reinterpret_cast<const void *>(function_handle);
   rtStream_t stream = reinterpret_cast<rtStream_t>(stream_handle);
-  uint32_t block_num =
+  uint32_t block_dim =
       static_cast<uint32_t>(gx) * static_cast<uint32_t>(gy) * static_cast<uint32_t>(gz);
 
   bool binary_uses_debug_fifo = false;
@@ -1060,7 +1060,7 @@ extern "C" int tla_runtime_launch_kernel(uint64_t function_handle, uint64_t stre
   cce::internal::AscDebugFifo::FifoData *asc_debug_fifo = nullptr;
   cce::internal::AscDebugFifo::FifoData *print_tensor_fifo = nullptr;
   if (expects_debug_fifo) {
-    asc_debug_fifo = cce::internal::AscDebugFifo::open(block_num);
+    asc_debug_fifo = cce::internal::AscDebugFifo::open(block_dim);
     if (!asc_debug_fifo)
       return -1;
     if (!replace_debug_print_workspace_marker(
@@ -1074,7 +1074,7 @@ extern "C" int tla_runtime_launch_kernel(uint64_t function_handle, uint64_t stre
 
   if (expects_print_tensor) {
     print_tensor_fifo = cce::internal::AscDebugFifo::open(
-        block_num, expects_print_tensor == 2);
+        block_dim, expects_print_tensor == 2);
     if (!print_tensor_fifo)
       return -1;
     const uint64_t workspace =
@@ -1100,7 +1100,7 @@ extern "C" int tla_runtime_launch_kernel(uint64_t function_handle, uint64_t stre
           : const_cast<uint8_t *>(args);
   const size_t launch_arg_size =
       uses_debug_workspace ? values.size() * sizeof(uint64_t) : arg_size;
-  rtError_t rt_ret = rtKernelLaunch(function, block_num, args_array,
+  rtError_t rt_ret = rtKernelLaunch(function, block_dim, args_array,
                                     launch_arg_size, nullptr, stream);
   if (rt_ret != RT_ERROR_NONE) {
     if (asc_debug_fifo)

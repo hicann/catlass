@@ -116,7 +116,7 @@ python examples/end_to_end/basic_mmad/basic_matmul.py --run --all-layouts --devi
 python examples/end_to_end/basic_mmad/basic_matmul.py --run --all-mmad-dtypes --device 0
 ```
 
-常用参数：`--block`、`--sentinel`、`--atol`、`--cache-dir`、`--force-recompile`、`--no-cache`。
+常用参数：`--block-dim`、`--sentinel`、`--atol`、`--cache-dir`、`--force-recompile`、`--no-cache`。
 
 ```bash
 python examples/end_to_end/basic_mmad/basic_matmul.py --help

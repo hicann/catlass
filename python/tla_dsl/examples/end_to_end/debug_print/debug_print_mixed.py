@@ -217,7 +217,7 @@ def run(args: argparse.Namespace) -> int:
                 force_recompile=args.force_recompile,
             )
             output = _capture_c_stdout(
-                lambda: executor(*type_args, block=1)
+                lambda: executor(*type_args, block_dim=1)
             )
             _verify_mixed_debug_output(
                 output,

@@ -206,7 +206,7 @@ def run(args: argparse.Namespace) -> int:
             case_args = _case_args(args, dtype=dtype, value=value, rhs=rhs)
             executor = _compile(case_args)
             output = _capture_c_stdout(
-                lambda: executor(*_type_args(case_args), block=args.block)
+                lambda: executor(*_type_args(case_args), block_dim=args.block_dim)
             )
             result = value + rhs if args.expression else value
             if args.all_dtypes:
@@ -254,7 +254,7 @@ def _parser() -> argparse.ArgumentParser:
         "--arch-scope", choices=("aic.c310", "aiv.c310"), default="aiv.c310"
     )
     parser.add_argument("--device", type=int, default=2)
-    parser.add_argument("--block", type=int, default=1)
+    parser.add_argument("--block-dim", type=int, default=1)
     parser.add_argument("--expect-count", type=int, default=1)
     parser.add_argument("--cache-dir", default=str(DEFAULT_CACHE_DIR))
     parser.add_argument("--force-recompile", action="store_true")

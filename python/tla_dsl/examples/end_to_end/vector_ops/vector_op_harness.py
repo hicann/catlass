@@ -447,7 +447,7 @@ class DirectVectorOpHarness:
             *tla_outputs,
             **self._runtime_kwargs(args),
         )
-        artifact(*tla_inputs, *tla_outputs, block=args.block)
+        artifact(*tla_inputs, *tla_outputs, block_dim=args.block_dim)
 
         torch.npu.synchronize()
         first_mismatch: dict[str, Any] | None = None
@@ -622,7 +622,7 @@ class DirectVectorOpHarness:
             *tla_outputs,
             **self._runtime_kwargs(batch_args),
         )
-        artifact(*tla_inputs, *tla_outputs, block=len(ops))
+        artifact(*tla_inputs, *tla_outputs, block_dim=len(ops))
         torch.npu.synchronize()
 
         extent = shape_num_elements(shape)
@@ -884,7 +884,7 @@ class DirectVectorOpHarness:
             help=argparse.SUPPRESS,
         )
         parser.add_argument("--device", type=int, default=2)
-        parser.add_argument("--block", type=int, default=None)
+        parser.add_argument("--block-dim", type=int, default=None)
         parser.add_argument("--dtype", choices=self.config.all_dtypes, default="f32")
         parser.add_argument(
             "--shape",
@@ -939,8 +939,8 @@ class DirectVectorOpHarness:
 
     def main(self) -> int:
         args = self._build_parser().parse_args()
-        if args.block is None:
-            args.block = self.config.launch_blocks
+        if args.block_dim is None:
+            args.block_dim = self.config.launch_blocks
         if args.batch_run is not None:
             if args.op is not None:
                 raise SystemExit("positional op cannot be combined with --batch-run")

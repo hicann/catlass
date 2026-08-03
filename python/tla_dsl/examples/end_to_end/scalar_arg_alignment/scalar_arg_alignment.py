@@ -65,7 +65,7 @@ def run(args: argparse.Namespace) -> int:
             cache_dir=str(Path(args.cache_dir).expanduser().resolve()),
             force_recompile=args.force_recompile,
         )
-        artifact(output_tensor, scalar, trailing_tensor, block=1)
+        artifact(output_tensor, scalar, trailing_tensor, block_dim=1)
         torch.npu.synchronize()
 
         actual = [int(value) for value in output.cpu().tolist()]

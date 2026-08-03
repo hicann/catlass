@@ -2613,7 +2613,7 @@ def test_runtime_wrapper_c_abi_is_byte_oriented() -> None:
     assert "std::vector<uint64_t> values" in source
     assert "std::memcpy(values.data(), args, arg_size)" in source
     assert "values.assign(args" not in source
-    assert "rtKernelLaunch(function, block_num, args_array," in source
+    assert "rtKernelLaunch(function, block_dim, args_array," in source
     assert "arg_size, nullptr, stream)" in source
 
 

@@ -56,24 +56,24 @@ class KernelLauncher:
     def launch(
         self,
         *,
-        block: int | None = None,
+        block_dim: int | None = None,
         type_args: Sequence[Any] | None = None,
         args: Sequence[Any] | None = None,
         **kwargs: Any,
     ) -> TlaExecutionResult:
         if "grid" in kwargs or "grid" in self._launch_kwargs:
             raise TlaUnsupportedAbiError(
-                "`grid` is not supported. Use `block` with an integer value."
+                "`grid` is not supported. Use `block_dim` with an integer value."
             )
         launch_kwargs = {**self._launch_kwargs, **kwargs}
-        if "block" in launch_kwargs:
-            if block is not None:
-                raise TlaUnsupportedAbiError("`block` specified multiple times.")
-            block = launch_kwargs.pop("block")
-        if block is None:
-            block = 1
-        if not isinstance(block, int):
-            raise TlaUnsupportedAbiError("`block` must be an int.")
+        if "block_dim" in launch_kwargs:
+            if block_dim is not None:
+                raise TlaUnsupportedAbiError("`block_dim` specified multiple times.")
+            block_dim = launch_kwargs.pop("block_dim")
+        if block_dim is None:
+            block_dim = 1
+        if not isinstance(block_dim, int):
+            raise TlaUnsupportedAbiError("`block_dim` must be an int.")
         launch_args = self._launch_args
         if args is not None:
             if launch_args:
@@ -83,7 +83,7 @@ class KernelLauncher:
             type_args = _resolve_jit_type_args(self._fn.fn.__name__)
         if type_args is None and launch_args:
             type_args = _infer_type_args_from_runtime(launch_args)
-        launch_kwargs["grid"] = (int(block), 1, 1)
+        launch_kwargs["grid"] = (int(block_dim), 1, 1)
         if (
             self._runtime is not None
             and "cache_dir" not in launch_kwargs

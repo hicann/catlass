@@ -191,7 +191,7 @@ def main() -> int:
         tla_stored = _runtime_tensor(stored_out, (VECTOR_ELE,))
         tla_reduced = _runtime_tensor(reduced_out, (1,))
         artifact = _compile(args, tla_x, tla_stored, tla_reduced)
-        artifact(tla_x, tla_stored, tla_reduced, block=1)
+        artifact(tla_x, tla_stored, tla_reduced, block_dim=1)
         torch.npu.synchronize()
 
         expected_scalar = x.sum()

@@ -1,6 +1,6 @@
-"""Basic MMAD (flag sync): Kernel + Host in one file.
+"""Basic MMAD (atomic add): Kernel + Host in one file.
 
-Dynamic GM; mnk/dtype/layout from CLI.
+Dynamic GM; mnk/dtype/layout from CLI (GM C must be f32).
 """
 
 from __future__ import annotations
@@ -11,8 +11,6 @@ from pathlib import Path
 import catlass as tla
 from catlass.runtime import from_dlpack
 
-ENABLE_UNIT_FLAG = True
-
 l1_tm = 256
 l1_tn = 256
 l1_tk = 128
@@ -20,7 +18,7 @@ l0_tm = 256
 l0_tn = 256
 l0_tk = 32
 
-DESCRIPTION = "Basic MMAD flag sync; dynamic GM."
+DESCRIPTION = "Basic MMAD atomic add (fp32 GM C); dynamic GM."
 
 
 # ---------------------------------------------------------------------------
@@ -53,8 +51,9 @@ def basic_mmad_kernel(
     l0b0_available = tla.flag("l0b0_available", tla.arch.CUBE, tla.arch.MTE1)
     l0b1_available = tla.flag("l0b1_available", tla.arch.CUBE, tla.arch.MTE1)
     l0_ab_data_ready = tla.flag("l0_ab_data_ready", tla.arch.MTE1, tla.arch.CUBE)
-    l0c_data_ready = tla.flag("l0c_data_ready", tla.arch.CUBE, tla.arch.FIX)
-    l0c_available = tla.flag("l0c_available", tla.arch.FIX, tla.arch.CUBE)
+    partial_l0c_data_ready = tla.flag(
+        "partial_l0c_data_ready", tla.arch.CUBE, tla.arch.FIX
+    )
 
     l1a0_ptr = tla.allocate(l1_tm * l1_tk, DTYPE_A, tla.AddressSpace.l1, 512)
     l1a1_ptr = tla.allocate(l1_tm * l1_tk, DTYPE_A, tla.AddressSpace.l1, 512)
@@ -81,7 +80,6 @@ def basic_mmad_kernel(
         tla.set_flag(l0a1_available)
         tla.set_flag(l0b0_available)
         tla.set_flag(l0b1_available)
-        tla.set_flag(l0c_available)
 
         l1_buf_idx = c0
         l0_buf_idx = c0
@@ -97,31 +95,37 @@ def basic_mmad_kernel(
                 gm_b, tla.make_shape(k, l1_tn), tla.make_coord(c0, block_col)
             )
             gm_c_by_core = tla.tile_view(
-                gm_c, tla.make_shape(l1_tm, l1_tn), tla.make_coord(block_row, block_col)
+                gm_c,
+                tla.make_shape(l1_tm, l1_tn),
+                tla.make_coord(block_row, block_col),
             )
 
             k_block = gm_a_by_core.origin_shape[1]
             k_l1_count = (k_block + l1_tk - 1) // l1_tk
             k_l1_range = tla.range(c0, k_l1_count, c1)
-
             l0_c = tla.make_tensor_like(l0c_ptr, gm_c_by_core)
 
-            if not ENABLE_UNIT_FLAG:
-                tla.wait_flag(l0c_available)
             for k_l1 in k_l1_range:
+                is_first_l1_tile = k_l1 == 0
+
                 gm_a_by_l1 = tla.tile_view(
-                    gm_a_by_core, tla.make_shape(l1_tm, l1_tk), tla.make_coord(c0, k_l1)
+                    gm_a_by_core,
+                    tla.make_shape(l1_tm, l1_tk),
+                    tla.make_coord(c0, k_l1),
                 )
                 gm_b_by_l1 = tla.tile_view(
-                    gm_b_by_core, tla.make_shape(l1_tk, l1_tn), tla.make_coord(k_l1, c0)
+                    gm_b_by_core,
+                    tla.make_shape(l1_tk, l1_tn),
+                    tla.make_coord(k_l1, c0),
                 )
 
                 l1_a = tla.make_tensor_like(
-                    l1a0_ptr if (l1_buf_idx == c0) else l1a1_ptr, gm_a_by_l1
+                    l1a0_ptr if l1_buf_idx == c0 else l1a1_ptr, gm_a_by_l1
                 )
                 l1_b = tla.make_tensor_like(
-                    l1b0_ptr if (l1_buf_idx == c0) else l1b1_ptr, gm_b_by_l1
+                    l1b0_ptr if l1_buf_idx == c0 else l1b1_ptr, gm_b_by_l1
                 )
+
                 if l1_buf_idx == c0:
                     tla.wait_flag(l1a0_available)
                 else:
@@ -147,18 +151,23 @@ def basic_mmad_kernel(
 
                 for k_l0 in k_l0_range:
                     l1_a_by_l0 = tla.tile_view(
-                        l1_a, tla.make_shape(l0_tm, l0_tk), tla.make_coord(c0, k_l0)
+                        l1_a,
+                        tla.make_shape(l0_tm, l0_tk),
+                        tla.make_coord(c0, k_l0),
                     )
                     l1_b_by_l0 = tla.tile_view(
-                        l1_b, tla.make_shape(l0_tk, l0_tn), tla.make_coord(k_l0, c0)
+                        l1_b,
+                        tla.make_shape(l0_tk, l0_tn),
+                        tla.make_coord(k_l0, c0),
                     )
 
                     l0_a = tla.make_tensor_like(
-                        l0a0_ptr if (l0_buf_idx == c0) else l0a1_ptr, l1_a_by_l0
+                        l0a0_ptr if l0_buf_idx == c0 else l0a1_ptr, l1_a_by_l0
                     )
                     l0_b = tla.make_tensor_like(
-                        l0b0_ptr if (l0_buf_idx == c0) else l0b1_ptr, l1_b_by_l0
+                        l0b0_ptr if l0_buf_idx == c0 else l0b1_ptr, l1_b_by_l0
                     )
+
                     if k_l0 == 0:
                         if l1_buf_idx == c0:
                             tla.wait_flag(l1a0_data_ready)
@@ -181,6 +190,7 @@ def basic_mmad_kernel(
                             tla.wait_flag(l1b0_data_ready)
                         else:
                             tla.wait_flag(l1b1_data_ready)
+
                     if l0_buf_idx == c0:
                         tla.wait_flag(l0b0_available)
                     else:
@@ -195,14 +205,17 @@ def basic_mmad_kernel(
                     tla.set_flag(l0_ab_data_ready)
                     tla.wait_flag(l0_ab_data_ready)
 
-                    unit_flag = 0
-                    if ENABLE_UNIT_FLAG:
-                        if (k_l1 == k_l1_count - 1) and (k_l0 == k_l0_count - 1):
-                            unit_flag = 0b11
-                        else:
-                            unit_flag = 0b10
-                    init_c = True if k_l1 == 0 and k_l0 == 0 else False
+                    unit_flag=0b00
+                    if (k_l0 == k_l0_count - 1):
+                        unit_flag=0b11
+                    else:
+                        unit_flag=0b10
+
+                    # This MMAD produces one independent K-tile partial.  It
+                    # must not consume the previous contents of L0C.
+                    init_c = (k_l0 == 0)
                     tla.mmad(l0_c, l0_a, l0_b, init_c=init_c, unit_flag=unit_flag)
+
                     if l0_buf_idx == c0:
                         tla.set_flag(l0a0_available)
                         tla.set_flag(l0b0_available)
@@ -210,15 +223,26 @@ def basic_mmad_kernel(
                         tla.set_flag(l0a1_available)
                         tla.set_flag(l0b1_available)
                     l0_buf_idx = c1 - l0_buf_idx
-                l1_buf_idx = c1 - l1_buf_idx
 
-            if not ENABLE_UNIT_FLAG:
-                tla.set_flag(l0c_data_ready)
-                tla.wait_flag(l0c_data_ready)
-                tla.copy(gm_c_by_core, l0_c)
-                tla.set_flag(l0c_available)
-            else:
-                tla.copy(gm_c_by_core, l0_c, tla.params.CopyL0C2DstParams(unit_flag=0b11))
+                # FIX consumes this partial immediately.  The FIX barrier
+                # keeps L0C reuse and the atomic control state behind the
+                if not is_first_l1_tile:
+                    tla.copy(
+                        gm_c_by_core,
+                        l0_c,
+                        tla.params.CopyL0C2DstParams(
+                            unit_flag=0b11,
+                            atomic_mode=tla.params.AtomicMode.ADD
+                        )
+                    )
+                else:
+                    tla.copy(
+                        gm_c_by_core,
+                        l0_c,
+                        tla.params.CopyL0C2DstParams(unit_flag=0b11)
+                    )
+
+                l1_buf_idx = c1 - l1_buf_idx
 
         tla.wait_flag(l1a0_available)
         tla.wait_flag(l1a1_available)
@@ -228,7 +252,6 @@ def basic_mmad_kernel(
         tla.wait_flag(l0a1_available)
         tla.wait_flag(l0b0_available)
         tla.wait_flag(l0b1_available)
-        tla.wait_flag(l0c_available)
 
 # ---------------------------------------------------------------------------
 # Host
@@ -257,6 +280,8 @@ def run(args: argparse.Namespace) -> int:
     da, db, dc = args.dtype_a, args.dtype_b, args.dtype_c
     la, lb = args.layout_a, args.layout_b
     mi, ni, ki = int(args.m), int(args.n), int(args.k)
+    if dc != "f32":
+        raise SystemExit("atomic-add requires --dtype-c f32")
     mod.DTYPE_A = tla_of[da]
     mod.DTYPE_B = tla_of[db]
 

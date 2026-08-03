@@ -2471,9 +2471,9 @@ static PyObject *launchWithArgs(PyObject *, PyObject *args) {
 
   const void *function = reinterpret_cast<const void *>(function_u64);
   rtStream_t stream = reinterpret_cast<rtStream_t>(stream_u64);
-  uint32_t block_num = static_cast<uint32_t>(gx) * static_cast<uint32_t>(gy) * static_cast<uint32_t>(gz);
+  uint32_t block_dim = static_cast<uint32_t>(gx) * static_cast<uint32_t>(gy) * static_cast<uint32_t>(gz);
   void *args_array = arg_size == 0 ? NULL : const_cast<char *>(arg_data);
-  rtError_t ret = rtKernelLaunch(function, block_num, args_array,
+  rtError_t ret = rtKernelLaunch(function, block_dim, args_array,
                                  static_cast<size_t>(arg_size), NULL, stream);
   if (ret != RT_ERROR_NONE) {
     PyErr_Format(PyExc_RuntimeError, "rtKernelLaunch failed: 0x%x", ret);

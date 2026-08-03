@@ -133,7 +133,7 @@ def main() -> int:
         tla_dst = _runtime_tensor(dst, (VECTOR_ELE,), tla.Float32)
 
         artifact = _compile(args, tla_src, tla_idx, tla_dst)
-        artifact(tla_src, tla_idx, tla_dst, block=1)
+        artifact(tla_src, tla_idx, tla_dst, block_dim=1)
         torch.npu.synchronize()
 
         expected = src[idx.to(torch.long)]

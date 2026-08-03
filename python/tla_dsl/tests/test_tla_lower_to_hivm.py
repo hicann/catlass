@@ -1065,6 +1065,7 @@ def test_vector_zn_unalign_address_arithmetic_uses_i32() -> None:
 
 
 def test_vector_static_tile_does_not_narrow_unknown_base_capacity() -> None:
+    """UB base stays memref<?xf16> with extent 0; tile size must not become capacity."""
     mlir_text = _vector_dynamic_row_major_loop_unknown_base_kernel.dump_mlir(
         type_args=(2, 0)
     )
@@ -1076,23 +1077,29 @@ def test_vector_static_tile_does_not_narrow_unknown_base_capacity() -> None:
         mlir_text, "tla-vector-region", require_success=True
     )
 
-    pointer_cast = re.search(
+    dynamic_ub_casts = re.findall(
         r"hivm\.hir\.pointer_cast\([^)]*\) \[(%[A-Za-z0-9_]+)\] "
         r": memref<\?xf16, #hivm\.address_space<ub>>",
         output,
     )
-    assert pointer_cast is not None, output
-    unknown_extent = re.escape(pointer_cast.group(1))
-    assert re.search(
-        rf"{unknown_extent} = arith\.constant 0 : index", output
-    ), output
-    assert re.search(
-        r"func\.func private @vector_region_[^(]+\("
-        r"%arg0: memref<\?xf16, #hivm\.address_space<ub>>",
-        output,
-    ), output
+    assert dynamic_ub_casts, output
+    for extent in set(dynamic_ub_casts):
+        escaped = re.escape(extent)
+        assert re.search(
+            rf"{escaped} = arith\.constant 0 : index", output
+        ), output
+
+    helper_signatures = [
+        line
+        for line in output.splitlines()
+        if "func.func private @vector_region_" in line
+    ]
+    dynamic_ub_type = "memref<?xf16, #hivm.address_space<ub>>"
+    assert any(dynamic_ub_type in line for line in helper_signatures), output
+
     assert "arith.constant 128 : index" in output
     assert "arith.muli" in output
+    assert "memref<0xf16" not in output
     assert not re.search(
         r"hivm\.hir\.pointer_cast\([^)]*\).*"
         r"memref<128xf16, #hivm\.address_space<ub>>",

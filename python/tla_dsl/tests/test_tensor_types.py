@@ -331,6 +331,30 @@ def test_tensor_repr_includes_metadata() -> None:
     )
 
 
+def test_tensor_data_ptr_none_is_unbound_placeholder() -> None:
+    with runtime_mod._eager_capture():
+        tensor = tla.Tensor(
+            tla.make_shape(4,),
+            tla.Float32,
+            origin_shape=tla.make_shape(4,),
+            data_ptr=None,
+        )
+    assert tensor.data_ptr == 0
+    assert tensor._external_binding is False
+
+
+def test_tensor_nonzero_data_ptr_auto_binds() -> None:
+    with runtime_mod._eager_capture():
+        tensor = tla.Tensor(
+            tla.make_shape(4,),
+            tla.Float32,
+            origin_shape=tla.make_shape(4,),
+            data_ptr=0xCAFE,
+        )
+    assert tensor.data_ptr == 0xCAFE
+    assert tensor._external_binding is True
+
+
 def test_tensor_dtype_rejects_raw_string() -> None:
     with (
         runtime_mod._eager_capture(),

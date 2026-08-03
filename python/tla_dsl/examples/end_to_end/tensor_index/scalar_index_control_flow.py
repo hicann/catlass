@@ -175,7 +175,7 @@ def _run_static_1d_2d(args: argparse.Namespace, torch, device: str) -> int:
         cache_dir=args.cache_dir,
         force_recompile=args.force_recompile,
     )
-    artifact(meta, meta_row, markers_t, block=args.block)
+    artifact(meta, meta_row, markers_t, block_dim=args.block_dim)
     torch.npu.synchronize()
     if not torch.allclose(markers, expected_markers, rtol=0.0, atol=1e-4):
         print(f"static_1d_2d_failed expected={expected_markers.tolist()} actual={markers.tolist()}")
@@ -193,7 +193,7 @@ def _run_literal_store(args: argparse.Namespace, torch, device: str) -> int:
         cache_dir=args.cache_dir,
         force_recompile=args.force_recompile,
     )
-    artifact(out_t, block=args.block)
+    artifact(out_t, block_dim=args.block_dim)
     torch.npu.synchronize()
     expected = torch.tensor([1.1125, 42.0], dtype=torch.float32, device=device)
     if not torch.allclose(out, expected, rtol=0.0, atol=1e-4):
@@ -218,7 +218,7 @@ def _run_loop_copy(
         cache_dir=args.cache_dir,
         force_recompile=args.force_recompile,
     )
-    artifact(meta_t, out_t, block=args.block)
+    artifact(meta_t, out_t, block_dim=args.block_dim)
     torch.npu.synchronize()
     if not torch.allclose(out, expected, rtol=0.0, atol=1e-4):
         print(f"loop_copy_failed expected={expected.tolist()} actual={out.tolist()}")
@@ -244,7 +244,7 @@ def _run_dynamic_if(
         cache_dir=args.cache_dir,
         force_recompile=args.force_recompile,
     )
-    artifact(meta_t, out_t, block=args.block)
+    artifact(meta_t, out_t, block_dim=args.block_dim)
     torch.npu.synchronize()
     if not torch.allclose(out, expected, rtol=0.0, atol=1e-4):
         print(f"dynamic_if_failed expected={expected.tolist()} actual={out.tolist()}")
@@ -272,7 +272,7 @@ def _run_value_through_dynamic_if(
             cache_dir=args.cache_dir,
             force_recompile=args.force_recompile,
         )
-        artifact(out_t, meta_t, selector, block=args.block)
+        artifact(out_t, meta_t, selector, block_dim=args.block_dim)
         torch.npu.synchronize()
         actual = float(out[0].item())
         if abs(actual - expected_val) > 1e-4:
@@ -301,7 +301,7 @@ def _run_constexpr_if(
             cache_dir=args.cache_dir,
             force_recompile=args.force_recompile,
         )
-        artifact(meta_t, out_t, block=args.block)
+        artifact(meta_t, out_t, block_dim=args.block_dim)
         torch.npu.synchronize()
         if not torch.allclose(out, expected, rtol=0.0, atol=1e-4):
             print(
@@ -328,7 +328,7 @@ def _run_vec_func(
         cache_dir=args.cache_dir,
         force_recompile=args.force_recompile,
     )
-    artifact(meta_t, out_t, block=args.block)
+    artifact(meta_t, out_t, block_dim=args.block_dim)
     torch.npu.synchronize()
     if not torch.allclose(out, expected, rtol=0.0, atol=1e-4):
         print(f"vec_func_failed expected={expected.tolist()} actual={out.tolist()}")
@@ -351,7 +351,7 @@ def _run_numeric_compare_if(args: argparse.Namespace, torch, device: str) -> int
         cache_dir=args.cache_dir,
         force_recompile=args.force_recompile,
     )
-    artifact(src_t, out_t, block=args.block)
+    artifact(src_t, out_t, block_dim=args.block_dim)
     torch.npu.synchronize()
 
     expected = [-1, 0, 2, 3]
@@ -379,7 +379,7 @@ def _run_index_vs_numeric_compare(
         cache_dir=args.cache_dir,
         force_recompile=args.force_recompile,
     )
-    artifact(tile_t, out_t, block=args.block)
+    artifact(tile_t, out_t, block_dim=args.block_dim)
     torch.npu.synchronize()
 
     expected = [0, 0, 1, 1]
@@ -430,7 +430,7 @@ def main() -> int:
         description="GM tensor scalar indexing E2E (1D/2D layouts, control flow, vec.func)."
     )
     parser.add_argument("--device", type=int, default=0)
-    parser.add_argument("--block", type=int, default=1)
+    parser.add_argument("--block-dim", type=int, default=1)
     parser.add_argument(
         "--cache-dir",
         default=str(Path(__file__).resolve().parent / "artifacts" / "runtime-cache"),

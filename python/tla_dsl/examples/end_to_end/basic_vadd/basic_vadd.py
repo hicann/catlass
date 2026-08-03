@@ -2,482 +2,342 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Any
 
 import catlass as tla
 
+# VECTOR_ELE is the static UB allocation upper bound (compile-time capacity).
+# GM extents come from mark_compact_shape_dynamic host tensors (no Int32 n_ele).
 VECTOR_ELE = 400
 VL_ELE = 64
-LOOPS = (VECTOR_ELE + VL_ELE - 1) // VL_ELE
-ALL_DTYPES = ("i8", "i16", "i32", "f16", "f32")
-
-# Minimal dynamic-GM smoke: same compiled kernel, different launch extents (≤ UB).
-DEFAULT_N_SHAPES = (VECTOR_ELE, 1)
-
-DEMO_DIR = Path(__file__).resolve().parent
-DEFAULT_CACHE_DIR = DEMO_DIR / "artifacts" / "runtime-cache"
 _KERNEL_DTYPE = tla.Float32
-_KERNEL_ELEMENT_BYTES = 4
 
+
+# ---------------------------------------------------------------------------
+# Kernel
+# ---------------------------------------------------------------------------
 
 @tla.kernel
-def basic_vadd(mem_x: tla.Tensor, mem_y: tla.Tensor, mem_z: tla.Tensor) -> None:
-    n_ele = mem_x.origin_shape[0]
+def basic_vadd(
+    gm_a: tla.Tensor,
+    gm_b: tla.Tensor,
+    gm_c: tla.Tensor
+) -> None:
+    n_ele = gm_a.origin_shape[0]
     ub_loaded = tla.flag("ub_loaded", tla.arch.MTE2, tla.arch.VECTOR)
     vec_done = tla.flag("vec_done", tla.arch.VECTOR, tla.arch.MTE3)
 
-    x_gm = tla.tile_view(mem_x, tla.make_shape(n_ele), tla.make_coord(0))
-    y_gm = tla.tile_view(mem_y, tla.make_shape(n_ele), tla.make_coord(0))
-    z_gm = tla.tile_view(mem_z, tla.make_shape(n_ele), tla.make_coord(0))
+    ub_ptr_a = tla.allocate(VECTOR_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 256)
+    ub_ptr_b = tla.allocate(VECTOR_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 256)
+    ub_ptr_c = tla.allocate(VECTOR_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 256)
 
-    x_ub_ptr = tla.allocate(VECTOR_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 256)
-    y_ub_ptr = tla.allocate(VECTOR_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 256)
-    z_ub_ptr = tla.allocate(VECTOR_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 256)
-
-    x_ub = tla.make_tensor_like(x_ub_ptr, x_gm, tla.arch.RowMajor)
-    y_ub = tla.make_tensor_like(y_ub_ptr, y_gm, tla.arch.RowMajor)
-    z_ub = tla.make_tensor_like(z_ub_ptr, z_gm, tla.arch.RowMajor)
+    ub_a = tla.make_tensor_like(ub_ptr_a, gm_a, tla.arch.RowMajor)
+    ub_b = tla.make_tensor_like(ub_ptr_b, gm_b, tla.arch.RowMajor)
+    ub_c = tla.make_tensor_like(ub_ptr_c, gm_c, tla.arch.RowMajor)
 
     with tla.vector():
-        tla.copy(x_ub, x_gm)
-        tla.copy(y_ub, y_gm)
+        tla.copy(ub_a, gm_a)
+        tla.copy(ub_b, gm_b)
 
         tla.set_flag(ub_loaded)
         tla.wait_flag(ub_loaded)
         with tla.vec.func(mode="simd"):
             for i in tla.range((n_ele + VL_ELE - 1) // VL_ELE):
-                x_tile = tla.tile_view(
-                    x_ub, tla.make_shape(VL_ELE), tla.make_coord(i)
+                ub_vl_a = tla.tile_view(
+                    ub_a, tla.make_shape(VL_ELE), tla.make_coord(i)
                 )
-                y_tile = tla.tile_view(
-                    y_ub, tla.make_shape(VL_ELE), tla.make_coord(i)
+                ub_vl_b = tla.tile_view(
+                    ub_b, tla.make_shape(VL_ELE), tla.make_coord(i)
                 )
-                z_tile = tla.tile_view(
-                    z_ub, tla.make_shape(VL_ELE), tla.make_coord(i)
+                ub_vl_c = tla.tile_view(
+                    ub_c, tla.make_shape(VL_ELE), tla.make_coord(i)
                 )
 
-                x_reg = x_tile.load()
-                y_reg = y_tile.load()
-                z_reg = tla.add(x_reg, y_reg)
-                z_tile.store(z_reg)
+                reg_a = ub_vl_a.load()
+                reg_b = ub_vl_b.load()
+                reg_c = tla.add(reg_a, reg_b)
+                ub_vl_c.store(reg_c)
 
         tla.set_flag(vec_done)
         tla.wait_flag(vec_done)
 
-        tla.copy(z_gm, z_ub)
+        tla.copy(gm_c, ub_c)
         tla.pipe_barrier(tla.pipes.ALL)
 
 
 @tla.kernel
-def basic_vadd_mutex(mem_x: tla.Tensor, mem_y: tla.Tensor, mem_z: tla.Tensor) -> None:
-    n_ele = mem_x.origin_shape[0]
-    mutex_x_ub = tla.mutex(resource="x_ub", id=0)
-    mutex_y_ub = tla.mutex(resource="y_ub", id=1)
-    mutex_z_ub = tla.mutex(resource="z_ub", id=2)
+def basic_vadd_mutex(
+    gm_a: tla.Tensor,
+    gm_b: tla.Tensor,
+    gm_c: tla.Tensor
+) -> None:
+    n_ele = gm_a.origin_shape[0]
+    mutex_ub_a = tla.mutex(resource="ub_a", id=0)
+    mutex_ub_b = tla.mutex(resource="ub_b", id=1)
+    mutex_ub_c = tla.mutex(resource="ub_c", id=2)
 
-    x_gm = tla.tile_view(mem_x, tla.make_shape(n_ele), tla.make_coord(0))
-    y_gm = tla.tile_view(mem_y, tla.make_shape(n_ele), tla.make_coord(0))
-    z_gm = tla.tile_view(mem_z, tla.make_shape(n_ele), tla.make_coord(0))
+    ub_ptr_a = tla.allocate(VECTOR_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 256)
+    ub_ptr_b = tla.allocate(VECTOR_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 256)
+    ub_ptr_c = tla.allocate(VECTOR_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 256)
 
-    x_ub_ptr = tla.allocate(VECTOR_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 256)
-    y_ub_ptr = tla.allocate(VECTOR_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 256)
-    z_ub_ptr = tla.allocate(VECTOR_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 256)
-
-    x_ub = tla.make_tensor_like(x_ub_ptr, x_gm, tla.arch.RowMajor)
-    y_ub = tla.make_tensor_like(y_ub_ptr, y_gm, tla.arch.RowMajor)
-    z_ub = tla.make_tensor_like(z_ub_ptr, z_gm, tla.arch.RowMajor)
+    ub_a = tla.make_tensor_like(ub_ptr_a, gm_a, tla.arch.RowMajor)
+    ub_b = tla.make_tensor_like(ub_ptr_b, gm_b, tla.arch.RowMajor)
+    ub_c = tla.make_tensor_like(ub_ptr_c, gm_c, tla.arch.RowMajor)
 
     with tla.vector():
-        mutex_x_ub.lock(pipe=tla.arch.MTE2)
-        tla.copy(x_ub, x_gm)
-        mutex_x_ub.unlock(pipe=tla.arch.MTE2)
+        mutex_ub_a.lock(pipe=tla.arch.MTE2)
+        tla.copy(ub_a, gm_a)
+        mutex_ub_a.unlock(pipe=tla.arch.MTE2)
 
-        mutex_y_ub.lock(pipe=tla.arch.MTE2)
-        tla.copy(y_ub, y_gm)
-        mutex_y_ub.unlock(pipe=tla.arch.MTE2)
+        mutex_ub_b.lock(pipe=tla.arch.MTE2)
+        tla.copy(ub_b, gm_b)
+        mutex_ub_b.unlock(pipe=tla.arch.MTE2)
 
-        mutex_x_ub.lock(pipe=tla.arch.VECTOR)
-        mutex_y_ub.lock(pipe=tla.arch.VECTOR)
-        mutex_z_ub.lock(pipe=tla.arch.VECTOR)
+        mutex_ub_a.lock(pipe=tla.arch.VECTOR)
+        mutex_ub_b.lock(pipe=tla.arch.VECTOR)
+        mutex_ub_c.lock(pipe=tla.arch.VECTOR)
         with tla.vec.func(mode="simd"):
             for i in tla.range((n_ele + VL_ELE - 1) // VL_ELE):
-                x_tile = tla.tile_view(
-                    x_ub, tla.make_shape(VL_ELE), tla.make_coord(i)
+                ub_vl_a = tla.tile_view(
+                    ub_a, tla.make_shape(VL_ELE), tla.make_coord(i)
                 )
-                y_tile = tla.tile_view(
-                    y_ub, tla.make_shape(VL_ELE), tla.make_coord(i)
+                ub_vl_b = tla.tile_view(
+                    ub_b, tla.make_shape(VL_ELE), tla.make_coord(i)
                 )
-                z_tile = tla.tile_view(
-                    z_ub, tla.make_shape(VL_ELE), tla.make_coord(i)
+                ub_vl_c = tla.tile_view(
+                    ub_c, tla.make_shape(VL_ELE), tla.make_coord(i)
                 )
 
-                x_reg = x_tile.load()
-                y_reg = y_tile.load()
-                z_reg = tla.add(x_reg, y_reg)
-                z_tile.store(z_reg)
-        mutex_z_ub.unlock(pipe=tla.arch.VECTOR)
-        mutex_y_ub.unlock(pipe=tla.arch.VECTOR)
-        mutex_x_ub.unlock(pipe=tla.arch.VECTOR)
+                reg_a = ub_vl_a.load()
+                reg_b = ub_vl_b.load()
+                reg_c = tla.add(reg_a, reg_b)
+                ub_vl_c.store(reg_c)
+        mutex_ub_c.unlock(pipe=tla.arch.VECTOR)
+        mutex_ub_b.unlock(pipe=tla.arch.VECTOR)
+        mutex_ub_a.unlock(pipe=tla.arch.VECTOR)
 
-        mutex_z_ub.lock(pipe=tla.arch.MTE3)
-        tla.copy(z_gm, z_ub)
-        mutex_z_ub.unlock(pipe=tla.arch.MTE3)
+        mutex_ub_c.lock(pipe=tla.arch.MTE3)
+        tla.copy(gm_c, ub_c)
+        mutex_ub_c.unlock(pipe=tla.arch.MTE3)
         tla.pipe_barrier(tla.pipes.ALL)
 
 
 @tla.kernel
-def basic_vadd_mutex_with(mem_x: tla.Tensor, mem_y: tla.Tensor, mem_z: tla.Tensor) -> None:
-    n_ele = mem_x.origin_shape[0]
-    mutex_x_ub = tla.mutex(resource="x_ub", id=0)
-    mutex_y_ub = tla.mutex(resource="y_ub", id=1)
-    mutex_z_ub = tla.mutex(resource="z_ub", id=2)
+def basic_vadd_mutex_with(
+    gm_a: tla.Tensor,
+    gm_b: tla.Tensor,
+    gm_c: tla.Tensor
+) -> None:
+    n_ele = gm_a.origin_shape[0]
+    mutex_ub_a = tla.mutex(resource="ub_a", id=0)
+    mutex_ub_b = tla.mutex(resource="ub_b", id=1)
+    mutex_ub_c = tla.mutex(resource="ub_c", id=2)
 
-    x_gm = tla.tile_view(mem_x, tla.make_shape(n_ele), tla.make_coord(0))
-    y_gm = tla.tile_view(mem_y, tla.make_shape(n_ele), tla.make_coord(0))
-    z_gm = tla.tile_view(mem_z, tla.make_shape(n_ele), tla.make_coord(0))
+    ub_ptr_a = tla.allocate(VECTOR_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 256)
+    ub_ptr_b = tla.allocate(VECTOR_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 256)
+    ub_ptr_c = tla.allocate(VECTOR_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 256)
 
-    x_ub_ptr = tla.allocate(VECTOR_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 256)
-    y_ub_ptr = tla.allocate(VECTOR_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 256)
-    z_ub_ptr = tla.allocate(VECTOR_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 256)
-
-    x_ub = tla.make_tensor_like(x_ub_ptr, x_gm, tla.arch.RowMajor)
-    y_ub = tla.make_tensor_like(y_ub_ptr, y_gm, tla.arch.RowMajor)
-    z_ub = tla.make_tensor_like(z_ub_ptr, z_gm, tla.arch.RowMajor)
+    ub_a = tla.make_tensor_like(ub_ptr_a, gm_a, tla.arch.RowMajor)
+    ub_b = tla.make_tensor_like(ub_ptr_b, gm_b, tla.arch.RowMajor)
+    ub_c = tla.make_tensor_like(ub_ptr_c, gm_c, tla.arch.RowMajor)
 
     with tla.vector():
-        with tla.mutex_guard(mutex_x_ub):
-            tla.copy(x_ub, x_gm)
+        with tla.mutex_guard(mutex_ub_a):
+            tla.copy(ub_a, gm_a)
 
-        with tla.mutex_guard(mutex_y_ub):
-            tla.copy(y_ub, y_gm)
+        with tla.mutex_guard(mutex_ub_b):
+            tla.copy(ub_b, gm_b)
 
-        with tla.mutex_guard(mutex_x_ub, mutex_y_ub, mutex_z_ub):
+        with tla.mutex_guard(mutex_ub_a, mutex_ub_b, mutex_ub_c):
             with tla.vec.func(mode="simd"):
                 for i in tla.range((n_ele + VL_ELE - 1) // VL_ELE):
-                    x_tile = tla.tile_view(
-                        x_ub, tla.make_shape(VL_ELE), tla.make_coord(i)
+                    ub_vl_a = tla.tile_view(
+                        ub_a, tla.make_shape(VL_ELE), tla.make_coord(i)
                     )
-                    y_tile = tla.tile_view(
-                        y_ub, tla.make_shape(VL_ELE), tla.make_coord(i)
+                    ub_vl_b = tla.tile_view(
+                        ub_b, tla.make_shape(VL_ELE), tla.make_coord(i)
                     )
-                    z_tile = tla.tile_view(
-                        z_ub, tla.make_shape(VL_ELE), tla.make_coord(i)
+                    ub_vl_c = tla.tile_view(
+                        ub_c, tla.make_shape(VL_ELE), tla.make_coord(i)
                     )
 
-                    x_reg = x_tile.load()
-                    y_reg = y_tile.load()
-                    z_reg = tla.add(x_reg, y_reg)
-                    z_tile.store(z_reg)
+                    reg_a = ub_vl_a.load()
+                    reg_b = ub_vl_b.load()
+                    reg_c = tla.add(reg_a, reg_b)
+                    ub_vl_c.store(reg_c)
 
-        with tla.mutex_guard(mutex_z_ub):
-            tla.copy(z_gm, z_ub)
+        with tla.mutex_guard(mutex_ub_c):
+            tla.copy(gm_c, ub_c)
         tla.pipe_barrier(tla.pipes.ALL)
 
+
 @tla.kernel
-def basic_vadd_atomic_add(mem_x: tla.Tensor, mem_y: tla.Tensor, mem_z: tla.Tensor) -> None:
-    """This demo use one AIV to compute Z = X + Y, which is done by setting the atomic add operation."""
-    n_ele = mem_x.origin_shape[0]
+def basic_vadd_atomic_add(
+    gm_a: tla.Tensor,
+    gm_b: tla.Tensor,
+    gm_c: tla.Tensor
+) -> None:
+    """C = A + B via plain A store then atomic B add (single AIV block)."""
+    n_ele = gm_a.origin_shape[0]
     ub_loaded = tla.flag("ub_loaded", tla.arch.MTE2, tla.arch.MTE3)
 
-    x_gm = tla.tile_view(mem_x, tla.make_shape(n_ele), tla.make_coord(0))
-    y_gm = tla.tile_view(mem_y, tla.make_shape(n_ele), tla.make_coord(0))
-    z_gm = tla.make_tensor(mem_z.ptr, tla.make_layout(shape=tla.make_shape(n_ele),stride=tla.make_stride(1)))
+    # tile_view needed: kernel-arg gm_* are _ArgProxy inside dynamic if;
+    # copy(..., AtomicMode) reads dst.dtype and requires a real tensor SSA.
+    gm_a = tla.tile_view(gm_a, tla.make_shape(n_ele), tla.make_coord(0))
+    gm_b = tla.tile_view(gm_b, tla.make_shape(n_ele), tla.make_coord(0))
+    gm_c = tla.tile_view(gm_c, tla.make_shape(n_ele), tla.make_coord(0))
 
-    x_ub_ptr = tla.allocate(VECTOR_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 256)
-    y_ub_ptr = tla.allocate(VECTOR_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 256)
+    ub_ptr_a = tla.allocate(VECTOR_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 256)
+    ub_ptr_b = tla.allocate(VECTOR_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 256)
 
-    x_ub = tla.make_tensor_like(x_ub_ptr, x_gm, tla.arch.RowMajor)
-    y_ub = tla.make_tensor_like(y_ub_ptr, y_gm, tla.arch.RowMajor)
+    ub_a = tla.make_tensor_like(ub_ptr_a, gm_a, tla.arch.RowMajor)
+    ub_b = tla.make_tensor_like(ub_ptr_b, gm_b, tla.arch.RowMajor)
 
     with tla.vector():
-        # To avoid possible race condition since every 
+        # To avoid possible race condition since every
         # launched block sees the same GM tiles,
         # Restrict this work to only one block.
         if tla.arch.block_idx() == 0:
-            tla.copy(x_ub, x_gm)
-            tla.copy(y_ub, y_gm)
+            tla.copy(ub_a, gm_a)
+            tla.copy(ub_b, gm_b)
 
             tla.set_flag(ub_loaded)
             tla.wait_flag(ub_loaded)
 
-            # Z = X (plain copy, overwrite z on GM)
-            tla.copy(z_gm, x_ub)
+            # C = A (plain copy, overwrite c on GM)
+            tla.copy(gm_c, ub_a)
             tla.pipe_barrier(tla.pipes.MTE3)
 
-            tla.copy(z_gm, y_ub, tla.params.CopyUbToGmParams(atomic_mode=tla.params.AtomicMode.ADD))
+            tla.copy(gm_c, ub_b, tla.params.CopyUbToGmParams(atomic_mode=tla.params.AtomicMode.ADD))
             tla.pipe_barrier(tla.pipes.MTE3)
         tla.pipe_barrier(tla.pipes.ALL)
 
 
-def _dtype_config(dtype_name: str) -> tuple[type[Any], Any, float | int, int, int]:
-    try:
-        import torch
-    except ImportError:
-        torch = None
+# ---------------------------------------------------------------------------
+# Host
+# ---------------------------------------------------------------------------
 
-    if dtype_name == "f32":
-        return tla.Float32, torch.float32 if torch is not None else None, -7.0, 64, 4
-    if dtype_name == "f16":
-        return tla.Float16, torch.float16 if torch is not None else None, -7.0, 128, 2
-    if dtype_name == "i16":
-        return tla.Int16, torch.int16 if torch is not None else None, -7, 128, 2
-    if dtype_name == "i32":
-        return tla.Int32, torch.int32 if torch is not None else None, -7, 64, 4
-    if dtype_name == "i8":
-        return tla.Int8, torch.int8 if torch is not None else None, -101, 256, 1
-    raise SystemExit(
-        f"unsupported dtype={dtype_name!r}; expected one of: f32, f16, i8, i16, i32"
-    )
+EXAMPLE_DIR = Path(__file__).resolve().parent
+DEFAULT_CACHE_DIR = EXAMPLE_DIR / "artifacts" / "runtime-cache"
 
 
-def _set_kernel_dtype(dtype_name: str) -> tuple[type[Any], Any, float | int]:
-    global VL_ELE, LOOPS, _KERNEL_DTYPE, _KERNEL_ELEMENT_BYTES
-    tla_dtype, torch_dtype, default_sentinel, vl_ele, element_bytes = _dtype_config(dtype_name)
-    VL_ELE = vl_ele
-    LOOPS = (VECTOR_ELE + VL_ELE - 1) // VL_ELE
-    _KERNEL_DTYPE = tla_dtype
-    _KERNEL_ELEMENT_BYTES = element_bytes
-    return tla_dtype, torch_dtype, default_sentinel
-
-
-def _compile_only_type_args(dtype_name: str = "f32") -> tuple[Any, Any, Any]:
-    from catlass import runtime as runtime_mod
-
-    tla_dtype, _, _ = _set_kernel_dtype(dtype_name)
-    with runtime_mod._eager_capture():
-        return (
-            tla.Tensor(
-                tla.make_shape(VECTOR_ELE),
-                tla_dtype,
-                origin_shape=tla.make_shape(VECTOR_ELE),
-                coord=tla.make_coord(0),
-                stride=tla.make_stride(1),
-                layout_tag=tla.arch.RowMajor,
-            ).mark_compact_shape_dynamic(0),
-            tla.Tensor(
-                tla.make_shape(VECTOR_ELE),
-                tla_dtype,
-                origin_shape=tla.make_shape(VECTOR_ELE),
-                coord=tla.make_coord(0),
-                stride=tla.make_stride(1),
-                layout_tag=tla.arch.RowMajor,
-            ).mark_compact_shape_dynamic(0),
-            tla.Tensor(
-                tla.make_shape(VECTOR_ELE),
-                tla_dtype,
-                origin_shape=tla.make_shape(VECTOR_ELE),
-                coord=tla.make_coord(0),
-                stride=tla.make_stride(1),
-                layout_tag=tla.arch.RowMajor,
-            ).mark_compact_shape_dynamic(0),
-        )
-
-
-def _runtime_kwargs(args: argparse.Namespace) -> dict[str, Any]:
-    return {
-        "arch_scope": "aiv.c310",
-        "cache": not args.no_cache,
-        "cache_dir": str(Path(args.cache_dir).expanduser().resolve()),
-        "force_recompile": args.force_recompile,
-    }
-
-
-def _select_kernel(args: argparse.Namespace) -> Any:
-    if getattr(args, "use_mutex", False):
-        return basic_vadd_mutex
-    if getattr(args, "use_mutex_with", False):
-        return basic_vadd_mutex_with
-    if getattr(args, "use_atomic_add", False):
-        return basic_vadd_atomic_add
-    return basic_vadd
-
-
-def dump_tlair(args: argparse.Namespace) -> str:
-    return _select_kernel(args).dump_mlir(type_args=_compile_only_type_args(args.dtype))
-
-
-def build_only(args: argparse.Namespace) -> int:
-    kernel = _select_kernel(args)
-    artifact = tla.compile(
-        kernel,
-        *_compile_only_type_args(args.dtype),
-        mlir_print_ir_after_all=True,
-        **_runtime_kwargs(args),
-    )
-    print("compile_ok=True")
-    print(f"kernel.o path={artifact.kernel_binary_path}")
-    return 0
-
-
-def _require_torch_npu(device_id: int) -> Any:
-    try:
-        import torch
-    except ImportError as exc:
-        raise SystemExit("basic_vadd --run requires PyTorch.") from exc
-    try:
-        import torch_npu  # noqa: F401
-    except ImportError as exc:
-        raise SystemExit("basic_vadd --run requires torch_npu.") from exc
-    torch.npu.set_device(device_id)
-    return torch
-
-
-def _create_tla_tensor(dev_buf: Any, tla_dtype: type[Any], n_ele: int) -> Any:
-    from catlass import runtime as runtime_mod
-
-    contiguous = dev_buf.contiguous()
-    with runtime_mod._eager_capture():
-        tensor = tla.Tensor(
-            tla.make_shape(n_ele),
-            tla_dtype,
-            origin_shape=tla.make_shape(n_ele),
-            coord=tla.make_coord(0),
-            stride=tla.make_stride(1),
-            data_ptr=int(contiguous.data_ptr()),
-        ).mark_compact_shape_dynamic(0)
-    tensor._external_binding = True
-    return tensor
-
-
-def _run_single_case(
-    args: argparse.Namespace, dtype_name: str, torch: Any, n_ele: int
-) -> int:
-    if n_ele <= 0 or n_ele > VECTOR_ELE:
-        raise ValueError(f"n_ele must be in 1..{VECTOR_ELE}; got {n_ele}")
-    tla_dtype, torch_dtype, default_sentinel = _set_kernel_dtype(dtype_name)
-    device = "npu"
-    sentinel = args.sentinel if args.sentinel is not None else default_sentinel
-    if dtype_name in {"i8", "i16"}:
-        arange = torch.arange(n_ele, dtype=torch.int32, device=device)
-        if dtype_name == "i8":
-            x = ((arange % 50) - 25).to(torch_dtype)
-            y = ((arange % 30) - 15).to(torch_dtype)
-        else:
-            x = arange.to(torch_dtype)
-            y = ((arange * 2) - 3).to(torch_dtype)
-    else:
-        x = torch.arange(n_ele, dtype=torch_dtype, device=device)
-        y = (torch.arange(n_ele, dtype=torch_dtype, device=device) * 2) - 3
-    z = torch.full((n_ele,), sentinel, dtype=torch_dtype, device=device)
-    expected = x + y
-
-    tla_x = _create_tla_tensor(x, tla_dtype, n_ele)
-    tla_y = _create_tla_tensor(y, tla_dtype, n_ele)
-    tla_z = _create_tla_tensor(z, tla_dtype, n_ele)
-
-    kernel = _select_kernel(args)
-    artifact = tla.compile(
-        kernel,
-        tla_x,
-        tla_y,
-        tla_z,
-        **_runtime_kwargs(args),
-    )
-    block = max(1, args.block if args.block != -1 else tla.get_aicore_num(args.device))
-    artifact(tla_x, tla_y, tla_z, block=block)
-
-    torch.npu.synchronize()
-    if dtype_name in {"f32", "f16"}:
-        unchanged = torch.isclose(
-            z, torch.full_like(z, sentinel), rtol=0.0, atol=args.atol
-        )
-        expected_match = torch.isclose(z, expected, rtol=0.0, atol=args.atol)
-    else:
-        unchanged = z.eq(torch.full_like(z, sentinel))
-        expected_match = z.eq(expected)
-    mismatch = expected_match.logical_not().nonzero(as_tuple=False)
-    first_mismatch: dict[str, Any] | None = None
-    if mismatch.numel():
-        index = int(mismatch[0].item())
-        first_mismatch = {
-            "index": index,
-            "actual": z[index].item(),
-            "expected": expected[index].item(),
-        }
-
-    print(
-        f"compile_ok=True host=torch_npu dtype={dtype_name} layout=row n={n_ele}"
-    )
-    print(f"kernel.o path={artifact.kernel_binary_path}")
-    print(f"cache_key={artifact.cache_key}")
-    print("launch_ok=True")
-    print(f"Z unchanged? {bool(unchanged.all())}")
-    print(f"Z equals expected add? {bool(expected_match.all())}")
-    print(f"Z changed count={int((~unchanged).sum().item())}")
-    print(f"first mismatch={first_mismatch}")
-    return 0 if first_mismatch is None else 1
-
-
-def _dtype_cases(args: argparse.Namespace) -> tuple[str, ...]:
-    if args.all_dtypes:
-        return ALL_DTYPES
-    return (args.dtype,)
+def golden(a, b):
+    return a + b
 
 
 def run(args: argparse.Namespace) -> int:
+    import sys
+    import torch
+    import torch_npu  # noqa: F401
+    from catlass.runtime import from_dlpack
+
+    mod = sys.modules[__name__]
+    dtype_name = args.dtype
+    n_ele = int(args.n)
+    if n_ele <= 0 or n_ele > VECTOR_ELE:
+        raise SystemExit(f"--n={n_ele} out of range [1, {VECTOR_ELE}]")
+
+    tla_of = {
+        "f32": tla.Float32,
+        "f16": tla.Float16,
+        "i16": tla.Int16,
+        "i32": tla.Int32,
+        "i8": tla.Int8,
+    }
+    torch_of = {
+        "f32": torch.float32,
+        "f16": torch.float16,
+        "i16": torch.int16,
+        "i32": torch.int32,
+        "i8": torch.int8,
+    }
+    vl_of = {"f32": 64, "f16": 128, "i16": 128, "i32": 64, "i8": 256}
+    default_sentinel = {"f32": -7.0, "f16": -7.0, "i16": -7, "i32": -7, "i8": -101}
+
+    mod.VL_ELE = vl_of[dtype_name]
+    mod._KERNEL_DTYPE = tla_of[dtype_name]
+    torch_dtype = torch_of[dtype_name]
+    sentinel = args.sentinel if args.sentinel is not None else default_sentinel[dtype_name]
+
+    def create_tla_tensor(dev_buf):
+        return from_dlpack(
+            dev_buf.contiguous(), layout_tag=tla.arch.RowMajor
+        ).mark_compact_shape_dynamic(0)
+
+    if args.use_mutex:
+        kernel = basic_vadd_mutex
+    elif args.use_mutex_with:
+        kernel = basic_vadd_mutex_with
+    elif args.use_atomic_add:
+        kernel = basic_vadd_atomic_add
+    else:
+        kernel = basic_vadd
+
+    cache_dir = str(Path(args.cache_dir).expanduser().resolve())
+    atol = float(args.atol)
+
     tla.initialize(device=args.device)
     try:
-        torch = _require_torch_npu(args.device)
-        failed = 0
-        # Plain `--run` sweeps DEFAULT_N_SHAPES; `--all-dtypes` keeps one n for CI cost.
-        n_shapes = (VECTOR_ELE,) if args.all_dtypes else DEFAULT_N_SHAPES
-        for n_ele in n_shapes:
-            for dtype_name in _dtype_cases(args):
-                print("---", f"n={n_ele}", f"dtype={dtype_name}", "---")
-                failed += _run_single_case(args, dtype_name, torch, n_ele)
-        return 0 if failed == 0 else 1
+        torch.npu.set_device(args.device)
+        block_dim = max(1, args.block_dim if args.block_dim != -1 else tla.get_aicore_num(args.device))
+        print(f"--- dtype={dtype_name} n={n_ele} ---")
+
+        if dtype_name in {"i8", "i16", "i32"}:
+            # Integer tensors: use randint (torch.rand is float-only).
+            # Keep i8 ranges small enough that a+b stays in int8.
+            if dtype_name == "i8":
+                a = torch.randint(-25, 26, (n_ele,), dtype=torch_dtype, device="npu")
+                b = torch.randint(-15, 16, (n_ele,), dtype=torch_dtype, device="npu")
+            else:
+                a = torch.randint(-1000, 1001, (n_ele,), dtype=torch_dtype, device="npu")
+                b = torch.randint(-1000, 1001, (n_ele,), dtype=torch_dtype, device="npu")
+        else:
+            a = torch.rand(n_ele, dtype=torch_dtype, device="npu") * 10.0 - 5.0
+            b = torch.rand(n_ele, dtype=torch_dtype, device="npu") * 10.0 - 5.0
+        c = torch.full((n_ele,), sentinel, dtype=torch_dtype, device="npu")
+        expected = golden(a, b)
+
+        tla_a, tla_b, tla_c = create_tla_tensor(a), create_tla_tensor(b), create_tla_tensor(c)
+        artifact = tla.compile(
+            kernel,
+            tla_a,
+            tla_b,
+            tla_c,
+            arch_scope="aiv.c310",
+            cache=not args.no_cache,
+            cache_dir=cache_dir,
+            force_recompile=args.force_recompile,
+        )
+        artifact(tla_a, tla_b, tla_c, block_dim=block_dim)
+        torch.npu.synchronize()
+
+        if dtype_name in {"f32", "f16"}:
+            passed = bool(torch.isclose(c, expected, rtol=0.0, atol=atol).all())
+        else:
+            passed = bool(c.eq(expected).all())
+
+        print(f"passed={passed} cache_key={artifact.cache_key}")
+        print(f"kernel.o={artifact.kernel_binary_path}")
+        return 0 if passed else 1
     finally:
         tla.finalize()
 
 
-def _build_parser() -> argparse.ArgumentParser:
+def main() -> int:
     parser = argparse.ArgumentParser(description="Compile and run a vector add.")
-    mode = parser.add_mutually_exclusive_group()
-    mode.add_argument("--build-only", action="store_true")
-    mode.add_argument("--run", action="store_true")
-    parser.add_argument("--device", type=int, default=2)
-    parser.add_argument("--block", type=int, default=-1)
+    parser.add_argument("--device", type=int, default=0)
+    parser.add_argument("--n", type=int, default=VECTOR_ELE)
+    parser.add_argument("--block-dim", type=int, default=-1)
     parser.add_argument("--dtype", choices=("f32", "f16", "i8", "i16", "i32"), default="f32")
-    parser.add_argument(
-        "--all-dtypes",
-        action="store_true",
-        help="Run all supported vector add dtypes sequentially: i8, i16, i32, f16, f32.",
-    )
     parser.add_argument("--sentinel", type=float, default=None)
     parser.add_argument("--atol", type=float, default=1e-4)
     parser.add_argument("--cache-dir", default=str(DEFAULT_CACHE_DIR))
     parser.add_argument("--force-recompile", action="store_true")
     parser.add_argument("--no-cache", action="store_true")
     sync = parser.add_mutually_exclusive_group()
-    sync.add_argument(
-        "--use-mutex", action="store_true", help="Use explicit mutex lock/unlock sync."
-    )
-    sync.add_argument(
-        "--use-mutex-with",
-        action="store_true",
-        help="Use tla.mutex_guard with-syntax sync.",
-    )
-    sync.add_argument(
-        "--use-atomic-add",
-        action="store_true",
-        help="Use a block-0 plain X store followed by an atomic Y add.",
-    )
-    parser.add_argument("--dump-tlair", action="store_true")
-    return parser
-
-
-def main() -> int:
-    args = _build_parser().parse_args()
-    if args.dump_tlair:
-        if args.all_dtypes:
-            raise SystemExit("--dump-tlair requires a single dtype.")
-        print(dump_tlair(args))
-        return 0
-    if args.build_only:
-        if args.all_dtypes:
-            raise SystemExit("--build-only requires a single dtype.")
-        return build_only(args)
-    return run(args)
+    sync.add_argument("--use-mutex", action="store_true")
+    sync.add_argument("--use-mutex-with", action="store_true")
+    sync.add_argument("--use-atomic-add", action="store_true")
+    return run(parser.parse_args())
 
 
 if __name__ == "__main__":
