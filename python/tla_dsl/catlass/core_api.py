@@ -3847,9 +3847,20 @@ def copy(dst: TileLike, src: TileLike, params: CopyParams | None = None, *, loc:
                 raise NotImplementedError(f"currently unsupported quant mode {params.quant_mode}")
             if params.relu_enable != False:
                 raise NotImplementedError(f"currently unsupported relu_enable {params.relu_enable}")
-            if (dst.addrspace == "ub") and (src.dtype != dst.dtype) and (
+            # Read dtype/addrspace from MLIR descriptors — kernel-arg proxies
+            # (_ArgProxy) do not expose Python .dtype / .addrspace attributes.
+            src_dtype = str(
+                _tla_tensor_type_for_mlir_value(src_value).element_type
+            ).strip().lower()
+            dst_dtype = str(
+                _tla_tensor_type_for_mlir_value(dst_value).element_type
+            ).strip().lower()
+            if (_route[1] == "ub") and (src_dtype != dst_dtype) and (
                 params.l0c2ub_mode == L0C2UBMode.SPLIT_M or params.l0c2ub_mode == L0C2UBMode.SPLIT_N):
-                raise TlaLoweringError(f"When copy l0c to ub with split mode, src and dst dtype must be same , got {src.dtype} {dst.dtype}")
+                raise TlaLoweringError(
+                    "When copy l0c to ub with split mode, src and dst dtype must be same , "
+                    f"got {src_dtype} {dst_dtype}"
+                )
 
             ctx = loc.context if loc is not None else mlir_ir.Context.current
             quant_mode_attr = mlir_ir.Attribute.parse(f"#tla.quant_mode<{params.quant_mode}>", context=ctx)
@@ -3869,7 +3880,8 @@ def copy(dst: TileLike, src: TileLike, params: CopyParams | None = None, *, loc:
             )
         else:
             raise TlaLoweringError(
-                f"tla.copy operand `params` expects to be a CopyL0C2DstParams when {src.addrspace} -> {dst.addrspace}"
+                "tla.copy operand `params` expects to be a CopyL0C2DstParams when "
+                f"{_route[0]} -> {_route[1]}"
             )
     else:
         params_value = None
@@ -3886,9 +3898,15 @@ def copy(dst: TileLike, src: TileLike, params: CopyParams | None = None, *, loc:
 
         if _route[1] != "gm":
             raise TlaLoweringError(f"When atomic operation is enabled, the dst location should only be GM but got {_route[1]}")
-            
-        if dst.dtype not in ("f32", "f16", "i16", "i32", "i8", "bf16"):
-            raise TlaLoweringError(f"The supported atomic operation's data type includes f32, f16, i16, i32, i8, bf16, the data type {dst.dtype} is not supported")
+
+        dst_dtype = str(
+            _tla_tensor_type_for_mlir_value(dst_value).element_type
+        ).strip().lower()
+        if dst_dtype not in ("f32", "f16", "i16", "i32", "i8", "bf16"):
+            raise TlaLoweringError(
+                "The supported atomic operation's data type includes f32, f16, i16, i32, i8, bf16, "
+                f"the data type {dst_dtype} is not supported"
+            )
 
         ctx = loc.context if loc is not None else mlir_ir.Context.current
         atomic_mode_attr = mlir_ir.Attribute.parse(f"#tla.atomic_mode<{atomic_mode.value}>", context=ctx)

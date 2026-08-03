@@ -177,14 +177,7 @@ def basic_vadd_atomic_add(
     gm_c: tla.Tensor
 ) -> None:
     """C = A + B via plain A store then atomic B add (single AIV block)."""
-    n_ele = gm_a.origin_shape[0]
     ub_loaded = tla.flag("ub_loaded", tla.arch.MTE2, tla.arch.MTE3)
-
-    # tile_view needed: kernel-arg gm_* are _ArgProxy inside dynamic if;
-    # copy(..., AtomicMode) reads dst.dtype and requires a real tensor SSA.
-    gm_a = tla.tile_view(gm_a, tla.make_shape(n_ele), tla.make_coord(0))
-    gm_b = tla.tile_view(gm_b, tla.make_shape(n_ele), tla.make_coord(0))
-    gm_c = tla.tile_view(gm_c, tla.make_shape(n_ele), tla.make_coord(0))
 
     ub_ptr_a = tla.allocate(VECTOR_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 256)
     ub_ptr_b = tla.allocate(VECTOR_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 256)

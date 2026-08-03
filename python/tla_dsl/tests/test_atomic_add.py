@@ -80,6 +80,20 @@ def atomic_add_ub2gm(ub_tensor: tla.Tensor, gm_tensor: tla.Tensor) -> None:
     with tla.vector():
         tla.copy(x_gm, x_ub, tla.params.CopyUbToGmParams(atomic_mode=tla.params.AtomicMode.ADD))
 
+
+@tla.kernel
+def atomic_add_ub2gm_direct_arg(ub_tensor: tla.Tensor, gm_tensor: tla.Tensor) -> None:
+    """Atomic UB→GM with kernel-arg GM dst (no tile_view), including dynamic if."""
+
+    with tla.vector():
+        if tla.arch.block_idx() == 0:
+            tla.copy(
+                gm_tensor,
+                ub_tensor,
+                tla.params.CopyUbToGmParams(atomic_mode=tla.params.AtomicMode.ADD),
+            )
+
+
 @tla.kernel
 def atomic_add_l0c2gm(l0c_tensor: tla.Tensor, gm_tensor: tla.Tensor) -> None:
     """Test atomic add mode, data path from L0C to GM"""
@@ -120,6 +134,17 @@ def test_atomic_add_ub2gm(compiler_tlair: Any) -> None:
 
     assert "tla.copy" in mlir
     assert "atomic_mode = #tla.atomic_mode<add>" in mlir
+
+
+def test_atomic_add_ub2gm_direct_arg(compiler_tlair: Any) -> None:
+    """Kernel-arg GM dst must work without identity tile_view (_ArgProxy has no .dtype)."""
+    mlir = compiler_tlair(
+        atomic_add_ub2gm_direct_arg, type_args=(_ub_tensor(), _gm_tensor())
+    )
+
+    assert "tla.copy" in mlir
+    assert "atomic_mode = #tla.atomic_mode<add>" in mlir
+
 
 def test_atomic_add_l0c2gm(compiler_tlair: Any) -> None:
     mlir = compiler_tlair(

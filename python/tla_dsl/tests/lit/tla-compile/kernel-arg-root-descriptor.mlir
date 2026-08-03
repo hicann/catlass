@@ -5,9 +5,11 @@
 !tile = !tla.tensor<!tla.layout<!tla.shape<4,8>, !tla.stride<16,1>, !tla.shape<4,8>, row_major>, !tla.coord<2,3>, !tla.ptr<f32, gm, 4>>
 !child = !tla.tensor<!tla.layout<!tla.shape<2,3>, !tla.stride<16,1>, !tla.shape<2,3>, row_major>, !tla.coord<1,2>, !tla.ptr<f32, gm, 4>>
 !padded_row = !tla.tensor<!tla.layout<!tla.shape<8,16>, !tla.stride<20,1>, !tla.shape<8,16>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>
-!dynamic_row = !tla.tensor<!tla.layout<!tla.shape<?,64>, !tla.stride<?,1>, !tla.shape<?,64>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>
-!dynamic_col = !tla.tensor<!tla.layout<!tla.shape<?,64>, !tla.stride<1,?>, !tla.shape<?,64>, column_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>
-!dynamic_1d = !tla.tensor<!tla.layout<!tla.shape<?>, !tla.stride<1>, !tla.shape<?>, row_major>, !tla.coord<0>, !tla.ptr<i32, gm, 4>>
+// Shape/stride may be dynamic; origin_shape must stay static on this !tla.tensor
+// entry path (runtime origin uses the frontend memref + origin0/1 ABI instead).
+!dynamic_row = !tla.tensor<!tla.layout<!tla.shape<?,64>, !tla.stride<?,1>, !tla.shape<32,64>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>
+!dynamic_col = !tla.tensor<!tla.layout<!tla.shape<?,64>, !tla.stride<1,?>, !tla.shape<32,64>, column_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>
+!dynamic_1d = !tla.tensor<!tla.layout<!tla.shape<?>, !tla.stride<1>, !tla.shape<16>, row_major>, !tla.coord<0>, !tla.ptr<i32, gm, 4>>
 !rank1_tile = !tla.tensor<!tla.layout<!tla.shape<16>, !tla.stride<1>, !tla.shape<16>, row_major>, !tla.coord<4>, !tla.ptr<i32, gm, 4>>
 
 module {
