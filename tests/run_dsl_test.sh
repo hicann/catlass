@@ -9,7 +9,7 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 #
-# End-to-end validation for python/tla_dsl/examples/end_to_end/basic_mmad (basic_matmul.py, basic_mmad_ptr.py),
+# End-to-end validation for python/tla_dsl/examples/end_to_end/basic_mmad (basic_matmul*.py, basic_mmad_ptr.py),
 # python/tla_dsl/examples/end_to_end/basic_vadd (basic_vadd.py),
 # python/tla_dsl/examples/end_to_end/basic_mixed (basic_mixed.py, including mutex mode), and
 # python/tla_dsl/examples/end_to_end/basic_mixed (basic_mixed_ub2l1.py, basic_mixed_store_zN.py,
@@ -126,7 +126,8 @@ usage() {
 Usage: $(basename "$0") [options]
 
 Run end-to-end validation for:
-  - basic_mmad (basic_matmul*.py with per-mnk / per-layout / per-dtype CLI invocations)
+  - basic_mmad (full flag-sync mnk/layout/dtype matrix; representative mutex cases;
+    atomic-add coverage for each supported input dtype)
   - basic_mmad_ptr (basic_mmad_ptr.py)
   - basic_vadd (basic_vadd.py with per-dtype CLI invocations, plus mutex variants)
   - basic_mixed (basic_mixed.py --run dynamic GM mnk list, including --use-mutex; basic_mixed_ub2l1.py --run,
@@ -159,8 +160,9 @@ Run end-to-end validation for:
   - scalar_arg_alignment (scalar_arg_alignment.py: tensor-i16-tensor host ABI)
   - print_tensor (print_tensor.py: all supported GM/UB dtypes with AIV/AIC
     multi-block and multi-call coverage)
-Runs basic_mmad with irregular CLI shapes (333×444×555 and 1×2×3); example
-defaults remain regular (256×512×1024).
+Runs the basic_mmad flag-sync matrix with irregular CLI shapes (333×444×555
+and 1×2×3); representative mutex and atomic-add cases use 333×444×555.
+Example defaults remain regular (256×512×1024).
 Activates conda env "${CONDA_ENV}", sources CANN set_env.sh, exports AscendNPU-IR MLIR/LLVM
 env, runs ./build.sh, then runs the test.
 
@@ -437,6 +439,14 @@ _run_basic_mmad_case() {
     local label="$1"
     local script="$2"
     shift 2
+    echo "==> Running basic_mmad validation [${label}]: ${script} $* --device ${DEVICE_ID}"
+    (
+        cd "${TLA_DSL_DIR}"
+        python "${script}" "$@" --device "${DEVICE_ID}" --force-recompile
+    )
+}
+
+_run_basic_mmad_flag_sync_matrix() {
     # One process per (mnk, layout, dtype); script itself does not sweep.
     local shapes=(
         "--m 333 --n 444 --k 555"
@@ -455,34 +465,42 @@ _run_basic_mmad_case() {
         "--dtype-a bf16 --dtype-b bf16 --dtype-c bf16"
         "--dtype-a f32 --dtype-b f32 --dtype-c f32"
     )
-    # Atomic-add only supports fp32 GM C.
-    if [[ "${script}" == *basic_matmul_atomic_add.py ]]; then
-        triples=(
-            "--dtype-a f16 --dtype-b f16 --dtype-c f32"
-            "--dtype-a bf16 --dtype-b bf16 --dtype-c f32"
-            "--dtype-a f32 --dtype-b f32 --dtype-c f32"
-        )
-    fi
     local shape_args layout_args dtype_args
     for shape_args in "${shapes[@]}"; do
         for layout_args in "${layouts[@]}"; do
             for dtype_args in "${triples[@]}"; do
-                echo "==> Running basic_mmad validation [${label}]: ${script} ${shape_args} ${layout_args} ${dtype_args} --device ${DEVICE_ID} $*"
-                (
-                    cd "${TLA_DSL_DIR}"
-                    # shellcheck disable=SC2086
-                    python "${script}" ${shape_args} ${layout_args} ${dtype_args} \
-                        --device "${DEVICE_ID}" --force-recompile "$@"
-                )
+                # These specifications are fixed, internal argument lists.
+                # shellcheck disable=SC2086
+                _run_basic_mmad_case "flag sync" "${BASIC_MMAD_REL}" \
+                    ${shape_args} ${layout_args} ${dtype_args}
             done
         done
     done
 }
 
-_run_basic_mmad_case "flag sync" "${BASIC_MMAD_REL}"
-_run_basic_mmad_case "mutex mode" "examples/end_to_end/basic_mmad/basic_matmul_mutex.py"
-_run_basic_mmad_case "mutex with mode" "examples/end_to_end/basic_mmad/basic_matmul_mutex_with.py"
-_run_basic_mmad_case "atomic add" "examples/end_to_end/basic_mmad/basic_matmul_atomic_add.py"
+_run_basic_mmad_atomic_add_cases() {
+    local dtype
+    for dtype in f16 bf16 f32; do
+        _run_basic_mmad_case "atomic add, ${dtype} inputs" \
+            "examples/end_to_end/basic_mmad/basic_matmul_atomic_add.py" \
+            --m 333 --n 444 --k 555 \
+            --layout-a row --layout-b row \
+            --dtype-a "${dtype}" --dtype-b "${dtype}" --dtype-c f32
+    done
+}
+
+_run_basic_mmad_flag_sync_matrix
+_run_basic_mmad_case "mutex mode" \
+    "examples/end_to_end/basic_mmad/basic_matmul_mutex.py" \
+    --m 333 --n 444 --k 555 \
+    --layout-a row --layout-b row \
+    --dtype-a f16 --dtype-b f16 --dtype-c f32
+_run_basic_mmad_case "mutex with mode" \
+    "examples/end_to_end/basic_mmad/basic_matmul_mutex_with.py" \
+    --m 333 --n 444 --k 555 \
+    --layout-a row --layout-b row \
+    --dtype-a f16 --dtype-b f16 --dtype-c f32
+_run_basic_mmad_atomic_add_cases
 
 _run_basic_mmad_ptr_case() {
     echo "==> Running basic_mmad_ptr validation [ptr + offset -> make_tensor]: --device ${DEVICE_ID}"
