@@ -295,10 +295,11 @@ def run(args: argparse.Namespace) -> int:
     try:
         torch = _require_torch_npu(args.device)
         device = "npu"
-        lhs = torch.randn(m_dim * k_dim, dtype=torch.float32, device="cpu").reshape(
+        torch.manual_seed(0)
+        lhs = (torch.rand(m_dim * k_dim, dtype=torch.float32, device="cpu") * 10.0 - 5.0).reshape(
             m_dim, k_dim
         )
-        rhs = torch.randn(k_dim * n_dim, dtype=torch.float32, device="cpu").reshape(
+        rhs = (torch.rand(k_dim * n_dim, dtype=torch.float32, device="cpu") * 10.0 - 5.0).reshape(
             k_dim, n_dim
         )
         out = torch.full((m_dim, n_dim), -9.0, dtype=torch.float32, device="cpu").to(device)
@@ -317,7 +318,7 @@ def run(args: argparse.Namespace) -> int:
             tla_out,
             **_runtime_kwargs(args),
         )
-        artifact(tla_lhs, tla_rhs, tla_out, block=args.block)
+        artifact(tla_lhs, tla_rhs, tla_out, block_dim=args.block_dim)
 
         torch.npu.synchronize()
         out = out.cpu()
@@ -355,7 +356,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--n", type=int, default=DEFAULT_N_DIM, help="GM N dimension (cols of rhs/out).")
     parser.add_argument("--k", type=int, default=DEFAULT_K_DIM, help="GM K dimension (lhs cols / rhs rows).")
     parser.add_argument("--device", type=int, default=2)
-    parser.add_argument("--block", type=int, default=1)
+    parser.add_argument("--block-dim", type=int, default=1)
     parser.add_argument("--atol", type=float, default=1e-4)
     parser.add_argument("--cache-dir", default=str(DEFAULT_CACHE_DIR))
     parser.add_argument("--force-recompile", action="store_true")

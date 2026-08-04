@@ -9,11 +9,11 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 #
-# End-to-end validation for python/tla_dsl/examples/end_to_end/basic_mmad (basic_matmul.py, basic_mmad_ptr.py),
-# python/tla_dsl/examples/end_to_end/basic_vadd (basic_vadd.py, basic_vadd_unknown_extent.py),
+# End-to-end validation for python/tla_dsl/examples/end_to_end/basic_mmad (basic_matmul*.py, basic_mmad_ptr.py),
+# python/tla_dsl/examples/end_to_end/basic_vadd (basic_vadd.py),
 # python/tla_dsl/examples/end_to_end/basic_mixed (basic_mixed.py, including mutex mode), and
 # python/tla_dsl/examples/end_to_end/basic_mixed (basic_mixed_ub2l1.py, basic_mixed_store_zN.py,
-# basic_mixed_store_zNUnAlign.py).
+# basic_mixed_store_zNUnAlign.py, basic_mixed_fixpipe_nz2dn.py).
 # python/tla_dsl/examples/end_to_end/vector_ops (binary_op.py, masked_binary.py,
 # bitwise_ops.py, reduction_ops.py, compare_mask.py, unary_ops.py, arange_op.py,
 # interleave_op.py, load_dintlv_op.py, load_store_mask.py, squeeze_op.py,
@@ -82,11 +82,11 @@ COMPILE_JOBS="${TLA_DSL_COMPILE_JOBS:-4}"
 BASIC_MMAD_REL="examples/end_to_end/basic_mmad/basic_matmul.py"
 BASIC_MMAD_PTR_REL="examples/end_to_end/basic_mmad/basic_mmad_ptr.py"
 BASIC_VADD_REL="examples/end_to_end/basic_vadd/basic_vadd.py"
-BASIC_VADD_UNKNOWN_EXTENT_REL="examples/end_to_end/basic_vadd/basic_vadd_unknown_extent.py"
 BASIC_MIXED_REL="examples/end_to_end/basic_mixed/basic_mixed.py"
 BASIC_MIXED_UB2L1_REL="examples/end_to_end/basic_mixed/basic_mixed_ub2l1.py"
 BASIC_MIXED_STORE_ZN_REL="examples/end_to_end/basic_mixed/basic_mixed_store_zN.py"
 BASIC_MIXED_STORE_ZNUNALIGN_REL="examples/end_to_end/basic_mixed/basic_mixed_store_zNUnAlign.py"
+BASIC_MIXED_FIXPIPE_NZ2DN_REL="examples/end_to_end/basic_mixed/basic_mixed_fixpipe_nz2dn.py"
 MASKED_BINARY_REL="examples/end_to_end/vector_ops/masked_binary.py"
 BITWISE_OPS_REL="examples/end_to_end/vector_ops/bitwise_ops.py"
 BINARY_OP_REL="examples/end_to_end/vector_ops/binary_op.py"
@@ -127,12 +127,12 @@ usage() {
 Usage: $(basename "$0") [options]
 
 Run end-to-end validation for:
-  - basic_mmad (basic_matmul.py --run --all-layouts --all-mmad-dtypes)
-  - basic_mmad_ptr (basic_mmad_ptr.py --run)
-  - basic_vadd (basic_vadd.py --run --all-dtypes, plus mutex variants)
-  - basic_vadd_unknown_extent (dynamic UB base capacity as memref<?xT> with extent 0)
-  - basic_mixed (basic_mixed.py --run dynamic GM mnk list, basic_mixed_ub2l1.py --run, basic_mixed_store_zN.py --run,
-    basic_mixed_store_zNUnAlign.py --run for m=64/m=50)
+  - basic_mmad (full flag-sync mnk/layout/dtype matrix; representative mutex cases;
+    atomic-add coverage for each supported input dtype)
+  - basic_mmad_ptr (basic_mmad_ptr.py)
+  - basic_vadd (basic_vadd.py with per-dtype CLI invocations, plus mutex variants)
+  - basic_mixed (basic_mixed.py --run dynamic GM mnk list, including --use-mutex; basic_mixed_ub2l1.py --run,
+    basic_mixed_store_zN.py --run, basic_mixed_store_zNUnAlign.py --run for m=64/m=50, basic_mixed_fixpipe_nz2dn.py --run)
   - binary_op (binary_op.py <op> --run --all-dtypes for add/sub/mul/div/max/min/add_unalign/add_brc_b32)
   - masked_binary (masked_binary.py masked_binary --run --all-dtypes)
   - bitwise_ops (bitwise_ops.py bitwise_ops --run --all-dtypes)
@@ -161,7 +161,9 @@ Run end-to-end validation for:
   - scalar_arg_alignment (scalar_arg_alignment.py: tensor-i16-tensor host ABI)
   - print_tensor (print_tensor.py: all supported GM/UB dtypes with AIV/AIC
     multi-block and multi-call coverage)
-Runs basic_mmad default MNK plus m=1, n=2, k=3.
+Runs the basic_mmad flag-sync matrix with irregular CLI shapes (333×444×555
+and 1×2×3); representative mutex and atomic-add cases use 333×444×555.
+Example defaults remain regular (256×512×1024).
 Activates conda env "${CONDA_ENV}", sources CANN set_env.sh, exports AscendNPU-IR MLIR/LLVM
 env, runs ./build.sh, then runs the test.
 
@@ -357,10 +359,6 @@ if [[ ! -f "${TLA_DSL_DIR}/${BASIC_VADD_REL}" ]]; then
     echo "error: missing ${BASIC_VADD_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
 fi
-if [[ ! -f "${TLA_DSL_DIR}/${BASIC_VADD_UNKNOWN_EXTENT_REL}" ]]; then
-    echo "error: missing ${BASIC_VADD_UNKNOWN_EXTENT_REL} under ${TLA_DSL_DIR}" >&2
-    exit 1
-fi
 if [[ ! -f "${TLA_DSL_DIR}/${BASIC_MIXED_REL}" ]]; then
     echo "error: missing ${BASIC_MIXED_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
@@ -375,6 +373,10 @@ if [[ ! -f "${TLA_DSL_DIR}/${BASIC_MIXED_STORE_ZN_REL}" ]]; then
 fi
 if [[ ! -f "${TLA_DSL_DIR}/${BASIC_MIXED_STORE_ZNUNALIGN_REL}" ]]; then
     echo "error: missing ${BASIC_MIXED_STORE_ZNUNALIGN_REL} under ${TLA_DSL_DIR}" >&2
+    exit 1
+fi
+if [[ ! -f "${TLA_DSL_DIR}/${BASIC_MIXED_FIXPIPE_NZ2DN_REL}" ]]; then
+    echo "error: missing ${BASIC_MIXED_FIXPIPE_NZ2DN_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
 fi
 if [[ ! -f "${TLA_DSL_DIR}/${MASKED_BINARY_REL}" ]]; then
@@ -440,26 +442,76 @@ fi
 
 _run_basic_mmad_case() {
     local label="$1"
-    shift
-    echo "==> Running basic_mmad validation [${label}]: --run --all-layouts --all-mmad-dtypes --device ${DEVICE_ID} $*"
+    local script="$2"
+    shift 2
+    echo "==> Running basic_mmad validation [${label}]: ${script} $* --device ${DEVICE_ID}"
     (
         cd "${TLA_DSL_DIR}"
-        python "${BASIC_MMAD_REL}" --run --all-layouts --all-mmad-dtypes \
-            --device "${DEVICE_ID}" --force-recompile "$@"
+        python "${script}" "$@" --device "${DEVICE_ID}" --force-recompile
     )
 }
 
-_run_basic_mmad_case "default MNK"
-_run_basic_mmad_case "m=1 n=2 k=3" --m 1 --n 2 --k 3
-_run_basic_mmad_case "mutex mode" --use-mutex
-_run_basic_mmad_case "mutex with mode" --use-mutex-with
-_run_basic_mmad_case "atomic add" --use-atomic-add
+_run_basic_mmad_flag_sync_matrix() {
+    # One process per (mnk, layout, dtype); script itself does not sweep.
+    local shapes=(
+        "--m 333 --n 444 --k 555"
+        "--m 1 --n 2 --k 3"
+    )
+    local layouts=(
+        "--layout-a row --layout-b row"
+        "--layout-a row --layout-b col"
+        "--layout-a col --layout-b row"
+        "--layout-a col --layout-b col"
+    )
+    local triples=(
+        "--dtype-a f16 --dtype-b f16 --dtype-c f32"
+        "--dtype-a f16 --dtype-b f16 --dtype-c f16"
+        "--dtype-a bf16 --dtype-b bf16 --dtype-c f32"
+        "--dtype-a bf16 --dtype-b bf16 --dtype-c bf16"
+        "--dtype-a f32 --dtype-b f32 --dtype-c f32"
+    )
+    local shape_args layout_args dtype_args
+    for shape_args in "${shapes[@]}"; do
+        for layout_args in "${layouts[@]}"; do
+            for dtype_args in "${triples[@]}"; do
+                # These specifications are fixed, internal argument lists.
+                # shellcheck disable=SC2086
+                _run_basic_mmad_case "flag sync" "${BASIC_MMAD_REL}" \
+                    ${shape_args} ${layout_args} ${dtype_args}
+            done
+        done
+    done
+}
+
+_run_basic_mmad_atomic_add_cases() {
+    local dtype
+    for dtype in f16 bf16 f32; do
+        _run_basic_mmad_case "atomic add, ${dtype} inputs" \
+            "examples/end_to_end/basic_mmad/basic_matmul_atomic_add.py" \
+            --m 333 --n 444 --k 555 \
+            --layout-a row --layout-b row \
+            --dtype-a "${dtype}" --dtype-b "${dtype}" --dtype-c f32
+    done
+}
+
+_run_basic_mmad_flag_sync_matrix
+_run_basic_mmad_case "mutex mode" \
+    "examples/end_to_end/basic_mmad/basic_matmul_mutex.py" \
+    --m 333 --n 444 --k 555 \
+    --layout-a row --layout-b row \
+    --dtype-a f16 --dtype-b f16 --dtype-c f32
+_run_basic_mmad_case "mutex with mode" \
+    "examples/end_to_end/basic_mmad/basic_matmul_mutex_with.py" \
+    --m 333 --n 444 --k 555 \
+    --layout-a row --layout-b row \
+    --dtype-a f16 --dtype-b f16 --dtype-c f32
+_run_basic_mmad_atomic_add_cases
 
 _run_basic_mmad_ptr_case() {
-    echo "==> Running basic_mmad_ptr validation [ptr + offset -> make_tensor]: --run --device ${DEVICE_ID}"
+    echo "==> Running basic_mmad_ptr validation [ptr + offset -> make_tensor]: --device ${DEVICE_ID}"
     (
         cd "${TLA_DSL_DIR}"
-        python "${BASIC_MMAD_PTR_REL}" --run --device "${DEVICE_ID}" --force-recompile
+        python "${BASIC_MMAD_PTR_REL}" --device "${DEVICE_ID}" --force-recompile
     )
 }
 
@@ -468,37 +520,31 @@ _run_basic_mmad_ptr_case
 _run_basic_vadd_case() {
     local label="$1"
     shift
-    echo "==> Running basic_vadd validation [${label}]: --run --all-dtypes --device ${DEVICE_ID} $*"
-    (
-        cd "${TLA_DSL_DIR}"
-        python "${BASIC_VADD_REL}" --run --all-dtypes --device "${DEVICE_ID}" \
-            --force-recompile "$@"
-    )
+    # One process per dtype; script itself does not sweep.
+    local dtypes=(i8 i16 i32 f16 f32)
+    local dtype
+    for dtype in "${dtypes[@]}"; do
+        echo "==> Running basic_vadd validation [${label}]: --dtype ${dtype} --device ${DEVICE_ID} $*"
+        (
+            cd "${TLA_DSL_DIR}"
+            python "${BASIC_VADD_REL}" --dtype "${dtype}" --device "${DEVICE_ID}" \
+                --force-recompile "$@"
+        )
+    done
 }
 
-_run_basic_vadd_case "all dtypes"
+_run_basic_vadd_case "flag sync"
 _run_basic_vadd_case "mutex mode" --use-mutex
 _run_basic_vadd_case "mutex with mode" --use-mutex-with
 _run_basic_vadd_case "enable atomic add" --use-atomic-add
 
-_run_basic_vadd_unknown_extent_case() {
-    echo "==> Running basic_vadd_unknown_extent validation: --run --device ${DEVICE_ID} --force-recompile"
-    (
-        cd "${TLA_DSL_DIR}"
-        python "${BASIC_VADD_UNKNOWN_EXTENT_REL}" \
-            --run --device "${DEVICE_ID}" --force-recompile
-    )
-}
-
-_run_basic_vadd_unknown_extent_case
-
 _run_basic_mixed_case() {
     local cache_mode="$1"
     shift
-    echo "==> Running basic_mixed validation [dynamic GM mnk list, tensor print, ${cache_mode}]: --run --device ${DEVICE_ID} --block 1 $*"
+    echo "==> Running basic_mixed validation [dynamic GM mnk list, tensor print, ${cache_mode}]: --run --device ${DEVICE_ID} --block-dim 1 $*"
     (
         cd "${TLA_DSL_DIR}"
-        python "${BASIC_MIXED_REL}" --run --device "${DEVICE_ID}" --block 1 "$@"
+        python "${BASIC_MIXED_REL}" --run --device "${DEVICE_ID}" --block-dim 1 "$@"
     )
 }
 
@@ -540,6 +586,16 @@ _run_basic_mixed_store_zNUnAlign_case() {
 # where the dest leaf[0] is the runtime row count and stride is runtime-varying.
 _run_basic_mixed_store_zNUnAlign_case "m=64 (fractal-aligned)" --m 64
 _run_basic_mixed_store_zNUnAlign_case "m=50 (non-aligned)" --m 50
+
+_run_basic_mixed_fixpipe_nz2dn_case() {
+    echo "==> Running basic_mixed_fixpipe_nz2dn validation [fixed shape/dtypes]: --run --device ${DEVICE_ID}"
+    (
+        cd "${TLA_DSL_DIR}"
+        python "${BASIC_MIXED_FIXPIPE_NZ2DN_REL}" --run --device "${DEVICE_ID}" --force-recompile
+    )
+}
+
+_run_basic_mixed_fixpipe_nz2dn_case
 
 _run_masked_binary_case() {
     echo "==> Running masked_binary validation [all dtypes]: masked_binary --sweep --shapes 400 --device ${DEVICE_ID} --force-recompile"
@@ -755,7 +811,7 @@ _run_print_tensor_gm_case() {
         cd "${TLA_DSL_DIR}"
         python "${PRINT_TENSOR_REL}" --run --device "${DEVICE_ID}" \
             --arch-scope "${arch_scope}" \
-            --block "${block_count}" --calls "${calls}" \
+            --block-dim "${block_count}" --calls "${calls}" \
             "${dtype_args[@]}" --force-recompile
     )
 }
@@ -773,7 +829,7 @@ _run_debug_print_matrix_case() {
     (
         cd "${TLA_DSL_DIR}"
         python "${DEBUG_PRINT_REL}" --run --device "${DEVICE_ID}" \
-            --arch-scope "${arch_scope}" --all-dtypes --block 2 \
+            --arch-scope "${arch_scope}" --all-dtypes --block-dim 2 \
             --expect-count 2 --force-recompile
     )
 }
@@ -854,7 +910,7 @@ _run_print_tensor_ub_case() {
         cd "${TLA_DSL_DIR}"
         python "${PRINT_TENSOR_REL}" --run --device "${DEVICE_ID}" \
             --storage ub --case "${case_name}" --arch-scope aiv.c310 \
-            --block "${block_count}" --calls "${calls}" \
+            --block-dim "${block_count}" --calls "${calls}" \
             "${dtype_args[@]}" --force-recompile
     )
 }

@@ -58,7 +58,7 @@ def _run_int_arg_arith(args: argparse.Namespace, torch, device: str) -> int:
         cache_dir=args.cache_dir,
         force_recompile=args.force_recompile,
     )
-    artifact(out_t, a, block=args.block)
+    artifact(out_t, a, block_dim=args.block_dim)
     torch.npu.synchronize()
 
     expected = [20 + 6, 20 * 6, 20 // 6, 20 % 6]
@@ -82,7 +82,7 @@ def _run_float_arg_arith(args: argparse.Namespace, torch, device: str) -> int:
         cache_dir=args.cache_dir,
         force_recompile=args.force_recompile,
     )
-    artifact(out_t, a, block=args.block)
+    artifact(out_t, a, block_dim=args.block_dim)
     torch.npu.synchronize()
 
     expected = torch.tensor([5.0, 6.0, 1.5], dtype=torch.float32, device=device)
@@ -118,7 +118,7 @@ def main() -> int:
         description="Host Numeric kernel args used in scalar arithmetic E2E."
     )
     parser.add_argument("--device", type=int, default=0)
-    parser.add_argument("--block", type=int, default=1)
+    parser.add_argument("--block-dim", type=int, default=1)
     parser.add_argument(
         "--cache-dir",
         default=str(Path(__file__).resolve().parent / "artifacts" / "runtime-cache"),

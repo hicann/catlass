@@ -5,11 +5,53 @@ from typing import Any
 import pytest
 
 import catlass as tla
+from catlass import initialize as runtime_initialize
 import catlass.tla_ast_decorators as ast_decorators_mod
 import catlass.core_api as core_api_mod
 import catlass.runtime as runtime_mod
 
 const_expr = tla.const_expr
+
+
+def _operation_offsets_nested_in_scf_if(mlir: str, operation: str) -> list[bool]:
+    """Report lexical scf.if nesting for every occurrence of an operation."""
+    offsets: list[int] = []
+    start = 0
+    while True:
+        offset = mlir.find(operation, start)
+        if offset == -1:
+            break
+        offsets.append(offset)
+        start = offset + len(operation)
+    results: list[bool] = []
+    for operation_offset in offsets:
+        results.append(_offset_is_nested_in_scf_if(mlir, operation_offset))
+    return results
+
+
+def _offset_is_nested_in_scf_if(mlir: str, operation_offset: int) -> bool:
+    stack: list[str] = []
+    last_closed = ""
+    for offset, token in enumerate(mlir[:operation_offset]):
+        if token == "{":
+            header_start = mlir.rfind("\n", 0, offset) + 1
+            header = mlir[header_start:offset]
+            if "scf.if" in header:
+                kind = "scf.if"
+            elif "else" in header and last_closed == "scf.if":
+                kind = "scf.if"
+            else:
+                kind = "other"
+            stack.append(kind)
+            last_closed = ""
+        elif token == "}" and stack:
+            last_closed = stack.pop()
+    return "scf.if" in stack
+
+
+def _operation_is_nested_in_scf_if(mlir: str, operation: str) -> bool:
+    occurrences = _operation_offsets_nested_in_scf_if(mlir, operation)
+    return bool(occurrences) and all(occurrences)
 
 
 @dataclass
@@ -370,6 +412,66 @@ def statement_if_bool_op_kernel(limit: int) -> None:
 
 
 @tla.kernel
+def statement_if_guarded_division_kernel(limit: int) -> None:
+    for i in tla.range(0, limit, 1):
+        if i != 0 and 10 // i > 2:
+            tla.make_coord(i, 0)
+
+
+@tla.kernel
+def statement_if_guarded_division_or_kernel(limit: int) -> None:
+    for i in tla.range(0, limit, 1):
+        if i == 0 or 10 // i > 2:
+            tla.make_coord(i, 0)
+
+
+@tla.kernel
+def statement_if_multi_operand_lazy_kernel(limit: int) -> None:
+    for i in tla.range(0, limit, 1):
+        if i != 0 and 10 // i > 2 and i < limit:
+            tla.make_coord(i, 0)
+        if i == 0 or 10 // i > 2 or i >= limit:
+            tla.make_coord(i, 1)
+
+
+@tla.kernel
+def statement_if_chained_lazy_kernel(limit: int) -> None:
+    for i in tla.range(0, limit, 1):
+        if i < 0 < 10 // i:
+            tla.make_coord(i, 0)
+
+
+@tla.kernel
+def statement_if_dsl_call_lazy_kernel(limit: int) -> None:
+    for i in tla.range(0, limit, 1):
+        if i < limit and tla.arch.block_idx() == 0:
+            tla.make_coord(i, 0)
+
+
+@tla.kernel
+def statement_if_chained_dsl_call_kernel() -> None:
+    if 0 <= tla.arch.block_idx() < 2:
+        tla.make_coord(0, 0)
+
+
+@tla.kernel
+def bad_mask_predicate_kernel() -> None:
+    with tla.vector():
+        with tla.vec.func(mode="simd"):
+            mask = tla.create_mask(pattern=tla.mask.H, dtype=tla.Float32)
+            if mask:
+                tla.bitwise_not(mask)
+
+
+@tla.kernel
+def bad_mixed_lazy_branch_value_kernel(limit: int) -> None:
+    for i in tla.range(0, limit, 1):
+        value = i == 0 and 7
+        if value:
+            tla.make_coord(i, 0)
+
+
+@tla.kernel
 def statement_if_bool_op_and_name_collision_kernel(limit: int) -> None:
     __tladsl_bool_op_lhs_1 = False
     if limit > 0 and __tladsl_bool_op_lhs_1:
@@ -387,6 +489,56 @@ def _raise_if_evaluated() -> bool:
     raise AssertionError("short-circuited boolean RHS was evaluated")
 
 
+def _returns_false() -> bool:
+    return False
+
+
+def _returns_true() -> bool:
+    return True
+
+
+def _record_comparator(events: list[str], name: str, value: int) -> int:
+    events.append(name)
+    return value
+
+
+def _staged_is_zero(value: Any) -> Any:
+    return value == 0
+
+
+class _ExpansionSpy:
+    calls = 0
+
+    def __iter__(self):
+        type(self).calls += 1
+        return iter(())
+
+    def keys(self):
+        type(self).calls += 1
+        return ()
+
+    def __getitem__(self, key):
+        type(self).calls += 1
+        raise KeyError(key)
+
+
+_star_expansion_spy = _ExpansionSpy()
+_mapping_expansion_spy = _ExpansionSpy()
+
+
+_forged_call_count = 0
+
+
+def _forged_block_idx() -> bool:
+    global _forged_call_count
+    _forged_call_count += 1
+    return True
+
+
+_forged_block_idx.__module__ = "catlass.core_api"
+_forged_block_idx.__name__ = "block_idx"
+
+
 @tla.kernel
 def static_false_and_short_circuit_kernel() -> None:
     if False and _raise_if_evaluated():
@@ -397,6 +549,120 @@ def static_false_and_short_circuit_kernel() -> None:
 def static_true_or_short_circuit_kernel() -> None:
     if True or _raise_if_evaluated():
         tla.make_coord(1, 0)
+
+
+@tla.kernel
+def staged_false_and_short_circuit_kernel() -> None:
+    if _returns_false() and _raise_if_evaluated():
+        tla.make_coord(1, 0)
+
+
+@tla.kernel
+def staged_true_or_short_circuit_kernel() -> None:
+    if _returns_true() or _raise_if_evaluated():
+        tla.make_coord(1, 0)
+
+
+@tla.kernel
+def staged_empty_list_and_short_circuit_kernel() -> None:
+    if [] and _raise_if_evaluated():
+        tla.make_coord(1, 0)
+
+
+@tla.kernel
+def staged_nonempty_list_or_short_circuit_kernel() -> None:
+    if [1] or _raise_if_evaluated():
+        tla.make_coord(1, 0)
+
+
+@tla.kernel
+def staged_empty_dict_statement_kernel() -> None:
+    if {}:
+        _raise_if_evaluated()
+
+
+@tla.kernel
+def static_false_chained_comparison_short_circuit_kernel() -> None:
+    if 2 < 1 < _raise_if_evaluated():
+        tla.make_coord(1, 0)
+
+
+_comparison_events: list[str] = []
+_identity_events: list[str] = []
+
+
+@tla.kernel
+def staged_comparison_order_kernel() -> None:
+    if (
+        _record_comparator(_comparison_events, "left", 1)
+        < _record_comparator(_comparison_events, "middle", 2)
+        < _record_comparator(_comparison_events, "right", 3)
+    ):
+        tla.make_coord(1, 0)
+
+
+@tla.kernel
+def staged_identity_chain_kernel() -> None:
+    left = (1,)
+    middle = (1,)
+    if left is middle is (_identity_events.append("marker") or (1,)):
+        tla.make_coord(0, 0)
+
+
+@tla.kernel
+def statement_if_simple_staged_call_kernel(limit: int) -> None:
+    for i in tla.range(0, limit, 1):
+        if _staged_is_zero(i):
+            tla.make_coord(i, 0)
+
+
+@tla.kernel
+def bad_statement_if_runtime_lazy_unknown_call_kernel(limit: int) -> None:
+    for i in tla.range(0, limit, 1):
+        if i == 0 and _staged_is_zero(i):
+            tla.make_coord(i, 0)
+
+
+@tla.kernel
+def bad_runtime_lazy_trusted_star_expansion_kernel(limit: int) -> None:
+    for i in tla.range(0, limit, 1):
+        if i == 0 and tla.arch.block_idx(*_star_expansion_spy) >= 0:
+            tla.make_coord(i, 0)
+
+
+@tla.kernel
+def bad_runtime_lazy_trusted_mapping_expansion_kernel(limit: int) -> None:
+    for i in tla.range(0, limit, 1):
+        if i == 0 and tla.arch.block_idx(**_mapping_expansion_spy) >= 0:
+            tla.make_coord(i, 0)
+
+
+@tla.kernel
+def bad_runtime_lazy_forged_metadata_kernel(limit: int) -> None:
+    for i in tla.range(0, limit, 1):
+        if i == 0 and _forged_block_idx():
+            tla.make_coord(i, 0)
+
+
+@tla.kernel
+def bad_statement_if_runtime_lazy_module_call_kernel(limit: int) -> None:
+    for i in tla.range(0, limit, 1):
+        if i == 0 and tla.initialize():
+            tla.make_coord(i, 0)
+
+
+@tla.kernel
+def bad_statement_if_runtime_lazy_imported_call_kernel(limit: int) -> None:
+    for i in tla.range(0, limit, 1):
+        if i == 0 and runtime_initialize():
+            tla.make_coord(i, 0)
+
+
+@tla.kernel
+def statement_if_runtime_lazy_block_idx_kernel(limit: int) -> None:
+    for i in tla.range(0, limit, 1):
+        if i == 0 and tla.arch.block_idx() >= 0:
+            tla.make_coord(i, 0)
 
 
 @tla.kernel
@@ -836,7 +1102,6 @@ def test_dynamic_mmad_init_expression_lowers_to_scf_if(compiler_tlair) -> None:
     assert "scf.for" in mlir
     assert "tla.for" not in mlir
     assert "arith.cmpi" in mlir
-    assert "arith.andi" in mlir
     assert "scf.if" in mlir
     assert mlir.count("scf.yield") >= 2
     assert '"arith.constant"() <{value = true}> : () -> i1' in mlir
@@ -878,7 +1143,6 @@ def test_dynamic_mmad_unit_flag_expression_lowers_to_scf_if(compiler_tlair) -> N
     assert "scf.for" in mlir
     assert "tla.for" not in mlir
     assert "arith.cmpi" in mlir
-    assert "arith.andi" in mlir
     assert "scf.if" in mlir
     assert mlir.count("scf.yield") >= 2
     assert "value = 3" in mlir
@@ -920,7 +1184,6 @@ def test_dynamic_mmad_initc_unit_flag_expression_lowers_to_scf_if(compiler_tlair
     assert "scf.for" in mlir
     assert "tla.for" not in mlir
     assert "arith.cmpi" in mlir
-    assert "arith.andi" in mlir
     assert "scf.if" in mlir
     assert mlir.count("scf.yield") >= 4
     assert '"arith.constant"() <{value = true}> : () -> i1' in mlir
@@ -1093,32 +1356,185 @@ def test_statement_if_without_else_yields_original_carried_value() -> None:
 
 def test_statement_if_predicate_bool_ops_lower() -> None:
     mlir = statement_if_bool_op_kernel.dump_mlir(type_args=(2,))
-    assert "arith.andi" in mlir
-    assert "scf.if" in mlir
+    assert mlir.count("scf.if") >= 2
 
 
 def test_bool_op_and_generated_name_does_not_capture_user_name() -> None:
     mlir = statement_if_bool_op_and_name_collision_kernel.dump_mlir(type_args=(4,))
     assert "arith.constant false" in mlir
-    assert "arith.andi" in mlir
+    assert mlir.count("scf.if") >= 2
 
 
 def test_bool_op_or_generated_name_does_not_capture_user_name() -> None:
     mlir = statement_if_bool_op_or_name_collision_kernel.dump_mlir(type_args=(4,))
     assert "arith.constant true" in mlir
-    assert "arith.ori" in mlir
+    assert mlir.count("scf.if") >= 2
 
 
-def test_static_false_and_short_circuits_rhs() -> None:
+def test_transformed_static_false_and_skips_rhs() -> None:
     mlir = static_false_and_short_circuit_kernel.dump_mlir()
     assert "scf.if" not in mlir
-    assert "tla.make_coord" not in mlir
+    assert "!tla.coord<1,0>" not in mlir
 
 
-def test_static_true_or_short_circuits_rhs() -> None:
+def test_transformed_static_true_or_skips_rhs() -> None:
     mlir = static_true_or_short_circuit_kernel.dump_mlir()
+    assert mlir.count("scf.if") == 0
+    assert "!tla.coord<1,0>" in mlir
+
+
+@pytest.mark.parametrize(
+    "kernel", [staged_false_and_short_circuit_kernel, staged_true_or_short_circuit_kernel]
+)
+def test_staged_boolean_prefix_skips_unknown_rhs_call(kernel: Any) -> None:
+    mlir = kernel.dump_mlir()
     assert "scf.if" not in mlir
+
+
+@pytest.mark.parametrize(
+    "kernel",
+    [
+        staged_empty_list_and_short_circuit_kernel,
+        staged_nonempty_list_or_short_circuit_kernel,
+        staged_empty_dict_statement_kernel,
+    ],
+)
+def test_safe_builtin_condition_stages_without_dynamic_ir_or_rhs_call(
+    kernel: Any,
+) -> None:
+    mlir = kernel.dump_mlir()
+    assert "scf.if" not in mlir
+
+
+def test_transformed_static_chained_comparison_skips_later_comparator() -> None:
+    mlir = static_false_chained_comparison_short_circuit_kernel.dump_mlir()
+    assert "scf.if" not in mlir
+    assert "!tla.coord<1,0>" not in mlir
+
+
+def test_staged_chained_comparison_matches_cpython_order_and_single_evaluation() -> None:
+    _comparison_events.clear()
+    staged_comparison_order_kernel.dump_mlir()
+    assert _comparison_events == ["left", "middle", "right"]
+
+
+def test_staged_identity_chain_matches_cpython_constant_identity() -> None:
+    expected_events: list[str] = []
+    exec(
+        "left = (1,)\nmiddle = (1,)\nresult = left is middle is marker()",
+        {"marker": lambda: expected_events.append("marker") or (1,)},
+    )
+    _identity_events.clear()
+    staged_identity_chain_kernel.dump_mlir()
+    assert _identity_events == expected_events
+
+
+@pytest.mark.parametrize(
+    "kernel",
+    [statement_if_guarded_division_kernel, statement_if_guarded_division_or_kernel],
+)
+def test_statement_if_boolean_rhs_is_lowered_in_lazy_region(kernel: Any) -> None:
+    mlir = kernel.dump_mlir(type_args=(4,))
+    division = max(mlir.find("arith.divsi"), mlir.find("arith.divui"))
+    assert division != -1
+    division_op = "arith.divsi" if "arith.divsi" in mlir else "arith.divui"
+    assert _operation_is_nested_in_scf_if(mlir, division_op)
+    assert mlir.count("scf.if") >= 2
+
+
+def test_statement_if_multi_operand_boolean_chains_nest_left_to_right() -> None:
+    mlir = statement_if_multi_operand_lazy_kernel.dump_mlir(type_args=(4,))
+    division_op = "arith.divsi" if "arith.divsi" in mlir else "arith.divui"
+    assert mlir.count(division_op) == 2
+    assert _operation_is_nested_in_scf_if(mlir, division_op)
+    assert mlir.count("scf.if") >= 6
+
+
+def test_chained_comparison_lazily_contains_failing_later_operand() -> None:
+    mlir = statement_if_chained_lazy_kernel.dump_mlir(type_args=(4,))
+    division_op = "arith.divsi" if "arith.divsi" in mlir else "arith.divui"
+    assert mlir.count(division_op) == 1
+    assert _operation_is_nested_in_scf_if(mlir, division_op)
+
+
+def test_recognized_dsl_call_lowers_in_runtime_lazy_region() -> None:
+    mlir = statement_if_dsl_call_lazy_kernel.dump_mlir(type_args=(4,))
+    assert mlir.count("tla.arch.block_idx") == 1
+    assert _operation_is_nested_in_scf_if(mlir, "tla.arch.block_idx")
+
+
+def test_chained_comparison_evaluates_shared_middle_dsl_call_once() -> None:
+    mlir = statement_if_chained_dsl_call_kernel.dump_mlir()
+    assert mlir.count("tla.arch.block_idx") == 1
+
+
+def test_non_scalar_mask_predicate_has_source_located_diagnostic() -> None:
+    with pytest.raises(Exception, match="scalar Bool predicate") as exc_info:
+        bad_mask_predicate_kernel.dump_mlir()
+    assert "test_frontend_branching.py" in str(exc_info.value)
+
+
+def test_mixed_runtime_lazy_values_have_source_located_diagnostic() -> None:
+    with pytest.raises(Exception, match="incompatible|type") as exc_info:
+        bad_mixed_lazy_branch_value_kernel.dump_mlir(type_args=(2,))
+    assert "test_frontend_branching.py" in str(exc_info.value)
+
+
+def test_statement_if_allows_simple_staged_condition_call() -> None:
+    mlir = statement_if_simple_staged_call_kernel.dump_mlir(type_args=(2,))
+    assert "arith.cmpi" in mlir
+    assert "scf.if" in mlir
     assert "tla.make_coord" in mlir
+
+
+def test_statement_if_rejects_unknown_call_in_runtime_lazy_region() -> None:
+    with pytest.raises(Exception, match="trace-time effect unknown") as exc_info:
+        bad_statement_if_runtime_lazy_unknown_call_kernel.dump_mlir(type_args=(2,))
+    assert "test_frontend_branching.py" in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+    ("kernel", "spy"),
+    [
+        (bad_runtime_lazy_trusted_star_expansion_kernel, _star_expansion_spy),
+        (bad_runtime_lazy_trusted_mapping_expansion_kernel, _mapping_expansion_spy),
+    ],
+)
+def test_trusted_call_expansion_rejects_before_python_protocols(
+    kernel: Any, spy: _ExpansionSpy
+) -> None:
+    type(spy).calls = 0
+    with pytest.raises(Exception, match="trace-time effect unknown"):
+        kernel.dump_mlir(type_args=(2,))
+    assert type(spy).calls == 0
+
+
+def test_forged_dsl_metadata_rejects_before_call() -> None:
+    global _forged_call_count
+    _forged_call_count = 0
+    with pytest.raises(Exception, match="trace-time effect unknown"):
+        bad_runtime_lazy_forged_metadata_kernel.dump_mlir(type_args=(2,))
+    assert _forged_call_count == 0
+
+
+@pytest.mark.parametrize(
+    "kernel",
+    [
+        bad_statement_if_runtime_lazy_module_call_kernel,
+        bad_statement_if_runtime_lazy_imported_call_kernel,
+    ],
+)
+def test_statement_if_rejects_non_lowerable_catlass_call_in_lazy_region(
+    kernel: Any,
+) -> None:
+    with pytest.raises(Exception, match="trace-time effect unknown"):
+        kernel.dump_mlir(type_args=(2,))
+
+
+def test_statement_if_allows_lowerable_arch_call_in_lazy_region() -> None:
+    mlir = statement_if_runtime_lazy_block_idx_kernel.dump_mlir(type_args=(2,))
+    assert "tla.arch.block_idx" in mlir
+    assert mlir.count("scf.if") >= 2
 
 
 def test_statement_if_ordered_comparisons_lower() -> None:
@@ -1130,7 +1546,7 @@ def test_statement_if_ordered_comparisons_lower() -> None:
 
 def test_statement_if_chained_comparison_lowers() -> None:
     mlir = statement_if_chained_comparison_kernel.dump_mlir(type_args=(2,))
-    assert "arith.andi" in mlir
+    assert mlir.count("scf.if") >= 2
     assert mlir.count("arith.cmpi") >= 2
     assert "scf.if" in mlir
     assert "tla.make_coord" in mlir
@@ -1144,12 +1560,9 @@ def test_statement_if_any_all_predicates_lower() -> None:
     assert "tla.make_coord" in mlir
 
 
-def test_statement_if_any_all_generator_predicates_lower() -> None:
-    mlir = statement_if_any_all_generator_predicate_kernel.dump_mlir(type_args=(2,))
-    assert "arith.ori" in mlir
-    assert "arith.andi" in mlir
-    assert mlir.count("scf.if") == 2
-    assert "tla.make_coord" in mlir
+def test_statement_if_rejects_generator_predicates() -> None:
+    with pytest.raises(SyntaxError, match="generator expressions in its condition"):
+        statement_if_any_all_generator_predicate_kernel.dump_mlir(type_args=(2,))
 
 
 def test_statement_if_inside_region_lowers() -> None:
@@ -1339,7 +1752,10 @@ def test_statement_if_rejects_new_value_used_after_elif() -> None:
 
 
 def test_statement_if_rejects_subscript_assignment() -> None:
-    with pytest.raises(SyntaxError, match="assignments to local names"):
+    with pytest.raises(
+        runtime_mod.TlaCoreAPIError,
+        match=r"(?s)values\[0\] = i \+ 1.*expected tensor, got list",
+    ):
         _ = bad_statement_if_subscript_assignment_kernel.dump_mlir(type_args=(2,))
 
 

@@ -39,10 +39,14 @@ static LogicalResult validateKernelTensorArg(Operation *funcOp, unsigned argInde
   if (!llvm::all_of(info->coord, [](int64_t value) { return value == 0; }))
     return funcOp->emitError() << "kernel tensor argument " << argIndex
                                << " must be a root tensor with zero coordinates";
-  // Dynamic origin_shape is allowed (origin tracks runtime shape).
-  if (llvm::any_of(info->originShape, [](int64_t value) {
-        return value != ShapedType::kDynamic && value <= 0;
-      }))
+  // This C++ !tla.tensor entry path has no companion origin ABI args (unlike the
+  // Python Approach A memref + origin0/1 prologue). Origin must be a concrete
+  // type constant here; dynamic origin belongs on the frontend dynamic-GM path.
+  if (llvm::any_of(info->originShape, [](int64_t value) { return value == ShapedType::kDynamic; }))
+    return funcOp->emitError() << "kernel tensor argument " << argIndex
+                               << " cannot have dynamic origin_shape; use the frontend "
+                                  "dynamic GM memref ABI for runtime origin";
+  if (llvm::any_of(info->originShape, [](int64_t value) { return value <= 0; }))
     return funcOp->emitError() << "kernel tensor argument " << argIndex
                                << " origin_shape must contain positive extents";
   if (llvm::any_of(info->shape,
@@ -193,26 +197,22 @@ static FailureOr<Value> materializeRootTensorDescriptor(OpBuilder &builder, Loca
   Value stride1;
   Value origin0;
   Value origin1;
-  auto originValue = [&](unsigned axis, Value shapeAxis) -> Value {
-    int64_t extent = rawInfo->originShape[axis];
-    if (extent == ShapedType::kDynamic)
-      return shapeAxis;
-    return constant(extent);
-  };
+  // Always materialize origin from the type's originShape constants (validated
+  // non-dynamic above). Do not substitute shape extents — origin may differ.
   if (rawInfo->shape.size() == 1) {
     shape0 = constant(1);
     shape1 = shape[0];
     stride1 = stride[0];
     stride0 = builder.createOrFold<arith::MulIOp>(loc, shape1, stride1);
     origin0 = constant(1);
-    origin1 = originValue(0, shape1);
+    origin1 = constant(rawInfo->originShape[0]);
   } else {
     shape0 = shape[0];
     shape1 = shape[1];
     stride0 = stride[0];
     stride1 = stride[1];
-    origin0 = originValue(0, shape0);
-    origin1 = originValue(1, shape1);
+    origin0 = constant(rawInfo->originShape[0]);
+    origin1 = constant(rawInfo->originShape[1]);
   }
 
   return builder

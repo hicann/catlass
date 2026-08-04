@@ -173,6 +173,14 @@ CATLASS_DEVICE auto makeColumnMajorTlaLayout(const TensorDesc2D &desc) {
                            tla::MakeShape(desc.originShape0, desc.originShape1));
 }
 
+template <typename T, size_t Dim>
+CATLASS_DEVICE auto makeUBTensorColumnMajor(memref_t<__ubuf__ T, Dim> *memref, const TensorDesc2D &desc) {
+    return tla::MakeTensor(AscendC::LocalTensor<T>(AscendC::TPosition::VECCALC, localAddr(memref),
+                                 elementCount(memref)),
+                           makeColumnMajorTlaLayout(desc), makeTlaTileCoord(desc),
+                           Catlass::Arch::PositionUB{});
+}
+
 template <typename T>
 CATLASS_DEVICE auto makeGMTensorColumnMajor(memref_t<__gm__ T, 2> *memref, const TensorDesc2D &desc) {
     return tla::MakeTensor(makeGlobalTensor(basePtr(memref)), makeColumnMajorTlaLayout(desc),

@@ -531,9 +531,10 @@ def test_compile_artifact_propagates_and_persists_kernel_abi(
     )
     hivmc = tmp_path / "hivmc-a5"
     hivmc.write_text("")
-    template_bc = tmp_path / "meta_op.aiv.c310.bc"
+    template_bc = tmp_path / "bc" / "meta_op.aiv.c310.bc"
+    template_bc.parent.mkdir(parents=True)
     template_bc.write_bytes(b"bc")
-    monkeypatch.setenv("TLA_DSL_HIVM_TEMPLATE_BC", str(template_bc))
+    monkeypatch.setattr(execution, "_mlir_build_dirs", lambda: [tmp_path])
     monkeypatch.setattr(
         base_dsl_mod.BaseDSL, "_lower", lambda *_a, **_k: _FakeLowered()
     )

@@ -4,6 +4,7 @@
 // RUN: not %tla_compile %t/layout.mlir -o - 2>&1 | %filecheck %s --check-prefix=LAYOUT
 // RUN: not %tla_compile %t/coord.mlir -o - 2>&1 | %filecheck %s --check-prefix=COORD
 // RUN: not %tla_compile %t/origin.mlir -o - 2>&1 | %filecheck %s --check-prefix=ORIGIN
+// RUN: not %tla_compile %t/dynamic-origin.mlir -o - 2>&1 | %filecheck %s --check-prefix=DYNAMIC-ORIGIN
 // RUN: not %tla_compile %t/row-stride.mlir -o - 2>&1 | %filecheck %s --check-prefix=ROW-STRIDE
 // RUN: not %tla_compile %t/column-stride.mlir -o - 2>&1 | %filecheck %s --check-prefix=COL-STRIDE
 // RUN: not %tla_compile %t/result.mlir -o - 2>&1 | %filecheck %s --check-prefix=RESULT
@@ -18,6 +19,8 @@
 // COORD-SAME: kernel tensor argument 0 cannot have dynamic coordinates
 // ORIGIN: error:
 // ORIGIN-SAME: kernel tensor argument 0 origin_shape must contain positive extents
+// DYNAMIC-ORIGIN: error:
+// DYNAMIC-ORIGIN-SAME: kernel tensor argument 0 cannot have dynamic origin_shape
 // ROW-STRIDE: error:
 // ROW-STRIDE-SAME: row_major kernel tensor argument 0 must have non-overlapping rows
 // COL-STRIDE: error:
@@ -55,8 +58,16 @@ module {
 
 //--- origin.mlir
 module {
-  // Dynamic origin_shape is allowed; reject non-positive static extents.
+  // Reject non-positive static origin extents.
   tla.func @bad_origin(%arg0: !tla.tensor<!tla.layout<!tla.shape<8,8>, !tla.stride<8,1>, !tla.shape<0,8>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>) {
+    tla.return
+  }
+}
+
+//--- dynamic-origin.mlir
+module {
+  // Dynamic origin on !tla.tensor entry requires the frontend dynamic GM ABI.
+  tla.func @bad_dynamic_origin(%arg0: !tla.tensor<!tla.layout<!tla.shape<?,8>, !tla.stride<8,1>, !tla.shape<?,8>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>) {
     tla.return
   }
 }

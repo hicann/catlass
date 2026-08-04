@@ -181,7 +181,7 @@ def run(args: argparse.Namespace) -> int:
             tla_out,
             **_runtime_kwargs(args),
         )
-        artifact(tla_x, tla_y, tla_out, block=args.block)
+        artifact(tla_x, tla_y, tla_out, block_dim=args.block_dim)
         torch.npu.synchronize()
 
         matches = torch.isclose(out, expected, rtol=0.0, atol=args.atol)
@@ -216,7 +216,7 @@ def _build_parser() -> argparse.ArgumentParser:
     mode.add_argument("--build-only", action="store_true")
     mode.add_argument("--run", action="store_true")
     parser.add_argument("--device", type=int, default=0)
-    parser.add_argument("--block", type=int, default=1)
+    parser.add_argument("--block-dim", type=int, default=1)
     parser.add_argument("--atol", type=float, default=1e-4)
     parser.add_argument("--cache-dir", default=str(DEFAULT_CACHE_DIR))
     parser.add_argument("--force-recompile", action="store_true")

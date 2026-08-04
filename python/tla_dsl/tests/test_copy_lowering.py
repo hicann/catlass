@@ -544,3 +544,35 @@ def test_ptradd_ub_subtile_copy_applies_ptr_offset(tmp_path) -> None:
     # (32*64+32 = 2080) from absCoord/stride at runtime.
     assert "arith.constant 64 : i64" in out
     assert '"tla.copy"' not in out
+
+
+@tla.kernel
+def copy_l0c_to_ub_split_m_col_major_dst_kernel(gm_c: tla.Tensor) -> None:
+    """L0C(f32)->UB(f32) with SPLIT_M and column_major dst must be rejected."""
+    l0c_ptr = tla.allocate(32 * 32, tla.Float32, tla.AddressSpace.l0c, 512)
+    l0c = tla.make_tensor_like(l0c_ptr, gm_c, tla.arch.L0Clayout)
+    ub_ptr = tla.allocate(32 * 32, tla.Float32, tla.AddressSpace.ub, 256)
+    ub = tla.make_tensor_like(ub_ptr, gm_c, tla.arch.ColumnMajor)
+    with tla.cube():
+        tla.copy(
+            ub, l0c,
+            tla.params.CopyL0C2DstParams(l0c2ub_mode=tla.params.L0C2UBMode.SPLIT_M),
+        )
+
+
+def test_copy_l0c_to_ub_split_m_col_major_dst_raises() -> None:
+    """L0C->UB copy with SPLIT_M + column_major dst must raise TlaLoweringError."""
+    with runtime_mod._eager_capture():
+        gm_c = tla.Tensor(
+            tla.make_shape(32, 32),
+            tla.Float32,
+            origin_shape=tla.make_shape(32, 32),
+            coord=tla.make_coord(0, 0),
+            stride=tla.make_stride(32, 1),
+            layout_tag=tla.arch.RowMajor,
+        )
+    with pytest.raises(
+        TlaLoweringError,
+        match=r"When copy l0c to ub and dst layout_tag is column_major, only support `NO_SPLIT` mode",
+    ):
+        copy_l0c_to_ub_split_m_col_major_dst_kernel.dump_mlir(type_args=(gm_c,))

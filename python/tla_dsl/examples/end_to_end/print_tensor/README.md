@@ -18,10 +18,10 @@ Cube-core output keeps the same format without a `subblock` field.
 Run GM on either supported core scope:
 
 ```bash
-python print_tensor.py --run --arch-scope aiv.c310 --device 0 --block 1 --force-recompile
-python print_tensor.py --run --arch-scope aic.c310 --device 0 --block 1 --force-recompile
-python print_tensor.py --run --dynamic-shape --arch-scope aiv.c310 --device 0 --block 1 --force-recompile
-python print_tensor.py --run --dynamic-shape --arch-scope aic.c310 --device 0 --block 1 --force-recompile
+python print_tensor.py --run --arch-scope aiv.c310 --device 0 --block-dim 1 --force-recompile
+python print_tensor.py --run --arch-scope aic.c310 --device 0 --block-dim 1 --force-recompile
+python print_tensor.py --run --dynamic-shape --arch-scope aiv.c310 --device 0 --block-dim 1 --force-recompile
+python print_tensor.py --run --dynamic-shape --arch-scope aic.c310 --device 0 --block-dim 1 --force-recompile
 ```
 
 Exercise raw physical-prefix semantics with column-major GM storage. The
@@ -29,14 +29,14 @@ logical output shape remains `[8,4]`, while values follow the contiguous
 transposed backing buffer:
 
 ```bash
-python print_tensor.py --run --layout column-major --arch-scope aiv.c310 --device 0 --block 1 --force-recompile
+python print_tensor.py --run --layout column-major --arch-scope aiv.c310 --device 0 --block-dim 1 --force-recompile
 ```
 
 Exercise the exact 262,112-element GM capacity boundary (redirect the large
 canonical record when running in automation):
 
 ```bash
-python print_tensor.py --run --case capacity --arch-scope aiv.c310 --device 0 --block 1 --force-recompile > capacity.log
+python print_tensor.py --run --case capacity --arch-scope aiv.c310 --device 0 --block-dim 1 --force-recompile > capacity.log
 ```
 
 Run the UB base-address and aligned-offset cases on AIV. The kernel explicitly
@@ -44,9 +44,9 @@ uses a 32-byte row width and completes the producer-side GM-to-UB copy before
 printing:
 
 ```bash
-python print_tensor.py --run --storage ub --case base --arch-scope aiv.c310 --device 0 --block 1 --force-recompile
-python print_tensor.py --run --storage ub --case aligned-offset --arch-scope aiv.c310 --device 0 --block 1 --force-recompile
-python print_tensor.py --run --storage ub --case dynamic --arch-scope aiv.c310 --device 0 --block 1 --force-recompile
+python print_tensor.py --run --storage ub --case base --arch-scope aiv.c310 --device 0 --block-dim 1 --force-recompile
+python print_tensor.py --run --storage ub --case aligned-offset --arch-scope aiv.c310 --device 0 --block-dim 1 --force-recompile
+python print_tensor.py --run --storage ub --case dynamic --arch-scope aiv.c310 --device 0 --block-dim 1 --force-recompile
 ```
 
 ## Support matrix

@@ -16,6 +16,36 @@ tla_range_constexpr = tla.range_constexpr
 range_constexpr = tla.range_constexpr
 
 
+def _return_in_tuple_loop(limit: int) -> None:
+    for i in tla.range(0, limit, 1):
+        if i == 0:
+            for _ in (0,):
+                return
+
+
+def _return_in_list_loop(limit: int) -> None:
+    for i in tla.range(0, limit, 1):
+        if i == 0:
+            for _ in [0]:
+                return
+
+
+def _python_loop_break_in_dynamic_if(limit: int) -> None:
+    for i in tla.range(0, limit, 1):
+        if i == 0:
+            for item in (0, 1):
+                break
+        tla.make_coord(i, 0)
+
+
+def _python_loop_continue_in_dynamic_if(limit: int) -> None:
+    for i in tla.range(0, limit, 1):
+        if i == 0:
+            for item in (0, 1):
+                continue
+        tla.make_coord(i, 0)
+
+
 @dataclass
 class LoopState:
     coord: Any
@@ -482,6 +512,41 @@ def test_dynamic_tla_range_loop_rejects_return() -> None:
         )
     with pytest.raises(SyntaxError, match="dynamic Tla for"):
         _ = BaseDSL()._func(lowered, kind="kernel", options={}, type_args=(mem_a,))
+
+
+def test_dynamic_if_rejects_return_hidden_in_nested_static_for() -> None:
+    def lowered(limit: int) -> None:
+        for i in tla.range(0, limit, 1):
+            if i == 0:
+                for _ in range(1):
+                    return
+            tla.make_coord(i, 0)
+
+    with pytest.raises(SyntaxError, match="dynamic Tla if does not support return"):
+        _ = BaseDSL()._func(lowered, kind="kernel", options={}, type_args=(4,))
+
+
+@pytest.mark.parametrize(
+    "lowered",
+    [_return_in_tuple_loop, _return_in_list_loop],
+    ids=["tuple", "list"],
+)
+def test_dynamic_if_rejects_return_hidden_in_arbitrary_python_for(
+    lowered,
+) -> None:
+    with pytest.raises(SyntaxError, match="dynamic Tla if does not support return"):
+        _ = BaseDSL()._func(lowered, kind="kernel", options={}, type_args=(4,))
+
+
+@pytest.mark.parametrize(
+    "lowered",
+    [_python_loop_break_in_dynamic_if, _python_loop_continue_in_dynamic_if],
+    ids=["break", "continue"],
+)
+def test_dynamic_if_allows_exit_owned_by_nested_python_loop(lowered) -> None:
+    mlir = BaseDSL()._func(lowered, kind="kernel", options={}, type_args=(4,))
+    assert "scf.for" in mlir
+    assert "scf.if" in mlir
 
 
 def test_dynamic_tla_range_loop_rejects_break() -> None:

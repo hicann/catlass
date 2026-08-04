@@ -511,11 +511,11 @@ def _run_spec(args: argparse.Namespace, torch: Any, spec: _DTypeSpec) -> None:
     executor = _compile(args, kernel, kernel_args)
     captured = StringIO()
     with redirect_stdout(captured):
-        executor(*kernel_args, block=args.block)
+        executor(*kernel_args, block_dim=args.block_dim)
     output_shape = (
         UB_SHAPE if args.storage == "ub" and args.case != "dynamic" else source_shape
     )
-    if args.calls == 1 and args.block == 1:
+    if args.calls == 1 and args.block_dim == 1:
         rendered = _verify_public_output(
             captured.getvalue(),
             spec,
@@ -527,7 +527,7 @@ def _run_spec(args: argparse.Namespace, torch: Any, spec: _DTypeSpec) -> None:
         rendered = _verify_multi_record_public_output(
             captured.getvalue(),
             calls=args.calls,
-            block_count=args.block,
+            block_count=args.block_dim,
             spec=spec,
             values=expected_values,
             shape=output_shape,
@@ -541,10 +541,10 @@ def _run_spec(args: argparse.Namespace, torch: Any, spec: _DTypeSpec) -> None:
 
 def run(args: argparse.Namespace) -> int:
     if args.case == "capacity" and (
-        args.storage != "gm" or args.dynamic_shape or args.block != 1
+        args.storage != "gm" or args.dynamic_shape or args.block_dim != 1
     ):
         raise tla.TlaExecutionError(
-            "the capacity case requires static GM printing with --block 1"
+            "the capacity case requires static GM printing with --block-dim 1"
         )
     if args.layout == "column-major" and (
         args.storage != "gm" or args.case != "base" or args.dynamic_shape
@@ -595,7 +595,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--dynamic-shape", action="store_true")
     parser.add_argument("--device", type=int, default=0)
-    parser.add_argument("--block", type=int, default=1)
+    parser.add_argument("--block-dim", type=int, default=1)
     parser.add_argument("--calls", type=int, choices=(1, 2), default=1)
     parser.add_argument("--cache-dir", default=str(DEFAULT_CACHE_DIR))
     parser.add_argument("--force-recompile", action="store_true")

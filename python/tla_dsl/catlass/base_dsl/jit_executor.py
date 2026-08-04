@@ -21,21 +21,21 @@ class TlaJitExecutor:
     def launch(
         self,
         *launch_args: Any,
-        block: int | None = None,
+        block_dim: int | None = None,
         args: Sequence[Any] | None = None,
         **kwargs: Any,
     ) -> TlaExecutionResult:
-        if "grid" in kwargs and block is not None:
-            raise TlaUnsupportedAbiError("Use either `block` or `grid`, not both.")
+        if "grid" in kwargs and block_dim is not None:
+            raise TlaUnsupportedAbiError("Use either `block_dim` or `grid`, not both.")
         if launch_args and args is not None:
             raise TlaUnsupportedAbiError("Launch arguments specified multiple times.")
         if args is None:
             args = launch_args
         launch_kwargs = dict(kwargs)
-        if block is not None:
-            if not isinstance(block, int):
-                raise TlaUnsupportedAbiError("`block` must be an int.")
-            launch_kwargs["grid"] = (int(block), 1, 1)
+        if block_dim is not None:
+            if not isinstance(block_dim, int):
+                raise TlaUnsupportedAbiError("`block_dim` must be an int.")
+            launch_kwargs["grid"] = (int(block_dim), 1, 1)
         runtime = self.artifact.runtime
         if runtime is None:
             raise TlaRuntimeUnavailableError(

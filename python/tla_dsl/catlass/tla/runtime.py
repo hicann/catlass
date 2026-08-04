@@ -103,7 +103,7 @@ class _Tensor(TensorABC):
         dtype: Any,
         *,
         addrspace: Any = AddressSpace.gm,
-        data_ptr: int = 0,
+        data_ptr: int | None = 0,
         origin_shape: Iterable[Any] | None = None,
         coord: Iterable[Any] | None = None,
         stride: Any | None = None,
@@ -117,7 +117,11 @@ class _Tensor(TensorABC):
         self._dynamic_origin_shape_tree: Any | None = None
         self._dynamic_stride_tree: Any | None = None
 
-        self.data_ptr = data_ptr
+        # None is treated as unbound (compile-time placeholder tensors).
+        self.data_ptr = 0 if data_ptr is None else int(data_ptr)
+        # Non-zero data_ptr means the host already owns a device buffer (e.g. torch).
+        if self.data_ptr != 0:
+            self._external_binding = True
         self._initialize_metadata(
             shape,
             dtype,

@@ -228,10 +228,11 @@ def run(args: argparse.Namespace) -> int:
     try:
         torch = _require_torch_npu(args.device)
         device = "npu"
-        lhs = torch.randn(M_DIM * K_DIM, dtype=torch.float32, device=device).reshape(
+        torch.npu.manual_seed(0)
+        lhs = (torch.rand(M_DIM * K_DIM, dtype=torch.float32, device=device) * 10.0 - 5.0).reshape(
             M_DIM, K_DIM
         )
-        rhs = torch.randn(K_DIM * N_DIM, dtype=torch.float32, device=device).reshape(
+        rhs = (torch.rand(K_DIM * N_DIM, dtype=torch.float32, device=device) * 10.0 - 5.0).reshape(
             K_DIM, N_DIM
         )
         out = torch.full((M_DIM, N_DIM), -9.0, dtype=torch.float32, device=device)
@@ -249,8 +250,8 @@ def run(args: argparse.Namespace) -> int:
             **_runtime_kwargs(args),
         )
 
-        block = max(1, args.block if args.block != -1 else tla.get_aicore_num(args.device))
-        artifact(tla_lhs, tla_rhs, tla_out, block=block)
+        block_dim = max(1, args.block_dim if args.block_dim != -1 else tla.get_aicore_num(args.device))
+        artifact(tla_lhs, tla_rhs, tla_out, block_dim=block_dim)
 
         torch.npu.synchronize()
         expected_match = torch.isclose(out, expected, rtol=0.0, atol=args.atol)
@@ -280,7 +281,7 @@ def _build_parser() -> argparse.ArgumentParser:
     mode.add_argument("--build-only", action="store_true")
     mode.add_argument("--run", action="store_true")
     parser.add_argument("--device", type=int, default=2)
-    parser.add_argument("--block", type=int, default=-1)
+    parser.add_argument("--block-dim", type=int, default=-1)
     parser.add_argument("--atol", type=float, default=1e-4)
     parser.add_argument("--cache-dir", default=str(DEFAULT_CACHE_DIR))
     parser.add_argument("--force-recompile", action="store_true")

@@ -23,7 +23,7 @@ Run on an Ascend 950 device:
 
 ```bash
 python cross_flag_two_way.py \
-  --run --device 0 --block 1 --force-recompile
+  --run --device 0 --block-dim 1 --force-recompile
 ```
 
 A passing run prints `aiv0_row_ok=True`, `aiv1_row_ok=True`, and

@@ -411,7 +411,7 @@ def _create_tla_tensor(dev_buf: Any, rows: int, cols: int) -> Any:
 
     contiguous = dev_buf.contiguous()
     with runtime_mod._eager_capture():
-        tensor = tla.Tensor(
+        return tla.Tensor(
             tla.make_shape(rows, cols),
             tla.Float32,
             origin_shape=tla.make_shape(rows, cols),
@@ -419,8 +419,6 @@ def _create_tla_tensor(dev_buf: Any, rows: int, cols: int) -> Any:
             stride=tla.make_stride(cols, 1),
             data_ptr=int(contiguous.data_ptr()),
         ).mark_layout_dynamic()
-    tensor._external_binding = True
-    return tensor
 
 
 def _verify_mixed_print_output(output: str) -> list[str]:
@@ -488,8 +486,9 @@ def _run_single_case(
         raise ValueError(f"k must be in 1..{K_DIM}; got {k}")
 
     device = "npu"
-    lhs = torch.arange(m * k, dtype=torch.float32, device=device).reshape(m, k)
-    rhs = torch.arange(k * n, dtype=torch.float32, device=device).reshape(k, n)
+    torch.npu.manual_seed(0)
+    lhs = torch.rand(m, k, dtype=torch.float32, device=device) * 10.0 - 5.0
+    rhs = torch.rand(k, n, dtype=torch.float32, device=device) * 10.0 - 5.0
     addend = torch.full((m, n), 3.0, dtype=torch.float32, device=device)
     out = torch.full((m, n), -9.0, dtype=torch.float32, device=device)
     expected = lhs @ rhs + addend
@@ -508,14 +507,19 @@ def _run_single_case(
         tla_addend,
         **_runtime_kwargs(args),
     )
-    block = max(1, args.block if args.block != -1 else tla.get_aicore_num(args.device))
+    block_dim = max(1, args.block_dim if args.block_dim != -1 else tla.get_aicore_num(args.device))
     captured = StringIO()
     with redirect_stdout(captured):
-        artifact(tla_lhs, tla_rhs, tla_out, tla_addend, block=block)
+        artifact(tla_lhs, tla_rhs, tla_out, tla_addend, block_dim=block_dim)
     print_records = _verify_mixed_print_output(captured.getvalue())
 
     torch.npu.synchronize()
-    expected_match = torch.isclose(out, expected, rtol=0.0, atol=args.atol)
+    rtol = (1.0 / 256.0) if k < 2048 else (1.0 / 128.0)
+    out_f = out.detach().to(device="cpu", dtype=torch.float32)
+    expected_f = expected.detach().to(device="cpu", dtype=torch.float32)
+    expected_match = (out_f - expected_f).abs() <= (
+        rtol * torch.maximum(torch.ones_like(expected_f), expected_f.abs())
+    )
     mismatch = expected_match.logical_not().nonzero(as_tuple=False)
     first_mismatch: dict[str, Any] | None = None
     if mismatch.numel():
@@ -556,8 +560,7 @@ def _build_parser() -> argparse.ArgumentParser:
     mode.add_argument("--build-only", action="store_true")
     mode.add_argument("--run", action="store_true")
     parser.add_argument("--device", type=int, default=2)
-    parser.add_argument("--block", type=int, default=-1)
-    parser.add_argument("--atol", type=float, default=1e-4)
+    parser.add_argument("--block-dim", type=int, default=-1)
     parser.add_argument("--cache-dir", default=str(DEFAULT_CACHE_DIR))
     parser.add_argument("--force-recompile", action="store_true")
     parser.add_argument("--no-cache", action="store_true")

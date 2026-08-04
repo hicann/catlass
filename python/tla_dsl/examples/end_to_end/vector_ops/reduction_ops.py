@@ -217,7 +217,7 @@ def main() -> int:
             tla_x = _runtime_tensor(x, (3 * VECTOR_ELE,))
             tla_z = _runtime_tensor(z, (6,))
             artifact = _compile_batch(args, tla_x, tla_z)
-            artifact(tla_x, tla_z, block=3)
+            artifact(tla_x, tla_z, block_dim=3)
             torch.npu.synchronize()
             failed = 0
             for index, op_name in enumerate(("add", "max", "min")):
@@ -263,7 +263,7 @@ def main() -> int:
         tla_x = _runtime_tensor(x, (VECTOR_ELE,))
         tla_z = _runtime_tensor(z, (2,))
         artifact = _compile(args, tla_x, tla_z)
-        artifact(tla_x, tla_z, block=1)
+        artifact(tla_x, tla_z, block_dim=1)
         torch.npu.synchronize()
 
         exp0 = _expected(args.op, x[:TILE_ELE])

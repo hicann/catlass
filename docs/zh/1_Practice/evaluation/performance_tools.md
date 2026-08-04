@@ -14,9 +14,9 @@ CANN对算子开发的两个场景——单算子与整网开发，分别提供�
 
 ### Profiling简介
 
-[Profiling](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/devaids/Profiling/atlasprofiling_16_0010.html)是整网性能分析工具，对应的指令为`msprof`。
+[Profiling](https://www.hiascend.com/document/detail/zh/mindstudio/2600/msTT_msIT/msProf/docs/zh/quick_start.md)是整网性能分析工具，对应的指令为`msprof`。
 
-[Profiling](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/devaids/Profiling/atlasprofiling_16_0010.html)工具提供了AI任务运行性能数据、昇腾AI处理器系统数据等性能数据的采集和解析能力。
+[Profiling](https://www.hiascend.com/document/detail/zh/mindstudio/2600/msTT_msIT/msProf/docs/zh/quick_start.md)工具提供了AI任务运行性能数据、昇腾AI处理器系统数据等性能数据的采集和解析能力。
 
 其中，`msprof`采集通用命令是性能数据采集的基础，用于提供性能数据采集时的基本信息，包括参数说明、AI任务文件、数据存放路径、自定义环境变量等。
 

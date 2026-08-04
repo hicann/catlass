@@ -269,10 +269,11 @@ def run(args: argparse.Namespace) -> int:
     try:
         torch = _require_torch_npu(args.device)
         device = "npu"
-        lhs = torch.randn(M_DIM * K_DIM, dtype=torch.float32, device="cpu").reshape(
+        torch.manual_seed(0)
+        lhs = (torch.rand(M_DIM * K_DIM, dtype=torch.float32, device="cpu") * 10.0 - 5.0).reshape(
             M_DIM, K_DIM
         )
-        rhs = torch.randn(K_DIM * N_DIM, dtype=torch.float32, device="cpu").reshape(
+        rhs = (torch.rand(K_DIM * N_DIM, dtype=torch.float32, device="cpu") * 10.0 - 5.0).reshape(
             K_DIM, N_DIM
         )
         out = torch.full((M_DIM, N_DIM), -9.0, dtype=torch.float32, device="cpu").to(device)
@@ -291,7 +292,7 @@ def run(args: argparse.Namespace) -> int:
             tla_out,
             **_runtime_kwargs(args),
         )
-        artifact(tla_lhs, tla_rhs, tla_out, block=args.block)
+        artifact(tla_lhs, tla_rhs, tla_out, block_dim=args.block_dim)
 
         torch.npu.synchronize()
         out = out.cpu()
@@ -323,7 +324,7 @@ def _build_parser() -> argparse.ArgumentParser:
     mode.add_argument("--build-only", action="store_true")
     mode.add_argument("--run", action="store_true")
     parser.add_argument("--device", type=int, default=2)
-    parser.add_argument("--block", type=int, default=1)
+    parser.add_argument("--block-dim", type=int, default=1)
     parser.add_argument("--atol", type=float, default=1e-4)
     parser.add_argument("--cache-dir", default=str(DEFAULT_CACHE_DIR))
     parser.add_argument("--force-recompile", action="store_true")

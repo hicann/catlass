@@ -7,10 +7,10 @@ final attributed ``i64`` workspace.  HIVMC ELF evidence is compared through
 ``__CCE_KernelArgSize``, ``.ParamInfo_*`` symbols, and the entry's
 ``.ascend.meta.<entry>`` section.
 
-Produce the required non-print AIV input from ``python/tla_dsl`` with
-``python examples/end_to_end/basic_vadd/dump_ir.py --out-dir <dir>``; this
-creates ``<dir>/1_basic_vadd.lowered.mlir``.  Do not use a print kernel as the
-input control for this test.
+Produce the required non-print AIV input from ``python/tla_dsl`` by compiling
+``examples/end_to_end/basic_vadd/basic_vadd.py`` and taking its lowered MLIR
+artifact (for example ``artifact.lowered_llvm``).  Do not use a print kernel as
+the input control for this test.
 
 The metadata header and parameter record sizes below are the fixed layout
 observed by the static PoC.  They are intentionally not a general ELF parser:

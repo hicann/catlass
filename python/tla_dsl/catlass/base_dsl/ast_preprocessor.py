@@ -9,7 +9,7 @@ import inspect
 import textwrap
 from dataclasses import dataclass
 from types import FunctionType, ModuleType
-from typing import Any, Iterator
+from typing import Any, Callable, Iterator
 
 
 _INTERNAL_FOR = "__tladsl_internal_for__"
@@ -29,6 +29,11 @@ _INTERNAL_CF_SYMBOL_CHECK = "__tladsl_internal_cf_symbol_check__"
 _INTERNAL_INDEX_ADD = "__tladsl_internal_index_add__"
 _INTERNAL_INDEX_SUB = "__tladsl_internal_index_sub__"
 _INTERNAL_ATTACH_SOURCE_INFO = "__tladsl_internal_attach_source_info__"
+_INTERNAL_UNKNOWN_EFFECT_CALL = "__tladsl_internal_unknown_effect_call__"
+_INTERNAL_LAZY_ATTRIBUTE = "__tladsl_internal_lazy_attribute__"
+_INTERNAL_LAZY_SUBSCRIPT = "__tladsl_internal_lazy_subscript__"
+_INTERNAL_LAZY_BINOP = "__tladsl_internal_lazy_binop__"
+_INTERNAL_LAZY_UNARY = "__tladsl_internal_lazy_unary__"
 _SOURCE_INFO_ATTR = "__tladsl_source_info__"
 _WHILE_SELECTOR = "while_selector"
 _WHILE_EXECUTOR = "while_executor"
@@ -39,17 +44,93 @@ _BUILTIN_REDIRECTS = {
     "min": _INTERNAL_MIN,
     "max": _INTERNAL_MAX,
 }
+_TRUSTED_LAZY_CALLABLES: tuple[Callable[..., Any], ...] = ()
+
+
+def _register_trusted_lazy_callables(
+    callables: tuple[Callable[..., Any], ...],
+) -> None:
+    """Freeze genuine DSL call identities once core_api has initialized."""
+
+    global _TRUSTED_LAZY_CALLABLES
+    if _TRUSTED_LAZY_CALLABLES:
+        raise RuntimeError("trusted lazy callables are already registered")
+    _TRUSTED_LAZY_CALLABLES = callables
 
 
 @dataclass(frozen=True)
-class RegionVariableAnalysis:
-    active_symbols: set[str]
-    active_callables: set[str]
-    assigned_by_region: tuple[set[str], ...]
-    assigned_names: set[str]
-    invoked_names: set[str]
-    carried_names: list[str]
+class ControlFlowPlan:
+    """Immutable analysis consumed by one runtime control-flow rewrite."""
+
+    construct_name: str
+    lineno: int
+    col_offset: int
+    active_symbols: frozenset[str]
+    active_callables: frozenset[str]
+    assigned_by_region: tuple[frozenset[str], ...]
+    assigned_names: frozenset[str]
+    invoked_names: frozenset[str]
+    carried_names: tuple[str, ...]
     full_write_args_count: int
+    assignment_targets: tuple[str, ...]
+    tensor_store_assignments: frozenset[int]
+    nested_constructs: tuple[tuple[str, int, int], ...]
+
+
+class _ControlFlowAnalyzer:
+    """Analyze and validate a runtime construct without rewriting its AST."""
+
+    def analyze(
+        self,
+        *,
+        node: ast.If | ast.For | ast.While,
+        construct_name: str,
+        assigned_regions: list[list[ast.stmt]],
+        active_call_nodes: list[ast.AST],
+        active_symbols: set[str],
+        active_callables: set[str],
+        filename: str = "<unknown>",
+        line_offset: int = 0,
+        source_text: str = "",
+        is_runtime_for: Callable[[ast.For], bool] | None = None,
+        is_static_test: Callable[[ast.AST], bool] | None = None,
+    ) -> ControlFlowPlan:
+        _reject_unsupported_dynamic_active_callable_calls(
+            active_call_nodes, active_callables, construct_name
+        )
+        policy = _DynamicControlFlowPolicy(
+            construct_name,
+            filename=filename,
+            line_offset=line_offset,
+            source_text=source_text,
+            is_runtime_for=is_runtime_for,
+            is_static_test=is_static_test,
+        )
+        for statement in (stmt for region in assigned_regions for stmt in region):
+            policy.visit(statement)
+        assigned_by_region = tuple(
+            _assigned_names_from_statements(region) for region in assigned_regions
+        )
+        assigned_names = set().union(*assigned_by_region)
+        invoked_names = _invoked_active_names_from_statements(
+            active_call_nodes, active_symbols
+        )
+        carried_names = tuple(sorted((assigned_names & active_symbols) | invoked_names))
+        return ControlFlowPlan(
+            construct_name=construct_name,
+            lineno=int(getattr(node, "lineno", 0) or 0),
+            col_offset=int(getattr(node, "col_offset", 0) or 0),
+            active_symbols=frozenset(active_symbols),
+            active_callables=frozenset(active_callables),
+            assigned_by_region=tuple(frozenset(names) for names in assigned_by_region),
+            assigned_names=frozenset(assigned_names),
+            invoked_names=frozenset(invoked_names),
+            carried_names=carried_names,
+            full_write_args_count=len(carried_names),
+            assignment_targets=tuple(policy.assignment_targets),
+            tensor_store_assignments=frozenset(policy.tensor_store_assignments),
+            nested_constructs=tuple(policy.nested_constructs),
+        )
 
 
 class ScopeManager:
@@ -105,6 +186,68 @@ class ScopeManager:
             self.callables.pop()
             self.scopes.pop()
 
+
+class _DynamicConditionValidator(ast.NodeVisitor):
+    """Reject condition syntax whose Python evaluation cannot be preserved."""
+
+    def __init__(
+        self,
+        construct_name: str,
+        *,
+        filename: str = "<unknown>",
+        line_offset: int = 0,
+        source_text: str = "",
+    ) -> None:
+        self.construct_name = construct_name
+        self.filename = filename
+        self.line_offset = line_offset
+        self.source_lines = source_text.splitlines()
+
+    def validate(self, node: ast.AST) -> None:
+        self.visit(node)
+
+    def visit_NamedExpr(self, node: ast.NamedExpr) -> None:
+        self._raise(node, "does not support assignment expressions in its condition")
+
+    def visit_Await(self, node: ast.Await) -> None:
+        self._raise(node, "does not support await expressions in its condition")
+
+    def visit_Yield(self, node: ast.Yield) -> None:
+        self._raise(node, "does not support yield expressions in its condition")
+
+    def visit_YieldFrom(self, node: ast.YieldFrom) -> None:
+        self._raise(node, "does not support yield expressions in its condition")
+
+    def visit_Lambda(self, node: ast.Lambda) -> None:
+        self._raise(node, "does not support lambda expressions in its condition")
+
+    def visit_ListComp(self, node: ast.ListComp) -> None:
+        self._raise(node, "does not support comprehension expressions in its condition")
+
+    def visit_SetComp(self, node: ast.SetComp) -> None:
+        self._raise(node, "does not support comprehension expressions in its condition")
+
+    def visit_DictComp(self, node: ast.DictComp) -> None:
+        self._raise(node, "does not support comprehension expressions in its condition")
+
+    def visit_GeneratorExp(self, node: ast.GeneratorExp) -> None:
+        self._raise(node, "does not support generator expressions in its condition")
+
+    def _raise(self, node: ast.AST, message: str) -> None:
+        error = SyntaxError(f"dynamic Tla {self.construct_name} {message}")
+        relative_lineno = int(getattr(node, "lineno", 0) or 0)
+        error.filename = self.filename
+        error.lineno = self.line_offset + relative_lineno
+        error.offset = (
+            int(getattr(node, "col_offset", 0)) + 1
+            if getattr(node, "col_offset", None) is not None
+            else None
+        )
+        if 0 < relative_lineno <= len(self.source_lines):
+            error.text = self.source_lines[relative_lineno - 1]
+        raise error
+
+
 class _FrontendControlFlowTransformer(ast.NodeTransformer):
     def __init__(
         self,
@@ -119,10 +262,15 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
         self._range_alias_stack: list[set[str]] = []
         self._scope_manager = ScopeManager.create()
         self._following_loads_stack: list[set[str]] = []
+        self._tensor_store_assignments: set[int] = set()
+        self._control_flow_analyzer = _ControlFlowAnalyzer()
         self._global_symbols = global_symbols or {}
         self._filename = filename
         self._line_offset = line_offset
         self._source_text = source_text
+        self._tensor_store_helper_name: str | None = None
+        self._lazy_operand_context: str | None = None
+        self._call_shadow_stack: list[set[str]] = []
         self._tla_range_names = _tla_function_names_from_globals(
             self._global_symbols, "range"
         )
@@ -138,7 +286,14 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
 
     def visit_Module(self, node: ast.Module) -> Any:
         self._reserved_names.update(_identifier_names(node))
+        self._tensor_store_helper_name = self._fresh("tensor_store")
         return self.generic_visit(node)
+
+    @property
+    def tensor_store_helper_name(self) -> str:
+        if self._tensor_store_helper_name is None:
+            raise RuntimeError("frontend module has not been initialized")
+        return self._tensor_store_helper_name
 
     def _fresh(self, prefix: str) -> str:
         while True:
@@ -158,7 +313,9 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
         region: str,
     ) -> ast.Dict:
         source = ast.get_source_segment(self._source_text, node) or ""
-        source = next((line.strip() for line in source.splitlines() if line.strip()), "")
+        source = next(
+            (line.strip() for line in source.splitlines() if line.strip()), ""
+        )
         return ast.Dict(
             keys=[
                 ast.Constant(value="filename"),
@@ -171,7 +328,9 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
             ],
             values=[
                 ast.Constant(value=self._filename),
-                ast.Constant(value=self._line_offset + int(getattr(node, "lineno", 0) or 0)),
+                ast.Constant(
+                    value=self._line_offset + int(getattr(node, "lineno", 0) or 0)
+                ),
                 ast.Constant(value=int(getattr(node, "col_offset", 0) or 0)),
                 ast.Constant(value=construct),
                 ast.Constant(value=region),
@@ -227,37 +386,57 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
             self._local_scope(),
         )
 
-    def analyze_region_variables(
+    def analyze_control_flow(
         self,
         *,
+        node: ast.If | ast.For | ast.While,
         construct_name: str,
         assigned_regions: list[list[ast.stmt]],
         active_call_nodes: list[ast.AST],
-    ) -> RegionVariableAnalysis:
-        active_symbols = set(self._local_scope())
-        active_callables = set(self._active_callables())
-        _reject_unsupported_dynamic_active_callable_calls(
-            active_call_nodes, active_callables, construct_name
+    ) -> ControlFlowPlan:
+        plan = self._control_flow_analyzer.analyze(
+            node=node,
+            construct_name=construct_name,
+            assigned_regions=assigned_regions,
+            active_call_nodes=active_call_nodes,
+            active_symbols=set(self._local_scope()),
+            active_callables=set(self._active_callables()),
+            filename=self._filename,
+            line_offset=self._line_offset,
+            source_text=self._source_text,
+            is_runtime_for=lambda nested: _is_tla_range_iter(
+                nested.iter,
+                self._range_aliases(),
+                self._tla_range_names,
+                self._tla_module_aliases,
+                self._local_scope(),
+            ),
+            is_static_test=self._is_static_control_flow_test,
         )
-        assigned_by_region = tuple(
-            _assigned_names_from_statements(region) for region in assigned_regions
+        self._tensor_store_assignments.update(plan.tensor_store_assignments)
+        return plan
+
+    def visit_Assign(self, node: ast.Assign) -> Any:
+        if id(node) not in self._tensor_store_assignments:
+            return self.generic_visit(node)
+        if len(node.targets) != 1 or not isinstance(node.targets[0], ast.Subscript):
+            raise SyntaxError(
+                "dynamic Tla control flow requires a tensor store to have one target"
+            )
+        target = node.targets[0]
+        rewritten = ast.Expr(
+            value=ast.Call(
+                func=ast.Name(id=self.tensor_store_helper_name, ctx=ast.Load()),
+                # Python assignment evaluates RHS before the target and index.
+                args=[
+                    self.visit(node.value),
+                    self.visit(target.value),
+                    self.visit(target.slice),
+                ],
+                keywords=[],
+            )
         )
-        assigned_names: set[str] = set()
-        for assigned in assigned_by_region:
-            assigned_names.update(assigned)
-        invoked_names = _invoked_active_names_from_statements(
-            active_call_nodes, active_symbols
-        )
-        carried_names = sorted((assigned_names & active_symbols) | invoked_names)
-        return RegionVariableAnalysis(
-            active_symbols=active_symbols,
-            active_callables=active_callables,
-            assigned_by_region=assigned_by_region,
-            assigned_names=assigned_names,
-            invoked_names=invoked_names,
-            carried_names=carried_names,
-            full_write_args_count=len(carried_names),
-        )
+        return ast.copy_location(rewritten, node)
 
     def _visit_statement_list(self, body: list[ast.stmt]) -> list[ast.stmt]:
         rewritten_body: list[ast.stmt] = []
@@ -289,6 +468,10 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> Any:
         self._range_alias_stack.append(set())
+        local_names = _function_arg_names(node.args) | _assigned_names_from_statements(
+            node.body
+        )
+        self._call_shadow_stack.append(local_names)
         with self._scope_manager.enter_local_scope(_function_arg_names(node.args)):
             try:
                 node.args = self.visit(node.args)
@@ -300,6 +483,7 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
                     node.returns = self.visit(node.returns)
                 return node
             finally:
+                self._call_shadow_stack.pop()
                 self._range_alias_stack.pop()
 
     def visit_For(self, node: ast.For) -> Any:
@@ -334,7 +518,6 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
             self._local_scope(),
         )
         if is_tla_range:
-            _reject_unsupported_dynamic_for_control_flow(node)
             if node.orelse:
                 raise SyntaxError("dynamic Tla for does not support for-else")
         if not is_tla_range:
@@ -363,7 +546,8 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
         ):
             negative_step_prelude = self._rewrite_negative_step_range(node)
 
-        analysis = self.analyze_region_variables(
+        analysis = self.analyze_control_flow(
+            node=node,
             construct_name="for",
             assigned_regions=[node.body],
             active_call_nodes=node.body,
@@ -374,7 +558,7 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
             node.target.id,
             self._following_loads(),
         )
-        carried_names = analysis.carried_names
+        carried_names = list(analysis.carried_names)
         self._scope_manager.add_names_to_scope(carried_names)
 
         body = self._transform_nested_function_body(
@@ -462,15 +646,17 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
             self._local_scope(),
         ):
             result.append(_cf_symbol_check_stmt(node.iter))
-        result.extend([
-            *negative_step_prelude,
-            range_assign,
-            body_fn,
-            self._source_info_stmt(
-                body_name, node, construct="dynamic for", region="body"
-            ),
-            helper_stmt,
-        ])
+        result.extend(
+            [
+                *negative_step_prelude,
+                range_assign,
+                body_fn,
+                self._source_info_stmt(
+                    body_name, node, construct="dynamic for", region="body"
+                ),
+                helper_stmt,
+            ]
+        )
         return result
 
     def _rewrite_negative_step_range(self, node: ast.For) -> list[ast.stmt]:
@@ -574,6 +760,7 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
         return transformed
 
     def visit_If(self, node: ast.If) -> Any:
+        self._validate_dynamic_condition(node.test, "if")
         if self._is_static_control_flow_test(node.test):
             self.generic_visit(node)
             if isinstance(node.test, ast.Call) and _is_constexpr_cf_test(
@@ -584,9 +771,8 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
             ):
                 return [_cf_symbol_check_stmt(node.test), node]
             return node
-        _reject_unsupported_dynamic_if_control_flow(node)
-        _reject_unsupported_dynamic_if_assignment_targets(node)
-        analysis = self.analyze_region_variables(
+        analysis = self.analyze_control_flow(
+            node=node,
             construct_name="if",
             assigned_regions=[node.body, node.orelse],
             active_call_nodes=[*node.body, *node.orelse],
@@ -599,7 +785,7 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
             else_assigned,
             self._following_loads(),
         )
-        carried_names = analysis.carried_names
+        carried_names = list(analysis.carried_names)
 
         test = self.visit(node.test)
         then_body = self._transform_nested_function_body(
@@ -684,6 +870,7 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
         return result
 
     def visit_While(self, node: ast.While) -> Any:
+        self._validate_dynamic_condition(node.test, "while")
         if self._is_static_control_flow_test(node.test):
             self.generic_visit(node)
             if isinstance(node.test, ast.Call) and _is_constexpr_cf_test(
@@ -694,14 +881,11 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
             ):
                 return [_cf_symbol_check_stmt(node.test), node]
             return node
-        _reject_unsupported_dynamic_while_control_flow(node)
-        _reject_unsupported_dynamic_if_assignment_targets(
-            ast.If(test=node.test, body=node.body, orelse=node.orelse)
-        )
         if node.orelse:
             raise SyntaxError("dynamic Tla while does not support while-else")
 
-        analysis = self.analyze_region_variables(
+        analysis = self.analyze_control_flow(
+            node=node,
             construct_name="while",
             assigned_regions=[node.body],
             active_call_nodes=[node.test, *node.body],
@@ -709,7 +893,7 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
         _reject_unsupported_dynamic_while_new_defs(
             analysis.active_symbols, analysis.assigned_names, self._following_loads()
         )
-        carried_names = analysis.carried_names
+        carried_names = list(analysis.carried_names)
         self._scope_manager.add_names_to_scope(carried_names)
 
         before_body = self._transform_nested_function_body(
@@ -795,7 +979,13 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
                 vararg=None,
                 kwarg=None,
             ),
-            body=[before_fn, before_info, after_fn, after_info, ast.Return(value=execute_call)],
+            body=[
+                before_fn,
+                before_info,
+                after_fn,
+                after_info,
+                ast.Return(value=execute_call),
+            ],
             decorator_list=[
                 ast.Call(
                     func=ast.Name(id=_WHILE_SELECTOR, ctx=ast.Load()),
@@ -842,6 +1032,16 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
             )
         ast.copy_location(helper_stmt, node)
         return [region_fn, helper_stmt]
+
+    def _validate_dynamic_condition(
+        self, condition: ast.AST, construct_name: str
+    ) -> None:
+        _DynamicConditionValidator(
+            construct_name,
+            filename=self._filename,
+            line_offset=self._line_offset,
+            source_text=self._source_text,
+        ).validate(condition)
 
     def _transform_nested_function_body(
         self,
@@ -949,42 +1149,52 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
         )
 
     def visit_BoolOp(self, node: ast.BoolOp) -> Any:
-        node = self.generic_visit(node)
         if not isinstance(node.op, (ast.And, ast.Or)) or len(node.values) < 2:
+            node = self.generic_visit(node)
             return node
-        if isinstance(node.op, ast.And):
-            helper = _INTERNAL_BOOL_AND
-            short_circuit_value = ast.Constant(value=False)
-        else:
-            helper = _INTERNAL_BOOL_OR
-            short_circuit_value = ast.Constant(value=True)
-
-        lhs = node.values[0]
-        for rhs in node.values[1:]:
+        lhs = self.visit(node.values[0])
+        for original_rhs in node.values[1:]:
+            with self._lazy_operand("boolean"):
+                rhs = self.visit(original_rhs)
             lhs_name = self._fresh("bool_op_lhs")
             bound_lhs = ast.NamedExpr(
                 target=ast.Name(id=lhs_name, ctx=ast.Store()),
                 value=lhs,
             )
             ast.copy_location(bound_lhs, lhs)
-            short_circuit = ast.IfExp(
-                test=ast.Compare(
-                    left=bound_lhs,
-                    ops=[ast.Is()],
-                    comparators=[short_circuit_value],
-                ),
-                body=ast.Name(id=lhs_name, ctx=ast.Load()),
-                orelse=ast.Call(
-                    func=ast.Name(id=helper, ctx=ast.Load()),
-                    args=[ast.Name(id=lhs_name, ctx=ast.Load()), rhs],
-                    keywords=[],
-                ),
+            bound_name = ast.Name(id=lhs_name, ctx=ast.Load())
+            if isinstance(node.op, ast.And):
+                true_value, false_value = rhs, bound_name
+            else:
+                true_value, false_value = bound_name, rhs
+            lhs = self._lazy_conditional_expression(
+                bound_lhs,
+                true_value,
+                false_value,
+                original_rhs,
+                construct="boolean expression",
             )
-            lhs = ast.copy_location(short_circuit, node)
+            if isinstance(original_rhs, ast.Constant) and isinstance(
+                original_rhs.value, bool
+            ):
+                if isinstance(node.op, ast.And) and not original_rhs.value:
+                    break
+                if isinstance(node.op, ast.Or) and original_rhs.value:
+                    break
         return lhs
 
     def visit_UnaryOp(self, node: ast.UnaryOp) -> Any:
-        node = self.generic_visit(node)
+        operand = self.visit(node.operand)
+        if self._lazy_operand_context is not None and not isinstance(node.op, ast.Not):
+            return ast.copy_location(
+                ast.Call(
+                    func=ast.Name(id=_INTERNAL_LAZY_UNARY, ctx=ast.Load()),
+                    args=[ast.Constant(value=type(node.op).__name__), operand],
+                    keywords=[],
+                ),
+                node,
+            )
+        node.operand = operand
         if not isinstance(node.op, ast.Not):
             return node
         return ast.copy_location(
@@ -997,28 +1207,132 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
         )
 
     def visit_Compare(self, node: ast.Compare) -> Any:
-        node = self.generic_visit(node)
-        return ast.copy_location(
-            ast.Call(
+        left = self.visit(node.left)
+        comparators = []
+        for index, comparator in enumerate(node.comparators):
+            if index == 0:
+                comparators.append(self.visit(comparator))
+            else:
+                with self._lazy_operand("chained-comparison"):
+                    comparators.append(self.visit(comparator))
+
+        def compare_pair(lhs: ast.expr, rhs: ast.expr, op: ast.cmpop) -> ast.Call:
+            return ast.Call(
                 func=ast.Name(id=_INTERNAL_COMPARE, ctx=ast.Load()),
                 args=[
-                    node.left,
-                    ast.Tuple(elts=node.comparators, ctx=ast.Load()),
+                    lhs,
+                    ast.Tuple(elts=[rhs], ctx=ast.Load()),
                     ast.Tuple(
-                        elts=[
-                            ast.Constant(value=_compare_op_name(op)) for op in node.ops
-                        ],
-                        ctx=ast.Load(),
+                        elts=[ast.Constant(value=_compare_op_name(op))], ctx=ast.Load()
                     ),
                 ],
                 keywords=[],
-            ),
-            node,
+            )
+
+        def build(index: int, lhs: ast.expr) -> ast.expr:
+            rhs = comparators[index]
+            if index == len(comparators) - 1:
+                return compare_pair(lhs, rhs, node.ops[index])
+            rhs_name = self._fresh("compare_rhs")
+            bound_rhs = ast.NamedExpr(
+                target=ast.Name(id=rhs_name, ctx=ast.Store()), value=rhs
+            )
+            condition_name = self._fresh("compare_result")
+            bound_condition = ast.NamedExpr(
+                target=ast.Name(id=condition_name, ctx=ast.Store()),
+                value=compare_pair(lhs, bound_rhs, node.ops[index]),
+            )
+            later = build(index + 1, ast.Name(id=rhs_name, ctx=ast.Load()))
+            return self._lazy_conditional_expression(
+                bound_condition,
+                later,
+                ast.Name(id=condition_name, ctx=ast.Load()),
+                node.comparators[index + 1],
+                construct="chained comparison",
+            )
+
+        return ast.copy_location(build(0, left), node)
+
+    def _lazy_conditional_expression(
+        self,
+        condition: ast.expr,
+        true_value: ast.expr,
+        false_value: ast.expr,
+        source_node: ast.AST,
+        *,
+        construct: str,
+    ) -> ast.Call:
+        def region(value: ast.expr, name: str) -> ast.Call:
+            function = ast.Lambda(
+                args=ast.arguments(
+                    posonlyargs=[],
+                    args=[],
+                    kwonlyargs=[],
+                    kw_defaults=[],
+                    defaults=[],
+                    vararg=None,
+                    kwarg=None,
+                ),
+                body=value,
+            )
+            ast.copy_location(function, source_node)
+            return ast.Call(
+                func=ast.Name(id=_INTERNAL_ATTACH_SOURCE_INFO, ctx=ast.Load()),
+                args=[
+                    function,
+                    self._source_info_dict(
+                        name, source_node, construct=construct, region=name
+                    ),
+                ],
+                keywords=[],
+            )
+
+        call = ast.Call(
+            func=ast.Name(id=_INTERNAL_IF_EXPR, ctx=ast.Load()),
+            args=[
+                condition,
+                region(true_value, "lazy-true-region"),
+                region(false_value, "lazy-false-region"),
+            ],
+            keywords=[],
         )
+        return ast.copy_location(call, source_node)
 
     def visit_Call(self, node: ast.Call) -> Any:
+        if self._lazy_operand_context is not None and not self._is_dsl_call(node):
+            original = self.generic_visit(node)
+            thunk = ast.Lambda(
+                args=ast.arguments(
+                    posonlyargs=[], args=[], kwonlyargs=[], kw_defaults=[], defaults=[]
+                ),
+                body=original,
+            )
+            ast.copy_location(thunk, node)
+            attached = ast.Call(
+                func=ast.Name(id=_INTERNAL_ATTACH_SOURCE_INFO, ctx=ast.Load()),
+                args=[
+                    thunk,
+                    self._source_info_dict(
+                        "unknown-effect-call",
+                        node,
+                        construct="runtime-lazy operand",
+                        region=self._lazy_operand_context,
+                    ),
+                ],
+                keywords=[],
+            )
+            return ast.copy_location(
+                ast.Call(
+                    func=ast.Name(id=_INTERNAL_UNKNOWN_EFFECT_CALL, ctx=ast.Load()),
+                    args=[attached],
+                    keywords=[],
+                ),
+                node,
+            )
         if not isinstance(node.func, ast.Name):
-            return self.generic_visit(node)
+            node.args = [self.visit(arg) for arg in node.args]
+            node.keywords = [self.visit(keyword) for keyword in node.keywords]
+            return node
         original_func_name = node.func.id
         node.args = [self.visit(arg) for arg in node.args]
         node.keywords = [self.visit(keyword) for keyword in node.keywords]
@@ -1036,6 +1350,104 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
             ast.Call(
                 func=ast.Name(id=helper, ctx=ast.Load()),
                 args=node.args,
+                keywords=[],
+            ),
+            node,
+        )
+
+    @contextlib.contextmanager
+    def _lazy_operand(self, context: str) -> Iterator[None]:
+        previous = self._lazy_operand_context
+        self._lazy_operand_context = previous or context
+        try:
+            yield
+        finally:
+            self._lazy_operand_context = previous
+
+    def _is_dsl_call(self, node: ast.Call) -> bool:
+        # Expanding user-provided iterables or mappings invokes arbitrary Python
+        # protocols before the trusted call target itself is entered.
+        if any(isinstance(arg, ast.Starred) for arg in node.args) or any(
+            keyword.arg is None for keyword in node.keywords
+        ):
+            return False
+        target = self._resolve_global_call_target(node.func)
+        if target is None:
+            return False
+        return any(target is trusted for trusted in _trusted_lazy_callables())
+
+    def _resolve_global_call_target(self, node: ast.expr) -> Any | None:
+        shadowed_names = {
+            name
+            for scope in self._call_shadow_stack
+            for name in scope
+        }
+        if isinstance(node, ast.Name):
+            if node.id in shadowed_names or node.id in _BUILTIN_REDIRECTS:
+                return None
+            return self._global_symbols.get(node.id)
+        if not isinstance(node, ast.Attribute):
+            return None
+        attributes: list[str] = []
+        current: ast.expr = node
+        while isinstance(current, ast.Attribute):
+            attributes.append(current.attr)
+            current = current.value
+        if not isinstance(current, ast.Name):
+            return None
+        if current.id in shadowed_names:
+            return None
+        target = self._global_symbols.get(current.id)
+        for attribute in reversed(attributes):
+            try:
+                target = inspect.getattr_static(target, attribute)
+            except (AttributeError, TypeError):
+                members = inspect.getattr_static(target, "_members", None)
+                if object.__getattribute__(members, "__class__") is not dict:
+                    return None
+                if attribute not in members:
+                    return None
+                target = members[attribute]
+        return target
+
+    def visit_Attribute(self, node: ast.Attribute) -> Any:
+        value = self.visit(node.value)
+        if self._lazy_operand_context is None or not isinstance(node.ctx, ast.Load):
+            node.value = value
+            return node
+        return ast.copy_location(
+            ast.Call(
+                func=ast.Name(id=_INTERNAL_LAZY_ATTRIBUTE, ctx=ast.Load()),
+                args=[value, ast.Constant(value=node.attr)],
+                keywords=[],
+            ),
+            node,
+        )
+
+    def visit_Subscript(self, node: ast.Subscript) -> Any:
+        value = self.visit(node.value)
+        slice_value = self.visit(node.slice)
+        if self._lazy_operand_context is None or not isinstance(node.ctx, ast.Load):
+            node.value, node.slice = value, slice_value
+            return node
+        return ast.copy_location(
+            ast.Call(
+                func=ast.Name(id=_INTERNAL_LAZY_SUBSCRIPT, ctx=ast.Load()),
+                args=[value, slice_value],
+                keywords=[],
+            ),
+            node,
+        )
+
+    def visit_BinOp(self, node: ast.BinOp) -> Any:
+        left, right = self.visit(node.left), self.visit(node.right)
+        if self._lazy_operand_context is None:
+            node.left, node.right = left, right
+            return node
+        return ast.copy_location(
+            ast.Call(
+                func=ast.Name(id=_INTERNAL_LAZY_BINOP, ctx=ast.Load()),
+                args=[ast.Constant(value=type(node.op).__name__), left, right],
                 keywords=[],
             ),
             node,
@@ -1180,37 +1592,23 @@ def maybe_transform_for_lowering(
     filename = inspect.getsourcefile(fn) or "<unknown>"
     line_offset = int(first_lineno) - 1
 
-    if (
-        "tla.range" not in source
-        and "tla.cube" not in source
-        and "tla.vector" not in source
-        and "tla.vec.func" not in source
-        and "range(" not in source
-        and "range_constexpr(" not in source
-        and " if " not in source
-        and "while " not in source
-        and "any(" not in source
-        and "all(" not in source
-        and "bool(" not in source
-        and "min(" not in source
-        and "max(" not in source
-    ):
-        return fn
-
     source = textwrap.dedent(source)
     module_ast = ast.parse(source, filename=filename)
     target = _find_function_def(module_ast, fn.__name__)
     if target is None:
         return fn
+    if not _function_needs_frontend_transform(target, fn.__globals__):
+        return fn
 
     target.decorator_list = []
     exec_globals = dict(fn.__globals__)
-    transformed = _FrontendControlFlowTransformer(
+    transformer = _FrontendControlFlowTransformer(
         exec_globals,
         filename=filename,
         line_offset=line_offset,
         source_text=source,
-    ).visit(module_ast)
+    )
+    transformed = transformer.visit(module_ast)
     ast.fix_missing_locations(transformed)
     if line_offset:
         ast.increment_lineno(transformed, line_offset)
@@ -1231,7 +1629,21 @@ def maybe_transform_for_lowering(
     exec_globals[_INTERNAL_CF_SYMBOL_CHECK] = _cf_symbol_check
     exec_globals[_INTERNAL_INDEX_ADD] = _index_add
     exec_globals[_INTERNAL_INDEX_SUB] = _index_sub
+    exec_globals[transformer.tensor_store_helper_name] = _tensor_store
     exec_globals[_INTERNAL_ATTACH_SOURCE_INFO] = _attach_source_info
+    from ..tla_ast_decorators import (
+        _internal_lazy_attribute,
+        _internal_lazy_binop,
+        _internal_lazy_subscript,
+        _internal_lazy_unary,
+        _internal_unknown_effect_call,
+    )
+
+    exec_globals[_INTERNAL_UNKNOWN_EFFECT_CALL] = _internal_unknown_effect_call
+    exec_globals[_INTERNAL_LAZY_ATTRIBUTE] = _internal_lazy_attribute
+    exec_globals[_INTERNAL_LAZY_SUBSCRIPT] = _internal_lazy_subscript
+    exec_globals[_INTERNAL_LAZY_BINOP] = _internal_lazy_binop
+    exec_globals[_INTERNAL_LAZY_UNARY] = _internal_lazy_unary
     from .ast_helpers import while_executor, while_selector
 
     exec_globals[_WHILE_EXECUTOR] = while_executor
@@ -1266,6 +1678,74 @@ def _find_function_def(module_ast: ast.Module, name: str) -> ast.FunctionDef | N
         if isinstance(node, ast.FunctionDef) and node.name == name:
             return node
     return None
+
+
+def _trusted_lazy_callables() -> tuple[Callable[..., Any], ...]:
+    """Return exact frontend call targets allowed to execute in lazy IR regions."""
+
+    return _TRUSTED_LAZY_CALLABLES
+
+
+def _function_needs_frontend_transform(
+    target: ast.FunctionDef, global_symbols: dict[str, Any]
+) -> bool:
+    """Return whether *target* contains syntax handled by the frontend rewrite."""
+
+    range_names = _tla_function_names_from_globals(global_symbols, "range")
+    range_constexpr_names = _tla_function_names_from_globals(
+        global_symbols, "range_constexpr"
+    )
+    module_aliases = _tla_module_aliases_from_globals(global_symbols) | {"tla"}
+
+    class Discovery(ast.NodeVisitor):
+        needed = False
+
+        def visit_If(self, node: ast.If) -> None:
+            self.needed = True
+
+        def visit_While(self, node: ast.While) -> None:
+            self.needed = True
+
+        def visit_IfExp(self, node: ast.IfExp) -> None:
+            self.needed = True
+
+        def visit_Call(self, node: ast.Call) -> None:
+            func = node.func
+            if isinstance(func, ast.Name) and func.id in {
+                "range",
+                "range_constexpr",
+                *_BUILTIN_REDIRECTS,
+                *range_names,
+                *range_constexpr_names,
+            }:
+                self.needed = True
+                return
+            if (
+                isinstance(func, ast.Attribute)
+                and isinstance(func.value, ast.Name)
+                and func.value.id in module_aliases
+                and func.attr in {"range", "range_constexpr", "cube", "vector"}
+            ):
+                self.needed = True
+                return
+            if (
+                isinstance(func, ast.Attribute)
+                and func.attr == "func"
+                and isinstance(func.value, ast.Attribute)
+                and func.value.attr == "vec"
+                and isinstance(func.value.value, ast.Name)
+                and func.value.value.id in module_aliases
+            ):
+                self.needed = True
+                return
+            self.generic_visit(node)
+
+    discovery = Discovery()
+    for statement in target.body:
+        discovery.visit(statement)
+        if discovery.needed:
+            break
+    return discovery.needed
 
 
 def _tla_function_names_from_globals(
@@ -1457,6 +1937,19 @@ def _index_sub(lhs: Any, rhs: Any) -> Any:
     from catlass.base_dsl.typing import as_numeric
 
     return as_numeric(lhs) - as_numeric(rhs)
+
+
+def _tensor_store(value: Any, target: Any, index: Any) -> None:
+    """Guard a rewritten subscription assignment before invoking tensor storage."""
+
+    from catlass.core_api import _require_category
+
+    _require_category("tensor_store", "target", target, "tensor", 0)
+    target[index] = value
+
+
+def _contains_slice(node: ast.AST) -> bool:
+    return any(isinstance(candidate, ast.Slice) for candidate in ast.walk(node))
 
 
 def _attach_source_info(fn: Any, info: dict[str, Any]) -> Any:
@@ -1679,6 +2172,15 @@ def _assigned_names(node: ast.AST) -> set[str]:
         def visit_ClassDef(self, class_node: ast.ClassDef) -> None:
             assigned.add(class_node.name)
 
+        def visit_Import(self, import_node: ast.Import) -> None:
+            for alias in import_node.names:
+                assigned.add(alias.asname or alias.name.split(".", 1)[0])
+
+        def visit_ImportFrom(self, import_node: ast.ImportFrom) -> None:
+            for alias in import_node.names:
+                if alias.name != "*":
+                    assigned.add(alias.asname or alias.name)
+
         def visit_Lambda(self, lambda_node: ast.Lambda) -> None:
             del lambda_node
 
@@ -1746,133 +2248,208 @@ def _invoked_active_names_from_statements(
     return invoked
 
 
-def _reject_unsupported_dynamic_if_control_flow(node: ast.If) -> None:
-    class Visitor(ast.NodeVisitor):
-        def visit_Return(self, return_node: ast.Return) -> None:
-            del return_node
-            self._raise()
+class _DynamicControlFlowPolicy(ast.NodeVisitor):
+    """Shared statement and assignment policy for runtime control flow."""
 
-        def visit_Break(self, break_node: ast.Break) -> None:
-            del break_node
-            self._raise()
+    def __init__(
+        self,
+        construct_name: str,
+        *,
+        filename: str = "<unknown>",
+        line_offset: int = 0,
+        source_text: str = "",
+        is_runtime_for: Callable[[ast.For], bool] | None = None,
+        is_static_test: Callable[[ast.AST], bool] | None = None,
+    ) -> None:
+        self.construct_name = construct_name
+        self.filename = filename
+        self.line_offset = line_offset
+        self.source_lines = source_text.splitlines()
+        self.is_runtime_for = is_runtime_for or _is_syntactic_tla_range_for
+        self.is_static_test = is_static_test or _is_static_python_if_test
+        self.python_loop_depth = 0
+        self.assignment_targets: list[str] = []
+        self.tensor_store_assignments: set[int] = set()
+        self.nested_constructs: list[tuple[str, int, int]] = []
 
-        def visit_Continue(self, continue_node: ast.Continue) -> None:
-            del continue_node
-            self._raise()
+    def visit_Return(self, node: ast.Return) -> None:
+        self._unsupported_exit(node)
 
-        def visit_Raise(self, raise_node: ast.Raise) -> None:
-            del raise_node
-            self._raise()
+    def visit_Break(self, node: ast.Break) -> None:
+        if self.python_loop_depth == 0:
+            self._unsupported_exit(node)
 
-        def visit_If(self, if_node: ast.If) -> None:
-            if _is_static_python_if_test(if_node.test):
-                self.generic_visit(if_node)
+    def visit_Continue(self, node: ast.Continue) -> None:
+        if self.python_loop_depth == 0:
+            self._unsupported_exit(node)
 
-        def visit_FunctionDef(self, function_node: ast.FunctionDef) -> None:
-            del function_node
+    def visit_Raise(self, node: ast.Raise) -> None:
+        self._unsupported_exit(node)
 
-        def visit_AsyncFunctionDef(self, function_node: ast.AsyncFunctionDef) -> None:
-            del function_node
+    def visit_Delete(self, node: ast.Delete) -> None:
+        self._raise(node, "does not support deletion")
 
-        def visit_ClassDef(self, class_node: ast.ClassDef) -> None:
-            del class_node
+    def visit_Assign(self, node: ast.Assign) -> None:
+        if len(node.targets) != 1:
+            if any(isinstance(target, ast.Subscript) for target in node.targets):
+                self._raise(node, "does not support chained tensor stores")
+            for target in node.targets:
+                self._check_local_target(target)
+        else:
+            target = node.targets[0]
+            if isinstance(target, ast.Subscript):
+                self._check_tensor_store(node, target)
+            else:
+                self._check_local_target(target)
+        self.visit(node.value)
 
-        def visit_Lambda(self, lambda_node: ast.Lambda) -> None:
-            del lambda_node
+    def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
+        if isinstance(node.target, ast.Subscript):
+            self._raise(node, "does not support annotated tensor stores")
+        self._check_local_target(node.target)
+        if node.value is not None:
+            self.visit(node.value)
 
-        def _raise(self) -> None:
-            raise SyntaxError(
-                "dynamic Tla if does not support return, break, continue, or raise"
-            )
+    def visit_AugAssign(self, node: ast.AugAssign) -> None:
+        if isinstance(node.target, ast.Subscript):
+            self._raise(node, "does not support augmented tensor stores")
+        self._check_local_target(node.target)
+        self.visit(node.value)
 
-    for stmt in [*node.body, *node.orelse]:
-        Visitor().visit(stmt)
+    def visit_For(self, node: ast.For) -> None:
+        self.nested_constructs.append(self._construct_key("for", node))
+        if self.is_runtime_for(node):
+            return
+        self._check_local_target(node.target)
+        self.visit(node.iter)
+        self._visit_python_loop(node.body, node.orelse)
+
+    def visit_While(self, node: ast.While) -> None:
+        self.nested_constructs.append(self._construct_key("while", node))
+        if not self.is_static_test(node.test):
+            return
+        self.visit(node.test)
+        self._visit_python_loop(node.body, node.orelse)
+
+    def visit_If(self, node: ast.If) -> None:
+        self.nested_constructs.append(self._construct_key("if", node))
+        if self.is_static_test(node.test):
+            self.generic_visit(node)
+
+    def visit_With(self, node: ast.With) -> None:
+        for item in node.items:
+            self.visit(item.context_expr)
+            if item.optional_vars is not None:
+                self._check_local_target(item.optional_vars)
+        for statement in node.body:
+            self.visit(statement)
+
+    def visit_Try(self, node: ast.Try) -> None:
+        self.generic_visit(node)
+        self._raise(node, "does not support try statements")
+
+    def visit_TryStar(self, node: ast.TryStar) -> None:
+        self.generic_visit(node)
+        self._raise(node, "does not support try-star statements")
+
+    def visit_Match(self, node: ast.Match) -> None:
+        self.generic_visit(node)
+        self._raise(node, "does not support match statements")
+
+    def visit_NamedExpr(self, node: ast.NamedExpr) -> None:
+        self._raise(node, "does not support assignment expressions")
+
+    def visit_Await(self, node: ast.Await) -> None:
+        self._raise(node, "does not support await expressions")
+
+    def visit_Yield(self, node: ast.Yield) -> None:
+        self._raise(node, "does not support yield expressions")
+
+    def visit_YieldFrom(self, node: ast.YieldFrom) -> None:
+        self._raise(node, "does not support yield expressions")
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        del node
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        del node
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        del node
+
+    def visit_Lambda(self, node: ast.Lambda) -> None:
+        del node
+
+    def _check_tensor_store(
+        self, assignment: ast.Assign, target: ast.Subscript
+    ) -> None:
+        if _contains_slice(target.slice):
+            self._raise(target, "does not support tensor slice assignment")
+        self.assignment_targets.append("tensor subscript")
+        self.tensor_store_assignments.add(id(assignment))
+        self.visit(target.value)
+        self.visit(target.slice)
+
+    def _check_local_target(self, target: ast.AST) -> None:
+        if isinstance(target, ast.Name):
+            self.assignment_targets.append(target.id)
+            return
+        if isinstance(target, (ast.Tuple, ast.List)) and all(
+            isinstance(element, ast.Name) for element in target.elts
+        ):
+            self.assignment_targets.extend(element.id for element in target.elts)
+            return
+        self._raise(
+            target,
+            "only supports assignments to local names, tuples/lists of local "
+            "names, or Catlass tensor elements",
+        )
+
+    def _unsupported_exit(self, node: ast.AST) -> None:
+        self._raise(node, "does not support return, break, continue, or raise")
+
+    def _visit_python_loop(
+        self, body: list[ast.stmt], orelse: list[ast.stmt]
+    ) -> None:
+        self.python_loop_depth += 1
+        try:
+            for statement in [*body, *orelse]:
+                self.visit(statement)
+        finally:
+            self.python_loop_depth -= 1
+
+    def _raise(self, node: ast.AST, message: str) -> None:
+        error = SyntaxError(f"dynamic Tla {self.construct_name} {message}")
+        relative_lineno = int(getattr(node, "lineno", 0) or 0)
+        error.filename = self.filename
+        error.lineno = self.line_offset + relative_lineno
+        error.offset = (
+            int(getattr(node, "col_offset", 0)) + 1
+            if getattr(node, "col_offset", None) is not None
+            else None
+        )
+        if 0 < relative_lineno <= len(self.source_lines):
+            error.text = self.source_lines[relative_lineno - 1]
+        raise error
+
+    @staticmethod
+    def _construct_key(kind: str, node: ast.AST) -> tuple[str, int, int]:
+        return (
+            kind,
+            int(getattr(node, "lineno", 0) or 0),
+            int(getattr(node, "col_offset", 0) or 0),
+        )
 
 
-def _reject_unsupported_dynamic_for_control_flow(node: ast.For) -> None:
-    class Visitor(ast.NodeVisitor):
-        def visit_Return(self, return_node: ast.Return) -> None:
-            del return_node
-            self._raise()
-
-        def visit_Break(self, break_node: ast.Break) -> None:
-            del break_node
-            self._raise()
-
-        def visit_Continue(self, continue_node: ast.Continue) -> None:
-            del continue_node
-            self._raise()
-
-        def visit_Raise(self, raise_node: ast.Raise) -> None:
-            del raise_node
-            self._raise()
-
-        def visit_If(self, if_node: ast.If) -> None:
-            if _is_static_python_if_test(if_node.test):
-                self.generic_visit(if_node)
-
-        def visit_FunctionDef(self, function_node: ast.FunctionDef) -> None:
-            del function_node
-
-        def visit_AsyncFunctionDef(self, function_node: ast.AsyncFunctionDef) -> None:
-            del function_node
-
-        def visit_ClassDef(self, class_node: ast.ClassDef) -> None:
-            del class_node
-
-        def visit_Lambda(self, lambda_node: ast.Lambda) -> None:
-            del lambda_node
-
-        def _raise(self) -> None:
-            raise SyntaxError(
-                "dynamic Tla for does not support return, break, continue, or raise"
-            )
-
-    for stmt in node.body:
-        Visitor().visit(stmt)
-
-
-def _reject_unsupported_dynamic_while_control_flow(node: ast.While) -> None:
-    class Visitor(ast.NodeVisitor):
-        def visit_Return(self, return_node: ast.Return) -> None:
-            del return_node
-            self._raise()
-
-        def visit_Break(self, break_node: ast.Break) -> None:
-            del break_node
-            self._raise()
-
-        def visit_Continue(self, continue_node: ast.Continue) -> None:
-            del continue_node
-            self._raise()
-
-        def visit_Raise(self, raise_node: ast.Raise) -> None:
-            del raise_node
-            self._raise()
-
-        def visit_If(self, if_node: ast.If) -> None:
-            if _is_static_python_if_test(if_node.test):
-                self.generic_visit(if_node)
-
-        def visit_FunctionDef(self, function_node: ast.FunctionDef) -> None:
-            del function_node
-
-        def visit_AsyncFunctionDef(self, function_node: ast.AsyncFunctionDef) -> None:
-            del function_node
-
-        def visit_ClassDef(self, class_node: ast.ClassDef) -> None:
-            del class_node
-
-        def visit_Lambda(self, lambda_node: ast.Lambda) -> None:
-            del lambda_node
-
-        def _raise(self) -> None:
-            raise SyntaxError(
-                "dynamic Tla while does not support return, break, continue, or raise"
-            )
-
-    for stmt in node.body:
-        Visitor().visit(stmt)
+def _is_syntactic_tla_range_for(node: ast.For) -> bool:
+    if not isinstance(node.iter, ast.Call):
+        return False
+    func = node.iter.func
+    if isinstance(func, ast.Name):
+        return func.id == "tla_range"
+    if isinstance(func, ast.Attribute):
+        return func.attr == "range" and isinstance(func.value, ast.Name)
+    return False
 
 
 def _reject_unsupported_dynamic_for_new_defs(
@@ -1893,63 +2470,6 @@ def _reject_unsupported_dynamic_for_new_defs(
             "dynamic Tla for values used after the loop must be initialized "
             f"before the loop: {', '.join(used_after)}"
         )
-
-
-def _reject_unsupported_dynamic_if_assignment_targets(node: ast.If) -> None:
-    class Visitor(ast.NodeVisitor):
-        def visit_Assign(self, assign_node: ast.Assign) -> None:
-            for target in assign_node.targets:
-                self._check_target(target)
-            self.visit(assign_node.value)
-
-        def visit_AnnAssign(self, assign_node: ast.AnnAssign) -> None:
-            self._check_target(assign_node.target)
-            if assign_node.value is not None:
-                self.visit(assign_node.value)
-
-        def visit_AugAssign(self, assign_node: ast.AugAssign) -> None:
-            self._check_target(assign_node.target)
-            self.visit(assign_node.value)
-
-        def visit_Delete(self, delete_node: ast.Delete) -> None:
-            del delete_node
-            self._raise()
-
-        def visit_For(self, for_node: ast.For) -> None:
-            self._check_target(for_node.target)
-            self.visit(for_node.iter)
-            for stmt in [*for_node.body, *for_node.orelse]:
-                self.visit(stmt)
-
-        def visit_FunctionDef(self, function_node: ast.FunctionDef) -> None:
-            del function_node
-
-        def visit_AsyncFunctionDef(self, function_node: ast.AsyncFunctionDef) -> None:
-            del function_node
-
-        def visit_ClassDef(self, class_node: ast.ClassDef) -> None:
-            del class_node
-
-        def visit_Lambda(self, lambda_node: ast.Lambda) -> None:
-            del lambda_node
-
-        def _check_target(self, target: ast.AST) -> None:
-            if isinstance(target, ast.Name):
-                return
-            if isinstance(target, (ast.Tuple, ast.List)) and all(
-                isinstance(element, ast.Name) for element in target.elts
-            ):
-                return
-            self._raise()
-
-        def _raise(self) -> None:
-            raise SyntaxError(
-                "dynamic Tla if only supports assignments to local names or "
-                "tuples/lists of local names"
-            )
-
-    for stmt in [*node.body, *node.orelse]:
-        Visitor().visit(stmt)
 
 
 def _reject_unsupported_dynamic_active_callable_calls(

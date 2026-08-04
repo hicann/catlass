@@ -353,9 +353,6 @@ class TlaVectorSSATypeDescriptor:
             self.element_mlir_type(ctx),
         )
 
-    def with_element_type(self, element_type: str) -> "TlaVectorSSATypeDescriptor":
-        return TlaVectorSSATypeDescriptor(self.valid_lanes, element_type)
-
 
 @dataclass(frozen=True)
 class TlaMaskSSATypeDescriptor:

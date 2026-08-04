@@ -1,3 +1,4 @@
+import functools
 import pytest
 from mlir import ir as mlir_ir  # type: ignore[assignment]
 import inspect
@@ -6,8 +7,64 @@ import catlass as tla
 import catlass.runtime as runtime_mod
 from catlass.execution_lowering import TlaLoweringError
 
+
+@pytest.mark.parametrize("decorator", [tla.kernel, tla.jit], ids=["kernel", "jit"])
+@pytest.mark.parametrize("kind", ["coroutine", "async-generator"])
+def test_async_dsl_functions_are_rejected_at_decoration(decorator, kind: str) -> None:
+    if kind == "coroutine":
+        async def async_fn() -> None:
+            return None
+    else:
+        async def async_fn():
+            yield 1
+
+    with pytest.raises(SyntaxError, match=r"async .*not supported") as excinfo:
+        decorator(async_fn)
+    assert excinfo.value.filename == __file__
+    assert excinfo.value.lineno is not None
+
+
+@pytest.mark.parametrize("decorator", [tla.kernel, tla.jit], ids=["kernel", "jit"])
+def test_wrapped_async_dsl_functions_are_rejected(decorator) -> None:
+    async def async_fn() -> None:
+        return None
+
+    @functools.wraps(async_fn)
+    def wrapper() -> None:
+        return None
+
+    with pytest.raises(SyntaxError, match=r"async .*not supported"):
+        decorator(wrapper)
+
 _TYPE_CTX = mlir_ir.Context()
 F64_TYPE = mlir_ir.Type.parse("f64", _TYPE_CTX)
+
+
+def _operation_occurs_in_scf_if(mlir: str, operation: str) -> bool:
+    stack: list[str] = []
+    last_closed = ""
+    operation_offset = mlir.find(operation)
+    while operation_offset != -1:
+        stack.clear()
+        last_closed = ""
+        for offset, token in enumerate(mlir[:operation_offset]):
+            if token == "{":
+                header_start = mlir.rfind("\n", 0, offset) + 1
+                header = mlir[header_start:offset]
+                if "scf.if" in header:
+                    kind = "scf.if"
+                elif "else" in header and last_closed == "scf.if":
+                    kind = "scf.if"
+                else:
+                    kind = "other"
+                stack.append(kind)
+                last_closed = ""
+            elif token == "}" and stack:
+                last_closed = stack.pop()
+        if "scf.if" in stack:
+            return True
+        operation_offset = mlir.find(operation, operation_offset + len(operation))
+    return False
 
 
 def _mmad_tensor_args() -> tuple[tla.Tensor, tla.Tensor, tla.Tensor]:
@@ -623,7 +680,7 @@ def test_dynamic_mmad_initc_unit_flag_expression_lowers_to_scf_if(compiler_tlair
     assert "scf.for" in mlir
     assert "tla.for" not in mlir
     assert "arith.cmpi" in mlir
-    assert "arith.andi" in mlir
+    assert _operation_occurs_in_scf_if(mlir, "arith.cmpi")
     assert "scf.if" in mlir
     assert mlir.count("scf.yield") >= 4
     assert '"arith.constant"() <{value = true}> : () -> i1' in mlir

@@ -518,7 +518,7 @@ class VectorSSA(_RegisterSSA):
         operand_value = _as_value(self)
         context = operand_value.type.context
         src_desc = _vector_ssa_type_for_mlir_value(operand_value)
-        result_desc = src_desc.with_element_type(_dtype_to_str(dst_type))
+        result_desc = _cast_result_descriptor(src_desc, _dtype_to_str(dst_type), params)
         with context:
             trait_attr = mlir_ir.DenseI32ArrayAttr.get(params.codes())
         mask_value = _as_value(mask) if mask is not None else None
@@ -1183,6 +1183,48 @@ def _vector_ssa_type_for_mlir_value(
         valid_lanes=valid_lanes,
         element_type=_dtype_to_str(element_type),
     )
+
+
+def _cast_result_descriptor(
+    src_desc: TlaVectorSSATypeDescriptor,
+    dst_token: str,
+    params: CastParams,
+) -> TlaVectorSSATypeDescriptor:
+    """Compute the result VectorSSA descriptor for a ``tla.cast``.
+
+    ``valid_lanes`` follows the AVE cast lane mapping:
+
+    - dynamic source (``None``) -> dynamic
+    - same-width cast (``dst_bytes == src_bytes``) -> source lanes unchanged
+    - narrowing (``dst_bytes < src_bytes``) -> dynamic (``None``): the result
+      lane placement depends on the AVE even/odd or pack part and is not
+      tracked statically
+    - widening (``dst_bytes > src_bytes``) -> ``ceil((src - slot) / ratio)``
+      where ``ratio = dst_bytes // src_bytes`` and ``slot = params.codes()[0]``
+      (the ``reg_slot`` code); ``src <= slot`` (no source lane at this slot)
+      raises :class:`TlaCoreAPIError` -- the result would contain invalid data
+    """
+    src_lanes = src_desc.valid_lanes
+    if src_lanes is None:
+        return TlaVectorSSATypeDescriptor(None, dst_token)
+    src_bytes = dtype_size_bytes(src_desc.element_type)
+    dst_bytes = dtype_size_bytes(dst_token)
+    if dst_bytes == src_bytes:
+        return TlaVectorSSATypeDescriptor(src_lanes, dst_token)
+    if dst_bytes < src_bytes:
+        return TlaVectorSSATypeDescriptor(None, dst_token)
+    ratio = dst_bytes // src_bytes
+    slot = params.codes()[0]
+    if src_lanes <= slot:
+        _op_error(
+            "cast",
+            f"widening {src_desc.element_type}->{dst_token} source has only "
+            f"{src_lanes} valid lane(s) but reg_slot {params.reg_slot} (slot "
+            f"{slot}) requires a source lane at index {slot}; the result "
+            f"would contain invalid data",
+        )
+    lanes = (src_lanes - slot + ratio - 1) // ratio
+    return TlaVectorSSATypeDescriptor(lanes, dst_token)
 
 
 def _mask_ssa_type_for_mlir_value(
@@ -3847,9 +3889,27 @@ def copy(dst: TileLike, src: TileLike, params: CopyParams | None = None, *, loc:
                 raise NotImplementedError(f"currently unsupported quant mode {params.quant_mode}")
             if params.relu_enable != False:
                 raise NotImplementedError(f"currently unsupported relu_enable {params.relu_enable}")
-            if (dst.addrspace == "ub") and (src.dtype != dst.dtype) and (
+            # Read dtype/addrspace from MLIR descriptors — kernel-arg proxies
+            # (_ArgProxy) do not expose Python .dtype / .addrspace attributes.
+            src_dtype = str(
+                _tla_tensor_type_for_mlir_value(src_value).element_type
+            ).strip().lower()
+            dst_dtype = str(
+                _tla_tensor_type_for_mlir_value(dst_value).element_type
+            ).strip().lower()
+            if (_route[1] == "ub") and (src_dtype != dst_dtype) and (
                 params.l0c2ub_mode == L0C2UBMode.SPLIT_M or params.l0c2ub_mode == L0C2UBMode.SPLIT_N):
-                raise TlaLoweringError(f"When copy l0c to ub with split mode, src and dst dtype must be same , got {src.dtype} {dst.dtype}")
+                raise TlaLoweringError(
+                    "When copy l0c to ub with split mode, src and dst dtype must be same , "
+                    f"got {src_dtype} {dst_dtype}"
+                )
+            dst_layout = str(_tla_tensor_type_for_mlir_value(dst_value).layout_tag).strip().lower()
+            if (_route[1] == "ub") and (dst_layout == "column_major") and (
+                params.l0c2ub_mode not in [L0C2UBMode.NO_SPLIT_VEC_0, L0C2UBMode.NO_SPLIT_VEC_1]):
+                raise TlaLoweringError(
+                    f"When copy l0c to ub and dst layout_tag is column_major, only support `NO_SPLIT` mode,"
+                    f"got {params.l0c2ub_mode}"
+                )
 
             ctx = loc.context if loc is not None else mlir_ir.Context.current
             quant_mode_attr = mlir_ir.Attribute.parse(f"#tla.quant_mode<{params.quant_mode}>", context=ctx)
@@ -3869,7 +3929,8 @@ def copy(dst: TileLike, src: TileLike, params: CopyParams | None = None, *, loc:
             )
         else:
             raise TlaLoweringError(
-                f"tla.copy operand `params` expects to be a CopyL0C2DstParams when {src.addrspace} -> {dst.addrspace}"
+                "tla.copy operand `params` expects to be a CopyL0C2DstParams when "
+                f"{_route[0]} -> {_route[1]}"
             )
     else:
         params_value = None
@@ -3886,9 +3947,15 @@ def copy(dst: TileLike, src: TileLike, params: CopyParams | None = None, *, loc:
 
         if _route[1] != "gm":
             raise TlaLoweringError(f"When atomic operation is enabled, the dst location should only be GM but got {_route[1]}")
-            
-        if dst.dtype not in ("f32", "f16", "i16", "i32", "i8", "bf16"):
-            raise TlaLoweringError(f"The supported atomic operation's data type includes f32, f16, i16, i32, i8, bf16, the data type {dst.dtype} is not supported")
+
+        dst_dtype = str(
+            _tla_tensor_type_for_mlir_value(dst_value).element_type
+        ).strip().lower()
+        if dst_dtype not in ("f32", "f16", "i16", "i32", "i8", "bf16"):
+            raise TlaLoweringError(
+                "The supported atomic operation's data type includes f32, f16, i16, i32, i8, bf16, "
+                f"the data type {dst_dtype} is not supported"
+            )
 
         ctx = loc.context if loc is not None else mlir_ir.Context.current
         atomic_mode_attr = mlir_ir.Attribute.parse(f"#tla.atomic_mode<{atomic_mode.value}>", context=ctx)
@@ -5947,3 +6014,44 @@ __all__ = [
     "MaskSSA",
     "LocalmemAllocator",
 ]
+
+
+# Capture the genuine frontend identities before user staging code can mutate
+# public module namespaces.  The consumers retain these immutable snapshots.
+from .base_dsl import ast_preprocessor as _ast_preprocessor  # noqa: E402
+from .base_dsl import typing as _dsl_typing  # noqa: E402
+from . import tla_ast_decorators as _tla_ast_decorators  # noqa: E402
+
+_TRUSTED_DSL_TYPE_MODULES = frozenset(
+    {
+        "catlass.address_space",
+        "catlass.base_dsl.typing",
+        "catlass.core_api",
+        "catlass.execution_lowering",
+        "catlass.params",
+        "catlass.runtime",
+        "catlass.tla.tensor",
+        "catlass.tla.typing",
+        "catlass.types",
+        "catlass.utils.localmem_allocator",
+    }
+)
+_ast_preprocessor._register_trusted_lazy_callables(
+    tuple(
+        value
+        for value in globals().values()
+        if callable(value)
+        and getattr(value, "__module__", None) == __name__
+        and not inspect.isclass(value)
+    )
+    + (_runtime.const_expr,)
+)
+_tla_ast_decorators._register_trusted_dsl_types(
+    frozenset(
+        candidate
+        for namespace in (globals(), vars(_dsl_typing))
+        for candidate in namespace.values()
+        if isinstance(candidate, type)
+        and getattr(candidate, "__module__", None) in _TRUSTED_DSL_TYPE_MODULES
+    )
+)
