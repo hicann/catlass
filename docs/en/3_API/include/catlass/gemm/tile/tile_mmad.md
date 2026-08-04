@@ -1,5 +1,5 @@
 # Basic Tile MMAD Template
-
+>
 > [Code location](../../../../../../../include/catlass/gemm/tile/tile_mmad.hpp)
 
 [TOC]
@@ -8,13 +8,13 @@
 
 ### Description
 
-Performs matrix multiply-accumulate ($C += A \times B$) operations using the [AscendC::mmad basic API](https://www.hiascend.com/document/detail/en/canncommercial/850/API/ascendcopapi/atlasascendc_api_07_0249.html). Matrices A, B, and C correspond to data residing in L0A, L0B, and L0C, respectively. The data layout formats for the A, B, and C matrices are zZ, nZ, and zN, respectively. This is a non-TLA implementation.
+Performs matrix multiply-accumulate ($C += A \times B$) operations using the [AscendC::mmad basic API](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/API/ascendcopapi/atlasascendc_api_07_0249.html). Matrices A, B, and C correspond to data residing in L0A, L0B, and L0C, respectively. The data layout formats for the A, B, and C matrices are zZ, nZ, and zN, respectively. This is a non-TLA implementation.
 
 ### Prototype
 
 - Structure template
 
-```cpp
+```
 template <
     class ArchTag_,         // Architecture tag
     class AType_,           // GEMM type for matrix A operand
@@ -26,7 +26,7 @@ struct TileMmad
 
 - Invocation without bias input
 
-```cpp
+```
 void operator() (
     AscendC::LocalTensor<ElementAccumulator> const &l0CTensor,  // Destination matrix in L0C
     AscendC::LocalTensor<ElementA> const &l0ATensor,            // Left matrix in L0A
@@ -41,7 +41,7 @@ void operator() (
 
 - Invocation with bias input
 
-```cpp
+```
 void operator() (
     AscendC::LocalTensor<ElementAccumulator> const &l0CTensor,  // Destination matrix in L0C
     AscendC::LocalTensor<ElementA> const &l0ATensor,            // Left matrix in L0A
@@ -63,13 +63,13 @@ For details, see the usage method in [block_mmad_pingpong](../../../../../../../
 
 ### Description
 
-Performs matrix multiply-accumulate ($C += A \times B$) operations using the [AscendC::mmad basic API](https://www.hiascend.com/document/detail/en/canncommercial/850/API/ascendcopapi/atlasascendc_api_07_0249.html). Matrices A, B, and C correspond to data residing in L0A, L0B, and L0C, respectively. The data layout formats for the A, B, and C matrices are zZ, nZ, and zN, respectively. This is a TLA implementation and does not support bias.
+Performs matrix multiply-accumulate ($C += A \times B$) operations using the [AscendC::mmad basic API](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/API/ascendcopapi/atlasascendc_api_07_0249.html). Matrices A, B, and C correspond to data residing in L0A, L0B, and L0C, respectively. The data layout formats for the A, B, and C matrices are zZ, nZ, and zN, respectively. This is a TLA implementation and does not support bias.
 
 ### Prototype
 
 - Structure template
 
-```cpp
+```
 template <
     class ArchTag_,         // Architecture tag
     class ElementA,         // Element type for matrix A operand
@@ -80,7 +80,7 @@ struct TileMmadTla
 
 - Invocation (bias not supported)
 
-```cpp
+```
 void operator() (
     TensorC const &l0CTensor,   // Destination matrix tensor in L0C
     TensorA const &l0ATensor,   // Left matrix tensor in L0A
