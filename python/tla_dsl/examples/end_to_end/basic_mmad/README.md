@@ -82,9 +82,7 @@ Lowering 会为不同组合选择 **GM row_major→L1 zN**、**GM column_major�
 
 - `cd python/tla_dsl && pip install -e .`（及 MLIR Python 绑定等）。
 - **`--run`**：`torch`、`torch_npu`，`ASCEND_HOME_PATH` / CANN 已配置。
-- 编译 toolchain 常需：  
-  `export TLA_DSL_HIVM_TEMPLATE_BC=$PWD/mlir/build/bc/meta_op.aic.c310.bc`  
-  （路径以本机 `mlir/build` 为准。）
+- 编译需已构建 DSL HIVM bitcode（`csrc/mlir/build/bc/meta_op.*.c310.bc`）。
 
 ---
 
@@ -130,7 +128,7 @@ python examples/end_to_end/basic_mmad/basic_matmul.py --help
 
 **`--build-only`** 仅打印 `compile_ok=True` 与 `kernel.o path=...`。
 
-若失败，请检查 **`TLA_DSL_HIVM_TEMPLATE_BC`**、`ASCEND_HOME_PATH`（run 路径）、**`torch_npu`** 及 **`--device`**。
+若失败，请检查 DSL bitcode 是否已构建、`ASCEND_HOME_PATH`（run 路径）、**`torch_npu`** 及 **`--device`**。
 
 ---
 

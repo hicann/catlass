@@ -33,6 +33,18 @@ template <>
 struct VectorTy<int32_t> {
   using type = vector_s32;
 };
+template <>
+struct VectorTy<uint32_t> {
+  using type = vector_u32;
+};
+template <>
+struct VectorTy<int16_t> {
+  using type = vector_s16;
+};
+template <>
+struct VectorTy<uint16_t> {
+  using type = vector_u16;
+};
 
 template <typename T>
 using VectorReg = typename VectorTy<T>::type;

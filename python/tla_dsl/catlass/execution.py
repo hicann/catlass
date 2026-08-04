@@ -2001,30 +2001,13 @@ def _mlir_build_dirs() -> list[Path]:
 
 
 def _resolve_hivm_template_bitcode(runtime: TlaRuntimeOptions) -> str:
-    explicit = os.getenv("TLA_DSL_HIVM_TEMPLATE_BC")
-    if explicit:
-        paths = [Path(item).expanduser().resolve() for item in explicit.split(",")]
-        missing = [str(path) for path in paths if not path.exists()]
-        if missing:
-            raise TlaRuntimeUnavailableError(
-                "TLA_DSL_HIVM_TEMPLATE_BC references missing files: "
-                + ", ".join(missing)
-            )
-        return ",".join(str(path) for path in paths)
-
     candidates: list[Path] = []
     if runtime.kernel_mode == "mix":
         repo_aic_candidates: list[Path] = []
-        for build_dir in _mlir_build_dirs():
-            repo_aic_candidates.append(build_dir / "bc" / "meta_op.aic.c310.bc")
-
         aiv_candidates: list[Path] = []
         for build_dir in _mlir_build_dirs():
+            repo_aic_candidates.append(build_dir / "bc" / "meta_op.aic.c310.bc")
             aiv_candidates.append(build_dir / "bc" / "meta_op.aiv.c310.bc")
-        ascend_home = os.getenv("ASCEND_HOME_PATH")
-        if ascend_home:
-            cann_lib = Path(ascend_home) / "tools" / "bishengir" / "lib"
-            aiv_candidates.append(cann_lib / "meta_op.aiv.c310.bc")
         repo_aic = next(
             (path.resolve() for path in repo_aic_candidates if path.exists()), None
         )
@@ -2034,8 +2017,8 @@ def _resolve_hivm_template_bitcode(runtime: TlaRuntimeOptions) -> str:
         if repo_aic is not None and aiv_bc is not None:
             return f"{repo_aic},{aiv_bc}"
         raise TlaRuntimeUnavailableError(
-            "C310 mixed HIVM template bitcode not found. Expected repo AIC bitcode "
-            "and CANN AIV bitcode, or set `TLA_DSL_HIVM_TEMPLATE_BC`."
+            "C310 mix HIVM bitcode not found. Expected DSL-built "
+            "meta_op.aic.c310.bc and meta_op.aiv.c310.bc under the mlir build tree."
         )
 
     if runtime.core_type == "aic":
@@ -2049,21 +2032,12 @@ def _resolve_hivm_template_bitcode(runtime: TlaRuntimeOptions) -> str:
     else:
         for build_dir in _mlir_build_dirs():
             candidates.append(build_dir / "bc" / "meta_op.aiv.c310.bc")
-        ascend_home = os.getenv("ASCEND_HOME_PATH")
-        if ascend_home:
-            candidates.append(
-                Path(ascend_home)
-                / "tools"
-                / "bishengir"
-                / "lib"
-                / "meta_op.aiv.c310.bc"
-            )
     existing = next((path.resolve() for path in candidates if path.exists()), None)
     if existing is not None:
         return str(existing)
     raise TlaRuntimeUnavailableError(
-        "C310 HIVM template bitcode not found. Build Tla DSL templates or set "
-        "`TLA_DSL_HIVM_TEMPLATE_BC`."
+        "C310 HIVM bitcode not found. Build Tla DSL templates "
+        "(meta_op.aic.c310.bc / meta_op.aiv.c310.bc) under the mlir build tree."
     )
 
 

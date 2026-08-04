@@ -193,7 +193,6 @@ def test_prepare_hivmc_input_selects_aic_print_tensor_helper(
     template_bc.write_bytes(b"bc")
     helper_bc.parent.mkdir(parents=True)
     helper_bc.write_bytes(b"bc__tla_print_tensor_abi")
-    monkeypatch.setenv("TLA_DSL_HIVM_TEMPLATE_BC", str(template_bc))
     monkeypatch.setattr(execution, "_mlir_build_dirs", lambda: [tmp_path])
 
     compiler_input, selected = execution._create_stamped_hivmc_input(
@@ -204,7 +203,7 @@ def test_prepare_hivmc_input_selects_aic_print_tensor_helper(
     )
 
     assert compiler_input != mlir_path
-    assert selected == f"{template_bc},{helper_bc}"
+    assert selected == f"{template_bc.resolve()},{helper_bc.resolve()}"
     assert "hivm.aic_bitcode" in compiler_input.read_text()
 
 
@@ -215,12 +214,12 @@ def test_prepare_hivmc_input_rejects_outdated_print_tensor_helper(
     mlir_path.write_text(
         "module { func.func @kernel(%workspace: i64 {tla.print_tensor.workspace}) }"
     )
-    template_bc = tmp_path / "meta_op.aiv.c310.bc"
+    template_bc = tmp_path / "bc" / "meta_op.aiv.c310.bc"
     helper_bc = tmp_path / "bc" / "Vector" / "print_tensor.aiv.c310.bc"
+    template_bc.parent.mkdir(parents=True)
     template_bc.write_bytes(b"bc")
     helper_bc.parent.mkdir(parents=True)
     helper_bc.write_bytes(b"bc_tla_print_tensor_old_abi")
-    monkeypatch.setenv("TLA_DSL_HIVM_TEMPLATE_BC", str(template_bc))
     monkeypatch.setattr(execution, "_mlir_build_dirs", lambda: [tmp_path])
 
     with pytest.raises(execution.TlaRuntimeUnavailableError, match="ABI marker"):
@@ -260,12 +259,14 @@ def test_prepare_hivmc_input_selects_mixed_split_print_tensor_helper(
         "}\n"
         "}\n"
     )
-    template_bc = tmp_path / "meta_op.mix.c310.bc"
+    aic_bc = tmp_path / "bc" / "meta_op.aic.c310.bc"
+    aiv_bc = tmp_path / "bc" / "meta_op.aiv.c310.bc"
     helper_bc = tmp_path / "bc" / helper_dir / helper_name
-    template_bc.write_bytes(b"bc")
+    aic_bc.parent.mkdir(parents=True)
+    aic_bc.write_bytes(b"bc")
+    aiv_bc.write_bytes(b"bc")
     helper_bc.parent.mkdir(parents=True)
     helper_bc.write_bytes(b"bc__tla_print_tensor_abi")
-    monkeypatch.setenv("TLA_DSL_HIVM_TEMPLATE_BC", str(template_bc))
     monkeypatch.setattr(execution, "_mlir_build_dirs", lambda: [tmp_path])
 
     _, selected = execution._create_stamped_hivmc_input(
@@ -273,7 +274,9 @@ def test_prepare_hivmc_input_selects_mixed_split_print_tensor_helper(
         execution.TlaRuntimeOptions(kernel_mode="mix"),
     )
 
-    assert selected == f"{template_bc},{helper_bc}"
+    assert selected == (
+        f"{aic_bc.resolve()},{aiv_bc.resolve()},{helper_bc.resolve()}"
+    )
 
 
 def test_debug_print_output_accepts_unordered_f32_records_from_distinct_blocks() -> (
@@ -637,7 +640,7 @@ def test_public_compile_dry_run_invokes_typed_bridge_and_hivmc_a5(
             "module { func.func @zero_arg_kernel() }\n"
         ),
     )
-    monkeypatch.setenv("TLA_DSL_HIVM_TEMPLATE_BC", str(template_bc))
+    monkeypatch.setattr(execution, "_mlir_build_dirs", lambda: [tmp_path])
 
     recorded: list[tuple[str, list[str]]] = []
 
@@ -672,7 +675,7 @@ def test_public_compile_dry_run_invokes_typed_bridge_and_hivmc_a5(
                 "--target=Ascend950PR_9589",
                 "--disable-ffts",
                 "--enable-hivm-compile=False",
-                f"--link-aicore-bitcode={template_bc}",
+                f"--link-aicore-bitcode={template_bc.resolve()}",
                 "-o",
                 str(artifact.kernel_binary_path),
             ],
@@ -690,7 +693,7 @@ def test_prepare_hivmc_input_stamps_only_debug_print_mlir(
     )
     template_bc = tmp_path / "meta_op.aic.c310.bc"
     template_bc.write_bytes(b"bc")
-    monkeypatch.setenv("TLA_DSL_HIVM_TEMPLATE_BC", str(template_bc))
+    monkeypatch.setattr(execution, "_mlir_build_dirs", lambda: [tmp_path])
 
     compiler_input, template_bitcode = execution._create_stamped_hivmc_input(
         mlir_path,
@@ -698,7 +701,7 @@ def test_prepare_hivmc_input_stamps_only_debug_print_mlir(
     )
 
     assert compiler_input != mlir_path
-    assert template_bitcode == str(template_bc)
+    assert template_bitcode == str(template_bc.resolve())
     assert "hivm.aic_bitcode" in compiler_input.read_text()
     assert "hivm.aic_bitcode" not in mlir_path.read_text()
 
@@ -707,8 +710,9 @@ def test_generated_kernel_bridge_lowers_live_module(monkeypatch, tmp_path) -> No
     tlair_mlir = "module {\n  tla.func @zero_arg_kernel() { tla.return }\n}"
     lowered_module = object()
     hivm_compile = tmp_path / "hivmc-a5"
-    template_bc = tmp_path / "meta_op.aiv.c310.bc"
+    template_bc = tmp_path / "bc" / "meta_op.aiv.c310.bc"
     hivm_compile.write_text("")
+    template_bc.parent.mkdir(parents=True)
     template_bc.write_bytes(b"bc")
 
     monkeypatch.setattr(
@@ -719,7 +723,7 @@ def test_generated_kernel_bridge_lowers_live_module(monkeypatch, tmp_path) -> No
     monkeypatch.setattr(execution, "resolve_bridge_extension_path", lambda: None)
     monkeypatch.setattr(execution, "_resolve_hivmc_a5", lambda _x: hivm_compile)
     monkeypatch.setattr(execution, "_tool_version", lambda _x: "test-version")
-    monkeypatch.setenv("TLA_DSL_HIVM_TEMPLATE_BC", str(template_bc))
+    monkeypatch.setattr(execution, "_mlir_build_dirs", lambda: [tmp_path])
 
     bridge_calls: list[tuple[object, dict[str, object]]] = []
 
@@ -1005,7 +1009,7 @@ def test_build_hivmc_a5_command_links_template_bitcode_for_aic(
     kernel_path = tmp_path / "kernel.o"
     template_bc = tmp_path / "meta_op.aic.c310.bc"
     template_bc.write_bytes(b"bc")
-    monkeypatch.setenv("TLA_DSL_HIVM_TEMPLATE_BC", str(template_bc))
+    monkeypatch.setattr(execution, "_mlir_build_dirs", lambda: [tmp_path])
 
     command = execution._build_hivmc_a5_command(
         compiler=compiler,
@@ -1022,7 +1026,7 @@ def test_build_hivmc_a5_command_links_template_bitcode_for_aic(
         "--target=Ascend950PR_9589",
         "--disable-ffts",
         "--enable-hivm-compile=False",
-        f"--link-aicore-bitcode={template_bc}",
+        f"--link-aicore-bitcode={template_bc.resolve()}",
         "-o",
         str(kernel_path),
         "--extra-flag",
@@ -1035,9 +1039,10 @@ def test_build_hivmc_a5_command_links_template_bitcode_for_aiv(
     compiler = tmp_path / "hivmc-a5"
     mlir_path = tmp_path / "kernel.mlir"
     kernel_path = tmp_path / "kernel.o"
-    template_bc = tmp_path / "meta_op.aiv.c310.bc"
+    template_bc = tmp_path / "bc" / "meta_op.aiv.c310.bc"
+    template_bc.parent.mkdir(parents=True)
     template_bc.write_bytes(b"bc")
-    monkeypatch.setenv("TLA_DSL_HIVM_TEMPLATE_BC", str(template_bc))
+    monkeypatch.setattr(execution, "_mlir_build_dirs", lambda: [tmp_path])
 
     command = execution._build_hivmc_a5_command(
         compiler=compiler,
@@ -1052,7 +1057,7 @@ def test_build_hivmc_a5_command_links_template_bitcode_for_aiv(
         "--target=Ascend950PR_9589",
         "--disable-ffts",
         "--enable-hivm-compile=False",
-        f"--link-aicore-bitcode={template_bc}",
+        f"--link-aicore-bitcode={template_bc.resolve()}",
         "-o",
         str(kernel_path),
     ]
