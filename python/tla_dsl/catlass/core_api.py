@@ -518,7 +518,7 @@ class VectorSSA(_RegisterSSA):
         operand_value = _as_value(self)
         context = operand_value.type.context
         src_desc = _vector_ssa_type_for_mlir_value(operand_value)
-        result_desc = src_desc.with_element_type(_dtype_to_str(dst_type))
+        result_desc = _cast_result_descriptor(src_desc, _dtype_to_str(dst_type), params)
         with context:
             trait_attr = mlir_ir.DenseI32ArrayAttr.get(params.codes())
         mask_value = _as_value(mask) if mask is not None else None
@@ -1183,6 +1183,48 @@ def _vector_ssa_type_for_mlir_value(
         valid_lanes=valid_lanes,
         element_type=_dtype_to_str(element_type),
     )
+
+
+def _cast_result_descriptor(
+    src_desc: TlaVectorSSATypeDescriptor,
+    dst_token: str,
+    params: CastParams,
+) -> TlaVectorSSATypeDescriptor:
+    """Compute the result VectorSSA descriptor for a ``tla.cast``.
+
+    ``valid_lanes`` follows the AVE cast lane mapping:
+
+    - dynamic source (``None``) -> dynamic
+    - same-width cast (``dst_bytes == src_bytes``) -> source lanes unchanged
+    - narrowing (``dst_bytes < src_bytes``) -> dynamic (``None``): the result
+      lane placement depends on the AVE even/odd or pack part and is not
+      tracked statically
+    - widening (``dst_bytes > src_bytes``) -> ``ceil((src - slot) / ratio)``
+      where ``ratio = dst_bytes // src_bytes`` and ``slot = params.codes()[0]``
+      (the ``reg_slot`` code); ``src <= slot`` (no source lane at this slot)
+      raises :class:`TlaCoreAPIError` -- the result would contain invalid data
+    """
+    src_lanes = src_desc.valid_lanes
+    if src_lanes is None:
+        return TlaVectorSSATypeDescriptor(None, dst_token)
+    src_bytes = dtype_size_bytes(src_desc.element_type)
+    dst_bytes = dtype_size_bytes(dst_token)
+    if dst_bytes == src_bytes:
+        return TlaVectorSSATypeDescriptor(src_lanes, dst_token)
+    if dst_bytes < src_bytes:
+        return TlaVectorSSATypeDescriptor(None, dst_token)
+    ratio = dst_bytes // src_bytes
+    slot = params.codes()[0]
+    if src_lanes <= slot:
+        _op_error(
+            "cast",
+            f"widening {src_desc.element_type}->{dst_token} source has only "
+            f"{src_lanes} valid lane(s) but reg_slot {params.reg_slot} (slot "
+            f"{slot}) requires a source lane at index {slot}; the result "
+            f"would contain invalid data",
+        )
+    lanes = (src_lanes - slot + ratio - 1) // ratio
+    return TlaVectorSSATypeDescriptor(lanes, dst_token)
 
 
 def _mask_ssa_type_for_mlir_value(

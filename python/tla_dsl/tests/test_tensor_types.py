@@ -168,24 +168,61 @@ def test_vector_ssa_type_rejects_i1_elements() -> None:
             mlir_ir.Type.parse("!tla.vector<1xi1>")
 
 
-def test_vector_ssa_with_element_type_preserves_valid_lanes() -> None:
-    static = tla.types.TlaVectorSSATypeDescriptor(64, "f32")
-    dynamic = tla.types.TlaVectorSSATypeDescriptor(None, "f16")
+def _cast_result_desc(
+    src_lanes: int | None,
+    src_token: str,
+    dst_token: str,
+    reg_slot: "tla.params.RegSlot" = tla.params.RegSlot.ZERO,
+) -> tla.types.TlaVectorSSATypeDescriptor:
+    """Drive the cast-result lane computation for a (src -> dst) element cast."""
+    src = tla.types.TlaVectorSSATypeDescriptor(src_lanes, src_token)
+    params = tla.params.CastParams(reg_slot=reg_slot)
+    return core_api_mod._cast_result_descriptor(src, dst_token, params)
 
-    converted_static = static.with_element_type("f16")
-    converted_dynamic = dynamic.with_element_type("f32")
 
-    assert converted_static.valid_lanes == 64
-    assert converted_static.element_type == "f16"
-    assert converted_dynamic.valid_lanes is None
-    assert converted_dynamic.element_type == "f32"
+def test_cast_result_descriptor_dynamic_source_stays_dynamic() -> None:
+    # A dynamic source never gains a static lane count, in either direction.
+    assert _cast_result_desc(None, "f16", "f32").valid_lanes is None
+    assert _cast_result_desc(None, "f32", "f16").valid_lanes is None
 
 
-def test_vector_ssa_with_element_type_rejects_insufficient_capacity() -> None:
-    descriptor = tla.types.TlaVectorSSATypeDescriptor(128, "f16")
+def test_cast_result_descriptor_same_width_preserves_lanes() -> None:
+    # Same bit width (f32<->i32, f16<->bf16): lanes are unchanged.
+    assert _cast_result_desc(64, "f32", "i32").valid_lanes == 64
+    assert _cast_result_desc(37, "i32", "f32").valid_lanes == 37
+    assert _cast_result_desc(128, "f16", "bf16").valid_lanes == 128
 
-    with pytest.raises(ValueError, match="valid_lanes must be <= 64 for f32"):
-        descriptor.with_element_type("f32")
+
+def test_cast_result_descriptor_narrowing_is_dynamic() -> None:
+    # High -> low bit width: the result lane placement depends on the AVE
+    # even/odd or pack part, so it is not tracked statically.
+    assert _cast_result_desc(64, "f32", "f16").valid_lanes is None
+    assert _cast_result_desc(64, "i32", "i8").valid_lanes is None
+    assert _cast_result_desc(128, "f16", "i8").valid_lanes is None
+
+
+def test_cast_result_descriptor_widening_full_source() -> None:
+    # A full 256-byte source register widens to a full destination register
+    # regardless of reg_slot (2x: f16->f32; 4x: i8->i32).
+    assert _cast_result_desc(128, "f16", "f32", tla.params.RegSlot.ZERO).valid_lanes == 64
+    assert _cast_result_desc(128, "f16", "f32", tla.params.RegSlot.ONE).valid_lanes == 64
+    for slot in (
+        tla.params.RegSlot.ZERO,
+        tla.params.RegSlot.ONE,
+        tla.params.RegSlot.TWO,
+        tla.params.RegSlot.THREE,
+    ):
+        assert _cast_result_desc(256, "i8", "i32", slot).valid_lanes == 64
+
+
+def test_cast_result_descriptor_widening_partial_source() -> None:
+    # ceil((src - slot) / ratio): reg_slot shifts which source lanes are taken.
+    # 2x widening, f16 -> f32.
+    assert _cast_result_desc(101, "f16", "f32", tla.params.RegSlot.ZERO).valid_lanes == 51
+    assert _cast_result_desc(101, "f16", "f32", tla.params.RegSlot.ONE).valid_lanes == 50
+    # 4x widening, i8 -> i32.
+    assert _cast_result_desc(201, "i8", "i32", tla.params.RegSlot.ZERO).valid_lanes == 51
+    assert _cast_result_desc(201, "i8", "i32", tla.params.RegSlot.ONE).valid_lanes == 50
 
 
 def test_legacy_tla_value_type_and_python_marker_are_removed() -> None:
