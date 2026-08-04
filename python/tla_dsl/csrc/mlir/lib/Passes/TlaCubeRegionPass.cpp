@@ -311,11 +311,12 @@ namespace {
           op.getContext(), srcAddrspace, dstAddrspace, srcDesc.layoutTag, dstDesc.layoutTag,
           srcDesc.elementType, dstDesc.elementType, extraDesc);
       if (!calleeName.empty()) {
-        bool l0c2DstNarrow = srcAddrspace == "l0c" && (dstAddrspace == "gm" || dstAddrspace == "ub") &&
-                           srcDesc.layoutTag == TensorLayoutTag::L0C &&
-                           dstDesc.layoutTag == TensorLayoutTag::RowMajor &&
-                           srcDesc.elementType == "f32" &&
-                           (dstDesc.elementType == "f16" || dstDesc.elementType == "bf16");
+        bool condSrc = (srcAddrspace == "l0c") && (srcDesc.layoutTag == TensorLayoutTag::L0C);
+        bool condGm = (dstAddrspace == "gm" && dstDesc.layoutTag == TensorLayoutTag::RowMajor);
+        bool condUb = (dstAddrspace == "ub" && (dstDesc.layoutTag == TensorLayoutTag::RowMajor 
+                                            || dstDesc.layoutTag == TensorLayoutTag::ColumnMajor));
+        bool condDtype = (srcDesc.elementType == "f32") && (dstDesc.elementType == "f16" || dstDesc.elementType == "bf16");
+        bool l0c2DstNarrow = condSrc && (condGm || condUb) && condDtype;
         if (!rankOk || (!sameElem && !l0c2DstNarrow)) {
           op.emitError() << "tla.copy supported route has src/dst descriptor metadata mismatch "
                             "(rank/element type)";

@@ -18,6 +18,7 @@
 
 #if defined(__NPU_ARCH__) && (__NPU_ARCH__ == 3510)
 constexpr AscendC::FixpipeConfig CFG_ROW_MAJOR_UB = {AscendC::CO2Layout::ROW_MAJOR, true};
+constexpr AscendC::FixpipeConfig CFG_COLUMN_MAJOR_UB = {AscendC::CO2Layout::COLUMN_MAJOR, true};
 #endif
 
 namespace Catlass::Gemm::Tile {
@@ -97,6 +98,91 @@ struct CopyL0CToUBTla<
 
         // Call AscendC Fixpipe
         AscendC::Fixpipe<ElementDst, ElementSrc, CFG_ROW_MAJOR_UB>(
+            dstTensor.data()[dstOffset], srcTensor.data()[srcOffset], intriParams);
+    }
+};
+
+template <class TensorSrc_, class ElementDst_, class LayoutDst_, class CoordDst_, bool ReluEnable_>
+struct CopyL0CToUBTla<
+    Catlass::Arch::Ascend950,
+    TensorSrc_,
+    tla::Tensor<AscendC::LocalTensor<ElementDst_>, LayoutDst_, CoordDst_, AscendC::TPosition::VECCALC>,
+    CopyL0CToUBMode::NO_SPLIT,
+    ScaleGranularity::NO_QUANT,
+    ReluEnable_,
+    std::enable_if_t<tla::detail::isColumnMajor<LayoutDst_>::value>> {
+    using ArchTag = Catlass::Arch::Ascend950;
+    using ElementDst = ElementDst_;
+    using ElementSrc = typename TensorSrc_::Element;
+    static constexpr auto quantPre =
+        CopyL0CToDstQuantMode<ArchTag, ElementSrc, ElementDst, ScaleGranularity::NO_QUANT>::VALUE;
+    static constexpr auto reluEn = ReluEnable_;
+
+    static constexpr uint32_t ELE_NUM_PER_BLK = BYTE_PER_BLK / sizeof(ElementDst);
+
+    template <class TensorDst, class TensorSrc>
+    CATLASS_DEVICE void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor, uint8_t unitFlag = 0)
+    {
+        static_assert(
+            tla::detail::isColumnMajor<typename TensorDst::Layout>::value && TensorSrc::position == AscendC::TPosition::CO1
+                && TensorDst::position == AscendC::TPosition::VECCALC,
+            "The input parameters do not match. TensorSrc must be L0C, while TensorDst must be UB and ColumnMajor"
+        );
+
+        AscendC::FixpipeParamsC310<AscendC::CO2Layout::COLUMN_MAJOR> intriParams;
+
+        // Fixpipe layout information
+        intriParams.nSize = tla::get<1>(dstTensor.originShape());
+        intriParams.mSize = RoundUp<ELE_NUM_PER_BLK>(tla::get<0>(dstTensor.originShape()));
+        intriParams.srcStride = tla::get<1, 1>(srcTensor.stride()) / tla::get<0, 0>(srcTensor.stride());
+        intriParams.dstStride = tla::get<1>(dstTensor.stride());
+
+        intriParams.params = AscendC::Nz2DnParams(1, 0, 0, 1); // srcNzC0Stride=1
+
+        // Fixpipe auxiliary arguments
+        intriParams.quantPre = quantPre;
+        intriParams.reluEn = reluEn;
+        intriParams.unitFlag = unitFlag;
+
+        auto dstOffset = dstTensor.layout()(dstTensor.coord());
+        auto srcOffset = srcTensor.layout()(srcTensor.coord());
+
+        // Call AscendC Fixpipe
+        AscendC::Fixpipe<ElementDst, ElementSrc, CFG_COLUMN_MAJOR_UB>(
+            dstTensor.data()[dstOffset], srcTensor.data()[srcOffset], intriParams);
+    }
+
+    template <class TensorDst, class TensorSrc>
+    CATLASS_DEVICE void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor, bool subBlockId, uint8_t unitFlag)
+    {
+        static_assert(
+            tla::detail::isColumnMajor<typename TensorDst::Layout>::value && TensorSrc::position == AscendC::TPosition::CO1
+                && TensorDst::position == AscendC::TPosition::VECCALC,
+            "The input parameters do not match. TensorSrc must be L0C, while TensorDst must be UB and ColumnMajor"
+        );
+
+        AscendC::FixpipeParamsC310<AscendC::CO2Layout::COLUMN_MAJOR> intriParams;
+
+        // Fixpipe layout information
+        intriParams.nSize = tla::get<1>(dstTensor.originShape());
+        intriParams.mSize = RoundUp<ELE_NUM_PER_BLK>(tla::get<0>(dstTensor.originShape()));
+        intriParams.srcStride = tla::get<1, 1>(srcTensor.stride()) / tla::get<0, 0>(srcTensor.stride());
+        intriParams.dstStride = tla::get<1>(dstTensor.stride());
+
+        intriParams.params = AscendC::Nz2DnParams(1, 0, 0, 1); // srcNzC0Stride=1
+
+        // Fixpipe auxiliary arguments
+        intriParams.quantPre = quantPre;
+        intriParams.reluEn = reluEn;
+        intriParams.unitFlag = unitFlag;
+        intriParams.dualDstCtl = 0;
+        intriParams.subBlockId = subBlockId;
+
+        auto dstOffset = dstTensor.layout()(dstTensor.coord());
+        auto srcOffset = srcTensor.layout()(srcTensor.coord());
+
+        // Call AscendC Fixpipe
+        AscendC::Fixpipe<ElementDst, ElementSrc, CFG_COLUMN_MAJOR_UB>(
             dstTensor.data()[dstOffset], srcTensor.data()[srcOffset], intriParams);
     }
 };

@@ -13,7 +13,7 @@
 # python/tla_dsl/examples/end_to_end/basic_vadd (basic_vadd.py),
 # python/tla_dsl/examples/end_to_end/basic_mixed (basic_mixed.py, including mutex mode), and
 # python/tla_dsl/examples/end_to_end/basic_mixed (basic_mixed_ub2l1.py, basic_mixed_store_zN.py,
-# basic_mixed_store_zNUnAlign.py).
+# basic_mixed_store_zNUnAlign.py, basic_mixed_fixpipe_nz2dn.py).
 # python/tla_dsl/examples/end_to_end/vector_ops (binary_op.py, masked_binary.py,
 # bitwise_ops.py, reduction_ops.py, compare_mask.py, unary_ops.py, arange_op.py,
 # interleave_op.py, load_dintlv_op.py, load_store_mask.py, squeeze_op.py,
@@ -86,6 +86,7 @@ BASIC_MIXED_REL="examples/end_to_end/basic_mixed/basic_mixed.py"
 BASIC_MIXED_UB2L1_REL="examples/end_to_end/basic_mixed/basic_mixed_ub2l1.py"
 BASIC_MIXED_STORE_ZN_REL="examples/end_to_end/basic_mixed/basic_mixed_store_zN.py"
 BASIC_MIXED_STORE_ZNUNALIGN_REL="examples/end_to_end/basic_mixed/basic_mixed_store_zNUnAlign.py"
+BASIC_MIXED_FIXPIPE_NZ2DN_REL="examples/end_to_end/basic_mixed/basic_mixed_fixpipe_nz2dn.py"
 MASKED_BINARY_REL="examples/end_to_end/vector_ops/masked_binary.py"
 BITWISE_OPS_REL="examples/end_to_end/vector_ops/bitwise_ops.py"
 BINARY_OP_REL="examples/end_to_end/vector_ops/binary_op.py"
@@ -131,7 +132,7 @@ Run end-to-end validation for:
   - basic_mmad_ptr (basic_mmad_ptr.py)
   - basic_vadd (basic_vadd.py with per-dtype CLI invocations, plus mutex variants)
   - basic_mixed (basic_mixed.py --run dynamic GM mnk list, including --use-mutex; basic_mixed_ub2l1.py --run,
-    basic_mixed_store_zN.py --run, basic_mixed_store_zNUnAlign.py --run for m=64/m=50)
+    basic_mixed_store_zN.py --run, basic_mixed_store_zNUnAlign.py --run for m=64/m=50, basic_mixed_fixpipe_nz2dn.py --run)
   - binary_op (binary_op.py <op> --run --all-dtypes for add/sub/mul/div/max/min/add_unalign/add_brc_b32)
   - masked_binary (masked_binary.py masked_binary --run --all-dtypes)
   - bitwise_ops (bitwise_ops.py bitwise_ops --run --all-dtypes)
@@ -374,6 +375,10 @@ if [[ ! -f "${TLA_DSL_DIR}/${BASIC_MIXED_STORE_ZNUNALIGN_REL}" ]]; then
     echo "error: missing ${BASIC_MIXED_STORE_ZNUNALIGN_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
 fi
+if [[ ! -f "${TLA_DSL_DIR}/${BASIC_MIXED_FIXPIPE_NZ2DN_REL}" ]]; then
+    echo "error: missing ${BASIC_MIXED_FIXPIPE_NZ2DN_REL} under ${TLA_DSL_DIR}" >&2
+    exit 1
+fi
 if [[ ! -f "${TLA_DSL_DIR}/${MASKED_BINARY_REL}" ]]; then
     echo "error: missing ${MASKED_BINARY_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
@@ -581,6 +586,16 @@ _run_basic_mixed_store_zNUnAlign_case() {
 # where the dest leaf[0] is the runtime row count and stride is runtime-varying.
 _run_basic_mixed_store_zNUnAlign_case "m=64 (fractal-aligned)" --m 64
 _run_basic_mixed_store_zNUnAlign_case "m=50 (non-aligned)" --m 50
+
+_run_basic_mixed_fixpipe_nz2dn_case() {
+    echo "==> Running basic_mixed_fixpipe_nz2dn validation [fixed shape/dtypes]: --run --device ${DEVICE_ID}"
+    (
+        cd "${TLA_DSL_DIR}"
+        python "${BASIC_MIXED_FIXPIPE_NZ2DN_REL}" --run --device "${DEVICE_ID}" --force-recompile
+    )
+}
+
+_run_basic_mixed_fixpipe_nz2dn_case
 
 _run_masked_binary_case() {
     echo "==> Running masked_binary validation [all dtypes]: masked_binary --sweep --shapes 400 --device ${DEVICE_ID} --force-recompile"

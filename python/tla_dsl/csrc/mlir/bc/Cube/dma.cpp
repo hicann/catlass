@@ -113,6 +113,17 @@ CATLASS_DEVICE void copyCcToUbufRowMajor(
     }
 }
 
+template <class ArchTag, typename ElementSrc, typename ElementDst>
+CATLASS_DEVICE void copyL0CToUbColumnMajor(
+    memref_t<__cc__ ElementSrc, 1> *src, memref_t<__ubuf__ ElementDst, 1> *dst,
+    const TensorDesc4D &srcDesc, const TensorDesc2D &dstDesc, uint8_t unitFlag, uint8_t subBlockId) {
+    auto srcTensor = makeL0CTensor(src, srcDesc);
+    auto dstTensor = makeUBTensorColumnMajor(dst, dstDesc);
+    constexpr auto l0c2ubMode = Catlass::Gemm::Tile::CopyL0CToUBMode::NO_SPLIT;
+    Catlass::Gemm::Tile::CopyL0CToUBTla<ArchTag, decltype(srcTensor), decltype(dstTensor), l0c2ubMode>{}(
+                                        dstTensor, srcTensor, (bool)subBlockId, unitFlag);
+}
+
 template <class ArchTag, typename T>
 CATLASS_DEVICE void copyCcToGmzN(memref_t<__cc__ T, 1> *src, memref_t<__gm__ T, 2> *dst,
                                  const TensorDesc4D &srcDesc, const TensorDesc4D &dstDesc) {
@@ -337,6 +348,32 @@ REGISTER_CC_TO_UBUF_ROW(nosplit, NO_SPLIT, float, bf16)
 // split mode src=dst
 REGISTER_CC_TO_UBUF_ROW(splitm, SPLIT_M, float, float)
 REGISTER_CC_TO_UBUF_ROW(splitn, SPLIT_N, float, float)
+
+#define REGISTER_L0C_TO_UB_COL(mode, DTypeSrc, DTypeDst)                                                             \
+[aicore] __attribute__((always_inline))                                                                              \
+void _mlir_ciface_copy_l0c_to_ub_column_major_##mode##_##DTypeDst(                                                   \
+    memref_t<__cc__ DTypeSrc, 1> *src, memref_t<__ubuf__ DTypeDst, 1> *dst,                                          \
+    int64_t srcShape0, int64_t srcShape1, int64_t srcShape2,                                                         \
+    int64_t srcShape3, int64_t srcStride0, int64_t srcStride1,                                                       \
+    int64_t srcStride2, int64_t srcStride3, int64_t srcCoord0,                                                       \
+    int64_t srcCoord1, int64_t srcOrgShape0, int64_t srcOrgShape1,                                                   \
+    int64_t dstShape0, int64_t dstShape1, int64_t dstStride0,                                                        \
+    int64_t dstStride1, int64_t dstCoord0, int64_t dstCoord1,                                                        \
+    int64_t dstOrgShape0, int64_t dstOrgShape1, uint8_t unitFlag,                                                    \
+    uint8_t subBlockId) {                                                                                            \
+    copyL0CToUbColumnMajor<Catlass::Arch::Ascend950, DTypeSrc, DTypeDst>(                                            \
+        src, dst,                                                                                                    \
+        TensorDesc4D{(uint32_t)srcShape0, (uint32_t)srcShape1, (uint32_t)srcShape2, (uint32_t)srcShape3, srcStride0, \
+                       srcStride1, srcStride2, srcStride3, (uint32_t)srcCoord0, (uint32_t)srcCoord1,                 \
+                       (uint32_t)srcOrgShape0, (uint32_t)srcOrgShape1},                                              \
+        TensorDesc2D{(uint32_t)dstShape0, (uint32_t)dstShape1, dstStride0, dstStride1,                               \
+                         (uint32_t)dstCoord0, (uint32_t)dstCoord1, (uint32_t)dstOrgShape0, (uint32_t)dstOrgShape1},  \
+        unitFlag, subBlockId);                                                                                       \
+}
+
+REGISTER_L0C_TO_UB_COL(nosplit, float, float)
+REGISTER_L0C_TO_UB_COL(nosplit, float, half)
+REGISTER_L0C_TO_UB_COL(nosplit, float, bf16)
 
 [aicore] __attribute__((always_inline))
 void _mlir_ciface_copy_cc_to_gm_zN_float(

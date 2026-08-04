@@ -3861,6 +3861,13 @@ def copy(dst: TileLike, src: TileLike, params: CopyParams | None = None, *, loc:
                     "When copy l0c to ub with split mode, src and dst dtype must be same , "
                     f"got {src_dtype} {dst_dtype}"
                 )
+            dst_layout = str(_tla_tensor_type_for_mlir_value(dst_value).layout_tag).strip().lower()
+            if (_route[1] == "ub") and (dst_layout == "column_major") and (
+                params.l0c2ub_mode not in [L0C2UBMode.NO_SPLIT_VEC_0, L0C2UBMode.NO_SPLIT_VEC_1]):
+                raise TlaLoweringError(
+                    f"When copy l0c to ub and dst layout_tag is column_major, only support `NO_SPLIT` mode,"
+                    f"got {params.l0c2ub_mode}"
+                )
 
             ctx = loc.context if loc is not None else mlir_ir.Context.current
             quant_mode_attr = mlir_ir.Attribute.parse(f"#tla.quant_mode<{params.quant_mode}>", context=ctx)

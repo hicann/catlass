@@ -729,6 +729,16 @@ std::string getCopyRouteCallee(MLIRContext *ctx, StringRef srcAddrspace, StringR
       return {};
     return Twine("copy_cc_to_ubuf_row_major_").concat(extraDesc).concat("_").concat(suffix).str();
   }
+  // L0C (fp32 MMAD acc) -> UB col-major: dst may be f32 / f16 / bf16 (narrowing on fixpipe).
+  if (*srcSpace == hivm::AddressSpace::L0C && *dstSpace == hivm::AddressSpace::UB &&
+      srcLayout == TensorLayoutTag::L0C && dstLayout == TensorLayoutTag::ColumnMajor) {
+    if (srcElementType != "f32")
+      return {};
+    StringRef suffix = copyRuntimeElemSuffix(dstElem);
+    if (suffix.empty())
+      return {};
+    return Twine("copy_l0c_to_ub_column_major_").concat(extraDesc).concat("_").concat(suffix).str();
+  }
   return {};
 }
 
@@ -796,7 +806,8 @@ static bool isAicTemplateRuntimeCall(StringRef name) {
          name.starts_with("copy_cbuf_zN_to_cb_nZ_") ||
          name.starts_with("copy_cbuf_nZ_to_cb_nZ_") ||
          name.starts_with("copy_cc_to_ubuf_row_major_") ||
-         name.starts_with("copy_cc_to_gm_row_major_");
+         name.starts_with("copy_cc_to_gm_row_major_") ||
+         name.starts_with("copy_l0c_to_ub_column_major_");
 }
 
 static bool isAivTemplateRuntimeCall(StringRef name) {
