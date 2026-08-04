@@ -30,6 +30,8 @@ from .execution import (
 )
 from .types import RuntimeTensorError
 
+_IdentityBinding = tuple[Any, Any]
+
 _ACL_DEV_ATTR_AICORE_CORE_NUM = 101
 _ACL_DEV_ATTR_VECTOR_CORE_NUM = 201
 
@@ -55,8 +57,8 @@ class TlaRuntimeState:
 class _FrontendEmitState:
     """Active frontend emission state."""
 
-    arg_bindings: dict[int, Any]
-    category_bindings: dict[int, str]
+    arg_bindings: dict[int, _IdentityBinding]
+    category_bindings: dict[int, _IdentityBinding]
     module: Any | None = None
     #: ``mlir.Value`` -> host :class:`~catlass.tla.runtime._Tensor` for execution lowering.
     tensor_host_by_value: dict[Any, Any] = field(default_factory=dict)
@@ -226,8 +228,8 @@ def register_device_ptr(ptr: int) -> None:
 @contextmanager
 def _frontend_emission(
     *,
-    arg_bindings: dict[int, Any] | None = None,
-    category_bindings: dict[int, str] | None = None,
+    arg_bindings: dict[int, _IdentityBinding] | None = None,
+    category_bindings: dict[int, _IdentityBinding] | None = None,
     tensor_host_by_value: dict[Any, Any] | None = None,
     module: Any | None = None,
 ) -> Any:
@@ -268,21 +270,30 @@ def _resolve_frontend_bound_value(value: Any) -> Any | None:
     state = _FRONTEND_EMIT_STATE.get()
     if state is None:
         return None
-    return state.arg_bindings.get(id(value))
+    return _resolve_identity_binding(state.arg_bindings, value)
 
 
 def _bind_frontend_value(proxy: Any, value: Any) -> None:
     state = _FRONTEND_EMIT_STATE.get()
     if state is None:
         return
-    state.arg_bindings[id(proxy)] = value
+    state.arg_bindings[id(proxy)] = (proxy, value)
 
 
 def _bind_frontend_category(value: Any, category: str) -> None:
     state = _FRONTEND_EMIT_STATE.get()
     if state is None:
         return
-    state.category_bindings[id(value)] = category
+    state.category_bindings[id(value)] = (value, category)
+
+
+def _resolve_identity_binding(
+    bindings: dict[int, _IdentityBinding], value: Any
+) -> Any | None:
+    binding = bindings.get(id(value))
+    if binding is None or binding[0] is not value:
+        return None
+    return binding[1]
 
 
 def _has_enclosing_region(kind: str) -> bool:
@@ -322,7 +333,7 @@ def _resolve_frontend_bound_category(value: Any) -> str | None:
     state = _FRONTEND_EMIT_STATE.get()
     if state is None:
         return None
-    return state.category_bindings.get(id(value))
+    return _resolve_identity_binding(state.category_bindings, value)
 
 
 def _coerce_bool_value(value: Any) -> Any:

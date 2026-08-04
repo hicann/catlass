@@ -104,6 +104,8 @@ def _is_trusted_dsl_value(value: Any) -> bool:
 
     if isinstance(value, mlir_ir.Value):
         return True
+    if _runtime._resolve_frontend_bound_category(value) is not None:
+        return True
     return _exact_class(value) in _TRUSTED_DSL_TYPES
 
 

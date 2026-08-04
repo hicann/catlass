@@ -58,6 +58,22 @@ def _kernel_bool_flag_in_if(flags: tla.Tensor) -> None:
 
 
 @tla.kernel
+def _kernel_scalar_load_in_lazy_boolean_rhs(meta: tla.Tensor) -> None:
+    index = tla.arch.block_idx()
+    if meta[index] > 0 or meta[index + 1] > 0:
+        tla.make_coord(1, 0)
+    if meta[index + 2] > 0 and meta[index + 3] > 0:
+        tla.make_coord(2, 0)
+
+
+@tla.kernel
+def _kernel_tensor_attribute_in_lazy_boolean_rhs(meta: tla.Tensor) -> None:
+    index = tla.arch.block_idx()
+    if index == 0 and meta.shape[0] > 0:
+        tla.make_coord(1, 0)
+
+
+@tla.kernel
 def _kernel_scalar_load_2d(meta: tla.Tensor) -> None:
     _ = meta[1, 3]
 
@@ -218,6 +234,20 @@ def test_bool_tensor_load_usable_in_if_and() -> None:
     assert _operation_is_nested_in_scf_if(mlir, "arith.cmpi")
     assert "!tla.ptr<i1" in mlir
     assert "-> i1" in mlir
+
+
+def test_tensor_arg_scalar_loads_lower_in_lazy_boolean_rhs() -> None:
+    meta = _gm_tensor_1d(8)
+    mlir = _kernel_scalar_load_in_lazy_boolean_rhs.dump_mlir(type_args=(meta,))
+    assert mlir.count("tla.scalar_load") == 4
+    assert mlir.count("scf.if") >= 4
+
+
+def test_tensor_arg_attribute_lowers_in_lazy_boolean_rhs() -> None:
+    meta = _gm_tensor_1d(8)
+    mlir = _kernel_tensor_attribute_in_lazy_boolean_rhs.dump_mlir(type_args=(meta,))
+    assert "scf.if" in mlir
+    assert "arith.cmpi" in mlir
 
 
 def test_scalar_load_returns_typed_numeric() -> None:

@@ -311,8 +311,8 @@ def _build_tla_func(
             return _Tensor.__setitem__(self, crd, data, loc=loc)
 
     call_args_for_fn = list(call_args)
-    arg_bindings: dict[int, Any] = {}
-    category_bindings: dict[int, str] = {}
+    arg_bindings: dict[int, tuple[Any, Any]] = {}
+    category_bindings: dict[int, tuple[Any, Any]] = {}
     for i, name in enumerate(arg_names):
         if name in constexpr_names:
             continue
@@ -324,20 +324,20 @@ def _build_tla_func(
         if isinstance(host_arg, Numeric):
             num = type(host_arg)(ssa)
             call_args_for_fn[i] = num
-            category_bindings[id(num)] = "numeric"
-            category_bindings[id(ssa)] = "numeric"
+            category_bindings[id(num)] = (num, "numeric")
+            category_bindings[id(ssa)] = (ssa, "numeric")
         elif isinstance(host_arg, int) and not isinstance(host_arg, bool):
             # Kernel ``int`` args are i32 Numerics (not MLIR index / ArgProxy).
             from .base_dsl.typing import Int32
 
             num = Int32(ssa)
             call_args_for_fn[i] = num
-            category_bindings[id(num)] = "numeric"
-            category_bindings[id(ssa)] = "numeric"
+            category_bindings[id(num)] = (num, "numeric")
+            category_bindings[id(ssa)] = (ssa, "numeric")
         else:
             proxy = _ArgProxy()
             call_args_for_fn[i] = proxy
-            arg_bindings[id(proxy)] = ssa
+            arg_bindings[id(proxy)] = (proxy, ssa)
             # Dynamic GM proxies bind to tensor_desc after prologue (below).
             category = _category_from_type_like(
                 ctx, arg_types.get(name) if name not in dynamic_gm_tensor_tys else None
@@ -345,8 +345,8 @@ def _build_tla_func(
             if name in dynamic_gm_tensor_tys:
                 category = "tensor"
             if category is not None:
-                category_bindings[id(proxy)] = category
-                category_bindings[id(ssa)] = category
+                category_bindings[id(proxy)] = (proxy, category)
+                category_bindings[id(ssa)] = (ssa, category)
     call_args_for_fn = tuple(call_args_for_fn)
 
     tensor_host_by_value: dict[Any, Any] = {}
@@ -378,8 +378,8 @@ def _build_tla_func(
                 if arg_name != name:
                     continue
                 proxy = call_args_for_fn[i]
-                arg_bindings[id(proxy)] = desc
-                category_bindings[id(desc)] = "tensor"
+                arg_bindings[id(proxy)] = (proxy, desc)
+                category_bindings[id(desc)] = (desc, "tensor")
                 host = call_args[i]
                 if isinstance(host, Tensor):
                     tensor_host_by_value[desc] = host

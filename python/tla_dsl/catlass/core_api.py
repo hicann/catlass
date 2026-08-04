@@ -297,9 +297,8 @@ class _Pointer(PointerABC):
             raise TypeError(
                 f"Expected _Pointer or mlir.ir.Value, but got {type(v0).__name__}"
             )
-        # Do not register pointers in arg_bindings: they use id()-keyed dict entries that
-        # can outlive ephemeral _Pointer wrappers after GC, so id reuse maps a new pointer
-        # to a stale SSA value (wrong addrspace / wrong copy route).
+        # Keep rebuilt pointers self-contained; frontend binding is only needed for
+        # proxies whose exposed value differs from their underlying SSA value.
         return _Pointer(inner)
 
     @property
