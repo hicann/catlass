@@ -9,6 +9,6 @@
 # -----------------------------------------------------------------------------------------------------------
 
 set_source_files_properties(svd_quant_matmul.cpp PROPERTIES LANGUAGE ASC)
-catlass_example_add_executable(ascend950_svd_quant_matmul mix svd_quant_matmul.cpp)
-target_compile_definitions(ascend950_svd_quant_matmul PRIVATE L2_CACHE_HINT)
-target_link_libraries(ascend950_svd_quant_matmul PRIVATE m)
+catlass_example_add_executable(61_ascend950_svd_quant_matmul mix svd_quant_matmul.cpp)
+target_compile_definitions(61_ascend950_svd_quant_matmul PRIVATE L2_CACHE_HINT)
+target_link_libraries(61_ascend950_svd_quant_matmul PRIVATE m)

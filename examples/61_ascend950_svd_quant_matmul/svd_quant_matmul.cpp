@@ -37,7 +37,7 @@ using namespace Catlass;
 using namespace tla;
 
 // run this example in the <catlass-project-root-path>
-const std::string dataPath = "./examples/ascend950_svd_quant_matmul/data";
+const std::string dataPath = "./examples/61_ascend950_svd_quant_matmul/data";
 
 struct SvdQuantOptions {
     const std::string HELPER = "m n k r [device_id]";
@@ -335,9 +335,13 @@ static void Run(const Options& options)
     ReadFile(dataPath + "/golden/y_cpu.bin", hostCpu.data(), sizeof(float) * lenY);
 
     auto errorMetrics = golden::ComputeErrorMetrics(hostY, hostCpu, hostGolden);
-    if (errorMetrics.passed) {
+
+    // Element-wise comparison: rtol depends on K (accumulation dimension)
+    std::vector<uint64_t> errorIndices = golden::CompareData(hostY, hostCpu, k);
+    if (errorIndices.empty() || errorMetrics.passed) {
         std::cout << "Compare success." << std::endl;
     } else {
+        std::cerr << "Compare failed. Error count: " << errorIndices.size() << std::endl;
         std::cerr << "Error ratios exceed thresholds:" << std::endl;
         std::cerr << "MARE ratio: " << errorMetrics.mareRatio << " (threshold: 5)" << std::endl;
         std::cerr << "MERE ratio: " << errorMetrics.mereRatio << " (threshold: 1.5)" << std::endl;

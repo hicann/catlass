@@ -102,7 +102,7 @@ struct SmoothQuant {
         uint32_t kBlockActual = tla::get<1>(gmTensorX.shape());
         uint32_t kL1Actual = min(kBlockActual, L1_TILE_K);
         uint32_t kAligned = RoundUp<UB_MX_SCALE_GROUP_NUM>(kL1Actual);
-        bool isPad = (kL1Actual != kAligned);
+        bool isPad = (kL1Actual % MX_SCALE_GROUP_NUM != 0); // 每组64对齐搬入，但是32对齐的时候就不填充0
 
         uint32_t mRowsPerCore = CeilDiv(mBlockActual, aivNum);
         uint32_t mL1Actual = (aivIdx < aivNum - 1) ? mRowsPerCore : (mBlockActual - (aivNum - 1) * mRowsPerCore);
@@ -151,7 +151,7 @@ struct SmoothQuant {
         for (uint32_t kL1Idx = 0; kL1Idx < kL1Loop; kL1Idx++) {
             uint32_t kL1Actual = (kL1Idx < kL1Loop - 1) ? L1_TILE_K : (kBlockActual - kL1Idx * L1_TILE_K);
             uint32_t kAligned = RoundUp<UB_MX_SCALE_GROUP_NUM>(kL1Actual);
-            bool isPad = (kL1Actual != kAligned);
+            bool isPad = (kL1Actual % MX_SCALE_GROUP_NUM != 0);
 
             uint32_t xListIdNext = (xListId + 1 < STAGES) ? (xListId + 1) : 0;
             if (kL1Idx < kL1Loop - 1) {
@@ -159,7 +159,7 @@ struct SmoothQuant {
                 uint32_t kL1ActualNext =
                     (kL1IdxNext < kL1Loop - 1) ? L1_TILE_K : (kBlockActual - kL1IdxNext * L1_TILE_K);
                 uint32_t kAlignedNext = RoundUp<UB_MX_SCALE_GROUP_NUM>(kL1ActualNext);
-                bool isPadNext = (kL1ActualNext != kAlignedNext);
+                bool isPadNext = (kL1ActualNext % MX_SCALE_GROUP_NUM != 0);
 
                 // X
                 auto gmTensorTileXNext = GetTile(
@@ -841,8 +841,7 @@ public:
 
         auto layoutC1 = tla::MakeLayout<typename BlockMmad1::ElementC, typename BlockMmad1::TileCopy::LayoutTagC>(m, r);
         auto layoutQuantXC = tla::MakeLayout<int8_t, typename BlockMmad3::TileCopy::LayoutTagA>(m, k);
-        auto layoutQuantXV =
-            tla::MakeLayout<typename SmoothQuant::U, typename BlockMmad3::TileCopy::LayoutTagA>(m, CeilDiv<2>(k));
+        auto layoutQuantXV = tla::MakeLayout<uint8_t, typename BlockMmad3::TileCopy::LayoutTagA>(m, CeilDiv<2>(k));
         auto layoutMxScaleX =
             tla::MakeMxScaleLayout<float8_e8m0_t, typename BlockMmad3::TileCopy::LayoutTagA, false>(m, mxScaleK);
 
@@ -1379,14 +1378,15 @@ public:
 
         // tensorX is tensorA1
         auto tensorSmooth = tla::MakeTensor(gmQuant.gmSmooth, params.layoutSmoothScale, Arch::PositionGM{});
-        auto tensorQuantX = tla::MakeTensor(gmQuant.gmQuantX, params.layoutQuantXV, Arch::PositionGM{});
         auto tensorMxScale = tla::MakeTensor(gmQuant.gmMxScaleX, params.layoutMxScaleX, Arch::PositionGM{});
 
 #ifdef __DAV_CUBE__
+        auto tensorQuantX = tla::MakeTensor(gmQuant.gmQuantX, params.layoutQuantXC, Arch::PositionGM{});
         uint32_t aiCoreIdx = AscendC::GetBlockIdx();
         uint32_t aiCoreNum = AscendC::GetBlockNum();
         BlockMmad1 blockMmad1(resource);
 #elif defined __DAV_VEC__
+        auto tensorQuantX = tla::MakeTensor(gmQuant.gmQuantX, params.layoutQuantXV, Arch::PositionGM{});
         uint32_t aiCoreIdx = AscendC::GetBlockIdx() / AscendC::GetSubBlockNum();
         uint32_t aiCoreNum = AscendC::GetBlockNum();
         SmoothQuant smoothQuant(resource);

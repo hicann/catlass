@@ -1,7 +1,5 @@
 # SvdQuantMatmulTla Example Readme
 
-> **注意**：本样例位于 `experimental/` 目录下，如需编译运行，请先将样例目录拷贝至 `examples/` 下，并在 `examples/CMakeLists.txt` 中添加样例名称 `ascend950_svd_quant_matmul`。
-
 ## SvdQuant算法原理简介
 
 在量化前有原始的激活X，原始的权重W。给定一个Smooth参数进行变换，可将量化难度从激活转移到权重，该部分离线融合，无在线开销。
@@ -50,7 +48,7 @@ $$
 在本样例的实现中，Quant(R) 采用标准的量化实现，scale的计算
 
 $$
-scaleR = 2 ** (log_{2} (abs(R))) - emax
+scaleR = 2 ** (log_{2} (abs(R)) - emax)
 $$
 
 在本算子的实现中, Quant(X')的scale用如下公式计算
@@ -63,14 +61,15 @@ $$
 
 SvdQuant更多细节参考[SvdQuant论文](https://arxiv.org/abs/2411.05007)
 
-## 输入输出tensor
+## 输入输出
 
-- 样例中的shape参数分别为 `m, n, k, r`，shape参数的约束如下：
+- 样例中的shape参数分别为 `m, n, k, r`，量化参数`qmax`，约束如下：
 
 | shape | 约束                                                                    |
 | ----- | ----------------------------------------------------------------------- |
 | m,n,k | 无限制                                                                  |
 | r     | 典型值16/32/64，算子实现要求 r<=BlockMmad1::L1_TILE_N, 现有配置即r<=128 |
+| qmax  | 取值范围[6.0, 12.0], 典型值 8.0                                         |
 
 涉及的算子输入如下：
 
@@ -110,7 +109,7 @@ SvdQuant更多细节参考[SvdQuant论文](https://arxiv.org/abs/2411.05007)
 ```text
 experimental
 ├── matmul
-│   ├── ascend950_svd_quant_matmul
+│   ├── 61_ascend950_svd_quant_matmul
 │   │   ├── CMakeLists.txt     # CMake编译文件
 │   │   ├── README.md
 │   │   ├── svd_quant_matmul.cpp    # 调用样例
@@ -123,15 +122,15 @@ experimental
 
 ```shell
 # 编译指定用例
-bash scripts/build.sh ascend950_svd_quant_matmul -DCATLASS_ARCH=3510
+bash scripts/build.sh 61_ascend950_svd_quant_matmul -DCATLASS_ARCH=3510
 
-# 生成测试样例（在 examples/ascend950_svd_quant_matmul/data 下生成 input/ 与 golden/）
+# 生成测试样例（在 examples/61_ascend950_svd_quant_matmul/data 下生成 input/ 与 golden/）
 # 参数对应 m n k r
-python examples/ascend950_svd_quant_matmul/gen_data.py 256 256 512 32
+python examples/61_ascend950_svd_quant_matmul/gen_data.py 256 256 512 32
 
 # 执行测试样例
 # 输入参数分别对应 m, n, k, r, deviceId, deviceId可选，默认为0
-./output/bin/ascend950_svd_quant_matmul 256 256 512 32 0
+./output/bin/61_ascend950_svd_quant_matmul 256 256 512 32 0
 ```
 
 执行结果如下，说明精度比对成功。
@@ -143,7 +142,7 @@ Compare success.
 查看gen_data脚本可配参数
 
 ```bash
-python examples/ascend950_svd_quant_matmul/gen_data.py -h
+python examples/61_ascend950_svd_quant_matmul/gen_data.py -h
 
 positional arguments:
     m

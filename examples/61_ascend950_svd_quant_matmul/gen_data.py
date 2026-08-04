@@ -23,9 +23,6 @@ _EPSILON = 1e-12
 _MIN_SCALE_EXP = -128
 _MAX_SCALE_EXP = 127
 
-_is_normal_matrix = True
-_qmax = 1.0
-
 dtype_map = {
     torch.float16: "float16",
     torch.bfloat16: "bfloat16",
@@ -90,10 +87,23 @@ def _quantize_to_fp4_lut(values: torch.Tensor, format_name: str) -> Tuple[torch.
     max_value = _FP4_FORMATS[format_name]["max_value"]
 
     clamped = values.clamp(min_value, max_value)
-
-    # 与原实现一致：按 LUT 顺序 argmin，距离相等时取更小下标。
     distances = (clamped.unsqueeze(-1) - lut).abs()
     indices = torch.argmin(distances, dim=-1)
+    min_dist = distances.gather(-1, indices.unsqueeze(-1)).squeeze(-1)
+
+    # NPU CAST_RINT 行为: 符号零 + ties-to-even mantissa。
+    # 1) ±0.0: 两者都是 even-mantissa，按原始值的 signbit 选择符号零
+    signbit = torch.signbit(values)
+    tie_0_8 = (distances[..., 0] == distances[..., 8]) & (distances[..., 0] == min_dist)
+    indices = torch.where(tie_0_8 & signbit, torch.full_like(indices, 8), indices)
+
+    # 2) 其他中点: odd-mantissa (idx%2==1) 若与相邻 even-mantissa 等距，切换到后者
+    is_odd = (indices & 1) == 1
+    next_idx = indices + 1
+    next_dist = distances.gather(-1, next_idx.clamp(max=15).unsqueeze(-1)).squeeze(-1)
+    tie_next = is_odd & (indices < 15) & (next_dist == min_dist)
+    indices = torch.where(tie_next, indices + 1, indices)
+
     quantized = lut[indices]
 
     return quantized, indices.to(torch.uint8)
@@ -113,7 +123,13 @@ def _pack_fp4_nibbles(index_matrix: torch.Tensor) -> torch.Tensor:
     return packed.to(torch.uint8)
 
 
-def _quantize_axis_last(matrix: torch.Tensor, format_name: str, block_size: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+def _quantize_axis_last(
+    matrix: torch.Tensor,
+    format_name: str,
+    block_size: int,
+    is_normal_matrix: bool = True,
+    qmax: float = 1.0
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     m, n = matrix.shape
     padded_n = ((n + block_size - 1) // block_size) * block_size
     num_blocks = padded_n // block_size
@@ -127,16 +143,18 @@ def _quantize_axis_last(matrix: torch.Tensor, format_name: str, block_size: int)
     blocks = padded.view(m, num_blocks, block_size)
     max_abs = blocks.abs().amax(dim=-1)
 
-    if _is_normal_matrix:
+    if is_normal_matrix:
         exp = torch.floor(torch.log2(torch.clamp(max_abs, min=_EPSILON))) - _FP4_FORMATS[format_name]["emax"]
     else:
-        exp = torch.ceil(torch.log2(torch.clamp(max_abs, min=_EPSILON) / _qmax))
+        qmaxInv = torch.tensor(1.0 / qmax, dtype=matrix.dtype, device=matrix.device)
+        exp = torch.ceil(torch.log2(torch.clamp(max_abs, min=_EPSILON) * qmaxInv))
 
     exp = torch.where(max_abs < _EPSILON, torch.zeros_like(exp), exp)
     exp = exp.clamp(_MIN_SCALE_EXP, _MAX_SCALE_EXP)
     scale = torch.pow(torch.tensor(2.0, dtype=torch.float32, device=matrix.device), exp)
 
     scaled = blocks / scale.unsqueeze(-1)
+
     quantized_blocks, _ = _quantize_to_fp4_lut(scaled, format_name)
     dequant_blocks = quantized_blocks * scale.unsqueeze(-1)
 
@@ -155,18 +173,29 @@ def _quantize_axis_last(matrix: torch.Tensor, format_name: str, block_size: int)
     return quantized, scale, dequantized
 
 
-def _quantize_axis_first(matrix: torch.Tensor, format_name: str, block_size: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    quantized_t, scale_t, dequantized_t = _quantize_axis_last(matrix.t().contiguous(), format_name, block_size)
+def _quantize_axis_first(
+    matrix: torch.Tensor,
+    format_name: str,
+    block_size: int,
+    is_normal_matrix: bool = True,
+    qmax: float = 1.0
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    quantized_t, scale_t, dequantized_t = _quantize_axis_last(matrix.t().contiguous(), format_name, block_size, is_normal_matrix, qmax)
     return quantized_t.t().contiguous(), scale_t.t().contiguous(), dequantized_t.t().contiguous()
 
 
-def _quantize(matrix: torch.Tensor, format_name: str, axis: int, block_size: int = _BLOCK_SIZE) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+def _quantize(
+    matrix: torch.Tensor,
+    format_name: str,
+    axis: int,
+    block_size: int = _BLOCK_SIZE,
+    is_normal_matrix: bool = True,
+    qmax: float = 1.0
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     if axis == 0:
-        return _quantize_axis_first(matrix, format_name, block_size)
+        return _quantize_axis_first(matrix, format_name, block_size, is_normal_matrix, qmax)
     if axis == 1:
-        return _quantize_axis_last(matrix, format_name, block_size)
-    raise ValueError(f"axis must be 0 or 1, got {axis}")
-
+        return _quantize_axis_last(matrix, format_name, block_size, is_normal_matrix, qmax)
 
 
 def gen_data_matrix16_fp4_e2m1(matrix: torch.Tensor, axis: int, trans: int, is_normal_matrix = True, qmax = 1.0):
@@ -175,13 +204,7 @@ def gen_data_matrix16_fp4_e2m1(matrix: torch.Tensor, axis: int, trans: int, is_n
     assert axis in [0, 1], f"unsupported axis {axis}"
     assert trans in [0, 1], f"unsupported trans {trans}"
 
-    if is_normal_matrix:
-        qmax = 1.0
-
-    _is_normal_matrix = is_normal_matrix
-    _qmax = qmax
-
-    quantized_matrix, scale_matrix, dequantized_matrix = _quantize(matrix, "E2M1", axis)
+    quantized_matrix, scale_matrix, dequantized_matrix = _quantize(matrix, "E2M1", axis, _BLOCK_SIZE, is_normal_matrix, qmax)
 
     if trans == 1:
         quantized_matrix = quantized_matrix.t().contiguous()
@@ -286,9 +309,12 @@ if __name__ == "__main__":
     torch.tensor(data["svd2"].untyped_storage(), dtype=dtype16).numpy().tofile(f"{save_path}/input/svd2.bin")
     torch.tensor(data["w"].untyped_storage(), dtype=torch.int8).numpy().tofile(f"{save_path}/input/w.bin")
     torch.tensor(data["w_scale"].untyped_storage(), dtype=torch.int8).numpy().tofile(f"{save_path}/input/w_scale.bin")
-    torch.tensor(data["smooth"].untyped_storage(), dtype=dtype16).numpy().tofile(f"{save_path}/input/smooth_scale.bin")
-
     torch.tensor([data["qmax"]], dtype=torch.float32).numpy().tofile(f"{save_path}/input/qmax.bin")
+
+    if args.smooth:
+        torch.tensor(data["smooth"].untyped_storage(), dtype=dtype16).numpy().tofile(f"{save_path}/input/smooth_scale.bin")
+    if args.bias:
+        torch.tensor(data["bias"].untyped_storage(), dtype=torch.float32).numpy().tofile(f"{save_path}/input/bias.bin")
 
     torch.tensor(data["y_cpu"].untyped_storage(), dtype=torch.float32).numpy().tofile(f"{save_path}/golden/y_cpu.bin")
     torch.tensor(data["y_golden"].untyped_storage(), dtype=torch.float32).numpy().tofile(f"{save_path}/golden/y_golden.bin")

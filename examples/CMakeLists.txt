@@ -164,6 +164,7 @@ set(EXAMPLE_ASCEND950
     58_ascend950_fp8_mx_batch_matmul
     59_ascend950_a8w4_mx_matmul
     60_ascend950_grouped_matmul_slice_m
+    61_ascend950_svd_quant_matmul
     62_ascend950_broadcast_matmul_perblock_quant
     64_ascend950_matmul_evg
     66_ascend950_streamk_matmul
