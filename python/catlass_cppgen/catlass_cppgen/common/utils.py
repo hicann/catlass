@@ -22,7 +22,9 @@ from catlass_cppgen.catlass.layout.layout import (
 from catlass_cppgen.common.typing import SupportedTensor
 
 
-def infer_layout_from_stride(shape: tuple[int, ...], stride: tuple[int, ...]) -> Layout:
+def infer_layout_from_stride(
+    shape: tuple[int, ...], stride: tuple[int, ...]
+) -> Layout | None:
     """从 shape 和 stride 推断 Layout 类型
 
     参数:
@@ -50,6 +52,14 @@ def infer_layout_from_stride(shape: tuple[int, ...], stride: tuple[int, ...]) ->
         if len(shape) == 3:
             batch, m, n = shape
             stride_batch, stride_m, stride_n = stride
+            if stride_batch != m * n:
+                # Transposed batch case
+                if stride_n == 1:
+                    return RowMajor((m, n))
+                elif stride_m == 1:
+                    return ColumnMajor((m, n))
+                else:
+                    return None
             if stride_m == n and stride_n == 1:
                 return RowMajor((m, n))
             if stride_m == 1 and stride_n == m:

@@ -287,6 +287,15 @@ class MmadPingpong(MmadBase):
         self.l0b_stages = l0b_stages
 
 
+class MmadPingpongTlaV2(MmadBase):
+    """TLA pingpong policy whose tile views carry the runtime origin shape."""
+
+    def __init__(self, arch_tag: Arch, enable_unit_flag: bool = False):
+        super().__init__(arch_tag, False)
+        self.stages = 2
+        self.enable_unit_flag = enable_unit_flag
+
+
 class MmadPreloadAsyncWithCallback(MmadBase):
     """Generic MMAD policy with async preload and callback."""
 

@@ -11,6 +11,7 @@ import unittest
 from catlass_cppgen.catlass.gemm.dispatch_policy import (
     MmadAtlasA2Pingpong,
     MmadPingpong,
+    MmadPingpongTlaV2,
     MmadPreloadAsyncWithCallback,
     MmadMultiBatch,
 )
@@ -57,6 +58,18 @@ class TestMmadPingpong(unittest.TestCase):
         cpp_str = mmad.to_cpp()
         self.assertIn("Gemm::MmadPingpong", cpp_str)
         self.assertIn("Arch::Ascend950", cpp_str)
+
+
+class TestMmadPingpongTlaV2(unittest.TestCase):
+    def test_mmad_pingpong_tla_v2_to_cpp(self):
+        policy = MmadPingpongTlaV2(
+            arch_tag=Arch.AtlasA2,
+            enable_unit_flag=True,
+        )
+        self.assertEqual(
+            policy.to_cpp(),
+            "Gemm::MmadPingpongTlaV2<Arch::AtlasA2, true>",
+        )
 
 
 class TestMmadPreloadAsyncWithCallback(unittest.TestCase):

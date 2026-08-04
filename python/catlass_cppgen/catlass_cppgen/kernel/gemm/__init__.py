@@ -10,6 +10,9 @@
 from catlass_cppgen.kernel.gemm.gemm_base import GemmKernelBase
 from catlass_cppgen.kernel.gemm.basic_matmul import BasicMatmulKernel
 from catlass_cppgen.kernel.gemm.batched_matmul import BatchedMatmulKernel
+from catlass_cppgen.kernel.gemm.strided_batched_matmul import (
+    StridedBatchedMatmulKernel,
+)
 from catlass_cppgen.kernel.gemm.basic_matmul_tla_visitor import (
     BasicMatmulTlaVisitorKernel,
 )
@@ -25,6 +28,7 @@ __all__ = [
     "GemmKernelBase",
     "BasicMatmulKernel",
     "BatchedMatmulKernel",
+    "StridedBatchedMatmulKernel",
     "BasicMatmulTlaVisitorKernel",
     "MultiCoreSplitkMatmulKernel",
     "StreamkMatmulKernel",

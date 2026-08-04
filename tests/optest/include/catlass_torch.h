@@ -173,7 +173,8 @@ at::Tensor sparse_matmul_tla(
  */
 at::Tensor strided_batched_matmul_tla(
     const at::Tensor& mat1, const at::Tensor& mat2, const c10::ScalarType& outDType,
-    const bool transA, const bool transB, const bool formatA, const bool formatB);
+    const bool transA, const bool transB, const bool formatA, const bool formatB,
+    const bool batchTransA, const bool batchTransB);
 
 /**
  * @brief PyTorch extension entry for CATLASS Ascend950 matmul fixpipe optimization.

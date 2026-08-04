@@ -31,6 +31,7 @@ from catlass_cppgen.catlass import (
     MmadAtlasA2DynamicCommon,
     MmadAtlasA2Small,
     MmadPingpong,
+    MmadPingpongTlaV2,
     MmadPreloadAsyncWithCallback,
     MmadMultiBatch,
 )
@@ -78,6 +79,7 @@ __all__ = [
     "MmadAtlasA2DynamicCommon",
     "MmadAtlasA2Small",
     "MmadPingpong",
+    "MmadPingpongTlaV2",
     "MmadPreloadAsyncWithCallback",
     "MmadMultiBatch",
     # catlass.layout

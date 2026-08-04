@@ -21,6 +21,9 @@ from catlass_cppgen.catlass.arch.arch import Arch
 from catlass_cppgen.kernel.gemm.gemm_base import GemmKernelBase
 from catlass_cppgen.kernel.gemm.basic_matmul import BasicMatmulKernel
 from catlass_cppgen.kernel.gemm.batched_matmul import BatchedMatmulKernel
+from catlass_cppgen.kernel.gemm.strided_batched_matmul import (
+    StridedBatchedMatmulKernel,
+)
 from catlass_cppgen.kernel.gemm.multi_core_splitk_matmul import (
     MultiCoreSplitkMatmulKernel,
 )
@@ -69,12 +72,18 @@ class Gemm(OperationBase):
         B: Optional[OpTensor] = None,
         Bias: Optional[OpTensor] = None,
         C: Optional[OpTensor] = None,
+        strided_batched: bool = False,
+        transA: bool = False,
+        transB: bool = False,
     ):
         # 保存 A、B、Bias 和 C OpTensor
         self.A = A
         self.B = B
         self.Bias = Bias
         self.C = C
+        self.strided_batched = strided_batched
+        self.transA = transA
+        self.transB = transB
 
         # 如果传入了 A 和 B OpTensor，从它们中提取信息
         if A is not None and B is not None:
@@ -89,8 +98,10 @@ class Gemm(OperationBase):
             # 确定最终使用的 element 和 layout（传入的参数优先，否则使用 OpTensor 中的信息）
             element_A = element_A_from_tensor or element_A or element
             element_B = element_B_from_tensor or element_B or element
-            layout_A = layout_A_from_tensor or layout_A or layout
-            layout_B = layout_B_from_tensor or layout_B or layout
+
+            _fall_back_layout = RowMajor
+            layout_A = layout_A_from_tensor or layout_A or layout or _fall_back_layout
+            layout_B = layout_B_from_tensor or layout_B or layout or _fall_back_layout
 
             # 判断是否 batched
             is_batched = len(A_shape) == 3 and len(B_shape) == 3
@@ -247,6 +258,8 @@ class Gemm(OperationBase):
             "K": self.K,
             "N": self.N,
             "batchCount": self.batch_count if self.is_batched else None,
+            "transA": self.transA,
+            "transB": self.transB,
             "evg": self.evg,
         }
 
@@ -257,6 +270,8 @@ class Gemm(OperationBase):
             # BatchedMatmul不支持Bias，带Bias的话返回空列表
             if self.element_Bias is not None:
                 return []
+            if self.strided_batched:
+                return [StridedBatchedMatmulKernel(**params)]
             return [BatchedMatmulKernel(**params)]
         else:
             if math.isclose(self.alpha, 1.0) and math.isclose(self.beta, 0.0):

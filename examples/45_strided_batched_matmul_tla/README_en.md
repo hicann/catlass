@@ -21,7 +21,23 @@ cd output/bin
 # Basic usage: Executable file name batch_axis | m_axis | n_axis | k_axis | Device_ID
 # The device ID is optional. The default value is 0.
 ./45_strided_batched_matmul_tla 5 256 512 1024 0
+```
 
+## Batch-axis layout
+
+The physical batch-axis position of A and B is selected by compile-time constants in the source:
+
+```cpp
+constexpr bool transA = true;
+constexpr bool transB = false;
+```
+
+- `false`: the batch axis is leading, for example `(B,M,K)` for A and `(B,K,N)` for B.
+- `true`: the batch axis is placed between the matrix axes, for example `(M,B,K)` for A and `(K,B,N)` for B.
+
+Rebuild the same target after changing the constants to cover all NN, NT, TN, and TT batch-axis layouts.
+
+```bash
 # Layout customization (Supports row/col, case-insensitive; optional, defaults to row row)
 # - layoutA: layout of matrix A(M,K)
 # - layoutB: layout of matrix B(K, N)
@@ -35,6 +51,8 @@ cd output/bin
 #   - Matrix B: ldb>=N if row-major; ldb>=K if col-major
 #   - Matrix C: Fixed to row-major in this example, hence ldc>=N
 # -  strideA/strideB/strideC: stride between adjacent matrix instances along the batch dimension
+#   When transA/transB is true, the corresponding leading dimension must also span every batch slice inserted
+#   between the matrix axes.
 #
 # Specifying lda/ldb/ldc only (batch strides are contiguous by default)
 ./45_strided_batched_matmul_tla 5 256 512 1024 0 1100 600 600

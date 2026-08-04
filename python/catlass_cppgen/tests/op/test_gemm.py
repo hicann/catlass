@@ -11,15 +11,17 @@ import unittest
 from catlass_cppgen.op.gemm import Gemm
 from catlass_cppgen.common.op_tensor import OpTensor
 from catlass_cppgen.common.data_type import DataType
-from catlass_cppgen.catlass.layout.layout import RowMajor
+from catlass_cppgen.catlass.layout.layout import ColumnMajor, RowMajor
 from catlass_cppgen.catlass.gemm_coord import GemmShape
 from catlass_cppgen.catlass.arch.arch import Arch
 from catlass_cppgen.catlass.gemm.dispatch_policy import (
     MmadPingpong,
+    MmadPingpongTlaV2,
 )
 from catlass_cppgen.kernel.gemm import (
     BasicMatmulKernel,
     BatchedMatmulKernel,
+    StridedBatchedMatmulKernel,
     BasicMatmulTlaVisitorKernel,
     MultiCoreSplitkMatmulKernel,
     StreamkMatmulKernel,
@@ -139,6 +141,125 @@ class TestGemm(unittest.TestCase):
         self.check.test_kernel(kernel_str, "BatchedMatmulTla")
         self.check.test_dispatch_policy(kernel_str, "MmadPingpong")
         self.check.test_arch_tag(kernel_str, Arch.Ascend950)
+
+    def test_strided_batched_matmul(self):
+        a = OpTensor.from_shape_stride(
+            shape=(3, 128, 256),
+            stride=(256, 3 * 256, 1),
+            dtype=DataType.FLOAT16,
+        )
+        b = OpTensor.from_shape_stride(
+            shape=(3, 256, 384),
+            stride=(256 * 384, 384, 1),
+            dtype=DataType.FLOAT16,
+        )
+        gemm_plan = Gemm(
+            atlas_arch=Arch.AtlasA2,
+            element_C=DataType.FLOAT16,
+            core_num=8,
+            A=a,
+            B=b,
+            strided_batched=True,
+            transA=True,
+            transB=False,
+        )
+        kernel = find_kernel_by_type(
+            gemm_plan.get_kernels(),
+            StridedBatchedMatmulKernel,
+        )
+        self.assertIsNotNone(kernel)
+
+        kernel_str = kernel.gen_kernel_template()
+        layout_str = kernel.gen_layout_template()
+
+        self.check.test_kernel(kernel_str, "StridedBatchedMatmulTla")
+        self.check.test_dispatch_policy(kernel_str, "MmadPingpongTlaV2")
+        self.check.test_arch_tag(kernel_str, Arch.AtlasA2)
+        self.assertIn("constexpr bool transA = true;", layout_str)
+        self.assertIn("constexpr bool transB = false;", layout_str)
+        self.assertIn(
+            "strideBatchA = transA ? static_cast<int64_t>(k)",
+            layout_str,
+        )
+        self.assertIn(
+            "strideMA = transA ? static_cast<int64_t>(batchCount) * k",
+            layout_str,
+        )
+        self.assertNotIn("lda", kernel.gen_params_device())
+        self.assertNotIn("strideA", kernel.gen_params_device())
+        self.assertIn("_TN_", kernel.gen_kernel_name())
+
+    def test_strided_batched_matmul_with_tune(self):
+        a = OpTensor.from_shape_stride(
+            shape=(3, 128, 256),
+            stride=(256, 1, 384),
+            dtype=DataType.FLOAT,
+        )
+        b = OpTensor.from_shape_stride(
+            shape=(3, 256, 384),
+            stride=(384, 1152, 1),
+            dtype=DataType.FLOAT,
+        )
+        gemm_plan = Gemm(
+            atlas_arch=Arch.Ascend950,
+            element_C=DataType.FLOAT,
+            core_num=8,
+            A=a,
+            B=b,
+            strided_batched=True,
+            transA=True,        
+            transB=False,
+            # Note; transA and transB means whether it 
+            # is transposed with the batch axis. 
+            # If you want to set the Row/ColumnMajor, 
+            # you need to construct correct op tensor or 
+            # directly set `layout_A` and `layout_B` 
+            # with messy `strides` that cannot be auto derived
+        )
+        kernel = find_kernel_by_type(
+            gemm_plan.get_kernels(),
+            StridedBatchedMatmulKernel,
+        )
+        self.assertIsNotNone(kernel)
+        self.assertEqual(type(kernel), StridedBatchedMatmulKernel)
+
+        kernel.tune(
+            GemmShape(256, 256, 128),
+            GemmShape(256, 256, 32),
+            dispatch_policy=MmadPingpongTlaV2(
+                arch_tag=Arch.Ascend950, enable_unit_flag=True
+            ),
+        )
+
+        kernel_str = kernel.gen_kernel_template()
+        layout_str = kernel.gen_layout_template()
+
+        self.check.test_tileshape(kernel_str, GemmShape(256, 256, 128))
+        self.check.test_tileshape(kernel_str, GemmShape(256, 256, 32), pos="L0")
+        self.check.test_element_dtype(kernel_str, DataType.FLOAT)
+        self.check.test_layout(kernel_str, "ColumnMajor")
+        self.check.test_layout(kernel_str, "RowMajor", "TagB")
+        self.check.test_layout(kernel_str, "RowMajor", "TagC")
+        self.check.test_kernel(kernel_str, "StridedBatchedMatmulTla")
+        self.check.test_dispatch_policy(kernel_str, "MmadPingpongTlaV2")
+        self.check.test_arch_tag(kernel_str, Arch.Ascend950)
+        self.assertIn("constexpr bool transA = true;", layout_str)
+        self.assertIn("constexpr bool transB = false;", layout_str)
+
+        params = kernel.gen_params_device(def_mode=False)
+        self.check.test_params(
+            params,
+            (
+                "batchCount",
+                "problemShape",
+                "deviceA",
+                "layoutA",
+                "deviceB",
+                "layoutB",
+                "deviceC",
+                "layoutC",
+            ),
+        )
 
     def test_basic_matmul_kernel_with_relu(self):
         a = OpTensor.from_shape_stride(

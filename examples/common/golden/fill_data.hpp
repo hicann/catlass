@@ -17,6 +17,8 @@
 #include <stack>
 #include <vector>
 
+#include "catlass/gemm_coord.hpp"
+
 namespace Catlass::golden {
 
 template <class Element, class ElementRandom>
@@ -163,6 +165,29 @@ std::vector<T> GenerateAverageGroupList(uint32_t m, uint32_t problemCount)
     }
 
     return groupList;
+}
+
+template <class ElementC, class ElementGolden, class LayoutTagDst, class LayoutTagSrc>
+void fillContigunousBatchedData(
+    uint32_t batchCount, const GemmCoord& problemShape, std::vector<ElementGolden>& dstData, const LayoutTagDst& tagDst,
+    const std::vector<ElementC>& srcData, const LayoutTagSrc& tagSrc, int64_t strideDst, int64_t strideSrc)
+{
+    if (strideDst == -1) { /* default to m*n if dst set to -1 */
+        strideDst = static_cast<int64_t>(problemShape.m()) * problemShape.n();
+    }
+    size_t offsetBatchDst = 0;
+    size_t offsetBatchSrc = 0;
+    for (uint32_t b = 0; b < batchCount; ++b) {
+        for (uint32_t i = 0; i < problemShape.m(); ++i) {
+            for (uint32_t j = 0; j < problemShape.n(); ++j) {
+                size_t srcOffset = offsetBatchSrc + tagSrc.GetOffset(MakeCoord(i, j));
+                size_t dstOffset = offsetBatchDst + tagDst.GetOffset(MakeCoord(i, j));
+                dstData[dstOffset] = static_cast<ElementGolden>(srcData[srcOffset]);
+            }
+        }
+        offsetBatchDst += strideDst;
+        offsetBatchSrc += strideSrc;
+    }
 }
 
 } // namespace Catlass::golden

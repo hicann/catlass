@@ -10,6 +10,8 @@ def strided_batched_matmul_tla(
     transB: bool = False,
     formatA: bool = False,
     formatB: bool = False,
+    batchTransA: bool = False,
+    batchTransB: bool = False,
 ) -> Tensor:
     """Run CATLASS strided batched matmul (TLA) on NPU tensors.
 
@@ -27,6 +29,10 @@ def strided_batched_matmul_tla(
         transB: Whether to read each ``mat2[b]`` as transposed.
         formatA: Whether ``mat1`` is in CATLASS NZ block format.
         formatB: Whether ``mat2`` is in CATLASS NZ block format.
+        batchTransA: Whether the batch axis of ``mat1`` sits on the
+            middle dimension (``(M, B, K)``) instead of the first.
+        batchTransB: Whether the batch axis of ``mat2`` sits on the
+            middle dimension (``(K, B, N)``) instead of the first.
 
     Returns:
         Output tensor with shape ``(B, M, N)`` on the active NPU device.
@@ -37,5 +43,6 @@ def strided_batched_matmul_tla(
     if outDType is None:
         raise ValueError(f"{outDType} is not a data type of torch")
     return torch.ops.catlass.strided_batched_matmul_tla(
-        mat1, mat2, outDType, transA, transB, formatA, formatB
+        mat1, mat2, outDType, transA, transB, formatA, formatB,
+        batchTransA, batchTransB,
     )

@@ -21,7 +21,23 @@ cd output/bin
 # 基本用法：可执行文件名 batch轴|m轴|n轴|k轴|Device ID
 # Device ID 可选，默认为0
 ./45_strided_batched_matmul_tla 5 256 512 1024 0
+```
 
+## Batch 轴布局
+
+示例通过源码中的编译期常量控制 A/B 的物理 batch 轴位置：
+
+```cpp
+constexpr bool transA = true;
+constexpr bool transB = false;
+```
+
+- `false`：batch 轴位于首维，例如 A 为 `(B,M,K)`、B 为 `(B,K,N)`。
+- `true`：batch 轴位于矩阵两维之间，例如 A 为 `(M,B,K)`、B 为 `(K,B,N)`。
+
+修改常量后重新编译同一个目标即可覆盖 NN、NT、TN 和 TT 四种 batch 轴布局（默认编译对象为`45_strided_batched_matmul_tla` 时为基础非转置情形，编译对象为 `45_strided_transposed_batched_matmul_tla` 时矩阵 A 的 batch 轴转置）。
+
+```bash
 # layout 定制（仅支持 row/col，大小写不敏感；可选，默认 row row）
 # - layoutA: A(M,K) 的 layout
 # - layoutB: B(K,N) 的 layout
@@ -35,6 +51,7 @@ cd output/bin
 #   - B: row 时 ldb>=N；col 时 ldb>=K
 #   - C: 本示例固定为 row，因此 ldc>=N
 # - strideA/strideB/strideC：batch 维度上相邻两矩阵的步长
+#   当 transA/transB 为 true 时，对应的 leading dimension 还需覆盖插入到矩阵中间的全部 batch 切片。
 #
 # 只指定 lda/ldb/ldc（strideBatch 默认连续）
 ./45_strided_batched_matmul_tla 5 256 512 1024 0 1100 600 600

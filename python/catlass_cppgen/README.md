@@ -67,6 +67,7 @@
 |---------|----------|---------|--------|
 | **基础矩阵乘法** | `BasicMatmulKernel` | • 输入张量 A 和 B 为 2 维<br>• `alpha = 1.0` 且 `beta = 0.0`<br>• 支持可选的 Bias 参数 | 无 |
 | **批处理矩阵乘法** | `BatchedMatmulKernel` | • 输入张量 A 和 B 为 3 维（batchCount, M, K）和（batchCount, K, N）<br>• 所有批次共享相同的矩阵维度<br>• `alpha = 1.0` 且 `beta = 0.0` | 无 |
+| **Strided 批处理矩阵乘法** | `StridedBatchedMatmulKernel` | • layout 直接编码 batch stride<br>• `transA/transB` 支持将物理 batch 轴放到矩阵两维之间<br>• stride 和 leading dimension 由 M/N/K/batchCount 自动推导 | 无 |
 | **EVG Visitor 矩阵乘法** | `BasicMatmulTlaVisitorKernel` | • 支持CATLASS模板库后处理框架 EVG（Epilogue Visitor Graph） | 无 |
 | **多核 Split-K** | `MultiCoreSplitkMatmulKernel` | • 输入张量 A 和 B 为 2 维<br>•  优化动作：沿 K 方向多核切分<br>• 支持可选的 Bias 参数 | K |
 | **尾块多核 Split-K** | `TailMultiCoreSplitkMatmulKernel` | • 输入张量 A 和 B 为 2 维<br>•  多核切K的尾块优化变体<br>• 支持可选的 Bias 参数 | K |
@@ -194,6 +195,23 @@ print(f"[Kernel] \n{kernel.gen_kernel_template()}")
 ```
 
 得到kernel对象后，可以调用`gen_kernel_template()`，`gen_params_device()`等方法，针对核函数和参数绑定做代码生成。
+
+Strided Batched Matmul 可通过 `Gemm` 规划器选择，stride 由 shape 和转置配置直接生成：
+
+```python
+a = OpTensor.from_shape_stride((3, 128, 256), (256, 3 * 256, 1), DataType.FLOAT16)
+b = OpTensor.from_shape_stride((3, 256, 384), (256 * 384, 384, 1), DataType.FLOAT16)
+
+kernel = Gemm(
+    atlas_arch=Arch.AtlasA2,
+    element_C=DataType.FLOAT16,
+    A=a,
+    B=b,
+    strided_batched=True,
+    transA=True,
+    transB=False,
+).get_kernels()[0]
+```
 
 ### 4.2 Group GEMM
 
