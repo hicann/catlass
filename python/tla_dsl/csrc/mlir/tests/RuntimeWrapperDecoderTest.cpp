@@ -23,16 +23,44 @@ using cce::internal::AscDebugFifo::kPrintTensorDescriptorNamespace;
 using cce::internal::AscDebugFifo::PrintFormatResult;
 using cce::internal::AscDebugFifo::PrintTlv;
 
-std::vector<uint8_t> scalar_tlv(const char *format, uint64_t slot) {
+std::vector<uint8_t> scalar_tlv(const char *format,
+                                const std::vector<uint64_t> &slots) {
   constexpr size_t kArgumentOffset = 16 + 8;
-  constexpr size_t kFormatOffset = kArgumentOffset + 8;
+  const size_t kFormatOffset =
+      kArgumentOffset + slots.size() * sizeof(uint64_t);
   const size_t format_length = std::strlen(format) + 1;
-  std::vector<uint8_t> bytes(kFormatOffset + format_length, 0);
+  const size_t raw_size = kFormatOffset + format_length;
+  const size_t record_size =
+      (raw_size + sizeof(uint64_t) - 1) & ~(sizeof(uint64_t) - 1);
+  std::vector<uint8_t> bytes(record_size, 0);
   auto *tlv = reinterpret_cast<PrintTlv *>(bytes.data());
+  tlv->type = static_cast<uint32_t>(FifoRecordType::Scalar);
   tlv->length = static_cast<uint32_t>(bytes.size() - 8);
   tlv->blockIdx = 0;
-  tlv->fmtOffset = 16;
-  std::memcpy(bytes.data() + kArgumentOffset, &slot, sizeof(slot));
+  tlv->fmtOffset = sizeof(uint64_t) + slots.size() * sizeof(uint64_t);
+  if (!slots.empty())
+    std::memcpy(bytes.data() + kArgumentOffset, slots.data(),
+                slots.size() * sizeof(uint64_t));
+  std::memcpy(bytes.data() + kFormatOffset, format, format_length);
+  return bytes;
+}
+
+std::vector<uint8_t> scalar_tlv(const char *format, uint64_t slot) {
+  return scalar_tlv(format, std::vector<uint64_t>{slot});
+}
+
+std::vector<uint8_t> literal_scalar_tlv(const char *format) {
+  constexpr size_t kFormatOffset = 24;
+  const size_t format_length = std::strlen(format) + 1;
+  const size_t raw_size = kFormatOffset + format_length;
+  const size_t record_size =
+      (raw_size + sizeof(uint64_t) - 1) & ~(sizeof(uint64_t) - 1);
+  std::vector<uint8_t> bytes(record_size, 0);
+  auto *tlv = reinterpret_cast<PrintTlv *>(bytes.data());
+  tlv->type = static_cast<uint32_t>(FifoRecordType::Scalar);
+  tlv->length = static_cast<uint32_t>(bytes.size() - 8);
+  tlv->blockIdx = 0;
+  tlv->fmtOffset = 8;
   std::memcpy(bytes.data() + kFormatOffset, format, format_length);
   return bytes;
 }
@@ -327,8 +355,27 @@ int main() {
               "unsigned format was rejected") ||
       !expect(is_supported_scalar_printf_format("v=%f", 4),
               "f32 format was rejected") ||
+      !expect(is_supported_scalar_printf_format("x=%d y=%f",
+                                                std::strlen("x=%d y=%f")),
+              "mixed generated format was rejected") ||
+      !expect(is_supported_scalar_printf_format(
+                  "repeat %d %d", std::strlen("repeat %d %d")),
+              "repeated generated format was rejected") ||
+      !expect(is_supported_scalar_printf_format(
+                  "progress=50%% x=%d", std::strlen("progress=50%% x=%d")),
+              "literal percent generated format was rejected") ||
+      !expect(is_supported_scalar_printf_format("braces={} x=%d",
+                                                std::strlen("braces={} x=%d")),
+              "escaped braces generated format was rejected") ||
       !expect(!is_supported_scalar_printf_format("ptr=%p", 6),
-              "legacy pointer format was accepted"))
+              "legacy pointer format was accepted") ||
+      !expect(!is_supported_scalar_printf_format("hex=%x", 6),
+              "native hex format was accepted") ||
+      !expect(!is_supported_scalar_printf_format("bad %q", 6),
+              "unsupported native format was accepted") ||
+      !expect(!is_supported_scalar_printf_format("progress=50%",
+                                                 std::strlen("progress=50%")),
+              "raw literal percent was accepted"))
     return 1;
 
   uint64_t i32_slot = static_cast<uint32_t>(-37);
@@ -352,17 +399,82 @@ int main() {
   float f32_value = 1.25f;
   uint64_t f32_slot = 0;
   std::memcpy(&f32_slot, &f32_value, sizeof(f32_value));
+  const uint64_t promoted_f16_slot = f32_slot;
+  float negative_f32_value = -2.5f;
+  uint64_t negative_f32_slot = 0;
+  std::memcpy(&negative_f32_slot, &negative_f32_value,
+              sizeof(negative_f32_value));
+  uint64_t slots[] = {i32_slot, f32_slot, static_cast<uint32_t>(11)};
   if (!expect(format_scalar_printf(
                   "v=%f", 4, reinterpret_cast<const uint8_t *>(&f32_slot),
                   sizeof(f32_slot)) == PrintFormatResult::Printed,
               "valid f32 slot did not print") ||
+      !expect(format_scalar_printf(
+                  "x=%d y=%f", std::strlen("x=%d y=%f"),
+                  reinterpret_cast<const uint8_t *>(slots),
+                  2 * sizeof(uint64_t)) == PrintFormatResult::Printed,
+              "valid mixed slots did not print") ||
+      !expect(format_scalar_printf(
+                  "repeat %d %d", std::strlen("repeat %d %d"),
+                  reinterpret_cast<const uint8_t *>(slots),
+                  2 * sizeof(uint64_t)) == PrintFormatResult::Printed,
+              "valid repeated slots did not print") ||
+      !expect(format_scalar_printf(
+                  "progress=50%% x=%d", std::strlen("progress=50%% x=%d"),
+                  reinterpret_cast<const uint8_t *>(slots),
+                  sizeof(uint64_t)) == PrintFormatResult::Printed,
+              "literal percent generated format did not print") ||
+      !expect(format_scalar_printf(
+                  "braces={} x=%d", std::strlen("braces={} x=%d"),
+                  reinterpret_cast<const uint8_t *>(slots),
+                  sizeof(uint64_t)) == PrintFormatResult::Printed,
+              "escaped braces generated format did not print") ||
       !expect(format_scalar_printf("x=%d", 4, nullptr, 0) ==
                   PrintFormatResult::Malformed,
-              "truncated signed scalar slot was accepted") ||
+              "truncated scalar slot was accepted") ||
       !expect(format_scalar_printf("x=%u", 4, nullptr, 0) ==
                   PrintFormatResult::Malformed,
-              "truncated unsigned scalar slot was accepted"))
+              "truncated unsigned scalar slot was accepted") ||
+      !expect(format_scalar_printf(
+                  "x=%d y=%f", std::strlen("x=%d y=%f"),
+                  reinterpret_cast<const uint8_t *>(slots),
+                  sizeof(uint64_t)) == PrintFormatResult::Malformed,
+              "missing mixed scalar slot was accepted") ||
+      !expect(format_scalar_printf(
+                  "hex=%x", 6, reinterpret_cast<const uint8_t *>(slots),
+                  sizeof(uint64_t)) == PrintFormatResult::Unsupported,
+               "unsupported native format sequence was not rejected"))
     return 1;
+
+  {
+    auto palette = scalar_tlv(
+        "all=%d %d %d %u %u %u %f %f",
+        {
+            static_cast<uint64_t>(static_cast<int64_t>(-37)),
+            static_cast<uint64_t>(static_cast<int64_t>(-30000)),
+            0,
+            255,
+            65535,
+            4294967295U,
+            promoted_f16_slot,
+            negative_f32_slot,
+        });
+    bool rendered = false;
+    const std::string output = capture_stdout(
+        [&] {
+          return print_scalar_tlv(
+              reinterpret_cast<const PrintTlv *>(palette.data()),
+              palette.size(), 7);
+        },
+        &rendered);
+    constexpr char kExpected[] =
+        "TLA printf: core=7 block=0 "
+        "all=-37 -30000 0 255 65535 4294967295 1.250000 -2.500000\n";
+    if (!expect(rendered, "eight-type scalar palette TLV was rejected") ||
+        !expect(output == kExpected,
+                "eight-type scalar palette output was not exact"))
+      return 1;
+  }
 
   auto valid = scalar_tlv("x=%d", i32_slot);
   auto valid_unsigned = scalar_tlv("x=%u", 4294967295U);
@@ -420,6 +532,43 @@ int main() {
                 "mixed AIV native block index was not normalized"))
       return 1;
   }
+
+  auto literal = literal_scalar_tlv("hello");
+  if (!expect(print_scalar_tlv(
+                  reinterpret_cast<const PrintTlv *>(literal.data()),
+                  literal.size(), 7),
+              "valid literal string scalar TLV was rejected"))
+    return 1;
+  auto literal_percent = literal_scalar_tlv("progress=50%%");
+  if (!expect(print_scalar_tlv(
+                  reinterpret_cast<const PrintTlv *>(literal_percent.data()),
+                  literal_percent.size(), 7),
+              "valid generated literal-percent scalar TLV was rejected"))
+    return 1;
+  auto raw_percent = literal_scalar_tlv("progress=50%");
+  if (!expect(!print_scalar_tlv(
+                  reinterpret_cast<const PrintTlv *>(raw_percent.data()),
+                  raw_percent.size(), 7),
+              "raw literal-percent scalar TLV was accepted"))
+    return 1;
+  auto mixed = scalar_tlv("x=%d y=%f", {i32_slot, f32_slot});
+  if (!expect(print_scalar_tlv(
+                  reinterpret_cast<const PrintTlv *>(mixed.data()),
+                  mixed.size(), 7),
+              "valid mixed scalar TLV was rejected"))
+    return 1;
+  auto missing_slot = scalar_tlv("x=%d y=%f", std::vector<uint64_t>{i32_slot});
+  if (!expect(print_scalar_tlv(
+                  reinterpret_cast<const PrintTlv *>(missing_slot.data()),
+                  missing_slot.size(), 7),
+              "missing-slot scalar TLV was not diagnosed"))
+    return 1;
+  auto unsupported = scalar_tlv("hex=%x", std::vector<uint64_t>{i32_slot});
+  if (!expect(!print_scalar_tlv(
+                  reinterpret_cast<const PrintTlv *>(unsupported.data()),
+                  unsupported.size(), 7),
+              "unsupported native scalar TLV was accepted"))
+    return 1;
 
   constexpr struct {
     uint32_t data_type;

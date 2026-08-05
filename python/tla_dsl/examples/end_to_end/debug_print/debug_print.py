@@ -152,14 +152,20 @@ def _verify_debug_output(
     pattern = re.compile(
         rf"^TLA printf: core=[0-9]+ block=([0-9]+) {tag}={re.escape(expected_value)}$"
     )
-    lines = output.splitlines()
-    framed = [line for line in lines if line.startswith("TLA printf:")]
+    diagnostic = re.compile(
+        r"^TLA printf: core=[0-9]+ block=[0-9]+ "
+        r"(?:\[WARNING\]: CANN TimeStamp is invalid.*|"
+        r"\[(?:AIC|AIV) Block [0-9]+/[0-9]+\]\s*)$"
+    )
     matches = []
-    for line in framed:
+    unexpected = []
+    for line in output.splitlines():
         match = pattern.fullmatch(line)
         if match:
             matches.append(match)
-    if len(framed) != expect_count or len(matches) != expect_count:
+        elif line.startswith("TLA printf:") and not diagnostic.fullmatch(line):
+            unexpected.append(line)
+    if unexpected or len(matches) != expect_count:
         raise RuntimeError(
             f"expected {expect_count} {dtype} debug line(s); got {output!r}"
         )

@@ -135,8 +135,11 @@ def _print_tensor_length_too_large(value: tla.Tensor) -> None:
         tla.print(value, 262_113)
 
 
-def test_print_has_positional_only_value_and_optional_length_surface() -> None:
-    assert str(inspect.signature(tla.print)) == "(value, length=None, /)"
+def test_print_has_positional_only_variadic_surface() -> None:
+    signature = inspect.signature(tla.print)
+    assert str(signature) == "(value, *args, /)"
+    assert signature.parameters["value"].kind is inspect.Parameter.POSITIONAL_ONLY
+    assert signature.parameters["args"].kind is inspect.Parameter.VAR_POSITIONAL
 
 
 @pytest.mark.parametrize(

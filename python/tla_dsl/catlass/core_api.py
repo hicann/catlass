@@ -2958,12 +2958,145 @@ _DEBUG_PRINT_SUPPORTED_DTYPES = _PRINT_TENSOR_SUPPORTED_DTYPES
 _DEBUG_PRINT_SUPPORTED_DTYPES_TEXT = _PRINT_TENSOR_SUPPORTED_DTYPES_TEXT
 
 
+def _is_supported_debug_print_scalar_type(value_type: mlir_ir.Type) -> bool:
+    if isinstance(value_type, (mlir_ir.F16Type, mlir_ir.F32Type)):
+        return True
+    if not mlir_ir.IntegerType.isinstance(value_type):
+        return False
+    int_type = mlir_ir.IntegerType(value_type)
+    return int_type.width in (8, 16, 32) and (
+        int_type.is_signless or int_type.is_unsigned
+    )
+
+
 def _print_scalar_type_error(value_type: Any) -> NoReturn:
     _op_error(
         "print",
         f"unsupported value type {value_type}; expected one of "
         f"{_DEBUG_PRINT_SUPPORTED_DTYPES_TEXT} scalar",
     )
+
+
+_DEBUG_PRINT_MAX_FORMAT_FIELDS = 8
+_DEBUG_PRINT_FIFO_BYTES = 1024 * 1024
+_DEBUG_PRINT_FORMAT_TLV_BYTES = 24
+_DEBUG_PRINT_FORMAT_SLOT_BYTES = 8
+
+
+class _TlaPrintSignature(inspect.Signature):
+    def __str__(self) -> str:
+        return "(value, *args, /)"
+
+
+def _validate_debug_print_format_text(format_value: str) -> None:
+    if "\x00" in format_value:
+        _op_error("print", "format string must not contain embedded NUL")
+    if not format_value.isascii():
+        _op_error("print", "format string must contain ASCII only")
+
+
+def _scan_debug_print_format(format_value: str) -> tuple[int, int]:
+    fields = 0
+    generated_length = 0
+    i = 0
+    while i < len(format_value):
+        char = format_value[i]
+        if char == "{":
+            if i + 1 >= len(format_value):
+                _op_error("print", "malformed format string")
+            next_char = format_value[i + 1]
+            if next_char == "{":
+                generated_length += 1
+                i += 2
+                continue
+            if next_char == "}":
+                fields += 1
+                if fields > _DEBUG_PRINT_MAX_FORMAT_FIELDS:
+                    _op_error(
+                        "print",
+                        f"formatted print supports at most {_DEBUG_PRINT_MAX_FORMAT_FIELDS} fields",
+                    )
+                generated_length += 2
+                i += 2
+                continue
+            close = format_value.find("}", i + 1)
+            if close < 0:
+                _op_error("print", "malformed format string")
+            _op_error("print", "unsupported format field")
+        if char == "}":
+            if i + 1 < len(format_value) and format_value[i + 1] == "}":
+                generated_length += 1
+                i += 2
+                continue
+            _op_error("print", "malformed format string")
+        elif char == "%":
+            generated_length += 2
+        else:
+            generated_length += 1
+        i += 1
+    return fields, generated_length
+
+
+def _check_debug_print_record_size(fields: int, generated_length: int) -> None:
+    record_bytes = (
+        _DEBUG_PRINT_FORMAT_TLV_BYTES
+        + fields * _DEBUG_PRINT_FORMAT_SLOT_BYTES
+        + generated_length
+        + 1
+    )
+    record_bytes = (
+        record_bytes + _DEBUG_PRINT_FORMAT_SLOT_BYTES - 1
+    ) // _DEBUG_PRINT_FORMAT_SLOT_BYTES * _DEBUG_PRINT_FORMAT_SLOT_BYTES
+    if record_bytes > _DEBUG_PRINT_FIFO_BYTES:
+        _op_error(
+            "print",
+            f"formatted print record exceeds {_DEBUG_PRINT_FIFO_BYTES} byte debug FIFO limit",
+        )
+
+
+def _parse_debug_print_format(format_value: str) -> tuple[int, int]:
+    _validate_debug_print_format_text(format_value)
+    fields, generated_length = _scan_debug_print_format(format_value)
+    _check_debug_print_record_size(fields, generated_length)
+    return fields, generated_length
+
+
+def _check_formatted_print_arg(value: Any) -> None:
+    resolved = _resolve_bound_value(value)
+    if _category(value) == "tensor" or (
+        isinstance(resolved, mlir_ir.Value)
+        and _tla_type_bridge.type_is_tensor(resolved.type)
+    ):
+        _op_error("print", "tensor arguments are unsupported in formatted print calls")
+    if isinstance(resolved, bool):
+        _print_scalar_type_error("bool")
+
+
+def _materialize_debug_print_numeric(
+    value: Numeric, *, loc: mlir_ir.Location | None
+) -> mlir_ir.Value:
+    value_type = type(value).mlir_type()
+    if isinstance(value.value, mlir_ir.Value):
+        return value.value
+    if mlir_ir.IntegerType.isinstance(value_type):
+        int_type = mlir_ir.IntegerType(value_type)
+        if int_type.is_unsigned:
+            signless_type = mlir_ir.IntegerType.get_signless(int_type.width)
+            constant = mlir_ir.Operation.create(
+                "arith.constant",
+                results=[signless_type],
+                attributes={
+                    "value": mlir_ir.IntegerAttr.get(signless_type, int(value.value))
+                },
+                loc=loc,
+            ).results[0]
+            return mlir_ir.Operation.create(
+                "builtin.unrealized_conversion_cast",
+                operands=[constant],
+                results=[value_type],
+                loc=loc,
+            ).results[0]
+    return value.ir_value(loc=loc)
 
 
 def _print_scalar_operand(value: Any, *, loc: mlir_ir.Location | None) -> mlir_ir.Value:
@@ -2982,23 +3115,15 @@ def _print_scalar_operand(value: Any, *, loc: mlir_ir.Location | None) -> mlir_i
         dtype = type(resolved).dtype.lower()
         if dtype not in _DEBUG_PRINT_SUPPORTED_DTYPES:
             _print_scalar_type_error(dtype)
-        return resolved.ir_value(loc=loc)
+        return _materialize_debug_print_numeric(resolved, loc=loc)
     if isinstance(resolved, VectorSSA):
         resolved = _resolve_bound_value(resolved.value)
     if not isinstance(resolved, mlir_ir.Value):
         _print_scalar_type_error(_type_name(value))
 
     value_type = resolved.type
-    if isinstance(value_type, mlir_ir.F16Type):
+    if _is_supported_debug_print_scalar_type(value_type):
         return resolved
-    if isinstance(value_type, mlir_ir.F32Type):
-        return resolved
-    if mlir_ir.IntegerType.isinstance(value_type):
-        int_type = mlir_ir.IntegerType(value_type)
-        if int_type.width in (8, 16, 32) and (
-            int_type.is_signless or int_type.is_unsigned
-        ):
-            return resolved
     _print_scalar_type_error(value_type)
 
 
@@ -3012,7 +3137,30 @@ def _emit_scalar_print(value: Any, *, loc: mlir_ir.Location | None) -> None:
         _op_error("print", f"Python int {value} is outside signless i32 range")
     _require_frontend_state("print")
     _runtime._require_enclosing_cube_or_vector("print")
-    _tla_ops_gen.debug_print(_print_scalar_operand(value, loc=loc), loc=loc)
+    _tla_ops_gen.debug_print([_print_scalar_operand(value, loc=loc)], loc=loc)
+
+
+def _emit_formatted_print(
+    format_value: str, args: Sequence[Any], *, loc: mlir_ir.Location | None
+) -> None:
+    field_count, _ = _parse_debug_print_format(format_value)
+    if field_count != len(args):
+        _op_error(
+            "print",
+            f"format argument count mismatch: format has {field_count} fields but got {len(args)} arguments",
+        )
+    for arg in args:
+        _check_formatted_print_arg(arg)
+    _require_frontend_state("print")
+    _runtime._require_enclosing_cube_or_vector("print")
+    operands = []
+    for arg in args:
+        operand = _print_scalar_operand(arg, loc=loc)
+        operand_type = operand.type
+        if not _is_supported_debug_print_scalar_type(operand_type):
+            _print_scalar_type_error(operand_type)
+        operands.append(operand)
+    _tla_ops_gen.debug_print(operands, format=format_value, loc=loc)
 
 
 # CANN's 1 MiB debug FIFO reserves 48 bytes for the shape TLV and 72 bytes
@@ -3127,15 +3275,20 @@ def _emit_tensor_print(
 
 
 def print(*args: Any, **kwargs: Any) -> None:
-    """Print one scalar or a prefix of one tensor inside a cube or vector region."""
+    """Print one scalar, a formatted scalar string, or a tensor prefix."""
     if kwargs:
         _op_error("print", "does not accept keyword arguments")
-    if not 1 <= len(args) <= 2:
-        _op_error("print", f"expects one or two positional arguments; got {len(args)}")
+    if len(args) < 1:
+        _op_error("print", f"expects at least one positional argument; got {len(args)}")
 
     original_value = args[0]
     value = _resolve_bound_value(original_value)
     if _category(original_value) == "tensor":
+        if len(args) > 2:
+            _op_error(
+                "print",
+                f"tensor printing expects one tensor and optional length; got {len(args)} arguments",
+            )
         if _runtime._current_frontend_state() is None:
             return _emit_tensor_print(
                 value, args[1] if len(args) == 2 else None, loc=None
@@ -3145,8 +3298,17 @@ def print(*args: Any, **kwargs: Any) -> None:
             args[1] if len(args) == 2 else None,
             loc=_capture_user_loc(),
         )
+    if isinstance(value, str):
+        loc = (
+            _capture_user_loc()
+            if _runtime._current_frontend_state() is not None
+            else None
+        )
+        return _emit_formatted_print(value, args[1:], loc=loc)
     if len(args) == 2:
         _op_error("print", "length is only valid when printing a tensor")
+    if len(args) > 2:
+        _op_error("print", "format string must be a host Python str")
     loc = (
         _capture_user_loc()
         if _runtime._current_frontend_state() is not None
@@ -3155,12 +3317,10 @@ def print(*args: Any, **kwargs: Any) -> None:
     return _emit_scalar_print(value, loc=loc)
 
 
-print.__signature__ = inspect.Signature(
+print.__signature__ = _TlaPrintSignature(
     [
         inspect.Parameter("value", inspect.Parameter.POSITIONAL_ONLY),
-        inspect.Parameter(
-            "length", inspect.Parameter.POSITIONAL_ONLY, default=None
-        ),
+        inspect.Parameter("args", inspect.Parameter.VAR_POSITIONAL),
     ]
 )
 

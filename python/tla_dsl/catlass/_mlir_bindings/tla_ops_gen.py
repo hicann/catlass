@@ -910,22 +910,44 @@ class DebugPrintOp(_ods_ir.OpView):
 
   _ODS_REGIONS = (0, True)
 
-  def __init__(self, value, *, loc=None, ip=None):
+  def __init__(self, values, *, format=None, loc=None, ip=None):
     operands = []
     results = []
     attributes = {}
     regions = None
-    operands.append(_get_op_result_or_value(value))
+    operands.extend(_get_op_results_or_values(values))
     _ods_context = _ods_get_default_loc_context(loc)
+    if format is not None: attributes["format"] = (format if (
+        isinstance(format, _ods_ir.Attribute) or
+        not _ods_ir.AttrBuilder.contains('StrAttr')) else
+          _ods_ir.AttrBuilder.get('StrAttr')(format, context=_ods_context))
     _ods_successors = None
     super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
 
   @builtins.property
-  def value(self):
-    return self.operation.operands[0]
+  def values(self):
+    _ods_variadic_group_length = len(self.operation.operands) - 1 + 1
+    return self.operation.operands[0:0 + _ods_variadic_group_length]
 
-def debug_print(value, *, loc=None, ip=None) -> _ods_ir.Operation:
-  return _get_op_result_or_op_results(DebugPrintOp(value=value, loc=loc, ip=ip))
+  @builtins.property
+  def format(self):
+    if "format" not in self.operation.attributes:
+      return None
+    return self.operation.attributes["format"]
+
+  @format.setter
+  def format(self, value):
+    if value is not None:
+      self.operation.attributes["format"] = value
+    elif "format" in self.operation.attributes:
+      del self.operation.attributes["format"]
+
+  @format.deleter
+  def format(self):
+    del self.operation.attributes["format"]
+
+def debug_print(values, *, format=None, loc=None, ip=None) -> _ods_ir.Operation:
+  return _get_op_result_or_op_results(DebugPrintOp(values=values, format=format, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
 class DivOp(_ods_ir.OpView):

@@ -299,6 +299,40 @@ def test_debug_print_output_accepts_unordered_f32_records_from_distinct_blocks()
     )
 
 
+def test_debug_print_output_ignores_cann_diagnostic_records() -> None:
+    example = _load_debug_print_example()
+
+    example._verify_debug_output(
+        "\n".join(
+            (
+                "TLA printf: core=0 block=0 [WARNING]: CANN TimeStamp is invalid",
+                "TLA printf: core=0 block=0 [AIV Block 0/1] ",
+                "TLA printf: core=0 block=0 x=-128",
+            )
+        ),
+        dtype="i8",
+        expected_value="-128",
+        expect_count=1,
+    )
+
+
+def test_debug_print_output_rejects_unexpected_scalar_records() -> None:
+    example = _load_debug_print_example()
+
+    with pytest.raises(RuntimeError):
+        example._verify_debug_output(
+            "\n".join(
+                (
+                    "TLA printf: core=0 block=0 x=-128",
+                    "TLA printf: core=0 block=0 x=127",
+                )
+            ),
+            dtype="i8",
+            expected_value="-128",
+            expect_count=1,
+        )
+
+
 def test_debug_print_output_rejects_duplicate_multiblock_records() -> None:
     example = _load_debug_print_example()
 
@@ -428,6 +462,21 @@ def test_debug_print_mixed_output_accepts_requested_region(
     example = _load_debug_print_example(mixed=True)
 
     example._verify_mixed_debug_output(output, print_region=print_region)
+
+
+def test_debug_print_mixed_output_ignores_cann_diagnostic_records() -> None:
+    example = _load_debug_print_example(mixed=True)
+
+    example._verify_mixed_debug_output(
+        "\n".join(
+            (
+                "TLA printf: core=0 block=0 [WARNING]: CANN TimeStamp is invalid",
+                "TLA printf: core=0 block=0 [AIC Block 0/1] ",
+                "TLA printf: core=0 block=0 x=-37",
+            )
+        ),
+        print_region="cube",
+    )
 
 
 @pytest.mark.parametrize(

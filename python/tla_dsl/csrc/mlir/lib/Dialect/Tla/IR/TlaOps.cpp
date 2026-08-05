@@ -12,6 +12,7 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/OpImplementation.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -22,6 +23,15 @@ namespace tla {
 
 static constexpr llvm::StringLiteral kPrintTensorSupportedDtypes =
     "f16, f32, i8, i16, i32, u8, u16, u32";
+static constexpr unsigned kDebugPrintMaxFormatFields = 8;
+static constexpr uint64_t kDebugPrintFifoBytes = 1024 * 1024;
+static constexpr uint64_t kDebugPrintFormatTlvBytes = 24;
+static constexpr uint64_t kDebugPrintFormatSlotBytes = 8;
+
+struct DebugPrintFormatInfo {
+  unsigned fieldCount = 0;
+  uint64_t generatedLength = 0;
+};
 
 template <typename TreeType>
 static mlir::LogicalResult getIndexTreeLeavesForVerify(
@@ -63,6 +73,81 @@ static std::string printTensorDiagnosticTypeToken(mlir::Type type) {
   if (integerType && integerType.isUnsigned())
     return "u" + std::to_string(integerType.getWidth());
   return typeToString(type);
+}
+
+static bool isSupportedDebugPrintScalar(mlir::Type type) {
+  return isSupportedPrintTensorInteger(type) || type.isF16() || type.isF32();
+}
+
+static mlir::LogicalResult
+scanDebugPrintFormat(mlir::Operation *op, llvm::StringRef format,
+                     DebugPrintFormatInfo &info) {
+  info = {};
+  for (size_t i = 0; i < format.size();) {
+    unsigned char c = static_cast<unsigned char>(format[i]);
+    if (c == '\0')
+      return op->emitOpError("format string must not contain embedded NUL");
+    if (c > 0x7f)
+      return op->emitOpError("format string must contain ASCII only");
+    if (c == '{') {
+      if (i + 1 >= format.size())
+        return op->emitOpError("malformed format string");
+      if (format[i + 1] == '{') {
+        ++info.generatedLength;
+        i += 2;
+        continue;
+      }
+      if (format[i + 1] == '}') {
+        ++info.fieldCount;
+        if (info.fieldCount > kDebugPrintMaxFormatFields)
+          return op->emitOpError("formatted debug_print supports at most ")
+                 << kDebugPrintMaxFormatFields << " operands";
+        info.generatedLength += 2;
+        i += 2;
+        continue;
+      }
+      if (format.find('}', i + 1) == llvm::StringRef::npos)
+        return op->emitOpError("malformed format string");
+      return op->emitOpError("unsupported format field");
+    }
+    if (c == '}') {
+      if (i + 1 < format.size() && format[i + 1] == '}') {
+        ++info.generatedLength;
+        i += 2;
+        continue;
+      }
+      return op->emitOpError("malformed format string");
+    }
+    info.generatedLength += c == '%' ? 2 : 1;
+    ++i;
+  }
+  return mlir::success();
+}
+
+static mlir::LogicalResult
+verifyDebugPrintRecordSize(mlir::Operation *op,
+                           const DebugPrintFormatInfo &info) {
+  uint64_t recordBytes = kDebugPrintFormatTlvBytes +
+                         info.fieldCount * kDebugPrintFormatSlotBytes +
+                         info.generatedLength + 1;
+  recordBytes = (recordBytes + kDebugPrintFormatSlotBytes - 1) &
+                ~(kDebugPrintFormatSlotBytes - 1);
+  if (recordBytes > kDebugPrintFifoBytes)
+    return op->emitOpError("formatted debug_print record exceeds ")
+           << kDebugPrintFifoBytes << " byte debug FIFO limit";
+  return mlir::success();
+}
+
+static mlir::LogicalResult parseDebugPrintFormat(mlir::Operation *op,
+                                                 llvm::StringRef format,
+                                                 unsigned &fieldCount) {
+  DebugPrintFormatInfo info;
+  if (failed(scanDebugPrintFormat(op, format, info)))
+    return mlir::failure();
+  if (failed(verifyDebugPrintRecordSize(op, info)))
+    return mlir::failure();
+  fieldCount = info.fieldCount;
+  return mlir::success();
 }
 
 static bool isSupportedCmpMode(llvm::StringRef mode) {
@@ -672,14 +757,35 @@ mlir::LogicalResult CmpOp::verify() {
 }
 
 mlir::LogicalResult DebugPrintOp::verify() {
-  auto type = getValue().getType();
-  bool isSupportedInteger = isSupportedPrintTensorInteger(type);
-  if (!isSupportedInteger && !type.isF16() && !type.isF32())
-    return emitOpError("expected one of ")
-           << kPrintTensorSupportedDtypes << " scalar, got " << type;
   if (!hasEnclosingRegion<CubeOp>(getOperation()) &&
       !hasEnclosingRegion<VectorOp>(getOperation()))
     return emitOpError("must be nested inside a tla.cube or tla.vector region");
+
+  auto formatAttr = (*this)->getAttrOfType<mlir::StringAttr>("format");
+  if (!formatAttr) {
+    if (getValues().size() != 1)
+      return emitOpError("legacy debug_print expects exactly one operand");
+    auto type = getValues().front().getType();
+    if (!isSupportedPrintTensorInteger(type) && !type.isF16() && !type.isF32())
+      return emitOpError("expected one of ")
+             << kPrintTensorSupportedDtypes << " scalar, got " << type;
+    return mlir::success();
+  }
+
+  unsigned fieldCount = 0;
+  if (failed(parseDebugPrintFormat(getOperation(), formatAttr.getValue(),
+                                   fieldCount)))
+    return mlir::failure();
+  if (fieldCount != getValues().size())
+    return emitOpError("format argument count mismatch: format has ")
+           << fieldCount << " fields but got " << getValues().size()
+           << " operands";
+  for (mlir::Value value : getValues()) {
+    auto type = value.getType();
+    if (!isSupportedDebugPrintScalar(type))
+      return emitOpError("expected one of ")
+             << kPrintTensorSupportedDtypes << " scalar, got " << type;
+  }
   return mlir::success();
 }
 
@@ -786,6 +892,85 @@ template <typename OpTy> static void printIndexTreeValueOp(OpTy op, mlir::OpAsmP
   printer.printOptionalAttrDict(op->getAttrs());
   printer << " -> ";
   printer.printType(op.getResult().getType());
+}
+
+mlir::ParseResult DebugPrintOp::parse(mlir::OpAsmParser &parser,
+                                      mlir::OperationState &result) {
+  llvm::SmallVector<mlir::OpAsmParser::UnresolvedOperand, 4> operands;
+  llvm::SmallVector<mlir::Type, 4> operandTypes;
+  llvm::SMLoc operandsLoc = parser.getCurrentLocation();
+
+  if (succeeded(parser.parseOptionalKeyword("format"))) {
+    mlir::StringAttr formatAttr;
+    if (parser.parseAttribute(formatAttr, "format", result.attributes))
+      return mlir::failure();
+    if (succeeded(parser.parseOptionalLParen())) {
+      if (failed(parser.parseOptionalRParen())) {
+        do {
+          mlir::OpAsmParser::UnresolvedOperand operand;
+          if (parser.parseOperand(operand))
+            return mlir::failure();
+          operands.push_back(operand);
+        } while (succeeded(parser.parseOptionalComma()));
+        if (parser.parseRParen())
+          return mlir::failure();
+      }
+    }
+    if (parser.parseOptionalAttrDict(result.attributes) ||
+        parser.parseColon() || parser.parseLParen())
+      return mlir::failure();
+    if (failed(parser.parseOptionalRParen())) {
+      do {
+        mlir::Type type;
+        if (parser.parseType(type))
+          return mlir::failure();
+        operandTypes.push_back(type);
+      } while (succeeded(parser.parseOptionalComma()));
+      if (parser.parseRParen())
+        return mlir::failure();
+    }
+    if (operands.size() != operandTypes.size())
+      return parser.emitError(operandsLoc)
+             << "expected " << operands.size() << " operand types, got "
+             << operandTypes.size();
+    if (parser.resolveOperands(operands, operandTypes, operandsLoc,
+                               result.operands))
+      return mlir::failure();
+    return mlir::success();
+  }
+
+  mlir::OpAsmParser::UnresolvedOperand operand;
+  mlir::Type type;
+  operandsLoc = parser.getCurrentLocation();
+  if (parser.parseOperand(operand) ||
+      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+      parser.parseType(type))
+    return mlir::failure();
+  if (parser.resolveOperand(operand, type, result.operands))
+    return mlir::failure();
+  return mlir::success();
+}
+
+void DebugPrintOp::print(mlir::OpAsmPrinter &printer) {
+  auto formatAttr = (*this)->getAttrOfType<mlir::StringAttr>("format");
+  if (!formatAttr) {
+    printer << ' ' << getValues().front();
+    printer.printOptionalAttrDict((*this)->getAttrs());
+    printer << " : ";
+    printer.printType(getValues().front().getType());
+    return;
+  }
+
+  printer << " format " << formatAttr;
+  printer << '(' << getValues() << ')';
+  printer.printOptionalAttrDict((*this)->getAttrs(), {"format"});
+  printer << " : (";
+  for (auto item : llvm::enumerate(getValues())) {
+    if (item.index() != 0)
+      printer << ", ";
+    printer.printType(item.value().getType());
+  }
+  printer << ')';
 }
 
 mlir::ParseResult MakeShapeOp::parse(mlir::OpAsmParser &parser, mlir::OperationState &result) {

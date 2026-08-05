@@ -284,9 +284,22 @@ uint32_t load_print_slot_unsigned(uint64_t slot) {
 enum class PrintFormatResult { Printed, Malformed, Unsupported };
 
 bool is_supported_scalar_printf_format(const char *fmt, size_t fmt_length) {
-  return (fmt_length == 4 && std::memcmp(fmt, "x=%d", 4) == 0) ||
-         (fmt_length == 4 && std::memcmp(fmt, "x=%u", 4) == 0) ||
-         (fmt_length == 4 && std::memcmp(fmt, "v=%f", 4) == 0);
+  if (!fmt)
+    return false;
+  size_t i = 0;
+  while (i < fmt_length) {
+    if (fmt[i] != '%') {
+      ++i;
+      continue;
+    }
+    if (i + 1 >= fmt_length)
+      return false;
+    char spec = fmt[i + 1];
+    if (spec != '%' && spec != 'd' && spec != 'u' && spec != 'f')
+      return false;
+    i += 2;
+  }
+  return true;
 }
 
 PrintFormatResult format_scalar_printf(const char *fmt, size_t fmt_length,
@@ -295,30 +308,46 @@ PrintFormatResult format_scalar_printf(const char *fmt, size_t fmt_length,
     return PrintFormatResult::Unsupported;
 
   uint64_t arg_offset = 0;
-
-  uint64_t slot = 0;
-  if (fmt_length == 4 && std::memcmp(fmt, "x=%d", 4) == 0) {
-    if (!read_print_slot(args, arg_bytes, arg_offset, slot))
-      return PrintFormatResult::Malformed;
-    std::printf("x=%d", static_cast<int32_t>(slot));
-    return PrintFormatResult::Printed;
+  size_t i = 0;
+  while (i < fmt_length) {
+    if (fmt[i] != '%') {
+      std::fputc(fmt[i], stdout);
+      ++i;
+      continue;
+    }
+    if (i + 1 >= fmt_length)
+      return PrintFormatResult::Unsupported;
+    char spec = fmt[i + 1];
+    i += 2;
+    if (spec == '%') {
+      std::fputc('%', stdout);
+      continue;
+    }
+    uint64_t slot = 0;
+    if (spec == 'd') {
+      if (!read_print_slot(args, arg_bytes, arg_offset, slot))
+        return PrintFormatResult::Malformed;
+      std::printf("%d", static_cast<int32_t>(slot));
+      continue;
+    }
+    if (spec == 'u') {
+      if (!read_print_slot(args, arg_bytes, arg_offset, slot))
+        return PrintFormatResult::Malformed;
+      std::printf("%u", load_print_slot_unsigned(slot));
+      continue;
+    }
+    if (spec == 'f') {
+      if (!read_print_slot(args, arg_bytes, arg_offset, slot))
+        return PrintFormatResult::Malformed;
+      std::printf("%f", static_cast<double>(load_print_slot_float(slot)));
+      continue;
+    }
+    return PrintFormatResult::Unsupported;
   }
 
-  if (fmt_length == 4 && std::memcmp(fmt, "x=%u", 4) == 0) {
-    if (!read_print_slot(args, arg_bytes, arg_offset, slot))
-      return PrintFormatResult::Malformed;
-    std::printf("x=%u", load_print_slot_unsigned(slot));
-    return PrintFormatResult::Printed;
-  }
-
-  if (fmt_length == 4 && std::memcmp(fmt, "v=%f", 4) == 0) {
-    if (!read_print_slot(args, arg_bytes, arg_offset, slot))
-      return PrintFormatResult::Malformed;
-    std::printf("v=%f", static_cast<double>(load_print_slot_float(slot)));
-    return PrintFormatResult::Printed;
-  }
-
-  return PrintFormatResult::Unsupported;
+  if (arg_offset != arg_bytes)
+    return PrintFormatResult::Malformed;
+  return PrintFormatResult::Printed;
 }
 
 bool print_malformed_scalar_tlv(const char *reason, uint32_t core) {
@@ -354,13 +383,17 @@ bool print_scalar_tlv(const PrintTlv *tlv, uint64_t total, uint32_t core) {
   size_t fmt_length = bounded_c_string_length(fmt, max_fmt_length);
   if (fmt_length == max_fmt_length)
     return print_malformed_scalar_tlv("unterminated format string", core);
+
   if (!is_supported_scalar_printf_format(fmt, fmt_length))
     return false;
 
   std::printf("TLA printf: core=%u block=%u ", core, tlv->blockIdx);
-  if (format_scalar_printf(fmt, fmt_length, record + args_start, arg_bytes) ==
-      PrintFormatResult::Malformed)
+  PrintFormatResult result =
+      format_scalar_printf(fmt, fmt_length, record + args_start, arg_bytes);
+  if (result == PrintFormatResult::Malformed)
     std::printf("<malformed scalar printf TLV: missing argument slot>");
+  else if (result == PrintFormatResult::Unsupported)
+    return false;
   std::printf("\n");
   return true;
 }

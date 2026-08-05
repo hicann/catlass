@@ -806,12 +806,25 @@ def Tla_PipeBarrierOp : Tla_Op<"pipe_barrier", []> {
 def Tla_DebugPrintOp : Tla_Op<"debug_print", [MemoryEffects<[MemWrite]>]> {
   let summary = "Typed frontend debug print op";
   let description = [{
-    Side-effecting TLA IR for one f16, f32, i8, i16, i32, u8, u16, or u32
-    scalar operand. Backend lowering preserves the operand type and selects its
-    device print helper.
+    Side-effecting TLA IR for legacy one-scalar debug print or compile-time
+    string/formatted scalar print. The legacy assembly remains:
+
+      tla.debug_print %value : type
+
+    Formatted calls carry the validated user format string as metadata plus
+    zero or more runtime scalar operands:
+
+      tla.debug_print format "x={}"(%value) : (type)
+
+    Formatted calls lower through the same private debug-print backend and
+    scalar FIFO transport as legacy scalar debug print.
+
+    Legacy operands support f16, f32, i8, i16, i32, u8, u16, and u32.
+    Formatted operands support signless i32 and f32.
   }];
-  let arguments = (ins AnyType:$value);
-  let assemblyFormat = "$value attr-dict `:` type($value)";
+  let arguments = (ins Variadic<AnyType>:$values,
+                       OptionalAttr<StrAttr>:$format);
+  let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
 }
 

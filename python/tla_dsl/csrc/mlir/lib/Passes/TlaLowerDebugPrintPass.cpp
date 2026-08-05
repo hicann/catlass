@@ -3,12 +3,22 @@
 #include "Passes/TlaTensorToMemref.h"
 #include "llvm/ADT/DenseMap.h"
 
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+
+#include <cstdint>
+
 namespace tla {
 
 constexpr StringLiteral kDebugPrintWorkspaceAttrName = "tla.debug_print.workspace";
+constexpr StringLiteral kDebugPrintFormatCallAttrName = "tla.debug_print.format";
 constexpr StringLiteral kPrintTensorWorkspaceAttrName = "tla.print_tensor.workspace";
 constexpr StringLiteral kPrintTensorSupportedDtypes =
     "f16, f32, i8, i16, i32, u8, u16, u32";
+constexpr StringLiteral kStringFormatCalleeName =
+    "_mlir_ciface_tla_printf_format_string";
+constexpr StringLiteral kValuesFormatCalleeName =
+    "_mlir_ciface_tla_printf_format_values";
+constexpr unsigned kFormattedScalarValueSlots = 8;
 
 static std::string typeToString(Type type)
 {
@@ -24,6 +34,166 @@ static std::string printTensorDiagnosticTypeToken(Type type)
     if (integerType && integerType.isUnsigned())
         return "u" + std::to_string(integerType.getWidth());
     return typeToString(type);
+}
+
+static FailureOr<StringRef> getDebugPrintScalarTypeToken(Type type)
+{
+    auto intType = dyn_cast<IntegerType>(type);
+    if (intType) {
+        unsigned width = intType.getWidth();
+        if (width == 8 || width == 16 || width == 32) {
+            if (intType.isSignless())
+                return width == 8 ? StringRef("i8")
+                                  : width == 16 ? StringRef("i16")
+                                                : StringRef("i32");
+            if (intType.isUnsigned())
+                return width == 8 ? StringRef("u8")
+                                  : width == 16 ? StringRef("u16")
+                                                : StringRef("u32");
+        }
+    }
+    if (type.isF16())
+        return StringRef("f16");
+    if (type.isF32())
+        return StringRef("f32");
+    return failure();
+}
+
+// Format text becomes an LLVM global, so derive a deterministic, symbol-safe
+// suffix from the canonical backend printf payload instead of using user text.
+static uint64_t hashDebugPrintCanonicalPayload(StringRef payload)
+{
+    uint64_t hash = 14695981039346656037ULL;
+    for (char c : payload) {
+        hash ^= static_cast<unsigned char>(c);
+        hash *= 1099511628211ULL;
+    }
+    return hash;
+}
+
+static std::string toLowerHex64(uint64_t value)
+{
+    constexpr char kHex[] = "0123456789abcdef";
+    std::string result(16, '0');
+    for (int i = 15; i >= 0; --i) {
+        result[i] = kHex[value & 0xf];
+        value >>= 4;
+    }
+    return result;
+}
+
+static FailureOr<std::string>
+getFormattedDebugPrintCanonicalPayload(::tla::DebugPrintOp op)
+{
+    auto formatAttr = op->getAttrOfType<StringAttr>("format");
+    if (!formatAttr)
+        return failure();
+
+    StringRef format = formatAttr.getValue();
+    std::string payload;
+    payload += "tla.debug_print.format\n";
+    payload += "format:";
+    payload += std::to_string(format.size());
+    payload += ":";
+    if (!format.empty())
+        payload.append(format.data(), format.size());
+    payload += "\ntypes:";
+    for (auto item : llvm::enumerate(op.getValues())) {
+        FailureOr<StringRef> typeToken =
+            getDebugPrintScalarTypeToken(item.value().getType());
+        if (failed(typeToken)) {
+            op.emitError() << "unsupported tla.debug_print operand type "
+                           << typeToString(item.value().getType());
+            return failure();
+        }
+        if (item.index() != 0)
+            payload += ",";
+        payload.append(typeToken->data(), typeToken->size());
+    }
+    return payload;
+}
+
+static FailureOr<std::string>
+getFormattedDebugPrintHelperSuffix(::tla::DebugPrintOp op)
+{
+    FailureOr<std::string> payload = getFormattedDebugPrintCanonicalPayload(op);
+    if (failed(payload))
+        return failure();
+    return toLowerHex64(hashDebugPrintCanonicalPayload(*payload));
+}
+
+static FailureOr<std::string>
+getGeneratedDebugPrintFormat(::tla::DebugPrintOp op)
+{
+    auto formatAttr = op->getAttrOfType<StringAttr>("format");
+    if (!formatAttr)
+        return failure();
+
+    StringRef format = formatAttr.getValue();
+    std::string generated;
+    unsigned fieldIndex = 0;
+    for (size_t i = 0; i < format.size();) {
+        char c = format[i];
+        if (c == '{') {
+            if (i + 1 >= format.size()) {
+                op.emitError("malformed format string");
+                return failure();
+            }
+            if (format[i + 1] == '{') {
+                generated.push_back('{');
+                i += 2;
+                continue;
+            }
+            if (format[i + 1] == '}') {
+                if (fieldIndex >= op.getValues().size()) {
+                    op.emitError("format argument count mismatch");
+                    return failure();
+                }
+                FailureOr<StringRef> typeToken =
+                    getDebugPrintScalarTypeToken(
+                        op.getValues()[fieldIndex].getType());
+                if (failed(typeToken)) {
+                    op.emitError()
+                        << "unsupported tla.debug_print operand type "
+                        << typeToString(
+                               op.getValues()[fieldIndex].getType());
+                    return failure();
+                }
+                if (typeToken->starts_with("i"))
+                    generated += "%d";
+                else if (typeToken->starts_with("u"))
+                    generated += "%u";
+                else if (typeToken->starts_with("f"))
+                    generated += "%f";
+                else
+                    return failure();
+                ++fieldIndex;
+                i += 2;
+                continue;
+            }
+            op.emitError("unsupported format field");
+            return failure();
+        }
+        if (c == '}') {
+            if (i + 1 < format.size() && format[i + 1] == '}') {
+                generated.push_back('}');
+                i += 2;
+                continue;
+            }
+            op.emitError("malformed format string");
+            return failure();
+        }
+        if (c == '%')
+            generated += "%%";
+        else
+            generated.push_back(c);
+        ++i;
+    }
+    if (fieldIndex != op.getValues().size()) {
+        op.emitError("format argument count mismatch");
+        return failure();
+    }
+    return generated;
 }
 
 FailureOr<StringRef>
@@ -208,12 +378,116 @@ static func::FuncOp getOrCreateRuntimeCall(ModuleOp module, StringRef name, Arra
     return func;
 }
 
-static LogicalResult lowerDebugPrint(::tla::DebugPrintOp op, PatternRewriter& rewriter, ModuleOp module)
+static LLVM::GlobalOp getOrCreateStringFormatGlobal(ModuleOp module,
+                                                    OpBuilder& builder,
+                                                    Location loc,
+                                                    StringRef suffix,
+                                                    StringRef format)
+{
+    std::string name = "tla_debug_print_format_";
+    name.append(suffix.data(), suffix.size());
+    if (auto existing = module.lookupSymbol<LLVM::GlobalOp>(name))
+        return existing;
+
+    OpBuilder::InsertionGuard guard(builder);
+    builder.setInsertionPointToStart(module.getBody());
+    std::string value(format.data(), format.size());
+    value.push_back('\0');
+    auto globalType = LLVM::LLVMArrayType::get(
+        IntegerType::get(builder.getContext(), 8), value.size());
+    return builder.create<LLVM::GlobalOp>(
+        loc, globalType, /*isConstant=*/true, LLVM::Linkage::Internal, name,
+        builder.getStringAttr(StringRef(value.data(), value.size())),
+        /*alignment=*/0);
+}
+
+static Value createStringFormatPointer(OpBuilder& builder, Location loc,
+                                       LLVM::GlobalOp global)
+{
+    auto ptrType = LLVM::LLVMPointerType::get(builder.getContext());
+    Value globalPtr =
+        builder.create<LLVM::AddressOfOp>(loc, ptrType, global.getSymNameAttr());
+    SmallVector<LLVM::GEPArg> indices{0, 0};
+    return builder.create<LLVM::GEPOp>(
+        loc, ptrType, global.getType(), globalPtr, indices);
+}
+
+static SmallVector<Type, 12>
+getFormattedValuesHelperTypes(MLIRContext* ctx)
+{
+    Type i64Type = IntegerType::get(ctx, 64);
+    SmallVector<Type, 12> types{
+        LLVM::LLVMPointerType::get(ctx), i64Type, i64Type};
+    for (unsigned i = 0; i < kFormattedScalarValueSlots; ++i)
+        types.push_back(i64Type);
+    types.push_back(i64Type);
+    return types;
+}
+
+static FailureOr<Value> createFormattedScalarSlot(OpBuilder& builder,
+                                                 Location loc,
+                                                 Value value)
+{
+    Type i64Type = builder.getI64Type();
+    Type valueType = value.getType();
+    auto intType = dyn_cast<IntegerType>(valueType);
+    if (intType && (intType.getWidth() == 8 || intType.getWidth() == 16 ||
+                    intType.getWidth() == 32)) {
+        if (intType.isSignless())
+            return builder.create<arith::ExtSIOp>(loc, i64Type, value)
+                .getResult();
+        if (intType.isUnsigned()) {
+            Type signlessType = builder.getIntegerType(intType.getWidth());
+            Value signless =
+                builder
+                    .create<UnrealizedConversionCastOp>(loc, signlessType,
+                                                        value)
+                    .getResult(0);
+            return builder.create<arith::ExtUIOp>(loc, i64Type, signless)
+                .getResult();
+        }
+    }
+    if (valueType.isF16())
+        value = builder.create<arith::ExtFOp>(loc, builder.getF32Type(), value);
+    if (value.getType().isF32()) {
+        Value bits = builder.create<arith::BitcastOp>(
+            loc, builder.getI32Type(), value);
+        return builder.create<arith::ExtUIOp>(loc, i64Type, bits).getResult();
+    }
+    return failure();
+}
+
+static FailureOr<SmallVector<Value, 12>> buildFormattedValuesCallOperands(
+    OpBuilder& builder, Location loc, StringRef generatedFormat,
+    Value formatPtr, ValueRange values, Value workspace)
+{
+    SmallVector<Value, 12> callOperands;
+    callOperands.push_back(formatPtr);
+    callOperands.push_back(builder.create<arith::ConstantIntOp>(
+        loc, static_cast<int64_t>(generatedFormat.size()), 64));
+    callOperands.push_back(builder.create<arith::ConstantIntOp>(
+        loc, static_cast<int64_t>(values.size()), 64));
+
+    Value zero = builder.create<arith::ConstantIntOp>(loc, 0, 64);
+    SmallVector<Value, 8> slots(kFormattedScalarValueSlots, zero);
+    for (auto item : llvm::enumerate(values)) {
+        FailureOr<Value> slot =
+            createFormattedScalarSlot(builder, loc, item.value());
+        if (failed(slot))
+            return failure();
+        slots[item.index()] = *slot;
+    }
+    callOperands.append(slots.begin(), slots.end());
+    callOperands.push_back(workspace);
+    return callOperands;
+}
+
+static LogicalResult lowerLegacyDebugPrint(::tla::DebugPrintOp op, PatternRewriter& rewriter, ModuleOp module)
 {
     if (op->getNumResults() != 0 || op->getNumOperands() != 1)
         return op.emitError("tla.debug_print lowering requires exactly one operand and no results");
 
-    Value value = op.getValue();
+    Value value = op.getValues().front();
     Type valueType = value.getType();
     auto funcOp = op->getParentOfType<func::FuncOp>();
     if (!funcOp)
@@ -238,6 +512,77 @@ static LogicalResult lowerDebugPrint(::tla::DebugPrintOp op, PatternRewriter& re
     rewriter.create<func::CallOp>(op.getLoc(), callee, ValueRange{value, workspace});
     rewriter.eraseOp(op);
     return success();
+}
+
+static LogicalResult lowerFormattedDebugPrint(::tla::DebugPrintOp op,
+                                              PatternRewriter& rewriter,
+                                              ModuleOp module)
+{
+    if (op->getNumResults() != 0)
+        return op.emitError("formatted tla.debug_print lowering requires no results");
+
+    auto formatAttr = op->getAttrOfType<StringAttr>("format");
+    if (!formatAttr)
+        return op.emitError("formatted tla.debug_print lowering requires a format attribute");
+
+    auto funcOp = op->getParentOfType<func::FuncOp>();
+    if (!funcOp)
+        return op.emitError("tla.debug_print must be nested inside func.func");
+
+    FailureOr<std::string> helperSuffix = getFormattedDebugPrintHelperSuffix(op);
+    if (failed(helperSuffix))
+        return failure();
+    FailureOr<std::string> generatedFormat = getGeneratedDebugPrintFormat(op);
+    if (failed(generatedFormat))
+        return failure();
+
+    Type i64Type = rewriter.getI64Type();
+    BlockArgument workspace = getOrAppendDebugPrintWorkspaceArg(funcOp);
+
+    if (op.getValues().empty()) {
+        auto ptrType = LLVM::LLVMPointerType::get(rewriter.getContext());
+        LLVM::GlobalOp global = getOrCreateStringFormatGlobal(
+            module, rewriter, op.getLoc(), *helperSuffix, *generatedFormat);
+        Value formatPtr = createStringFormatPointer(rewriter, op.getLoc(), global);
+        auto callee = getOrCreateRuntimeCall(
+            module, kStringFormatCalleeName, {ptrType, i64Type, workspace.getType()});
+        SmallVector<Value, 3> callOperands;
+        callOperands.push_back(formatPtr);
+        callOperands.push_back(
+            rewriter.create<arith::ConstantIntOp>(
+                op.getLoc(), static_cast<int64_t>(generatedFormat->size()), 64));
+        callOperands.push_back(workspace);
+        auto call = rewriter.create<func::CallOp>(op.getLoc(), callee, callOperands);
+        call->setAttr(kDebugPrintFormatCallAttrName, formatAttr);
+        rewriter.eraseOp(op);
+        return success();
+    }
+
+    LLVM::GlobalOp global = getOrCreateStringFormatGlobal(
+        module, rewriter, op.getLoc(), *helperSuffix, *generatedFormat);
+    Value formatPtr = createStringFormatPointer(rewriter, op.getLoc(), global);
+    auto callee = getOrCreateRuntimeCall(
+        module, kValuesFormatCalleeName,
+        getFormattedValuesHelperTypes(rewriter.getContext()));
+    FailureOr<SmallVector<Value, 12>> callOperands =
+        buildFormattedValuesCallOperands(rewriter, op.getLoc(), *generatedFormat,
+                                         formatPtr, op.getValues(), workspace);
+    if (failed(callOperands))
+        return op.emitError("unsupported tla.debug_print operand type");
+
+    auto call = rewriter.create<func::CallOp>(op.getLoc(), callee, *callOperands);
+    call->setAttr(kDebugPrintFormatCallAttrName, formatAttr);
+    rewriter.eraseOp(op);
+    return success();
+}
+
+static LogicalResult lowerDebugPrint(::tla::DebugPrintOp op,
+                                     PatternRewriter& rewriter,
+                                     ModuleOp module)
+{
+    if (op->getAttrOfType<StringAttr>("format"))
+        return lowerFormattedDebugPrint(op, rewriter, module);
+    return lowerLegacyDebugPrint(op, rewriter, module);
 }
 
 static LogicalResult lowerPrintTensor(::tla::PrintTensorOp op,
@@ -370,7 +715,8 @@ public:
 
     void getDependentDialects(DialectRegistry& registry) const override
     {
-        registry.insert<func::FuncDialect, hivm::HIVMDialect>();
+        registry.insert<arith::ArithDialect, func::FuncDialect, hivm::HIVMDialect,
+                        LLVM::LLVMDialect>();
     }
 
     void runOnOperation() override

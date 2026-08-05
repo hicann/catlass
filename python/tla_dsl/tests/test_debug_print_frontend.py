@@ -9,6 +9,7 @@ import catlass as tla
 import catlass.runtime as runtime_mod
 from catlass.base_dsl import BaseDSL
 from examples.end_to_end.debug_print import debug_print as debug_print_example
+from examples.end_to_end.debug_print import debug_print_format
 
 
 @tla.kernel
@@ -54,6 +55,36 @@ def _literal_kernel() -> None:
 
 
 @tla.kernel
+def _formatted_literals_kernel(i: object, f: object) -> None:
+    with tla.vector():
+        tla.print("")
+        tla.print("hello")
+        tla.print("x={}", i)
+        tla.print("v={}", f)
+        tla.print("x={} y={}", i, f)
+        tla.print("{} {}", i, i)
+        tla.print("{{}} % {}", i)
+
+
+@tla.kernel
+def _formatted_cube_kernel(i: object) -> None:
+    with tla.cube():
+        tla.print("cube {}", i)
+
+
+@tla.kernel
+def _formatted_python_literals_kernel() -> None:
+    with tla.vector():
+        tla.print("x={} v={}", 7, 1.25)
+
+
+@tla.kernel
+def _formatted_unsigned_literals_kernel() -> None:
+    with tla.vector():
+        tla.print("u={} {} {}", tla.UInt8(255), tla.UInt16(65535), tla.UInt32(7))
+
+
+@tla.kernel
 def _f32_literal_location_kernel() -> None:
     with tla.vector():
         tla.print(1.25)
@@ -65,9 +96,20 @@ def _regionless_kernel() -> None:
 
 
 @tla.kernel
+def _regionless_formatted_kernel() -> None:
+    tla.print("x={}", tla.Int32(1))
+
+
+@tla.kernel
 def _typed_scalar_kernel(value: object) -> None:
     with tla.vector():
         tla.print(value)
+
+
+@tla.kernel
+def _formatted_typed_scalar_kernel(value: object) -> None:
+    with tla.vector():
+        tla.print("x={}", value)
 
 
 @tla.kernel
@@ -85,11 +127,25 @@ def _tensor_kernel(value: tla.Tensor) -> None:
 
 
 @tla.kernel
+def _formatted_tensor_arg_kernel(value: tla.Tensor) -> None:
+    with tla.vector():
+        tla.print("tensor={}", value)
+
+
+@tla.kernel
 def _vector_value_kernel(value: tla.Tensor) -> None:
     tile = tla.tile_view(value, tla.make_shape(64), tla.make_coord(0))
     with tla.vector():
         with tla.vec.func(mode="simd"):
             tla.print(tile.load())
+
+
+@tla.kernel
+def _formatted_vector_value_kernel(value: tla.Tensor) -> None:
+    tile = tla.tile_view(value, tla.make_shape(64), tla.make_coord(0))
+    with tla.vector():
+        with tla.vec.func(mode="simd"):
+            tla.print("{}", tile.load())
 
 
 def _host_vector_tensor() -> tla.Tensor:
@@ -103,8 +159,12 @@ def _host_vector_tensor() -> tla.Tensor:
         )
 
 
-def test_print_has_value_and_optional_tensor_length_public_surface() -> None:
-    assert str(inspect.signature(tla.print)) == "(value, length=None, /)"
+def test_print_signature_is_variadic() -> None:
+    signature = inspect.signature(tla.print)
+    assert str(signature) == "(value, *args, /)"
+    assert list(signature.parameters) == ["value", "args"]
+    assert signature.parameters["value"].kind is inspect.Parameter.POSITIONAL_ONLY
+    assert signature.parameters["args"].kind is inspect.Parameter.VAR_POSITIONAL
 
 
 def test_debug_print_materializes_api_local_i32_and_f32_literals() -> None:
@@ -114,6 +174,128 @@ def test_debug_print_materializes_api_local_i32_and_f32_literals() -> None:
     assert f"{-(2**31)} : i32" in mlir
     assert f"{2**31 - 1} : i32" in mlir
     assert "1.250000e+00 : f32" in mlir or "1.25" in mlir
+
+
+def test_debug_print_emits_formatted_string_and_variadic_scalars() -> None:
+    mlir = _formatted_literals_kernel.dump_mlir(
+        type_args=(tla.Int32(0), tla.Float32(0.0))
+    )
+
+    assert mlir.count("tla.debug_print") == 7
+    assert "tla.debug_print format \"\"" in mlir
+    assert "tla.debug_print format \"hello\"" in mlir
+    assert "tla.debug_print format \"x={}\"" in mlir
+    assert "tla.debug_print format \"v={}\"" in mlir
+    assert "tla.debug_print format \"x={} y={}\"" in mlir
+    assert "tla.debug_print format \"{} {}\"" in mlir
+    assert "tla.debug_print format \"{{}} % {}\"" in mlir
+    assert "debug_printf" not in mlir
+
+
+def test_debug_print_materializes_unsigned_literals_through_signless_constants() -> None:
+    mlir = _formatted_unsigned_literals_kernel.dump_mlir()
+
+    assert mlir.count("builtin.unrealized_conversion_cast") == 3
+    for width in (8, 16, 32):
+        assert re.search(rf"arith\.constant.*(?:->|:) i{width}", mlir)
+        assert re.search(
+            rf"(?:\(i{width}\) -> ui{width}|i{width} to ui{width})", mlir
+        )
+
+
+@pytest.mark.parametrize(
+    ("scalar", "expected_type"),
+    (
+        pytest.param(tla.Int8(-37), "i8", id="i8"),
+        pytest.param(tla.Int16(-30000), "i16", id="i16"),
+        pytest.param(tla.Int32(-7), "i32", id="i32"),
+        pytest.param(tla.UInt8(255), "ui8", id="u8"),
+        pytest.param(tla.UInt16(65535), "ui16", id="u16"),
+        pytest.param(tla.UInt32(4294967295), "ui32", id="u32"),
+        pytest.param(tla.Float16(1.25), "f16", id="f16"),
+        pytest.param(tla.Float32(1.25), "f32", id="f32"),
+    ),
+)
+def test_debug_print_emits_formatted_typed_scalar(
+    scalar: object, expected_type: str
+) -> None:
+    mlir = _formatted_typed_scalar_kernel.dump_mlir(type_args=(scalar,))
+
+    debug_line = next(line for line in mlir.splitlines() if "tla.debug_print" in line)
+    assert 'format "x={}"' in debug_line or 'format = "x={}"' in debug_line
+    assert re.search(
+        rf"(?:\({expected_type}\)|: {expected_type}(?:\s|$))", debug_line
+    )
+
+
+def test_debug_print_emits_formatted_cube_region() -> None:
+    mlir = _formatted_cube_kernel.dump_mlir(type_args=(tla.Int32(0),))
+
+    assert "tla.cube" in mlir
+    assert "tla.debug_print format \"cube {}\"" in mlir
+
+
+def test_debug_print_materializes_formatted_python_literals() -> None:
+    mlir = _formatted_python_literals_kernel.dump_mlir()
+
+    assert "tla.debug_print format \"x={} v={}\"" in mlir
+    assert "7 : i32" in mlir
+    assert "1.250000e+00 : f32" in mlir or "1.25" in mlir
+
+
+def test_debug_print_formatted_generic_mlir_uses_same_op() -> None:
+    lowered = BaseDSL()._lower(
+        _formatted_literals_kernel.fn,
+        kind=_formatted_literals_kernel.kind,
+        options=dict(_formatted_literals_kernel.options),
+        type_args=(tla.Int32(0), tla.Float32(0.0)),
+        location=_formatted_literals_kernel.decorator_location,
+    )
+    with lowered.context:
+        mlir = lowered.module.operation.get_asm(
+            print_generic_op_form=True,
+            assume_verified=False,
+        )
+
+    assert '"tla.debug_print"' in mlir
+    assert 'format = "x={} y={}"' in mlir
+    assert 'format = "{{}} % {}"' in mlir
+    assert "debug_printf" not in mlir
+
+
+def test_debug_print_format_output_accepts_cross_core_reordering() -> None:
+    output = "\n".join(
+        (
+            "TLA printf: core=3 block=1 repeated",
+            "TLA printf: core=8 block=0 single",
+            "TLA printf: core=2 block=0 repeated",
+            "TLA printf: core=9 block=1 single",
+            "TLA printf: core=4 block=1 repeated",
+            "TLA printf: core=1 block=0 repeated",
+        )
+    )
+
+    debug_print_format._verify_case_output(
+        output, payloads=("single", "repeated", "repeated"), block=2
+    )
+
+
+@pytest.mark.parametrize(
+    "output",
+    (
+        "TLA printf: core=1 malformed scalar printf TLV",
+        "TLA printf: core=1 block=x value",
+        "TLA printf: core=1 block=2 value",
+        "TLA printf: core=1 block=0 value\nTLA printf: core=2 block=0 value",
+        "TLA printf: core=1 block=0 unexpected",
+        "",
+    ),
+)
+def test_debug_print_format_output_rejects_invalid_records(output: str) -> None:
+    with pytest.raises(RuntimeError):
+        debug_print_format._verify_case_output(
+            output, payloads=("value",), block=1
+        )
 
 
 def test_debug_print_emits_direct_scalars_in_both_regions() -> None:
@@ -302,13 +484,14 @@ def test_debug_print_backend_matrix(region: str, dtype: str, guarded: bool) -> N
 @pytest.mark.parametrize(
     ("args", "kwargs", "match"),
     [
-        ((), {}, "expects one or two positional arguments; got 0"),
+        ((), {}, "expects at least one positional argument; got 0"),
         (
             (tla.Int32(1), tla.Int32(2), tla.Int32(3)),
             {},
-            "expects one or two positional arguments; got 3",
+            "format string must be a host Python str",
         ),
         ((), {"value": tla.Int32(1)}, "does not accept keyword arguments"),
+        (("{}",), {"args": (tla.Int32(1),)}, "does not accept keyword arguments"),
         ((tla.Int32(1), 1), {}, "length is only valid"),
         ((2**31,), {}, "outside signless i32 range"),
         ((-(2**31) - 1,), {}, "outside signless i32 range"),
@@ -322,6 +505,37 @@ def test_debug_print_rejects_invalid_public_calls(
 
 
 _SCALAR_ERROR = "expected one of f16, f32, i8, i16, i32, u8, u16, u32 scalar"
+_FORMATTED_SCALAR_ERROR = (
+    "expected one of f16, f32, i8, i16, i32, u8, u16, u32 scalar"
+)
+
+
+@pytest.mark.parametrize(
+    ("args", "match"),
+    [
+        (("{",), "malformed format string"),
+        (("}",), "malformed format string"),
+        (("{:d}", tla.Int32(1)), "unsupported format field"),
+        (("{:.2f}", tla.Float32(1.0)), "unsupported format field"),
+        (("{0}", tla.Int32(1)), "unsupported format field"),
+        (("{name}", tla.Int32(1)), "unsupported format field"),
+        (("{!r}", tla.Int32(1)), "unsupported format field"),
+        (("{:{}}", tla.Int32(1), tla.Int32(2)), "unsupported format field"),
+        (("{} {}", tla.Int32(1)), "format argument count mismatch"),
+        (("{}",), "format argument count mismatch"),
+        (("{}", tla.Int32(1), tla.Int32(2)), "format argument count mismatch"),
+        (("{} {} {} {} {} {} {} {} {}",) + (tla.Int32(1),) * 9, "at most 8"),
+        (("x" * (1024 * 1024 - 24),), "debug FIFO limit"),
+        (("bad\x00",), "embedded NUL"),
+        (("snowman \u2603",), "ASCII"),
+        (("{}", True), "unsupported value type bool"),
+    ],
+)
+def test_debug_print_rejects_invalid_format_calls(
+    args: tuple[object, ...], match: str
+) -> None:
+    with pytest.raises(tla.TlaCoreAPIError, match=match):
+        tla.print(*args)
 
 
 @pytest.mark.parametrize(
@@ -331,10 +545,29 @@ _SCALAR_ERROR = "expected one of f16, f32, i8, i16, i32, u8, u16, u32 scalar"
             (_typed_scalar_kernel, (value,), _SCALAR_ERROR)
             for value in (True, tla.Int64(1), tla.UInt64(1))
         ],
+        *[
+            (_formatted_typed_scalar_kernel, (value,), _FORMATTED_SCALAR_ERROR)
+            for value in (tla.Int64(1), tla.UInt64(1))
+        ],
         (_pointer_kernel, (), _SCALAR_ERROR),
         (_vector_value_kernel, (_host_vector_tensor(),), _SCALAR_ERROR),
         (
+            _formatted_vector_value_kernel,
+            (_host_vector_tensor(),),
+            _FORMATTED_SCALAR_ERROR,
+        ),
+        (
+            _formatted_tensor_arg_kernel,
+            (_host_vector_tensor(),),
+            "tensor arguments are unsupported in formatted print calls",
+        ),
+        (
             _regionless_kernel,
+            (),
+            r"must be nested inside tla\.cube\(\) or tla\.vector\(\)",
+        ),
+        (
+            _regionless_formatted_kernel,
             (),
             r"must be nested inside tla\.cube\(\) or tla\.vector\(\)",
         ),

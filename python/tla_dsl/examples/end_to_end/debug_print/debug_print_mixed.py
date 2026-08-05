@@ -16,6 +16,11 @@ from debug_print import DTYPE_SPECS
 DEFAULT_CACHE_DIR = (
     Path(__file__).resolve().parent / "artifacts" / "mixed-runtime-cache"
 )
+_CANN_DIAGNOSTIC = re.compile(
+    r"^TLA printf: core=[0-9]+ block=[0-9]+ "
+    r"(?:\[WARNING\]: CANN TimeStamp is invalid.*|"
+    r"\[(?:AIC|AIV) Block [0-9]+/[0-9]+\]\s*)$"
+)
 
 
 @tla.kernel
@@ -120,7 +125,11 @@ def _verify_mixed_debug_output(
     so its two exact frames must come from distinct AIV cores rather than being
     collapsed by a MIX-only guard.
     """
-    framed = [line for line in output.splitlines() if line.startswith("TLA printf:")]
+    framed = [
+        line
+        for line in output.splitlines()
+        if line.startswith("TLA printf:") and not _CANN_DIAGNOSTIC.fullmatch(line)
+    ]
     expected_counts = {
         "cube": (1, 1, 0),
         "vector": (2, 0, 2),

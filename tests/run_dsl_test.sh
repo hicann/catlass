@@ -20,7 +20,8 @@
 # register_control_flow.py, load_and_store_scalar_after_reduction.py, load_us_b8_op.py).
 # python/tla_dsl/examples/end_to_end/tensor_index (scalar_index_control_flow.py,
 # scalar_kernel_arg.py).
-# python/tla_dsl/examples/end_to_end/debug_print (debug_print.py, debug_print_mixed.py).
+# python/tla_dsl/examples/end_to_end/debug_print (debug_print.py, debug_print_mixed.py,
+# debug_print_format.py).
 # python/tla_dsl/examples/end_to_end/scalar_arg_alignment (scalar_arg_alignment.py).
 # python/tla_dsl/examples/end_to_end/print_tensor (print_tensor.py: all eight
 # supported GM/UB dtypes plus multi-block and multi-call cases).
@@ -112,6 +113,7 @@ SCALAR_INDEX_CONTROL_FLOW_REL="examples/end_to_end/tensor_index/scalar_index_con
 SCALAR_KERNEL_ARG_REL="examples/end_to_end/tensor_index/scalar_kernel_arg.py"
 DEBUG_PRINT_REL="examples/end_to_end/debug_print/debug_print.py"
 DEBUG_PRINT_MIXED_REL="examples/end_to_end/debug_print/debug_print_mixed.py"
+DEBUG_PRINT_FORMAT_REL="examples/end_to_end/debug_print/debug_print_format.py"
 SCALAR_ARG_ALIGNMENT_REL="examples/end_to_end/scalar_arg_alignment/scalar_arg_alignment.py"
 PRINT_TENSOR_REL="examples/end_to_end/print_tensor/print_tensor.py"
 
@@ -159,6 +161,7 @@ Run end-to-end validation for:
     same-type scalar arithmetic)
   - debug_print (all direct scalar dtypes, supported computed values, and two-block prints on AIV and AIC)
   - debug_print_mixed (all scalar dtypes in cube-only, vector-only, and combined regions)
+  - debug_print_format (formatted multicall and multiblock prints on AIV and AIC)
   - scalar_arg_alignment (scalar_arg_alignment.py: tensor-i16-tensor host ABI)
   - print_tensor (print_tensor.py: all supported GM/UB dtypes with AIV/AIC
     multi-block and multi-call coverage)
@@ -434,6 +437,10 @@ if [[ ! -f "${TLA_DSL_DIR}/${DEBUG_PRINT_REL}" ]]; then
 fi
 if [[ ! -f "${TLA_DSL_DIR}/${DEBUG_PRINT_MIXED_REL}" ]]; then
     echo "error: missing ${DEBUG_PRINT_MIXED_REL} under ${TLA_DSL_DIR}" >&2
+    exit 1
+fi
+if [[ ! -f "${TLA_DSL_DIR}/${DEBUG_PRINT_FORMAT_REL}" ]]; then
+    echo "error: missing ${DEBUG_PRINT_FORMAT_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
 fi
 if [[ ! -f "${TLA_DSL_DIR}/${SCALAR_ARG_ALIGNMENT_REL}" ]]; then
@@ -894,6 +901,20 @@ _run_debug_print_mixed_case() {
 
 for _debug_print_region in cube vector both; do
     _run_debug_print_mixed_case "${_debug_print_region}"
+done
+
+_run_debug_print_format_case() {
+    local arch_scope="$1"
+    echo "==> Running debug_print_format validation [${arch_scope}, 2 blocks]"
+    (
+        cd "${TLA_DSL_DIR}"
+        python "${DEBUG_PRINT_FORMAT_REL}" --run --device "${DEVICE_ID}" \
+            --arch-scope "${arch_scope}" --block-dim 2 --force-recompile
+    )
+}
+
+for _debug_arch_scope in aiv.c310 aic.c310; do
+    _run_debug_print_format_case "${_debug_arch_scope}"
 done
 
 _run_scalar_arg_alignment_case() {

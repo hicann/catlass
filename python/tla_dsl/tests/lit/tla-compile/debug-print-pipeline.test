@@ -1,4 +1,6 @@
 // RUN: sed -n '/BEGIN-LOWER$/,/END-LOWER$/p' %s | %tla_compile - -o - | %filecheck %s --check-prefix=LOWER
+// RUN: sed -n '/BEGIN-LOWER$/,/END-LOWER$/p' %s | %tla_compile - --emit=mlir --mlir-print-ir-after-all -o /dev/null 2>&1 | %filecheck %s --check-prefix=BRIDGE
+// RUN: sed -n '/BEGIN-LOWER$/,/END-LOWER$/p' %s | not %tla_compile - --emit=llvm --mlir-print-ir-after-all -o /dev/null 2>&1 | sed -n '/IR Dump After ReconcileUnrealizedCasts/,/Failed to translate/p' | %filecheck %s --check-prefix=FINAL
 // RUN: sed -n '/BEGIN-NOOP$/,/END-NOOP$/p' %s | %tla_compile - --emit=tla-mlir -o - | %filecheck %s --check-prefix=NOOP
 
 // BEGIN-LOWER
@@ -14,6 +16,31 @@ module {
     "tla.cube"() ({ tla.debug_print %f : f32 }) : () -> ()
     tla.return
   }
+  tla.func @debug_print_formatted_aic(%i8: i8, %i16: i16, %v: i32, %u8: ui8, %u16: ui16, %u32: ui32, %h: f16, %f: f32) {
+    "tla.cube"() ({
+      tla.debug_print format "hello"() : ()
+      tla.debug_print format "all={} {} {} {} {} {} {} {}"(%i8, %i16, %v, %u8, %u16, %u32, %h, %f) : (i8, i16, i32, ui8, ui16, ui32, f16, f32)
+      tla.debug_print format "x={}"(%v) : (i32)
+      tla.debug_print format "v={}"(%f) : (f32)
+      tla.debug_print format "x={} v={}"(%v, %f) : (i32, f32)
+      tla.debug_print format "progress=50% {}"(%v) : (i32)
+      tla.debug_print format "braces={{}} {}"(%v) : (i32)
+      tla.debug_print format "again {}"(%v) : (i32)
+      tla.debug_print format "again {}"(%v) : (i32)
+    }) : () -> ()
+    tla.return
+  }
+  tla.func @debug_print_formatted_aiv(%v: i32, %f: f32) {
+    "tla.vector"() ({
+      tla.debug_print format "hello"() : ()
+      tla.debug_print format "x={}"(%v) : (i32)
+      tla.debug_print format "v={}"(%f) : (f32)
+      tla.debug_print format "x={} v={}"(%v, %f) : (i32, f32)
+      tla.debug_print format "progress=50% {}"(%v) : (i32)
+      tla.debug_print format "braces={{}} {}"(%v) : (i32)
+    }) : () -> ()
+    tla.return
+  }
 }
 // END-LOWER
 // LOWER-DAG: func.func private @_mlir_ciface_tla_printf_x_i8(i8, i64)
@@ -24,6 +51,17 @@ module {
 // LOWER-DAG: func.func private @_mlir_ciface_tla_printf_x_u32(ui32, i64)
 // LOWER-DAG: func.func private @_mlir_ciface_tla_printf_v_f16(f16, i64)
 // LOWER-DAG: func.func private @_mlir_ciface_tla_printf_v_f32(f32, i64)
+// LOWER-DAG: llvm.mlir.global internal constant @tla_debug_print_format_f8fea83e3244911b("hello\00")
+// LOWER-DAG: llvm.mlir.global internal constant @{{.*}}("all=%d %d %d %u %u %u %f %f\00")
+// LOWER-DAG: llvm.mlir.global internal constant @{{.*}}("x=%d\00")
+// LOWER-DAG: llvm.mlir.global internal constant @{{.*}}("v=%f\00")
+// LOWER-DAG: llvm.mlir.global internal constant @{{.*}}("x=%d v=%f\00")
+// LOWER-DAG: llvm.mlir.global internal constant @{{.*}}("progress=50%% %d\00")
+// LOWER-DAG: llvm.mlir.global internal constant @{{.*}}("braces={{[{][}]}} %d\00")
+// LOWER-DAG: llvm.mlir.global internal constant @{{.*}}("again %d\00")
+// LOWER-DAG: func.func private @_mlir_ciface_tla_printf_format_string(!llvm.ptr, i64, i64)
+// LOWER-DAG: func.func private @_mlir_ciface_tla_printf_format_values(!llvm.ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64)
+// LOWER-NOT: func.func private @_mlir_ciface_tla_printf_format_{{[0-9a-f]}}
 // LOWER-LABEL: func.func @debug_print_scalars
 // LOWER-SAME: %[[WORKSPACE:arg[0-9]+]]: i64 {{.*}}hacc.arg_type = #hacc.arg_type<workspace>{{.*}}tla.debug_print.workspace
 // LOWER-NOT: func_dyn_memref_args
@@ -37,9 +75,82 @@ module {
 // LOWER-DAG: call @_mlir_ciface_tla_printf_x_u32(%{{.*}}, %{{.*}})
 // LOWER-DAG: call @_mlir_ciface_tla_printf_v_f16(%{{.*}}, %{{.*}})
 // LOWER-DAG: call @_mlir_ciface_tla_printf_v_f32(%{{.*}}, %{{.*}})
-// LOWER-NOT: tla.debug_print
+// LOWER-LABEL: func.func @debug_print_formatted_aic
+// LOWER-SAME: %[[AIC_WORKSPACE:arg[0-9]+]]: i64 {{.*}}hacc.arg_type = #hacc.arg_type<workspace>{{.*}}tla.debug_print.workspace
+// LOWER: %[[AIC_FORMAT_ADDR:.*]] = llvm.mlir.addressof @tla_debug_print_format_f8fea83e3244911b
+// LOWER: %[[AIC_FORMAT_PTR:.*]] = llvm.getelementptr %[[AIC_FORMAT_ADDR]][0, 0]
+// LOWER: call @_mlir_ciface_tla_printf_format_string(%[[AIC_FORMAT_PTR]], %{{.*}}, %[[AIC_WORKSPACE]]) {{.*}}tla.debug_print.format = "hello"
+// LOWER-DAG: llvm.sext %{{.*}} : i8 to i64
+// LOWER-DAG: llvm.sext %{{.*}} : i16 to i64
+// LOWER-DAG: llvm.sext %{{.*}} : i32 to i64
+// LOWER-DAG: llvm.zext %{{.*}} : i8 to i64
+// LOWER-DAG: llvm.zext %{{.*}} : i16 to i64
+// LOWER-DAG: llvm.zext %{{.*}} : i32 to i64
+// LOWER-DAG: llvm.fpext %{{.*}} : f16 to f32
+// LOWER: call @_mlir_ciface_tla_printf_format_values(%{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %[[AIC_WORKSPACE]]) {{.*}}tla.debug_print.format = "x={}"
+// LOWER: call @_mlir_ciface_tla_printf_format_values(%{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %[[AIC_WORKSPACE]]) {{.*}}tla.debug_print.format = "v={}"
+// LOWER: call @_mlir_ciface_tla_printf_format_values(%{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %[[AIC_WORKSPACE]]) {{.*}}tla.debug_print.format = "x={} v={}"
+// LOWER: call @_mlir_ciface_tla_printf_format_values(%{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %[[AIC_WORKSPACE]]) {{.*}}tla.debug_print.format = "progress=50% {}"
+// LOWER: call @_mlir_ciface_tla_printf_format_values(%{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %[[AIC_WORKSPACE]]) {{.*}}tla.debug_print.format = "braces={{[{][{][}][}]}} {}"
+// LOWER: call @_mlir_ciface_tla_printf_format_values(%{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %[[AIC_WORKSPACE]]) {{.*}}tla.debug_print.format = "again {}"
+// LOWER: call @_mlir_ciface_tla_printf_format_values(%{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %[[AIC_WORKSPACE]]) {{.*}}tla.debug_print.format = "again {}"
+// LOWER-LABEL: func.func @debug_print_formatted_aiv
+// LOWER-SAME: %[[AIV_WORKSPACE:arg[0-9]+]]: i64 {{.*}}hacc.arg_type = #hacc.arg_type<workspace>{{.*}}tla.debug_print.workspace
+// LOWER: %[[AIV_FORMAT_ADDR:.*]] = llvm.mlir.addressof @tla_debug_print_format_f8fea83e3244911b
+// LOWER: %[[AIV_FORMAT_PTR:.*]] = llvm.getelementptr %[[AIV_FORMAT_ADDR]][0, 0]
+// LOWER: call @_mlir_ciface_tla_printf_format_string(%[[AIV_FORMAT_PTR]], %{{.*}}, %[[AIV_WORKSPACE]]) {{.*}}tla.debug_print.format = "hello"
+// LOWER: call @_mlir_ciface_tla_printf_format_values(%{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %[[AIV_WORKSPACE]]) {{.*}}tla.debug_print.format = "x={}"
+// LOWER: call @_mlir_ciface_tla_printf_format_values(%{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %[[AIV_WORKSPACE]]) {{.*}}tla.debug_print.format = "v={}"
+// LOWER: call @_mlir_ciface_tla_printf_format_values(%{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %[[AIV_WORKSPACE]]) {{.*}}tla.debug_print.format = "x={} v={}"
+// LOWER: call @_mlir_ciface_tla_printf_format_values(%{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %[[AIV_WORKSPACE]]) {{.*}}tla.debug_print.format = "progress=50% {}"
+// LOWER: call @_mlir_ciface_tla_printf_format_values(%{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %[[AIV_WORKSPACE]]) {{.*}}tla.debug_print.format = "braces={{[{][{][}][}]}} {}"
+// LOWER-NOT: tla.debug_print %
+// LOWER-NOT: tla.debug_print format
+
+// BRIDGE: IR Dump After TlaLowerDebugPrintPass
+// BRIDGE-DAG: arith.extsi %{{.*}} : i8 to i64
+// BRIDGE-DAG: arith.extsi %{{.*}} : i16 to i64
+// BRIDGE-DAG: arith.extsi %{{.*}} : i32 to i64
+// BRIDGE-DAG: builtin.unrealized_conversion_cast %{{.*}} : ui8 to i8
+// BRIDGE-DAG: arith.extui %{{.*}} : i8 to i64
+// BRIDGE-DAG: builtin.unrealized_conversion_cast %{{.*}} : ui16 to i16
+// BRIDGE-DAG: arith.extui %{{.*}} : i16 to i64
+// BRIDGE-DAG: builtin.unrealized_conversion_cast %{{.*}} : ui32 to i32
+// BRIDGE-DAG: arith.extui %{{.*}} : i32 to i64
+// BRIDGE-DAG: arith.extf %{{.*}} : f16 to f32
+
+// FINAL-LABEL: IR Dump After ReconcileUnrealizedCasts
+// FINAL-NOT: unrealized_conversion_cast
+// FINAL: llvm.func @debug_print_formatted_aic
+// FINAL-NOT: unrealized_conversion_cast
+// FINAL-DAG: llvm.zext %{{.*}} : i8 to i64
+// FINAL-DAG: llvm.zext %{{.*}} : i16 to i64
+// FINAL-DAG: llvm.zext %{{.*}} : i32 to i64
+// FINAL-NOT: unrealized_conversion_cast
+// FINAL: Failed to translate to LLVM IR.
 
 // BEGIN-NOOP
 module { tla.func @without_debug_print() { tla.return } }
 // END-NOOP
 // NOOP: func.func @without_debug_print
+
+// RUN: sed -n '/BEGIN-WORKSPACE-ONCE$/,/END-WORKSPACE-ONCE$/p' %s | %tla_compile - -o - | %filecheck %s --check-prefix=ONCE
+
+// BEGIN-WORKSPACE-ONCE
+module {
+  tla.func @debug_print_workspace_once(%v: i32, %f: f32) {
+    "tla.vector"() ({
+      tla.debug_print %v : i32
+      tla.debug_print format "x={}"(%v) : (i32)
+      tla.debug_print format "v={}"(%f) : (f32)
+      tla.debug_print %f : f32
+    }) : () -> ()
+    tla.return
+  }
+}
+// END-WORKSPACE-ONCE
+// ONCE-COUNT-1: tla.debug_print.workspace
+// ONCE: call @_mlir_ciface_tla_printf_x_i32(%{{.*}}, %[[WORKSPACE:arg[0-9]+]])
+// ONCE: call @_mlir_ciface_tla_printf_format_values(%{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %[[WORKSPACE]])
+// ONCE: call @_mlir_ciface_tla_printf_format_values(%{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %[[WORKSPACE]])
+// ONCE: call @_mlir_ciface_tla_printf_v_f32(%{{.*}}, %[[WORKSPACE]])
