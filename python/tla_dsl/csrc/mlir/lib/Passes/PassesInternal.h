@@ -15,6 +15,7 @@ namespace tla {
 
 void registerTlaLowerDebugPrintPass();
 void registerTlaLowerFuncPass();
+void registerTlaInsertAutoMutexPass();
 void registerTlaLowerScalarAccessPass();
 void registerTlaSplitMixedFuncPass();
 void registerTlaLowerTensorDescPass();

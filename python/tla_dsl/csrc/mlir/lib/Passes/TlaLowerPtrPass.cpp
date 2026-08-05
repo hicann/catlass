@@ -1,6 +1,7 @@
 #include "Passes/TlaTensorToMemref.h"
 #include "PassesCommon.h"
 #include "PassesInternal.h"
+#include "TlaScratchAllocation.h"
 
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/Transforms/FuncConversions.h"
@@ -8,54 +9,6 @@
 
 namespace tla {
 namespace {
-
-static FailureOr<uint64_t> alignUpCheckedU64(uint64_t value,
-                                             uint64_t alignment) {
-  if (alignment == 0)
-    return failure();
-  uint64_t remainder = value % alignment;
-  if (remainder == 0)
-    return value;
-  uint64_t addend = alignment - remainder;
-  if (value > std::numeric_limits<uint64_t>::max() - addend)
-    return failure();
-  return value + addend;
-}
-
-struct TlaAllocPtrOffsetState {
-  llvm::StringMap<uint64_t> nextOffsetByAddrspace;
-  llvm::DenseMap<mlir::Value, uint64_t> offsetByAllocResult;
-};
-
-static FailureOr<uint64_t>
-assignOrGetAllocPtrOffset(::tla::AllocPtrOp allocOp,
-                          TlaAllocPtrOffsetState &state) {
-  auto ptrTy = dyn_cast<::tla::PtrType>(allocOp.getResult().getType());
-  if (!ptrTy)
-    return failure();
-
-  auto cached = state.offsetByAllocResult.find(allocOp.getResult());
-  if (cached != state.offsetByAllocResult.end())
-    return cached->second;
-
-  int64_t sizeBytes = allocOp.getSizeBytesAttr().getInt();
-  if (sizeBytes < 0)
-    return failure();
-  uint64_t alignment = ptrTy.getAlignment();
-  std::string addrspaceKey =
-      ::stringifyAddressSpace(ptrTy.getAddrspace()).str();
-  FailureOr<uint64_t> start =
-      alignUpCheckedU64(state.nextOffsetByAddrspace[addrspaceKey], alignment);
-  FailureOr<uint64_t> alignedSize =
-      alignUpCheckedU64(static_cast<uint64_t>(sizeBytes), alignment);
-  if (failed(start) || failed(alignedSize) ||
-      *start > std::numeric_limits<uint64_t>::max() - *alignedSize)
-    return failure();
-
-  state.offsetByAllocResult[allocOp.getResult()] = *start;
-  state.nextOffsetByAddrspace[addrspaceKey] = *start + *alignedSize;
-  return *start;
-}
 
 // Resolve tensor_ptr while tensor descriptors still carry source provenance.
 // A pointer backed by another !tla.ptr aliases that address. A pointer backed
@@ -234,15 +187,11 @@ public:
     ModuleOp module = getOperation();
     MLIRContext *context = &getContext();
 
-    TlaAllocPtrOffsetState offsets;
-    SmallVector<::tla::AllocPtrOp, 8> allocs;
-    module.walk([&](::tla::AllocPtrOp op) { allocs.push_back(op); });
-    for (::tla::AllocPtrOp op : allocs) {
-      if (failed(assignOrGetAllocPtrOffset(op, offsets))) {
-        op.emitError() << "failed to assign a static scratch byte offset";
-        signalPassFailure();
-        return;
-      }
+    FailureOr<TlaScratchAllocationPlan> allocationPlan =
+        planTlaScratchAllocations(module);
+    if (failed(allocationPlan)) {
+      signalPassFailure();
+      return;
     }
 
     if (failed(resolveTensorPtrOps(module))) {
@@ -263,7 +212,7 @@ public:
     RewritePatternSet patterns(context);
     ConversionTarget target(*context);
     patterns.add<LowerAllocPtrPattern>(converter, context,
-                                       offsets.offsetByAllocResult);
+                                       allocationPlan->offsetByAllocResult);
     patterns.add<LowerIntToPtrPattern, LowerRecastPtrPattern,
                  LowerPtrAddPattern>(converter, context);
     scf::populateSCFStructuralTypeConversionsAndLegality(converter, patterns,

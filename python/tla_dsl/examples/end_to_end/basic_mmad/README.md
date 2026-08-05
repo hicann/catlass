@@ -9,6 +9,7 @@
 | **`basic_mmad_kernels_atomic_add.py`** | 每个 K tile 独立计算后立刻搬移，在 GM 上进行原子加，当前GM C和DTYPE_C均为f32，不支持 `sentinel` 设置。 |
 | **`basic_mmad_kernels_mutex.py`** | 使用显式 `mutex.lock/unlock` 的同步版本，可通过 `--use-mutex` 选择。 |
 | **`basic_mmad_kernels_mutex_with.py`** | 使用 `with tla.mutex_guard(...)` 的同步版本，可通过 `--use-mutex-with` 选择。 |
+| **`basic_matmul_auto_sync.py`** | 使用 `@tla.kernel(auto_sync="v0")` 自动插入核内 mutex 的独立端到端用例，覆盖 MMAD/FIX unit flag 协议且无需手写本地同步。 |
 
 矩阵尺寸、dtype 与 CLI 默认值以源码与 **`--help`** 为准。
 

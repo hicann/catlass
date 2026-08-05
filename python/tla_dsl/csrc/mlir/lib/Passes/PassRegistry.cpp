@@ -25,6 +25,7 @@ void registerTlaPasses() {
   });
   registerTlaLowerDebugPrintPass();
   registerTlaLowerFuncPass();
+  registerTlaInsertAutoMutexPass();
   registerTlaLowerScalarAccessPass();
   registerTlaSplitMixedFuncPass();
   registerTlaLowerTensorDescPass();
@@ -47,6 +48,7 @@ void buildTlaPipeline(OpPassManager &pm) {
   // and tags the module core type -- one structure-derived classification the
   // HACC machinery and the mixed-func split both consume.
   pm.addPass(createTlaLowerFuncPass());
+  pm.addPass(createTlaInsertAutoMutexPass());
   pm.addPass(createTlaLowerPtrPass());
   pm.addPass(createTlaSplitMixedFuncPass());
   // Materialize tensor-view producer chains as tla.tensor_desc before region

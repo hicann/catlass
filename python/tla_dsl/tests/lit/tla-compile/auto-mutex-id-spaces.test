@@ -1,0 +1,255 @@
+// Mutex IDs and the 32-ID limit are independent for the Cube and Vector sides.
+// RUN: split-file %s %t
+// RUN: %tla_compile %t/per-core.mlir -o %t/per-core.o --mlir-print-ir-after=tla-insert-auto-mutex 2>&1 | %filecheck %s --check-prefix=PER-CORE
+// RUN: not %tla_compile %t/id-limit.mlir -o - 2>&1 | %filecheck %s --check-prefix=ID-LIMIT
+
+// PER-CORE-LABEL: func.func @auto_mutex_per_core_id_space
+// PER-CORE: tla.mutex "auto_l0a_0_4096" {id = 0 : i64} -> !tla.mutex
+// PER-CORE: tla.mutex "auto_l0c_0_4096" {id = 2 : i64} -> !tla.mutex
+// PER-CORE: tla.mutex "auto_ub_0_256" {id = 0 : i64} -> !tla.mutex
+// PER-CORE: tla.mutex "auto_ub_7424_256" {id = 29 : i64} -> !tla.mutex
+// ID-LIMIT: automatic mutex requires 33 IDs for the vector side, exceeding the per-core hardware limit of 32
+
+//--- per-core.mlir
+
+!gm = !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<32,1>, !tla.shape<32,32>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>
+!l0a = !tla.tensor<!tla.layout<!tla.shape<(16,2),(8,4)>, !tla.stride<(8,128),(1,256)>, !tla.shape<32,32>, zN>, !tla.coord<0,0>, !tla.ptr<f32, l0a, 512>>
+!l0b = !tla.tensor<!tla.layout<!tla.shape<(8,4),(16,2)>, !tla.stride<(1,256),(8,128)>, !tla.shape<32,32>, nZ>, !tla.coord<0,0>, !tla.ptr<f32, l0b, 512>>
+!l0c = !tla.tensor<!tla.layout<!tla.shape<(16,2),(16,2)>, !tla.stride<(16,256),(1,512)>, !tla.shape<32,32>, L0Clayout>, !tla.coord<0,0>, !tla.ptr<f32, l0c, 512>>
+!ub_layout = !tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, row_major>
+!ub_coord = !tla.coord<0>
+!ub = !tla.tensor<!ub_layout, !ub_coord, !tla.ptr<f32, ub, 256>>
+!gm_ub = !tla.tensor<!ub_layout, !ub_coord, !tla.ptr<f32, gm, 4>>
+
+module {
+  tla.func @auto_mutex_per_core_id_space(%gm: !gm, %gm_ub: !gm_ub) attributes {tla.auto_sync = "v0"} {
+    %pa = tla.alloc_ptr{size_bytes = 4096} -> !tla.ptr<f32, l0a, 512>
+    %pb = tla.alloc_ptr{size_bytes = 4096} -> !tla.ptr<f32, l0b, 512>
+    %pc = tla.alloc_ptr{size_bytes = 4096} -> !tla.ptr<f32, l0c, 512>
+    %a = "tla.make_tensor_like"(%pa, %gm) {layoutTag = "zN"} : (!tla.ptr<f32, l0a, 512>, !gm) -> !l0a
+    %b = "tla.make_tensor_like"(%pb, %gm) {layoutTag = "nZ"} : (!tla.ptr<f32, l0b, 512>, !gm) -> !l0b
+    %c = "tla.make_tensor_like"(%pc, %gm) {layoutTag = "L0Clayout"} : (!tla.ptr<f32, l0c, 512>, !gm) -> !l0c
+    %shape = tla.make_shape -> !tla.shape<64>
+    %stride = tla.make_stride -> !tla.stride<1>
+    %layout = tla.make_layout %shape, %stride : !tla.shape<64>, !tla.stride<1> -> !ub_layout
+    %coord = tla.make_coord -> !ub_coord
+    %p0 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p1 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p2 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p3 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p4 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p5 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p6 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p7 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p8 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p9 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p10 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p11 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p12 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p13 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p14 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p15 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p16 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p17 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p18 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p19 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p20 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p21 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p22 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p23 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p24 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p25 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p26 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p27 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p28 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p29 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %t0 = tla.make_tensor %p0, %layout, %coord : !tla.ptr<f32, ub, 256>, !ub_layout, !ub_coord -> !ub
+    %t1 = tla.make_tensor %p1, %layout, %coord : !tla.ptr<f32, ub, 256>, !ub_layout, !ub_coord -> !ub
+    %t2 = tla.make_tensor %p2, %layout, %coord : !tla.ptr<f32, ub, 256>, !ub_layout, !ub_coord -> !ub
+    %t3 = tla.make_tensor %p3, %layout, %coord : !tla.ptr<f32, ub, 256>, !ub_layout, !ub_coord -> !ub
+    %t4 = tla.make_tensor %p4, %layout, %coord : !tla.ptr<f32, ub, 256>, !ub_layout, !ub_coord -> !ub
+    %t5 = tla.make_tensor %p5, %layout, %coord : !tla.ptr<f32, ub, 256>, !ub_layout, !ub_coord -> !ub
+    %t6 = tla.make_tensor %p6, %layout, %coord : !tla.ptr<f32, ub, 256>, !ub_layout, !ub_coord -> !ub
+    %t7 = tla.make_tensor %p7, %layout, %coord : !tla.ptr<f32, ub, 256>, !ub_layout, !ub_coord -> !ub
+    %t8 = tla.make_tensor %p8, %layout, %coord : !tla.ptr<f32, ub, 256>, !ub_layout, !ub_coord -> !ub
+    %t9 = tla.make_tensor %p9, %layout, %coord : !tla.ptr<f32, ub, 256>, !ub_layout, !ub_coord -> !ub
+    %t10 = tla.make_tensor %p10, %layout, %coord : !tla.ptr<f32, ub, 256>, !ub_layout, !ub_coord -> !ub
+    %t11 = tla.make_tensor %p11, %layout, %coord : !tla.ptr<f32, ub, 256>, !ub_layout, !ub_coord -> !ub
+    %t12 = tla.make_tensor %p12, %layout, %coord : !tla.ptr<f32, ub, 256>, !ub_layout, !ub_coord -> !ub
+    %t13 = tla.make_tensor %p13, %layout, %coord : !tla.ptr<f32, ub, 256>, !ub_layout, !ub_coord -> !ub
+    %t14 = tla.make_tensor %p14, %layout, %coord : !tla.ptr<f32, ub, 256>, !ub_layout, !ub_coord -> !ub
+    %t15 = tla.make_tensor %p15, %layout, %coord : !tla.ptr<f32, ub, 256>, !ub_layout, !ub_coord -> !ub
+    %t16 = tla.make_tensor %p16, %layout, %coord : !tla.ptr<f32, ub, 256>, !ub_layout, !ub_coord -> !ub
+    %t17 = tla.make_tensor %p17, %layout, %coord : !tla.ptr<f32, ub, 256>, !ub_layout, !ub_coord -> !ub
+    %t18 = tla.make_tensor %p18, %layout, %coord : !tla.ptr<f32, ub, 256>, !ub_layout, !ub_coord -> !ub
+    %t19 = tla.make_tensor %p19, %layout, %coord : !tla.ptr<f32, ub, 256>, !ub_layout, !ub_coord -> !ub
+    %t20 = tla.make_tensor %p20, %layout, %coord : !tla.ptr<f32, ub, 256>, !ub_layout, !ub_coord -> !ub
+    %t21 = tla.make_tensor %p21, %layout, %coord : !tla.ptr<f32, ub, 256>, !ub_layout, !ub_coord -> !ub
+    %t22 = tla.make_tensor %p22, %layout, %coord : !tla.ptr<f32, ub, 256>, !ub_layout, !ub_coord -> !ub
+    %t23 = tla.make_tensor %p23, %layout, %coord : !tla.ptr<f32, ub, 256>, !ub_layout, !ub_coord -> !ub
+    %t24 = tla.make_tensor %p24, %layout, %coord : !tla.ptr<f32, ub, 256>, !ub_layout, !ub_coord -> !ub
+    %t25 = tla.make_tensor %p25, %layout, %coord : !tla.ptr<f32, ub, 256>, !ub_layout, !ub_coord -> !ub
+    %t26 = tla.make_tensor %p26, %layout, %coord : !tla.ptr<f32, ub, 256>, !ub_layout, !ub_coord -> !ub
+    %t27 = tla.make_tensor %p27, %layout, %coord : !tla.ptr<f32, ub, 256>, !ub_layout, !ub_coord -> !ub
+    %t28 = tla.make_tensor %p28, %layout, %coord : !tla.ptr<f32, ub, 256>, !ub_layout, !ub_coord -> !ub
+    %t29 = tla.make_tensor %p29, %layout, %coord : !tla.ptr<f32, ub, 256>, !ub_layout, !ub_coord -> !ub
+    %init = arith.constant true
+    %unit = arith.constant 0 : i64
+    "tla.cube"() ({
+      tla.mmad %c, %a, %b, %init, %unit : !l0c, !l0a, !l0b, i1, i64
+    }) : () -> ()
+    "tla.vector"() ({
+      tla.copy %t0, %gm_ub : !ub, !gm_ub
+      tla.copy %t1, %gm_ub : !ub, !gm_ub
+      tla.copy %t2, %gm_ub : !ub, !gm_ub
+      tla.copy %t3, %gm_ub : !ub, !gm_ub
+      tla.copy %t4, %gm_ub : !ub, !gm_ub
+      tla.copy %t5, %gm_ub : !ub, !gm_ub
+      tla.copy %t6, %gm_ub : !ub, !gm_ub
+      tla.copy %t7, %gm_ub : !ub, !gm_ub
+      tla.copy %t8, %gm_ub : !ub, !gm_ub
+      tla.copy %t9, %gm_ub : !ub, !gm_ub
+      tla.copy %t10, %gm_ub : !ub, !gm_ub
+      tla.copy %t11, %gm_ub : !ub, !gm_ub
+      tla.copy %t12, %gm_ub : !ub, !gm_ub
+      tla.copy %t13, %gm_ub : !ub, !gm_ub
+      tla.copy %t14, %gm_ub : !ub, !gm_ub
+      tla.copy %t15, %gm_ub : !ub, !gm_ub
+      tla.copy %t16, %gm_ub : !ub, !gm_ub
+      tla.copy %t17, %gm_ub : !ub, !gm_ub
+      tla.copy %t18, %gm_ub : !ub, !gm_ub
+      tla.copy %t19, %gm_ub : !ub, !gm_ub
+      tla.copy %t20, %gm_ub : !ub, !gm_ub
+      tla.copy %t21, %gm_ub : !ub, !gm_ub
+      tla.copy %t22, %gm_ub : !ub, !gm_ub
+      tla.copy %t23, %gm_ub : !ub, !gm_ub
+      tla.copy %t24, %gm_ub : !ub, !gm_ub
+      tla.copy %t25, %gm_ub : !ub, !gm_ub
+      tla.copy %t26, %gm_ub : !ub, !gm_ub
+      tla.copy %t27, %gm_ub : !ub, !gm_ub
+      tla.copy %t28, %gm_ub : !ub, !gm_ub
+      tla.copy %t29, %gm_ub : !ub, !gm_ub
+    }) : () -> ()
+    tla.return
+  }
+}
+
+// The function uses 33 mutexes in total, but the per-core limits are Cube=3
+// and Vector=30, so both independent ID spaces are valid.
+
+//--- id-limit.mlir
+!limit_layout = !tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, row_major>
+!limit_coord = !tla.coord<0>
+!limit_ub = !tla.tensor<!limit_layout, !limit_coord, !tla.ptr<f32, ub, 256>>
+!limit_gm = !tla.tensor<!limit_layout, !limit_coord, !tla.ptr<f32, gm, 4>>
+
+module {
+  tla.func @auto_mutex_id_limit(%gm: !limit_gm) attributes {tla.auto_sync = "v0"} {
+    %shape = tla.make_shape -> !tla.shape<64>
+    %stride = tla.make_stride -> !tla.stride<1>
+    %layout = tla.make_layout %shape, %stride : !tla.shape<64>, !tla.stride<1> -> !limit_layout
+    %coord = tla.make_coord -> !limit_coord
+    %p0 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p1 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p2 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p3 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p4 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p5 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p6 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p7 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p8 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p9 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p10 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p11 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p12 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p13 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p14 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p15 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p16 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p17 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p18 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p19 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p20 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p21 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p22 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p23 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p24 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p25 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p26 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p27 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p28 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p29 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p30 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p31 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p32 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %t0 = tla.make_tensor %p0, %layout, %coord : !tla.ptr<f32, ub, 256>, !limit_layout, !limit_coord -> !limit_ub
+    %t1 = tla.make_tensor %p1, %layout, %coord : !tla.ptr<f32, ub, 256>, !limit_layout, !limit_coord -> !limit_ub
+    %t2 = tla.make_tensor %p2, %layout, %coord : !tla.ptr<f32, ub, 256>, !limit_layout, !limit_coord -> !limit_ub
+    %t3 = tla.make_tensor %p3, %layout, %coord : !tla.ptr<f32, ub, 256>, !limit_layout, !limit_coord -> !limit_ub
+    %t4 = tla.make_tensor %p4, %layout, %coord : !tla.ptr<f32, ub, 256>, !limit_layout, !limit_coord -> !limit_ub
+    %t5 = tla.make_tensor %p5, %layout, %coord : !tla.ptr<f32, ub, 256>, !limit_layout, !limit_coord -> !limit_ub
+    %t6 = tla.make_tensor %p6, %layout, %coord : !tla.ptr<f32, ub, 256>, !limit_layout, !limit_coord -> !limit_ub
+    %t7 = tla.make_tensor %p7, %layout, %coord : !tla.ptr<f32, ub, 256>, !limit_layout, !limit_coord -> !limit_ub
+    %t8 = tla.make_tensor %p8, %layout, %coord : !tla.ptr<f32, ub, 256>, !limit_layout, !limit_coord -> !limit_ub
+    %t9 = tla.make_tensor %p9, %layout, %coord : !tla.ptr<f32, ub, 256>, !limit_layout, !limit_coord -> !limit_ub
+    %t10 = tla.make_tensor %p10, %layout, %coord : !tla.ptr<f32, ub, 256>, !limit_layout, !limit_coord -> !limit_ub
+    %t11 = tla.make_tensor %p11, %layout, %coord : !tla.ptr<f32, ub, 256>, !limit_layout, !limit_coord -> !limit_ub
+    %t12 = tla.make_tensor %p12, %layout, %coord : !tla.ptr<f32, ub, 256>, !limit_layout, !limit_coord -> !limit_ub
+    %t13 = tla.make_tensor %p13, %layout, %coord : !tla.ptr<f32, ub, 256>, !limit_layout, !limit_coord -> !limit_ub
+    %t14 = tla.make_tensor %p14, %layout, %coord : !tla.ptr<f32, ub, 256>, !limit_layout, !limit_coord -> !limit_ub
+    %t15 = tla.make_tensor %p15, %layout, %coord : !tla.ptr<f32, ub, 256>, !limit_layout, !limit_coord -> !limit_ub
+    %t16 = tla.make_tensor %p16, %layout, %coord : !tla.ptr<f32, ub, 256>, !limit_layout, !limit_coord -> !limit_ub
+    %t17 = tla.make_tensor %p17, %layout, %coord : !tla.ptr<f32, ub, 256>, !limit_layout, !limit_coord -> !limit_ub
+    %t18 = tla.make_tensor %p18, %layout, %coord : !tla.ptr<f32, ub, 256>, !limit_layout, !limit_coord -> !limit_ub
+    %t19 = tla.make_tensor %p19, %layout, %coord : !tla.ptr<f32, ub, 256>, !limit_layout, !limit_coord -> !limit_ub
+    %t20 = tla.make_tensor %p20, %layout, %coord : !tla.ptr<f32, ub, 256>, !limit_layout, !limit_coord -> !limit_ub
+    %t21 = tla.make_tensor %p21, %layout, %coord : !tla.ptr<f32, ub, 256>, !limit_layout, !limit_coord -> !limit_ub
+    %t22 = tla.make_tensor %p22, %layout, %coord : !tla.ptr<f32, ub, 256>, !limit_layout, !limit_coord -> !limit_ub
+    %t23 = tla.make_tensor %p23, %layout, %coord : !tla.ptr<f32, ub, 256>, !limit_layout, !limit_coord -> !limit_ub
+    %t24 = tla.make_tensor %p24, %layout, %coord : !tla.ptr<f32, ub, 256>, !limit_layout, !limit_coord -> !limit_ub
+    %t25 = tla.make_tensor %p25, %layout, %coord : !tla.ptr<f32, ub, 256>, !limit_layout, !limit_coord -> !limit_ub
+    %t26 = tla.make_tensor %p26, %layout, %coord : !tla.ptr<f32, ub, 256>, !limit_layout, !limit_coord -> !limit_ub
+    %t27 = tla.make_tensor %p27, %layout, %coord : !tla.ptr<f32, ub, 256>, !limit_layout, !limit_coord -> !limit_ub
+    %t28 = tla.make_tensor %p28, %layout, %coord : !tla.ptr<f32, ub, 256>, !limit_layout, !limit_coord -> !limit_ub
+    %t29 = tla.make_tensor %p29, %layout, %coord : !tla.ptr<f32, ub, 256>, !limit_layout, !limit_coord -> !limit_ub
+    %t30 = tla.make_tensor %p30, %layout, %coord : !tla.ptr<f32, ub, 256>, !limit_layout, !limit_coord -> !limit_ub
+    %t31 = tla.make_tensor %p31, %layout, %coord : !tla.ptr<f32, ub, 256>, !limit_layout, !limit_coord -> !limit_ub
+    %t32 = tla.make_tensor %p32, %layout, %coord : !tla.ptr<f32, ub, 256>, !limit_layout, !limit_coord -> !limit_ub
+    "tla.vector"() ({
+      tla.copy %t0, %gm : !limit_ub, !limit_gm
+      tla.copy %t1, %gm : !limit_ub, !limit_gm
+      tla.copy %t2, %gm : !limit_ub, !limit_gm
+      tla.copy %t3, %gm : !limit_ub, !limit_gm
+      tla.copy %t4, %gm : !limit_ub, !limit_gm
+      tla.copy %t5, %gm : !limit_ub, !limit_gm
+      tla.copy %t6, %gm : !limit_ub, !limit_gm
+      tla.copy %t7, %gm : !limit_ub, !limit_gm
+      tla.copy %t8, %gm : !limit_ub, !limit_gm
+      tla.copy %t9, %gm : !limit_ub, !limit_gm
+      tla.copy %t10, %gm : !limit_ub, !limit_gm
+      tla.copy %t11, %gm : !limit_ub, !limit_gm
+      tla.copy %t12, %gm : !limit_ub, !limit_gm
+      tla.copy %t13, %gm : !limit_ub, !limit_gm
+      tla.copy %t14, %gm : !limit_ub, !limit_gm
+      tla.copy %t15, %gm : !limit_ub, !limit_gm
+      tla.copy %t16, %gm : !limit_ub, !limit_gm
+      tla.copy %t17, %gm : !limit_ub, !limit_gm
+      tla.copy %t18, %gm : !limit_ub, !limit_gm
+      tla.copy %t19, %gm : !limit_ub, !limit_gm
+      tla.copy %t20, %gm : !limit_ub, !limit_gm
+      tla.copy %t21, %gm : !limit_ub, !limit_gm
+      tla.copy %t22, %gm : !limit_ub, !limit_gm
+      tla.copy %t23, %gm : !limit_ub, !limit_gm
+      tla.copy %t24, %gm : !limit_ub, !limit_gm
+      tla.copy %t25, %gm : !limit_ub, !limit_gm
+      tla.copy %t26, %gm : !limit_ub, !limit_gm
+      tla.copy %t27, %gm : !limit_ub, !limit_gm
+      tla.copy %t28, %gm : !limit_ub, !limit_gm
+      tla.copy %t29, %gm : !limit_ub, !limit_gm
+      tla.copy %t30, %gm : !limit_ub, !limit_gm
+      tla.copy %t31, %gm : !limit_ub, !limit_gm
+      tla.copy %t32, %gm : !limit_ub, !limit_gm
+    }) : () -> ()
+    tla.return
+  }
+}

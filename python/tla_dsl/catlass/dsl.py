@@ -231,16 +231,38 @@ def jit(fn: Callable[..., Any]) -> TlaJitFunction:
     )
 
 
-def kernel(fn: Callable[..., Any]) -> TlaJitFunction:
-    """Decorate a Tla kernel entry point."""
+def kernel(
+    fn: Callable[..., Any] | None = None,
+    *,
+    auto_sync: str | None = None,
+) -> TlaJitFunction | Callable[[Callable[..., Any]], TlaJitFunction]:
+    """Decorate a Tla kernel entry point.
 
-    _reject_async_dsl_function(fn, kind="kernel")
-    return TlaJitFunction(
-        fn,
-        kind="kernel",
-        options={},
-        decorator_location=_capture_decorator_location(),
-    )
+    By default, local synchronization remains explicit. ``auto_sync="v0"``
+    enables the first version of automatic local mutex insertion.
+    """
+
+    if auto_sync not in (None, "v0"):
+        raise ValueError(
+            "tla.kernel auto_sync must be 'v0' or None, "
+            f"got {auto_sync!r}"
+        )
+
+    def decorate(target: Callable[..., Any]) -> TlaJitFunction:
+        if not callable(target):
+            raise TypeError("tla.kernel expects a callable")
+        _reject_async_dsl_function(target, kind="kernel")
+        options = {} if auto_sync is None else {"auto_sync": auto_sync}
+        return TlaJitFunction(
+            target,
+            kind="kernel",
+            options=options,
+            decorator_location=_capture_decorator_location(),
+        )
+
+    if fn is None:
+        return decorate
+    return decorate(fn)
 
 
 def _reject_async_dsl_function(fn: Callable[..., Any], *, kind: str) -> None:

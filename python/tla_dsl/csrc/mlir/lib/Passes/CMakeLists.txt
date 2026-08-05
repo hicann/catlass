@@ -2,12 +2,14 @@ add_library(TlaPasses
   PassRegistry.cpp
   TlaLowerDebugPrintPass.cpp
   TlaLowerFuncPass.cpp
+  TlaInsertAutoMutexPass.cpp
   TlaLowerScalarAccessPass.cpp
   TlaSplitMixedFuncPass.cpp
   TlaLowerTensorDescPass.cpp
   TlaTensorDescDerivation.cpp
   TlaTensorDescriptor.cpp
   TlaLowerBlockIdxPass.cpp
+  TlaScratchAllocation.cpp
   TlaLowerPtrPass.cpp
   TlaLowerMutexToStdPass.cpp
   TlaFinalizeMemrefPass.cpp

@@ -80,6 +80,7 @@ DEVICE_ID="${DEVICE_ID:-1}"
 COMPILE_JOBS="${TLA_DSL_COMPILE_JOBS:-4}"
 
 BASIC_MMAD_REL="examples/end_to_end/basic_mmad/basic_matmul.py"
+BASIC_MMAD_AUTO_SYNC_REL="examples/end_to_end/basic_mmad/basic_matmul_auto_sync.py"
 BASIC_MMAD_PTR_REL="examples/end_to_end/basic_mmad/basic_mmad_ptr.py"
 BASIC_VADD_REL="examples/end_to_end/basic_vadd/basic_vadd.py"
 BASIC_MIXED_REL="examples/end_to_end/basic_mixed/basic_mixed.py"
@@ -127,7 +128,7 @@ usage() {
 Usage: $(basename "$0") [options]
 
 Run end-to-end validation for:
-  - basic_mmad (full flag-sync mnk/layout/dtype matrix; representative mutex cases;
+  - basic_mmad (full flag-sync mnk/layout/dtype matrix; representative manual and automatic mutex cases;
     atomic-add coverage for each supported input dtype)
   - basic_mmad_ptr (basic_mmad_ptr.py)
   - basic_vadd (basic_vadd.py with per-dtype CLI invocations, plus mutex variants)
@@ -351,6 +352,10 @@ if [[ ! -f "${TLA_DSL_DIR}/${BASIC_MMAD_REL}" ]]; then
     echo "error: missing ${BASIC_MMAD_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
 fi
+if [[ ! -f "${TLA_DSL_DIR}/${BASIC_MMAD_AUTO_SYNC_REL}" ]]; then
+    echo "error: missing ${BASIC_MMAD_AUTO_SYNC_REL} under ${TLA_DSL_DIR}" >&2
+    exit 1
+fi
 if [[ ! -f "${TLA_DSL_DIR}/${BASIC_MMAD_PTR_REL}" ]]; then
     echo "error: missing ${BASIC_MMAD_PTR_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
@@ -502,6 +507,11 @@ _run_basic_mmad_case "mutex mode" \
     --dtype-a f16 --dtype-b f16 --dtype-c f32
 _run_basic_mmad_case "mutex with mode" \
     "examples/end_to_end/basic_mmad/basic_matmul_mutex_with.py" \
+    --m 333 --n 444 --k 555 \
+    --layout-a row --layout-b row \
+    --dtype-a f16 --dtype-b f16 --dtype-c f32
+_run_basic_mmad_case "automatic mutex synchronization" \
+    "${BASIC_MMAD_AUTO_SYNC_REL}" \
     --m 333 --n 444 --k 555 \
     --layout-a row --layout-b row \
     --dtype-a f16 --dtype-b f16 --dtype-c f32

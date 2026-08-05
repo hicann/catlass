@@ -107,7 +107,14 @@ def lower_jit_to_tlair_module_by_execution(
     type_args: Sequence[Any] | None = None,
     location: DSLLocation | None = None,
 ) -> LoweredTlaIR:
-    del kind, options
+    auto_sync = (options or {}).get("auto_sync")
+    if kind == "kernel" and auto_sync not in (None, "v0"):
+        raise TlaLoweringError(
+            "kernel option auto_sync must be 'v0' or None, "
+            f"got {auto_sync!r}"
+        )
+    if kind != "kernel" and auto_sync is not None:
+        raise TlaLoweringError("auto_sync is supported only for tla.kernel")
     fn = maybe_transform_for_lowering(
         fn,
         internal_for=ast_decorators._internal_frontend_for,
@@ -156,6 +163,7 @@ def lower_jit_to_tlair_module_by_execution(
                     call_args=call_args,
                     ctx=ctx,
                     fn_loc=fn_loc,
+                    auto_sync=auto_sync,
                 )
     lowered = LoweredTlaIR(context=ctx, module=module, generic=bool(generic))
     lowered._asm = module.operation.get_asm(
@@ -193,6 +201,7 @@ def _build_tla_func(
     call_args: Sequence[Any],
     ctx: mlir_ir.Context,
     fn_loc: mlir_ir.Location,
+    auto_sync: str | None,
 ) -> None:
     runtime_arg_names = [name for name in arg_names if name not in constexpr_names]
 
@@ -234,12 +243,15 @@ def _build_tla_func(
             block_slots[name] = (start,)
 
     fn_type = mlir_ir.FunctionType.get(mlir_arg_types, [])
+    func_attrs = {
+        "sym_name": mlir_ir.StringAttr.get(fn_name),
+        "function_type": mlir_ir.TypeAttr.get(fn_type),
+    }
+    if auto_sync == "v0":
+        func_attrs["tla.auto_sync"] = mlir_ir.StringAttr.get("v0")
     func_op = mlir_ir.Operation.create(
         "tla.func",
-        attributes={
-            "sym_name": mlir_ir.StringAttr.get(fn_name),
-            "function_type": mlir_ir.TypeAttr.get(fn_type),
-        },
+        attributes=func_attrs,
         regions=1,
         loc=fn_loc,
     )
