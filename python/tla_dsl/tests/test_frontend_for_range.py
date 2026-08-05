@@ -1,3 +1,4 @@
+import ast
 import builtins
 import inspect
 from dataclasses import dataclass
@@ -9,6 +10,11 @@ import catlass as tla
 import catlass.core_api as core_api_mod
 import catlass.runtime as runtime_mod
 from catlass.base_dsl import BaseDSL
+from catlass.base_dsl.ast_preprocessor import (
+    _FrontendControlFlowTransformer,
+    _FunctionAnalyzer,
+    _scope_facts_for_transform,
+)
 
 tla_alias = tla
 tla_range = tla.range
@@ -269,6 +275,65 @@ def test_range_alias_lowers_to_scf_for() -> None:
     assert "tla.tile_view" in mlir
 
 
+def test_range_alias_is_preserved_in_nested_outlined_regions() -> None:
+    source = (
+        "def kernel(predicate, limit):\n"
+        "    loop_range = tla.range(0, limit, 1)\n"
+        "    if predicate:\n"
+        "        for i in loop_range:\n"
+        "            if i == 0:\n"
+        "                tla.make_coord(i, 0)\n"
+    )
+    tree = ast.parse(source)
+    target = tree.body[0]
+    assert isinstance(target, ast.FunctionDef)
+    scope_facts = _scope_facts_for_transform(
+        source, "nested_range_alias.py", target
+    )
+    transformer = _FrontendControlFlowTransformer(
+        {"tla": tla},
+        filename="nested_range_alias.py",
+        source_text=source,
+        root_plan=_FunctionAnalyzer(
+            global_symbols={"tla": tla}, scope_facts=scope_facts
+        ).analyze(target),
+    )
+
+    transformed = transformer.visit(tree)
+
+    assert sum(
+        isinstance(node, ast.Name) and node.id == "__tladsl_internal_for__"
+        for node in ast.walk(transformed)
+    ) == 1
+
+
+def test_range_alias_keeps_hidden_exit_owned_by_nested_dynamic_loop() -> None:
+    source = (
+        "def kernel(predicate, limit):\n"
+        "    loop_range = tla.range(0, limit, 1)\n"
+        "    if predicate:\n"
+        "        for i in loop_range:\n"
+        "            return\n"
+    )
+    tree = ast.parse(source)
+    target = tree.body[0]
+    assert isinstance(target, ast.FunctionDef)
+    scope_facts = _scope_facts_for_transform(
+        source, "nested_range_alias.py", target
+    )
+    transformer = _FrontendControlFlowTransformer(
+        {"tla": tla},
+        filename="nested_range_alias.py",
+        source_text=source,
+        root_plan=_FunctionAnalyzer(
+            global_symbols={"tla": tla}, scope_facts=scope_facts
+        ).analyze(target),
+    )
+
+    with pytest.raises(SyntaxError, match="dynamic Tla for does not support return"):
+        transformer.visit(tree)
+
+
 def test_range_arities_lower_to_scf_for() -> None:
     with runtime_mod._eager_capture():
         mem = tla.Tensor(
@@ -472,7 +537,7 @@ def test_range_rejects_active_object_method_structure_change() -> None:
 
 
 def test_range_rejects_active_closure_call() -> None:
-    with pytest.raises(SyntaxError, match="active local callable"):
+    with pytest.raises(SyntaxError, match="nested function definition"):
         _ = bad_range_active_closure_call_kernel.dump_mlir(type_args=(2,))
 
 

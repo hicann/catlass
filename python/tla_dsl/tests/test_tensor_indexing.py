@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import pathlib
 import subprocess
 import tempfile
@@ -10,6 +11,11 @@ import pytest
 
 import catlass as tla
 import catlass.runtime as runtime_mod
+from catlass.base_dsl.ast_preprocessor import (
+    _FrontendControlFlowTransformer,
+    _FunctionAnalyzer,
+    _scope_facts_for_transform,
+)
 
 
 def _operation_is_nested_in_scf_if(mlir: str, operation: str) -> bool:
@@ -330,6 +336,33 @@ def test_tensor_store_helper_does_not_collide_with_user_name() -> None:
         type_args=(out, 0, 7)
     )
     assert mlir.count("tla.scalar_store") == 1
+
+
+def test_tensor_store_helper_reserves_indirect_global_name() -> None:
+    source = (
+        "def kernel(out, selector):\n"
+        "    if selector == 0:\n"
+        "        out[0] = globals()['__tladsl_tensor_store_1']\n"
+    )
+    tree = ast.parse(source)
+    target = tree.body[0]
+    assert isinstance(target, ast.FunctionDef)
+    globals_ = {"__tladsl_tensor_store_1": 7}
+    scope_facts = _scope_facts_for_transform(
+        source, "indirect_global_collision.py", target
+    )
+    transformer = _FrontendControlFlowTransformer(
+        globals_,
+        filename="indirect_global_collision.py",
+        source_text=source,
+        root_plan=_FunctionAnalyzer(
+            global_symbols=globals_, scope_facts=scope_facts
+        ).analyze(target),
+    )
+
+    transformer.visit(tree)
+
+    assert transformer.tensor_store_helper_name == "__tladsl_tensor_store_2"
 
 
 def test_tensor_scalar_store_accepts_local_tensor_view() -> None:

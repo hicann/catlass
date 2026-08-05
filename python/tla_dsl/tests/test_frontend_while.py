@@ -420,7 +420,7 @@ def test_statement_while_rejects_custom_class_type_mismatch_by_leaf_name() -> No
 
 
 def test_statement_while_rejects_active_closure_call() -> None:
-    with pytest.raises(SyntaxError, match="active local callable"):
+    with pytest.raises(SyntaxError, match="nested function definition"):
         _ = bad_statement_while_active_closure_call_kernel.dump_mlir(type_args=(4,))
 
 

@@ -1651,16 +1651,20 @@ def test_statement_if_augassign_carried_index_lowers() -> None:
     assert "arith.addi" in mlir
 
 
-def test_statement_if_nested_function_local_does_not_become_carried() -> None:
-    mlir = statement_if_nested_function_local_kernel.dump_mlir(type_args=(2,))
-    assert "scf.if" in mlir
-    assert "tla.make_coord" in mlir
+def test_statement_if_rejects_nested_function_with_isolated_local() -> None:
+    with pytest.raises(
+        SyntaxError,
+        match="nested function definition 'helper' is not supported",
+    ):
+        _ = statement_if_nested_function_local_kernel.dump_mlir(type_args=(2,))
 
 
-def test_statement_if_nested_function_return_is_not_branch_return() -> None:
-    mlir = statement_if_nested_function_return_kernel.dump_mlir(type_args=(2,))
-    assert "scf.if" in mlir
-    assert "tla.make_coord" in mlir
+def test_statement_if_rejects_nested_function_with_return() -> None:
+    with pytest.raises(
+        SyntaxError,
+        match="nested function definition 'helper' is not supported",
+    ):
+        _ = statement_if_nested_function_return_kernel.dump_mlir(type_args=(2,))
 
 
 def test_statement_if_rejects_return() -> None:
@@ -1770,7 +1774,7 @@ def test_statement_if_rejects_starred_assignment() -> None:
 
 
 def test_statement_if_rejects_active_closure_call() -> None:
-    with pytest.raises(SyntaxError, match="active local callable"):
+    with pytest.raises(SyntaxError, match="nested function definition"):
         _ = bad_statement_if_active_closure_call_kernel.dump_mlir(type_args=(2,))
 
 

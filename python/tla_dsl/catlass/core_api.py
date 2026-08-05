@@ -5,6 +5,7 @@ from __future__ import annotations
 import builtins as _builtins
 import inspect
 import math
+import sys
 import warnings
 from enum import Enum
 from itertools import chain
@@ -6043,7 +6044,15 @@ _ast_preprocessor._register_trusted_lazy_callables(
         and getattr(value, "__module__", None) == __name__
         and not inspect.isclass(value)
     )
-    + (_runtime.const_expr,)
+    + (_runtime.const_expr,),
+    sys.modules["catlass"],
+    range_callable=range,
+    range_constexpr_callable=range_constexpr,
+    const_expr_callable=_runtime.const_expr,
+    cube_callable=cube,
+    vector_callable=vector,
+    vec_namespace=vec,
+    vec_func_callable=_vec_func,
 )
 _tla_ast_decorators._register_trusted_dsl_types(
     frozenset(
