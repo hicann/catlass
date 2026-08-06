@@ -13,6 +13,7 @@ nav:
   - Torch Tensor Binding: framework_integration.md
   - Dynamic Layout: dsl_dynamic_layout.md
   - Core API Reference: api-reference.md
+  - BC Backend Integration: bc-backend-integration.md
 
 markdown_extensions:
   - toc:
