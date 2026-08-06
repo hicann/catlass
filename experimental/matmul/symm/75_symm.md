@@ -1,6 +1,6 @@
-# 对称矩阵乘算子（75_symm）设计文档
+# 对称矩阵乘算子（symm）设计文档
 
-本文档用于说明 `examples/75_symm` 对称矩阵乘算子示例所依赖的 Catlass GEMM 模板库能力、外部接口、分层设计方案。
+本文档用于说明 `experimental/matmul/symm` 对称矩阵乘算子示例所依赖的 Catlass GEMM 模板库能力、外部接口、分层设计方案。
 
 ## 1. 功能说明
 
@@ -64,7 +64,7 @@ SymmMatmul 所涉及的关键模板参数如下：
 
 #### 4.1.1 参数解析
 
-`75_symm` 命令执行参数：
+`symm` 命令执行参数：
 
 ```text
 m, n, k, device_id, symm_side, symm_fill
@@ -106,7 +106,7 @@ C: M x N
 
 #### 4.1.3 host 数据构造
 
-`75_symm` 生成随机数据后，还需要根据 side/fill 对对称矩阵做镜像补全。
+`symm` 生成随机数据后，还需要根据 side/fill 对对称矩阵做镜像补全。
 
 左乘时，对称矩阵是 `hostA`：
 
@@ -123,7 +123,7 @@ C: M x N
 
 #### 4.2.1 对称矩阵乘 kernel
 
-`75_symm` 使用统一的对称矩阵乘 kernel producer：
+`symm` 使用统一的对称矩阵乘 kernel producer：
 
 ```cpp
 Gemm::Kernel::SymmMatmulTlaSingleKernelProducer<
@@ -364,7 +364,7 @@ using L0TileShape = Shape<256, 128, 32>;
 ### 6.1 编译
 
 ```
-bash scripts/build.sh 75_symm
+bash scripts/build.sh symm
 ```
 
 ### 6.2 运行
@@ -372,23 +372,23 @@ bash scripts/build.sh 75_symm
 左乘，上三角：
 
 ```bash
-./75_symm 768 4096 768 0 0 1
+./symm 768 4096 768 0 0 1
 ```
 
 左乘，下三角：
 
 ```bash
-./75_symm 768 4096 768 0 0 0
+./symm 768 4096 768 0 0 0
 ```
 
 右乘，上三角：
 
 ```bash
-./75_symm 4096 768 768 0 1 1
+./symm 4096 768 768 0 1 1
 ```
 
 右乘，下三角：
 
 ```bash
-./75_symm 4096 768 768 0 1 0
+./symm 4096 768 768 0 1 0
 ```

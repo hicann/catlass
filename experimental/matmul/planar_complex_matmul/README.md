@@ -1,6 +1,8 @@
 # PlanarComplexMatmul
 
-本文档用于说明 `examples/77_planar_complex_matmul` 平面复数矩阵乘算子示例所依赖的 Catlass GEMM 模板库能力、外部接口、分层设计方案。
+> **注意**：本样例位于 `experimental/` 目录下，如需编译运行，请先将样例目录拷贝至 `examples/` 下，并在 `examples/CMakeLists.txt` 中添加样例名称 `planar_complex_matmul`。
+
+本文档用于说明 `experimental/matmul/planar_complex_matmul` 平面复数矩阵乘算子示例所依赖的 Catlass GEMM 模板库能力、外部接口、分层设计方案。
 
 ## 1. 功能说明
 
@@ -8,7 +10,7 @@
  - 计算公式：
 
 $$
-    \begin{aligned}
+\begin{aligned}
     A &= A_{real} + iA_{imag} \\
     B &= B_{real} + iB_{imag} \\
     C &= A \times B \\
@@ -43,8 +45,8 @@ PlanarComplexMatmul 所涉及的关键模板参数如下：
 | `LayoutB` | 右矩阵排布方式 | `layout::ColumnMajor` |
 | `LayoutC` | 输出矩阵排布方式 | `layout::RowMajor` |
 | `ArchTag` | 目标架构 | `Arch::AtlasA2` |
-| `L1TileShape` | L1 tile 形状 | `tla::tuple<tla::Int<128>, tla::Int<256>, tla::Int<256>>` |
-| `L0TileShape` | L0 tile 形状 | `tla::tuple<tla::Int<128>, tla::Int<256>, tla::Int<64>>` |
+| `L1TileShape` | L1 tile 形状 | `GemmShape<128, 256, 256>` |
+| `L0TileShape` | L0 tile 形状 | `GemmShape<128, 256, 64>` |
 | `DispatchPolicy` (Four-Pass) | 4-pass 路径的 MMAD 调度策略 | `Gemm::MmadPingpong<ArchTag, true>` |
 | `DispatchPolicy` (Fused) | Fused 路径的 MMAD 调度策略 | `Gemm::MmadPlanarComplexFused<ArchTag, true>` |
 
@@ -61,7 +63,7 @@ PlanarComplexMatmul 所涉及的关键模板参数如下：
 
 #### 4.1.1 参数解析
 
-`77_planar_complex_matmul` 命令执行参数：
+`planar_complex_matmul` 命令执行参数：
 
 ```text
 m, n, k, [device_id], [--datapath DATA_PATH]
@@ -85,7 +87,7 @@ K >= 6000 AND per_core >= 3 tiles  -> Four-Pass
 - `coreLoops = CeilDiv(m, L1_TILE_M) * CeilDiv(n, L1_TILE_N)`
 - `perCore = coreLoops / aicCoreNum`
 
-Four-Pass 将 L2 工作集锁定为 2 个矩阵（每 pass 只读写一路 C），适合 K 大、per-core tile 多的场景；Fused 单遍完成，适合 K 小或 per-core tile 少的场景。
+Four-Pass 每 pass 只读写一路 C，适合 K 大、per-core tile 多的场景；Fused 单遍完成，适合 K 小或 per-core tile 少的场景。
 
 #### 4.1.3 NEGATE_A 选择
 
@@ -107,14 +109,7 @@ deviceCReal, deviceCImag          // 输出 C 实部/虚部
 deviceWorkspace                   // AIV 取负后的 signed 工作区
 ```
 
-Host 通过 `aclrtGetHardwareSyncAddr` 获取硬件同步地址 `hardwareSyncAddr`，用于 Mix kernel 内 AIV<->AIC 跨核同步。Host 将 problemShape、4 路输入指针、2 路 signed 占位（`nullptr`，由 kernel 层根据 `NEGATE_A` 替换为 workspace 指针）、2 路输出指针传入 `PlanarKernel::Arguments`，再通过 `DeviceGemm<PlanarKernel>` 启动 kernel：
-
-```cpp
-using DeviceOp = Gemm::Device::DeviceGemm<PlanarKernel>;
-DeviceOp op;
-op.Initialize(arguments, deviceWorkspace);
-op(stream, aicCoreNum, hardwareSyncAddr);   // hardwareSyncAddr 用于跨核同步
-```
+Host 将 6 个输入指针 + 2 个输出指针 + workspace 传入 `DeviceGemm::Arguments`，由 kernel 层根据 `NEGATE_A` 决定 `ptrAImagSigned`/`ptrBImagSigned` 指向 workspace 还是原始指针。
 
 ### 4.2 Kernel 层
 
@@ -208,8 +203,8 @@ Fused 使用 `BlockMmadTla` 针对 `MmadPlanarComplexFused` policy 的偏特化�
 ### 5.1 Tile Shape 设计
 
 ```cpp
-using L1TileShape = tla::tuple<tla::Int<128>, tla::Int<256>, tla::Int<256>>;  // M, N, K
-using L0TileShape = tla::tuple<tla::Int<128>, tla::Int<256>, tla::Int<64>>;   // M, N, K
+using L1TileShape = GemmShape<128, 256, 256>;  // M, N, K
+using L0TileShape = GemmShape<128, 256, 64>;   // M, N, K
 ```
 
 ### 5.2 存储空间计算
@@ -239,12 +234,13 @@ Host 选择较小的一侧取负以减少 workspace 开销。
 ## 6. 代码组织
 
 ```
-├── examples
-│   └── 77_planar_complex_matmul
-│       ├── CMakeLists.txt              # CMake 编译文件
-│       ├── README.md                   # 本文档
-│       ├── gen_data_compare.py         # NumPy golden 数据生成与精度比对脚本
-│       └── planar_complex_matmul.cpp   # 样例主文件（Host 层入口）
+├── experimental
+│   └── matmul
+│       └── planar_complex_matmul
+│           ├── CMakeLists.txt              # CMake 编译文件
+│           ├── README.md                   # 本文档
+│           ├── gen_data_compare.py         # NumPy golden 数据生成与精度比对脚本
+│           └── planar_complex_matmul.cpp   # 样例主文件（Host 层入口）
 └── include
     └── catlass
         ├── gemm
@@ -252,12 +248,15 @@ Host 选择较小的一侧取负以减少 workspace 开销。
         │   │   └── block_mmad_planar_complex_fused_tla.hpp
         │   │       # BlockMmadTla 针对 MmadPlanarComplexFused 的偏特化
         │   │       # 实现 Fused 路径的双 stage K-loop 与 L0C 分时复用
+        │   ├── device
+        │   │   └── (复用主仓库 device_gemm.hpp)
+        │   │       # Device 层薄封装：参数透传 + KernelAdapter 启动
         │   └── kernel
         │       └── planar_complex_gemm_tla.hpp
         │           # PlanarComplexGemm 统一 kernel（Four-Pass / Fused 编排）
-        │           # 含 NegateMatrixAiv AIV 取负预处理
+        │           # 含 NegateMatrixAiv AIV 取负预处理组件
         └── dispatch_policy.hpp
-            # MmadPlanarComplexFused policy（ENABLE_SHUFFLE_K 参数）
+            # MmadPlanarComplexFused policy（仅 ENABLE_SHUFFLE_K 参数）
 ```
 
 ## 7. 使用示例
@@ -265,14 +264,14 @@ Host 选择较小的一侧取负以减少 workspace 开销。
 1. 编译样例代码，并生成相应的算子可执行文件。
 
 ```
-bash scripts/build.sh 77_planar_complex_matmul
+bash scripts/build.sh planar_complex_matmul
 ```
 
 2. 切换到可执行文件的编译目录 `output/bin` 下，执行算子样例程序。该方式随机生成输入数据，只输出 kernel 调度路径与平均耗时，不做精度比对。
 
 ```
 cd output/bin
-./77_planar_complex_matmul 256 512 1024 0
+./planar_complex_matmul 256 512 1024 0
 ```
 
 • 256：矩阵 m 轴
@@ -291,10 +290,10 @@ PlanarComplexGemm: M=256 N=512 K=1024 variant=Fused gemm=... ms (20 iters)
 No --datapath provided, skipping validation.
 ```
 
-3. 使用 `gen_data_compare.py` 生成输入数据、运行 NPU 可执行文件并与 NumPy golden 结果进行比对。脚本默认从仓库根目录自动定位 `output/bin/77_planar_complex_matmul`，默认在当前目录下生成 `data`、`golden` 目录并在结束后删除；如需指定保存路径可使用 `--save_path`，如需保留可指定 `--clean false`。
+3. 使用 `gen_data_compare.py` 生成输入数据、运行 NPU 可执行文件并与 NumPy golden 结果进行比对。脚本默认从仓库根目录自动定位 `output/bin/planar_complex_matmul`，默认在当前目录下生成 `data`、`golden` 目录并在结束后删除；如需指定保存路径可使用 `--save_path`，如需保留可指定 `--clean false`。
 
 ```
-python examples/77_planar_complex_matmul/gen_data_compare.py 256 512 1024
+python examples/planar_complex_matmul/gen_data_compare.py 256 512 1024
 ```
 
 执行结果如下，说明精度比对成功。

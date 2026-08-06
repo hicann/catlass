@@ -1,5 +1,7 @@
 # SymmMatmul Example Readme
 
+> **注意**：本样例位于 `experimental/` 目录下，如需编译运行，请先将样例目录拷贝至 `examples/` 下，并在 `examples/CMakeLists.txt` 中添加样例名称 `symm`。
+
 ## 功能说明
 
 - 算子功能：完成对称矩阵乘法计算（SYMM），利用输入矩阵的对称性，仅读取上三角（或下三角）有效数据，通过 direct/transpose 双路径完成等价的全量矩阵乘。
@@ -54,10 +56,12 @@
 ## 代码组织
 
 ```text
-├── 75_symm
-│   ├── CMakeLists.txt     # CMake 编译文件
-│   ├── README.md
-│   └── symm.cpp    # 主文件（包含 host 数据生成、kernel 调度、正确性验证）
+experimental
+├── matmul
+│   └── symm
+│       ├── CMakeLists.txt     # CMake 编译文件
+│       ├── README.md
+│       └── symm.cpp    # 主文件（包含 host 数据生成、kernel 调度、正确性验证）
 ```
 
 ## 使用示例
@@ -65,7 +69,7 @@
 1. 编译样例代码：
 
     ```bash
-    bash scripts/build.sh 75_symm
+    bash scripts/build.sh symm
     ```
 
 2. 执行算子样例程序：
@@ -74,16 +78,16 @@
     cd output/bin
 
     # 左乘 + 上三角：C = S(M×M) × B(M×N)，S 上三角有效
-    ./75_symm 768 4096 768 0 0 1
+    ./symm 768 4096 768 0 0 1
 
     # 左乘 + 下三角
-    ./75_symm 768 4096 768 0 0 0
+    ./symm 768 4096 768 0 0 0
 
     # 右乘 + 上三角：C = B(M×K) × S(K×K)，S 上三角有效
-    ./75_symm 4096 768 768 0 1 1
+    ./symm 4096 768 768 0 1 1
 
     # 右乘 + 下三角
-    ./75_symm 4096 768 768 0 1 0
+    ./symm 4096 768 768 0 1 0
     ```
 
     参数含义依次为：`m n k deviceId symmSide symmFill`。

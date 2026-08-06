@@ -32,28 +32,28 @@ side = 1, Right: C = alpha * A * op(B)，B 为三角矩阵
 
 ## 样例实现
 
-CATLASS [`76_trmm` 样例](./README.md)算子是基于 CATLASS Gemm API 实现的三角矩阵乘算子。实现主体复用通用矩阵乘组件，TRMM 自身负责三角矩阵语义参数、有效 K 范围裁剪以及 `alpha` 后处理。
+CATLASS [`trmm` 样例](./README.md)算子是基于 CATLASS Gemm API 实现的三角矩阵乘算子。实现主体复用通用矩阵乘组件，TRMM 自身负责三角矩阵语义参数、有效 K 范围裁剪以及 `alpha` 后处理。
 
 关键组件包括：
 
 - **Example 组装**：[trmm.cpp](./trmm.cpp)
-- **Kernel 实现**：[trmm.hpp](../../include/catlass/gemm/kernel/trmm.hpp)
+- **Kernel 实现**：[trmm.hpp](../../../include/catlass/gemm/kernel/trmm.hpp)
 - **Block 组件**：
-  - 通用 MMAD 组件 [block_mmad_pingpong_tla.hpp](../../include/catlass/gemm/block/block_mmad_pingpong_tla.hpp)
-  - 基本块分发策略 [block_swizzle.hpp](../../include/catlass/gemm/block/block_swizzle.hpp)
+  - 通用 MMAD 组件 [block_mmad_pingpong_tla.hpp](../../../include/catlass/gemm/block/block_mmad_pingpong_tla.hpp)
+  - 基本块分发策略 [block_swizzle.hpp](../../../include/catlass/gemm/block/block_swizzle.hpp)
 - **Tile 组件**：
-  - GM/L1/L0 搬运组件 [tile_copy_tla.hpp](../../include/catlass/gemm/tile/tile_copy_tla.hpp)
-  - AIV 后处理搬运组件 [copy_gm_to_ub_tla.hpp](../../include/catlass/epilogue/tile/copy_gm_to_ub_tla.hpp) 和 [copy_ub_to_gm_tla.hpp](../../include/catlass/epilogue/tile/copy_ub_to_gm_tla.hpp)
+  - GM/L1/L0 搬运组件 [tile_copy_tla.hpp](../../../include/catlass/gemm/tile/tile_copy_tla.hpp)
+  - AIV 后处理搬运组件 [copy_gm_to_ub_tla.hpp](../../../include/catlass/epilogue/tile/copy_gm_to_ub_tla.hpp) 和 [copy_ub_to_gm_tla.hpp](../../../include/catlass/epilogue/tile/copy_ub_to_gm_tla.hpp)
 - **CMake 组装**：[CMakeLists.txt](./CMakeLists.txt)
 
 ## Example 组装
 
 ### Host 侧参数组织
 
-`76_trmm` 的命令格式为：
+`trmm` 的命令格式为：
 
 ```bash
-./output/bin/76_trmm m n side uplo trans diag alpha [device_id]
+./output/bin/trmm m n side uplo trans diag alpha [device_id]
 ```
 
 Host 侧通过 `TrmmOptions` 解析命令行参数，并根据 `side` 推导 `K`：
@@ -71,7 +71,7 @@ Host 示例在 CPU 侧构造输入：
 - `side=left` 时，matA 为三角矩阵，matB 为 dense 矩阵。
 - `side=right` 时，matA 为 dense 矩阵，matB 为三角矩阵。
 - 三角矩阵按原始 `uplo` 保留 active half，inactive half 写 0。
-- dense 矩阵使用 [FillRandomData](../common/golden/fill_data.hpp)，三角矩阵使用 [FillTriangularData](../common/golden/fill_data.hpp)。
+- dense 矩阵使用 [FillRandomData](../../../examples/common/golden/fill_data.hpp)，三角矩阵使用 [FillTriangularData](../../../examples/common/golden/fill_data.hpp)。
 
 inactive half 置零是当前 kernel 满足 TRMM 语义的前置条件。Kernel 做 tile 级 K 范围裁剪，不做逐元素三角 mask；同一个输出 tile 内仍可能覆盖到三角矩阵 inactive half，因此 inactive half 需要由调用侧保证为 0。
 
@@ -224,42 +224,42 @@ CMake 写法与其他 matmul 类样例一致：
 
 ```cmake
 set_source_files_properties(trmm.cpp PROPERTIES LANGUAGE ASC)
-catlass_example_add_executable(76_trmm mix trmm.cpp)
-target_link_libraries(76_trmm PRIVATE pthread)
+catlass_example_add_executable(trmm mix trmm.cpp)
+target_link_libraries(trmm PRIVATE pthread)
 ```
 
 在 CATLASS 仓库根目录执行：
 
 ```bash
 source /usr/local/Ascend/ascend-toolkit/set_env.sh
-bash scripts/build.sh 76_trmm
+bash scripts/build.sh trmm
 ```
 
 编译成功后会生成：
 
 ```text
-output/bin/76_trmm
+output/bin/trmm
 ```
 
 运行命令格式为：
 
 ```bash
-./output/bin/76_trmm m n side uplo trans diag alpha [device_id]
+./output/bin/trmm m n side uplo trans diag alpha [device_id]
 ```
 
 运行示例：
 
 ```bash
-./output/bin/76_trmm 128 96 0 0 0 0 1.0 0
-./output/bin/76_trmm 128 96 0 1 1 0 0.5 0
-./output/bin/76_trmm 96 128 1 0 0 0 1.0 0
-./output/bin/76_trmm 96 128 1 1 1 0 0.5 0
+./output/bin/trmm 128 96 0 0 0 0 1.0 0
+./output/bin/trmm 128 96 0 1 1 0 0.5 0
+./output/bin/trmm 96 128 1 0 0 0 1.0 0
+./output/bin/trmm 96 128 1 1 1 0 0.5 0
 ```
 
 Profiling 示例：
 
 ```bash
-WARMUP=5 REPEAT=20 SKIP_OUTPUT=1 ./output/bin/76_trmm 4608 256 1 1 1 0 1.0 0
+WARMUP=5 REPEAT=20 SKIP_OUTPUT=1 ./output/bin/trmm 4608 256 1 1 1 0 1.0 0
 ```
 
 ## 约束说明

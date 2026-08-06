@@ -1,9 +1,11 @@
 # GroupedMatmulSliceMGelu Example Readme
 
+> **注意**：本样例位于 `experimental/` 目录下，如需编译运行，请先将样例目录拷贝至 `examples/` 下，并在 `examples/CMakeLists.txt` 中添加样例名称 `grouped_matmul_slice_m_gelu`。
+
 ## 代码组织
 
 ```
-./examples/80_grouped_matmul_slice_m_gelu/
+./experimental/gmm/grouped_matmul_slice_m_gelu/
 ├── CMakeLists.txt     // CMake编译文件
 ├── gen_data.py   // 数据生成脚本
 ├── grouped_matmul_slice_m_gelu.cpp   // 主文件
@@ -26,7 +28,7 @@
 
 example使用
 
-- 获取代码之后编译相应的算子可执行文件，可参考[快速入门](../../docs/zh/1_Practice/01_quick_start.md)
+- 获取代码之后编译相应的算子可执行文件，可参考[快速入门](../../../docs/zh/1_Practice/01_quick_start.md)
 - 执行算子
 
 ```
@@ -34,7 +36,7 @@ example使用
 function build() {
     rm -rf ./build
     rm -rf ./output
-    bash scripts/build.sh 80_grouped_matmul_slice_m_gelu -DCATLASS_ARCH=3510
+    bash scripts/build.sh grouped_matmul_slice_m_gelu -DCATLASS_ARCH=3510
 }
 build
 
@@ -44,9 +46,9 @@ n=256
 k=256
 device_id=1
 
-python ./examples/80_grouped_matmul_slice_m_gelu/gen_data.py "$group_num" "$m" "$n" "$k" "$device_id"
+python ./examples/grouped_matmul_slice_m_gelu/gen_data.py "$group_num" "$m" "$n" "$k" "$device_id"
 
-./output/bin/80_grouped_matmul_slice_m_gelu $group_num $m $n $k $device_id
+./output/bin/grouped_matmul_slice_m_gelu $group_num $m $n $k $device_id
 ```
 
 执行结果如下，说明精度比对成功。

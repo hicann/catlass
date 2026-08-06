@@ -67,7 +67,7 @@ def gen_data(m, n, k, seed, blas_threads, save_path):
 def get_default_op_path():
     current_dir = os.path.dirname(os.path.abspath(__file__))
     catlass_home_dir = os.path.dirname(os.path.dirname(current_dir))
-    return os.path.join(catlass_home_dir, "output", "bin", "77_planar_complex_matmul")
+    return os.path.join(catlass_home_dir, "output", "bin", "planar_complex_matmul")
 
 
 def run_op(op_path, m, n, k, device_id, save_path):

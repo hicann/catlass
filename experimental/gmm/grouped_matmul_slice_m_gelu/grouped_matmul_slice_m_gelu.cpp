@@ -31,7 +31,7 @@ using Options = GroupedGemmOptions;
 
 void Run(Options const& options)
 {
-    std::string datapath = "./examples/80_grouped_matmul_slice_m_gelu/data/";
+    std::string datapath = "./examples/grouped_matmul_slice_m_gelu/data/";
 
     aclrtStream stream{nullptr};
     ACL_CHECK(aclInit(nullptr));

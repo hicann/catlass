@@ -9,5 +9,5 @@
 # ----------------------------------------------------------------------------
 
 set_source_files_properties(grouped_matmul_slice_m_gelu.cpp PROPERTIES LANGUAGE ASC)
-catlass_example_add_executable(80_grouped_matmul_slice_m_gelu mix grouped_matmul_slice_m_gelu.cpp)
-target_compile_definitions(80_grouped_matmul_slice_m_gelu PRIVATE L2_CACHE_HINT)
+catlass_example_add_executable(grouped_matmul_slice_m_gelu mix grouped_matmul_slice_m_gelu.cpp)
+target_compile_definitions(grouped_matmul_slice_m_gelu PRIVATE L2_CACHE_HINT)

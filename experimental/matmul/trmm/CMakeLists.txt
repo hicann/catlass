@@ -8,6 +8,6 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 
-# Mix mode is required: AIV produces the signed imaginary workspace before AIC consumes it.
-set_source_files_properties(planar_complex_matmul.cpp PROPERTIES LANGUAGE ASC)
-catlass_example_add_executable(77_planar_complex_matmul mix planar_complex_matmul.cpp)
+set_source_files_properties(trmm.cpp PROPERTIES LANGUAGE ASC)
+catlass_example_add_executable(trmm mix trmm.cpp)
+target_link_libraries(trmm PRIVATE pthread)
