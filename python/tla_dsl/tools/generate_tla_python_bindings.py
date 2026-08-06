@@ -29,7 +29,7 @@ def _resolve_tblgen(explicit: str | None = None) -> str:
         if p.is_file():
             return str(p)
         raise SystemExit(f"mlir-tblgen not found: {p}")
-    prebuilt = os.environ.get("TLA_DSL_PREBUILT_ASCENDNPU_IR")
+    prebuilt = os.environ.get("CATLASS_DSL_PREBUILT_ASCENDNPU_IR")
     if prebuilt:
         p = Path(prebuilt) / "build" / "bin" / "mlir-tblgen"
         if p.is_file():
@@ -54,8 +54,8 @@ def _resolve_include(explicit: str | None = None) -> Path:
         raise SystemExit(
             f"MLIR_TBLGEN_INCLUDE_DIR does not contain mlir/IR/OpBase.td: {p}"
         )
-    # 自动从 TLA_DSL_PREBUILT_ASCENDNPU_IR 派生 include
-    prebuilt = os.environ.get("TLA_DSL_PREBUILT_ASCENDNPU_IR")
+    # 自动从 CATLASS_DSL_PREBUILT_ASCENDNPU_IR 派生 include
+    prebuilt = os.environ.get("CATLASS_DSL_PREBUILT_ASCENDNPU_IR")
     if prebuilt:
         p = Path(prebuilt) / "build" / "install" / "include"
         if (p / "mlir" / "IR" / "OpBase.td").is_file():

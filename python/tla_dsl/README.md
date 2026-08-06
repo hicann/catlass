@@ -112,7 +112,7 @@ git submodule update --init
 默认使用仓库内submodule的路径：
 
 ```bash
-export TLA_DSL_PREBUILT_ASCENDNPU_IR="${CATLASS_ROOT}/python/tla_dsl/3rdparty/AscendNPU-IR"
+export CATLASS_DSL_PREBUILT_ASCENDNPU_IR="${CATLASS_ROOT}/python/tla_dsl/3rdparty/AscendNPU-IR"
 ```
 
 可根据环境实际情况，修改该路径。
@@ -120,10 +120,10 @@ export TLA_DSL_PREBUILT_ASCENDNPU_IR="${CATLASS_ROOT}/python/tla_dsl/3rdparty/As
 - 检查`AscendNPU-IR`产物是否就绪：
 
 ```bash
-test -f "$TLA_DSL_PREBUILT_ASCENDNPU_IR/bishengir/include/bishengir/Dialect/HIVM/IR/HIVM.h" && echo "HIVM.h OK"
-test -f "$TLA_DSL_PREBUILT_ASCENDNPU_IR/build/tools/bishengir/include/bishengir/Interfaces/BiShengIREnums.h.inc" && echo "TableGen inc OK"
-test -f "$TLA_DSL_PREBUILT_ASCENDNPU_IR/build/install/lib/cmake/mlir/MLIRConfig.cmake" && echo "Ascend MLIR CMake package OK"
-ls "$TLA_DSL_PREBUILT_ASCENDNPU_IR/build/lib"/libMLIRHIVMDialect.so 2>/dev/null || ls "$TLA_DSL_PREBUILT_ASCENDNPU_IR/build/lib"/libMLIRHIVMDialect.a 2>/dev/null && echo "HIVM lib OK"
+test -f "$CATLASS_DSL_PREBUILT_ASCENDNPU_IR/bishengir/include/bishengir/Dialect/HIVM/IR/HIVM.h" && echo "HIVM.h OK"
+test -f "$CATLASS_DSL_PREBUILT_ASCENDNPU_IR/build/tools/bishengir/include/bishengir/Interfaces/BiShengIREnums.h.inc" && echo "TableGen inc OK"
+test -f "$CATLASS_DSL_PREBUILT_ASCENDNPU_IR/build/install/lib/cmake/mlir/MLIRConfig.cmake" && echo "Ascend MLIR CMake package OK"
+ls "$CATLASS_DSL_PREBUILT_ASCENDNPU_IR/build/lib"/libMLIRHIVMDialect.so 2>/dev/null || ls "$CATLASS_DSL_PREBUILT_ASCENDNPU_IR/build/lib"/libMLIRHIVMDialect.a 2>/dev/null && echo "HIVM lib OK"
 ```
 
 #### 暴露 AscendNPU-IR 的 MLIR / LLVM 运行环境
@@ -131,11 +131,11 @@ ls "$TLA_DSL_PREBUILT_ASCENDNPU_IR/build/lib"/libMLIRHIVMDialect.so 2>/dev/null 
 构建和运行 TLA DSL 时，应使用 AscendNPU-IR 构建出的 MLIR Python 包与动态库，不要使用 conda 的 MLIR binding：
 
 ```bash
-export MLIR_TBLGEN_INCLUDE_DIR="$TLA_DSL_PREBUILT_ASCENDNPU_IR/build/install/include"
-export PYTHONPATH="$TLA_DSL_PREBUILT_ASCENDNPU_IR/build/install/python_packages/mlir_core:${PYTHONPATH:-}"
+export MLIR_TBLGEN_INCLUDE_DIR="$CATLASS_DSL_PREBUILT_ASCENDNPU_IR/build/install/include"
+export PYTHONPATH="$CATLASS_DSL_PREBUILT_ASCENDNPU_IR/build/install/python_packages/mlir_core:${PYTHONPATH:-}"
 ```
 
-- `./build.sh` 会在配置 CMake 前调用 `tools/generate_tla_python_bindings.py`，脚本会使用`$TLA_DSL_PREBUILT_ASCENDNPU_IR/build/bin/mlir-tblgen`，根据 `csrc/mlir/include/Dialect/Tla/IR/Tla.td` 重新生成 `catlass/_mlir_bindings/tla_ops_gen.py`，避免手动修改生成文件后与 TD 定义不一致。
+- `./build.sh` 会在配置 CMake 前调用 `tools/generate_tla_python_bindings.py`，脚本会使用`$CATLASS_DSL_PREBUILT_ASCENDNPU_IR/build/bin/mlir-tblgen`，根据 `csrc/mlir/include/Dialect/Tla/IR/Tla.td` 重新生成 `catlass/_mlir_bindings/tla_ops_gen.py`，避免手动修改生成文件后与 TD 定义不一致。
 
 ### 2.5 配置并编译 `tla`
 
@@ -228,7 +228,7 @@ bash tests/run_dsl_test.sh --device 0
 向量 op 会合并到最多 4 个 case 的 multi-block kernel 中，每个 block 执行并
 独立校验一个 case；不同 dtype 仍使用不同的编译特化。融合 batch 和不能合并的
 dtype 矩阵都会先使用有限数量的 host compiler 进程编译，再顺序启动 batch。可通过
-`--compile-jobs`（默认 `4`）或 `TLA_DSL_COMPILE_JOBS` 调整这些 host-only
+`--compile-jobs`（默认 `4`）或 `CATLASS_DSL_COMPILE_JOBS` 调整这些 host-only
 编译进程：
 
 ```bash
@@ -249,7 +249,7 @@ python examples/end_to_end/vector_ops/binary_op.py \
 需要设置的环境变量：
 
 - `ASCEND_HOME_PATH`（指向 CANN toolkit 根目录）。在运行前执行 `source /path/to/ascend-toolkit/set_env.sh`，会**自动设置** `ASCEND_HOME_PATH`
-- `TLA_DSL_PREBUILT_ASCENDNPU_IR`（已构建的 AscendNPU-IR 根目录）
+- `CATLASS_DSL_PREBUILT_ASCENDNPU_IR`（已构建的 AscendNPU-IR 根目录）
 
 可选：
 
@@ -257,7 +257,7 @@ python examples/end_to_end/vector_ops/binary_op.py \
 
 ```bash
 source /path/to/ascend-toolkit/set_env.sh
-export TLA_DSL_PREBUILT_ASCENDNPU_IR=/path/to/AscendNPU-IR
+export CATLASS_DSL_PREBUILT_ASCENDNPU_IR=/path/to/AscendNPU-IR
 bash tests/run_dsl_test.sh --device 0
 ```
 
@@ -333,7 +333,7 @@ http://127.0.0.1:8000/
 |------|------|
 | DLPack → TLA `Tensor` 字段来源与 layout 转换 | `docs/dlpack_to_tla_tensor.md` |
 | MMAD 端到端示例与运行参数 | `examples/end_to_end/basic_mmad/README.md` |
-| AscendNPU-IR 子模块、`build.sh`、TableGen 校验与 `TLA_DSL_PREBUILT` | 上文 **2.4** |
+| AscendNPU-IR 子模块、`build.sh`、TableGen 校验与 `CATLASS_DSL_PREBUILT` | 上文 **2.4** |
 | 依赖版本表、`python/tla_dsl/environment.yml`、`lit` 与 MLIR 19.1.7 同栈 | 上文 **2.2.1** |
 | 一键构建（`build.sh` / `hatch build`） | 上文 **2.5** |
 | 仅配置 MLIR 子目录（不跑完整 Catlass） | 见上文 **2.5** 的 **`./build.sh`** 或 `cmake` / `ninja` |

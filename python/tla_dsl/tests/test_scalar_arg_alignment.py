@@ -4,9 +4,9 @@ import ast
 from pathlib import Path
 
 
-_TLA_DSL_ROOT = Path(__file__).resolve().parents[1]
+_CATLASS_DSL_ROOT = Path(__file__).resolve().parents[1]
 _EXAMPLE = (
-    _TLA_DSL_ROOT
+    _CATLASS_DSL_ROOT
     / "examples"
     / "end_to_end"
     / "scalar_arg_alignment"

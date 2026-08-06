@@ -4,7 +4,7 @@ Ascend launch takes an integer stream handle from PyACL. Resolution order:
 
 1. ``torch.npu`` current device / ``npu_stream`` (when torch_npu is available)
 2. ``tla.initialize`` / ``catlass.runtime`` current device/stream
-3. ``TLA_DSL_NPU_DEVICE`` env (device only)
+3. ``CATLASS_DSL_NPU_DEVICE`` env (device only)
 
 Preferring the torch stream matters: example harnesses fill I/O tensors with
 ``torch.*`` on the torch stream, while ``tla.initialize`` creates a separate
@@ -37,7 +37,7 @@ def current_device() -> int:
             return int(runtime_device)
     except Exception:
         pass
-    return int(os.getenv("TLA_DSL_NPU_DEVICE", "0"))
+    return int(os.getenv("CATLASS_DSL_NPU_DEVICE", "0"))
 
 
 def current_stream(device: int) -> int:

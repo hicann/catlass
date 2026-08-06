@@ -243,7 +243,7 @@ bisheng -O2 -x cce --cce-auto-sync=off --cce-aicore-only --cce-generic-addrspace
      --cce-aicore-arch=dav-c310-cube \   # cube 核；vec 核用 dav-c310-vec
      -DCATLASS_ARCH=3510 \
      -I${ASCEND_HOME_PATH}/compiler/tikcpp/tikcfw/impl \
-     -I${TLA_DSL_CATLASS_INCLUDE_DIR} \
+     -I${CATLASS_DSL_CATLASS_INCLUDE_DIR} \
      dma.cpp -emit-llvm -c -mllvm -disable-llvm-optzns \
      -o dma.aic.c310.bc
 ```

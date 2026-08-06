@@ -303,7 +303,7 @@ def _load_bridge_extension() -> ModuleType:
         _EXTENSION = False
         raise TlaTypeBridgeUnavailableError(
             "Tla type bridge extension not found. Build the native type bridge "
-            "module or set TLA_DSL_TYPE_BRIDGE_EXTENSION."
+            "module or set CATLASS_DSL_TYPE_BRIDGE_EXTENSION."
         )
     spec = importlib.util.spec_from_file_location(
         "catlass._tla_type_bridge_native", path
@@ -318,7 +318,7 @@ def _load_bridge_extension() -> ModuleType:
 
 
 def _resolve_bridge_extension_path() -> Path | None:
-    explicit = os.getenv("TLA_DSL_TYPE_BRIDGE_EXTENSION")
+    explicit = os.getenv("CATLASS_DSL_TYPE_BRIDGE_EXTENSION")
     if explicit:
         candidate = Path(explicit).expanduser().resolve()
         if candidate.exists():

@@ -75,9 +75,9 @@ $$
    | `target_arch` | 平台默认（如 `"c310"`） | 目标芯片架构 |
    | `core_type` | `"aiv"` | 核函数类别，合法值 `"aic"`或`"aiv"` |
    | `kernel_mode` | `core_type` | 与`core_type`相同，支持 `"mix"` |
-   | `cache` | `True` | 是否命中磁盘/内存 (也可通过设置 `TLA_DSL_CACHE` 环境变量修改) |
-   | `cache_dir` | `"artifacts/runtime-cache"` | 编译产物缓存路径 （也可通过设置 `TLA_DSL_CACHE_DIR` 环境变量修改）  |
-   | `force_recompile` | `False` | 是否强制重新编译（忽略cache，也可通过设置 `TLA_DSL_FORCE_RECOMPILE` 环境变量修改） |
+   | `cache` | `True` | 是否命中磁盘/内存 (也可通过设置 `CATLASS_DSL_CACHE` 环境变量修改) |
+   | `cache_dir` | `"artifacts/runtime-cache"` | 编译产物缓存路径 （也可通过设置 `CATLASS_DSL_CACHE_DIR` 环境变量修改）  |
+   | `force_recompile` | `False` | 是否强制重新编译（忽略cache，也可通过设置 `CATLASS_DSL_FORCE_RECOMPILE` 环境变量修改） |
    | `hivmc` | 自动解析 | `hivmc-a5` 的可执行文件路径 | 
    | `hivmc_args` | `()` | 追加给 `hivmc` 的参数组（如 `("--verbose",)` |
 
