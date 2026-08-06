@@ -223,7 +223,7 @@ def test_mixed_handoff_uses_logical_abi_count_for_dynamic_gm(tmp_path) -> None:
         artifact=artifact,
         runtime=execution.TlaRuntimeOptions(kernel_mode="mix"),
         launch_args=[_make_tensor(0x1000, 32, 16), _make_tensor(0x2000, 16, 32)],
-        grid=(1, 1, 1),
+        block_num=1,
     )
 
     assert plan.entrypoint == "basic_mixed"

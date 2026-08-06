@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import contextvars
-import importlib
 import inspect
 from contextlib import contextmanager
 from dataclasses import dataclass, field  # noqa: F401 — field used below
@@ -27,6 +26,11 @@ from .execution import (
     execute_kernel,
     runtime_options_for_launch,
     runtime_options_from_kwargs,
+)
+from .base_dsl.runtime.ascend import (
+    check_acl_errors,
+    initialize_acl_context,
+    load_acl,
 )
 from .types import RuntimeTensorError
 
@@ -78,15 +82,6 @@ _FRONTEND_EMIT_STATE: contextvars.ContextVar[_FrontendEmitState | None] = (
 _GLOBAL_RUNTIME_STATE = TlaRuntimeState()
 
 
-def _load_acl() -> Any:
-    try:
-        return importlib.import_module("acl")
-    except ImportError as exc:
-        raise TlaRuntimeUnavailableError(
-            "Failed to import `acl`. Ensure the Ascend Python runtime is installed."
-        ) from exc
-
-
 def _normalize_runtime_device(device: int | str | None = None) -> int:
     if device is None:
         return 0
@@ -113,11 +108,6 @@ def _normalize_runtime_device(device: int | str | None = None) -> int:
     return device_id
 
 
-def _require_acl_success(ret: Any, op_name: str) -> None:
-    if int(ret) != 0:
-        raise TlaRuntimeUnavailableError(f"{op_name} failed with ret={int(ret)}")
-
-
 def initialize(device: int | str | None = None) -> TlaRuntimeState:
     """Initialize the global Ascend runtime state and create a stream."""
 
@@ -127,12 +117,11 @@ def initialize(device: int | str | None = None) -> TlaRuntimeState:
             "tla.initialize() was already called. Call tla.finalize() before reinitializing."
         )
     device_id = _normalize_runtime_device(device)
-    acl = _load_acl()
-    _require_acl_success(acl.init(), "acl.init")
+    acl = initialize_acl_context()
     try:
-        _require_acl_success(acl.rt.set_device(device_id), "acl.rt.set_device")
+        check_acl_errors(acl.rt.set_device(device_id), "acl.rt.set_device")
         stream, ret = acl.rt.create_stream()
-        _require_acl_success(ret, "acl.rt.create_stream")
+        check_acl_errors(ret, "acl.rt.create_stream")
     except Exception:
         try:
             acl.rt.reset_device(device_id)
@@ -160,17 +149,17 @@ def finalize() -> None:
         raise TlaExecutionError(
             "tla.finalize() requires a prior call to tla.initialize()."
         )
-    acl = _load_acl()
+    acl = load_acl()
     try:
         from . import types as types_mod
     except Exception:
         types_mod = None
     for dev_ptr in state.device_ptrs:
-        _require_acl_success(acl.rt.free(dev_ptr), "acl.rt.free")
+        check_acl_errors(acl.rt.free(dev_ptr), "acl.rt.free")
     if types_mod is not None:
         types_mod.invalidate_runtime_allocations(device_ptrs=state.device_ptrs)
-    _require_acl_success(acl.rt.reset_device(state.device_id), "acl.rt.reset_device")
-    _require_acl_success(acl.finalize(), "acl.finalize")
+    check_acl_errors(acl.rt.reset_device(state.device_id), "acl.rt.reset_device")
+    check_acl_errors(acl.finalize(), "acl.finalize")
     _GLOBAL_RUNTIME_STATE = TlaRuntimeState()
 
 
@@ -195,20 +184,20 @@ def current_stream() -> Any | None:
 def get_aicore_num(device: int | str | None = None) -> int:
     """Return the number of AICore on the current device."""
     device_id = _normalize_runtime_device(device)
-    acl = _load_acl()
+    acl = load_acl()
 
     aicore_num, ret = acl.rt.get_device_info(device_id, _ACL_DEV_ATTR_AICORE_CORE_NUM)
-    _require_acl_success(ret, f"acl.rt.get_device_info({device_id}, _ACL_DEV_ATTR_AICORE_CORE_NUM)")
+    check_acl_errors(ret, f"acl.rt.get_device_info({device_id}, _ACL_DEV_ATTR_AICORE_CORE_NUM)")
     return aicore_num
 
 
 def get_vector_core_num(device: int | str | None = None) -> int:
     """Return the number of VectorCore on the current device."""
     device_id = _normalize_runtime_device(device)
-    acl = _load_acl()
+    acl = load_acl()
 
     vector_core_num, ret = acl.rt.get_device_info(device_id, _ACL_DEV_ATTR_VECTOR_CORE_NUM)
-    _require_acl_success(ret, f"acl.rt.get_device_info({device_id}, _ACL_DEV_ATTR_VECTOR_CORE_NUM)")
+    check_acl_errors(ret, f"acl.rt.get_device_info({device_id}, _ACL_DEV_ATTR_VECTOR_CORE_NUM)")
     return vector_core_num
 
 
@@ -390,7 +379,7 @@ def _const_i1(value: int) -> Any:
 
 
 def _coerce_index_value(value: Any) -> Any:
-    mlir_ir: Any = importlib.import_module("mlir.ir")
+    from mlir import ir as mlir_ir
 
     from .base_dsl.typing import Numeric
 

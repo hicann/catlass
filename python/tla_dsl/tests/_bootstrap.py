@@ -199,9 +199,6 @@ def ensure_pretest_mlir_build(repo_root: Path) -> None:
     build_env["MLIR_TBLGEN_INCLUDE_DIR"] = str(include_dir)
     if mlir_dir:
         build_env["MLIR_DIR"] = mlir_dir
-    runtime_wrapper = env.get("TLA_DSL_BUILD_RUNTIME_WRAPPER")
-    if runtime_wrapper:
-        build_env["TLA_DSL_BUILD_RUNTIME_WRAPPER"] = runtime_wrapper
     if c_compiler:
         build_env["CC"] = c_compiler
     if cxx_compiler:
@@ -223,8 +220,6 @@ def ensure_pretest_mlir_build(repo_root: Path) -> None:
         cmake_cmd.append(f"-DCMAKE_CXX_COMPILER={cxx_compiler}")
     if mlir_dir:
         cmake_cmd.append(f"-DMLIR_DIR={mlir_dir}")
-    if runtime_wrapper:
-        cmake_cmd.append(f"-DTLA_DSL_BUILD_RUNTIME_WRAPPER={runtime_wrapper}")
     _run_checked(cmake_cmd, cwd=repo_root, env=build_env, runner=runner)
     _run_checked(
         ["ninja", "-C", "csrc/mlir/build", "tla-compiler"],

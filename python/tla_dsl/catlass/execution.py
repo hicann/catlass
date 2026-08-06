@@ -201,7 +201,6 @@ class TlaRuntimeOptions:
     target_arch: str = "c310"
     core_type: str = "aiv"
     kernel_mode: str = "aiv"
-    shared: int = 1
     arch_scope: str = DEFAULT_ARCH_SCOPE
     mlir_print_ir_before: tuple[str, ...] = ()
     mlir_print_ir_after: tuple[str, ...] = ()
@@ -213,7 +212,7 @@ class TlaRuntimeOptions:
 class _KernelLaunchPlan:
     entrypoint: str
     kernel_mode: str
-    grid: tuple[int, int, int]
+    block_num: int
     payload: bytes
     expects_debug_fifo: bool
     # 1 moves the workspace to arg 0 for pure kernels; 2 replaces the
@@ -425,110 +424,13 @@ def _drop_memory_cached_artifact(cache_key: str) -> None:
         _MEMORY_COMPILE_CACHE.pop(cache_key, None)
 
 
-def execute_kernel(
-    artifact: TlaKernelArtifact,
-    *,
-    runtime: TlaRuntimeOptions,
-    launch_args: Sequence[Any],
-    launch_kwargs: Mapping[str, Any],
-) -> TlaExecutionResult:
-    loader = _AscendLoader()
-    grid = _normalize_launch_grid(launch_kwargs.get("grid", (1, 1, 1)))
-    device, stream = _resolve_launch_context(loader, launch_kwargs)
-    if launch_args:
-        _mark_tensor_launch_args_uploaded(launch_args)
-    plan = _build_kernel_launch_plan(
-        artifact=artifact,
-        runtime=runtime,
-        launch_args=launch_args,
-        grid=grid,
-    )
-    print_metadata = (
-        _print_tensor_static_metadata_records(
-            artifact.tlair_mlir, entrypoint=artifact.entrypoint
-        )
-        if plan.expects_print_tensor
-        else None
-    )
-
-    module_handle, function_handle = loader.load_binary(
-        name=f"{plan.entrypoint} {plan.kernel_mode}",
-        kernel_path=artifact.kernel_binary_path,
-        shared=runtime.shared,
-        device=device,
-    )
-
-    def launch() -> None:
-        loader.launch_with_args(
-            function=function_handle,
-            stream=int(stream),
-            grid_x=int(plan.grid[0]),
-            grid_y=int(plan.grid[1]),
-            grid_z=int(plan.grid[2]),
-            args=plan.payload,
-            expects_debug_fifo=plan.expects_debug_fifo,
-            expects_print_tensor=plan.expects_print_tensor,
-        )
-
-    if print_metadata is None:
-        launch()
-    else:
-        native_output = _capture_c_stdout(launch)
-        print_block_count = _checked_print_tensor_block_count(plan.grid)
-        helper_core = (
-            _mixed_print_tensor_helper_core(artifact.lowered_llvm)
-            if plan.kernel_mode == "mix"
-            else runtime.core_type
-        )
-        expected_subblocks: tuple[int | None, ...] = (
-            (0, 1)
-            if helper_core == "aiv" and plan.kernel_mode == "mix"
-            else (0,)
-            if helper_core == "aiv"
-            else (None,)
-        )
-        decoded = _decode_native_print_tensor_records(
-            native_output,
-            metadata=print_metadata,
-            block_count=print_block_count,
-            expected_subblocks=expected_subblocks,
-        )
-        preserve_legacy_format = len(print_metadata) * print_block_count == 1
-        for metadata, record, values in decoded:
-            print(
-                _format_print_tensor_record(
-                    values,
-                    shape=record.shape,
-                    dtype=metadata.dtype,
-                    call=None if preserve_legacy_format else metadata.call,
-                    block=record.block,
-                    position=(metadata.position if plan.kernel_mode == "mix" else None),
-                    subblock=record.subblock,
-                )
-            )
-    return TlaExecutionResult(
-        artifact=artifact,
-        module_handle=module_handle,
-        function_handle=function_handle,
-        device=device,
-    )
-
-
-def _normalize_launch_grid(grid: Any) -> tuple[int, int, int]:
-    if isinstance(grid, int):
-        return (int(grid), 1, 1)
-    if len(grid) != 3:
-        raise TlaUnsupportedAbiError("`grid` must be an int or a 3-tuple.")
-    return tuple(int(item) for item in grid)
-
-
-def _checked_print_tensor_block_count(grid: tuple[int, int, int]) -> int:
-    block_count = math.prod(grid)
-    if any(extent <= 0 for extent in grid) or block_count > _PRINT_TENSOR_MAX_BLOCKS:
+def _checked_print_tensor_block_count(block_num: int) -> int:
+    block_count = int(block_num)
+    if block_count <= 0 or block_count > _PRINT_TENSOR_MAX_BLOCKS:
         raise TlaExecutionError(
             "tla.print_tensor 16-bit block identity requires a positive "
-            f"grid with at most {_PRINT_TENSOR_MAX_BLOCKS} blocks; "
-            f"got {grid}"
+            f"block_num with at most {_PRINT_TENSOR_MAX_BLOCKS} blocks; "
+            f"got {block_num}"
         )
     return block_count
 
@@ -554,12 +456,12 @@ def _print_tensor_native_wire_bytes(metadata: _PrintTensorMetadata) -> int:
 
 def _validate_print_tensor_fifo_capacity(
     artifact: TlaKernelArtifact,
-    grid: tuple[int, int, int],
+    block_num: int,
     *,
     helper_core: str,
     mixed: bool,
 ) -> None:
-    block_count = _checked_print_tensor_block_count(grid)
+    block_count = _checked_print_tensor_block_count(block_num)
     records_per_block = 2 if helper_core == "aiv" and mixed else 1
     core_records = block_count * records_per_block
     if core_records > _PRINT_TENSOR_CORE_RECORDS:
@@ -579,97 +481,6 @@ def _validate_print_tensor_fifo_capacity(
             f"{per_block_bytes} bytes/block, capacity is "
             f"{_PRINT_TENSOR_FIFO_BYTES} bytes"
         )
-
-
-def _resolve_launch_context(
-    loader: "_AscendLoader", launch_kwargs: Mapping[str, Any]
-) -> tuple[int, int]:
-    device = int(launch_kwargs.get("device", loader.get_current_device()))
-    stream = launch_kwargs.get("stream")
-    if stream is None:
-        stream = loader.get_current_stream(device)
-    return device, int(stream)
-
-
-def _build_kernel_launch_plan(
-    *,
-    artifact: TlaKernelArtifact,
-    runtime: TlaRuntimeOptions,
-    launch_args: Sequence[Any],
-    grid: tuple[int, int, int],
-) -> _KernelLaunchPlan:
-    expects_print_tensor = _has_print_tensor_workspace(artifact)
-    if expects_print_tensor:
-        helper_core = (
-            _mixed_print_tensor_helper_core(artifact.lowered_llvm)
-            if runtime.kernel_mode == "mix"
-            else runtime.core_type
-        )
-        _validate_print_tensor_fifo_capacity(
-            artifact,
-            grid,
-            helper_core=helper_core,
-            mixed=runtime.kernel_mode == "mix",
-        )
-    logical_mixed_handoff = _extract_logical_mixed_handoff(artifact.lowered_llvm)
-    expected_abi_entrypoint = (
-        logical_mixed_handoff.entrypoint
-        if logical_mixed_handoff is not None and runtime.kernel_mode == "mix"
-        else artifact.entrypoint
-    )
-    _validate_kernel_abi_layout(
-        artifact.kernel_abi, expected_entrypoint=expected_abi_entrypoint
-    )
-    if logical_mixed_handoff is not None and runtime.kernel_mode == "mix":
-        payload, effective_grid = _build_logical_mixed_handoff_launch_args(
-            launch_args,
-            grid,
-            logical_mixed_handoff.user_arg_types,
-            artifact.kernel_abi,
-        )
-        payload = _append_debug_print_workspace_payload(payload, artifact)
-        if expects_print_tensor:
-            extension = bytearray(payload)
-            _align_payload(extension, _POINTER_ABI_SIZE)
-            extension.extend(
-                _PRINT_TENSOR_WORKSPACE_SENTINEL.to_bytes(
-                    _POINTER_ABI_SIZE, byteorder="little", signed=False
-                )
-            )
-            payload = bytes(extension)
-        return _KernelLaunchPlan(
-            entrypoint=logical_mixed_handoff.entrypoint,
-            kernel_mode="mix",
-            grid=effective_grid,
-            payload=payload,
-            expects_debug_fifo=_has_debug_print_workspace(artifact),
-            expects_print_tensor=2 if expects_print_tensor else False,
-        )
-    payload = _pack_launch_args(launch_args, artifact.kernel_abi)
-    payload = _append_debug_print_workspace_payload(payload, artifact)
-    if expects_print_tensor:
-        extension = bytearray(payload)
-        _align_payload(extension, _POINTER_ABI_SIZE)
-        extension.extend(
-            _PRINT_TENSOR_WORKSPACE_SENTINEL.to_bytes(
-                _POINTER_ABI_SIZE, byteorder="little", signed=False
-            )
-        )
-        payload = bytes(extension)
-    return _KernelLaunchPlan(
-        entrypoint=artifact.entrypoint,
-        kernel_mode=runtime.kernel_mode,
-        grid=grid,
-        payload=payload,
-        expects_debug_fifo=_has_debug_print_workspace(artifact),
-        expects_print_tensor=expects_print_tensor,
-    )
-
-
-def _mark_tensor_launch_args_uploaded(args: Sequence[Any]) -> None:
-    for arg in args:
-        if hasattr(arg, "prepare_for_launch") and callable(arg.prepare_for_launch):
-            arg.prepare_for_launch()
 
 
 def _runtime_arg_values(arg: Any) -> list[int]:
@@ -833,7 +644,7 @@ def _memref_launch_field_value(tensor: Any, field: str) -> int:
 
 
 def _pack_launch_args(
-    args: Sequence[Any], layout: KernelAbiLayout | None
+    args: Sequence[Any], layout: KernelAbiLayout | None = None
 ) -> bytes:
     _validate_kernel_abi_layout(layout)
     if layout is None:
@@ -1165,10 +976,9 @@ def _extract_logical_mixed_handoff_entrypoint(mlir_text: str) -> str | None:
 
 def _build_logical_mixed_handoff_launch_args(
     launch_args: Sequence[Any],
-    grid: Sequence[int],
     arg_types: Sequence[str],
     kernel_abi: KernelAbiLayout | None,
-) -> tuple[bytes, tuple[int, int, int]]:
+) -> bytes:
     # Host still passes one object per logical kernel argument. Dynamic GM expands
     # each Tensor into many device params / memref_field slots in the ABI, so do
     # not compare against the raw split-function parameter count.
@@ -1182,7 +992,7 @@ def _build_logical_mixed_handoff_launch_args(
             "mixed handoff launch argument count does not match ABI layout: "
             f"got {len(launch_args)}, expected {expected}"
         )
-    return _pack_launch_args(launch_args, kernel_abi), tuple(int(item) for item in grid)
+    return _pack_launch_args(launch_args, kernel_abi)
 
 
 def _has_debug_print_workspace(artifact: TlaKernelArtifact) -> bool:
@@ -1610,7 +1420,6 @@ def runtime_options_from_kwargs(kwargs: Mapping[str, Any]) -> TlaRuntimeOptions:
         target_arch=target_arch,
         core_type=core_type,
         kernel_mode=kernel_mode,
-        shared=int(kwargs.get("shared", 1)),
         arch_scope=arch_scope,
         mlir_print_ir_before=_string_tuple(kwargs.get("mlir_print_ir_before", ())),
         mlir_print_ir_after=_string_tuple(kwargs.get("mlir_print_ir_after", ())),
@@ -1870,7 +1679,13 @@ def _build_hivmc_a5_command(
 def _create_stamped_hivmc_input(
     mlir_path: Path, runtime: TlaRuntimeOptions
 ) -> tuple[Path, str | None]:
-    """Stamp a private HIVMC input only when debug-print helpers are present."""
+    """Stamp a private HIVMC input only when debug-print helpers are present.
+
+    Ordinary kernels rely on ``--link-aicore-bitcode`` alone. Debug /
+    ``print_tensor`` helpers also need module attrs ``hivm.aiv_bitcode`` /
+    ``hivm.aic_bitcode`` (and optionally helper bitcode), so copy+stamp a
+    private ``*.hivmc-input.mlir`` in those cases only.
+    """
     compiler_text = mlir_path.read_text()
     if (
         "tla.debug_print.workspace" not in compiler_text
@@ -1878,7 +1693,7 @@ def _create_stamped_hivmc_input(
     ):
         return mlir_path, None
     compiler_input = mlir_path.with_name(f"{mlir_path.stem}.hivmc-input.mlir")
-    compiler_input.write_text(mlir_path.read_text())
+    compiler_input.write_text(compiler_text)
     template_bitcode = _resolve_hivm_template_bitcode(runtime)
     if "tla.print_tensor.workspace" in compiler_text:
         helper_core_type = (
@@ -2274,336 +2089,12 @@ def _env_truthy(name: str, *, default: str) -> bool:
     value = os.getenv(name, default).strip().lower()
     return value in {"1", "true", "yes", "on", "y"}
 
-
-def _resolve_runtime_wrapper_library(explicit: str | None = None) -> Path:
-    candidates: list[Path] = []
-    if explicit:
-        candidates.append(Path(explicit))
-    env = os.getenv("TLA_DSL_RUNTIME_WRAPPER")
-    if env:
-        candidates.append(Path(env))
-    package_root = Path(__file__).resolve().parent
-    candidates.append(package_root / "bin" / "libtla_dsl_runtime_wrapper.so")
-    for build_dir in _mlir_build_dirs():
-        candidates.extend(
-            [
-                build_dir / "libtla_dsl_runtime_wrapper.so",
-                build_dir / "tla_dsl_runtime_wrapper.so",
-            ]
-        )
-        for path in build_dir.rglob("*tla_dsl_runtime_wrapper*.so*"):
-            candidates.append(path)
-    for candidate in candidates:
-        if candidate.exists():
-            return candidate
-    raise TlaRuntimeUnavailableError(
-        "Failed to resolve the CMake-built runtime wrapper. "
-        "Build `tla_dsl_runtime_wrapper` and/or set TLA_DSL_RUNTIME_WRAPPER."
-    )
-
-
-def _build_cpp_extension(module_name: str, src: str, *, ascend_path: Path) -> Path:
-    cache_dir = _default_cache_dir() / "extensions"
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    ext_suffix = sysconfig.get_config_var("EXT_SUFFIX") or ".so"
-    key = hashlib.sha256((module_name + src + sys.version).encode("utf-8")).hexdigest()
-    output = cache_dir / f"{module_name}_{key}{ext_suffix}"
-    if output.exists():
-        return output
-
-    cxx = os.environ.get("CXX") or shutil.which("clang++") or shutil.which("g++")
-    if cxx is None:
-        raise TlaRuntimeUnavailableError(
-            "No C++ compiler found (set CXX or install clang++/g++)."
-        )
-
-    if hasattr(sysconfig, "get_default_scheme"):
-        scheme = sysconfig.get_default_scheme()
-    else:  # pragma: no cover
-        scheme = "posix_prefix"
-    if scheme == "posix_local":
-        scheme = "posix_prefix"
-    py_include = Path(sysconfig.get_paths(scheme=scheme)["include"])
-    asc_include = ascend_path / "include"
-    asc_lib64 = ascend_path / "lib64"
-    if not asc_include.exists() or not asc_lib64.exists():
-        raise TlaRuntimeUnavailableError(
-            f"Ascend toolkit not found under {ascend_path}. Missing include/ or lib64/."
-        )
-
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmpdir_path = Path(tmpdir)
-        src_path = tmpdir_path / f"{module_name}.cpp"
-        out_path = tmpdir_path / f"{module_name}{ext_suffix}"
-        src_path.write_text(src)
-        cmd = [
-            cxx,
-            str(src_path),
-            "-shared",
-            "-fPIC",
-            "-O2",
-            "-std=c++17",
-            f"-I{py_include}",
-            f"-I{asc_include}",
-            f"-I{asc_include / 'experiment'}",
-            "-L" + str(asc_lib64),
-            "-lruntime",
-            "-lascendcl",
-            f"-Wl,-rpath,{asc_lib64}",
-            "-o",
-            str(out_path),
-        ]
-        proc = subprocess.run(cmd, check=False, capture_output=True, text=True)
-        if proc.returncode != 0:
-            raise TlaRuntimeUnavailableError(
-                "Failed to build Ascend runtime extension.\n"
-                f"cmd: {' '.join(cmd)}\n"
-                f"stdout:\n{proc.stdout}\n"
-                f"stderr:\n{proc.stderr}"
-            )
-        out_path.replace(output)
-    return output
-
-
-def _load_ext_module(module_name: str, path: Path):
-    spec = importlib.util.spec_from_file_location(module_name, str(path))
-    if spec is None or spec.loader is None:
-        raise TlaRuntimeUnavailableError(
-            f"Failed to load extension module spec for {module_name}"
-        )
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-_ASCEND_EXT_SRC = r"""
-#define PY_SSIZE_T_CLEAN
-#include <Python.h>
-#include <cstdint>
-#include <string>
-#include <vector>
-
-#if __has_include("experiment/runtime/runtime/rt.h")
-#include "experiment/runtime/runtime/rt.h"
-#elif __has_include("runtime/rt.h")
-#include "runtime/rt.h"
-#else
-#error "Cannot find Ascend runtime header (rt.h)"
-#endif
-
-static PyObject *loadKernelBinary(PyObject *, PyObject *args) {
-  const char *name;
-  const char *data;
-  Py_ssize_t data_size;
-  int shared;
-  int device;
-  const char *kernel_mode;
-  if (!PyArg_ParseTuple(args, "ss#iis", &name, &data, &data_size, &shared, &device, &kernel_mode)) {
-    return NULL;
-  }
-
-  rtDevBinary_t devbin;
-  devbin.data = data;
-  devbin.length = data_size;
-  std::string mode{kernel_mode};
-  devbin.magic = mode == "aiv" ? RT_DEV_BINARY_MAGIC_ELF_AIVEC : RT_DEV_BINARY_MAGIC_ELF;
-  devbin.version = 0;
-
-  rtError_t ret = rtSetDevice(device);
-  if (ret != RT_ERROR_NONE) {
-    PyErr_Format(PyExc_RuntimeError, "rtSetDevice failed: 0x%x", ret);
-    return NULL;
-  }
-
-  void *module = nullptr;
-  ret = rtDevBinaryRegister(&devbin, &module);
-  if (ret != RT_ERROR_NONE) {
-    PyErr_Format(PyExc_RuntimeError, "rtDevBinaryRegister failed: 0x%x", ret);
-    return NULL;
-  }
-
-  auto *stub = new uint64_t(0);
-  void *stub_ptr = reinterpret_cast<void *>(stub);
-  ret = rtFunctionRegister(module, stub_ptr, name, (void *)name, 0);
-  if (ret != RT_ERROR_NONE) {
-    delete stub;
-    PyErr_Format(PyExc_RuntimeError, "rtFunctionRegister failed: 0x%x", ret);
-    return NULL;
-  }
-  return Py_BuildValue("(KK)", reinterpret_cast<uint64_t>(module), reinterpret_cast<uint64_t>(stub_ptr));
-}
-
-static PyObject *launchWithArgs(PyObject *, PyObject *args) {
-  unsigned long long function_u64;
-  unsigned long long stream_u64;
-  int gx, gy, gz;
-  const char *arg_data = nullptr;
-  Py_ssize_t arg_size = 0;
-  if (!PyArg_ParseTuple(args, "KKiiiy#", &function_u64, &stream_u64, &gx, &gy, &gz, &arg_data, &arg_size)) {
-    return NULL;
-  }
-
-  const void *function = reinterpret_cast<const void *>(function_u64);
-  rtStream_t stream = reinterpret_cast<rtStream_t>(stream_u64);
-  uint32_t block_dim = static_cast<uint32_t>(gx) * static_cast<uint32_t>(gy) * static_cast<uint32_t>(gz);
-  void *args_array = arg_size == 0 ? NULL : const_cast<char *>(arg_data);
-  rtError_t ret = rtKernelLaunch(function, block_dim, args_array,
-                                 static_cast<size_t>(arg_size), NULL, stream);
-  if (ret != RT_ERROR_NONE) {
-    PyErr_Format(PyExc_RuntimeError, "rtKernelLaunch failed: 0x%x", ret);
-    return NULL;
-  }
-  Py_RETURN_NONE;
-}
-
-static PyMethodDef Methods[] = {
-    {"load_kernel_binary", loadKernelBinary, METH_VARARGS, "Load kernel binary"},
-    {"launch_with_args", launchWithArgs, METH_VARARGS, "Launch kernel with args"},
-    {NULL, NULL, 0, NULL},
-};
-
-static struct PyModuleDef ModuleDef = {
-    PyModuleDef_HEAD_INIT,
-    "tla_dsl_ascend_rt",
-    NULL,
-    -1,
-    Methods,
-};
-
-PyMODINIT_FUNC PyInit_tla_dsl_ascend_rt(void) {
-  return PyModule_Create(&ModuleDef);
-}
-"""
-
-
-class _AscendLoader:
-    def __init__(self) -> None:
-        self._module = None
-
-    def _ensure_loaded(self) -> None:
-        if self._module is not None:
-            return
-        so_path = _resolve_runtime_wrapper_library()
-        lib = ctypes.CDLL(str(so_path))
-        lib.tla_runtime_last_error.restype = ctypes.c_char_p
-        lib.tla_runtime_load_kernel.argtypes = [
-            ctypes.c_char_p,
-            ctypes.c_char_p,
-            ctypes.c_char_p,
-            ctypes.POINTER(ctypes.c_uint64),
-            ctypes.POINTER(ctypes.c_uint64),
-        ]
-        lib.tla_runtime_load_kernel.restype = ctypes.c_int
-        lib.tla_runtime_launch_kernel.argtypes = [
-            ctypes.c_uint64,
-            ctypes.c_uint64,
-            ctypes.c_int,
-            ctypes.c_int,
-            ctypes.c_int,
-            ctypes.POINTER(ctypes.c_uint8),
-            ctypes.c_size_t,
-            ctypes.c_int,
-            ctypes.c_int,
-        ]
-        lib.tla_runtime_launch_kernel.restype = ctypes.c_int
-        self._module = lib
-
-    def _last_error(self) -> str:
-        self._ensure_loaded()
-        message = self._module.tla_runtime_last_error()
-        if not message:
-            return "unknown runtime wrapper error"
-        return message.decode("utf-8", errors="replace")
-
-    def get_current_device(self) -> int:
-        try:
-            from . import runtime as runtime_mod
-
-            runtime_device = runtime_mod.current_device_id()
-            if runtime_device is not None:
-                return int(runtime_device)
-        except Exception:
-            pass
-        try:
-            import torch  # type: ignore
-            import torch_npu  # noqa: F401
-
-            return int(torch.npu.current_device())
-        except Exception:
-            return int(os.getenv("TLA_DSL_NPU_DEVICE", "0"))
-
-    def get_current_stream(self, device: int) -> int:
-        try:
-            from . import runtime as runtime_mod
-
-            runtime_stream = runtime_mod.current_stream()
-            if runtime_stream is not None:
-                return int(runtime_stream)
-        except Exception:
-            pass
-        try:
-            import torch  # type: ignore
-            import torch_npu  # noqa: F401
-
-            return int(torch.npu.current_stream(device).npu_stream)
-        except Exception as exc:
-            raise TlaRuntimeUnavailableError(
-                "Failed to infer current NPU stream. Install torch_npu or pass "
-                "`stream=<rtStream_t integer>`."
-            ) from exc
-
-    def load_binary(
-        self, *, name: str, kernel_path: Path, shared: int, device: int
-    ) -> tuple[int, int]:
-        self._ensure_loaded()
-        del shared, device
-        fn_name, mode = name.split()
-        module_handle = ctypes.c_uint64(0)
-        function_handle = ctypes.c_uint64(0)
-        ret = self._module.tla_runtime_load_kernel(
-            os.fsencode(str(kernel_path)),
-            os.fsencode(fn_name),
-            os.fsencode(mode),
-            ctypes.byref(module_handle),
-            ctypes.byref(function_handle),
-        )
-        if ret != 0:
-            raise TlaRuntimeUnavailableError(self._last_error())
-        return int(module_handle.value), int(function_handle.value)
-
-    def launch_with_args(
-        self,
-        *,
-        function: int,
-        stream: int,
-        grid_x: int,
-        grid_y: int,
-        grid_z: int,
-        args: bytes,
-        expects_debug_fifo: bool,
-        expects_print_tensor: bool | int,
-    ) -> None:
-        self._ensure_loaded()
-        # The Ascend runtime rejects rtKernelLaunch with a zero-size argument
-        # buffer (0x107000) -- verified that this is about arg_size == 0, not a
-        # NULL pointer: passing a non-NULL pointer to an empty array fails the
-        # same way. Pad a single zero slot so a no-argument kernel presents a
-        # non-empty buffer (arg_size == 8); the kernel never reads it.
-        if not args:
-            args = b"\x00" * ctypes.sizeof(ctypes.c_uint64)
-        arg_size = len(args)
-        arg_array = (ctypes.c_uint8 * arg_size).from_buffer_copy(args)
-        raw_ptr = ctypes.cast(arg_array, ctypes.POINTER(ctypes.c_uint8))
-        ret = self._module.tla_runtime_launch_kernel(
-            ctypes.c_uint64(int(function)),
-            ctypes.c_uint64(int(stream)),
-            int(grid_x),
-            int(grid_y),
-            int(grid_z),
-            raw_ptr,
-            arg_size,
-            int(expects_debug_fifo),
-            int(expects_print_tensor),
-        )
-        if ret != 0:
-            raise TlaRuntimeUnavailableError(self._last_error())
+from .catlass_dsl.ascend_jit_executor import (
+    execute_kernel,
+    _build_kernel_launch_plan,
+    _mark_tensor_launch_args_uploaded,
+)
+from .base_dsl.runtime.ascend import (
+    launch_kernel,
+    load_binary,
+)

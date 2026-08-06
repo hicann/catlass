@@ -13,11 +13,8 @@ class CompileCallable:
         if func is None:
             raise TlaUnsupportedAbiError("Function is not set or invalid.")
 
-        from ..dsl import (
-            TlaJitFunction,
-            KernelLauncher,
-            _infer_type_args_from_runtime,
-        )
+        from ..dsl import TlaJitFunction, _get_typed_call_args
+        from ..catlass_dsl.tla import KernelLauncher
 
         if isinstance(func, KernelLauncher):
             func = func._fn
@@ -27,7 +24,7 @@ class CompileCallable:
             )
         type_args = kwargs.pop("type_args", None)
         if type_args is None and args:
-            inferred = _infer_type_args_from_runtime(args)
+            inferred = _get_typed_call_args(args)
             if inferred is not None:
                 type_args = inferred
         return TlaJitExecutor(func.compile(type_args=type_args, **kwargs))

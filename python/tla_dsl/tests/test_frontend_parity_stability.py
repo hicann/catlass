@@ -33,8 +33,10 @@ def test_full_demo_style_compile_routes_kernel(monkeypatch) -> None:
     )
     calls: list[tuple[str, str]] = []
 
-    def fake_compile(fn, *, kind, options, runtime, type_args=None):
-        del options, runtime, type_args
+    def fake_compile(
+        fn, *, kind, options, runtime, type_args=None, decorator_location=None
+    ):
+        del options, runtime, type_args, decorator_location
         calls.append((fn.__name__, kind))
         return artifact
 

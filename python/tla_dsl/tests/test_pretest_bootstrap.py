@@ -196,37 +196,3 @@ def test_ensure_pretest_mlir_build_resets_stale_compiler_cache(
         "-DCMAKE_CXX_COMPILER=/toolchain/bin/g++",
         f"-DMLIR_DIR={mlir_dir}",
     ]
-
-
-def test_ensure_pretest_mlir_build_honors_runtime_wrapper_env_toggle(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    bootstrap = _load_bootstrap(REPO_ROOT)
-    include_dir = tmp_path / "include"
-    _touch_opbase(include_dir)
-    mlir_dir = tmp_path / "cmake" / "mlir"
-    mlir_dir.mkdir(parents=True)
-
-    monkeypatch.setenv("MLIR_TBLGEN_INCLUDE_DIR", str(include_dir))
-    monkeypatch.setenv("MLIR_DIR", str(mlir_dir))
-    monkeypatch.setenv("TLA_DSL_BUILD_RUNTIME_WRAPPER", "ON")
-    monkeypatch.delenv("TLA_DSL_SKIP_PRETEST_BUILD", raising=False)
-    monkeypatch.delenv("CC", raising=False)
-    monkeypatch.delenv("CXX", raising=False)
-    monkeypatch.setattr(
-        bootstrap.shutil,
-        "which",
-        lambda name, path=None: None,
-    )
-
-    seen: list[list[str]] = []
-
-    def fake_run(cmd, check=False, **kwargs):  # type: ignore[no-untyped-def]
-        del check, kwargs
-        seen.append(list(cmd))
-        return subprocess.CompletedProcess(args=cmd, returncode=0)
-
-    monkeypatch.setattr(bootstrap.subprocess, "run", fake_run)
-    bootstrap.ensure_pretest_mlir_build(tmp_path)
-
-    assert "-DTLA_DSL_BUILD_RUNTIME_WRAPPER=ON" in seen[0]

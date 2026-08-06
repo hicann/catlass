@@ -18,105 +18,31 @@ _JIT_TYPE_ARGS: contextvars.ContextVar[Any] = contextvars.ContextVar(
 )
 
 
-class KernelLauncher:
-    """Launch wrapper for zero-arg Tla kernels."""
+def _get_context_type_args(kernel_name: str) -> Sequence[Any] | None:
+    type_args = _JIT_TYPE_ARGS.get()
+    if type_args is None:
+        return None
+    if isinstance(type_args, Mapping):
+        if kernel_name in type_args:
+            return type_args.get(kernel_name)
+        return type_args.get("__default__")
+    return type_args
 
-    def __init__(
-        self,
-        fn: "TlaJitFunction",
-        *,
-        launch_kwargs: dict[str, Any] | None = None,
-        launch_args: Sequence[Any] | None = None,
-    ) -> None:
-        self._fn = fn
-        self._launch_kwargs = dict(launch_kwargs or {})
-        self._launch_args = tuple(launch_args or ())
-        self._runtime = None
-        self._artifact = None
-        type_args = _resolve_jit_type_args(self._fn.fn.__name__)
-        if type_args is None and self._launch_args:
-            type_args = _infer_type_args_from_runtime(self._launch_args)
-        should_eager_compile = (
-            type_args is not None or not inspect.signature(self._fn.fn).parameters
-        )
-        if should_eager_compile:
-            runtime = _runtime.runtime_options_for_launch(
-                _runtime.runtime_options_from_kwargs(self._launch_kwargs)
-            )
-            self._runtime = runtime
-            self._artifact = _compile_kernel_compat(
-                fn=self._fn.fn,
-                kind=self._fn.kind,
-                options=self._fn.options,
-                runtime=runtime,
-                type_args=type_args,
-                decorator_location=self._fn.decorator_location,
-            )
 
-    def launch(
-        self,
-        *,
-        block_dim: int | None = None,
-        type_args: Sequence[Any] | None = None,
-        args: Sequence[Any] | None = None,
-        **kwargs: Any,
-    ) -> TlaExecutionResult:
-        if "grid" in kwargs or "grid" in self._launch_kwargs:
-            raise TlaUnsupportedAbiError(
-                "`grid` is not supported. Use `block_dim` with an integer value."
-            )
-        launch_kwargs = {**self._launch_kwargs, **kwargs}
-        if "block_dim" in launch_kwargs:
-            if block_dim is not None:
-                raise TlaUnsupportedAbiError("`block_dim` specified multiple times.")
-            block_dim = launch_kwargs.pop("block_dim")
-        if block_dim is None:
-            block_dim = 1
-        if not isinstance(block_dim, int):
-            raise TlaUnsupportedAbiError("`block_dim` must be an int.")
-        launch_args = self._launch_args
-        if args is not None:
-            if launch_args:
-                raise TlaUnsupportedAbiError("`args` specified multiple times.")
-            launch_args = tuple(args)
-        if type_args is None:
-            type_args = _resolve_jit_type_args(self._fn.fn.__name__)
-        if type_args is None and launch_args:
-            type_args = _infer_type_args_from_runtime(launch_args)
-        launch_kwargs["grid"] = (int(block_dim), 1, 1)
-        if (
-            self._runtime is not None
-            and "cache_dir" not in launch_kwargs
-            and self._runtime.cache_dir is not None
-            and not self._runtime.cache_enabled
-        ):
-            launch_kwargs["cache_dir"] = self._runtime.cache_dir
-            launch_kwargs["cache"] = False
-        runtime = _runtime.runtime_options_for_launch(
-            _runtime.runtime_options_from_kwargs(launch_kwargs)
-        )
-        artifact = self._artifact
-        if artifact is None or self._runtime != runtime:
-            artifact = _compile_kernel_compat(
-                fn=self._fn.fn,
-                kind=self._fn.kind,
-                options=self._fn.options,
-                runtime=runtime,
-                type_args=type_args,
-                decorator_location=self._fn.decorator_location,
-            )
-            self._artifact = artifact
-            self._runtime = runtime
-        print(f"kernel.o: {artifact.kernel_binary_path}")
-        return _runtime.execute_kernel(
-            artifact,
-            runtime=runtime,
-            launch_args=launch_args,
-            launch_kwargs=launch_kwargs,
-        )
+def _get_typed_call_args(args: Sequence[Any]) -> Sequence[Any] | None:
+    inferred: list[Any] = []
+    for arg in args:
+        resolver = getattr(arg, "__get_mlir_types__", None)
+        if callable(resolver):
+            inferred.append(arg)
+        else:
+            inferred.append(None)
+    if all(item is None for item in inferred):
+        return None
+    return tuple(inferred)
 
-    def __call__(self, *args: Any, **kwargs: Any) -> TlaExecutionResult:
-        return self.launch(args=args, **kwargs)
+
+from .catlass_dsl.tla import KernelLauncher
 
 
 @dataclass
@@ -138,7 +64,7 @@ class TlaJitFunction:
             )
         type_args = kwargs.pop("type_args", None)
         if type_args is None and args:
-            inferred = _infer_type_args_from_runtime(args)
+            inferred = _get_typed_call_args(args)
             if inferred is not None:
                 type_args = {"__default__": inferred}
         if type_args is None:
@@ -153,8 +79,8 @@ class TlaJitFunction:
         self, *, type_args: Sequence[Any] | None = None, **kwargs: Any
     ) -> TlaKernelArtifact:
         runtime = _runtime.runtime_options_from_kwargs(kwargs)
-        return _compile_kernel_compat(
-            fn=self.fn,
+        return _runtime.compile_kernel(
+            self.fn,
             kind=self.kind,
             options=self.options,
             runtime=runtime,
@@ -168,13 +94,15 @@ class TlaJitFunction:
         type_args: Sequence[Any] | None = None,
         **kwargs: Any,
     ) -> TlaExecutionResult:
-        if args:
-            raise TlaUnsupportedAbiError(
-                "Phase-1 execution supports zero-argument kernels only."
-            )
-        runtime = _runtime.runtime_options_from_kwargs(kwargs)
-        artifact = _compile_kernel_compat(
-            fn=self.fn,
+        launch_kwargs = dict(kwargs)
+        block_dim = launch_kwargs.get("block_dim")
+        if block_dim is not None and not isinstance(block_dim, int):
+            raise TlaUnsupportedAbiError("`block_dim` must be an int.")
+        if type_args is None and args:
+            type_args = _get_typed_call_args(args)
+        runtime = _runtime.runtime_options_from_kwargs(launch_kwargs)
+        artifact = _runtime.compile_kernel(
+            self.fn,
             kind=self.kind,
             options=self.options,
             runtime=runtime,
@@ -182,7 +110,10 @@ class TlaJitFunction:
             decorator_location=self.decorator_location,
         )
         return _runtime.execute_kernel(
-            artifact, runtime=runtime, launch_args=args, launch_kwargs=kwargs
+            artifact,
+            runtime=runtime,
+            launch_args=args,
+            launch_kwargs=launch_kwargs,
         )
 
     @property
@@ -305,60 +236,6 @@ def _capture_decorator_location() -> DSLLocation | None:
         function_name=caller.f_code.co_name,
     )
 
-
-
-def _compile_kernel_compat(
-    *,
-    fn: Callable[..., Any],
-    kind: str,
-    options: Mapping[str, Any],
-    runtime: Any,
-    type_args: Sequence[Any] | None,
-    decorator_location: DSLLocation | None,
-) -> TlaKernelArtifact:
-    try:
-        return _runtime.compile_kernel(
-            fn,
-            kind=kind,
-            options=options,
-            runtime=runtime,
-            type_args=type_args,
-            decorator_location=decorator_location,
-        )
-    except TypeError as exc:
-        if "decorator_location" not in str(exc):
-            raise
-        return _runtime.compile_kernel(
-            fn,
-            kind=kind,
-            options=options,
-            runtime=runtime,
-            type_args=type_args,
-        )
-
-
-def _resolve_jit_type_args(kernel_name: str) -> Sequence[Any] | None:
-    type_args = _JIT_TYPE_ARGS.get()
-    if type_args is None:
-        return None
-    if isinstance(type_args, Mapping):
-        if kernel_name in type_args:
-            return type_args.get(kernel_name)
-        return type_args.get("__default__")
-    return type_args
-
-
-def _infer_type_args_from_runtime(args: Sequence[Any]) -> Sequence[Any] | None:
-    inferred: list[Any] = []
-    for arg in args:
-        resolver = getattr(arg, "__get_mlir_types__", None)
-        if callable(resolver):
-            inferred.append(arg)
-        else:
-            inferred.append(None)
-    if all(item is None for item in inferred):
-        return None
-    return tuple(inferred)
 
 
 __all__ = [

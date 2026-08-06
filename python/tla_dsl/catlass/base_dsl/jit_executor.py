@@ -1,15 +1,75 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Sequence
+from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
-from ..execution import (
-    TlaKernelArtifact,
-    TlaExecutionResult,
-    TlaRuntimeUnavailableError,
-    TlaUnsupportedAbiError,
-    execute_kernel,
-)
+if TYPE_CHECKING:
+    from ..execution import TlaExecutionResult, TlaKernelArtifact
+
+
+@dataclass(frozen=True)
+class TlaExecutionArgs:
+    """Runtime ABI binder for TLA kernel launch arguments.
+
+    Packing always requires a compiler-produced ``kernel_abi`` layout so
+    Dynamic-GM / memref ABI stays signature-driven.
+
+    Must not import ``catlass.execution`` at module load time: ``execution``
+    re-exports ``execute_kernel`` from ``ascend_jit_executor``, which imports
+    this class, so a top-level import here creates a circular import.
+    """
+
+    signature: Mapping[str, Any] | None = None
+    kernel_abi: Any | None = None
+    expected_arg_count: int | None = None
+
+    def filter_runtime_signature(
+        self, signature: Mapping[str, Any] | None = None
+    ) -> Mapping[str, Any] | None:
+        """Return the runtime-visible signature (constexpr stripping later)."""
+        return self.signature if signature is None else signature
+
+    def get_rectified_args(
+        self, launch_args: Sequence[Any], **_kwargs: Any
+    ) -> tuple[Any, ...]:
+        """Normalize call args before packing (adapters + passthrough)."""
+        from .runtime.jit_arg_adapters import (
+            JitArgAdapterRegistry,
+            _adapt_from_data_ptr,
+        )
+        from .typing import Numeric
+
+        rectified: list[Any] = []
+        for arg in launch_args:
+            if isinstance(arg, Numeric) or hasattr(arg, "__c_pointers__"):
+                rectified.append(arg)
+            else:
+                adapter = JitArgAdapterRegistry.get_registered_adapter(arg)
+                if adapter is not None:
+                    rectified.append(adapter(arg))
+                else:
+                    rectified.append(_adapt_from_data_ptr(arg))
+        return tuple(rectified)
+
+    def generate_launch_payload(self, launch_args: Sequence[Any]) -> bytes:
+        """Pack ``launch_args`` into the Ascend host launch byte buffer."""
+        from .. import execution as execution_mod
+
+        if self.kernel_abi is None:
+            raise execution_mod.TlaUnsupportedAbiError(
+                "A compiler-produced kernel ABI layout is required before packing "
+                "launch arguments."
+            )
+        rectified = self.get_rectified_args(launch_args)
+        if (
+            self.expected_arg_count is not None
+            and len(rectified) != self.expected_arg_count
+        ):
+            raise execution_mod.TlaUnsupportedAbiError(
+                "launch argument count does not match expected signature: "
+                f"got {len(rectified)}, expected {self.expected_arg_count}"
+            )
+        return execution_mod._pack_launch_args(rectified, self.kernel_abi)
 
 
 @dataclass(frozen=True)
@@ -25,8 +85,12 @@ class TlaJitExecutor:
         args: Sequence[Any] | None = None,
         **kwargs: Any,
     ) -> TlaExecutionResult:
-        if "grid" in kwargs and block_dim is not None:
-            raise TlaUnsupportedAbiError("Use either `block_dim` or `grid`, not both.")
+        from ..execution import (
+            TlaRuntimeUnavailableError,
+            TlaUnsupportedAbiError,
+            execute_kernel,
+        )
+
         if launch_args and args is not None:
             raise TlaUnsupportedAbiError("Launch arguments specified multiple times.")
         if args is None:
@@ -35,7 +99,7 @@ class TlaJitExecutor:
         if block_dim is not None:
             if not isinstance(block_dim, int):
                 raise TlaUnsupportedAbiError("`block_dim` must be an int.")
-            launch_kwargs["grid"] = (int(block_dim), 1, 1)
+            launch_kwargs["block_dim"] = int(block_dim)
         runtime = self.artifact.runtime
         if runtime is None:
             raise TlaRuntimeUnavailableError(
@@ -58,3 +122,6 @@ class TlaJitExecutor:
         if isinstance(other, TlaJitExecutor):
             return self.artifact == other.artifact
         return self.artifact == other
+
+
+__all__ = ["TlaExecutionArgs", "TlaJitExecutor"]

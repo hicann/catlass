@@ -1112,48 +1112,19 @@ def test_build_hivmc_a5_command_links_template_bitcode_for_aiv(
     ]
 
 
-def test_ascend_loader_forwards_native_width_scalar_payload() -> None:
-    payload = struct.pack("<Qi", 0x123456789ABCDEF0, 20)
-    launches: list[tuple[bytes, int, int, int]] = []
+@pytest.mark.skip(reason="Legacy RT ctypes loader path removed; Host launch uses PyACL")
+def test_ascend_loader_forwards_native_width_scalar_payload(monkeypatch) -> None:
+    pass
 
-    class _FakeRuntimeWrapper:
-        def tla_runtime_launch_kernel(
-            self,
-            _function,
-            _stream,
-            _grid_x,
-            _grid_y,
-            _grid_z,
-            args,
-            arg_size,
-            expects_debug_fifo,
-            expects_print_tensor,
-        ) -> int:
-            size = int(arg_size)
-            launches.append(
-                (
-                    ctypes.string_at(args, size),
-                    size,
-                    int(expects_debug_fifo),
-                    int(expects_print_tensor),
-                )
-            )
-            return 0
 
-    loader = execution._AscendLoader()
-    loader._module = _FakeRuntimeWrapper()
-    loader.launch_with_args(
-        function=1,
-        stream=2,
-        grid_x=1,
-        grid_y=1,
-        grid_z=1,
-        args=payload,
-        expects_debug_fifo=False,
-        expects_print_tensor=False,
-    )
+@pytest.mark.skip(reason="Legacy RT ctypes loader path removed; Host launch uses PyACL")
+def test_ascend_loader_forwards_opaque_bytes_and_exact_byte_count(monkeypatch) -> None:
+    pass
 
-    assert launches == [(payload, 12, 0, 0)]
+
+@pytest.mark.skip(reason="Legacy RT ctypes loader path removed; Host launch uses PyACL")
+def test_ascend_loader_pads_empty_payload(monkeypatch) -> None:
+    pass
 
 
 class _TypedPointer:
@@ -1294,7 +1265,7 @@ def test_print_tensor_workspace_preserves_user_argument_and_uses_abi_marker(
         artifact=artifact,
         runtime=execution.TlaRuntimeOptions(),
         launch_args=[_TypedPointer(0x1000)],
-        grid=(1, 1, 1),
+        block_num=1,
     )
 
     assert plan.payload == struct.pack(
@@ -1303,24 +1274,24 @@ def test_print_tensor_workspace_preserves_user_argument_and_uses_abi_marker(
     assert plan.expects_print_tensor is True
 
 
+def _install_fake_launch_context(monkeypatch, *, device: int = 7, stream: int = 99) -> None:
+    from catlass.base_dsl.runtime import ascend_stream_adapter as stream_mod
+
+    monkeypatch.setattr(stream_mod, "current_device", lambda: device)
+    monkeypatch.setattr(stream_mod, "current_stream", lambda _device: stream)
+
+
 def _install_print_tensor_loader(monkeypatch, output: str) -> None:
-    class _FakeLoader:
-        def get_current_device(self) -> int:
-            return 1
+    _install_fake_launch_context(monkeypatch, device=1, stream=99)
+    monkeypatch.setattr(
+        execution, "load_binary", lambda **kwargs: (11, 12)
+    )
 
-        def get_current_stream(self, device: int) -> int:
-            assert device == 1
-            return 99
+    def _launch_kernel(**kwargs) -> None:
+        assert kwargs["expects_print_tensor"] in (True, 2)
+        os.write(1, output.encode())
 
-        def load_binary(self, **kwargs):
-            del kwargs
-            return (11, 12)
-
-        def launch_with_args(self, **kwargs) -> None:
-            assert kwargs["expects_print_tensor"] in (True, 2)
-            os.write(1, output.encode())
-
-    monkeypatch.setattr(execution, "_AscendLoader", _FakeLoader)
+    monkeypatch.setattr(execution, "launch_kernel", _launch_kernel)
 
 
 def test_execute_kernel_decodes_and_formats_native_print_tensor_for_ordinary_call(
@@ -1369,7 +1340,7 @@ def test_execute_kernel_formats_combined_calls_and_blocks_in_arrival_order(
             core_type="aic", kernel_mode="aic", arch_scope="aic.c310"
         ),
         launch_args=[_TypedPointer(0x1000)],
-        launch_kwargs={"grid": (2, 1, 1)},
+        launch_kwargs={"block_dim": 2},
     )
 
     assert capfd.readouterr().out == (
@@ -1409,7 +1380,7 @@ def test_execute_aiv_kernel_formats_calls_blocks_and_subblocks_in_arrival_order(
         _two_print_tensor_artifact(tmp_path),
         runtime=execution.TlaRuntimeOptions(),
         launch_args=[_TypedPointer(0x1000)],
-        launch_kwargs={"grid": (2, 1, 1)},
+        launch_kwargs={"block_dim": 2},
     )
 
     lines = capfd.readouterr().out.splitlines()
@@ -1693,9 +1664,9 @@ def test_print_tensor_workspace_uses_fixed_one_mib_core_records(
         artifact=artifact,
         runtime=execution.TlaRuntimeOptions(core_type=core_type, kernel_mode=core_type),
         launch_args=[_TypedPointer(0x1000)],
-        grid=(max_blocks, 1, 1),
+        block_num=max_blocks,
     )
-    assert plan.grid == (max_blocks, 1, 1)
+    assert plan.block_num == max_blocks
 
     with pytest.raises(execution.TlaExecutionError, match="fixed 1 MiB"):
         execution._build_kernel_launch_plan(
@@ -1704,7 +1675,7 @@ def test_print_tensor_workspace_uses_fixed_one_mib_core_records(
                 core_type=core_type, kernel_mode=core_type
             ),
             launch_args=[_TypedPointer(0x1000)],
-            grid=(max_blocks + 1, 1, 1),
+            block_num=max_blocks + 1,
         )
 
 
@@ -1716,16 +1687,16 @@ def test_mixed_aiv_print_tensor_capacity_counts_both_subblocks(
         artifact=artifact,
         runtime=execution.TlaRuntimeOptions(kernel_mode="mix"),
         launch_args=[_TypedPointer(0x1000)],
-        grid=(execution._PRINT_TENSOR_CORE_RECORDS // 2, 1, 1),
+        block_num=execution._PRINT_TENSOR_CORE_RECORDS // 2,
     )
 
-    assert accepted.grid == (54, 1, 1)
+    assert accepted.block_num == 54
     with pytest.raises(execution.TlaExecutionError, match="core records"):
         execution._build_kernel_launch_plan(
             artifact=artifact,
             runtime=execution.TlaRuntimeOptions(kernel_mode="mix"),
             launch_args=[_TypedPointer(0x1000)],
-            grid=(55, 1, 1),
+            block_num=55,
         )
 
 
@@ -1750,7 +1721,7 @@ def test_print_tensor_capacity_counts_all_calls_within_each_core_record(
             artifact=artifact,
             runtime=execution.TlaRuntimeOptions(),
             launch_args=[_TypedPointer(0x1000)],
-            grid=(1, 1, 1),
+            block_num=1,
         )
 
 
@@ -1776,7 +1747,7 @@ def test_print_tensor_capacity_assumes_worst_case_for_dynamic_call(
             artifact=artifact,
             runtime=execution.TlaRuntimeOptions(),
             launch_args=[_TypedPointer(0x1000)],
-            grid=(1, 1, 1),
+            block_num=1,
         )
 
 
@@ -1867,35 +1838,33 @@ def test_print_tensor_metadata_and_decode_are_scoped_to_second_entrypoint() -> N
 
 
 @pytest.mark.parametrize("core_type", ("aic", "aiv"))
-def test_print_tensor_launch_accepts_multiblock_grid(tmp_path, core_type) -> None:
+def test_print_tensor_launch_accepts_multiblock_block_dim(tmp_path, core_type) -> None:
     plan = execution._build_kernel_launch_plan(
         artifact=_print_tensor_artifact(tmp_path),
         runtime=execution.TlaRuntimeOptions(core_type=core_type, kernel_mode=core_type),
         launch_args=[_TypedPointer(0x1000)],
-        grid=(2, 1, 1),
+        block_num=2,
     )
 
-    assert plan.grid == (2, 1, 1)
+    assert plan.block_num == 2
     assert plan.expects_print_tensor is True
 
 
 @pytest.mark.parametrize(
-    ("grid", "accepted"),
+    ("block_num", "accepted"),
     (
-        ((65536, 1, 1), True),
-        ((256, 256, 1), True),
-        ((65537, 1, 1), False),
-        ((256, 256, 2), False),
-        ((0, 1, 1), False),
-        ((-1, 1, 1), False),
+        (65536, True),
+        (65537, False),
+        (0, False),
+        (-1, False),
     ),
 )
-def test_print_tensor_launch_checks_16_bit_block_identity(grid, accepted) -> None:
+def test_print_tensor_launch_checks_16_bit_block_identity(block_num, accepted) -> None:
     if accepted:
-        assert execution._checked_print_tensor_block_count(grid) == math.prod(grid)
+        assert execution._checked_print_tensor_block_count(block_num) == block_num
     else:
         with pytest.raises(execution.TlaExecutionError, match="16-bit block"):
-            execution._checked_print_tensor_block_count(grid)
+            execution._checked_print_tensor_block_count(block_num)
 
 
 def test_mixed_print_tensor_workspace_keeps_trailing_marker(tmp_path) -> None:
@@ -1903,7 +1872,7 @@ def test_mixed_print_tensor_workspace_keeps_trailing_marker(tmp_path) -> None:
         artifact=_print_tensor_artifact(tmp_path, storage="ub", mixed=True),
         runtime=execution.TlaRuntimeOptions(kernel_mode="mix"),
         launch_args=[_TypedPointer(0x1000)],
-        grid=(1, 1, 1),
+        block_num=1,
     )
 
     assert plan.entrypoint == "dump"
@@ -1995,7 +1964,7 @@ def test_debug_print_workspace_preserves_normal_user_argument_slots(
         artifact=artifact,
         runtime=execution.TlaRuntimeOptions(),
         launch_args=launch_args,
-        grid=(1, 1, 1),
+        block_num=1,
     )
 
     assert plan.payload == expected_user_payload + struct.pack(
@@ -2022,7 +1991,7 @@ def test_non_print_kernel_keeps_normal_pointer_payload(tmp_path) -> None:
         artifact=artifact,
         runtime=execution.TlaRuntimeOptions(),
         launch_args=launch_args,
-        grid=(1, 1, 1),
+        block_num=1,
     )
 
     assert plan.payload == struct.pack("<QQ", 0x1000, 0x2000)
@@ -2623,52 +2592,9 @@ def test_pack_launch_args_rejects_pointer_storage_overflow() -> None:
         execution._pack_launch_args([_HugePointer()], layout)
 
 
-def test_ascend_loader_forwards_opaque_bytes_and_exact_byte_count() -> None:
-    calls: list[tuple[bytes, int]] = []
-
-    class _FakeLaunch:
-        def __call__(self, *_args):
-            size = int(getattr(_args[-3], "value", _args[-3]))
-            calls.append((ctypes.string_at(_args[-4], size), size))
-            return 0
-
-    class _FakeModule:
-        tla_runtime_launch_kernel = _FakeLaunch()
-
-    loader = execution._AscendLoader()
-    loader._module = _FakeModule()
-    payload = bytes.fromhex("112233445566")
-
-    loader.launch_with_args(
-        function=1,
-        stream=2,
-        grid_x=3,
-        grid_y=4,
-        grid_z=5,
-        args=payload,
-        expects_debug_fifo=False,
-        expects_print_tensor=False,
-    )
-
-    assert calls == [(payload, len(payload))]
-
-
+@pytest.mark.skip(reason="RuntimeWrapper.cpp removed; Host launch uses pyACL + libruntime")
 def test_runtime_wrapper_c_abi_is_byte_oriented() -> None:
-    source = (
-        Path(execution.__file__).resolve().parents[1]
-        / "csrc"
-        / "mlir"
-        / "lib"
-        / "Tools"
-        / "RuntimeWrapper.cpp"
-    ).read_text()
-
-    assert "const uint8_t *args, size_t arg_size" in source
-    assert "std::vector<uint64_t> values" in source
-    assert "std::memcpy(values.data(), args, arg_size)" in source
-    assert "values.assign(args" not in source
-    assert "rtKernelLaunch(function, block_dim, args_array," in source
-    assert "arg_size, nullptr, stream)" in source
+    pass
 
 
 def test_build_kernel_launch_plan_uses_logical_mixed_handoff(tmp_path) -> None:
@@ -2719,12 +2645,12 @@ def test_build_kernel_launch_plan_uses_logical_mixed_handoff(tmp_path) -> None:
             _Tensor(0x3000, (32, 32)),
             _Tensor(0x4000, (32, 32)),
         ],
-        grid=(1, 1, 1),
+        block_num=1,
     )
 
     assert plan.entrypoint == "basic_mixed"
     assert plan.kernel_mode == "mix"
-    assert plan.grid == (1, 1, 1)
+    assert plan.block_num == 1
     assert plan.payload == struct.pack("<QQQQ", 0x1000, 0x2000, 0x3000, 0x4000)
 
 
@@ -2782,12 +2708,12 @@ def test_mixed_handoff_payload_follows_split_signature_not_fixed_four_args(
             _Tensor(0x3000, (16, 48)),
             _Tensor(0x4000, (16, 48)),
         ],
-        grid=(5, 6, 7),
+        block_num=210,
     )
 
     assert plan.entrypoint == "custom"
     assert plan.kernel_mode == "mix"
-    assert plan.grid == (5, 6, 7)
+    assert plan.block_num == 210
     assert plan.payload == struct.pack(
         "<I4xQQQQ",
         7,
@@ -2834,7 +2760,7 @@ def test_mixed_handoff_supplies_debug_workspace_without_public_argument(
         artifact=artifact,
         runtime=execution.TlaRuntimeOptions(kernel_mode="mix"),
         launch_args=[tla.Float32(1.0), tla.Float32(0.25)],
-        grid=(1, 1, 1),
+        block_num=1,
     )
 
     sentinel = int.from_bytes(b"TLA_PRNT", byteorder="big")
@@ -2846,22 +2772,16 @@ def test_mixed_handoff_supplies_debug_workspace_without_public_argument(
 def test_execute_kernel_uses_typed_launch_payload(monkeypatch, tmp_path) -> None:
     launches: list[tuple[str, object]] = []
 
-    class _FakeLoader:
-        def get_current_device(self) -> int:
-            return 7
+    def _load_binary(**kwargs):
+        launches.append(("load", kwargs))
+        return (11, 12)
 
-        def get_current_stream(self, device: int) -> int:
-            assert device == 7
-            return 99
+    def _launch_kernel(**kwargs) -> None:
+        launches.append(("flat", kwargs))
 
-        def load_binary(self, **kwargs):
-            launches.append(("load", kwargs))
-            return (11, 12)
-
-        def launch_with_args(self, **kwargs) -> None:
-            launches.append(("flat", kwargs))
-
-    monkeypatch.setattr(execution, "_AscendLoader", _FakeLoader)
+    _install_fake_launch_context(monkeypatch, device=7, stream=99)
+    monkeypatch.setattr(execution, "load_binary", _load_binary)
+    monkeypatch.setattr(execution, "launch_kernel", _launch_kernel)
 
     artifact = execution.TlaKernelArtifact(
         cache_key="cache",
@@ -2880,7 +2800,7 @@ def test_execute_kernel_uses_typed_launch_payload(monkeypatch, tmp_path) -> None
             total_size=8,
         ),
     )
-    runtime = execution.TlaRuntimeOptions(shared=3)
+    runtime = execution.TlaRuntimeOptions()
 
     result = execution.execute_kernel(
         artifact,
@@ -2896,9 +2816,7 @@ def test_execute_kernel_uses_typed_launch_payload(monkeypatch, tmp_path) -> None
         {
             "function": 12,
             "stream": 99,
-            "grid_x": 1,
-            "grid_y": 1,
-            "grid_z": 1,
+            "block_num": 1,
             "args": struct.pack("<I4x", 123),
             "expects_debug_fifo": False,
             "expects_print_tensor": False,
@@ -2911,22 +2829,11 @@ def test_execute_kernel_conveys_debug_fifo_intent_to_loader(
 ) -> None:
     launches: list[dict[str, object]] = []
 
-    class _FakeLoader:
-        def get_current_device(self) -> int:
-            return 7
-
-        def get_current_stream(self, device: int) -> int:
-            assert device == 7
-            return 99
-
-        def load_binary(self, **kwargs):
-            del kwargs
-            return (11, 12)
-
-        def launch_with_args(self, **kwargs) -> None:
-            launches.append(kwargs)
-
-    monkeypatch.setattr(execution, "_AscendLoader", _FakeLoader)
+    _install_fake_launch_context(monkeypatch, device=7, stream=99)
+    monkeypatch.setattr(execution, "load_binary", lambda **kwargs: (11, 12))
+    monkeypatch.setattr(
+        execution, "launch_kernel", lambda **kwargs: launches.append(kwargs)
+    )
     artifact = _debug_print_artifact(tmp_path, entrypoint="debug")
 
     execution.execute_kernel(
@@ -2940,9 +2847,7 @@ def test_execute_kernel_conveys_debug_fifo_intent_to_loader(
         {
             "function": 12,
             "stream": 99,
-            "grid_x": 1,
-            "grid_y": 1,
-            "grid_z": 1,
+            "block_num": 1,
             "args": struct.pack("<QQ", 7, int.from_bytes(b"TLA_PRNT", byteorder="big")),
             "expects_debug_fifo": True,
             "expects_print_tensor": False,
@@ -2953,22 +2858,16 @@ def test_execute_kernel_conveys_debug_fifo_intent_to_loader(
 def test_execute_kernel_uses_empty_payload_for_zero_arg(monkeypatch, tmp_path) -> None:
     launches: list[tuple[str, object]] = []
 
-    class _FakeLoader:
-        def get_current_device(self) -> int:
-            return 7
+    def _load_binary(**kwargs):
+        launches.append(("load", kwargs))
+        return (11, 12)
 
-        def get_current_stream(self, device: int) -> int:
-            assert device == 7
-            return 99
+    def _launch_kernel(**kwargs) -> None:
+        launches.append(("flat", kwargs))
 
-        def load_binary(self, **kwargs):
-            launches.append(("load", kwargs))
-            return (11, 12)
-
-        def launch_with_args(self, **kwargs) -> None:
-            launches.append(("flat", kwargs))
-
-    monkeypatch.setattr(execution, "_AscendLoader", _FakeLoader)
+    _install_fake_launch_context(monkeypatch, device=7, stream=99)
+    monkeypatch.setattr(execution, "load_binary", _load_binary)
+    monkeypatch.setattr(execution, "launch_kernel", _launch_kernel)
 
     artifact = execution.TlaKernelArtifact(
         cache_key="cache",
@@ -2981,7 +2880,7 @@ def test_execute_kernel_uses_empty_payload_for_zero_arg(monkeypatch, tmp_path) -
         kernel_binary_path=tmp_path / "kernel.o",
         kernel_abi=_kernel_abi(total_size=0),
     )
-    runtime = execution.TlaRuntimeOptions(shared=3)
+    runtime = execution.TlaRuntimeOptions()
 
     result = execution.execute_kernel(
         artifact,
@@ -2992,14 +2891,14 @@ def test_execute_kernel_uses_empty_payload_for_zero_arg(monkeypatch, tmp_path) -
 
     assert result.module_handle == 11
     assert result.function_handle == 12
+    # Plan-level payload stays empty; ``launch_kernel`` pads to 8 bytes
+    # before PyACL launch_kernel.
     assert (
         "flat",
         {
             "function": 12,
             "stream": 99,
-            "grid_x": 1,
-            "grid_y": 1,
-            "grid_z": 1,
+            "block_num": 1,
             "args": b"",
             "expects_debug_fifo": False,
             "expects_print_tensor": False,

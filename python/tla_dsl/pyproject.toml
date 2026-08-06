@@ -33,7 +33,6 @@ packages = ["catlass"]
 pure-python = false
 
 [tool.hatch.build.targets.wheel.force-include]
-"csrc/mlir/build/lib/Tools/libtla_dsl_runtime_wrapper.so" = "catlass/bin/libtla_dsl_runtime_wrapper.so"
 "csrc/mlir/build/python/catlass" = "catlass"
 
 [tool.ruff]
