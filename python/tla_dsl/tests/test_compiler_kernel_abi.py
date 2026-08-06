@@ -666,6 +666,20 @@ def _dynamic_gm_rank2_tensor() -> tla.Tensor:
     return tensor.mark_layout_dynamic()
 
 
+def _dynamic_gm_zn_tensor() -> tla.Tensor:
+    with runtime_mod._eager_capture():
+        tensor = tla.Tensor(
+            tla.make_shape((16, 2), (16, 4)),
+            tla.Float16,
+            addrspace=tla.AddressSpace.gm,
+            origin_shape=tla.make_shape(32, 64),
+            coord=tla.make_coord(0, 0),
+            stride=tla.make_stride((16, 512), (1, 512)),
+            layout_tag=tla.arch.zN,
+        )
+    return tensor.mark_layout_dynamic(leading_dim=2)
+
+
 @tla.kernel
 def _native_dynamic_rank1_gm_abi(buf: tla.Tensor) -> None:
     pass
@@ -679,6 +693,11 @@ def _native_dynamic_rank1_gm_reads_origin(buf: tla.Tensor) -> None:
 @tla.kernel
 def _native_dynamic_rank2_gm_abi(buf: tla.Tensor) -> None:
     pass
+
+
+@tla.kernel
+def _native_dynamic_zn_gm_reads_origin(buf: tla.Tensor) -> None:
+    _ = buf.origin_shape[0]
 
 
 def test_native_bridge_dynamic_rank1_gm_emits_memref_fields() -> None:
@@ -755,3 +774,29 @@ def test_native_bridge_dynamic_rank2_gm_emits_memref_fields() -> None:
     ]
     assert result.kernel_abi.total_size == 104
     assert all(argument.storage_size == 8 for argument in result.kernel_abi.arguments)
+
+
+def test_native_bridge_dynamic_zn_gm_materializes_four_slot_descriptor() -> None:
+    type_args = (_dynamic_gm_zn_tensor(),)
+    tlair = _native_dynamic_zn_gm_reads_origin.dump_mlir(type_args=type_args)
+
+    assert "memref<?x?x?x?xf16" in tlair
+    assert "tla.tensor_desc" in tlair
+    desc_line = next(line for line in tlair.splitlines() if "tla.tensor_desc" in line)
+    shape = desc_line.split(" shape[", 1)[1].split("] stride[", 1)[0]
+    stride = desc_line.split(" stride[", 1)[1].split("] origin_shape[", 1)[0]
+    origin = desc_line.split(" origin_shape[", 1)[1].split("] coord[", 1)[0]
+    coord = desc_line.split(" coord[", 1)[1].split("] :", 1)[0]
+    assert len(shape.split(", ")) == 4
+    assert len(stride.split(", ")) == 4
+    assert len(origin.split(", ")) == 2
+    assert len(coord.split(", ")) == 2
+    assert "!tla.shape<(?,?),(?,?)>" in desc_line
+    assert "!tla.stride<(?,?),(1,?)>" in desc_line
+    assert "!tla.shape<?,?>" in desc_line
+    result = _native_lower(
+        _native_dynamic_zn_gm_reads_origin, type_args=type_args
+    )
+    assert result.kernel_abi is not None
+    assert result.kernel_abi.schema_version == 4
+    assert result.kernel_abi.total_size == 104

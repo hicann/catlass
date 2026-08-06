@@ -9,7 +9,7 @@ module {
   func.func @load_from_gm_diagnostic(%src_memref: memref<1xf32, #hivm.address_space<gm>>) {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
-    %src = tla.tensor_desc %src_memref[%c0, %c0, %c1, %c1, %c1, %c1, %c1, %c1] : (memref<1xf32, #hivm.address_space<gm>>, index, index, index, index, index, index, index, index) -> !gm
+    %src = tla.tensor_desc %src_memref shape [%c1, %c1, %c1, %c1] stride [%c1, %c1, %c1, %c1] origin_shape [%c1, %c1] coord [%c0, %c0] : memref<1xf32, #hivm.address_space<gm>> -> !gm
     "tla.vec.func"() ({
       %loaded = tla.load %src {load_dist = #tla.load_dist<brc_b32>} : !gm -> !tla.vector<64xf32>
     }) : () -> ()

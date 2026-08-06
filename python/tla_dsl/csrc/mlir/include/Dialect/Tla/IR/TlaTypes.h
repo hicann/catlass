@@ -15,6 +15,14 @@ namespace tla {
 ::mlir::LogicalResult getTlaIndexTreeLeaves(::llvm::ArrayRef<int64_t> tree,
                                             ::llvm::SmallVectorImpl<int64_t> &leaves);
 
+/// The single source of truth for layouts whose shape and stride each have
+/// four physical leaves in tensor descriptors.
+inline bool isNZFamilyLayout(::LayoutTag layoutTag) {
+  return layoutTag == ::LayoutTag::zN || layoutTag == ::LayoutTag::nZ ||
+         layoutTag == ::LayoutTag::zZ || layoutTag == ::LayoutTag::L0Clayout ||
+         layoutTag == ::LayoutTag::zNUnAlign;
+}
+
 inline int64_t getByteSizeOfFixedWidthScalarType(::mlir::Type type) {
   if (type.isBF16() || type.isF16())
     return 2;

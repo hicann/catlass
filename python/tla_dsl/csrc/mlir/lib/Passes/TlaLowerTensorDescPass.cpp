@@ -24,15 +24,11 @@ namespace {
 // type on the result. Static leaves are materialized as SSA in `desc`.
 static Value buildTensorDescOp(OpBuilder& builder, Location loc, Type tileType, const TensorDescriptor& desc)
 {
-    SmallVector<Value, 8> packed;
-    if (isPackedLayout(desc.layoutTag)) {
-        packed.append(desc.packedShape.begin(), desc.packedShape.end());
-        packed.append(desc.packedStride.begin(), desc.packedStride.end());
-    }
     return builder
         .create<::tla::TensorDescOp>(
-            loc, tileType, desc.base, desc.rowOffset, desc.colOffset, desc.stride0, desc.stride1, desc.shape0,
-            desc.shape1, desc.originShape0, desc.originShape1, packed)
+            loc, tileType, desc.base, desc.shape[0], desc.shape[1], desc.shape[2], desc.shape[3], desc.stride[0],
+            desc.stride[1], desc.stride[2], desc.stride[3], desc.originShape[0], desc.originShape[1], desc.coord[0],
+            desc.coord[1])
         .getResult();
 }
 
@@ -47,7 +43,7 @@ struct CarrierExpansion {
     unsigned count = 1;
     Type originalType;
     TensorDescriptor prototype;
-    SmallVector<Type, 17> componentTypes;
+    SmallVector<Type, 13> componentTypes;
 };
 
 class TensorDescControlFlowLowering {
@@ -102,16 +98,15 @@ private:
         return failure();
     }
 
-    FailureOr<std::pair<TensorDescriptor, SmallVector<Value, 17>>> getCarrierFields(
+    FailureOr<std::pair<TensorDescriptor, SmallVector<Value, 13>>> getCarrierFields(
         OpBuilder& builder, Location loc, Value value, Operation* diagnosticOp)
     {
         FailureOr<TensorDescriptor> descOr = lookupDescriptor(value, diagnosticOp);
         if (failed(descOr))
             return failure();
         TensorDescriptor desc = *descOr;
-        if (!validateTensorDescriptorV1(
-                diagnosticOp, desc, "malformed descriptor for tensor-valued SCF carrier",
-                /*requireShapeOperands=*/true))
+        if (!validateTensorDescriptor(
+                diagnosticOp, desc, "malformed descriptor for tensor-valued SCF carrier"))
             return failure();
 
         auto toI64Address = [&](Value address) -> FailureOr<Value> {
@@ -155,14 +150,11 @@ private:
             return failure();
         }
 
-        SmallVector<Value, 17> fields{
-            address,     desc.rowOffset, desc.colOffset,    desc.stride0,      desc.stride1,
-            desc.shape0, desc.shape1,    desc.originShape0, desc.originShape1,
-        };
-        if (isPackedLayout(desc.layoutTag)) {
-            fields.append(desc.packedShape.begin(), desc.packedShape.end());
-            fields.append(desc.packedStride.begin(), desc.packedStride.end());
-        }
+        SmallVector<Value, 13> fields{address};
+        fields.append(desc.shape.begin(), desc.shape.end());
+        fields.append(desc.stride.begin(), desc.stride.end());
+        fields.append(desc.originShape.begin(), desc.originShape.end());
+        fields.append(desc.coord.begin(), desc.coord.end());
         return std::make_pair(std::move(desc), std::move(fields));
     }
 
@@ -179,7 +171,7 @@ private:
             return expansion;
         }
 
-        FailureOr<std::pair<TensorDescriptor, SmallVector<Value, 17>>> carrier =
+        FailureOr<std::pair<TensorDescriptor, SmallVector<Value, 13>>> carrier =
             getCarrierFields(builder, loc, value, diagnosticOp);
         if (failed(carrier))
             return failure();
@@ -207,7 +199,7 @@ private:
             return success();
         }
 
-        FailureOr<std::pair<TensorDescriptor, SmallVector<Value, 17>>> carrier =
+        FailureOr<std::pair<TensorDescriptor, SmallVector<Value, 13>>> carrier =
             getCarrierFields(builder, loc, value, diagnosticOp);
         if (failed(carrier))
             return failure();
@@ -229,7 +221,7 @@ private:
         OpBuilder& builder, Location loc, const CarrierExpansion& expansion, ValueRange components,
         Operation* diagnosticOp)
     {
-        if (!expansion.isTensor || components.size() != expansion.count || components.size() < 9) {
+        if (!expansion.isTensor || components.size() != expansion.count || components.size() != 13) {
             diagnosticOp->emitError("invalid flattened tensor descriptor SCF carrier");
             return failure();
         }
@@ -242,29 +234,18 @@ private:
 
         TensorDescriptor desc = expansion.prototype;
         desc.base = builder.create<::tla::IntToPtrOp>(loc, tensorType.getPtr(), components[0]);
-        desc.rowOffset = components[1];
-        desc.colOffset = components[2];
-        desc.stride0 = components[3];
-        desc.stride1 = components[4];
-        desc.shape0 = components[5];
-        desc.shape1 = components[6];
-        desc.originShape0 = components[7];
-        desc.originShape1 = components[8];
-        desc.absCoord0 = desc.rowOffset;
-        desc.absCoord1 = desc.colOffset;
-
-        desc.packedShape.clear();
-        desc.packedStride.clear();
-        if (isPackedLayout(desc.layoutTag)) {
-            if (components.size() != 17) {
-                diagnosticOp->emitError("packed tensor descriptor SCF carrier must have 17 fields");
-                return failure();
-            }
-            desc.packedShape.append(components.begin() + 9, components.begin() + 13);
-            desc.packedStride.append(components.begin() + 13, components.end());
-        } else if (components.size() != 9) {
-            diagnosticOp->emitError("linear tensor descriptor SCF carrier must have 9 fields");
-            return failure();
+        desc.shape = {components[1], components[2], components[3], components[4]};
+        desc.stride = {components[5], components[6], components[7], components[8]};
+        desc.originShape = {components[9], components[10]};
+        desc.coord = {components[11], components[12]};
+        if (isLinearLayout(desc.layoutTag)) {
+            // Structural carriers retain all four slots, but the materialized
+            // linear descriptor must expose literal unit padding to its verifier.
+            Value one = builder.create<arith::ConstantIndexOp>(loc, 1);
+            desc.shape[2] = one;
+            desc.shape[3] = one;
+            desc.stride[2] = one;
+            desc.stride[3] = one;
         }
 
         return buildTensorDescOp(builder, loc, expansion.originalType, desc);
@@ -288,9 +269,7 @@ private:
             if (it == derivation.descriptorByValue.end())
                 continue;
             const TensorDescriptor& desc = it->second;
-            if (!validateTensorDescriptorV1(
-                    op, desc, "malformed descriptor for tla.tensor_desc lowering",
-                    /*requireShapeOperands=*/true))
+            if (!validateTensorDescriptor(op, desc, "malformed descriptor for tla.tensor_desc lowering"))
                 return failure();
             OpBuilder builder(op);
             Value descValue = buildTensorDescOp(builder, op->getLoc(), op->getResult(0).getType(), desc);
@@ -454,7 +433,7 @@ private:
                 oldArg.replaceAllUsesWith(newBody->getArgument(1 + expansion.start));
                 continue;
             }
-            SmallVector<Value, 17> components;
+            SmallVector<Value, 13> components;
             for (unsigned i = 0; i < expansion.count; ++i)
                 components.push_back(newBody->getArgument(1 + expansion.start + i));
             FailureOr<Value> desc = buildDescFromComponents(bodyBuilder, forOp.getLoc(), expansion, components, forOp);
@@ -553,8 +532,8 @@ private:
                 continue;
             }
 
-            SmallVector<Value, 17> beforeComponents;
-            SmallVector<Value, 17> afterComponents;
+            SmallVector<Value, 13> beforeComponents;
+            SmallVector<Value, 13> afterComponents;
             for (unsigned i = 0; i < expansion.count; ++i) {
                 beforeComponents.push_back(newBefore->getArgument(expansion.start + i));
                 afterComponents.push_back(newAfter->getArgument(expansion.start + i));

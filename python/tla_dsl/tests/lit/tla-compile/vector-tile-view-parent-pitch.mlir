@@ -33,6 +33,7 @@ module {
 // CHECK: %[[COL:.*]] = arith.constant 0 : index
 // CHECK: %[[PITCH:.*]] = arith.constant 128 : index
 // CHECK: %[[ROW_OFFSET:.*]] = arith.muli %[[ROW]], %[[PITCH]] : index
-// CHECK: %[[OFFSET:.*]] = arith.addi %[[ROW_OFFSET]], %[[COL]] : index
+// CHECK: %[[COL_OFFSET:.*]] = arith.muli %[[COL]], %{{.*}} : index
+// CHECK: %[[OFFSET:.*]] = arith.addi %[[ROW_OFFSET]], %[[COL_OFFSET]] : index
 // CHECK: memref.reinterpret_cast {{.*}} to offset: [%[[OFFSET]]]
 // CHECK-NOT: tla.tile_view

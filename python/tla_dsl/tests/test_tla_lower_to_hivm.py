@@ -916,6 +916,8 @@ def test_tensor_valued_scf_carrier_is_materialized_as_descriptor_fields(
     ]
     assert carrier_lines
     assert all("!tla.tensor" not in line for line in carrier_lines), output
+    fixed_descriptor_types = re.compile(r"i64(?:, index){12}")
+    assert any(fixed_descriptor_types.search(line) for line in carrier_lines), output
 
 
 def test_tensor_scf_carrier_preserves_dynamic_descriptor_fields() -> None:

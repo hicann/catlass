@@ -11,7 +11,7 @@ func.func @vector_arange_decrease_lowering(
     %dst_c0 = arith.constant 0 : index
     %dst_c1 = arith.constant 1 : index
     %dst_c64 = arith.constant 64 : index
-    %dst = tla.tensor_desc %dst_memref[%dst_c0, %dst_c0, %dst_c64, %dst_c1, %dst_c1, %dst_c64, %dst_c1, %dst_c64] : (memref<64xi32, #hivm.address_space<ub>>, index, index, index, index, index, index, index, index) -> !t
+    %dst = tla.tensor_desc %dst_memref shape [%dst_c1, %dst_c64, %dst_c1, %dst_c1] stride [%dst_c64, %dst_c1, %dst_c1, %dst_c1] origin_shape [%dst_c1, %dst_c64] coord [%dst_c0, %dst_c0] : memref<64xi32, #hivm.address_space<ub>> -> !t
     "tla.vector"() ({
     "tla.vec.func"() ({
         %shape = "tla.make_shape"() : () -> !tla.shape<64>

@@ -13,15 +13,15 @@ module {
     %m_c0 = arith.constant 0 : index
     %m_c1 = arith.constant 1 : index
     %m_c8 = arith.constant 8 : index
-    %mask = tla.tensor_desc %mask_memref[%m_c0, %m_c0, %m_c8, %m_c1, %m_c1, %m_c8, %m_c1, %m_c8] : (memref<8xi8, #hivm.address_space<ub>>, index, index, index, index, index, index, index, index) -> !mask_b8
+    %mask = tla.tensor_desc %mask_memref shape [%m_c1, %m_c8, %m_c1, %m_c1] stride [%m_c8, %m_c1, %m_c1, %m_c1] origin_shape [%m_c1, %m_c8] coord [%m_c0, %m_c0] : memref<8xi8, #hivm.address_space<ub>> -> !mask_b8
     %src_c0 = arith.constant 0 : index
     %src_c1 = arith.constant 1 : index
     %src_c64 = arith.constant 64 : index
-    %src = tla.tensor_desc %src_memref[%src_c0, %src_c0, %src_c64, %src_c1, %src_c1, %src_c64, %src_c1, %src_c64] : (memref<64xf32, #hivm.address_space<ub>>, index, index, index, index, index, index, index, index) -> !fvec
+    %src = tla.tensor_desc %src_memref shape [%src_c1, %src_c64, %src_c1, %src_c1] stride [%src_c64, %src_c1, %src_c1, %src_c1] origin_shape [%src_c1, %src_c64] coord [%src_c0, %src_c0] : memref<64xf32, #hivm.address_space<ub>> -> !fvec
     %dst_c0 = arith.constant 0 : index
     %dst_c1 = arith.constant 1 : index
     %dst_c64 = arith.constant 64 : index
-    %dst = tla.tensor_desc %dst_memref[%dst_c0, %dst_c0, %dst_c64, %dst_c1, %dst_c1, %dst_c64, %dst_c1, %dst_c64] : (memref<64xf32, #hivm.address_space<ub>>, index, index, index, index, index, index, index, index) -> !fvec
+    %dst = tla.tensor_desc %dst_memref shape [%dst_c1, %dst_c64, %dst_c1, %dst_c1] stride [%dst_c64, %dst_c1, %dst_c1, %dst_c1] origin_shape [%dst_c1, %dst_c64] coord [%dst_c0, %dst_c0] : memref<64xf32, #hivm.address_space<ub>> -> !fvec
     "tla.vec.func"() ({
       %mask_shape = "tla.make_shape"() : () -> !tla.shape<8>
       %data_shape = "tla.make_shape"() : () -> !tla.shape<64>
@@ -46,15 +46,15 @@ module {
     %m_c0 = arith.constant 0 : index
     %m_c1 = arith.constant 1 : index
     %m_c4 = arith.constant 4 : index
-    %mask = tla.tensor_desc %mask_memref[%m_c0, %m_c0, %m_c4, %m_c1, %m_c1, %m_c4, %m_c1, %m_c4] : (memref<4xi16, #hivm.address_space<ub>>, index, index, index, index, index, index, index, index) -> !mask_b16
+    %mask = tla.tensor_desc %mask_memref shape [%m_c1, %m_c4, %m_c1, %m_c1] stride [%m_c4, %m_c1, %m_c1, %m_c1] origin_shape [%m_c1, %m_c4] coord [%m_c0, %m_c0] : memref<4xi16, #hivm.address_space<ub>> -> !mask_b16
     %src_c0 = arith.constant 0 : index
     %src_c1 = arith.constant 1 : index
     %src_c64 = arith.constant 64 : index
-    %src = tla.tensor_desc %src_memref[%src_c0, %src_c0, %src_c64, %src_c1, %src_c1, %src_c64, %src_c1, %src_c64] : (memref<64xf32, #hivm.address_space<ub>>, index, index, index, index, index, index, index, index) -> !fvec
+    %src = tla.tensor_desc %src_memref shape [%src_c1, %src_c64, %src_c1, %src_c1] stride [%src_c64, %src_c1, %src_c1, %src_c1] origin_shape [%src_c1, %src_c64] coord [%src_c0, %src_c0] : memref<64xf32, #hivm.address_space<ub>> -> !fvec
     %dst_c0 = arith.constant 0 : index
     %dst_c1 = arith.constant 1 : index
     %dst_c64 = arith.constant 64 : index
-    %dst = tla.tensor_desc %dst_memref[%dst_c0, %dst_c0, %dst_c64, %dst_c1, %dst_c1, %dst_c64, %dst_c1, %dst_c64] : (memref<64xf32, #hivm.address_space<ub>>, index, index, index, index, index, index, index, index) -> !fvec
+    %dst = tla.tensor_desc %dst_memref shape [%dst_c1, %dst_c64, %dst_c1, %dst_c1] stride [%dst_c64, %dst_c1, %dst_c1, %dst_c1] origin_shape [%dst_c1, %dst_c64] coord [%dst_c0, %dst_c0] : memref<64xf32, #hivm.address_space<ub>> -> !fvec
     "tla.vec.func"() ({
       %mask_shape = "tla.make_shape"() : () -> !tla.shape<4>
       %data_shape = "tla.make_shape"() : () -> !tla.shape<64>
@@ -79,15 +79,15 @@ module {
     %m_c0 = arith.constant 0 : index
     %m_c1 = arith.constant 1 : index
     %m_c2 = arith.constant 2 : index
-    %mask = tla.tensor_desc %mask_memref[%m_c0, %m_c0, %m_c2, %m_c1, %m_c1, %m_c2, %m_c1, %m_c2] : (memref<2xi32, #hivm.address_space<ub>>, index, index, index, index, index, index, index, index) -> !mask_b32
+    %mask = tla.tensor_desc %mask_memref shape [%m_c1, %m_c2, %m_c1, %m_c1] stride [%m_c2, %m_c1, %m_c1, %m_c1] origin_shape [%m_c1, %m_c2] coord [%m_c0, %m_c0] : memref<2xi32, #hivm.address_space<ub>> -> !mask_b32
     %src_c0 = arith.constant 0 : index
     %src_c1 = arith.constant 1 : index
     %src_c64 = arith.constant 64 : index
-    %src = tla.tensor_desc %src_memref[%src_c0, %src_c0, %src_c64, %src_c1, %src_c1, %src_c64, %src_c1, %src_c64] : (memref<64xf32, #hivm.address_space<ub>>, index, index, index, index, index, index, index, index) -> !fvec
+    %src = tla.tensor_desc %src_memref shape [%src_c1, %src_c64, %src_c1, %src_c1] stride [%src_c64, %src_c1, %src_c1, %src_c1] origin_shape [%src_c1, %src_c64] coord [%src_c0, %src_c0] : memref<64xf32, #hivm.address_space<ub>> -> !fvec
     %dst_c0 = arith.constant 0 : index
     %dst_c1 = arith.constant 1 : index
     %dst_c64 = arith.constant 64 : index
-    %dst = tla.tensor_desc %dst_memref[%dst_c0, %dst_c0, %dst_c64, %dst_c1, %dst_c1, %dst_c64, %dst_c1, %dst_c64] : (memref<64xf32, #hivm.address_space<ub>>, index, index, index, index, index, index, index, index) -> !fvec
+    %dst = tla.tensor_desc %dst_memref shape [%dst_c1, %dst_c64, %dst_c1, %dst_c1] stride [%dst_c64, %dst_c1, %dst_c1, %dst_c1] origin_shape [%dst_c1, %dst_c64] coord [%dst_c0, %dst_c0] : memref<64xf32, #hivm.address_space<ub>> -> !fvec
     "tla.vec.func"() ({
       %mask_shape = "tla.make_shape"() : () -> !tla.shape<2>
       %data_shape = "tla.make_shape"() : () -> !tla.shape<64>

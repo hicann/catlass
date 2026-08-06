@@ -233,7 +233,9 @@ class _Tensor(TensorABC):
         All shape modes become dynamic. Strides become dynamic except the leading
         dimension, which keeps stride ``1``. Broadcast strides of ``0`` are
         preserved. Matching ``origin_shape`` leaves become dynamic as well so the
-        compile type no longer depends on concrete DLPack extents.
+        compile type no longer depends on concrete DLPack extents. For NZFamily
+        layouts, each two-leaf physical shape group maps to one logical
+        ``origin_shape`` axis.
         """
         # Dynamic GM ABI hard-codes root coord/offset 0 (same rule as
         # TlaLowerFuncPass::validateKernelTensorArg).
@@ -289,7 +291,9 @@ class _Tensor(TensorABC):
         (their stride is a product that includes the marked extent).
 
         Matching ``origin_shape`` leaves become dynamic with the shape modes so
-        the compile type stays independent of concrete problem sizes.
+        the compile type stays independent of concrete problem sizes. For
+        NZFamily layouts, physical modes 0/1 map to logical M and modes 2/3 map
+        to logical N.
         """
         coord_leaves = _flat_layout_leaves(self.coord, allow_dynamic=True)
         if any(leaf is None for leaf in coord_leaves) or not all(
@@ -342,6 +346,11 @@ class _Tensor(TensorABC):
                 "origin_shape, coord, and stride metadata"
             )
         rank = len(self._shape_tuple or ())
+        mode_indices = tuple(int(mode) for mode in modes)
+        if any(mode < 0 or mode >= rank for mode in mode_indices):
+            raise RuntimeTensorError(
+                f"dynamic shape mode out of range for rank {rank}: {mode_indices!r}"
+            )
         shape_leaves = _flat_layout_leaves(
             self._layout_shape_components(),
             allow_dynamic=True,
@@ -350,11 +359,38 @@ class _Tensor(TensorABC):
         origin_leaves = _flat_layout_leaves(
             self._layout_origin_shape_components(),
             allow_dynamic=True,
-            expected_rank=rank,
         )
-        for mode in modes:
-            shape_leaves[int(mode)] = None
-            origin_leaves[int(mode)] = None
+        if len(origin_leaves) == rank:
+            origin_mode_indices = mode_indices
+        else:
+            # NZFamily shape/stride are physical 2x2 trees with four leaves,
+            # while origin_shape remains the flat logical (M, N) pair. Both
+            # leaves in the first physical group map to M; both leaves in the
+            # second group map to N.
+            from ..core_api import _NZ_FAMILY_LAYOUT_TOKENS
+
+            is_nz_family_2x2 = (
+                self.layout_tag in _NZ_FAMILY_LAYOUT_TOKENS
+                and rank == 4
+                and len(origin_leaves) == 2
+                and _tree_structure_mask(self._layout_shape_components())
+                == ((None, None), (None, None))
+                and _tree_structure_mask(self._layout_origin_shape_components())
+                == (None, None)
+            )
+            if not is_nz_family_2x2:
+                raise RuntimeTensorError(
+                    f"layout tree rank mismatch: expected {rank} leaves, "
+                    f"got {len(origin_leaves)}"
+                )
+            origin_mode_indices = tuple(
+                sorted({mode // 2 for mode in mode_indices})
+            )
+
+        for mode in mode_indices:
+            shape_leaves[mode] = None
+        for mode in origin_mode_indices:
+            origin_leaves[mode] = None
         self._dynamic_shape_tree = _replace_flat_leaves_in_tree(
             shape_components, shape_leaves
         )

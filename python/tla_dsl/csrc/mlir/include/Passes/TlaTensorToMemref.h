@@ -46,8 +46,8 @@ std::string getCopyRouteCallee(mlir::MLIRContext *ctx, llvm::StringRef srcAddrsp
                                llvm::StringRef dstElementType, llvm::StringRef extraDesc = "");
 
 /// The 20-element i64 runtime payload for a copy route: the src tile's layout
-/// descriptor followed by the dst tile's (row-major -> extent+origin+abs-coord,
-/// packed -> packed shape/stride + row/col offset + origin).
+/// descriptor followed by the dst tile's (linear -> shape2/stride2/coord2/origin2,
+/// NZFamily -> shape4/stride4/coord2/origin2).
 llvm::SmallVector<mlir::Value, 20> buildCopyPayloadForRoute(mlir::OpBuilder &builder,
                                                             mlir::Location loc,
                                                             const TensorDescriptor &srcDesc,

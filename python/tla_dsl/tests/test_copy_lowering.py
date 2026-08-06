@@ -119,7 +119,7 @@ def test_kernel_gm_arg_copies_directly_to_ub(tmp_path) -> None:
     )
 
     descriptor_match = re.search(
-        r"(?P<descriptor>%[A-Za-z0-9_]+) = tla\.tensor_desc %arg0\[",
+        r"(?P<descriptor>%[A-Za-z0-9_]+) = tla\.tensor_desc %arg0 shape\[",
         result.stderr,
     )
     assert descriptor_match is not None, result.stderr
@@ -241,6 +241,7 @@ _MAKE_TENSOR_LIKE_LAYOUT_CASES = (
     ("nZ", tla.arch.nZ),
     ("zZ", tla.arch.zZ),
     ("L0Clayout", tla.arch.L0Clayout),
+    ("zNUnAlign", tla.arch.zNUnAlign),
 )
 _MAKE_TENSOR_LIKE_PARENT_LAYOUT = tla.arch.RowMajor
 _MAKE_TENSOR_LIKE_CHILD_LAYOUT = tla.arch.RowMajor
@@ -274,20 +275,20 @@ def make_tensor_like_layout_pair_kernel(
         tla.make_shape(child.origin_shape[0], child.origin_shape[1])
 
 
-def _tensor_desc_metadata(line: str) -> tuple[list[str], list[str]]:
+def _tensor_desc_metadata(
+    line: str,
+) -> tuple[list[str], list[str], list[str], list[str]]:
     match = re.search(
-        r"tla\.tensor_desc\s+%[^\[]+\[([^\]]+)\]"
-        r"(?:\s+packed\s*\[([^\]]+)\])?\s+:",
+        r"tla\.tensor_desc\s+%\S+\s+shape\[([^\]]+)\]\s+"
+        r"stride\[([^\]]+)\]\s+origin_shape\[([^\]]+)\]\s+"
+        r"coord\[([^\]]+)\]\s+:",
         line,
     )
     assert match is not None, line
-    common = [value.strip() for value in match.group(1).split(",")]
-    packed = (
-        [value.strip() for value in match.group(2).split(",")]
-        if match.group(2)
-        else []
+    return tuple(
+        [value.strip() for value in match.group(group).split(",")]
+        for group in range(1, 5)
     )
-    return common, packed
 
 
 def _index_binary_operands(
@@ -374,7 +375,7 @@ def test_make_tensor_like_supports_every_layout_pair(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
-    """All six layouts can be the parent and child of make_tensor_like."""
+    """All seven layouts can be the parent and child of make_tensor_like."""
     monkeypatch.setitem(
         globals(), "_MAKE_TENSOR_LIKE_PARENT_LAYOUT", parent_layout
     )
@@ -421,25 +422,26 @@ def test_make_tensor_like_supports_every_layout_pair(
     assert len(desc_lines) >= 4, result.stderr
     child_desc = desc_lines[-1]
     assert child_name in child_desc
-    common, packed = _tensor_desc_metadata(child_desc)
-    assert len(common) == 8
-    assert common[4] == common[6]
-    assert common[5] == common[7]
+    shape, stride, origin, coord = _tensor_desc_metadata(child_desc)
+    assert len(shape) == 4
+    assert len(stride) == 4
+    assert len(origin) == 2
+    assert len(coord) == 2
 
     if child_name == "row_major":
-        assert packed == []
+        assert shape[:2] == origin
+        assert shape[2:] == stride[2:]
         _assert_f32_dynamic_stride_is_32b_aligned(
-            result.stderr, extent=common[5], stride=common[2]
+            result.stderr, extent=shape[1], stride=stride[0]
         )
     elif child_name == "column_major":
-        assert packed == []
+        assert shape[:2] == origin
+        assert shape[2:] == stride[2:]
         _assert_f32_dynamic_stride_is_32b_aligned(
-            result.stderr, extent=common[4], stride=common[3]
+            result.stderr, extent=shape[0], stride=stride[1]
         )
     else:
-        assert len(packed) == 8
-        assert common[2] == packed[4]
-        assert common[3] == packed[5]
+        assert child_name in {"zN", "nZ", "zZ", "L0Clayout", "zNUnAlign"}
 
 
 @tla.kernel
@@ -540,8 +542,8 @@ def test_ptradd_ub_subtile_copy_applies_ptr_offset(tmp_path) -> None:
     assert "hivm.func_core_type = #hivm.func_core_type<AIV>" in out
     # ptr_add contributes 64 bytes (16 f32 elements) to the UB base pointer_cast;
     # the UB sub-tile (coord (1,1) of a 64-wide buffer) carries stride0=64 and
-    # absCoord (32,32) in the i64 payload, so the stub computes the flat offset
-    # (32*64+32 = 2080) from absCoord/stride at runtime.
+    # coord (32,32) in the i64 payload, so the stub computes the flat offset
+    # (32*64+32 = 2080) from coord/stride at runtime.
     assert "arith.constant 64 : i64" in out
     assert '"tla.copy"' not in out
 

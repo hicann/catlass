@@ -4,6 +4,7 @@
 
 #include "llvm/ADT/DenseSet.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/IR/Matchers.h"
 
 namespace tla {
 
@@ -12,10 +13,10 @@ mlir::FailureOr<mlir::MemRefType> bridgeTlaTensorType(mlir::Type tlaTensorType)
     return bridgeTlaTensorStorageType(tlaTensorType);
 }
 
-bool isPackedLayout(TensorLayoutTag layoutTag)
+bool isNZFamilyLayout(TensorLayoutTag layoutTag)
 {
-    return layoutTag == TensorLayoutTag::zN || layoutTag == TensorLayoutTag::zZ || layoutTag == TensorLayoutTag::nZ ||
-           layoutTag == TensorLayoutTag::L0C || layoutTag == TensorLayoutTag::zNUnAlign;
+    auto tlaLayoutTag = symbolizeLayoutTag(stringifyTensorLayoutTag(layoutTag));
+    return tlaLayoutTag && isNZFamilyLayout(*tlaLayoutTag);
 }
 
 bool isLinearLayout(TensorLayoutTag layoutTag)
@@ -130,7 +131,7 @@ mlir::FailureOr<TileTypeInfo> decodeTileTypeInfo(mlir::Type tileType)
         if (info.rank != 2 || info.shapeDims.size() != 2 || info.strideDims.size() != 2 ||
             info.originShapeDims.size() != 2)
             return failure();
-    } else if (isPackedLayout(info.layoutTag)) {
+    } else if (isNZFamilyLayout(info.layoutTag)) {
         if (info.rank != 2 || info.originShapeDims.size() != 2)
             return failure();
         if (info.shapeDims.size() != 4 || info.strideDims.size() != 4)
@@ -169,38 +170,49 @@ mlir::MemRefType getDynamicStridedMemrefType(mlir::MemRefType memrefType)
     return MemRefType::get(dynamicShape, memrefType.getElementType(), layout, memrefType.getMemorySpace());
 }
 
-bool validateTensorDescriptorV1(
-    mlir::Operation* op, const TensorDescriptor& desc, llvm::StringRef errorMessage, bool requireShapeOperands)
+bool validateTensorDescriptor(mlir::Operation* op, const TensorDescriptor& desc, llvm::StringRef errorMessage)
 {
-    if (!desc.bridgedBaseMemrefType || desc.rank != 2 || desc.addrspace.empty() || desc.elementType.empty() ||
-        !desc.rowOffset.getType().isIndex() || !desc.colOffset.getType().isIndex() ||
-        !desc.stride0.getType().isIndex() || !desc.stride1.getType().isIndex() ||
-        !desc.originShape0.getType().isIndex() || !desc.originShape1.getType().isIndex() ||
-        !desc.absCoord0.getType().isIndex() || !desc.absCoord1.getType().isIndex()) {
+    if (!desc.base || !desc.bridgedBaseMemrefType || desc.addrspace.empty() || desc.elementType.empty()) {
         op->emitError() << errorMessage;
         return false;
     }
-    if (requireShapeOperands && (!desc.shape0.getType().isIndex() || !desc.shape1.getType().isIndex())) {
-        op->emitError() << errorMessage;
-        return false;
-    }
-    if (isPackedLayout(desc.layoutTag)) {
-        if (desc.packedShape.size() != 4 || desc.packedStride.size() != 4) {
+    for (Value value : desc.shape) {
+        if (!value || !value.getType().isIndex()) {
             op->emitError() << errorMessage;
             return false;
         }
-        for (Value value : desc.packedShape) {
-            if (!value.getType().isIndex()) {
-                op->emitError() << errorMessage;
-                return false;
-            }
+    }
+    for (Value value : desc.stride) {
+        if (!value || !value.getType().isIndex()) {
+            op->emitError() << errorMessage;
+            return false;
         }
-        for (Value value : desc.packedStride) {
-            if (!value.getType().isIndex()) {
-                op->emitError() << errorMessage;
-                return false;
-            }
+    }
+    for (Value value : desc.originShape) {
+        if (!value || !value.getType().isIndex()) {
+            op->emitError() << errorMessage;
+            return false;
         }
+    }
+    for (Value value : desc.coord) {
+        if (!value || !value.getType().isIndex()) {
+            op->emitError() << errorMessage;
+            return false;
+        }
+    }
+    if (isLinearLayout(desc.layoutTag)) {
+        auto isConstantOne = [](Value value) {
+            llvm::APInt constant;
+            return matchPattern(value, m_ConstantInt(&constant)) && constant == 1;
+        };
+        if (!isConstantOne(desc.shape[2]) || !isConstantOne(desc.shape[3]) ||
+            !isConstantOne(desc.stride[2]) || !isConstantOne(desc.stride[3])) {
+            op->emitError() << errorMessage;
+            return false;
+        }
+    } else if (!isNZFamilyLayout(desc.layoutTag)) {
+        op->emitError() << errorMessage;
+        return false;
     }
     return true;
 }
@@ -332,25 +344,13 @@ mlir::FailureOr<TensorDescriptor> descriptorFromTensorDescOp(::tla::TensorDescOp
     } else {
         return descOp->emitError() << "base must be memref or !tla.ptr", failure();
     }
-    d.rowOffset = descOp.getRowOffset();
-    d.colOffset = descOp.getColOffset();
-    d.stride0 = descOp.getStride0();
-    d.stride1 = descOp.getStride1();
-    d.shape0 = descOp.getShape0();
-    d.shape1 = descOp.getShape1();
-    d.originShape0 = descOp.getOriginShape0();
-    d.originShape1 = descOp.getOriginShape1();
-    d.absCoord0 = descOp.getRowOffset();
-    d.absCoord1 = descOp.getColOffset();
+    d.shape = {descOp.getShape0(), descOp.getShape1(), descOp.getShape2(), descOp.getShape3()};
+    d.stride = {descOp.getStride0(), descOp.getStride1(), descOp.getStride2(), descOp.getStride3()};
+    d.originShape = {descOp.getOriginShape0(), descOp.getOriginShape1()};
+    d.coord = {descOp.getCoord0(), descOp.getCoord1()};
     d.layoutTag = info->layoutTag;
     d.addrspace = info->addressSpace;
     d.elementType = info->elementType;
-    d.rank = info->rank;
-    auto packed = descOp.getPacked();
-    if (packed.size() == 8) {
-        d.packedShape.assign(packed.begin(), packed.begin() + 4);
-        d.packedStride.assign(packed.begin() + 4, packed.end());
-    }
     return d;
 }
 

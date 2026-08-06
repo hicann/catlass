@@ -615,36 +615,35 @@ static LogicalResult lowerPrintTensor(::tla::PrintTensorOp op,
     Value elementOffset;
     if (::tla::isLinearLayout(desc.layoutTag)) {
         Value rowElements = rewriter.createOrFold<arith::MulIOp>(
-            op.getLoc(), desc.rowOffset, desc.stride0);
+            op.getLoc(), desc.coord[0], desc.stride[0]);
         Value colElements = rewriter.createOrFold<arith::MulIOp>(
-            op.getLoc(), desc.colOffset, desc.stride1);
+            op.getLoc(), desc.coord[1], desc.stride[1]);
         elementOffset = rewriter.createOrFold<arith::AddIOp>(
             op.getLoc(), rowElements, colElements);
     } else {
-        if (!::tla::isPackedLayout(desc.layoutTag) ||
-            desc.packedShape.size() != 4 || desc.packedStride.size() != 4)
+        if (!::tla::isNZFamilyLayout(desc.layoutTag))
             return op.emitError("could not materialize the tensor physical offset");
 
-        Value rowDivisor = desc.packedShape[0];
+        Value rowDivisor = desc.shape[0];
         if (desc.layoutTag == ::tla::TensorLayoutTag::zNUnAlign)
             rowDivisor = rewriter.createOrFold<arith::DivSIOp>(
-                op.getLoc(), desc.packedStride[3], desc.packedShape[2]);
+                op.getLoc(), desc.stride[3], desc.shape[2]);
         Value physical0 = rewriter.createOrFold<arith::RemSIOp>(
-            op.getLoc(), desc.rowOffset, rowDivisor);
+            op.getLoc(), desc.coord[0], rowDivisor);
         Value physical1 = rewriter.createOrFold<arith::DivSIOp>(
-            op.getLoc(), desc.rowOffset, rowDivisor);
+            op.getLoc(), desc.coord[0], rowDivisor);
         Value physical2 = rewriter.createOrFold<arith::RemSIOp>(
-            op.getLoc(), desc.colOffset, desc.packedShape[2]);
+            op.getLoc(), desc.coord[1], desc.shape[2]);
         Value physical3 = rewriter.createOrFold<arith::DivSIOp>(
-            op.getLoc(), desc.colOffset, desc.packedShape[2]);
+            op.getLoc(), desc.coord[1], desc.shape[2]);
         Value term0 = rewriter.createOrFold<arith::MulIOp>(
-            op.getLoc(), physical0, desc.packedStride[0]);
+            op.getLoc(), physical0, desc.stride[0]);
         Value term1 = rewriter.createOrFold<arith::MulIOp>(
-            op.getLoc(), physical1, desc.packedStride[1]);
+            op.getLoc(), physical1, desc.stride[1]);
         Value term2 = rewriter.createOrFold<arith::MulIOp>(
-            op.getLoc(), physical2, desc.packedStride[2]);
+            op.getLoc(), physical2, desc.stride[2]);
         Value term3 = rewriter.createOrFold<arith::MulIOp>(
-            op.getLoc(), physical3, desc.packedStride[3]);
+            op.getLoc(), physical3, desc.stride[3]);
         Value rowElements = rewriter.createOrFold<arith::AddIOp>(
             op.getLoc(), term0, term1);
         Value colElements = rewriter.createOrFold<arith::AddIOp>(
@@ -663,12 +662,15 @@ static LogicalResult lowerPrintTensor(::tla::PrintTensorOp op,
     Value count = op.getLength();
     Value shape0;
     Value shape1;
-    if (op.getShape().size() == 1) {
-        shape0 = ::tla::castValueToI64(rewriter, op.getLoc(), desc.shape1);
+    if (::tla::isNZFamilyLayout(desc.layoutTag)) {
+        shape0 = ::tla::castValueToI64(rewriter, op.getLoc(), desc.originShape[0]);
+        shape1 = ::tla::castValueToI64(rewriter, op.getLoc(), desc.originShape[1]);
+    } else if (op.getShape().size() == 1) {
+        shape0 = ::tla::castValueToI64(rewriter, op.getLoc(), desc.shape[1]);
         shape1 = rewriter.create<arith::ConstantIntOp>(op.getLoc(), 0, 64);
     } else {
-        shape0 = ::tla::castValueToI64(rewriter, op.getLoc(), desc.shape0);
-        shape1 = ::tla::castValueToI64(rewriter, op.getLoc(), desc.shape1);
+        shape0 = ::tla::castValueToI64(rewriter, op.getLoc(), desc.shape[0]);
+        shape1 = ::tla::castValueToI64(rewriter, op.getLoc(), desc.shape[1]);
     }
     Value shift = rewriter.create<arith::ConstantIntOp>(op.getLoc(), 32, 64);
     Value packedShape1 = rewriter.create<arith::ShLIOp>(

@@ -1408,15 +1408,27 @@ def _materialize_dynamic_gm_root_tensor_descriptor(
     origin_leaves = list(_flatten_tla_tuple(tensor_ty.origin_shape))
     coord_leaves = list(_flatten_tla_tuple(tensor_ty.coord))
     rank = len(shape_leaves)
-    if (
-        rank not in (1, 2)
-        or len(stride_leaves) != rank
-        or len(origin_leaves) != rank
-        or len(coord_leaves) != rank
-    ):
+    layout_tag = str(tensor_ty.layout_tag)
+    is_nz_family = layout_tag in _NZ_FAMILY_LAYOUT_TOKENS
+    valid_linear_metadata = (
+        layout_tag in _LINEAR_LAYOUT_TOKENS
+        and rank in (1, 2)
+        and len(stride_leaves) == rank
+        and len(origin_leaves) == rank
+        and len(coord_leaves) == rank
+    )
+    valid_nz_family_metadata = (
+        is_nz_family
+        and rank == 4
+        and len(stride_leaves) == 4
+        and len(origin_leaves) == 2
+        and len(coord_leaves) == 2
+    )
+    if not valid_linear_metadata and not valid_nz_family_metadata:
         raise TlaLoweringError(
-            "dynamic GM prologue supports rank-1 or rank-2 logical tensors with matching "
-            f"shape/stride/origin/coord leaves; got ranks shape={rank}, "
+            "dynamic GM prologue supports rank-1/rank-2 linear metadata or "
+            "four-leaf NZFamily shape/stride with two-leaf origin/coord; "
+            f"got layout={layout_tag}, ranks shape={rank}, "
             f"stride={len(stride_leaves)}, origin={len(origin_leaves)}, "
             f"coord={len(coord_leaves)}"
         )
@@ -1440,9 +1452,10 @@ def _materialize_dynamic_gm_root_tensor_descriptor(
         else:
             shape_vals.append(_const_index(int(extent), loc=loc))
 
-    layout_tag = str(tensor_ty.layout_tag)
     abi_strides: list[mlir_ir.Value] | None = None
-    if layout_tag == "row_major" and any(leaf is None for leaf in stride_leaves):
+    if (
+        layout_tag == "row_major" or is_nz_family
+    ) and any(leaf is None for leaf in stride_leaves):
         meta = memref.ExtractStridedMetadataOp(memref_arg, loc=loc)
         results = list(meta.results)
         stride_start = 2 + abi_rank
@@ -1454,12 +1467,13 @@ def _materialize_dynamic_gm_root_tensor_descriptor(
         abi_strides = list(results[stride_start : stride_start + abi_rank])
 
     stride_vals: list[mlir_ir.Value] = []
-    if layout_tag == "row_major":
+    if layout_tag == "row_major" or is_nz_family:
         for axis, leaf in enumerate(stride_leaves):
             if leaf is None:
                 if abi_strides is None:
                     raise TlaLoweringError(
-                        "row_major dynamic stride requires extract_strided_metadata"
+                        f"{layout_tag} dynamic stride requires "
+                        "extract_strided_metadata"
                     )
                 stride_vals.append(abi_strides[axis])
             else:
@@ -1478,11 +1492,16 @@ def _materialize_dynamic_gm_root_tensor_descriptor(
         return _const_index(int(leaf), loc=loc)
 
     zero = _const_index(0, loc=loc)
+    one = _const_index(1, loc=loc)
     if rank == 1:
         shape0 = _const_index(1, loc=loc)
         shape1 = shape_vals[0]
+        shape2 = one
+        shape3 = one
         stride1 = stride_vals[0]
         stride0 = arith.MulIOp(shape1, stride1, loc=loc).result
+        stride2 = one
+        stride3 = one
         # Internal desc keeps origin0=1; user-facing origin is ABI originShape0.
         origin0 = _const_index(1, loc=loc)
         origin1 = origin_abi_value(0)
@@ -1504,11 +1523,37 @@ def _materialize_dynamic_gm_root_tensor_descriptor(
             "addrspace": tensor_ty.addrspace,
             "layout_tag": layout_tag,
         }
+    elif is_nz_family:
+        shape0, shape1, shape2, shape3 = shape_vals
+        stride0, stride1, stride2, stride3 = stride_vals
+        origin0 = origin_abi_value(0)
+        origin1 = origin_abi_value(1)
+        metadata = {
+            "shape": _replace_flat_leaves_in_tree(
+                tensor_ty.shape, tuple(as_numeric(value) for value in shape_vals)
+            ),
+            "stride": _replace_flat_leaves_in_tree(
+                tensor_ty.stride,
+                tuple(as_numeric(value) for value in stride_vals),
+            ),
+            "coord": tensor_ty.coord,
+            "origin_shape": _replace_flat_leaves_in_tree(
+                tensor_ty.origin_shape,
+                (as_numeric(origin0), as_numeric(origin1)),
+            ),
+            "dtype": tensor_ty.element_type,
+            "addrspace": tensor_ty.addrspace,
+            "layout_tag": layout_tag,
+        }
     else:
         shape0 = shape_vals[0]
         shape1 = shape_vals[1]
+        shape2 = one
+        shape3 = one
         stride0 = stride_vals[0]
         stride1 = stride_vals[1]
+        stride2 = one
+        stride3 = one
         origin0 = origin_abi_value(0)
         origin1 = origin_abi_value(1)
         metadata = {
@@ -1531,15 +1576,18 @@ def _materialize_dynamic_gm_root_tensor_descriptor(
     desc = _tla_ops_gen.tensor_desc(
         result_ty,
         memref_arg,
-        zero,
-        zero,
-        stride0,
-        stride1,
         shape0,
         shape1,
+        shape2,
+        shape3,
+        stride0,
+        stride1,
+        stride2,
+        stride3,
         origin0,
         origin1,
-        [],
+        zero,
+        zero,
         loc=loc,
     )
     _register_tla_tensor_type(desc, tensor_ty)
@@ -1570,7 +1618,7 @@ def _require_resolved_metadata_leaves(
 _CATLASS_BYTE_PER_C0 = 32
 _CATLASS_C0_NUM_PER_FRACTAL = 16
 _LINEAR_LAYOUT_TOKENS = frozenset({"row_major", "column_major"})
-_PACKED_LAYOUT_TOKENS = frozenset(
+_NZ_FAMILY_LAYOUT_TOKENS = frozenset(
     {"zN", "nZ", "zZ", "L0Clayout", "zNUnAlign"}
 )
 _MAKE_TENSOR_LIKE_ON_CHIP_ADDRSPACES = frozenset(
@@ -1643,7 +1691,7 @@ def _is_flat_pair(tree: Any) -> bool:
     )
 
 
-def _is_packed_2x2_tree(tree: Any) -> bool:
+def _is_nz_family_2x2_tree(tree: Any) -> bool:
     return (
         isinstance(tree, tuple)
         and len(tree) == 2
@@ -1656,12 +1704,12 @@ def _is_packed_2x2_tree(tree: Any) -> bool:
     )
 
 
-def _infer_padded_origin_tree_from_packed_shape(
+def _infer_padded_origin_tree_from_nz_family_shape(
     shape_tree: Any, *, for_op: str
 ) -> tuple[Any, Any]:
-    if not _is_packed_2x2_tree(shape_tree):
+    if not _is_nz_family_2x2_tree(shape_tree):
         raise TlaLoweringError(
-            f"tla.{for_op} packed layout expects shape as two 2-leaf groups "
+            f"tla.{for_op} NZFamily layout expects shape as two 2-leaf groups "
             f"((m0, m1), (n0, n1)); got {shape_tree!r}"
         )
     return (
@@ -1877,6 +1925,15 @@ def _materialize_layout_trees_from_origin(
                 (c0_num_per_fractal, _ceil_div_expr(cols, c0_num_per_fractal)),
             ),
             ((c0_num_per_fractal, 256), (1, rows_ru * c0_num_per_fractal)),
+            coord,
+            origin_shape,
+        )
+    if layout == "zNUnAlign":
+        ceil_div_cols = _ceil_div_expr(cols, ele_num_per_c0)
+        stride_scale = rows * ele_num_per_c0
+        return (
+            ((rows, 1), (ele_num_per_c0, ceil_div_cols)),
+            ((ele_num_per_c0, stride_scale), (1, stride_scale)),
             coord,
             origin_shape,
         )
@@ -2245,7 +2302,7 @@ def _format_tensor_type(
 ) -> str:
     """Build ``tile_view`` result ``!tla.tensor<…>`` from source tensor + shape/coord SSA.
 
-    **Stride**, **dtype**, **addr**, **layout** follow the parent tensor (including packed
+    **Stride**, **dtype**, **addr**, **layout** follow the parent tensor (including NZFamily
     layouts: stride is never replaced by a ``tile_view``-local fractal remap).
 
     **Shape** (memory-layout field): for flat ``M,N`` tile sizes, when
@@ -3468,7 +3525,7 @@ def make_layout(
     """Combine packed :func:`make_shape` and :func:`make_stride` into ``!tla.layout`` (``tla.make_layout``).
 
     For linear layouts, an omitted ``origin_shape`` is inferred as ``shape`` and
-    retains the same SSA. For packed layouts, it is inferred as the padded
+    retains the same SSA. For NZFamily layouts, it is inferred as the padded
     logical pair ``(m0*m1, n0*n1)`` from
     ``shape=((m0,m1),(n0,n1))``. A third operand is emitted only when its SSA
     differs from ``shape``'s.
@@ -3489,8 +3546,8 @@ def make_layout(
     layout_token = _resolve_arch_layout_tag(layoutTag, for_op="make_layout")
     if origin_shape is None and layout_token in _LINEAR_LAYOUT_TOKENS:
         origin_shape = shape
-    elif origin_shape is None and layout_token in _PACKED_LAYOUT_TOKENS:
-        inferred_origin = _infer_padded_origin_tree_from_packed_shape(
+    elif origin_shape is None and layout_token in _NZ_FAMILY_LAYOUT_TOKENS:
+        inferred_origin = _infer_padded_origin_tree_from_nz_family_shape(
             _components_to_index_tree(shape._components), for_op="make_layout"
         )
         origin_shape = make_shape(*inferred_origin, loc=loc)
@@ -3633,7 +3690,7 @@ def make_tensor(
     from the ``!tla.layout`` operand (origin defaults to ``shape``).
 
     Lowering supports RowMajor, ColumnMajor, zN, nZ, zZ, L0Clayout, and
-    zNUnAlign. Packed layouts use a nested 2x2 physical shape/stride tree and a
+    zNUnAlign. NZFamily layouts use a nested 2x2 physical shape/stride tree and a
     flat logical 2-D coord/origin. If their ``origin_shape`` was omitted from
     :func:`make_layout`, the padded logical pair is inferred from the physical
     shape. Like :func:`make_tensor_like`, a full compile requires ``ptr`` to
@@ -3672,8 +3729,8 @@ def make_tensor(
     stride_tree = _components_to_index_tree(layout._stride._components)
     if layout._origin_shape is not None:
         origin_tree = _components_to_index_tree(layout._origin_shape._components)
-    elif layout._layout_tag in _PACKED_LAYOUT_TOKENS:
-        origin_tree = _infer_padded_origin_tree_from_packed_shape(
+    elif layout._layout_tag in _NZ_FAMILY_LAYOUT_TOKENS:
+        origin_tree = _infer_padded_origin_tree_from_nz_family_shape(
             shape_tree, for_op="make_tensor"
         )
     else:
@@ -3692,8 +3749,8 @@ def make_tensor(
             raise TlaLoweringError(
                 "tla.make_tensor linear origin_shape rank must match layout rank"
             )
-    elif layout._layout_tag in _PACKED_LAYOUT_TOKENS:
-        if not _is_packed_2x2_tree(shape_tree) or not _is_packed_2x2_tree(
+    elif layout._layout_tag in _NZ_FAMILY_LAYOUT_TOKENS:
+        if not _is_nz_family_2x2_tree(shape_tree) or not _is_nz_family_2x2_tree(
             stride_tree
         ):
             raise TlaLoweringError(
@@ -3733,7 +3790,7 @@ def make_tensor(
             f"tla.make_tensor coord rank must match layout rank (got coord rank "
             f"{coord_rank}, expected {logical_rank})"
         )
-    if layout._layout_tag in _PACKED_LAYOUT_TOKENS and not _is_flat_pair(
+    if layout._layout_tag in _NZ_FAMILY_LAYOUT_TOKENS and not _is_flat_pair(
         coord_tree
     ):
         raise TlaLoweringError(

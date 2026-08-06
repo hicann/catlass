@@ -142,7 +142,7 @@ namespace {
                                      bool takeSecondDim) -> FailureOr<Value> {
         auto it = tensorDescriptorByValue.find(tensor);
         if (it != tensorDescriptorByValue.end()) {
-          Value dim = takeSecondDim ? it->second.originShape1 : it->second.originShape0;
+          Value dim = it->second.originShape[takeSecondDim ? 1 : 0];
           if (dim && dim.getType().isIndex())
             return dim;
         }
@@ -226,14 +226,12 @@ namespace {
 
       const TensorDescriptor &dstDesc = dstIt->second;
       const TensorDescriptor &srcDesc = srcIt->second;
-      if (!::tla::validateTensorDescriptorV1(
-              op, dstDesc, "malformed descriptor for tla.copy dst tile operand",
-              /*requireShapeOperands=*/true)) {
+      if (!::tla::validateTensorDescriptor(
+              op, dstDesc, "malformed descriptor for tla.copy dst tile operand")) {
         return failure();
       }
-      if (!::tla::validateTensorDescriptorV1(
-              op, srcDesc, "malformed descriptor for tla.copy src tile operand",
-              /*requireShapeOperands=*/true)) {
+      if (!::tla::validateTensorDescriptor(
+              op, srcDesc, "malformed descriptor for tla.copy src tile operand")) {
         return failure();
       }
       StringRef srcAddrspace = srcDesc.addrspace;
@@ -248,7 +246,6 @@ namespace {
         op.emitError() << "expected tla.copy " << src2Dst << " has 2 operands";
         return failure();
       }
-      bool rankOk = dstDesc.rank == srcDesc.rank;
       bool sameElem = dstDesc.elementType == srcDesc.elementType;
       auto buildRuntimeMemref = [&](const TensorDescriptor &desc) -> FailureOr<Value> {
         FailureOr<Value> baseMemref = ::tla::getOrMaterializeDescriptorBaseMemref(
@@ -317,9 +314,9 @@ namespace {
                                             || dstDesc.layoutTag == TensorLayoutTag::ColumnMajor));
         bool condDtype = (srcDesc.elementType == "f32") && (dstDesc.elementType == "f16" || dstDesc.elementType == "bf16");
         bool l0c2DstNarrow = condSrc && (condGm || condUb) && condDtype;
-        if (!rankOk || (!sameElem && !l0c2DstNarrow)) {
+        if (!sameElem && !l0c2DstNarrow) {
           op.emitError() << "tla.copy supported route has src/dst descriptor metadata mismatch "
-                            "(rank/element type)";
+                            "(element type)";
           return failure();
         }
 

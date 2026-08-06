@@ -966,11 +966,11 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
   }
 
   // tla.tensor_desc (produced by tla-lower-tensor-desc, the sole descriptor
-  // producer): consume it directly. The descriptor's row_offset / col_offset /
-  // stride0 already encode the tile's position and pitch, so there is no
+  // producer): consume it directly. The descriptor's coord / stride slots
+  // encode the tile's position and pitch, so there is no
   // tile_view -> make_tensor producer chain to re-walk. Carve a lanes-wide
   // (256-byte) flat subview of the helper's base-memref arg at the flat offset
-  // row_offset * stride0 + col_offset.
+  // coord0 * stride0 + coord1 * stride1.
   if (auto descOp = dyn_cast<::tla::TensorDescOp>(op)) {
     Value baseMemref = valueMap.lookup(descOp.getResult());
     if (!baseMemref)
@@ -984,32 +984,30 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
     if (failed(lanesOr))
       return descOp.emitError("unsupported element type for vector tensor_desc"),
              failure();
-    Value rowOff = lookupOrCloneScalarValue(b, descOp.getRowOffset(), valueMap);
-    Value colOff = lookupOrCloneScalarValue(b, descOp.getColOffset(), valueMap);
+    Value rowOff = lookupOrCloneScalarValue(b, descOp.getCoord0(), valueMap);
+    Value colOff = lookupOrCloneScalarValue(b, descOp.getCoord1(), valueMap);
     Value stride0 = lookupOrCloneScalarValue(b, descOp.getStride0(), valueMap);
-    if (!rowOff || !colOff || !stride0)
+    Value stride1 = lookupOrCloneScalarValue(b, descOp.getStride1(), valueMap);
+    auto info = decodeTileTypeInfo(descOp.getResult().getType());
+    if (!rowOff || !colOff || !stride0 || !stride1 || failed(info))
       return failure();
     Value flatOffset;
-    if (descOp.getPacked().empty()) {
+    if (isLinearLayout(info->layoutTag)) {
         flatOffset = b.create<arith::AddIOp>(
-            loc, b.create<arith::MulIOp>(loc, rowOff, stride0), colOff);
-    } else if (descOp.getPacked().size() == 8) {
-        auto info = parseTensorInfo(descOp.getResult().getType());
-        if (!succeeded(info)) {
-            return descOp.emitError() << "parseTensorInfo failed";
-        }
-        auto packed = descOp.getPacked();
-        auto shape0 = lookupOrCloneScalarValue(b, packed[0], valueMap);
-        auto shape1 = lookupOrCloneScalarValue(b, packed[1], valueMap);
-        auto shape2 = lookupOrCloneScalarValue(b, packed[2], valueMap);
-        auto shape3 = lookupOrCloneScalarValue(b, packed[3], valueMap);
-        auto stride0 = lookupOrCloneScalarValue(b, packed[4], valueMap);
-        auto stride1 = lookupOrCloneScalarValue(b, packed[5], valueMap);
-        auto stride2 = lookupOrCloneScalarValue(b, packed[6], valueMap);
-        auto stride3 = lookupOrCloneScalarValue(b, packed[7], valueMap);
+            loc, b.create<arith::MulIOp>(loc, rowOff, stride0),
+            b.create<arith::MulIOp>(loc, colOff, stride1));
+    } else if (isNZFamilyLayout(info->layoutTag)) {
+        auto shape0 = lookupOrCloneScalarValue(b, descOp.getShape0(), valueMap);
+        auto shape1 = lookupOrCloneScalarValue(b, descOp.getShape1(), valueMap);
+        auto shape2 = lookupOrCloneScalarValue(b, descOp.getShape2(), valueMap);
+        auto shape3 = lookupOrCloneScalarValue(b, descOp.getShape3(), valueMap);
+        stride0 = lookupOrCloneScalarValue(b, descOp.getStride0(), valueMap);
+        stride1 = lookupOrCloneScalarValue(b, descOp.getStride1(), valueMap);
+        auto stride2 = lookupOrCloneScalarValue(b, descOp.getStride2(), valueMap);
+        auto stride3 = lookupOrCloneScalarValue(b, descOp.getStride3(), valueMap);
         if (!shape0 || !shape1 || !shape2 || !shape3 || !stride0 || !stride1 || !stride2 || !stride3)
             return failure();
-        if(info->layoutTag == "zN") {
+        if(info->layoutTag == TensorLayoutTag::zN) {
             Value pc0 = b.create<arith::RemSIOp>(loc, rowOff, shape0);
             Value pc1 = b.create<arith::DivSIOp>(loc, rowOff, shape0);
             Value pc2 = b.create<arith::RemSIOp>(loc, colOff, shape2);
@@ -1021,7 +1019,7 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
             Value sum01 = b.create<arith::AddIOp>(loc, t0, t1);
             Value sum23 = b.create<arith::AddIOp>(loc, t2, t3);
             flatOffset = b.create<arith::AddIOp>(loc, sum01, sum23);
-        } else if (info->layoutTag == "zNUnAlign") {
+        } else if (info->layoutTag == TensorLayoutTag::zNUnAlign) {
             // zNUnAlign only used in on-chip memory, and the scalar unit in a
             // vf only supports integer arith to 32 bits. Keep the entire
             // address calculation in i32, then convert its final result to the
@@ -1052,8 +1050,10 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
             flatOffset = b.create<arith::IndexCastOp>(
                 loc, b.getIndexType(), flatOffsetI32);
         } else {
-            return descOp->emitError() << "unsupported packed layout to get flatOffset";
+            return descOp->emitError() << "unsupported NZFamily layout to get flatOffset";
         }
+    } else {
+        return descOp->emitError() << "unsupported layout to get flatOffset";
     }
     valueMap[descOp.getResult()] =
         ::tla::materializeFlatReinterpretSubview(b, loc, baseMemref, flatOffset, *lanesOr);
@@ -1876,7 +1876,7 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
   }
 
   // Index/scalar arithmetic (arith.*) feeding tensor_desc offset/stride operands:
-  // clone with operands remapped. tla-lower-tensor-desc emits the abs-coord/origin
+  // clone with operands remapped. tla-lower-tensor-desc emits the coord/origin
   // arithmetic (addi/subi/minsi) for dynamic-coord tile_views; static cases fold
   // to constants (createOrFold) and are handled by the arith::ConstantOp arm above.
   if (op.getDialect()->getNamespace() ==

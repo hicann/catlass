@@ -41,9 +41,8 @@ module {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c64 = arith.constant 64 : index
-    %dst = tla.tensor_desc %dst_memref[%c0, %c0, %c64, %c1, %c1, %c64, %c1, %c64]
-      : (memref<64xf32, #hivm.address_space<ub>>, index, index, index, index,
-         index, index, index, index) -> !vec64
+    %dst = tla.tensor_desc %dst_memref shape [%c1, %c64, %c1, %c1] stride [%c64, %c1, %c1, %c1] origin_shape [%c1, %c64] coord [%c0, %c0]
+      : memref<64xf32, #hivm.address_space<ub>> -> !vec64
     %value = arith.constant 4.500000e+00 : f32
     "tla.vector"() ({
       tla.scalar_store %dst[%index], %value : !vec64, f32
@@ -59,9 +58,8 @@ module {
     %c8 = arith.constant 8 : index
     %c16 = arith.constant 16 : index
     %c64 = arith.constant 64 : index
-    %tile = tla.tensor_desc %dst_memref[%c0, %c16, %c64, %c1, %c1, %c8, %c1, %c64]
-      : (memref<64xf32, #hivm.address_space<ub>>, index, index, index, index,
-         index, index, index, index) -> !tile8
+    %tile = tla.tensor_desc %dst_memref shape [%c1, %c8, %c1, %c1] stride [%c64, %c1, %c1, %c1] origin_shape [%c1, %c64] coord [%c0, %c16]
+      : memref<64xf32, #hivm.address_space<ub>> -> !tile8
     %value = arith.constant 4.500000e+00 : f32
     "tla.vector"() ({
       tla.scalar_store %tile[%index], %value : !tile8, f32
@@ -78,9 +76,8 @@ module {
     %c8 = arith.constant 8 : index
     %c16 = arith.constant 16 : index
     %c64 = arith.constant 64 : index
-    %tile = tla.tensor_desc %src_memref[%c0, %c16, %c64, %c1, %c1, %c8, %c1, %c64]
-      : (memref<64xf32, #hivm.address_space<ub>>, index, index, index, index,
-         index, index, index, index) -> !tile8
+    %tile = tla.tensor_desc %src_memref shape [%c1, %c8, %c1, %c1] stride [%c64, %c1, %c1, %c1] origin_shape [%c1, %c64] coord [%c0, %c16]
+      : memref<64xf32, #hivm.address_space<ub>> -> !tile8
     "tla.vector"() ({
       %value = tla.scalar_load %tile[%index] : !tile8 -> f32
       memref.store %value, %out_memref[%c0]
@@ -95,9 +92,8 @@ module {
     %c1 = arith.constant 1 : index
     %c2 = arith.constant 2 : index
     %c4 = arith.constant 4 : index
-    %tensor = tla.tensor_desc %tensor_memref[%c0, %c0, %c4, %c1, %c2, %c4, %c2, %c4]
-      : (memref<2x4xf32, #hivm.address_space<ub>>, index, index, index, index,
-         index, index, index, index) -> !matrix
+    %tensor = tla.tensor_desc %tensor_memref shape [%c2, %c4, %c1, %c1] stride [%c4, %c1, %c1, %c1] origin_shape [%c2, %c4] coord [%c0, %c0]
+      : memref<2x4xf32, #hivm.address_space<ub>> -> !matrix
     "tla.vector"() ({
       %value = tla.scalar_load %tensor[%c1, %c2] : !matrix -> f32
       tla.scalar_store %tensor[%c1, %c2], %value : !matrix, f32

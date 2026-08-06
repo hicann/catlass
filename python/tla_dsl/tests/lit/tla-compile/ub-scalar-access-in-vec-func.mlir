@@ -32,12 +32,10 @@ module {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c64 = arith.constant 64 : index
-    %src = tla.tensor_desc %src_memref[%c0, %c0, %c64, %c1, %c1, %c64, %c1, %c64]
-      : (memref<64xf32, #hivm.address_space<ub>>, index, index, index, index,
-         index, index, index, index) -> !vec64
-    %dst = tla.tensor_desc %dst_memref[%c0, %c0, %c64, %c1, %c1, %c64, %c1, %c64]
-      : (memref<64xf32, #hivm.address_space<ub>>, index, index, index, index,
-         index, index, index, index) -> !vec64
+    %src = tla.tensor_desc %src_memref shape [%c1, %c64, %c1, %c1] stride [%c64, %c1, %c1, %c1] origin_shape [%c1, %c64] coord [%c0, %c0]
+      : memref<64xf32, #hivm.address_space<ub>> -> !vec64
+    %dst = tla.tensor_desc %dst_memref shape [%c1, %c64, %c1, %c1] stride [%c64, %c1, %c1, %c1] origin_shape [%c1, %c64] coord [%c0, %c0]
+      : memref<64xf32, #hivm.address_space<ub>> -> !vec64
     "tla.vector"() ({
       "tla.vec.func"() ({
         %vector_value = tla.load %src : !vec64 -> !tla.vector<64xf32>
@@ -56,12 +54,10 @@ module {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c64 = arith.constant 64 : index
-    %src = tla.tensor_desc %src_memref[%c0, %c0, %c64, %c1, %c1, %c64, %c1, %c64]
-      : (memref<64xf32, #hivm.address_space<ub>>, index, index, index, index,
-         index, index, index, index) -> !vec64
-    %dst = tla.tensor_desc %dst_memref[%c0, %c0, %c64, %c1, %c1, %c64, %c1, %c64]
-      : (memref<64xf32, #hivm.address_space<ub>>, index, index, index, index,
-         index, index, index, index) -> !vec64
+    %src = tla.tensor_desc %src_memref shape [%c1, %c64, %c1, %c1] stride [%c64, %c1, %c1, %c1] origin_shape [%c1, %c64] coord [%c0, %c0]
+      : memref<64xf32, #hivm.address_space<ub>> -> !vec64
+    %dst = tla.tensor_desc %dst_memref shape [%c1, %c64, %c1, %c1] stride [%c64, %c1, %c1, %c1] origin_shape [%c1, %c64] coord [%c0, %c0]
+      : memref<64xf32, #hivm.address_space<ub>> -> !vec64
     "tla.vector"() ({
       "tla.vec.func"() ({
         %scalar_value = tla.scalar_load %src[%c0] : !vec64 -> f32

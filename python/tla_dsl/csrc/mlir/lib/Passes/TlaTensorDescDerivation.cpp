@@ -50,28 +50,25 @@ static mlir::FailureOr<TensorDescriptor> buildTileViewResultDescriptorFromParent
     Location loc = op->getLoc();
     OpBuilder b(op);
 
-    if (!isPackedLayout(info.layoutTag) && !isLinearLayout(info.layoutTag)) {
+    if (!isNZFamilyLayout(info.layoutTag) && !isLinearLayout(info.layoutTag)) {
         op->emitError() << "tile_view: unsupported layout tag for descriptor lowering";
         return failure();
     }
 
-    // createOrFold so static abs-coord / origin arithmetic folds to a constant
+    // createOrFold so static absolute coord / origin arithmetic folds to a constant
     // in place (at the tile_view) instead of leaving an arith op for downstream
     // passes to clone -- tla-lower-tensor-desc is the sole descriptor producer,
     // and the vector helper consumes these operands directly.
-    Value abs0 = b.createOrFold<arith::AddIOp>(loc, parent.absCoord0, row);
-    Value abs1 = b.createOrFold<arith::AddIOp>(loc, parent.absCoord1, col);
-    Value rest0 = b.createOrFold<arith::SubIOp>(loc, parent.originShape0, row);
-    Value rest1 = b.createOrFold<arith::SubIOp>(loc, parent.originShape1, col);
+    Value abs0 = b.createOrFold<arith::AddIOp>(loc, parent.coord[0], row);
+    Value abs1 = b.createOrFold<arith::AddIOp>(loc, parent.coord[1], col);
+    Value rest0 = b.createOrFold<arith::SubIOp>(loc, parent.originShape[0], row);
+    Value rest1 = b.createOrFold<arith::SubIOp>(loc, parent.originShape[1], col);
     Value origin0 = b.createOrFold<arith::MinSIOp>(loc, sh0, rest0);
     Value origin1 = b.createOrFold<arith::MinSIOp>(loc, sh1, rest1);
 
-    Value stride0;
-    Value stride1;
-    Value shape0;
-    Value shape1;
-    SmallVector<Value, 4> packedShape;
-    SmallVector<Value, 4> packedStride;
+    Value one = getConstant(op, 1, 0);
+    std::array<Value, 4> shape;
+    std::array<Value, 4> stride;
 
     if (isLinearLayout(info.layoutTag)) {
         auto materializeRowMajorStride = [&](int64_t dim, Value parentStride) -> FailureOr<Value> {
@@ -85,32 +82,31 @@ static mlir::FailureOr<TensorDescriptor> buildTileViewResultDescriptorFromParent
             }
             return getConstant(op, dim, 0);
         };
-        FailureOr<Value> st0 = materializeRowMajorStride(info.strideDims[0], parent.stride0);
-        FailureOr<Value> st1 = materializeRowMajorStride(info.strideDims[1], parent.stride1);
+        FailureOr<Value> st0 = materializeRowMajorStride(info.strideDims[0], parent.stride[0]);
+        FailureOr<Value> st1 = materializeRowMajorStride(info.strideDims[1], parent.stride[1]);
         if (failed(st0) || failed(st1))
             return failure();
-        stride0 = *st0;
-        stride1 = *st1;
-        shape0 = info.shapeDims[0] == ShapedType::kDynamic ? sh0 : getConstant(op, info.shapeDims[0], 0);
-        shape1 = info.shapeDims[1] == ShapedType::kDynamic ? sh1 : getConstant(op, info.shapeDims[1], 0);
+        shape = {info.shapeDims[0] == ShapedType::kDynamic ? sh0 : getConstant(op, info.shapeDims[0], 0),
+                 info.shapeDims[1] == ShapedType::kDynamic ? sh1 : getConstant(op, info.shapeDims[1], 0), one, one};
+        stride = {*st0, *st1, one, one};
     } else {
         auto ceilDivIndexByPositiveConst = [&](Value numerator, int64_t divisor) -> FailureOr<Value> {
             if (divisor <= 0) {
-                op->emitError() << "tile_view: packed shape dynamic leaf requires positive divisor, got " << divisor;
+                op->emitError() << "tile_view: NZFamily layout shape dynamic leaf requires positive divisor, got "
+                                << divisor;
                 return failure();
             }
             Value divisorV = getConstant(op, divisor, 0);
-            Value one = getConstant(op, 1, 0);
             Value adjusted =
                 b.createOrFold<arith::AddIOp>(loc, numerator, b.createOrFold<arith::SubIOp>(loc, divisorV, one));
             return b.createOrFold<arith::DivSIOp>(loc, adjusted, divisorV);
         };
-        auto materializePackedShapeLeaf = [&](size_t idx) -> FailureOr<Value> {
+        auto materializeNZFamilyShapeLeaf = [&](size_t idx) -> FailureOr<Value> {
             int64_t leaf = info.shapeDims[idx];
             if (leaf != ShapedType::kDynamic)
                 return getConstant(op, leaf, 0);
             if (info.shapeDims.size() < 4) {
-                op->emitError() << "tile_view: packed shape must have 4 leaves";
+                op->emitError() << "tile_view: NZFamily layout shape must have 4 leaves";
                 return failure();
             }
             // zNUnAlign: shape[0] = tile_M = sh0. The M axis is not fractal-blocked, so leaf[0]
@@ -120,72 +116,59 @@ static mlir::FailureOr<TensorDescriptor> buildTileViewResultDescriptorFromParent
             }
             if (idx == 1) {
                 if (info.shapeDims[0] == ShapedType::kDynamic) {
-                    op->emitError() << "tile_view: dynamic packed shape leaf index 1 requires static leaf index 0";
+                    op->emitError()
+                        << "tile_view: dynamic NZFamily layout shape leaf index 1 requires static leaf index 0";
                     return failure();
                 }
                 return ceilDivIndexByPositiveConst(sh0, info.shapeDims[0]);
             }
             if (idx == 3) {
                 if (info.shapeDims[2] == ShapedType::kDynamic) {
-                    op->emitError() << "tile_view: dynamic packed shape leaf index 3 requires static leaf index 2";
+                    op->emitError()
+                        << "tile_view: dynamic NZFamily layout shape leaf index 3 requires static leaf index 2";
                     return failure();
                 }
                 return ceilDivIndexByPositiveConst(sh1, info.shapeDims[2]);
             }
-            op->emitError() << "tile_view: dynamic packed shape leaf at index " << idx
+            op->emitError() << "tile_view: dynamic NZFamily layout shape leaf at index " << idx
                             << " is unsupported; only indices 1 and 3 may be dynamic";
             return failure();
         };
-        auto materializePackedStrideLeaf = [&](size_t idx) -> FailureOr<Value> {
+        auto materializeNZFamilyStrideLeaf = [&](size_t idx) -> FailureOr<Value> {
             int64_t leaf = info.strideDims[idx];
             if (leaf != ShapedType::kDynamic)
                 return getConstant(op, leaf, 0);
-            if (idx < parent.packedStride.size() && parent.packedStride[idx] &&
-                parent.packedStride[idx].getType().isIndex())
-                return parent.packedStride[idx];
-            op->emitError() << "tile_view: dynamic packed stride leaf index " << idx
-                            << " requires parent packed stride SSA";
+            if (parent.stride[idx] && parent.stride[idx].getType().isIndex())
+                return parent.stride[idx];
+            op->emitError() << "tile_view: dynamic NZFamily layout stride leaf index " << idx
+                            << " requires parent stride SSA";
             return failure();
         };
-        packedShape.reserve(info.shapeDims.size());
-        packedStride.reserve(info.strideDims.size());
-        for (size_t i = 0; i < info.shapeDims.size(); ++i) {
-            FailureOr<Value> leaf = materializePackedShapeLeaf(i);
+        for (size_t i = 0; i < shape.size(); ++i) {
+            FailureOr<Value> leaf = materializeNZFamilyShapeLeaf(i);
             if (failed(leaf))
                 return failure();
-            packedShape.push_back(*leaf);
+            shape[i] = *leaf;
         }
-        for (size_t i = 0; i < info.strideDims.size(); ++i) {
-            FailureOr<Value> leaf = materializePackedStrideLeaf(i);
+        for (size_t i = 0; i < stride.size(); ++i) {
+            FailureOr<Value> leaf = materializeNZFamilyStrideLeaf(i);
             if (failed(leaf))
                 return failure();
-            packedStride.push_back(*leaf);
+            stride[i] = *leaf;
         }
-        shape0 = origin0;
-        shape1 = origin1;
-        stride0 = packedStride[0];
-        stride1 = packedStride[1];
     }
 
-    return TensorDescriptor{
-        base,
-        bridgedBaseType,
-        abs0,
-        abs1,
-        stride0,
-        stride1,
-        shape0,
-        shape1,
-        origin0,
-        origin1,
-        abs0,
-        abs1,
-        info.layoutTag,
-        info.addressSpace,
-        info.elementType,
-        info.rank,
-        std::move(packedShape),
-        std::move(packedStride)};
+    TensorDescriptor desc;
+    desc.base = base;
+    desc.bridgedBaseMemrefType = bridgedBaseType;
+    desc.shape = shape;
+    desc.stride = stride;
+    desc.originShape = {origin0, origin1};
+    desc.coord = {abs0, abs1};
+    desc.layoutTag = info.layoutTag;
+    desc.addrspace = info.addressSpace;
+    desc.elementType = info.elementType;
+    return desc;
 }
 
 mlir::LogicalResult TensorDescriptorDerivation::derive(mlir::func::FuncOp funcOp)
@@ -219,51 +202,51 @@ mlir::LogicalResult TensorDescriptorDerivation::derive(mlir::func::FuncOp funcOp
         return constants.get(anchor, value, bits);
     };
 
-    auto materializePackedIndexPair = [&](Operation* op, Value packedValue,
-                                          StringRef kind) -> FailureOr<std::array<Value, 2>> {
-        auto emitPackedError = [&](Twine message) -> FailureOr<std::array<Value, 2>> {
+    auto materializeIndexPair = [&](Operation* op, Value aggregateValue,
+                                    StringRef kind) -> FailureOr<std::array<Value, 2>> {
+        auto emitError = [&](Twine message) -> FailureOr<std::array<Value, 2>> {
             op->emitError() << message;
             return failure();
         };
 
         SmallVector<int64_t, 2> leaves;
         if (kind == "shape") {
-            auto shapeTy = dyn_cast<::tla::ShapeType>(packedValue.getType());
+            auto shapeTy = dyn_cast<::tla::ShapeType>(aggregateValue.getType());
             if (!shapeTy || failed(::tla::getTlaIndexTreeLeaves(shapeTy.getTree(), leaves))) {
-                return emitPackedError("expected flat rank-2 tla.shape operand");
+                return emitError("expected flat rank-2 tla.shape operand");
             }
             if (shapeTy.getTree().size() == 1 && leaves.size() == 1) {
                 leaves = {1, leaves[0]};
             } else if (shapeTy.getTree().size() != 2) {
-                return emitPackedError("expected flat rank-2 tla.shape operand");
+                return emitError("expected flat rank-2 tla.shape operand");
             }
         } else {
-            auto coordTy = dyn_cast<::tla::CoordType>(packedValue.getType());
+            auto coordTy = dyn_cast<::tla::CoordType>(aggregateValue.getType());
             if (!coordTy || failed(::tla::getTlaIndexTreeLeaves(coordTy.getTree(), leaves))) {
-                return emitPackedError("expected flat rank-2 tla.coord operand");
+                return emitError("expected flat rank-2 tla.coord operand");
             }
             if (coordTy.getTree().size() == 1 && leaves.size() == 1) {
                 leaves = {0, leaves[0]};
             } else if (coordTy.getTree().size() != 2) {
-                return emitPackedError("expected flat rank-2 tla.coord operand");
+                return emitError("expected flat rank-2 tla.coord operand");
             }
         }
         if (leaves.size() != 2) {
-            return emitPackedError(Twine("tla.") + kind + " descriptor v1 requires exactly 2 packed elements");
+            return emitError(Twine("tla.") + kind + " descriptor requires exactly 2 elements");
         }
 
         SmallVector<Value, 2> dynamicValues;
         if (llvm::any_of(leaves, [](int64_t leaf) { return leaf == ShapedType::kDynamic; })) {
             if (kind == "shape") {
-                auto makeShape = packedValue.getDefiningOp<::tla::MakeShapeOp>();
+                auto makeShape = aggregateValue.getDefiningOp<::tla::MakeShapeOp>();
                 if (!makeShape) {
-                    return emitPackedError("dynamic tla.shape operands must come from tla.make_shape");
+                    return emitError("dynamic tla.shape operands must come from tla.make_shape");
                 }
                 dynamicValues.append(makeShape.getDynElems().begin(), makeShape.getDynElems().end());
             } else {
-                auto makeCoord = packedValue.getDefiningOp<::tla::MakeCoordOp>();
+                auto makeCoord = aggregateValue.getDefiningOp<::tla::MakeCoordOp>();
                 if (!makeCoord) {
-                    return emitPackedError("dynamic tla.coord operands must come from tla.make_coord");
+                    return emitError("dynamic tla.coord operands must come from tla.make_coord");
                 }
                 dynamicValues.append(makeCoord.getDynElems().begin(), makeCoord.getDynElems().end());
             }
@@ -274,12 +257,11 @@ mlir::LogicalResult TensorDescriptorDerivation::derive(mlir::func::FuncOp funcOp
         for (auto [index, leaf] : llvm::enumerate(leaves)) {
             if (leaf == ShapedType::kDynamic) {
                 if (dynamicIndex >= dynamicValues.size()) {
-                    return emitPackedError(
-                        Twine("packed tla.") + kind + " type/operand dynamic element count mismatch");
+                    return emitError(Twine("tla.") + kind + " type/operand dynamic element count mismatch");
                 }
                 Value dynamicValue = dynamicValues[dynamicIndex++];
                 if (!dynamicValue.getType().isIndex()) {
-                    return emitPackedError(Twine("tla.") + kind + " dynamic operands must be index type");
+                    return emitError(Twine("tla.") + kind + " dynamic operands must be index type");
                 }
                 result[index] = dynamicValue;
                 continue;
@@ -289,7 +271,7 @@ mlir::LogicalResult TensorDescriptorDerivation::derive(mlir::func::FuncOp funcOp
         }
 
         if (dynamicIndex != dynamicValues.size()) {
-            return emitPackedError(Twine("packed tla.") + kind + " type/operand dynamic element count mismatch");
+            return emitError(Twine("tla.") + kind + " type/operand dynamic element count mismatch");
         }
         return result;
     };
@@ -305,7 +287,7 @@ mlir::LogicalResult TensorDescriptorDerivation::derive(mlir::func::FuncOp funcOp
             shape0 = op->getOperand(3);
             shape1 = op->getOperand(4);
         } else {
-            auto shapePair = materializePackedIndexPair(op, op->getOperand(1), "shape");
+            auto shapePair = materializeIndexPair(op, op->getOperand(1), "shape");
             if (failed(shapePair))
                 return failure();
             shape0 = (*shapePair)[0];
@@ -338,7 +320,7 @@ mlir::LogicalResult TensorDescriptorDerivation::derive(mlir::func::FuncOp funcOp
                     }
                 }
             }
-            auto coordPair = materializePackedIndexPair(op, op->getOperand(2), "coord");
+            auto coordPair = materializeIndexPair(op, op->getOperand(2), "coord");
             if (failed(coordPair))
                 return failure();
             row = (*coordPair)[0];
@@ -351,10 +333,10 @@ mlir::LogicalResult TensorDescriptorDerivation::derive(mlir::func::FuncOp funcOp
     // (shape/coord packs or explicit index operands). Linear layouts
     // (RowMajor/ColumnMajor) may use dynamic shape in the type (``?``) filled from ``sh0/sh1``
     // operands, and dynamic stride (``?``) taken from the parent tile descriptor stride SSA.
-    // Packed layouts may also carry dynamic leaves when they can be derived from explicit
+    // NZFamily layouts may also carry dynamic leaves when they can be derived from explicit
     // shape operands or inherited from parent descriptors. Absolute coord and cropped origin
     // follow TLA
-    // ``TileViewImpl``: ``abs = parent.abs + tileCoord`` and
+    // ``TileViewImpl``: ``coord = parent.coord + tileCoord`` and
     // ``origin_i = min(tileShape_i, parent.origin_i - tileCoord_i)``.
     // The producer-local descriptor builder takes the constant factory
     // explicitly.
@@ -412,7 +394,7 @@ mlir::LogicalResult TensorDescriptorDerivation::derive(mlir::func::FuncOp funcOp
                 return;
             }
             if (resultInfo->rank != 2) {
-                op->emitError() << "tla.tile_view descriptor v1 supports only rank-2 tiles";
+                op->emitError() << "tla.tile_view descriptor supports only normalized rank-2 tiles";
                 derivationFailed = true;
                 return;
             }
@@ -428,16 +410,14 @@ mlir::LogicalResult TensorDescriptorDerivation::derive(mlir::func::FuncOp funcOp
                 return;
             }
             const TensorDescriptor& parent = parentIt->second;
-            if (!validateTensorDescriptorV1(op, parent,
-                                            "malformed parent tensor descriptor for tla.tile_view source tile",
-                                            /*requireShapeOperands=*/false)) {
+            if (!validateTensorDescriptor(
+                    op, parent, "malformed parent tensor descriptor for tla.tile_view source tile")) {
                 derivationFailed = true;
                 return;
             }
-            if (resultInfo->rank != parent.rank || resultInfo->addressSpace != parent.addrspace ||
-                resultInfo->elementType != parent.elementType) {
+            if (resultInfo->addressSpace != parent.addrspace || resultInfo->elementType != parent.elementType) {
                 op->emitError() << "tla.tile_view result tile metadata must match parent descriptor "
-                                   "(rank/element type/addrspace) when source is a tile";
+                                   "(element type/addrspace) when source is a tile";
                 derivationFailed = true;
                 return;
             }
@@ -496,9 +476,8 @@ mlir::LogicalResult TensorDescriptorDerivation::derive(mlir::func::FuncOp funcOp
                 return;
             }
             const TensorDescriptor& parent = parentIt->second;
-            if (!validateTensorDescriptorV1(
-                    op, parent, "malformed parent tensor descriptor for tla.make_tensor_like reference tile",
-                    /*requireShapeOperands=*/true)) {
+            if (!validateTensorDescriptor(
+                    op, parent, "malformed parent tensor descriptor for tla.make_tensor_like reference tile")) {
                 derivationFailed = true;
                 return;
             }
@@ -510,13 +489,6 @@ mlir::LogicalResult TensorDescriptorDerivation::derive(mlir::func::FuncOp funcOp
                 derivationFailed = true;
                 return;
             }
-            if (childInfo->rank != parent.rank) {
-                op->emitError() << "tla.make_tensor_like result tile rank must match reference descriptor "
-                                   "(rank)";
-                derivationFailed = true;
-                return;
-            }
-
             int64_t flatElemCount = ShapedType::kDynamic;
             if (auto n = getStaticAllocationElementCount(ptrValue); succeeded(n) && *n > 0) {
                 flatElemCount = *n;
@@ -570,7 +542,8 @@ mlir::LogicalResult TensorDescriptorDerivation::derive(mlir::func::FuncOp funcOp
             };
             auto ceilDivIndexByPositiveConst = [&](Value numerator, int64_t divisor) -> FailureOr<Value> {
                 if (divisor <= 0) {
-                    op->emitError() << "packed shape dynamic leaf requires positive divisor, got " << divisor;
+                    op->emitError() << "NZFamily layout shape dynamic leaf requires positive divisor, got "
+                                    << divisor;
                     return failure();
                 }
                 Value divisorV = getOrCreateConstant(op, divisor, 0);
@@ -579,24 +552,20 @@ mlir::LogicalResult TensorDescriptorDerivation::derive(mlir::func::FuncOp funcOp
                     op->getLoc(), numerator, builder.create<arith::SubIOp>(op->getLoc(), divisorV, one));
                 return builder.create<arith::DivSIOp>(op->getLoc(), adjusted, divisorV).getResult();
             };
-            auto materializePackedShapeDynamicLeafFromOrigin = [&](ArrayRef<int64_t> leaves,
-                                                                   size_t idx) -> FailureOr<Value> {
-                // Packed layout shape trees flatten as (m0,m1),(n0,n1).
+            auto materializeNZFamilyShapeDynamicLeafFromOrigin = [&](ArrayRef<int64_t> leaves,
+                                                                     size_t idx) -> FailureOr<Value> {
+                // NZFamily layout shape trees flatten as (m0,m1),(n0,n1).
                 // For zN/nZ/zZ/L0C dynamic logical extents live in m1 / n1:
                 //   m1 <- ceil_div(origin0, m0), n1 <- ceil_div(origin1, n0).
                 // m0 / n0 are layout constants (tile fractal factors), not runtime-varying.
-                auto supportedPackedLayout =
-                    childInfo->layoutTag == TensorLayoutTag::zN || childInfo->layoutTag == TensorLayoutTag::nZ ||
-                    childInfo->layoutTag == TensorLayoutTag::zZ || childInfo->layoutTag == TensorLayoutTag::L0C ||
-                    childInfo->layoutTag == TensorLayoutTag::zNUnAlign;
-                if (!supportedPackedLayout) {
-                    op->emitError() << "dynamic packed shape leaf at index " << idx
+                if (!isNZFamilyLayout(childInfo->layoutTag)) {
+                    op->emitError() << "dynamic NZFamily layout shape leaf at index " << idx
                                     << " has no SSA derivation rule for layout "
                                     << stringifyTensorLayoutTag(childInfo->layoutTag);
                     return failure();
                 }
                 if (leaves.size() < 4) {
-                    op->emitError() << "packed shape must have 4 leaves for layout "
+                    op->emitError() << "NZFamily layout shape must have 4 leaves for layout "
                                     << stringifyTensorLayoutTag(childInfo->layoutTag);
                     return failure();
                 }
@@ -604,32 +573,35 @@ mlir::LogicalResult TensorDescriptorDerivation::derive(mlir::func::FuncOp funcOp
                 // so leaf[0] is the runtime row count (not a compile-time divisor like zN's
                 // C0_NUM_PER_FRACTAL) and is derived directly from the logical origin M.
                 if (childInfo->layoutTag == TensorLayoutTag::zNUnAlign && idx == 0) {
-                    return parent.originShape0;
+                    return parent.originShape[0];
                 }
                 if (idx == 1) {
                     if (leaves[0] == ShapedType::kDynamic) {
-                        op->emitError() << "dynamic packed shape leaf index 1 requires static divisor leaf index 0";
+                        op->emitError()
+                            << "dynamic NZFamily layout shape leaf index 1 requires static divisor leaf index 0";
                         return failure();
                     }
-                    return ceilDivIndexByPositiveConst(parent.originShape0, leaves[0]);
+                    return ceilDivIndexByPositiveConst(parent.originShape[0], leaves[0]);
                 }
                 if (idx == 3) {
                     if (leaves[2] == ShapedType::kDynamic) {
-                        op->emitError() << "dynamic packed shape leaf index 3 requires static divisor leaf index 2";
+                        op->emitError()
+                            << "dynamic NZFamily layout shape leaf index 3 requires static divisor leaf index 2";
                         return failure();
                     }
-                    return ceilDivIndexByPositiveConst(parent.originShape1, leaves[2]);
+                    return ceilDivIndexByPositiveConst(parent.originShape[1], leaves[2]);
                 }
-                op->emitError() << "dynamic packed shape leaf at index " << idx
+                op->emitError() << "dynamic NZFamily layout shape leaf at index " << idx
                                 << " is unsupported; only indices 1 and 3 may be dynamic";
                 return failure();
             };
-            auto materializePackedLeafFromTypeOrParent = [&](ArrayRef<int64_t> leaves, ArrayRef<Value> parentLeaves,
-                                                             size_t idx, StringRef fieldName) -> FailureOr<Value> {
+            auto materializeNZFamilyLeafFromTypeOrParent = [&](ArrayRef<int64_t> leaves,
+                                                               ArrayRef<Value> parentLeaves, size_t idx,
+                                                               StringRef fieldName) -> FailureOr<Value> {
                 int64_t leaf = leaves[idx];
                 if (leaf == ShapedType::kDynamic) {
-                    if (fieldName == "packed shape") {
-                        FailureOr<Value> derived = materializePackedShapeDynamicLeafFromOrigin(leaves, idx);
+                    if (fieldName == "NZFamily layout shape") {
+                        FailureOr<Value> derived = materializeNZFamilyShapeDynamicLeafFromOrigin(leaves, idx);
                         if (succeeded(derived))
                             return *derived;
                     }
@@ -641,18 +613,18 @@ mlir::LogicalResult TensorDescriptorDerivation::derive(mlir::func::FuncOp funcOp
                 }
                 return getOrCreateConstant(op, leaf, 0);
             };
-            auto materializePackedStrideDynamicLeafFromShape = [&](ArrayRef<Value> packedShapeLeaves,
-                                                                   size_t idx) -> FailureOr<Value> {
+            auto deriveNZFamilyStrideLeafFromShape = [&](ArrayRef<Value> shapeLeaves,
+                                                         size_t idx) -> FailureOr<Value> {
                 auto mulShapeLeaves = [&](size_t a, size_t b, size_t c) -> FailureOr<Value> {
-                    if (packedShapeLeaves.size() <= std::max({a, b, c})) {
-                        op->emitError() << "dynamic packed stride derivation requires packed shape leaves " << a << ", "
-                                        << b << ", " << c;
+                    if (shapeLeaves.size() <= std::max({a, b, c})) {
+                        op->emitError() << "dynamic NZFamily layout stride derivation requires shape leaves " << a
+                                        << ", " << b << ", " << c;
                         return failure();
                     }
-                    Value ab = builder.create<arith::MulIOp>(op->getLoc(), packedShapeLeaves[a], packedShapeLeaves[b]);
-                    return builder.create<arith::MulIOp>(op->getLoc(), ab, packedShapeLeaves[c]).getResult();
+                    Value ab = builder.create<arith::MulIOp>(op->getLoc(), shapeLeaves[a], shapeLeaves[b]);
+                    return builder.create<arith::MulIOp>(op->getLoc(), ab, shapeLeaves[c]).getResult();
                 };
-                // Layout-coupled packed stride derivation from the remapped fractal shape leaves.
+                // Layout-coupled NZFamily stride derivation from the remapped fractal shape leaves.
                 // zN/L0C: stride[3] = ceil_div_rows * c0 * ele_num_per_c0 = shape[1]*shape[0]*shape[2]
                 if ((childInfo->layoutTag == TensorLayoutTag::zN || childInfo->layoutTag == TensorLayoutTag::L0C) &&
                     idx == 3) {
@@ -669,43 +641,44 @@ mlir::LogicalResult TensorDescriptorDerivation::derive(mlir::func::FuncOp funcOp
                 if (childInfo->layoutTag == TensorLayoutTag::zNUnAlign && (idx == 1 || idx == 3)) {
                     return mulShapeLeaves(/*a=*/1, /*b=*/0, /*c=*/2);
                 }
-                op->emitError() << "dynamic packed stride leaf at index " << idx
+                op->emitError() << "dynamic NZFamily layout stride leaf at index " << idx
                                 << " has no SSA derivation rule for layout "
                                 << stringifyTensorLayoutTag(childInfo->layoutTag);
                 return failure();
             };
 
             FailureOr<Value> coord0 =
-                materializeLeafFromTypeOrParent(childInfo->coordDims[0], parent.rowOffset, "coord");
+                materializeLeafFromTypeOrParent(childInfo->coordDims[0], parent.coord[0], "coord");
             FailureOr<Value> coord1 =
-                materializeLeafFromTypeOrParent(childInfo->coordDims[1], parent.colOffset, "coord");
+                materializeLeafFromTypeOrParent(childInfo->coordDims[1], parent.coord[1], "coord");
             FailureOr<Value> origin0 =
-                materializeLeafFromTypeOrParent(childInfo->originShapeDims[0], parent.originShape0, "origin_shape");
+                materializeLeafFromTypeOrParent(childInfo->originShapeDims[0], parent.originShape[0], "origin_shape");
             FailureOr<Value> origin1 =
-                materializeLeafFromTypeOrParent(childInfo->originShapeDims[1], parent.originShape1, "origin_shape");
+                materializeLeafFromTypeOrParent(childInfo->originShapeDims[1], parent.originShape[1], "origin_shape");
             if (failed(coord0) || failed(coord1) || failed(origin0) || failed(origin1)) {
                 derivationFailed = true;
                 return;
             }
 
-            Value stride0;
-            Value stride1;
-            Value shape0;
-            Value shape1;
-            SmallVector<Value, 4> packedShape;
-            SmallVector<Value, 4> packedStride;
+            Value one = getOrCreateConstant(op, 1, 0);
+            std::array<Value, 4> shape;
+            std::array<Value, 4> stride;
 
             if (isLinearLayout(childInfo->layoutTag)) {
+                Value parentShape0 = isLinearLayout(parent.layoutTag) ? parent.shape[0] : parent.originShape[0];
+                Value parentShape1 = isLinearLayout(parent.layoutTag) ? parent.shape[1] : parent.originShape[1];
                 FailureOr<Value> shape0Or =
-                    materializeLeafFromTypeOrParent(childInfo->shapeDims[0], parent.shape0, "shape");
+                    materializeLeafFromTypeOrParent(childInfo->shapeDims[0], parentShape0, "shape");
                 FailureOr<Value> shape1Or =
-                    materializeLeafFromTypeOrParent(childInfo->shapeDims[1], parent.shape1, "shape");
+                    materializeLeafFromTypeOrParent(childInfo->shapeDims[1], parentShape1, "shape");
                 if (failed(shape0Or) || failed(shape1Or)) {
                     derivationFailed = true;
                     return;
                 }
-                shape0 = *shape0Or;
-                shape1 = *shape1Or;
+                shape[0] = *shape0Or;
+                shape[1] = *shape1Or;
+                shape[2] = one;
+                shape[3] = one;
                 constexpr int64_t linearStrideAlignmentBytes = 32;
                 int64_t elementBytes = getByteSizeOfFixedWidthScalarType(childInfo->mlirElementType);
                 if (childInfo->mlirElementType.isInteger(1))
@@ -731,9 +704,9 @@ mlir::LogicalResult TensorDescriptorDerivation::derive(mlir::func::FuncOp funcOp
                     if (leaf != ShapedType::kDynamic)
                         return getOrCreateConstant(op, leaf, 0);
                     if (childInfo->layoutTag == TensorLayoutTag::RowMajor)
-                        return idx == 0 ? alignLinearExtent(shape1) : getOrCreateConstant(op, 1, 0);
+                        return idx == 0 ? alignLinearExtent(shape[1]) : one;
                     if (childInfo->layoutTag == TensorLayoutTag::ColumnMajor)
-                        return idx == 0 ? getOrCreateConstant(op, 1, 0) : alignLinearExtent(shape0);
+                        return idx == 0 ? one : alignLinearExtent(shape[0]);
                     op->emitError() << "unsupported linear layout for dynamic stride derivation";
                     return failure();
                 };
@@ -745,68 +718,50 @@ mlir::LogicalResult TensorDescriptorDerivation::derive(mlir::func::FuncOp funcOp
                     derivationFailed = true;
                     return;
                 }
-                stride0 = *stride0Or;
-                stride1 = *stride1Or;
+                stride = {*stride0Or, *stride1Or, one, one};
             } else {
-                if (!isPackedLayout(childInfo->layoutTag)) {
-                    op->emitError() << "unsupported tla.make_tensor_like layout for descriptor v1";
+                if (!isNZFamilyLayout(childInfo->layoutTag)) {
+                    op->emitError() << "unsupported tla.make_tensor_like layout for descriptor";
                     derivationFailed = true;
                     return;
                 }
-                packedShape.reserve(childInfo->shapeDims.size());
-                packedStride.reserve(childInfo->strideDims.size());
-                for (size_t i = 0; i < childInfo->shapeDims.size(); ++i) {
-                    FailureOr<Value> leaf = materializePackedLeafFromTypeOrParent(
-                        childInfo->shapeDims, parent.packedShape, i, "packed shape");
+                for (size_t i = 0; i < shape.size(); ++i) {
+                    FailureOr<Value> leaf = materializeNZFamilyLeafFromTypeOrParent(
+                        childInfo->shapeDims, parent.shape, i, "NZFamily layout shape");
                     if (failed(leaf)) {
                         derivationFailed = true;
                         return;
                     }
-                    packedShape.push_back(*leaf);
+                    shape[i] = *leaf;
                 }
-                for (size_t i = 0; i < childInfo->strideDims.size(); ++i) {
+                for (size_t i = 0; i < stride.size(); ++i) {
                     FailureOr<Value> leaf;
                     bool dynamicStrideLeaf = childInfo->strideDims[i] == ShapedType::kDynamic;
-                    bool packedStrideUnavailable = i >= parent.packedStride.size();
                     bool layoutChanged = parent.layoutTag != childInfo->layoutTag;
-                    if (dynamicStrideLeaf && (packedStrideUnavailable || layoutChanged)) {
-                        leaf = materializePackedStrideDynamicLeafFromShape(packedShape, i);
+                    if (dynamicStrideLeaf && layoutChanged) {
+                        leaf = deriveNZFamilyStrideLeafFromShape(shape, i);
                     } else {
-                        leaf = materializePackedLeafFromTypeOrParent(
-                            childInfo->strideDims, parent.packedStride, i, "packed stride");
+                        leaf = materializeNZFamilyLeafFromTypeOrParent(
+                            childInfo->strideDims, parent.stride, i, "NZFamily layout stride");
                     }
                     if (failed(leaf)) {
                         derivationFailed = true;
                         return;
                     }
-                    packedStride.push_back(*leaf);
+                    stride[i] = *leaf;
                 }
-                shape0 = *origin0;
-                shape1 = *origin1;
-                stride0 = packedStride[0];
-                stride1 = packedStride[1];
             }
 
-            TensorDescriptor desc{
-                typedBuffer,
-                *bridgedBaseType,
-                *coord0,
-                *coord1,
-                stride0,
-                stride1,
-                shape0,
-                shape1,
-                *origin0,
-                *origin1,
-                *coord0,
-                *coord1,
-                childInfo->layoutTag,
-                childInfo->addressSpace,
-                childInfo->elementType,
-                childInfo->rank,
-                std::move(packedShape),
-                std::move(packedStride),
-            };
+            TensorDescriptor desc;
+            desc.base = typedBuffer;
+            desc.bridgedBaseMemrefType = *bridgedBaseType;
+            desc.shape = shape;
+            desc.stride = stride;
+            desc.originShape = {*origin0, *origin1};
+            desc.coord = {*coord0, *coord1};
+            desc.layoutTag = childInfo->layoutTag;
+            desc.addrspace = childInfo->addressSpace;
+            desc.elementType = childInfo->elementType;
             tensorDescriptorByValue[op->getResult(0)] = std::move(desc);
             return;
         }
@@ -840,7 +795,7 @@ mlir::LogicalResult TensorDescriptorDerivation::derive(mlir::func::FuncOp funcOp
                 derivationFailed = true;
                 return;
             }
-            if (!isLinearLayout(childInfo->layoutTag) && !isPackedLayout(childInfo->layoutTag)) {
+            if (!isLinearLayout(childInfo->layoutTag) && !isNZFamilyLayout(childInfo->layoutTag)) {
                 op->emitError() << "tla.make_tensor has an unsupported layout for descriptor lowering";
                 derivationFailed = true;
                 return;
@@ -990,8 +945,8 @@ mlir::LogicalResult TensorDescriptorDerivation::derive(mlir::func::FuncOp funcOp
                 }
                 origin0 = (*originLeaves)[0];
                 origin1 = (*originLeaves)[1];
-            } else if (isPackedLayout(childInfo->layoutTag)) {
-                // Packed shapes flatten as (m0,m1),(n0,n1). Without an explicit
+            } else if (isNZFamilyLayout(childInfo->layoutTag)) {
+                // NZFamily shapes flatten as (m0,m1),(n0,n1). Without an explicit
                 // logical origin, use the padded logical dimensions represented
                 // by the physical blocking.
                 OpBuilder builder(op);
@@ -1004,45 +959,26 @@ mlir::LogicalResult TensorDescriptorDerivation::derive(mlir::func::FuncOp funcOp
                 origin1 = (*shapeLeaves)[1];
             }
 
-            Value shape0;
-            Value shape1;
-            Value stride0;
-            Value stride1;
-            SmallVector<Value, 4> packedShape;
-            SmallVector<Value, 4> packedStride;
-            if (isPackedLayout(childInfo->layoutTag)) {
-                packedShape.append(shapeLeaves->begin(), shapeLeaves->end());
-                packedStride.append(strideLeaves->begin(), strideLeaves->end());
-                shape0 = origin0;
-                shape1 = origin1;
-                stride0 = packedStride[0];
-                stride1 = packedStride[1];
+            Value one = getOrCreateConstant(op, 1, 0);
+            std::array<Value, 4> shape;
+            std::array<Value, 4> stride;
+            if (isNZFamilyLayout(childInfo->layoutTag)) {
+                shape = {(*shapeLeaves)[0], (*shapeLeaves)[1], (*shapeLeaves)[2], (*shapeLeaves)[3]};
+                stride = {(*strideLeaves)[0], (*strideLeaves)[1], (*strideLeaves)[2], (*strideLeaves)[3]};
             } else {
-                shape0 = (*shapeLeaves)[0];
-                shape1 = (*shapeLeaves)[1];
-                stride0 = (*strideLeaves)[0];
-                stride1 = (*strideLeaves)[1];
+                shape = {(*shapeLeaves)[0], (*shapeLeaves)[1], one, one};
+                stride = {(*strideLeaves)[0], (*strideLeaves)[1], one, one};
             }
-            TensorDescriptor desc{
-                typedBuffer,
-                *bridgedBaseType,
-                coord0,
-                coord1,
-                stride0,
-                stride1,
-                shape0,
-                shape1,
-                origin0,
-                origin1,
-                coord0,
-                coord1,
-                childInfo->layoutTag,
-                childInfo->addressSpace,
-                childInfo->elementType,
-                childInfo->rank,
-                std::move(packedShape),
-                std::move(packedStride),
-            };
+            TensorDescriptor desc;
+            desc.base = typedBuffer;
+            desc.bridgedBaseMemrefType = *bridgedBaseType;
+            desc.shape = shape;
+            desc.stride = stride;
+            desc.originShape = {origin0, origin1};
+            desc.coord = {coord0, coord1};
+            desc.layoutTag = childInfo->layoutTag;
+            desc.addrspace = childInfo->addressSpace;
+            desc.elementType = childInfo->elementType;
             tensorDescriptorByValue[op->getResult(0)] = std::move(desc);
             return;
         }

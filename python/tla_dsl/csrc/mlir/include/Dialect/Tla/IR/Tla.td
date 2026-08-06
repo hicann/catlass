@@ -755,24 +755,26 @@ def Tla_TensorDescOp : Tla_Op<"tensor_desc", [Pure]> {
     Materialized by ``tla-lower-tensor-desc`` from a tensor-view producer chain.
     ``base`` is the resolved root storage: either a builtin ``memref`` kernel
     argument or a ``!tla.ptr`` whose pointer transforms have already been applied.
-    The remaining operands are the descriptor's SSA-valued coordinates, strides,
-    shapes, and origin shapes. ``packed`` is empty for a linear layout or contains
-    ``[packed_shape0..3, packed_stride0..3]`` for a packed layout.
+    The remaining operands are the descriptor's SSA-valued four-slot layout shape
+    and stride, two-dimensional origin shape, and two-dimensional coordinate.
+    Linear layouts use ``[M, N, 1, 1]`` shape and ``[sM, sN, 1, 1]`` stride;
+    NZFamily layouts preserve their four shape/stride leaves.
 
     Downstream passes consume this op without interpreting the producer chain.
   }];
   let arguments = (ins
     AnyTypeOf<[Tla_PtrType, AnyMemRef]>:$base,
-    Index:$row_offset, Index:$col_offset,
-    Index:$stride0, Index:$stride1,
-    Index:$shape0, Index:$shape1,
+    Index:$shape0, Index:$shape1, Index:$shape2, Index:$shape3,
+    Index:$stride0, Index:$stride1, Index:$stride2, Index:$stride3,
     Index:$origin_shape0, Index:$origin_shape1,
-    Variadic<Index>:$packed);
+    Index:$coord0, Index:$coord1);
   let results = (outs Tla_TensorType:$result);
   let assemblyFormat = [{
-    $base `[` $row_offset `,` $col_offset `,` $stride0 `,` $stride1 `,` $shape0 `,`
-    $shape1 `,` $origin_shape0 `,` $origin_shape1 `]` (`packed` `[` $packed^ `]`)?
-    attr-dict `:` functional-type(operands, results)
+    $base `shape` `[` $shape0 `,` $shape1 `,` $shape2 `,` $shape3 `]`
+    `stride` `[` $stride0 `,` $stride1 `,` $stride2 `,` $stride3 `]`
+    `origin_shape` `[` $origin_shape0 `,` $origin_shape1 `]`
+    `coord` `[` $coord0 `,` $coord1 `]`
+    attr-dict `:` qualified(type($base)) `->` qualified(type($result))
   }];
   let hasVerifier = 1;
 }

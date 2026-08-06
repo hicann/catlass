@@ -17,6 +17,7 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 
+#include <array>
 #include <cstdint>
 #include <string>
 
@@ -41,7 +42,7 @@ enum class TensorLayoutTag
     zNUnAlign
 };
 
-bool isPackedLayout(TensorLayoutTag layoutTag);
+bool isNZFamilyLayout(TensorLayoutTag layoutTag);
 bool isLinearLayout(TensorLayoutTag layoutTag);
 llvm::StringRef stringifyTensorLayoutTag(TensorLayoutTag layoutTag);
 mlir::FailureOr<TensorLayoutTag> convertTlaLayoutTag(::LayoutTag layoutTag);
@@ -81,29 +82,20 @@ mlir::FailureOr<ParsedTensorInfo> parseTensorInfo(mlir::Type tensorType);
 struct TensorDescriptor {
     mlir::Value base;
     mlir::Type bridgedBaseMemrefType;
-    mlir::Value rowOffset;
-    mlir::Value colOffset;
-    mlir::Value stride0;
-    mlir::Value stride1;
-    mlir::Value shape0;
-    mlir::Value shape1;
-    mlir::Value originShape0;
-    mlir::Value originShape1;
-    mlir::Value absCoord0;
-    mlir::Value absCoord1;
+    std::array<mlir::Value, 4> shape;
+    std::array<mlir::Value, 4> stride;
+    std::array<mlir::Value, 2> originShape;
+    std::array<mlir::Value, 2> coord;
     TensorLayoutTag layoutTag = TensorLayoutTag::Unknown;
     std::string addrspace;
     std::string elementType;
-    int64_t rank = 0;
-    llvm::SmallVector<mlir::Value, 4> packedShape;
-    llvm::SmallVector<mlir::Value, 4> packedStride;
 };
 
 /// Fully dynamic shape/stride form used at structural joins and runtime calls.
 mlir::MemRefType getDynamicStridedMemrefType(mlir::MemRefType memrefType);
 
-bool validateTensorDescriptorV1(
-    mlir::Operation* op, const TensorDescriptor& desc, llvm::StringRef errorMessage, bool requireShapeOperands);
+bool validateTensorDescriptor(
+    mlir::Operation* op, const TensorDescriptor& desc, llvm::StringRef errorMessage);
 
 /// Recover optional allocation capacity preserved by pointer lowering.
 mlir::FailureOr<int64_t> getStaticAllocationElementCount(mlir::Value ptr);

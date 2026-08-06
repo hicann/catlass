@@ -74,7 +74,7 @@ void pushStagedErase(llvm::SmallVectorImpl<mlir::Operation *> &toErase, mlir::Op
 
 // For a GM linear-layout tensor with a static origin_shape, fill `originDims` and the
 // contiguous strides implied by that origin (row-major: trailing product; column-major:
-// leading product). Returns true if filled; false for non-GM, packed layout, or a dynamic
+// leading product). Returns true if filled; false for non-GM, NZFamily layout, or a dynamic
 // origin. Uses the raw (rank-preserving) parse so the view mirrors the declared origin.
 static bool tryGmOriginLayout(mlir::Type tensorTy, llvm::SmallVectorImpl<int64_t> &originDims,
                               llvm::SmallVectorImpl<int64_t> &contigStrides) {
@@ -164,7 +164,7 @@ mlir::FailureOr<mlir::Value> materializeDescriptorBaseMemref(mlir::OpBuilder &bu
       auto allocType = MemRefType::get(
           {ShapedType::kDynamic, ShapedType::kDynamic},
           memrefType.getElementType(), AffineMap(), memrefType.getMemorySpace());
-      SmallVector<Value, 2> dynamicSizes = {desc.shape0, desc.shape1};
+      SmallVector<Value, 2> dynamicSizes = {desc.shape[0], desc.shape[1]};
       return materializePtrValueAsMemref(builder, loc, desc.base, allocType,
                                          diagnosticOp, dynamicSizes);
     }
@@ -199,11 +199,11 @@ mlir::FailureOr<mlir::Value> materializeDescriptorBaseMemref(mlir::OpBuilder &bu
         continue;
       if (memrefType.getRank() == 1) {
         dynamicSizes.push_back(builder.create<arith::MulIOp>(
-            loc, desc.originShape0, desc.originShape1));
+            loc, desc.originShape[0], desc.originShape[1]));
       } else if (index == 0) {
-        dynamicSizes.push_back(desc.shape0);
+        dynamicSizes.push_back(isLinearLayout(desc.layoutTag) ? desc.shape[0] : desc.originShape[0]);
       } else if (index == 1) {
-        dynamicSizes.push_back(desc.shape1);
+        dynamicSizes.push_back(isLinearLayout(desc.layoutTag) ? desc.shape[1] : desc.originShape[1]);
       } else {
         diagnosticOp->emitError()
             << "cannot derive dynamic pointer_cast size for memref dimension "
@@ -240,10 +240,12 @@ mlir::FailureOr<mlir::Value> materializeTileMemrefFromDescriptor(
   if (baseType.getRank() == 1)
     return *baseMemref;
   Value one = builder.create<arith::ConstantIndexOp>(loc, 1);
+  Value size0 = isLinearLayout(desc.layoutTag) ? desc.shape[0] : desc.originShape[0];
+  Value size1 = isLinearLayout(desc.layoutTag) ? desc.shape[1] : desc.originShape[1];
   return builder
       .create<mlir::memref::SubViewOp>(loc, *baseMemref,
-                                       ValueRange{desc.rowOffset, desc.colOffset},
-                                       ValueRange{desc.shape0, desc.shape1}, ValueRange{one, one})
+                                       ValueRange{desc.coord[0], desc.coord[1]},
+                                       ValueRange{size0, size1}, ValueRange{one, one})
       .getResult();
 }
 
@@ -742,35 +744,35 @@ std::string getCopyRouteCallee(MLIRContext *ctx, StringRef srcAddrspace, StringR
   return {};
 }
 
-static SmallVector<Value, 8> buildRowMajorCopyPayload(OpBuilder &builder, Location loc,
-                                                      const TensorDescriptor &desc) {
+static SmallVector<Value, 8> buildLinearCopyPayload(OpBuilder &builder, Location loc,
+                                                    const TensorDescriptor &desc) {
   return {
-      castValueToI64(builder, loc, desc.shape0),
-      castValueToI64(builder, loc, desc.shape1),
-      castValueToI64(builder, loc, desc.stride0),
-      castValueToI64(builder, loc, desc.stride1),
-      castValueToI64(builder, loc, desc.absCoord0),
-      castValueToI64(builder, loc, desc.absCoord1),
-      castValueToI64(builder, loc, desc.originShape0),
-      castValueToI64(builder, loc, desc.originShape1),
+      castValueToI64(builder, loc, desc.shape[0]),
+      castValueToI64(builder, loc, desc.shape[1]),
+      castValueToI64(builder, loc, desc.stride[0]),
+      castValueToI64(builder, loc, desc.stride[1]),
+      castValueToI64(builder, loc, desc.coord[0]),
+      castValueToI64(builder, loc, desc.coord[1]),
+      castValueToI64(builder, loc, desc.originShape[0]),
+      castValueToI64(builder, loc, desc.originShape[1]),
   };
 }
 
-static SmallVector<Value, 12> buildPackedCopyPayload(OpBuilder &builder, Location loc,
-                                                     const TensorDescriptor &desc) {
+static SmallVector<Value, 12> buildNZFamilyCopyPayload(OpBuilder &builder, Location loc,
+                                                       const TensorDescriptor &desc) {
   return {
-      castValueToI64(builder, loc, desc.packedShape[0]),
-      castValueToI64(builder, loc, desc.packedShape[1]),
-      castValueToI64(builder, loc, desc.packedShape[2]),
-      castValueToI64(builder, loc, desc.packedShape[3]),
-      castValueToI64(builder, loc, desc.packedStride[0]),
-      castValueToI64(builder, loc, desc.packedStride[1]),
-      castValueToI64(builder, loc, desc.packedStride[2]),
-      castValueToI64(builder, loc, desc.packedStride[3]),
-      castValueToI64(builder, loc, desc.rowOffset),
-      castValueToI64(builder, loc, desc.colOffset),
-      castValueToI64(builder, loc, desc.originShape0),
-      castValueToI64(builder, loc, desc.originShape1),
+      castValueToI64(builder, loc, desc.shape[0]),
+      castValueToI64(builder, loc, desc.shape[1]),
+      castValueToI64(builder, loc, desc.shape[2]),
+      castValueToI64(builder, loc, desc.shape[3]),
+      castValueToI64(builder, loc, desc.stride[0]),
+      castValueToI64(builder, loc, desc.stride[1]),
+      castValueToI64(builder, loc, desc.stride[2]),
+      castValueToI64(builder, loc, desc.stride[3]),
+      castValueToI64(builder, loc, desc.coord[0]),
+      castValueToI64(builder, loc, desc.coord[1]),
+      castValueToI64(builder, loc, desc.originShape[0]),
+      castValueToI64(builder, loc, desc.originShape[1]),
   };
 }
 
@@ -780,14 +782,14 @@ SmallVector<Value, 20> buildCopyPayloadForRoute(OpBuilder &builder, Location loc
   SmallVector<Value, 20> payload;
   auto append = [&](ArrayRef<Value> values) { payload.append(values.begin(), values.end()); };
   if (isLinearLayout(srcDesc.layoutTag))
-    append(buildRowMajorCopyPayload(builder, loc, srcDesc));
+    append(buildLinearCopyPayload(builder, loc, srcDesc));
   else
-    append(buildPackedCopyPayload(builder, loc, srcDesc));
+    append(buildNZFamilyCopyPayload(builder, loc, srcDesc));
 
   if (isLinearLayout(dstDesc.layoutTag))
-    append(buildRowMajorCopyPayload(builder, loc, dstDesc));
+    append(buildLinearCopyPayload(builder, loc, dstDesc));
   else
-    append(buildPackedCopyPayload(builder, loc, dstDesc));
+    append(buildNZFamilyCopyPayload(builder, loc, dstDesc));
   return payload;
 }
 

@@ -8,10 +8,10 @@ module {
       %dst_memref: memref<1xf32, #hivm.address_space<ub>>) {
     %src_c0 = arith.constant 0 : index
     %src_c1 = arith.constant 1 : index
-    %src = tla.tensor_desc %src_memref[%src_c0, %src_c0, %src_c1, %src_c1, %src_c1, %src_c1, %src_c1, %src_c1] : (memref<1xf32, #hivm.address_space<ub>>, index, index, index, index, index, index, index, index) -> !fvec
+    %src = tla.tensor_desc %src_memref shape [%src_c1, %src_c1, %src_c1, %src_c1] stride [%src_c1, %src_c1, %src_c1, %src_c1] origin_shape [%src_c1, %src_c1] coord [%src_c0, %src_c0] : memref<1xf32, #hivm.address_space<ub>> -> !fvec
     %dst_c0 = arith.constant 0 : index
     %dst_c1 = arith.constant 1 : index
-    %dst = tla.tensor_desc %dst_memref[%dst_c0, %dst_c0, %dst_c1, %dst_c1, %dst_c1, %dst_c1, %dst_c1, %dst_c1] : (memref<1xf32, #hivm.address_space<ub>>, index, index, index, index, index, index, index, index) -> !fvec
+    %dst = tla.tensor_desc %dst_memref shape [%dst_c1, %dst_c1, %dst_c1, %dst_c1] stride [%dst_c1, %dst_c1, %dst_c1, %dst_c1] origin_shape [%dst_c1, %dst_c1] coord [%dst_c0, %dst_c0] : memref<1xf32, #hivm.address_space<ub>> -> !fvec
     "tla.vec.func"() ({
       %shape = "tla.make_shape"() : () -> !tla.shape<1>
       %coord = "tla.make_coord"() : () -> !tla.coord<0>

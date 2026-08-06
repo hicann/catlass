@@ -10,8 +10,8 @@ module {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c128 = arith.constant 128 : index
-    %src = tla.tensor_desc %src_memref[%c0, %c0, %c128, %c1, %c1, %c128, %c1, %c128] : (memref<128xi16, #hivm.address_space<ub>>, index, index, index, index, index, index, index, index) -> !src_i16
-    %dst = tla.tensor_desc %dst_memref[%c0, %c0, %c128, %c1, %c1, %c128, %c1, %c128] : (memref<128xi8, #hivm.address_space<ub>>, index, index, index, index, index, index, index, index) -> !dst_i8
+    %src = tla.tensor_desc %src_memref shape [%c1, %c128, %c1, %c1] stride [%c128, %c1, %c1, %c1] origin_shape [%c1, %c128] coord [%c0, %c0] : memref<128xi16, #hivm.address_space<ub>> -> !src_i16
+    %dst = tla.tensor_desc %dst_memref shape [%c1, %c128, %c1, %c1] stride [%c128, %c1, %c1, %c1] origin_shape [%c1, %c128] coord [%c0, %c0] : memref<128xi8, #hivm.address_space<ub>> -> !dst_i8
     "tla.vec.func"() ({
       %shape = "tla.make_shape"() : () -> !tla.shape<128>
       %coord = "tla.make_coord"() : () -> !tla.coord<0>

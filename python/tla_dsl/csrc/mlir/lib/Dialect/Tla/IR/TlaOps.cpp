@@ -11,6 +11,7 @@
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/Matchers.h"
 #include "mlir/IR/OpImplementation.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringSwitch.h"
@@ -201,14 +202,48 @@ mlir::LogicalResult PtrAddOp::verify() {
 }
 
 mlir::LogicalResult TensorDescOp::verify() {
-  // `packed` is empty for a linear (row-major/column-major) layout, or exactly
-  // the 8 zN/nZ leaves [packed_shape0..3, packed_stride0..3] for a packed
-  // layout. tla.tensor_desc is the single tile-descriptor op all tile producers
-  // lower into.
-  size_t n = getPacked().size();
-  if (n != 0 && n != 8)
-    return emitOpError("packed operands must be 0 (linear layout) or 8 "
-                       "[packed_shape0..3, packed_stride0..3]");
+  auto tensorType = getResult().getType();
+  auto layout = tensorType.getLayout();
+  auto layoutTag = layout.getLayoutTag();
+  bool isLinear = layoutTag == LayoutTag::row_major ||
+                  layoutTag == LayoutTag::column_major;
+  bool isNZFamily = isNZFamilyLayout(layoutTag);
+  if (!isLinear && !isNZFamily)
+    return emitOpError("result must use a supported linear or NZFamily layout");
+
+  llvm::SmallVector<int64_t, 4> shapeLeaves;
+  llvm::SmallVector<int64_t, 4> strideLeaves;
+  llvm::SmallVector<int64_t, 2> originLeaves;
+  llvm::SmallVector<int64_t, 2> coordLeaves;
+  if (!layout.getOrigin())
+    return emitOpError("result layout must have an origin shape");
+  if (failed(getIndexTreeLeavesForVerify(getOperation(), layout.getShape(), shapeLeaves, "layout shape")) ||
+      failed(getIndexTreeLeavesForVerify(getOperation(), layout.getStride(), strideLeaves, "layout stride")) ||
+      failed(getIndexTreeLeavesForVerify(getOperation(), layout.getOrigin(), originLeaves, "origin shape")) ||
+      failed(getIndexTreeLeavesForVerify(getOperation(), tensorType.getCoord(), coordLeaves, "coordinate")))
+    return mlir::failure();
+  if (isLinear) {
+    size_t rank = coordLeaves.size();
+    if ((rank != 1 && rank != 2) || shapeLeaves.size() != rank ||
+        strideLeaves.size() != rank || originLeaves.size() != rank)
+      return emitOpError(
+          "linear result metadata must have a consistent raw rank of one or two");
+  }
+  if (isNZFamily &&
+      (shapeLeaves.size() != 4 || strideLeaves.size() != 4 ||
+       originLeaves.size() != 2 || coordLeaves.size() != 2))
+    return emitOpError(
+        "NZFamily layout shape/stride must have four leaves and origin/coordinate two leaves");
+
+  if (isLinear) {
+    auto isConstantOne = [](mlir::Value value) {
+      llvm::APInt constant;
+      return mlir::matchPattern(value, mlir::m_ConstantInt(&constant)) && constant == 1;
+    };
+    if (!isConstantOne(getShape2()) || !isConstantOne(getShape3()) ||
+        !isConstantOne(getStride2()) || !isConstantOne(getStride3()))
+      return emitOpError("linear layout shape[2:4] and stride[2:4] must be constant 1");
+  }
   return mlir::success();
 }
 

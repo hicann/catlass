@@ -28,7 +28,7 @@ static FailureOr<Value> materializeScalarView(OpBuilder &builder, Operation *dia
   if (desc.addrspace != "gm" && desc.addrspace != "ub")
     return diagnosticOp->emitError("scalar access requires a GM or UB tensor descriptor"),
            failure();
-  if (!isLinearLayout(desc.layoutTag) || !desc.packedShape.empty() || !desc.packedStride.empty())
+  if (!isLinearLayout(desc.layoutTag))
     return diagnosticOp->emitError(
                "scalar access supports only linear row_major/column_major descriptors"),
            failure();
@@ -36,8 +36,7 @@ static FailureOr<Value> materializeScalarView(OpBuilder &builder, Operation *dia
   if (logicalRank != 1 && logicalRank != 2)
     return diagnosticOp->emitError("scalar access descriptor must have logical rank 1 or 2"),
            failure();
-  if (!validateTensorDescriptorV1(diagnosticOp, desc, "malformed descriptor for scalar access",
-                                  /*requireShapeOperands=*/true))
+  if (!validateTensorDescriptor(diagnosticOp, desc, "malformed descriptor for scalar access"))
     return failure();
 
   FailureOr<Value> base = getOrMaterializeDescriptorBaseMemref(builder, diagnosticOp->getLoc(),
@@ -51,8 +50,8 @@ static FailureOr<Value> materializeScalarView(OpBuilder &builder, Operation *dia
 
   Location loc = diagnosticOp->getLoc();
   auto metadata = builder.create<mlir::memref::ExtractStridedMetadataOp>(loc, *base);
-  Value rowOffset = builder.createOrFold<arith::MulIOp>(loc, desc.rowOffset, desc.stride0);
-  Value colOffset = builder.createOrFold<arith::MulIOp>(loc, desc.colOffset, desc.stride1);
+  Value rowOffset = builder.createOrFold<arith::MulIOp>(loc, desc.coord[0], desc.stride[0]);
+  Value colOffset = builder.createOrFold<arith::MulIOp>(loc, desc.coord[1], desc.stride[1]);
   Value logicalOffset = builder.createOrFold<arith::AddIOp>(loc, rowOffset, colOffset);
   Value storageOffset =
       builder.createOrFold<arith::AddIOp>(loc, metadata.getOffset(), logicalOffset);
@@ -60,11 +59,11 @@ static FailureOr<Value> materializeScalarView(OpBuilder &builder, Operation *dia
   SmallVector<Value, 2> sizes;
   SmallVector<Value, 2> strides;
   if (logicalRank == 1) {
-    sizes.push_back(desc.shape1);
-    strides.push_back(desc.stride1);
+    sizes.push_back(desc.shape[1]);
+    strides.push_back(desc.stride[1]);
   } else {
-    sizes.append({desc.shape0, desc.shape1});
-    strides.append({desc.stride0, desc.stride1});
+    sizes.append({desc.shape[0], desc.shape[1]});
+    strides.append({desc.stride[0], desc.stride[1]});
   }
 
   SmallVector<int64_t, 2> dynamicShape(logicalRank, ShapedType::kDynamic);

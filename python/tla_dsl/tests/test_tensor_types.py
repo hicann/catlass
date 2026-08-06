@@ -637,6 +637,48 @@ def test_mark_layout_dynamic_column_major_keeps_leading_when_rows_are_one() -> N
     assert "!tla.stride<1,?>" in type_str
 
 
+def _manual_gm_zn_tensor() -> tla.Tensor:
+    with runtime_mod._eager_capture():
+        return tla.Tensor(
+            tla.make_shape((16, 2), (16, 4)),
+            tla.Float16,
+            addrspace=tla.AddressSpace.gm,
+            origin_shape=tla.make_shape(32, 64),
+            coord=tla.make_coord(0, 0),
+            stride=tla.make_stride((16, 512), (1, 512)),
+            layout_tag=tla.arch.zN,
+        )
+
+
+def test_mark_layout_dynamic_nz_family_maps_physical_modes_to_logical_origin() -> None:
+    updated = _manual_gm_zn_tensor().mark_layout_dynamic(leading_dim=2)
+
+    assert updated._dynamic_shape_tree == ((None, None), (None, None))
+    assert updated._dynamic_stride_tree == ((None, None), (1, None))
+    assert updated._dynamic_origin_shape_tree == (None, None)
+    type_str = updated.__tla_type__()
+    assert "!tla.shape<(?,?),(?,?)>" in type_str
+    assert "!tla.stride<(?,?),(1,?)>" in type_str
+    assert "!tla.shape<?,?>" in type_str
+
+
+@pytest.mark.parametrize(
+    ("mode", "expected_origin"),
+    (
+        (0, (None, 64)),
+        (1, (None, 64)),
+        (2, (32, None)),
+        (3, (32, None)),
+    ),
+)
+def test_mark_compact_shape_dynamic_nz_family_maps_group_to_logical_axis(
+    mode: int, expected_origin: tuple[int | None, int | None]
+) -> None:
+    updated = _manual_gm_zn_tensor().mark_compact_shape_dynamic(mode=mode)
+
+    assert updated._dynamic_origin_shape_tree == expected_origin
+
+
 def test_mark_compact_shape_dynamic_marks_origin_and_major_strides() -> None:
     tensor = _from_dlpack_with_parsed(
         _device_dlpack_fields(shape=(4, 8), strides=(8, 1)),

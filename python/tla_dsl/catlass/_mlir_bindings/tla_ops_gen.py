@@ -2654,21 +2654,24 @@ class TensorDescOp(_ods_ir.OpView):
 
   _ODS_REGIONS = (0, True)
 
-  def __init__(self, result, base, row_offset, col_offset, stride0, stride1, shape0, shape1, origin_shape0, origin_shape1, packed, *, loc=None, ip=None):
+  def __init__(self, result, base, shape0, shape1, shape2, shape3, stride0, stride1, stride2, stride3, origin_shape0, origin_shape1, coord0, coord1, *, loc=None, ip=None):
     operands = []
     results = []
     attributes = {}
     regions = None
     operands.append(_get_op_result_or_value(base))
-    operands.append(_get_op_result_or_value(row_offset))
-    operands.append(_get_op_result_or_value(col_offset))
-    operands.append(_get_op_result_or_value(stride0))
-    operands.append(_get_op_result_or_value(stride1))
     operands.append(_get_op_result_or_value(shape0))
     operands.append(_get_op_result_or_value(shape1))
+    operands.append(_get_op_result_or_value(shape2))
+    operands.append(_get_op_result_or_value(shape3))
+    operands.append(_get_op_result_or_value(stride0))
+    operands.append(_get_op_result_or_value(stride1))
+    operands.append(_get_op_result_or_value(stride2))
+    operands.append(_get_op_result_or_value(stride3))
     operands.append(_get_op_result_or_value(origin_shape0))
     operands.append(_get_op_result_or_value(origin_shape1))
-    operands.extend(_get_op_results_or_values(packed))
+    operands.append(_get_op_result_or_value(coord0))
+    operands.append(_get_op_result_or_value(coord1))
     _ods_context = _ods_get_default_loc_context(loc)
     results.append(result)
     _ods_successors = None
@@ -2679,48 +2682,59 @@ class TensorDescOp(_ods_ir.OpView):
     return self.operation.operands[0]
 
   @builtins.property
-  def row_offset(self):
+  def shape0(self):
     return self.operation.operands[1]
 
   @builtins.property
-  def col_offset(self):
+  def shape1(self):
     return self.operation.operands[2]
 
   @builtins.property
-  def stride0(self):
+  def shape2(self):
     return self.operation.operands[3]
 
   @builtins.property
-  def stride1(self):
+  def shape3(self):
     return self.operation.operands[4]
 
   @builtins.property
-  def shape0(self):
+  def stride0(self):
     return self.operation.operands[5]
 
   @builtins.property
-  def shape1(self):
+  def stride1(self):
     return self.operation.operands[6]
 
   @builtins.property
-  def origin_shape0(self):
+  def stride2(self):
     return self.operation.operands[7]
 
   @builtins.property
-  def origin_shape1(self):
+  def stride3(self):
     return self.operation.operands[8]
 
   @builtins.property
-  def packed(self):
-    _ods_variadic_group_length = len(self.operation.operands) - 10 + 1
-    return self.operation.operands[9:9 + _ods_variadic_group_length]
+  def origin_shape0(self):
+    return self.operation.operands[9]
+
+  @builtins.property
+  def origin_shape1(self):
+    return self.operation.operands[10]
+
+  @builtins.property
+  def coord0(self):
+    return self.operation.operands[11]
+
+  @builtins.property
+  def coord1(self):
+    return self.operation.operands[12]
 
   @builtins.property
   def result(self):
     return self.operation.results[0]
 
-def tensor_desc(result, base, row_offset, col_offset, stride0, stride1, shape0, shape1, origin_shape0, origin_shape1, packed, *, loc=None, ip=None) -> _ods_ir.Value:
-  return _get_op_result_or_op_results(TensorDescOp(result=result, base=base, row_offset=row_offset, col_offset=col_offset, stride0=stride0, stride1=stride1, shape0=shape0, shape1=shape1, origin_shape0=origin_shape0, origin_shape1=origin_shape1, packed=packed, loc=loc, ip=ip))
+def tensor_desc(result, base, shape0, shape1, shape2, shape3, stride0, stride1, stride2, stride3, origin_shape0, origin_shape1, coord0, coord1, *, loc=None, ip=None) -> _ods_ir.Value:
+  return _get_op_result_or_op_results(TensorDescOp(result=result, base=base, shape0=shape0, shape1=shape1, shape2=shape2, shape3=shape3, stride0=stride0, stride1=stride1, stride2=stride2, stride3=stride3, origin_shape0=origin_shape0, origin_shape1=origin_shape1, coord0=coord0, coord1=coord1, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
 class TensorPtrOp(_ods_ir.OpView):

@@ -56,26 +56,26 @@ module {
 
 // CHECK-LABEL: func.func @root_static(
 // CHECK-SAME: %[[STATIC_ARG:.*]]: memref<16x16xf32, #hivm.address_space<gm>>)
-// CHECK: %[[STATIC_DESC:.*]] = tla.tensor_desc %[[STATIC_ARG]][
+// CHECK: %[[STATIC_DESC:.*]] = tla.tensor_desc %[[STATIC_ARG]] shape[
 // CHECK: %[[STATIC_TILE:.*]] = tla.tile_view %[[STATIC_DESC]],
 // CHECK: tla.tensor_ptr %[[STATIC_TILE]]
 // CHECK-NOT: tla.tile_view %[[STATIC_ARG]],
 
 // CHECK-LABEL: func.func @root_padded_row(
 // CHECK-SAME: %[[PADDED_ARG:.*]]: memref<8x16xf32, strided<[20, 1], offset: ?>, #hivm.address_space<gm>>)
-// CHECK: tla.tensor_desc %[[PADDED_ARG]][
+// CHECK: tla.tensor_desc %[[PADDED_ARG]] shape[
 
 // CHECK-LABEL: func.func @root_dynamic_row(
 // CHECK-SAME: %[[ROW_ARG:.*]]: memref<?x64xf32, strided<{{.*}}>, #hivm.address_space<gm>>)
 // CHECK: memref.dim %[[ROW_ARG]],
 // CHECK: memref.extract_strided_metadata %[[ROW_ARG]]
-// CHECK: %[[ROW_DESC:.*]] = tla.tensor_desc %[[ROW_ARG]][
+// CHECK: %[[ROW_DESC:.*]] = tla.tensor_desc %[[ROW_ARG]] shape[
 // CHECK: tla.scalar_load %[[ROW_DESC]]
 
 // CHECK-LABEL: func.func @root_dynamic_column(
 // CHECK-SAME: %[[COL_ARG:.*]]: memref<?x64xf32, #hivm.address_space<gm>>)
 // CHECK: %[[COL_DIM:.*]] = memref.dim %[[COL_ARG]],
-// CHECK: %[[COL_DESC:.*]] = tla.tensor_desc %[[COL_ARG]][
+// CHECK: %[[COL_DESC:.*]] = tla.tensor_desc %[[COL_ARG]] shape[
 // CHECK: tla.scalar_load %[[COL_DESC]]
 
 // SCALAR-LABEL: func.func @root_static
@@ -101,6 +101,6 @@ module {
 // CHECK-LABEL: func.func @root_dynamic_rank1(
 // CHECK-SAME: %[[RANK1_ARG:.*]]: memref<?xi32, strided<{{.*}}>, #hivm.address_space<gm>>)
 // CHECK: memref.dim %[[RANK1_ARG]],
-// CHECK: %[[RANK1_DESC:.*]] = tla.tensor_desc %[[RANK1_ARG]][
+// CHECK: %[[RANK1_DESC:.*]] = tla.tensor_desc %[[RANK1_ARG]] shape[
 // CHECK: %[[RANK1_TILE:.*]] = tla.tile_view %[[RANK1_DESC]],
 // CHECK: tla.scalar_load %[[RANK1_TILE]]

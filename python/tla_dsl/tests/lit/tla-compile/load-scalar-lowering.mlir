@@ -27,12 +27,10 @@ module {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c64 = arith.constant 64 : index
-    %src = tla.tensor_desc %src_memref[%c0, %c0, %c64, %c1, %c1, %c64, %c1, %c64]
-      : (memref<64xf32, #hivm.address_space<ub>>, index, index, index, index,
-         index, index, index, index) -> !vec64
-    %tmp = tla.tensor_desc %tmp_memref[%c0, %c0, %c1, %c1, %c1, %c1, %c1, %c1]
-      : (memref<1xf32, #hivm.address_space<ub>>, index, index, index, index,
-         index, index, index, index) -> !vec1
+    %src = tla.tensor_desc %src_memref shape [%c1, %c64, %c1, %c1] stride [%c64, %c1, %c1, %c1] origin_shape [%c1, %c64] coord [%c0, %c0]
+      : memref<64xf32, #hivm.address_space<ub>> -> !vec64
+    %tmp = tla.tensor_desc %tmp_memref shape [%c1, %c1, %c1, %c1] stride [%c1, %c1, %c1, %c1] origin_shape [%c1, %c1] coord [%c0, %c0]
+      : memref<1xf32, #hivm.address_space<ub>> -> !vec1
     "tla.vector"() ({
       "tla.vec.func"() ({
         %vec_shape64 = "tla.make_shape"() : () -> !tla.shape<64>
