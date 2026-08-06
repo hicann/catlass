@@ -26,9 +26,14 @@ def pytest_sessionstart(session: pytest.Session) -> None:
     try:
         bootstrap.ensure_pretest_mlir_build(repo_root)
     except bootstrap.PretestBuildError as exc:
-        import warnings
-
-        warnings.warn(f"Skipping pretest MLIR build: {exc}", stacklevel=2)
+        # Fail fast instead of letting tests run against missing MLIR
+        # binaries (which would fail later with confusing import errors).
+        pytest.exit(
+            f"Pre-test MLIR build check failed: {exc}\n"
+            "Run `build.sh` (or `build.sh --debug`) first, or set "
+            "TLA_DSL_SKIP_PRETEST_BUILD=1 to skip this check.",
+            returncode=1,
+        )
 
 
 def _compiler_tlair(kernel: Any, *, type_args: tuple[Any, ...] | None = None) -> str:

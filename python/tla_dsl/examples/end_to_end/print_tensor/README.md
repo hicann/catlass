@@ -72,7 +72,7 @@ python print_tensor.py --run --storage ub --case dynamic --arch-scope aiv.c310 -
 | Length | Static or integer-SSA 1–262,112 element prefix, no greater than runtime tensor size | Zero, negative, over 262,112, or over tensor size |
 | Dynamic control flow | AIV GM print sites under runtime `if` and `tla.range` | AIC, multi-block, or dynamic-shape variants of this example case |
 | Layout | Row-major, column-major, padded/strided, and packed TLA layouts | Layouts outside the TLA layout enum |
-| Baseline | Ascend950PR, CANN 9.1.0-beta.3 or later | Other device/CANN combinations are not declared |
+| Baseline | Ascend950PR, CANN 9.1.0 or later | Other device/CANN combinations are not declared |
 
 `tla.print(value, length, /)` derives dtype and the concrete runtime shape from
 the tensor. Length is an element count, not a byte count, and may be a Python

@@ -1,4 +1,8 @@
 cmake_minimum_required(VERSION 3.20)
+# 默认用宿主 sysroot(conda 自带 glibc 2.28 缺 LLVM 所需符号);显式传入时保留
+if(NOT DEFINED CMAKE_SYSROOT OR "${CMAKE_SYSROOT}" STREQUAL "")
+  set(CMAKE_SYSROOT "/")
+endif()
 project(tla LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 
@@ -100,6 +104,7 @@ if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bc/CMakeLists.txt")
 endif()
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter Development.Module)
+find_package(Threads REQUIRED)
 # python/tla_dsl: sibling of catlass/ (Python pkg) and csrc/ (contains tests/, pyproject, .artifacts, tools).
 set(TLA_REPO_ROOT ${CMAKE_CURRENT_LIST_DIR}/../..)
 find_package(pybind11 CONFIG QUIET)
