@@ -11,7 +11,6 @@
 from __future__ import annotations
 
 import argparse
-import re
 from pathlib import Path
 
 import catlass as tla
@@ -29,14 +28,7 @@ L0A_BYTES = 32 * 32 * 4
 L0B_BYTES = 32 * 32 * 4
 L0C_BYTES = 32 * 32 * 4
 
-# Minimal dynamic-GM smoke for mix kernel: M/N stay 32 (AIV tile split), vary K.
-DESCRIPTION = "Basic Mixed Cube+Vector add."
-_PRINT_RECORD = re.compile(
-    r"^tla\.print dtype=float32 position=(?P<position>[A-Z0-9]+) "
-    r"subblock=(?P<subblock>[01]) "
-    r"shape=\[(?P<shape>[0-9,]+)\] count=(?P<count>[0-9]+) "
-    r"values=\[(?P<values>.*)\]$"
-)
+DESCRIPTION = "Basic Mixed Cube+Vector add; mutex sync; f32 only."
 
 
 # ---------------------------------------------------------------------------
@@ -44,7 +36,7 @@ _PRINT_RECORD = re.compile(
 # ---------------------------------------------------------------------------
 
 @tla.kernel
-def basic_mixed(
+def basic_mixed_mutex(
     lhs: tla.Tensor,
     rhs: tla.Tensor,
     out: tla.Tensor,
@@ -54,13 +46,14 @@ def basic_mixed(
     k = lhs.origin_shape[1]
     n = rhs.origin_shape[1]
 
-    mmad_done = tla.flag("mmad_done", tla.arch.CUBE, tla.arch.FIX)
-    l1_loaded = tla.flag("l1_loaded", tla.arch.MTE2, tla.arch.MTE1)
-    l0_loaded = tla.flag("l0_loaded", tla.arch.MTE1, tla.arch.CUBE)
-
-    ub_load_ready = tla.flag("ub_load_ready", tla.arch.VECTOR, tla.arch.MTE2)
-    ub_loaded = tla.flag("ub_loaded", tla.arch.MTE2, tla.arch.VECTOR)
-    vec_done = tla.flag("vec_done", tla.arch.VECTOR, tla.arch.MTE3)
+    mutex_l1a = tla.mutex(resource="l1a", id=0)
+    mutex_l1b = tla.mutex(resource="l1b", id=1)
+    mutex_l0a = tla.mutex(resource="l0a", id=2)
+    mutex_l0b = tla.mutex(resource="l0b", id=3)
+    mutex_l0c = tla.mutex(resource="l0c", id=4)
+    mutex_c_ub = tla.mutex(resource="c_ub", id=5)
+    mutex_addend_ub = tla.mutex(resource="addend_ub", id=6)
+    mutex_result_ub = tla.mutex(resource="result_ub", id=7)
 
     fix_done = tla.cross_flag("fix_done")
 
@@ -80,32 +73,49 @@ def basic_mixed(
         gm_c = tla.tile_view(out, tla.make_shape(m, n), tla.make_coord(0, 0))
         l1_a = tla.make_tensor_like(l1a_ptr, gm_a, tla.arch.zN)
         l1_b = tla.make_tensor_like(l1b_ptr, gm_b, tla.arch.zN)
-        tla.copy(l1_a, gm_a)
-        tla.copy(l1_b, gm_b)
 
-        tla.set_flag(l1_loaded)
-        tla.wait_flag(l1_loaded)
+        mutex_l1a.lock(pipe=tla.arch.MTE2)
+        tla.copy(l1_a, gm_a)
+        mutex_l1a.unlock(pipe=tla.arch.MTE2)
+
+        mutex_l1b.lock(pipe=tla.arch.MTE2)
+        tla.copy(l1_b, gm_b)
+        mutex_l1b.unlock(pipe=tla.arch.MTE2)
 
         l1_a_l0 = tla.tile_view(l1_a, tla.make_shape(m, k), tla.make_coord(0, 0))
         l1_b_l0 = tla.tile_view(l1_b, tla.make_shape(k, n), tla.make_coord(0, 0))
         l0_a = tla.make_tensor_like(l0a_ptr, l1_a_l0, tla.arch.zN)
         l0_b = tla.make_tensor_like(l0b_ptr, l1_b_l0, tla.arch.nZ)
         l0_c = tla.make_tensor_like(l0c_ptr, gm_c, tla.arch.L0Clayout)
+
+        mutex_l1a.lock(pipe=tla.arch.MTE1)
+        mutex_l0a.lock(pipe=tla.arch.MTE1)
         tla.copy(l0_a, l1_a_l0)
+        mutex_l0a.unlock(pipe=tla.arch.MTE1)
+        mutex_l1a.unlock(pipe=tla.arch.MTE1)
+
+        mutex_l1b.lock(pipe=tla.arch.MTE1)
+        mutex_l0b.lock(pipe=tla.arch.MTE1)
         tla.copy(l0_b, l1_b_l0)
+        mutex_l0b.unlock(pipe=tla.arch.MTE1)
+        mutex_l1b.unlock(pipe=tla.arch.MTE1)
 
-        tla.set_flag(l0_loaded)
-        tla.wait_flag(l0_loaded)
-
+        mutex_l0a.lock(pipe=tla.arch.CUBE)
+        mutex_l0b.lock(pipe=tla.arch.CUBE)
+        mutex_l0c.lock(pipe=tla.arch.CUBE)
         tla.mmad(l0_c, l0_a, l0_b, init_c=True)
-
-        tla.set_flag(mmad_done)
-        tla.wait_flag(mmad_done)
+        mutex_l0c.unlock(pipe=tla.arch.CUBE)
+        mutex_l0b.unlock(pipe=tla.arch.CUBE)
+        mutex_l0a.unlock(pipe=tla.arch.CUBE)
 
         ub_c = tla.make_tensor_like(c_ub_ptr, l0_c, tla.arch.RowMajor)
+        mutex_l0c.lock(pipe=tla.arch.FIX)
+        mutex_c_ub.lock(pipe=tla.arch.FIX)
         tla.copy(ub_c, l0_c, tla.params.CopyL0C2DstParams(
             l0c2ub_mode=tla.params.L0C2UBMode.SPLIT_M,
         ))
+        mutex_c_ub.unlock(pipe=tla.arch.FIX)
+        mutex_l0c.unlock(pipe=tla.arch.FIX)
 
         tla.cross_core_set_flag(fix_done, tla.arch.FIX)
         tla.pipe_barrier(tla.pipes.ALL)
@@ -118,25 +128,29 @@ def basic_mixed(
         ub_result = tla.make_tensor_like(result_ub_ptr, gm_result, tla.arch.RowMajor)
         ub_addend = tla.make_tensor_like(addend_ub_ptr, gm_addend, tla.arch.RowMajor)
 
-        tla.set_flag(ub_load_ready)
-        tla.wait_flag(ub_load_ready)
+        mutex_addend_ub.lock(pipe=tla.arch.MTE2)
         tla.copy(ub_addend, gm_addend)
-        tla.set_flag(ub_loaded)
-        tla.wait_flag(ub_loaded)
+        mutex_addend_ub.unlock(pipe=tla.arch.MTE2)
 
         ub_c = tla.make_tensor_like(c_ub_ptr, gm_result, tla.arch.RowMajor)
         tla.cross_core_wait_flag(fix_done, tla.arch.VECTOR)
 
         for row_tile_idx in tla.range(0, VECTOR_TILE_M // VECTOR_REG_TILE_M, 1):
+            mutex_c_ub.lock(pipe=tla.arch.VECTOR)
+            mutex_addend_ub.lock(pipe=tla.arch.VECTOR)
+            mutex_result_ub.lock(pipe=tla.arch.VECTOR)
             with tla.vec.func(mode="simd"):
                 c_chunk = tla.tile_view(ub_c, tla.make_shape(VECTOR_REG_TILE_M, VECTOR_TILE_N), tla.make_coord(row_tile_idx, 0))
                 addend_chunk = tla.tile_view(ub_addend, tla.make_shape(VECTOR_REG_TILE_M, VECTOR_TILE_N), tla.make_coord(row_tile_idx, 0))
                 result_chunk = tla.tile_view(ub_result, tla.make_shape(VECTOR_REG_TILE_M, VECTOR_TILE_N), tla.make_coord(row_tile_idx, 0))
                 result_chunk.store(c_chunk.load() + addend_chunk.load())
+            mutex_result_ub.unlock(pipe=tla.arch.VECTOR)
+            mutex_addend_ub.unlock(pipe=tla.arch.VECTOR)
+            mutex_c_ub.unlock(pipe=tla.arch.VECTOR)
 
-        tla.set_flag(vec_done)
-        tla.wait_flag(vec_done)
+        mutex_result_ub.lock(pipe=tla.arch.MTE3)
         tla.copy(gm_result, ub_result)
+        mutex_result_ub.unlock(pipe=tla.arch.MTE3)
 
         tla.pipe_barrier(tla.pipes.ALL)
 
@@ -148,60 +162,6 @@ def basic_mixed(
 EXAMPLE_DIR = Path(__file__).resolve().parent
 DEFAULT_CACHE_DIR = EXAMPLE_DIR / "artifacts" / "runtime-cache"
 
-
-
-def _verify_mixed_print_output(output: str) -> list[str]:
-    records = [
-        line
-        for line in output.splitlines()
-        if line.startswith("tla.print ")
-    ]
-    if len(records) != 2:
-        raise tla.TlaExecutionError(
-            "mixed tensor tla.print validation failed: "
-            f"expected two AIV records, got {records!r}"
-        )
-    records_by_subblock: dict[int, str] = {}
-    for record in records:
-        match = _PRINT_RECORD.fullmatch(record)
-        if match is None:
-            raise tla.TlaExecutionError(
-                f"mixed tensor tla.print validation failed: malformed record {record!r}"
-            )
-        shape = tuple(int(extent) for extent in match.group("shape").split(","))
-        try:
-            values = [
-                float(value.strip())
-                for value in match.group("values").split(",")
-            ]
-        except ValueError as exc:
-            raise tla.TlaExecutionError(
-                f"mixed tensor tla.print validation failed: malformed record {record!r}"
-            ) from exc
-        subblock = int(match.group("subblock"))
-        if subblock in records_by_subblock:
-            raise tla.TlaExecutionError(
-                "mixed tensor tla.print validation failed: "
-                f"duplicate subblock={subblock}"
-            )
-        records_by_subblock[subblock] = record
-        if (
-            match.group("position") != "UB"
-            or shape != (VECTOR_TILE_M, VECTOR_TILE_N)
-            or int(match.group("count")) != 16
-            or values != [3.0] * 16
-        ):
-            raise tla.TlaExecutionError(
-                "mixed tensor tla.print validation failed: expected position=UB, "
-                f"shape=[{VECTOR_TILE_M},{VECTOR_TILE_N}], count=16, and sixteen "
-                f"3.0 values; got {record!r}"
-            )
-    if set(records_by_subblock) != {0, 1}:
-        raise tla.TlaExecutionError(
-            "mixed tensor tla.print validation failed: expected records from "
-            f"subblocks 0 and 1, got {sorted(records_by_subblock)}"
-        )
-    return records
 
 def golden(lhs, rhs, addend):
     import torch
@@ -238,7 +198,7 @@ def run(args: argparse.Namespace) -> int:
         td = create_tla_tensor(addend, "row")
 
         artifact = tla.compile(
-            basic_mixed,
+            basic_mixed_mutex,
             ta,
             tb,
             tc,

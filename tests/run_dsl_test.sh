@@ -11,7 +11,7 @@
 #
 # End-to-end validation for python/tla_dsl/examples/end_to_end/basic_mmad (basic_matmul*.py, basic_mmad_ptr.py),
 # python/tla_dsl/examples/end_to_end/basic_vadd (basic_vadd.py),
-# python/tla_dsl/examples/end_to_end/basic_mixed (basic_mixed.py, including mutex mode), and
+# python/tla_dsl/examples/end_to_end/basic_mixed (basic_mixed.py), python/tla_dsl/examples/end_to_end/basic_mixed_mutex (basic_mixed_mutex.py) and
 # python/tla_dsl/examples/end_to_end/basic_mixed (basic_mixed_ub2l1.py, basic_mixed_store_zN.py,
 # basic_mixed_store_zNUnAlign.py, basic_mixed_fixpipe_nz2dn.py).
 # python/tla_dsl/examples/end_to_end/vector_ops (binary_op.py, masked_binary.py,
@@ -85,6 +85,7 @@ BASIC_MMAD_AUTO_SYNC_REL="examples/end_to_end/basic_mmad/basic_matmul_auto_sync.
 BASIC_MMAD_PTR_REL="examples/end_to_end/basic_mmad/basic_mmad_ptr.py"
 BASIC_VADD_REL="examples/end_to_end/basic_vadd/basic_vadd.py"
 BASIC_MIXED_REL="examples/end_to_end/basic_mixed/basic_mixed.py"
+BASIC_MIXED_MUTEX_REL="examples/end_to_end/basic_mixed/basic_mixed_mutex.py"
 BASIC_MIXED_UB2L1_REL="examples/end_to_end/basic_mixed/basic_mixed_ub2l1.py"
 BASIC_MIXED_STORE_ZN_REL="examples/end_to_end/basic_mixed/basic_mixed_store_zN.py"
 BASIC_MIXED_STORE_ZNUNALIGN_REL="examples/end_to_end/basic_mixed/basic_mixed_store_zNUnAlign.py"
@@ -134,26 +135,26 @@ Run end-to-end validation for:
     atomic-add coverage for each supported input dtype)
   - basic_mmad_ptr (basic_mmad_ptr.py)
   - basic_vadd (basic_vadd.py with per-dtype CLI invocations, plus mutex variants)
-  - basic_mixed (basic_mixed.py --run dynamic GM mnk list, including --use-mutex; basic_mixed_ub2l1.py --run,
-    basic_mixed_store_zN.py --run, basic_mixed_store_zNUnAlign.py --run for m=64/m=50, basic_mixed_fixpipe_nz2dn.py --run)
-  - binary_op (binary_op.py <op> --run --all-dtypes for add/sub/mul/div/max/min/add_unalign/add_brc_b32)
-  - masked_binary (masked_binary.py masked_binary --run --all-dtypes)
-  - bitwise_ops (bitwise_ops.py bitwise_ops --run --all-dtypes)
+  - basic_mixed (basic_mixed.py with dynamic GM mnk list, including --use-mutex; basic_mixed_ub2l1.py,
+    basic_mixed_store_zN.py, basic_mixed_store_zNUnAlign.py for m=64/m=50)
+  - binary_op (binary_op.py <op> --all-dtypes for add/sub/mul/div/max/min/add_unalign/add_brc_b32)
+  - masked_binary (masked_binary.py masked_binary --all-dtypes)
+  - bitwise_ops (bitwise_ops.py bitwise_ops --all-dtypes)
   - reduction_ops (reduction_ops.py <op> --run for add/max/min)
   - load_and_store_scalar_after_reduction (UB scalar load/store in tla.vector and outlined tla.vec.func)
-  - compare_mask (compare_mask.py <op> --run --all-dtypes for each compare-mask op)
-  - unary_ops (unary_ops.py <op> --run --all-dtypes for exp/log/sqrt/abs/neg/masked_unary/masked_abs/masked_neg)
-  - arange_op (arange_op.py [increase/decrease] --run --all-dtypes)
-  - interleave_op (interleave_op.py interleave/deinterleave --run --all-dtypes)
-  - load_dintlv_op (load_dintlv_op.py dintlv_b32 --run --all-dtypes; f32 only)
+  - compare_mask (compare_mask.py <op> --all-dtypes for each compare-mask op)
+  - unary_ops (unary_ops.py <op> --all-dtypes for exp/log/sqrt/abs/neg/masked_unary/masked_abs/masked_neg)
+  - arange_op (arange_op.py [increase/decrease] --all-dtypes)
+  - interleave_op (interleave_op.py interleave/deinterleave --all-dtypes)
+  - load_dintlv_op (load_dintlv_op.py dintlv_b32 --all-dtypes; f32 only)
   - load_us_b8_op (load_us_b8_op.py us_b8 --sweep --shapes 512; i8 only:
     DIST_US_B8 2x up-sample load of b8 elements)
-  - load_store_mask (load_store_mask.py load_store_mask --run --all-dtypes:
+  - load_store_mask (load_store_mask.py load_store_mask --all-dtypes:
     MaskSSA load/store round-trip via MaskLoadParams/MaskStoreParams for
     b8/b16/b32 UB carriers; companion vector fixed to f32)
-  - store_pack (store_pack.py store_pack --run --all-dtypes; i32/i16 only)
-  - squeeze_op (squeeze_op.py squeeze --run --all-dtypes)
-  - register_control_flow (register_control_flow.py register_carriers --run:
+  - store_pack (store_pack.py store_pack --all-dtypes; i32/i16 only)
+  - squeeze_op (squeeze_op.py squeeze --all-dtypes)
+  - register_control_flow (register_control_flow.py register_carriers:
     mixed VectorSSA/MaskSSA scf.for carriers and masked store)
   - scalar_index_control_flow (scalar_index_control_flow.py: GM scalar read/write,
     loop/dynamic-if/constexpr-if, vec.func, AST Numeric / index-vs-Int32 compare)
@@ -371,6 +372,10 @@ if [[ ! -f "${TLA_DSL_DIR}/${BASIC_MIXED_REL}" ]]; then
     echo "error: missing ${BASIC_MIXED_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
 fi
+if [[ ! -f "${TLA_DSL_DIR}/${BASIC_MIXED_MUTEX_REL}" ]]; then
+    echo "error: missing ${BASIC_MIXED_MUTEX_REL} under ${TLA_DSL_DIR}" >&2
+    exit 1
+fi
 if [[ ! -f "${TLA_DSL_DIR}/${BASIC_MIXED_UB2L1_REL}" ]]; then
     echo "error: missing ${BASIC_MIXED_UB2L1_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
@@ -558,32 +563,41 @@ _run_basic_vadd_case "enable atomic add" --use-atomic-add
 _run_basic_mixed_case() {
     local cache_mode="$1"
     shift
-    echo "==> Running basic_mixed validation [dynamic GM mnk list, tensor print, ${cache_mode}]: --run --device ${DEVICE_ID} --block-dim 1 $*"
+    echo "==> Running basic_mixed validation [dynamic GM mnk list, tensor print, ${cache_mode}]: --device ${DEVICE_ID} --block-dim 1 $*"
     (
         cd "${TLA_DSL_DIR}"
-        python "${BASIC_MIXED_REL}" --run --device "${DEVICE_ID}" --block-dim 1 "$@"
+        python "${BASIC_MIXED_REL}" --device "${DEVICE_ID}" --block-dim 1 "$@"
     )
 }
 
 _run_basic_mixed_case "forced compilation" --force-recompile
 _run_basic_mixed_case "cache reuse"
-_run_basic_mixed_case "mutex mode, forced compilation" --use-mutex --force-recompile
 
-_run_basic_mixed_ub2l1_case() {
-    echo "==> Running basic_mixed_ub2l1 validation [fixed shape/dtypes, gm->ub->l1]: --run --device ${DEVICE_ID}"
+_run_basic_mixed_mutex_case() {
+    echo "==> Running basic_mixed_mutex validation [mutex sync]: --device ${DEVICE_ID} --block-dim 1"
     (
         cd "${TLA_DSL_DIR}"
-        python "${BASIC_MIXED_UB2L1_REL}" --run --device "${DEVICE_ID}" --force-recompile
+        python "${BASIC_MIXED_MUTEX_REL}" --device "${DEVICE_ID}" --block-dim 1 --force-recompile
+    )
+}
+
+_run_basic_mixed_mutex_case
+
+_run_basic_mixed_ub2l1_case() {
+    echo "==> Running basic_mixed_ub2l1 validation [fixed shape/dtypes, gm->ub->l1]: --device ${DEVICE_ID}"
+    (
+        cd "${TLA_DSL_DIR}"
+        python "${BASIC_MIXED_UB2L1_REL}" --device "${DEVICE_ID}" --force-recompile
     )
 }
 
 _run_basic_mixed_ub2l1_case
 
 _run_basic_mixed_store_zN_case() {
-    echo "==> Running basic_mixed_store_zN validation [gm->ub(row->zN)->l1]: --run --device ${DEVICE_ID}"
+    echo "==> Running basic_mixed_store_zN validation [gm->ub(row->zN)->l1]: --device ${DEVICE_ID}"
     (
         cd "${TLA_DSL_DIR}"
-        python "${BASIC_MIXED_STORE_ZN_REL}" --run --device "${DEVICE_ID}" --force-recompile
+        python "${BASIC_MIXED_STORE_ZN_REL}" --device "${DEVICE_ID}" --force-recompile
     )
 }
 
@@ -592,10 +606,10 @@ _run_basic_mixed_store_zN_case
 _run_basic_mixed_store_zNUnAlign_case() {
     local label="$1"
     shift
-    echo "==> Running basic_mixed_store_zNUnAlign validation [${label}]: --run --device ${DEVICE_ID} $*"
+    echo "==> Running basic_mixed_store_zNUnAlign validation [${label}]: --device ${DEVICE_ID} $*"
     (
         cd "${TLA_DSL_DIR}"
-        python "${BASIC_MIXED_STORE_ZNUNALIGN_REL}" --run --device "${DEVICE_ID}" "$@"
+        python "${BASIC_MIXED_STORE_ZNUNALIGN_REL}" --device "${DEVICE_ID}" "$@"
     )
 }
 
@@ -605,10 +619,10 @@ _run_basic_mixed_store_zNUnAlign_case "m=64 (fractal-aligned)" --m 64
 _run_basic_mixed_store_zNUnAlign_case "m=50 (non-aligned)" --m 50
 
 _run_basic_mixed_fixpipe_nz2dn_case() {
-    echo "==> Running basic_mixed_fixpipe_nz2dn validation [fixed shape/dtypes]: --run --device ${DEVICE_ID}"
+    echo "==> Running basic_mixed_fixpipe_nz2dn validation [fixed shape/dtypes]: --device ${DEVICE_ID}"
     (
         cd "${TLA_DSL_DIR}"
-        python "${BASIC_MIXED_FIXPIPE_NZ2DN_REL}" --run --device "${DEVICE_ID}" --force-recompile
+        python "${BASIC_MIXED_FIXPIPE_NZ2DN_REL}" --device "${DEVICE_ID}" --force-recompile
     )
 }
 
@@ -752,20 +766,20 @@ _run_load_us_b8_op_case() {
 _run_load_us_b8_op_case
 
 _run_load_store_mask_case() {
-    echo "==> Running load_store_mask validation [b8/b16/b32 carriers]: load_store_mask --run --all-dtypes --device ${DEVICE_ID}"
+    echo "==> Running load_store_mask validation [b8/b16/b32 carriers]: load_store_mask --all-dtypes --device ${DEVICE_ID}"
     (
         cd "${TLA_DSL_DIR}"
-        python "${LOAD_STORE_MASK_REL}" load_store_mask --run --all-dtypes --device "${DEVICE_ID}"
+        python "${LOAD_STORE_MASK_REL}" load_store_mask --all-dtypes --device "${DEVICE_ID}"
     )
 }
 
 _run_load_store_mask_case
 
 _run_store_pack_case() {
-    echo "==> Running store_pack validation [i32/i16 only]: store_pack --run --all-dtypes --device ${DEVICE_ID}"
+    echo "==> Running store_pack validation [i32/i16 only]: store_pack --all-dtypes --device ${DEVICE_ID}"
     (
         cd "${TLA_DSL_DIR}"
-        python "${STORE_PACK_REL}" store_pack --run --all-dtypes --device "${DEVICE_ID}"
+        python "${STORE_PACK_REL}" store_pack --all-dtypes --device "${DEVICE_ID}"
     )
 }
 
@@ -784,10 +798,10 @@ _run_squeeze_op_case() {
 _run_squeeze_op_case
 
 _run_register_control_flow_case() {
-    echo "==> Running register_control_flow validation [mixed VectorSSA/MaskSSA carriers]: register_carriers --run --device ${DEVICE_ID}"
+    echo "==> Running register_control_flow validation [mixed VectorSSA/MaskSSA carriers]: register_carriers --device ${DEVICE_ID}"
     (
         cd "${TLA_DSL_DIR}"
-        python "${REGISTER_CONTROL_FLOW_REL}" register_carriers --run \
+        python "${REGISTER_CONTROL_FLOW_REL}" register_carriers \
             --device "${DEVICE_ID}" --force-recompile
     )
 }

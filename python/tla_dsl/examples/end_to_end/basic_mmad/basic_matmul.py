@@ -245,7 +245,6 @@ def golden(a, b, out_dtype):
         expected = expected.to(out_dtype).to(torch.float32)
     return expected
 
-
 def run(args: argparse.Namespace) -> int:
     import sys
     import torch

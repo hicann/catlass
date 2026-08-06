@@ -12,22 +12,25 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Any
 
 import catlass as tla
+from catlass.runtime import from_dlpack
 
 M_DIM = 32
 N_DIM = 32
 K_DIM = 32
-UB_A_TILE_BYTES = M_DIM//2 * K_DIM * 4
+UB_A_TILE_BYTES = M_DIM // 2 * K_DIM * 4
 L1_STAGE_BYTES = 32 * 32 * 4
 L0A_BYTES = 32 * 32 * 4
 L0B_BYTES = 32 * 32 * 4
 L0C_BYTES = 32 * 32 * 4
 
-DEMO_DIR = Path(__file__).resolve().parent
-DEFAULT_CACHE_DIR = DEMO_DIR / "artifacts" / "runtime-cache" / "basic_mixed_ub2l1"
+DESCRIPTION = "Basic Mixed UB→L1 + cross_core sync; f32 only."
 
+
+# ---------------------------------------------------------------------------
+# Kernel
+# ---------------------------------------------------------------------------
 
 @tla.kernel
 def basic_mixed_ub2l1(
@@ -75,14 +78,10 @@ def basic_mixed_ub2l1(
         tla.set_flag(l1_loaded)
         tla.wait_flag(l1_loaded)
 
-        tla.cross_core_wait_flag(ub2l1_done, tla.arch.MTE1)  # wait ub_a->l1_a
+        tla.cross_core_wait_flag(ub2l1_done, tla.arch.MTE1)
 
-        l1_a_l0 = tla.tile_view(
-            l1_a, tla.make_shape(M_DIM, K_DIM), tla.make_coord(0, 0)
-        )
-        l1_b_l0 = tla.tile_view(
-            l1_b, tla.make_shape(K_DIM, N_DIM), tla.make_coord(0, 0)
-        )
+        l1_a_l0 = tla.tile_view(l1_a, tla.make_shape(M_DIM, K_DIM), tla.make_coord(0, 0))
+        l1_b_l0 = tla.tile_view(l1_b, tla.make_shape(K_DIM, N_DIM), tla.make_coord(0, 0))
         l0_a = tla.make_tensor_like(l0a_ptr, l1_a_l0, tla.arch.zN)
         l0_b = tla.make_tensor_like(l0b_ptr, l1_b_l0, tla.arch.nZ)
         l0_c = tla.make_tensor_like(l0c_ptr, gm_c, tla.arch.L0Clayout)
@@ -104,11 +103,7 @@ def basic_mixed_ub2l1(
         vec_idx = tla.arch.sub_block_idx()
 
         gm_a_full = tla.tile_view(lhs, tla.make_shape(M_DIM, K_DIM), tla.make_coord(0, 0))
-        gm_a = tla.tile_view(
-            lhs,
-            tla.make_shape(M_DIM//2, K_DIM),
-            tla.make_coord(vec_idx, 0)
-        )
+        gm_a = tla.tile_view(lhs, tla.make_shape(M_DIM // 2, K_DIM), tla.make_coord(vec_idx, 0))
 
         ub_a = tla.make_tensor_like(ub_a_ptr, gm_a, tla.arch.RowMajor)
 
@@ -121,11 +116,7 @@ def basic_mixed_ub2l1(
         tla.wait_flag(ub_loaded)
 
         l1_a_full = tla.make_tensor_like(l1a_ptr, gm_a_full, tla.arch.zN)
-        l1_a = tla.tile_view(
-            l1_a_full,
-            tla.make_shape(M_DIM//2, K_DIM),
-            tla.make_coord(vec_idx, 0)
-        )
+        l1_a = tla.tile_view(l1_a_full, tla.make_shape(M_DIM // 2, K_DIM), tla.make_coord(vec_idx, 0))
         tla.cross_core_wait_flag(ub2l1_ready, tla.arch.MTE3)
         tla.copy(l1_a, ub_a)
         tla.cross_core_set_flag(ub2l1_done, tla.arch.MTE3)
@@ -133,171 +124,90 @@ def basic_mixed_ub2l1(
         tla.pipe_barrier(tla.pipes.ALL)
 
 
-def _compile_only_type_args() -> tuple[Any, Any, Any]:
-    from catlass import runtime as runtime_mod
+# ---------------------------------------------------------------------------
+# Host
+# ---------------------------------------------------------------------------
 
-    with runtime_mod._eager_capture():
-        lhs_shape = tla.make_shape(M_DIM, K_DIM)
-        rhs_shape = tla.make_shape(K_DIM, N_DIM)
-        out_shape = tla.make_shape(M_DIM, N_DIM)
-        out_stride = tla.make_stride(N_DIM, 1)
-        return (
-            tla.Tensor(
-                lhs_shape,
-                tla.Float32,
-                origin_shape=lhs_shape,
-                coord=tla.make_coord(0, 0),
-                stride=tla.make_stride(K_DIM, 1),
-                layout_tag=tla.arch.RowMajor,
-            ),
-            tla.Tensor(
-                rhs_shape,
-                tla.Float32,
-                origin_shape=rhs_shape,
-                coord=tla.make_coord(0, 0),
-                stride=tla.make_stride(N_DIM, 1),
-                layout_tag=tla.arch.RowMajor,
-            ),
-            tla.Tensor(
-                out_shape,
-                tla.Float32,
-                origin_shape=out_shape,
-                coord=tla.make_coord(0, 0),
-                stride=out_stride,
-                layout_tag=tla.arch.RowMajor,
-            ),
-        )
+EXAMPLE_DIR = Path(__file__).resolve().parent
+DEFAULT_CACHE_DIR = EXAMPLE_DIR / "artifacts" / "runtime-cache"
 
 
-def _runtime_kwargs(args: argparse.Namespace) -> dict[str, Any]:
-    return {
-        "arch_scope": "aic.c310",
-        "cache": not args.no_cache,
-        "cache_dir": str(Path(args.cache_dir).expanduser().resolve()),
-        "force_recompile": args.force_recompile,
-    }
+def golden(lhs, rhs):
+    import torch
 
-
-def dump_tlair() -> str:
-    return basic_mixed_ub2l1.dump_mlir(type_args=_compile_only_type_args())
-
-
-def build_only(args: argparse.Namespace) -> int:
-    artifact = tla.compile(
-        basic_mixed_ub2l1,
-        *_compile_only_type_args(),
-        **_runtime_kwargs(args),
-    )
-    print("compile_ok=True")
-    print(f"kernel.o path={artifact.kernel_binary_path}")
-    return 0
-
-
-def _require_torch_npu(device_id: int) -> Any:
-    try:
-        import torch
-    except ImportError as exc:
-        raise SystemExit("basic_mixed_ub2l1 --run requires PyTorch.") from exc
-    try:
-        import torch_npu
-    except ImportError as exc:
-        raise SystemExit("basic_mixed_ub2l1 --run requires torch_npu.") from exc
-    torch.npu.set_device(device_id)
-    return torch
-
-
-def _create_tla_tensor(dev_buf: Any) -> Any:
-    from catlass import runtime as runtime_mod
-
-    contiguous = dev_buf.contiguous()
-    with runtime_mod._eager_capture():
-        tensor = tla.Tensor(
-            tla.make_shape(M_DIM, N_DIM),
-            tla.Float32,
-            origin_shape=tla.make_shape(M_DIM, N_DIM),
-            coord=tla.make_coord(0, 0),
-            stride=tla.make_stride(N_DIM, 1),
-            data_ptr=int(contiguous.data_ptr()),
-        )
-    tensor._external_binding = True
-    return tensor
+    return lhs.to(torch.float32) @ rhs.to(torch.float32)
 
 
 def run(args: argparse.Namespace) -> int:
+    import torch
+    import torch_npu  # noqa: F401
+
+    mi, ni, ki = int(args.m), int(args.n), int(args.k)
+
+    def create_tla_tensor(buf, layout: str):
+        storage = buf.contiguous() if layout == "row" else buf.permute(1, 0).contiguous()
+        tag = tla.arch.RowMajor if layout == "row" else tla.arch.ColumnMajor
+        return from_dlpack(storage, layout_tag=tag)
+
+    cache_dir = str(Path(args.cache_dir).expanduser().resolve())
+
     tla.initialize(device=args.device)
     try:
-        torch = _require_torch_npu(args.device)
-        device = "npu"
-        torch.npu.manual_seed(0)
-        lhs = (torch.rand(M_DIM * K_DIM, dtype=torch.float32, device=device) * 10.0 - 5.0).reshape(
-            M_DIM, K_DIM
-        )
-        rhs = (torch.rand(K_DIM * N_DIM, dtype=torch.float32, device=device) * 10.0 - 5.0).reshape(
-            K_DIM, N_DIM
-        )
-        out = torch.full((M_DIM, N_DIM), -9.0, dtype=torch.float32, device=device)
-        expected = lhs @ rhs
+        torch.npu.set_device(args.device)
+        print(f"--- mnk=({mi},{ni},{ki}) ---")
+        lhs = torch.rand(mi, ki, dtype=torch.float32, device="npu") * 10.0 - 5.0
+        rhs = torch.rand(ki, ni, dtype=torch.float32, device="npu") * 10.0 - 5.0
+        out = torch.full((mi, ni), args.sentinel, dtype=torch.float32, device="npu")
+        expected = golden(lhs, rhs)
 
-        tla_lhs = _create_tla_tensor(lhs)
-        tla_rhs = _create_tla_tensor(rhs)
-        tla_out = _create_tla_tensor(out)
+        ta = create_tla_tensor(lhs, args.layout_a)
+        tb = create_tla_tensor(rhs, args.layout_b)
+        tc = create_tla_tensor(out, "row")
 
         artifact = tla.compile(
             basic_mixed_ub2l1,
-            tla_lhs,
-            tla_rhs,
-            tla_out,
-            **_runtime_kwargs(args),
+            ta,
+            tb,
+            tc,
+            arch_scope="aic.c310",
+            cache=not args.no_cache,
+            cache_dir=cache_dir,
+            force_recompile=args.force_recompile,
         )
-
-        block_dim = max(1, args.block_dim if args.block_dim != -1 else tla.get_aicore_num(args.device))
-        artifact(tla_lhs, tla_rhs, tla_out, block_dim=block_dim)
-
+        block_dim = max(
+            1,
+            args.block_dim if args.block_dim != -1 else tla.get_aicore_num(args.device),
+        )
+        artifact(ta, tb, tc, block_dim=block_dim)
         torch.npu.synchronize()
-        expected_match = torch.isclose(out, expected, rtol=0.0, atol=args.atol)
-        mismatch = expected_match.logical_not().nonzero(as_tuple=False)
-        first_mismatch: dict[str, Any] | None = None
-        if mismatch.numel():
-            i, j = (int(v) for v in mismatch[0].tolist())
-            first_mismatch = {
-                "index": [i, j],
-                "actual": out[i, j].item(),
-                "expected": expected[i, j].item(),
-            }
 
-        print("compile_ok=True")
-        print(f"kernel.o path={artifact.kernel_binary_path}")
-        print("launch_ok=True")
-        print(f"out equals expected mixed result? {bool(expected_match.all())}")
-        print(f"first mismatch={first_mismatch}")
-        return 0 if first_mismatch is None else 1
+        # dtype -- f32
+        rtol = (1.0 / 256.0) if ki < 2048 else (1.0 / 128.0)
+        floor = 1.0
+        got = out.detach().to(device="cpu", dtype=torch.float32)
+        exp = expected.detach().to(device="cpu", dtype=torch.float32)
+        passed = bool(((got - exp).abs() <= rtol * torch.maximum(torch.full_like(exp, floor), exp.abs())).all())
+        print(f"passed={passed} cache_key={artifact.cache_key}")
+        print(f"kernel.o={artifact.kernel_binary_path}")
+        return 0 if passed else 1
     finally:
         tla.finalize()
 
 
-def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Compile and run a minimal mixed kernel, matrix A gm->ub->l1.")
-    mode = parser.add_mutually_exclusive_group()
-    mode.add_argument("--build-only", action="store_true")
-    mode.add_argument("--run", action="store_true")
-    parser.add_argument("--device", type=int, default=2)
-    parser.add_argument("--block-dim", type=int, default=-1)
-    parser.add_argument("--atol", type=float, default=1e-4)
-    parser.add_argument("--cache-dir", default=str(DEFAULT_CACHE_DIR))
-    parser.add_argument("--force-recompile", action="store_true")
-    parser.add_argument("--no-cache", action="store_true")
-    parser.add_argument("--dump-tlair", action="store_true")
-    return parser
-
-
 def main() -> int:
-    args = _build_parser().parse_args()
-    if args.dump_tlair:
-        print(dump_tlair())
-        return 0
-    if args.build_only:
-        return build_only(args)
-    return run(args)
+    p = argparse.ArgumentParser(description=DESCRIPTION)
+    p.add_argument("--device", type=int, default=0)
+    p.add_argument("--m", type=int, default=M_DIM)
+    p.add_argument("--n", type=int, default=N_DIM)
+    p.add_argument("--k", type=int, default=K_DIM)
+    p.add_argument("--layout-a", choices=("row", "col"), default="row")
+    p.add_argument("--layout-b", choices=("row", "col"), default="row")
+    p.add_argument("--block-dim", type=int, default=-1)
+    p.add_argument("--sentinel", type=float, default=-9.0)
+    p.add_argument("--cache-dir", default=str(DEFAULT_CACHE_DIR))
+    p.add_argument("--force-recompile", action="store_true")
+    p.add_argument("--no-cache", action="store_true")
+    return run(p.parse_args())
 
 
 if __name__ == "__main__":

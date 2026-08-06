@@ -259,11 +259,11 @@ def require_torch_npu(device_id: int, script_name: str) -> Any:
     try:
         import torch
     except ImportError as exc:
-        raise SystemExit(f"{script_name} --run requires PyTorch.") from exc
+        raise SystemExit(f"{script_name} requires PyTorch.") from exc
     try:
         import torch_npu  # noqa: F401
     except ImportError as exc:
-        raise SystemExit(f"{script_name} --run requires torch_npu.") from exc
+        raise SystemExit(f"{script_name} requires torch_npu.") from exc
     torch.npu.set_device(device_id)
     return torch
 
@@ -275,27 +275,6 @@ class DirectVectorOpHarness:
 
     def _runtime_kwargs(self, args: argparse.Namespace) -> dict[str, Any]:
         return runtime_kwargs(args)
-
-    def dump_tlair(self, args: argparse.Namespace) -> str:
-        if self.config.unsupported_case(args.op, args.dtype):
-            self.config.print_skip(args.op, args.dtype, args.shape)
-            return ""
-        return self.config.kernel.dump_mlir(
-            type_args=self.config.compile_only_type_args(args.op, args.dtype, args.shape)
-        )
-
-    def build_only(self, args: argparse.Namespace) -> int:
-        if self.config.unsupported_case(args.op, args.dtype):
-            self.config.print_skip(args.op, args.dtype, args.shape)
-            return 0
-        artifact = tla.compile(
-            self.config.kernel,
-            *self.config.compile_only_type_args(args.op, args.dtype, args.shape),
-            **self._runtime_kwargs(args),
-        )
-        print("compile_ok=True")
-        print(f"kernel.o path={artifact.kernel_binary_path}")
-        return 0
 
     def _case_cache_dir(
         self, args: argparse.Namespace, op_name: str, dtype_name: str, shape: tuple[int, ...]
@@ -870,7 +849,6 @@ class DirectVectorOpHarness:
         )
         mode = parser.add_mutually_exclusive_group()
         mode.add_argument("--build-only", action="store_true")
-        mode.add_argument("--run", action="store_true")
         mode.add_argument("--sweep", action="store_true")
         mode.add_argument(
             "--batch-run",
@@ -917,7 +895,6 @@ class DirectVectorOpHarness:
         parser.add_argument("--cache-dir", default=str(DEFAULT_CACHE_DIR))
         parser.add_argument("--force-recompile", action="store_true")
         parser.add_argument("--no-cache", action="store_true")
-        parser.add_argument("--dump-tlair", action="store_true")
         parser.add_argument("--fail-fast", action="store_true")
         parser.add_argument(
             "--precompile-sweep",
@@ -957,17 +934,6 @@ class DirectVectorOpHarness:
             args.shapes = tuple((size,) for size in args.sizes)
         elif args.shapes is None:
             args.shapes = tuple((size,) for size in DEFAULT_SHAPES)
-        if args.dump_tlair:
-            if args.all_dtypes:
-                raise SystemExit("--dump-tlair requires a single dtype.")
-            dumped = self.dump_tlair(args)
-            if dumped:
-                print(dumped)
-            return 0
         if args.sweep:
             return self.sweep(args)
-        if args.build_only:
-            if args.all_dtypes:
-                raise SystemExit("--build-only requires a single dtype.")
-            return self.build_only(args)
         return self.run(args)
