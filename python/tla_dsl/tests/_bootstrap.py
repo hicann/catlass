@@ -36,8 +36,8 @@ def _resolve_mlir_include_dir(
             f"`mlir/IR/OpBase.td`: {configured_path}"
         )
 
-    # 自动从 CATLASS_DSL_PREBUILT_ASCENDNPU_IR 派生 MLIR include
-    prebuilt = env.get("CATLASS_DSL_PREBUILT_ASCENDNPU_IR")
+    # 自动从 TLA_DSL_PREBUILT_ASCENDNPU_IR 派生 MLIR include
+    prebuilt = env.get("TLA_DSL_PREBUILT_ASCENDNPU_IR")
     if prebuilt:
         npu_include = Path(prebuilt) / "build" / "install" / "include"
         if _has_opbase(npu_include):
@@ -60,7 +60,7 @@ def _resolve_mlir_include_dir(
 
     raise PretestBuildError(
         "Unable to locate MLIR includes containing `mlir/IR/OpBase.td`. "
-        "Set `MLIR_TBLGEN_INCLUDE_DIR` or `CATLASS_DSL_PREBUILT_ASCENDNPU_IR`, "
+        "Set `MLIR_TBLGEN_INCLUDE_DIR` or `TLA_DSL_PREBUILT_ASCENDNPU_IR`, "
         "or ensure `llvm-config` is available with MLIR headers."
     )
 
@@ -70,8 +70,8 @@ def _resolve_mlir_dir(*, env: Mapping[str, str]) -> str | None:
     if configured:
         return configured
 
-    # 自动从 CATLASS_DSL_PREBUILT_ASCENDNPU_IR 派生 MLIR_DIR
-    prebuilt = env.get("CATLASS_DSL_PREBUILT_ASCENDNPU_IR")
+    # 自动从 TLA_DSL_PREBUILT_ASCENDNPU_IR 派生 MLIR_DIR
+    prebuilt = env.get("TLA_DSL_PREBUILT_ASCENDNPU_IR")
     if prebuilt:
         npu_mlir_dir = Path(prebuilt) / "build" / "install" / "lib" / "cmake" / "mlir"
         if npu_mlir_dir.is_dir():
@@ -169,20 +169,20 @@ def ensure_pretest_mlir_build(repo_root: Path) -> None:
 
     Environment variables
     ---------------------
-    CATLASS_DSL_SKIP_PRETEST_BUILD : str
+    TLA_DSL_SKIP_PRETEST_BUILD : str
         If truthy (1/true/on/yes), unconditionally skip the build.
-    CATLASS_DSL_FORCE_PRETEST_BUILD : str
+    TLA_DSL_FORCE_PRETEST_BUILD : str
         If truthy, unconditionally trigger a full cmake + ninja build,
         even when pre-built binaries already exist.
     """
     env = dict(os.environ)
 
-    if _is_truthy(env.get("CATLASS_DSL_SKIP_PRETEST_BUILD")):
+    if _is_truthy(env.get("TLA_DSL_SKIP_PRETEST_BUILD")):
         return
 
     build_dir = repo_root / "csrc" / "mlir" / "build"
 
-    if not _is_truthy(env.get("CATLASS_DSL_FORCE_PRETEST_BUILD")):
+    if not _is_truthy(env.get("TLA_DSL_FORCE_PRETEST_BUILD")):
         if _prebuilt_binaries_exist(build_dir):
             return
 

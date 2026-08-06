@@ -1363,7 +1363,7 @@ def runtime_options_from_kwargs(kwargs: Mapping[str, Any]) -> TlaRuntimeOptions:
     _, core_type = _parse_arch_scope(arch_scope)
     return TlaRuntimeOptions(
         cache_enabled=bool(
-            kwargs.get("cache", _env_truthy("CATLASS_DSL_CACHE", default="1"))
+            kwargs.get("cache", _env_truthy("TLA_DSL_CACHE", default="1"))
         ),
         cache_dir=(
             Path(str(kwargs["cache_dir"])).expanduser().resolve()
@@ -1372,7 +1372,7 @@ def runtime_options_from_kwargs(kwargs: Mapping[str, Any]) -> TlaRuntimeOptions:
         ),
         force_recompile=bool(
             kwargs.get(
-                "force_recompile", _env_truthy("CATLASS_DSL_FORCE_RECOMPILE", default="0")
+                "force_recompile", _env_truthy("TLA_DSL_FORCE_RECOMPILE", default="0")
             )
         ),
         kernel_mode=core_type,
@@ -1509,7 +1509,7 @@ def _tool_fingerprint(binary: Path | None) -> str:
 
 
 def _default_cache_dir() -> Path:
-    cache = os.getenv("CATLASS_DSL_CACHE_DIR")
+    cache = os.getenv("TLA_DSL_CACHE_DIR")
     if cache:
         return Path(cache).expanduser().resolve()
     xdg = os.getenv("XDG_CACHE_HOME")
@@ -1871,7 +1871,7 @@ def _run_typed_bridge_to_mlir(
 
 
 def _resolve_tla_compile() -> Path | None:
-    explicit = os.getenv("CATLASS_DSL_COMPILE")
+    explicit = os.getenv("TLA_DSL_COMPILE")
     candidates: list[Path] = []
     if explicit:
         candidates.append(Path(explicit).expanduser().resolve())

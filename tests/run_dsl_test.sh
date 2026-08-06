@@ -29,11 +29,11 @@
 # Toolchain paths (env overrides first; directory-layout fallbacks last):
 #   CANN:             ASCEND_HOME_PATH (source set_env.sh if not already in env)
 #                     → WORKSPACE_ROOT/Ascend/9.1.0-beta.3/ascend-toolkit/set_env.sh
-#   AscendNPU-IR: CATLASS_DSL_PREBUILT_ASCENDNPU_IR
-#                     → CATLASS_DSL_ASCENDNPU_IR_ROOT
+#   AscendNPU-IR: TLA_DSL_PREBUILT_ASCENDNPU_IR
+#                     → TLA_DSL_ASCENDNPU_IR_ROOT
 #                     → WORKSPACE_ROOT/AscendNPU-IR
-#                     → CATLASS_DSL_DIR/3rdparty/AscendNPU-IR
-#   TLA DSL:          CATLASS_DSL_DIR → CATDSL_ROOT/python/tla_dsl
+#                     → TLA_DSL_DIR/3rdparty/AscendNPU-IR
+#   TLA DSL:          TLA_DSL_DIR → CATDSL_ROOT/python/tla_dsl
 #
 # CANN 9.1+ ships hivmc-a5 in toolkit; no separate HIVMC sibling is required.
 # LLVM/MLIR come from AscendNPU-IR build/install, not from conda.
@@ -41,7 +41,7 @@
 # Usage:
 #   bash tests/run_dsl_test.sh
 #   bash tests/run_dsl_test.sh --device 0
-#   CATLASS_DSL_PREBUILT_ASCENDNPU_IR=/path/to/AscendNPU-IR bash tests/run_dsl_test.sh --device 0
+#   TLA_DSL_PREBUILT_ASCENDNPU_IR=/path/to/AscendNPU-IR bash tests/run_dsl_test.sh --device 0
 
 set -euo pipefail
 
@@ -49,7 +49,7 @@ SCRIPT_PATH=$(dirname "$(realpath "$0")")
 CATDSL_ROOT="$(realpath "${SCRIPT_PATH}/..")"
 WORKSPACE_ROOT="${ASCEND_CATLASS_DSL_ROOT:-$(dirname "${CATDSL_ROOT}")}"
 
-CATLASS_DSL_DIR="${CATLASS_DSL_DIR:-${CATDSL_ROOT}/python/tla_dsl}"
+TLA_DSL_DIR="${TLA_DSL_DIR:-${CATDSL_ROOT}/python/tla_dsl}"
 
 _resolve_cann_set_env_sh() {
     if [[ -n "${ASCEND_HOME_PATH:-}" && -f "${ASCEND_HOME_PATH}/set_env.sh" ]]; then
@@ -65,20 +65,20 @@ _resolve_cann_set_env_sh() {
 }
 
 # Prefer env for AscendNPU-IR; fall back to monorepo sibling, then in-tree 3rdparty.
-if [[ -z "${CATLASS_DSL_PREBUILT_ASCENDNPU_IR:-}" ]]; then
-    if [[ -n "${CATLASS_DSL_ASCENDNPU_IR_ROOT:-}" ]]; then
-        CATLASS_DSL_PREBUILT_ASCENDNPU_IR="${CATLASS_DSL_ASCENDNPU_IR_ROOT}"
+if [[ -z "${TLA_DSL_PREBUILT_ASCENDNPU_IR:-}" ]]; then
+    if [[ -n "${TLA_DSL_ASCENDNPU_IR_ROOT:-}" ]]; then
+        TLA_DSL_PREBUILT_ASCENDNPU_IR="${TLA_DSL_ASCENDNPU_IR_ROOT}"
     elif [[ -d "${WORKSPACE_ROOT}/AscendNPU-IR" ]]; then
-        CATLASS_DSL_PREBUILT_ASCENDNPU_IR="${WORKSPACE_ROOT}/AscendNPU-IR"
+        TLA_DSL_PREBUILT_ASCENDNPU_IR="${WORKSPACE_ROOT}/AscendNPU-IR"
     else
-        CATLASS_DSL_PREBUILT_ASCENDNPU_IR="${CATLASS_DSL_DIR}/3rdparty/AscendNPU-IR"
+        TLA_DSL_PREBUILT_ASCENDNPU_IR="${TLA_DSL_DIR}/3rdparty/AscendNPU-IR"
     fi
 fi
-CATLASS_DSL_ASCENDNPU_IR_ROOT="${CATLASS_DSL_ASCENDNPU_IR_ROOT:-${CATLASS_DSL_PREBUILT_ASCENDNPU_IR}}"
+TLA_DSL_ASCENDNPU_IR_ROOT="${TLA_DSL_ASCENDNPU_IR_ROOT:-${TLA_DSL_PREBUILT_ASCENDNPU_IR}}"
 
 CONDA_ENV="${CONDA_ENV:-ascend-catlass-dsl}"
 DEVICE_ID="${DEVICE_ID:-1}"
-COMPILE_JOBS="${CATLASS_DSL_COMPILE_JOBS:-4}"
+COMPILE_JOBS="${TLA_DSL_COMPILE_JOBS:-4}"
 
 BASIC_MMAD_REL="examples/end_to_end/basic_mmad/basic_matmul.py"
 BASIC_MMAD_AUTO_SYNC_REL="examples/end_to_end/basic_mmad/basic_matmul_auto_sync.py"
@@ -176,14 +176,14 @@ Options:
   -h, --help              Show this help
   --device ID             NPU device id (default: ${DEVICE_ID})
   --compile-jobs N        Host-only compiler processes for vector dtype batches
-                          (default: ${COMPILE_JOBS}; env: CATLASS_DSL_COMPILE_JOBS)
+                          (default: ${COMPILE_JOBS}; env: TLA_DSL_COMPILE_JOBS)
                           Compatible same-dtype op batches use up to four NPU
                           blocks in one fused kernel.
 
 Paths (auto from script location):
   WORKSPACE_ROOT=${WORKSPACE_ROOT}   (override: ASCEND_CATLASS_DSL_ROOT)
   CATDSL_ROOT=${CATDSL_ROOT}
-  CATLASS_DSL_DIR=${CATLASS_DSL_DIR}
+  TLA_DSL_DIR=${TLA_DSL_DIR}
   CONDA_ENV=${CONDA_ENV}
 
 Toolchain (env first, layout fallback last):
@@ -191,17 +191,17 @@ Toolchain (env first, layout fallback last):
     resolve: ASCEND_HOME_PATH/set_env.sh
              → WORKSPACE_ROOT/Ascend/9.1.0-beta.3/ascend-toolkit/set_env.sh
     note: sourcing CANN set_env.sh sets ASCEND_HOME_PATH automatically
-  CATLASS_DSL_PREBUILT_ASCENDNPU_IR  current: ${CATLASS_DSL_PREBUILT_ASCENDNPU_IR}
-  CATLASS_DSL_ASCENDNPU_IR_ROOT      current: ${CATLASS_DSL_ASCENDNPU_IR_ROOT}
-    resolve: CATLASS_DSL_PREBUILT_ASCENDNPU_IR → CATLASS_DSL_ASCENDNPU_IR_ROOT
+  TLA_DSL_PREBUILT_ASCENDNPU_IR  current: ${TLA_DSL_PREBUILT_ASCENDNPU_IR}
+  TLA_DSL_ASCENDNPU_IR_ROOT      current: ${TLA_DSL_ASCENDNPU_IR_ROOT}
+    resolve: TLA_DSL_PREBUILT_ASCENDNPU_IR → TLA_DSL_ASCENDNPU_IR_ROOT
              → WORKSPACE_ROOT/AscendNPU-IR
-             → CATLASS_DSL_DIR/3rdparty/AscendNPU-IR
+             → TLA_DSL_DIR/3rdparty/AscendNPU-IR
   MLIR_DIR                       (default: ${MLIR_DIR:-<after Dev export>})
 
 Example:
   bash ${SCRIPT_PATH}/run_dsl_test.sh
   bash ${SCRIPT_PATH}/run_dsl_test.sh --device 0
-  CATLASS_DSL_PREBUILT_ASCENDNPU_IR=/path/to/AscendNPU-IR \\
+  TLA_DSL_PREBUILT_ASCENDNPU_IR=/path/to/AscendNPU-IR \\
     bash ${SCRIPT_PATH}/run_dsl_test.sh --device 0
 EOF
 }
@@ -285,25 +285,25 @@ _export_toolchain_env() {
     echo "==> Exporting toolchain env"
     echo "    WORKSPACE_ROOT=${WORKSPACE_ROOT}"
 
-    if [[ ! -d "${CATLASS_DSL_PREBUILT_ASCENDNPU_IR}" ]]; then
-        echo "error: AscendNPU-IR directory not found: ${CATLASS_DSL_PREBUILT_ASCENDNPU_IR}" >&2
+    if [[ ! -d "${TLA_DSL_PREBUILT_ASCENDNPU_IR}" ]]; then
+        echo "error: AscendNPU-IR directory not found: ${TLA_DSL_PREBUILT_ASCENDNPU_IR}" >&2
         exit 1
     fi
-    export CATLASS_DSL_PREBUILT_ASCENDNPU_IR
-    export CATLASS_DSL_ASCENDNPU_IR_ROOT
-    echo "    CATLASS_DSL_PREBUILT_ASCENDNPU_IR=${CATLASS_DSL_PREBUILT_ASCENDNPU_IR}"
-    echo "    CATLASS_DSL_ASCENDNPU_IR_ROOT=${CATLASS_DSL_ASCENDNPU_IR_ROOT}"
+    export TLA_DSL_PREBUILT_ASCENDNPU_IR
+    export TLA_DSL_ASCENDNPU_IR_ROOT
+    echo "    TLA_DSL_PREBUILT_ASCENDNPU_IR=${TLA_DSL_PREBUILT_ASCENDNPU_IR}"
+    echo "    TLA_DSL_ASCENDNPU_IR_ROOT=${TLA_DSL_ASCENDNPU_IR_ROOT}"
 
-    if ! _ascendnpu_ir_dev_is_prebuilt "${CATLASS_DSL_PREBUILT_ASCENDNPU_IR}"; then
-        echo "error: AscendNPU-IR is not built at ${CATLASS_DSL_PREBUILT_ASCENDNPU_IR}" >&2
+    if ! _ascendnpu_ir_dev_is_prebuilt "${TLA_DSL_PREBUILT_ASCENDNPU_IR}"; then
+        echo "error: AscendNPU-IR is not built at ${TLA_DSL_PREBUILT_ASCENDNPU_IR}" >&2
         echo "       Build it first (see python/tla_dsl/README.md §2.4)." >&2
         exit 1
     fi
-    _export_ascendnpu_ir_dev_mlir_env "${CATLASS_DSL_PREBUILT_ASCENDNPU_IR}"
+    _export_ascendnpu_ir_dev_mlir_env "${TLA_DSL_PREBUILT_ASCENDNPU_IR}"
 }
 
 _prepare_tla_dsl() {
-    echo "==> Using AscendNPU-IR at ${CATLASS_DSL_PREBUILT_ASCENDNPU_IR}"
+    echo "==> Using AscendNPU-IR at ${TLA_DSL_PREBUILT_ASCENDNPU_IR}"
     if [[ -f "${CATDSL_ROOT}/.gitmodules" ]]; then
         (
             cd "${CATDSL_ROOT}"
@@ -311,21 +311,21 @@ _prepare_tla_dsl() {
         )
     fi
 
-    echo "==> ./build.sh (under ${CATLASS_DSL_DIR})"
+    echo "==> ./build.sh (under ${TLA_DSL_DIR})"
     (
-        cd "${CATLASS_DSL_DIR}"
+        cd "${TLA_DSL_DIR}"
         ./build.sh
     )
 }
 
 # --- main ---
 
-if [[ ! -d "${CATLASS_DSL_DIR}" ]]; then
-    echo "error: CATLASS_DSL_DIR does not exist: ${CATLASS_DSL_DIR}" >&2
+if [[ ! -d "${TLA_DSL_DIR}" ]]; then
+    echo "error: TLA_DSL_DIR does not exist: ${TLA_DSL_DIR}" >&2
     exit 1
 fi
-if [[ ! -f "${CATLASS_DSL_DIR}/build.sh" ]]; then
-    echo "error: missing build.sh under CATLASS_DSL_DIR=${CATLASS_DSL_DIR}" >&2
+if [[ ! -f "${TLA_DSL_DIR}/build.sh" ]]; then
+    echo "error: missing build.sh under TLA_DSL_DIR=${TLA_DSL_DIR}" >&2
     exit 1
 fi
 
@@ -348,112 +348,112 @@ _export_cann_build_env
 
 _export_toolchain_env
 
-echo "==> Using CATLASS_DSL_DIR=${CATLASS_DSL_DIR}"
+echo "==> Using TLA_DSL_DIR=${TLA_DSL_DIR}"
 
 _prepare_tla_dsl
 
-if [[ ! -f "${CATLASS_DSL_DIR}/${BASIC_MMAD_REL}" ]]; then
-    echo "error: missing ${BASIC_MMAD_REL} under ${CATLASS_DSL_DIR}" >&2
+if [[ ! -f "${TLA_DSL_DIR}/${BASIC_MMAD_REL}" ]]; then
+    echo "error: missing ${BASIC_MMAD_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
 fi
-if [[ ! -f "${CATLASS_DSL_DIR}/${BASIC_MMAD_AUTO_SYNC_REL}" ]]; then
-    echo "error: missing ${BASIC_MMAD_AUTO_SYNC_REL} under ${CATLASS_DSL_DIR}" >&2
+if [[ ! -f "${TLA_DSL_DIR}/${BASIC_MMAD_AUTO_SYNC_REL}" ]]; then
+    echo "error: missing ${BASIC_MMAD_AUTO_SYNC_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
 fi
-if [[ ! -f "${CATLASS_DSL_DIR}/${BASIC_MMAD_PTR_REL}" ]]; then
-    echo "error: missing ${BASIC_MMAD_PTR_REL} under ${CATLASS_DSL_DIR}" >&2
+if [[ ! -f "${TLA_DSL_DIR}/${BASIC_MMAD_PTR_REL}" ]]; then
+    echo "error: missing ${BASIC_MMAD_PTR_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
 fi
-if [[ ! -f "${CATLASS_DSL_DIR}/${BASIC_VADD_REL}" ]]; then
-    echo "error: missing ${BASIC_VADD_REL} under ${CATLASS_DSL_DIR}" >&2
+if [[ ! -f "${TLA_DSL_DIR}/${BASIC_VADD_REL}" ]]; then
+    echo "error: missing ${BASIC_VADD_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
 fi
-if [[ ! -f "${CATLASS_DSL_DIR}/${BASIC_MIXED_REL}" ]]; then
-    echo "error: missing ${BASIC_MIXED_REL} under ${CATLASS_DSL_DIR}" >&2
+if [[ ! -f "${TLA_DSL_DIR}/${BASIC_MIXED_REL}" ]]; then
+    echo "error: missing ${BASIC_MIXED_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
 fi
-if [[ ! -f "${CATLASS_DSL_DIR}/${BASIC_MIXED_MUTEX_REL}" ]]; then
-    echo "error: missing ${BASIC_MIXED_MUTEX_REL} under ${CATLASS_DSL_DIR}" >&2
+if [[ ! -f "${TLA_DSL_DIR}/${BASIC_MIXED_MUTEX_REL}" ]]; then
+    echo "error: missing ${BASIC_MIXED_MUTEX_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
 fi
-if [[ ! -f "${CATLASS_DSL_DIR}/${BASIC_MIXED_UB2L1_REL}" ]]; then
-    echo "error: missing ${BASIC_MIXED_UB2L1_REL} under ${CATLASS_DSL_DIR}" >&2
+if [[ ! -f "${TLA_DSL_DIR}/${BASIC_MIXED_UB2L1_REL}" ]]; then
+    echo "error: missing ${BASIC_MIXED_UB2L1_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
 fi
-if [[ ! -f "${CATLASS_DSL_DIR}/${BASIC_MIXED_STORE_ZN_REL}" ]]; then
-    echo "error: missing ${BASIC_MIXED_STORE_ZN_REL} under ${CATLASS_DSL_DIR}" >&2
+if [[ ! -f "${TLA_DSL_DIR}/${BASIC_MIXED_STORE_ZN_REL}" ]]; then
+    echo "error: missing ${BASIC_MIXED_STORE_ZN_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
 fi
-if [[ ! -f "${CATLASS_DSL_DIR}/${BASIC_MIXED_STORE_ZNUNALIGN_REL}" ]]; then
-    echo "error: missing ${BASIC_MIXED_STORE_ZNUNALIGN_REL} under ${CATLASS_DSL_DIR}" >&2
+if [[ ! -f "${TLA_DSL_DIR}/${BASIC_MIXED_STORE_ZNUNALIGN_REL}" ]]; then
+    echo "error: missing ${BASIC_MIXED_STORE_ZNUNALIGN_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
 fi
-if [[ ! -f "${CATLASS_DSL_DIR}/${BASIC_MIXED_FIXPIPE_NZ2DN_REL}" ]]; then
-    echo "error: missing ${BASIC_MIXED_FIXPIPE_NZ2DN_REL} under ${CATLASS_DSL_DIR}" >&2
+if [[ ! -f "${TLA_DSL_DIR}/${BASIC_MIXED_FIXPIPE_NZ2DN_REL}" ]]; then
+    echo "error: missing ${BASIC_MIXED_FIXPIPE_NZ2DN_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
 fi
-if [[ ! -f "${CATLASS_DSL_DIR}/${MASKED_BINARY_REL}" ]]; then
-    echo "error: missing ${MASKED_BINARY_REL} under ${CATLASS_DSL_DIR}" >&2
+if [[ ! -f "${TLA_DSL_DIR}/${MASKED_BINARY_REL}" ]]; then
+    echo "error: missing ${MASKED_BINARY_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
 fi
-if [[ ! -f "${CATLASS_DSL_DIR}/${BITWISE_OPS_REL}" ]]; then
-    echo "error: missing ${BITWISE_OPS_REL} under ${CATLASS_DSL_DIR}" >&2
+if [[ ! -f "${TLA_DSL_DIR}/${BITWISE_OPS_REL}" ]]; then
+    echo "error: missing ${BITWISE_OPS_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
 fi
-if [[ ! -f "${CATLASS_DSL_DIR}/${BINARY_OP_REL}" ]]; then
-    echo "error: missing ${BINARY_OP_REL} under ${CATLASS_DSL_DIR}" >&2
+if [[ ! -f "${TLA_DSL_DIR}/${BINARY_OP_REL}" ]]; then
+    echo "error: missing ${BINARY_OP_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
 fi
-if [[ ! -f "${CATLASS_DSL_DIR}/${REDUCTION_OPS_REL}" ]]; then
-    echo "error: missing ${REDUCTION_OPS_REL} under ${CATLASS_DSL_DIR}" >&2
+if [[ ! -f "${TLA_DSL_DIR}/${REDUCTION_OPS_REL}" ]]; then
+    echo "error: missing ${REDUCTION_OPS_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
 fi
-if [[ ! -f "${CATLASS_DSL_DIR}/${LOAD_STORE_SCALAR_AFTER_REDUCTION_REL}" ]]; then
-    echo "error: missing ${LOAD_STORE_SCALAR_AFTER_REDUCTION_REL} under ${CATLASS_DSL_DIR}" >&2
+if [[ ! -f "${TLA_DSL_DIR}/${LOAD_STORE_SCALAR_AFTER_REDUCTION_REL}" ]]; then
+    echo "error: missing ${LOAD_STORE_SCALAR_AFTER_REDUCTION_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
 fi
-if [[ ! -f "${CATLASS_DSL_DIR}/${COMPARE_MASK_REL}" ]]; then
-    echo "error: missing ${COMPARE_MASK_REL} under ${CATLASS_DSL_DIR}" >&2
+if [[ ! -f "${TLA_DSL_DIR}/${COMPARE_MASK_REL}" ]]; then
+    echo "error: missing ${COMPARE_MASK_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
 fi
-if [[ ! -f "${CATLASS_DSL_DIR}/${UNARY_OPS_REL}" ]]; then
-    echo "error: missing ${UNARY_OPS_REL} under ${CATLASS_DSL_DIR}" >&2
+if [[ ! -f "${TLA_DSL_DIR}/${UNARY_OPS_REL}" ]]; then
+    echo "error: missing ${UNARY_OPS_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
 fi
-if [[ ! -f "${CATLASS_DSL_DIR}/${ARANGE_OP_REL}" ]]; then
-    echo "error: missing ${ARANGE_OP_REL} under ${CATLASS_DSL_DIR}" >&2
+if [[ ! -f "${TLA_DSL_DIR}/${ARANGE_OP_REL}" ]]; then
+    echo "error: missing ${ARANGE_OP_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
 fi
-if [[ ! -f "${CATLASS_DSL_DIR}/${SQUEEZE_OP_REL}" ]]; then
-    echo "error: missing ${SQUEEZE_OP_REL} under ${CATLASS_DSL_DIR}" >&2
+if [[ ! -f "${TLA_DSL_DIR}/${SQUEEZE_OP_REL}" ]]; then
+    echo "error: missing ${SQUEEZE_OP_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
 fi
-if [[ ! -f "${CATLASS_DSL_DIR}/${REGISTER_CONTROL_FLOW_REL}" ]]; then
-    echo "error: missing ${REGISTER_CONTROL_FLOW_REL} under ${CATLASS_DSL_DIR}" >&2
+if [[ ! -f "${TLA_DSL_DIR}/${REGISTER_CONTROL_FLOW_REL}" ]]; then
+    echo "error: missing ${REGISTER_CONTROL_FLOW_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
 fi
-if [[ ! -f "${CATLASS_DSL_DIR}/${SCALAR_INDEX_CONTROL_FLOW_REL}" ]]; then
-    echo "error: missing ${SCALAR_INDEX_CONTROL_FLOW_REL} under ${CATLASS_DSL_DIR}" >&2
+if [[ ! -f "${TLA_DSL_DIR}/${SCALAR_INDEX_CONTROL_FLOW_REL}" ]]; then
+    echo "error: missing ${SCALAR_INDEX_CONTROL_FLOW_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
 fi
-if [[ ! -f "${CATLASS_DSL_DIR}/${DEBUG_PRINT_REL}" ]]; then
-    echo "error: missing ${DEBUG_PRINT_REL} under ${CATLASS_DSL_DIR}" >&2
+if [[ ! -f "${TLA_DSL_DIR}/${DEBUG_PRINT_REL}" ]]; then
+    echo "error: missing ${DEBUG_PRINT_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
 fi
-if [[ ! -f "${CATLASS_DSL_DIR}/${DEBUG_PRINT_MIXED_REL}" ]]; then
-    echo "error: missing ${DEBUG_PRINT_MIXED_REL} under ${CATLASS_DSL_DIR}" >&2
+if [[ ! -f "${TLA_DSL_DIR}/${DEBUG_PRINT_MIXED_REL}" ]]; then
+    echo "error: missing ${DEBUG_PRINT_MIXED_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
 fi
-if [[ ! -f "${CATLASS_DSL_DIR}/${DEBUG_PRINT_FORMAT_REL}" ]]; then
-    echo "error: missing ${DEBUG_PRINT_FORMAT_REL} under ${CATLASS_DSL_DIR}" >&2
+if [[ ! -f "${TLA_DSL_DIR}/${DEBUG_PRINT_FORMAT_REL}" ]]; then
+    echo "error: missing ${DEBUG_PRINT_FORMAT_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
 fi
-if [[ ! -f "${CATLASS_DSL_DIR}/${SCALAR_ARG_ALIGNMENT_REL}" ]]; then
-    echo "error: missing ${SCALAR_ARG_ALIGNMENT_REL} under ${CATLASS_DSL_DIR}" >&2
+if [[ ! -f "${TLA_DSL_DIR}/${SCALAR_ARG_ALIGNMENT_REL}" ]]; then
+    echo "error: missing ${SCALAR_ARG_ALIGNMENT_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
 fi
-if [[ ! -f "${CATLASS_DSL_DIR}/${PRINT_TENSOR_REL}" ]]; then
-    echo "error: missing ${PRINT_TENSOR_REL} under ${CATLASS_DSL_DIR}" >&2
+if [[ ! -f "${TLA_DSL_DIR}/${PRINT_TENSOR_REL}" ]]; then
+    echo "error: missing ${PRINT_TENSOR_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
 fi
 
@@ -463,7 +463,7 @@ _run_basic_mmad_case() {
     shift 2
     echo "==> Running basic_mmad validation [${label}]: ${script} $* --device ${DEVICE_ID}"
     (
-        cd "${CATLASS_DSL_DIR}"
+        cd "${TLA_DSL_DIR}"
         python "${script}" "$@" --device "${DEVICE_ID}" --force-recompile
     )
 }
@@ -532,7 +532,7 @@ _run_basic_mmad_atomic_add_cases
 _run_basic_mmad_ptr_case() {
     echo "==> Running basic_mmad_ptr validation [ptr + offset -> make_tensor]: --device ${DEVICE_ID}"
     (
-        cd "${CATLASS_DSL_DIR}"
+        cd "${TLA_DSL_DIR}"
         python "${BASIC_MMAD_PTR_REL}" --device "${DEVICE_ID}" --force-recompile
     )
 }
@@ -548,7 +548,7 @@ _run_basic_vadd_case() {
     for dtype in "${dtypes[@]}"; do
         echo "==> Running basic_vadd validation [${label}]: --dtype ${dtype} --device ${DEVICE_ID} $*"
         (
-            cd "${CATLASS_DSL_DIR}"
+            cd "${TLA_DSL_DIR}"
             python "${BASIC_VADD_REL}" --dtype "${dtype}" --device "${DEVICE_ID}" \
                 --force-recompile "$@"
         )
@@ -565,7 +565,7 @@ _run_basic_mixed_case() {
     shift
     echo "==> Running basic_mixed validation [dynamic GM mnk list, tensor print, ${cache_mode}]: --device ${DEVICE_ID} --block-dim 1 $*"
     (
-        cd "${CATLASS_DSL_DIR}"
+        cd "${TLA_DSL_DIR}"
         python "${BASIC_MIXED_REL}" --device "${DEVICE_ID}" --block-dim 1 "$@"
     )
 }
@@ -576,7 +576,7 @@ _run_basic_mixed_case "cache reuse"
 _run_basic_mixed_mutex_case() {
     echo "==> Running basic_mixed_mutex validation [mutex sync]: --device ${DEVICE_ID} --block-dim 1"
     (
-        cd "${CATLASS_DSL_DIR}"
+        cd "${TLA_DSL_DIR}"
         python "${BASIC_MIXED_MUTEX_REL}" --device "${DEVICE_ID}" --block-dim 1 --force-recompile
     )
 }
@@ -586,7 +586,7 @@ _run_basic_mixed_mutex_case
 _run_basic_mixed_ub2l1_case() {
     echo "==> Running basic_mixed_ub2l1 validation [fixed shape/dtypes, gm->ub->l1]: --device ${DEVICE_ID}"
     (
-        cd "${CATLASS_DSL_DIR}"
+        cd "${TLA_DSL_DIR}"
         python "${BASIC_MIXED_UB2L1_REL}" --device "${DEVICE_ID}" --force-recompile
     )
 }
@@ -596,7 +596,7 @@ _run_basic_mixed_ub2l1_case
 _run_basic_mixed_store_zN_case() {
     echo "==> Running basic_mixed_store_zN validation [gm->ub(row->zN)->l1]: --device ${DEVICE_ID}"
     (
-        cd "${CATLASS_DSL_DIR}"
+        cd "${TLA_DSL_DIR}"
         python "${BASIC_MIXED_STORE_ZN_REL}" --device "${DEVICE_ID}" --force-recompile
     )
 }
@@ -608,7 +608,7 @@ _run_basic_mixed_store_zNUnAlign_case() {
     shift
     echo "==> Running basic_mixed_store_zNUnAlign validation [${label}]: --device ${DEVICE_ID} $*"
     (
-        cd "${CATLASS_DSL_DIR}"
+        cd "${TLA_DSL_DIR}"
         python "${BASIC_MIXED_STORE_ZNUNALIGN_REL}" --device "${DEVICE_ID}" "$@"
     )
 }
@@ -621,7 +621,7 @@ _run_basic_mixed_store_zNUnAlign_case "m=50 (non-aligned)" --m 50
 _run_basic_mixed_fixpipe_nz2dn_case() {
     echo "==> Running basic_mixed_fixpipe_nz2dn validation [fixed shape/dtypes]: --device ${DEVICE_ID}"
     (
-        cd "${CATLASS_DSL_DIR}"
+        cd "${TLA_DSL_DIR}"
         python "${BASIC_MIXED_FIXPIPE_NZ2DN_REL}" --device "${DEVICE_ID}" --force-recompile
     )
 }
@@ -631,7 +631,7 @@ _run_basic_mixed_fixpipe_nz2dn_case
 _run_masked_binary_case() {
     echo "==> Running masked_binary validation [all dtypes]: masked_binary --sweep --shapes 400 --device ${DEVICE_ID} --force-recompile"
     (
-        cd "${CATLASS_DSL_DIR}"
+        cd "${TLA_DSL_DIR}"
         python "${MASKED_BINARY_REL}" masked_binary --sweep --shapes 400 \
             --device "${DEVICE_ID}" --compile-jobs "${COMPILE_JOBS}" \
             --force-recompile
@@ -643,7 +643,7 @@ _run_masked_binary_case
 _run_bitwise_ops_case() {
     echo "==> Running bitwise_ops validation [all dtypes]: bitwise_ops --sweep --shapes 400 --device ${DEVICE_ID} --force-recompile"
     (
-        cd "${CATLASS_DSL_DIR}"
+        cd "${TLA_DSL_DIR}"
         python "${BITWISE_OPS_REL}" bitwise_ops --sweep --shapes 400 \
             --device "${DEVICE_ID}" --compile-jobs "${COMPILE_JOBS}" \
             --force-recompile
@@ -655,7 +655,7 @@ _run_bitwise_ops_case
 _run_binary_op_batch() {
     echo "==> Running binary_op validation [batched ops, all dtypes]: --batch-run --device ${DEVICE_ID}"
     (
-        cd "${CATLASS_DSL_DIR}"
+        cd "${TLA_DSL_DIR}"
         python "${BINARY_OP_REL}" --batch-run \
             add sub mul div max min add_unalign add_brc_b32 \
             --shape 400 --batch-size 4 --device "${DEVICE_ID}" \
@@ -669,7 +669,7 @@ _run_binary_op_batch
 _run_reduction_ops_batch() {
     echo "==> Running reduction_ops validation [batched add/max/min f32]: --batch-run --device ${DEVICE_ID}"
     (
-        cd "${CATLASS_DSL_DIR}"
+        cd "${TLA_DSL_DIR}"
         python "${REDUCTION_OPS_REL}" --batch-run --device "${DEVICE_ID}" \
             --force-recompile
     )
@@ -680,7 +680,7 @@ _run_reduction_ops_batch
 _run_load_store_scalar_after_reduction_case() {
     echo "==> Running load_and_store_scalar_after_reduction validation [f32]: --device ${DEVICE_ID}"
     (
-        cd "${CATLASS_DSL_DIR}"
+        cd "${TLA_DSL_DIR}"
         python "${LOAD_STORE_SCALAR_AFTER_REDUCTION_REL}" \
             --device "${DEVICE_ID}" --force-recompile
     )
@@ -691,7 +691,7 @@ _run_load_store_scalar_after_reduction_case
 _run_compare_mask_batch() {
     echo "==> Running compare_mask validation [batched ops]: --batch-run --device ${DEVICE_ID}"
     (
-        cd "${CATLASS_DSL_DIR}"
+        cd "${TLA_DSL_DIR}"
         python "${COMPARE_MASK_REL}" --batch-run "${COMPARE_MASK_OPS[@]}" \
             --shape 400 --batch-size 4 --device "${DEVICE_ID}" \
             --compile-jobs "${COMPILE_JOBS}" \
@@ -704,7 +704,7 @@ _run_compare_mask_batch
 _run_unary_ops_batch() {
     echo "==> Running unary_ops validation [batched ops, all dtypes]: --batch-run --device ${DEVICE_ID}"
     (
-        cd "${CATLASS_DSL_DIR}"
+        cd "${TLA_DSL_DIR}"
         python "${UNARY_OPS_REL}" --batch-run \
             exp log sqrt abs neg masked_unary masked_abs masked_neg \
             --shape 400 --batch-size 4 --device "${DEVICE_ID}" \
@@ -718,7 +718,7 @@ _run_unary_ops_batch
 _run_arange_op_case() {
     echo "==> Running arange_op validation [batched increase/decrease, all dtypes]: --batch-run --device ${DEVICE_ID}"
     (
-        cd "${CATLASS_DSL_DIR}"
+        cd "${TLA_DSL_DIR}"
         python "${ARANGE_OP_REL}" --batch-run increase decrease \
             --shape 400 --batch-size 4 --device "${DEVICE_ID}" \
             --compile-jobs "${COMPILE_JOBS}" \
@@ -731,7 +731,7 @@ _run_arange_op_case
 _run_interleave_op_batch() {
     echo "==> Running interleave_op validation [batched interleave/deinterleave, all dtypes]: --batch-run --device ${DEVICE_ID}"
     (
-        cd "${CATLASS_DSL_DIR}"
+        cd "${TLA_DSL_DIR}"
         python "${INTERLEAVE_OP_REL}" --batch-run interleave deinterleave \
             --shape 512 --batch-size 4 --device "${DEVICE_ID}" \
             --compile-jobs "${COMPILE_JOBS}" \
@@ -744,7 +744,7 @@ _run_interleave_op_batch
 _run_load_dintlv_op_case() {
     echo "==> Running load_dintlv_op validation [dintlv_b32 f32]: dintlv_b32 --sweep --shapes 512 --device ${DEVICE_ID} --force-recompile"
     (
-        cd "${CATLASS_DSL_DIR}"
+        cd "${TLA_DSL_DIR}"
         python "${LOAD_DINTLV_OP_REL}" dintlv_b32 --sweep --shapes 512 \
             --device "${DEVICE_ID}" --compile-jobs "${COMPILE_JOBS}" \
             --force-recompile
@@ -756,7 +756,7 @@ _run_load_dintlv_op_case
 _run_load_us_b8_op_case() {
     echo "==> Running load_us_b8_op validation [us_b8 i8]: us_b8 --sweep --shapes 512 --device ${DEVICE_ID} --force-recompile"
     (
-        cd "${CATLASS_DSL_DIR}"
+        cd "${TLA_DSL_DIR}"
         python "${LOAD_US_B8_OP_REL}" us_b8 --sweep --shapes 512 \
             --device "${DEVICE_ID}" --compile-jobs "${COMPILE_JOBS}" \
             --force-recompile
@@ -768,7 +768,7 @@ _run_load_us_b8_op_case
 _run_load_store_mask_case() {
     echo "==> Running load_store_mask validation [b8/b16/b32 carriers]: load_store_mask --all-dtypes --device ${DEVICE_ID}"
     (
-        cd "${CATLASS_DSL_DIR}"
+        cd "${TLA_DSL_DIR}"
         python "${LOAD_STORE_MASK_REL}" load_store_mask --all-dtypes --device "${DEVICE_ID}"
     )
 }
@@ -778,7 +778,7 @@ _run_load_store_mask_case
 _run_store_pack_case() {
     echo "==> Running store_pack validation [i32/i16 only]: store_pack --all-dtypes --device ${DEVICE_ID}"
     (
-        cd "${CATLASS_DSL_DIR}"
+        cd "${TLA_DSL_DIR}"
         python "${STORE_PACK_REL}" store_pack --all-dtypes --device "${DEVICE_ID}"
     )
 }
@@ -788,7 +788,7 @@ _run_store_pack_case
 _run_squeeze_op_case() {
     echo "==> Running squeeze_op validation [squeeze all dtypes]: squeeze --sweep --shapes 64 --device ${DEVICE_ID} --force-recompile"
     (
-        cd "${CATLASS_DSL_DIR}"
+        cd "${TLA_DSL_DIR}"
         python "${SQUEEZE_OP_REL}" squeeze --sweep --shapes 64 \
             --device "${DEVICE_ID}" --compile-jobs "${COMPILE_JOBS}" \
             --force-recompile
@@ -800,7 +800,7 @@ _run_squeeze_op_case
 _run_register_control_flow_case() {
     echo "==> Running register_control_flow validation [mixed VectorSSA/MaskSSA carriers]: register_carriers --device ${DEVICE_ID}"
     (
-        cd "${CATLASS_DSL_DIR}"
+        cd "${TLA_DSL_DIR}"
         python "${REGISTER_CONTROL_FLOW_REL}" register_carriers \
             --device "${DEVICE_ID}" --force-recompile
     )
@@ -811,7 +811,7 @@ _run_register_control_flow_case
 _run_scalar_index_control_flow_case() {
     echo "==> Running scalar_index_control_flow validation [GM scalar indexing + AST compare]: --device ${DEVICE_ID}"
     (
-        cd "${CATLASS_DSL_DIR}"
+        cd "${TLA_DSL_DIR}"
         python "${SCALAR_INDEX_CONTROL_FLOW_REL}" --device "${DEVICE_ID}" --force-recompile
     )
 }
@@ -821,7 +821,7 @@ _run_scalar_index_control_flow_case
 _run_scalar_kernel_arg_case() {
     echo "==> Running scalar_kernel_arg validation [Numeric args arithmetic]: --device ${DEVICE_ID}"
     (
-        cd "${CATLASS_DSL_DIR}"
+        cd "${TLA_DSL_DIR}"
         python "${SCALAR_KERNEL_ARG_REL}" --device "${DEVICE_ID}" --force-recompile
     )
 }
@@ -839,7 +839,7 @@ _run_print_tensor_gm_case() {
     fi
     echo "==> Running tensor tla.print validation [${arch_scope} calls=${calls} blocks=${block_count}]"
     (
-        cd "${CATLASS_DSL_DIR}"
+        cd "${TLA_DSL_DIR}"
         python "${PRINT_TENSOR_REL}" --run --device "${DEVICE_ID}" \
             --arch-scope "${arch_scope}" \
             --block-dim "${block_count}" --calls "${calls}" \
@@ -858,7 +858,7 @@ _run_debug_print_matrix_case() {
     local arch_scope="$1"
     echo "==> Running debug_print validation [${arch_scope} all dtypes, two blocks]"
     (
-        cd "${CATLASS_DSL_DIR}"
+        cd "${TLA_DSL_DIR}"
         python "${DEBUG_PRINT_REL}" --run --device "${DEVICE_ID}" \
             --arch-scope "${arch_scope}" --all-dtypes --block-dim 2 \
             --expect-count 2 --force-recompile
@@ -874,7 +874,7 @@ _run_debug_print_f16_special_case() {
     local value="$2"
     echo "==> Running f16 debug_print special value [${arch_scope} ${value}]"
     (
-        cd "${CATLASS_DSL_DIR}"
+        cd "${TLA_DSL_DIR}"
         python "${DEBUG_PRINT_REL}" --run --device "${DEVICE_ID}" \
             --arch-scope "${arch_scope}" --dtype f16 --value="${value}" \
             --force-recompile
@@ -892,7 +892,7 @@ _run_debug_print_expression_matrix_case() {
     local arch_scope="$1"
     echo "==> Running computed debug_print validation [${arch_scope} i8/i16/i32/f16/f32]"
     (
-        cd "${CATLASS_DSL_DIR}"
+        cd "${TLA_DSL_DIR}"
         python "${DEBUG_PRINT_REL}" --run --device "${DEVICE_ID}" \
             --arch-scope "${arch_scope}" --all-dtypes --expression \
             --force-recompile
@@ -907,7 +907,7 @@ _run_debug_print_mixed_case() {
     local print_region="$1"
     echo "==> Running debug_print_mixed validation [${print_region}]: --run --device ${DEVICE_ID} --print-region ${print_region}"
     (
-        cd "${CATLASS_DSL_DIR}"
+        cd "${TLA_DSL_DIR}"
         python "${DEBUG_PRINT_MIXED_REL}" --run --device "${DEVICE_ID}" \
             --all-dtypes --print-region "${print_region}" --force-recompile
     )
@@ -921,7 +921,7 @@ _run_debug_print_format_case() {
     local arch_scope="$1"
     echo "==> Running debug_print_format validation [${arch_scope}, 2 blocks]"
     (
-        cd "${CATLASS_DSL_DIR}"
+        cd "${TLA_DSL_DIR}"
         python "${DEBUG_PRINT_FORMAT_REL}" --run --device "${DEVICE_ID}" \
             --arch-scope "${arch_scope}" --block-dim 2 --force-recompile
     )
@@ -934,7 +934,7 @@ done
 _run_scalar_arg_alignment_case() {
     echo "==> Running scalar_arg_alignment validation [tensor + i16 + tensor]: --device ${DEVICE_ID}"
     (
-        cd "${CATLASS_DSL_DIR}"
+        cd "${TLA_DSL_DIR}"
         python "${SCALAR_ARG_ALIGNMENT_REL}" --device "${DEVICE_ID}" --force-recompile
     )
 }
@@ -952,7 +952,7 @@ _run_print_tensor_ub_case() {
     fi
     echo "==> Running print_tensor validation [AIV UB ${case_name} calls=${calls} blocks=${block_count}]"
     (
-        cd "${CATLASS_DSL_DIR}"
+        cd "${TLA_DSL_DIR}"
         python "${PRINT_TENSOR_REL}" --run --device "${DEVICE_ID}" \
             --storage ub --case "${case_name}" --arch-scope aiv.c310 \
             --block-dim "${block_count}" --calls "${calls}" \

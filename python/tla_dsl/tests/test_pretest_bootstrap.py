@@ -32,7 +32,7 @@ def test_ensure_pretest_mlir_build_respects_skip_env(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     bootstrap = _load_bootstrap(REPO_ROOT)
-    monkeypatch.setenv("CATLASS_DSL_SKIP_PRETEST_BUILD", "1")
+    monkeypatch.setenv("TLA_DSL_SKIP_PRETEST_BUILD", "1")
     called = False
 
     def fake_run(*args, **kwargs):  # type: ignore[no-untyped-def]
@@ -57,7 +57,7 @@ def test_ensure_pretest_mlir_build_runs_cmake_and_ninja_targets(
 
     monkeypatch.setenv("MLIR_TBLGEN_INCLUDE_DIR", str(include_dir))
     monkeypatch.setenv("MLIR_DIR", str(mlir_dir))
-    monkeypatch.delenv("CATLASS_DSL_SKIP_PRETEST_BUILD", raising=False)
+    monkeypatch.delenv("TLA_DSL_SKIP_PRETEST_BUILD", raising=False)
     monkeypatch.delenv("CC", raising=False)
     monkeypatch.delenv("CXX", raising=False)
     monkeypatch.setattr(
@@ -102,8 +102,8 @@ def test_ensure_pretest_mlir_build_uses_llvm_config_fallback(
     _touch_opbase(include_dir)
     monkeypatch.delenv("MLIR_TBLGEN_INCLUDE_DIR", raising=False)
     monkeypatch.delenv("MLIR_DIR", raising=False)
-    monkeypatch.delenv("CATLASS_DSL_PREBUILT_ASCENDNPU_IR", raising=False)
-    monkeypatch.delenv("CATLASS_DSL_SKIP_PRETEST_BUILD", raising=False)
+    monkeypatch.delenv("TLA_DSL_PREBUILT_ASCENDNPU_IR", raising=False)
+    monkeypatch.delenv("TLA_DSL_SKIP_PRETEST_BUILD", raising=False)
     monkeypatch.delenv("CC", raising=False)
     monkeypatch.delenv("CXX", raising=False)
     monkeypatch.setattr(
@@ -137,7 +137,7 @@ def test_resolve_include_dir_rejects_invalid_env_path(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     bootstrap = _load_bootstrap(REPO_ROOT)
-    monkeypatch.delenv("CATLASS_DSL_SKIP_PRETEST_BUILD", raising=False)
+    monkeypatch.delenv("TLA_DSL_SKIP_PRETEST_BUILD", raising=False)
     bad_include = tmp_path / "bad-include"
     bad_include.mkdir()
     monkeypatch.setenv("MLIR_TBLGEN_INCLUDE_DIR", str(bad_include))
@@ -163,7 +163,7 @@ def test_ensure_pretest_mlir_build_resets_stale_compiler_cache(
 
     monkeypatch.setenv("MLIR_TBLGEN_INCLUDE_DIR", str(include_dir))
     monkeypatch.setenv("MLIR_DIR", str(mlir_dir))
-    monkeypatch.delenv("CATLASS_DSL_SKIP_PRETEST_BUILD", raising=False)
+    monkeypatch.delenv("TLA_DSL_SKIP_PRETEST_BUILD", raising=False)
     monkeypatch.delenv("CC", raising=False)
     monkeypatch.delenv("CXX", raising=False)
     monkeypatch.setattr(

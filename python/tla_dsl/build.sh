@@ -7,7 +7,7 @@ cd "$repo_root"
 export XDG_CACHE_HOME="${XDG_CACHE_HOME:-${repo_root}/.artifacts/cache}"
 export HATCH_DATA_DIR="${HATCH_DATA_DIR:-${repo_root}/.artifacts/hatch/data}"
 export HATCH_CONFIG="${HATCH_CONFIG:-${repo_root}/.artifacts/hatch/config.toml}"
-strict_packaging="${CATLASS_DSL_STRICT_PACKAGING:-0}"
+strict_packaging="${TLA_DSL_STRICT_PACKAGING:-0}"
 mkdir -p "${XDG_CACHE_HOME}" "${HATCH_DATA_DIR}" "$(dirname "${HATCH_CONFIG}")"
 touch "${HATCH_CONFIG}"
 
@@ -67,8 +67,8 @@ find_mlir_include_dir() {
     return 0
   fi
 
-  if [[ -n "${CATLASS_DSL_PREBUILT_ASCENDNPU_IR:-}" && -f "${CATLASS_DSL_PREBUILT_ASCENDNPU_IR}/build/install/include/mlir/IR/OpBase.td" ]]; then
-    printf '%s\n' "${CATLASS_DSL_PREBUILT_ASCENDNPU_IR}/build/install/include"
+  if [[ -n "${TLA_DSL_PREBUILT_ASCENDNPU_IR:-}" && -f "${TLA_DSL_PREBUILT_ASCENDNPU_IR}/build/install/include/mlir/IR/OpBase.td" ]]; then
+    printf '%s\n' "${TLA_DSL_PREBUILT_ASCENDNPU_IR}/build/install/include"
     return 0
   fi
 
@@ -85,8 +85,8 @@ find_mlir_include_dir() {
 }
 
 find_mlir_tblgen() {
-  if [[ -n "${CATLASS_DSL_PREBUILT_ASCENDNPU_IR:-}" && -x "${CATLASS_DSL_PREBUILT_ASCENDNPU_IR}/build/bin/mlir-tblgen" ]]; then
-    printf '%s\n' "${CATLASS_DSL_PREBUILT_ASCENDNPU_IR}/build/bin/mlir-tblgen"
+  if [[ -n "${TLA_DSL_PREBUILT_ASCENDNPU_IR:-}" && -x "${TLA_DSL_PREBUILT_ASCENDNPU_IR}/build/bin/mlir-tblgen" ]]; then
+    printf '%s\n' "${TLA_DSL_PREBUILT_ASCENDNPU_IR}/build/bin/mlir-tblgen"
     return 0
   fi
 
@@ -110,7 +110,7 @@ EOF
 mlir_tblgen="$(find_mlir_tblgen)" || {
   cat <<'EOF'
 error: unable to locate mlir-tblgen.
-Set CATLASS_DSL_PREBUILT_ASCENDNPU_IR or ensure mlir-tblgen is on PATH.
+Set TLA_DSL_PREBUILT_ASCENDNPU_IR or ensure mlir-tblgen is on PATH.
 EOF
   exit 1
 }
@@ -177,7 +177,7 @@ if (( ${#type_extensions[@]} > 0 )); then
   if python_site_packages_is_writable; then
     if ! python -m pip install -e .; then
       if [[ "${strict_packaging}" == "1" ]]; then
-        echo "error: editable install failed and CATLASS_DSL_STRICT_PACKAGING=1" >&2
+        echo "error: editable install failed and TLA_DSL_STRICT_PACKAGING=1" >&2
         exit 1
       fi
       echo "warning: editable install failed; continuing because strict packaging env is not 1" >&2
@@ -193,7 +193,7 @@ if (( ${#type_extensions[@]} > 0 )); then
   echo "==> Building wheel(s)"
   if ! ./scripts/build_wheels.sh; then
     if [[ "${strict_packaging}" == "1" ]]; then
-      echo "error: wheel build failed and CATLASS_DSL_STRICT_PACKAGING=1" >&2
+      echo "error: wheel build failed and TLA_DSL_STRICT_PACKAGING=1" >&2
       exit 1
     fi
     echo "warning: wheel build failed; continuing because strict packaging env is not 1" >&2

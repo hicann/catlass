@@ -15,36 +15,36 @@ message("-- ASCEND_HOME_PATH Value: ${ASCEND_HOME_PATH}")
 
 # Catlass public headers for bisheng template bitcode (see mlir/bc).
 if(DEFINED CATLASS_INCLUDE_DIR AND NOT "${CATLASS_INCLUDE_DIR}" STREQUAL "")
-  set(CATLASS_DSL_CATLASS_INCLUDE_DIR "${CATLASS_INCLUDE_DIR}")
+  set(TLA_DSL_CATLASS_INCLUDE_DIR "${CATLASS_INCLUDE_DIR}")
 else()
-  get_filename_component(CATLASS_DSL_CATLASS_INCLUDE_DIR
+  get_filename_component(TLA_DSL_CATLASS_INCLUDE_DIR
     "${CMAKE_CURRENT_SOURCE_DIR}/../../../../include" ABSOLUTE)
 endif()
-message("-- CATLASS_DSL_CATLASS_INCLUDE_DIR Value: ${CATLASS_DSL_CATLASS_INCLUDE_DIR}")
+message("-- TLA_DSL_CATLASS_INCLUDE_DIR Value: ${TLA_DSL_CATLASS_INCLUDE_DIR}")
 
 # AscendNPU-IR lives under python/tla_dsl/3rdparty (mlir is under
 # python/tla_dsl/csrc/mlir). The TLA compiler intentionally uses the Dev
 # BiShengIR tree for all bishengir headers/libs so pass declarations and linked
 # implementations stay from the same checkout.
-set(CATLASS_DSL_ASCENDNPU_IR_ROOT
+set(TLA_DSL_ASCENDNPU_IR_ROOT
     ${CMAKE_CURRENT_SOURCE_DIR}/../../3rdparty/AscendNPU-IR)
-if(DEFINED ENV{CATLASS_DSL_PREBUILT_ASCENDNPU_IR}
-   AND NOT "$ENV{CATLASS_DSL_PREBUILT_ASCENDNPU_IR}" STREQUAL "")
-  set(CATLASS_DSL_ASCENDNPU_IR_ROOT "$ENV{CATLASS_DSL_PREBUILT_ASCENDNPU_IR}")
+if(DEFINED ENV{TLA_DSL_PREBUILT_ASCENDNPU_IR}
+   AND NOT "$ENV{TLA_DSL_PREBUILT_ASCENDNPU_IR}" STREQUAL "")
+  set(TLA_DSL_ASCENDNPU_IR_ROOT "$ENV{TLA_DSL_PREBUILT_ASCENDNPU_IR}")
 endif()
-message("-- CATLASS_DSL_ASCENDNPU_IR_ROOT Value: ${CATLASS_DSL_ASCENDNPU_IR_ROOT}")
+message("-- TLA_DSL_ASCENDNPU_IR_ROOT Value: ${TLA_DSL_ASCENDNPU_IR_ROOT}")
 
-set(CATLASS_DSL_HIVM_SOURCE_INCLUDE_DIR
-    ${CATLASS_DSL_ASCENDNPU_IR_ROOT}/bishengir/include)
-set(CATLASS_DSL_HIVM_GENERATED_INCLUDE_DIR
-    ${CATLASS_DSL_ASCENDNPU_IR_ROOT}/build/tools/bishengir/include)
-set(CATLASS_DSL_HIVM_LIB_DIR
-    ${CATLASS_DSL_ASCENDNPU_IR_ROOT}/build/lib)
-set(CATLASS_DSL_HIVM_HEADER
-    ${CATLASS_DSL_HIVM_SOURCE_INCLUDE_DIR}/bishengir/Dialect/HIVM/IR/HIVM.h)
-set(CATLASS_DSL_HIVM_ENUMS_INC
-    ${CATLASS_DSL_HIVM_GENERATED_INCLUDE_DIR}/bishengir/Interfaces/BiShengIREnums.h.inc)
-set(CATLASS_DSL_HIVM_REQUIRED_LIBS
+set(TLA_DSL_HIVM_SOURCE_INCLUDE_DIR
+    ${TLA_DSL_ASCENDNPU_IR_ROOT}/bishengir/include)
+set(TLA_DSL_HIVM_GENERATED_INCLUDE_DIR
+    ${TLA_DSL_ASCENDNPU_IR_ROOT}/build/tools/bishengir/include)
+set(TLA_DSL_HIVM_LIB_DIR
+    ${TLA_DSL_ASCENDNPU_IR_ROOT}/build/lib)
+set(TLA_DSL_HIVM_HEADER
+    ${TLA_DSL_HIVM_SOURCE_INCLUDE_DIR}/bishengir/Dialect/HIVM/IR/HIVM.h)
+set(TLA_DSL_HIVM_ENUMS_INC
+    ${TLA_DSL_HIVM_GENERATED_INCLUDE_DIR}/bishengir/Interfaces/BiShengIREnums.h.inc)
+set(TLA_DSL_HIVM_REQUIRED_LIBS
     MLIRHIVMUtils
     MLIRHIVMDialect
     MLIRHIVMTransforms
@@ -72,28 +72,28 @@ set(CATLASS_DSL_HIVM_REQUIRED_LIBS
     MLIRHACCDialect
     MLIRHMAPDialect
     BiShengIRScopeDialect)
-if(NOT EXISTS ${CATLASS_DSL_HIVM_HEADER} OR NOT EXISTS ${CATLASS_DSL_HIVM_ENUMS_INC})
+if(NOT EXISTS ${TLA_DSL_HIVM_HEADER} OR NOT EXISTS ${TLA_DSL_HIVM_ENUMS_INC})
   message(FATAL_ERROR
           "AscendNPU-IR generated headers are required. Build "
-          "python/tla_dsl/3rdparty/AscendNPU-IR first or set CATLASS_DSL_PREBUILT_ASCENDNPU_IR.")
+          "python/tla_dsl/3rdparty/AscendNPU-IR first or set TLA_DSL_PREBUILT_ASCENDNPU_IR.")
 endif()
-foreach(tla_dsl_hivm_lib IN LISTS CATLASS_DSL_HIVM_REQUIRED_LIBS)
+foreach(tla_dsl_hivm_lib IN LISTS TLA_DSL_HIVM_REQUIRED_LIBS)
   file(GLOB tla_dsl_hivm_matches
-       "${CATLASS_DSL_HIVM_LIB_DIR}/lib${tla_dsl_hivm_lib}.so"
-       "${CATLASS_DSL_HIVM_LIB_DIR}/lib${tla_dsl_hivm_lib}.a"
-       "${CATLASS_DSL_HIVM_LIB_DIR}/lib${tla_dsl_hivm_lib}.dylib")
+       "${TLA_DSL_HIVM_LIB_DIR}/lib${tla_dsl_hivm_lib}.so"
+       "${TLA_DSL_HIVM_LIB_DIR}/lib${tla_dsl_hivm_lib}.a"
+       "${TLA_DSL_HIVM_LIB_DIR}/lib${tla_dsl_hivm_lib}.dylib")
   if("${tla_dsl_hivm_matches}" STREQUAL "")
     message(FATAL_ERROR
             "AscendNPU-IR library ${tla_dsl_hivm_lib} is required. Build "
-            "python/tla_dsl/3rdparty/AscendNPU-IR first or set CATLASS_DSL_PREBUILT_ASCENDNPU_IR.")
+            "python/tla_dsl/3rdparty/AscendNPU-IR first or set TLA_DSL_PREBUILT_ASCENDNPU_IR.")
   endif()
   list(GET tla_dsl_hivm_matches 0 tla_dsl_hivm_match)
-  list(APPEND CATLASS_DSL_HIVM_REQUIRED_LIB_FILES "${tla_dsl_hivm_match}")
+  list(APPEND TLA_DSL_HIVM_REQUIRED_LIB_FILES "${tla_dsl_hivm_match}")
 endforeach()
 
-set(MLIR_DIR ${CATLASS_DSL_ASCENDNPU_IR_ROOT}/build/install/lib/cmake/mlir)
-set(LLVM_DIR ${CATLASS_DSL_ASCENDNPU_IR_ROOT}/build/install/lib/cmake/llvm)
-set(MLIR_TBLGEN_INCLUDE_DIR ${CATLASS_DSL_ASCENDNPU_IR_ROOT}/build/install/include)
+set(MLIR_DIR ${TLA_DSL_ASCENDNPU_IR_ROOT}/build/install/lib/cmake/mlir)
+set(LLVM_DIR ${TLA_DSL_ASCENDNPU_IR_ROOT}/build/install/lib/cmake/llvm)
+set(MLIR_TBLGEN_INCLUDE_DIR ${TLA_DSL_ASCENDNPU_IR_ROOT}/build/install/include)
 
 if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bc/CMakeLists.txt")
   add_subdirectory(bc)
@@ -108,29 +108,29 @@ if(NOT pybind11_FOUND)
     COMMAND ${CMAKE_COMMAND} -E env
             "PYTHONPATH=${TLA_REPO_ROOT}/.artifacts/pydeps:$ENV{PYTHONPATH}"
             ${Python3_EXECUTABLE} -m pybind11 --includes
-    OUTPUT_VARIABLE CATLASS_DSL_PYBIND11_INCLUDES
-    ERROR_VARIABLE CATLASS_DSL_PYBIND11_ERROR
-    RESULT_VARIABLE CATLASS_DSL_PYBIND11_RESULT
+    OUTPUT_VARIABLE TLA_DSL_PYBIND11_INCLUDES
+    ERROR_VARIABLE TLA_DSL_PYBIND11_ERROR
+    RESULT_VARIABLE TLA_DSL_PYBIND11_RESULT
     OUTPUT_STRIP_TRAILING_WHITESPACE
     ERROR_STRIP_TRAILING_WHITESPACE
   )
-  if(NOT CATLASS_DSL_PYBIND11_RESULT EQUAL 0 OR CATLASS_DSL_PYBIND11_INCLUDES STREQUAL "")
+  if(NOT TLA_DSL_PYBIND11_RESULT EQUAL 0 OR TLA_DSL_PYBIND11_INCLUDES STREQUAL "")
     message(FATAL_ERROR
             "pybind11 is required to build the Python MLIR bridge. "
             "CMake could not find pybind11::headers and "
             "'${Python3_EXECUTABLE} -m pybind11 --includes' failed. "
             "Install pybind11 in the Python environment used for this build. "
-            "pybind11 error: ${CATLASS_DSL_PYBIND11_ERROR}")
+            "pybind11 error: ${TLA_DSL_PYBIND11_ERROR}")
   endif()
-  separate_arguments(CATLASS_DSL_PYBIND11_INCLUDE_FLAGS UNIX_COMMAND
-                     "${CATLASS_DSL_PYBIND11_INCLUDES}")
-  set(CATLASS_DSL_PYBIND11_INCLUDE_DIRS)
-  foreach(_flag IN LISTS CATLASS_DSL_PYBIND11_INCLUDE_FLAGS)
+  separate_arguments(TLA_DSL_PYBIND11_INCLUDE_FLAGS UNIX_COMMAND
+                     "${TLA_DSL_PYBIND11_INCLUDES}")
+  set(TLA_DSL_PYBIND11_INCLUDE_DIRS)
+  foreach(_flag IN LISTS TLA_DSL_PYBIND11_INCLUDE_FLAGS)
     if(_flag MATCHES "^-I(.+)$")
-      list(APPEND CATLASS_DSL_PYBIND11_INCLUDE_DIRS "${CMAKE_MATCH_1}")
+      list(APPEND TLA_DSL_PYBIND11_INCLUDE_DIRS "${CMAKE_MATCH_1}")
     endif()
   endforeach()
-  if(CATLASS_DSL_PYBIND11_INCLUDE_DIRS STREQUAL "")
+  if(TLA_DSL_PYBIND11_INCLUDE_DIRS STREQUAL "")
     message(FATAL_ERROR
             "pybind11 is required to build the Python MLIR bridge. "
             "'${Python3_EXECUTABLE} -m pybind11 --includes' produced no include directories.")
@@ -155,12 +155,12 @@ if(NOT DEFINED MLIR_TBLGEN_INCLUDE_DIR OR "${MLIR_TBLGEN_INCLUDE_DIR}" STREQUAL 
           "Pass -DMLIR_TBLGEN_INCLUDE_DIR=<dir containing mlir/IR/OpBase.td>.")
 endif()
 message(STATUS "MLIR_TBLGEN_INCLUDE_DIR=${MLIR_TBLGEN_INCLUDE_DIR}")
-find_file(CATLASS_DSL_MLIR_PYBIND_ADAPTORS
+find_file(TLA_DSL_MLIR_PYBIND_ADAPTORS
   NAMES mlir/Bindings/Python/PybindAdaptors.h
   PATHS ${MLIR_INCLUDE_DIRS}
   NO_DEFAULT_PATH
 )
-if(NOT CATLASS_DSL_MLIR_PYBIND_ADAPTORS)
+if(NOT TLA_DSL_MLIR_PYBIND_ADAPTORS)
   message(FATAL_ERROR
           "MLIR Python PybindAdaptors.h is required for the typed Python bridge.")
 endif()
@@ -169,17 +169,17 @@ execute_process(
           "PYTHONPATH=${TLA_REPO_ROOT}/.artifacts/pydeps:$ENV{PYTHONPATH}"
           ${Python3_EXECUTABLE} -c
           "import pathlib; import mlir._mlir_libs as libs; root = pathlib.Path(libs.__file__).resolve().parent; candidates = [root / 'libMLIRPythonCAPI.so', *root.glob('libMLIRPythonCAPI.so.*')]; print(next(str(p) for p in candidates if p.exists()))"
-  OUTPUT_VARIABLE CATLASS_DSL_MLIR_PYTHON_CAPI_LIBRARY
+  OUTPUT_VARIABLE TLA_DSL_MLIR_PYTHON_CAPI_LIBRARY
   ERROR_QUIET
   OUTPUT_STRIP_TRAILING_WHITESPACE
 )
-if(CATLASS_DSL_MLIR_PYTHON_CAPI_LIBRARY STREQUAL "")
+if(TLA_DSL_MLIR_PYTHON_CAPI_LIBRARY STREQUAL "")
   message(FATAL_ERROR
           "libMLIRPythonCAPI.so from the active Python MLIR package is required "
           "for the typed Python bridge.")
 endif()
-get_filename_component(CATLASS_DSL_MLIR_PYTHON_CAPI_DIR
-                       "${CATLASS_DSL_MLIR_PYTHON_CAPI_LIBRARY}" DIRECTORY)
+get_filename_component(TLA_DSL_MLIR_PYTHON_CAPI_DIR
+                       "${TLA_DSL_MLIR_PYTHON_CAPI_LIBRARY}" DIRECTORY)
 
 if(NOT TARGET LLVM)
   find_package(LLVM REQUIRED CONFIG HINTS "${MLIR_CMAKE_DIR}/../llvm")
@@ -245,10 +245,10 @@ add_custom_target(TlaTblgen DEPENDS
 include_directories(${LLVM_INCLUDE_DIRS})
 include_directories(${MLIR_INCLUDE_DIRS})
 
-include_directories(${CATLASS_DSL_HIVM_SOURCE_INCLUDE_DIR} ${CATLASS_DSL_HIVM_GENERATED_INCLUDE_DIR})
-link_directories(${CATLASS_DSL_HIVM_LIB_DIR})
-set(CATLASS_DSL_PYTHON_PACKAGE_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/python/catlass)
-file(MAKE_DIRECTORY ${CATLASS_DSL_PYTHON_PACKAGE_OUTPUT_DIR})
+include_directories(${TLA_DSL_HIVM_SOURCE_INCLUDE_DIR} ${TLA_DSL_HIVM_GENERATED_INCLUDE_DIR})
+link_directories(${TLA_DSL_HIVM_LIB_DIR})
+set(TLA_DSL_PYTHON_PACKAGE_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/python/catlass)
+file(MAKE_DIRECTORY ${TLA_DSL_PYTHON_PACKAGE_OUTPUT_DIR})
 
 add_subdirectory(lib)
 add_subdirectory(tools/tla-compile)
@@ -260,7 +260,7 @@ if (TARGET bishengir_template_bitcode)
 endif()
 
 # Lit regression tests for compiler tools.
-set(CATLASS_DSL_TLA_COMPILE_TOOL
+set(TLA_DSL_TLA_COMPILE_TOOL
     "${CMAKE_CURRENT_BINARY_DIR}/tools/tla-compile/TlaCompile")
 if (EXISTS "${TLA_REPO_ROOT}/tests/lit/CMakeLists.txt")
   add_subdirectory(${TLA_REPO_ROOT}/tests/lit ${CMAKE_CURRENT_BINARY_DIR}/tests/lit)

@@ -815,9 +815,9 @@ def test_generated_kernel_bridge_lowers_live_module(monkeypatch, tmp_path) -> No
 
 
 def test_runtime_options_ignore_removed_target_env_vars(monkeypatch) -> None:
-    monkeypatch.setenv("CATLASS_DSL_TARGET_ARCH", "c220")
-    monkeypatch.setenv("CATLASS_DSL_CORE_TYPE", "aic")
-    monkeypatch.setenv("CATLASS_DSL_ARCH_SCOPE", "aic.c220")
+    monkeypatch.setenv("TLA_DSL_TARGET_ARCH", "c220")
+    monkeypatch.setenv("TLA_DSL_CORE_TYPE", "aic")
+    monkeypatch.setenv("TLA_DSL_ARCH_SCOPE", "aic.c220")
     options = execution.runtime_options_from_kwargs({})
 
     assert options.arch_scope == "aiv.c310"
