@@ -14,14 +14,12 @@ from ..types import (
     TlaIndexTreeType,
     TlaLayoutDescriptor,
     TlaTensorTypeDescriptor,
-    _TENSOR_DTYPE_SIZES,
     _coerce_host_tensor_addrspace,
     _coerce_host_tensor_dtype,
     _deduce_compact_stride_order,
     _flat_layout_leaves,
     _flatten_int_leaves_tree,
     _replace_flat_leaves_in_tree,
-    _track_live_tensor,
     _tree_structure_mask,
     _try_remap_stride_coord_trees,
     dtype_size_bytes,
@@ -208,8 +206,6 @@ class _Tensor(TensorABC):
             raise TypeError(
                 "Tensor stride=... must be None or the result of tla.make_stride(...)"
             )
-
-        _track_live_tensor(self)
 
     @property
     def dtype(self) -> Any:
@@ -473,21 +469,6 @@ class _Tensor(TensorABC):
     def __new_from_mlir_values__(self, values: list[Any]) -> "_Tensor":
         del values
         return self
-
-    @property
-    def size_bytes(self) -> int:
-        if self._shape_tuple is None:
-            raise TypeError(
-                "Tensor size is unavailable without concrete shape metadata."
-            )
-        if self.dtype not in _TENSOR_DTYPE_SIZES:
-            raise ValueError(
-                f"Unsupported tensor dtype for upload_data(): {self.dtype}"
-            )
-        elements = 1
-        for dim in self._shape_tuple:
-            elements *= dim
-        return elements * _TENSOR_DTYPE_SIZES[self.dtype]
 
     def prepare_for_launch(self) -> None:
         self._require_bound()

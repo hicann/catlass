@@ -59,9 +59,6 @@ def run(args: argparse.Namespace) -> int:
             scalar,
             trailing_tensor,
             arch_scope="aiv.c310",
-            target_arch="c310",
-            core_type="aiv",
-            kernel_mode="aiv",
             cache_dir=str(Path(args.cache_dir).expanduser().resolve()),
             force_recompile=args.force_recompile,
         )

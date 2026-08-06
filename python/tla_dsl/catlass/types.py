@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import importlib
-import weakref
 from dataclasses import dataclass
 from typing import Any, Iterable, Iterator, Literal, TypeAlias
 
@@ -568,32 +567,6 @@ def dtype_size_bytes(dtype: str) -> int:
     return ``0`` (same table as :class:`Tensor` host storage sizing).
     """
     return int(_TENSOR_DTYPE_SIZES.get(dtype.strip().lower(), 0))
-
-_LIVE_TENSORS: dict[int, weakref.ReferenceType[Any]] = {}
-
-def _track_live_tensor(tensor: Any) -> None:
-    tensor_id = id(tensor)
-
-    def _cleanup(_ref: weakref.ReferenceType[Any]) -> None:
-        _LIVE_TENSORS.pop(tensor_id, None)
-
-    _LIVE_TENSORS[tensor_id] = weakref.ref(tensor, _cleanup)
-
-def invalidate_runtime_allocations(
-    *,
-    device_ptrs: Iterable[int] = (),
-) -> None:
-    freed_device_ptrs = {int(ptr) for ptr in device_ptrs if int(ptr) != 0}
-    if not freed_device_ptrs:
-        return
-    for tensor_ref in list(_LIVE_TENSORS.values()):
-        tensor = tensor_ref()
-        if tensor is None:
-            continue
-        if tensor.data_ptr in freed_device_ptrs:
-            if getattr(tensor, "_external_binding", False):
-                continue
-            tensor.data_ptr = 0
 
 def _flatten_int_leaves_tree(tree: Any) -> list[int]:
     """Preorder flatten of positive-int leaves (same leaf order as :func:`catlass.core_api._flatten_tla_tuple`)."""

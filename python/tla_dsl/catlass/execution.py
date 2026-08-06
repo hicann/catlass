@@ -23,7 +23,6 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 from .base_dsl.arch import (
     TlaKernelTarget,
     arch_scope_for_target as _arch_scope_for_target_impl,
-    default_target_arch,
     get_kernel_target as _get_kernel_target,
     parse_arch_scope as _parse_arch_scope_impl,
 )
@@ -192,14 +191,9 @@ class TlaExecutionResult:
 
 @dataclass(frozen=True)
 class TlaRuntimeOptions:
-    backend: str = "ascend"
     cache_enabled: bool = True
     cache_dir: Path | None = None
     force_recompile: bool = False
-    hivmc: str | None = None
-    hivmc_args: tuple[str, ...] = ()
-    target_arch: str = "c310"
-    core_type: str = "aiv"
     kernel_mode: str = "aiv"
     arch_scope: str = DEFAULT_ARCH_SCOPE
     mlir_print_ir_before: tuple[str, ...] = ()
@@ -240,8 +234,6 @@ def compile_kernel(
     type_args: Sequence[Any] | None = None,
     decorator_location: DSLLocation | None = None,
 ) -> TlaKernelArtifact:
-    if runtime.backend != "ascend":
-        raise TlaExecutionError(f"Unsupported backend: {runtime.backend}")
     lowered = BaseDSL()._lower(
         fn,
         kind=kind,
@@ -252,7 +244,7 @@ def compile_kernel(
     tlair_mlir = lowered.asm(generic=True)
     entrypoint = _extract_entrypoint(tlair_mlir)
     compiler_bridge_path = resolve_bridge_extension_path()
-    hivmc = _resolve_hivmc_a5(runtime.hivmc)
+    hivmc = _resolve_hivmc_a5()
     target = _resolve_kernel_target(runtime)
     cache_dir = runtime.cache_dir or _default_cache_dir()
     cache_key = _cache_key(
@@ -374,8 +366,6 @@ def compile_kernel(
                 ),
                 "hivmc": str(hivmc),
                 "arch_scope": runtime_for_hivmc.arch_scope,
-                "target_arch": runtime_for_hivmc.target_arch,
-                "core_type": runtime_for_hivmc.core_type,
                 "kernel_abi": kernel_abi_to_dict(
                     getattr(lowering_result, "kernel_abi", None)
                 ),
@@ -1375,33 +1365,9 @@ def _format_print_tensor_record(
 
 
 def runtime_options_from_kwargs(kwargs: Mapping[str, Any]) -> TlaRuntimeOptions:
-    explicit_arch_scope = kwargs.get("arch_scope")
-    target_arch = str(
-        kwargs.get(
-            "target_arch",
-            default_target_arch().value,
-        )
-    ).lower()
-    core_type = str(
-        kwargs.get(
-            "core_type",
-            "aiv",
-        )
-    ).lower()
-    if explicit_arch_scope is not None:
-        arch_scope = str(explicit_arch_scope).lower()
-        target_arch, core_type = _parse_arch_scope(arch_scope)
-    else:
-        arch_scope = _arch_scope_for_target(
-            target_arch=target_arch, core_type=core_type
-        )
-    kernel_mode = str(kwargs.get("kernel_mode", core_type)).lower()
-    if kernel_mode != "mix" and kernel_mode != core_type:
-        raise TlaExecutionError(
-            f"kernel_mode={kernel_mode!r} does not match core_type={core_type!r}."
-        )
+    arch_scope = str(kwargs.get("arch_scope", DEFAULT_ARCH_SCOPE)).lower()
+    _, core_type = _parse_arch_scope(arch_scope)
     return TlaRuntimeOptions(
-        backend=str(kwargs.get("backend", "ascend")),
         cache_enabled=bool(
             kwargs.get("cache", _env_truthy("TLA_DSL_CACHE", default="1"))
         ),
@@ -1415,11 +1381,7 @@ def runtime_options_from_kwargs(kwargs: Mapping[str, Any]) -> TlaRuntimeOptions:
                 "force_recompile", _env_truthy("TLA_DSL_FORCE_RECOMPILE", default="0")
             )
         ),
-        hivmc=(str(kwargs["hivmc"]) if kwargs.get("hivmc") is not None else None),
-        hivmc_args=tuple(kwargs.get("hivmc_args", ()) or ()),
-        target_arch=target_arch,
-        core_type=core_type,
-        kernel_mode=kernel_mode,
+        kernel_mode=core_type,
         arch_scope=arch_scope,
         mlir_print_ir_before=_string_tuple(kwargs.get("mlir_print_ir_before", ())),
         mlir_print_ir_after=_string_tuple(kwargs.get("mlir_print_ir_after", ())),
@@ -1438,10 +1400,8 @@ def runtime_options_for_launch(runtime: TlaRuntimeOptions) -> TlaRuntimeOptions:
 def _runtime_options_from_lowered_mlir(
     runtime: TlaRuntimeOptions, mlir_text: str
 ) -> TlaRuntimeOptions:
-    target_arch = runtime.target_arch
-    core_type = runtime.core_type
+    target_arch, core_type = _parse_arch_scope(runtime.arch_scope)
     kernel_mode = runtime.kernel_mode
-    hivmc_args = runtime.hivmc_args
 
     if _extract_logical_mixed_handoff_entrypoint(mlir_text) is not None:
         core_type = "aic"
@@ -1463,21 +1423,12 @@ def _runtime_options_from_lowered_mlir(
         target_arch = "c310"
 
     arch_scope = _arch_scope_for_target(target_arch=target_arch, core_type=core_type)
-    if (
-        runtime.target_arch == target_arch
-        and runtime.core_type == core_type
-        and runtime.kernel_mode == kernel_mode
-        and runtime.arch_scope == arch_scope
-        and runtime.hivmc_args == hivmc_args
-    ):
+    if runtime.kernel_mode == kernel_mode and runtime.arch_scope == arch_scope:
         return runtime
     return replace(
         runtime,
-        target_arch=target_arch,
-        core_type=core_type,
         kernel_mode=kernel_mode,
         arch_scope=arch_scope,
-        hivmc_args=hivmc_args,
     )
 
 
@@ -1505,11 +1456,8 @@ def _cache_key(
         "print_tensor_workspace_abi_revision": _PRINT_TENSOR_WORKSPACE_ABI_REVISION,
         "cache_abi_version": _ONLINE_CACHE_ABI_VERSION,
         "entrypoint": entrypoint,
-        "backend": runtime.backend,
         "kernel_mode": runtime.kernel_mode,
         "arch_scope": runtime.arch_scope,
-        "target_arch": runtime.target_arch,
-        "core_type": runtime.core_type,
         "cce_arch": target.cce_arch,
         "compiler_bridge": str(compiler_bridge_path) if compiler_bridge_path else None,
         "hivmc": str(hivmc),
@@ -1517,7 +1465,6 @@ def _cache_key(
         "hivmc_version": _tool_version(hivmc),
         "hivmc_fingerprint": _tool_fingerprint(hivmc),
         "mlir": tlair_mlir,
-        "hivmc_args": list(runtime.hivmc_args),
         "mlir_print_ir_before": list(runtime.mlir_print_ir_before),
         "mlir_print_ir_after": list(runtime.mlir_print_ir_after),
         "mlir_print_ir_before_all": runtime.mlir_print_ir_before_all,
@@ -1588,6 +1535,10 @@ def _parse_arch_scope(arch_scope: str) -> tuple[str, str]:
         raise TlaExecutionError(str(exc)) from exc
 
 
+def _core_type_from_arch_scope(arch_scope: str) -> str:
+    return _parse_arch_scope(arch_scope)[1]
+
+
 def _arch_scope_for_target(*, target_arch: str, core_type: str) -> str:
     try:
         return _arch_scope_for_target_impl(target_arch=target_arch, core_type=core_type)
@@ -1596,45 +1547,31 @@ def _arch_scope_for_target(*, target_arch: str, core_type: str) -> str:
 
 
 def _resolve_kernel_target(runtime: TlaRuntimeOptions) -> TlaKernelTarget:
+    target_arch, core_type = _parse_arch_scope(runtime.arch_scope)
     try:
         return _get_kernel_target(
-            target_arch=runtime.target_arch,
-            core_type=runtime.core_type,
+            target_arch=target_arch,
+            core_type=core_type,
             arch_scope=runtime.arch_scope,
         )
     except ValueError as exc:
         raise TlaExecutionError(str(exc)) from exc
 
 
-def _resolve_hivmc_a5(explicit: str | None) -> Path:
-    if explicit:
-        candidate = Path(explicit).expanduser().resolve()
-        if candidate.exists():
-            return candidate
-    env = os.getenv("TLA_DSL_HIVMC_A5")
-    if env:
-        candidate = Path(env).expanduser().resolve()
-        if candidate.exists():
-            return candidate
-    root = os.getenv("TLA_DSL_ASCENDNPU_IR_ROOT")
-    candidates: list[Path] = []
-    if root:
-        root_path = Path(root).expanduser().resolve()
-        candidates.extend(
-            [
-                root_path / "build" / "bin" / "hivmc-a5",
-                root_path / "hivmc-a5",
-            ]
-        )
+def _resolve_hivmc_a5() -> Path:
+    """Resolve ``hivmc-a5`` from PATH / ``ASCEND_HOME_PATH`` after ``set_env.sh``."""
+
     which = shutil.which("hivmc-a5")
     if which:
-        candidates.append(Path(which).resolve())
-    for candidate in candidates:
+        return Path(which).resolve()
+    ascend_home = os.getenv("ASCEND_HOME_PATH")
+    if ascend_home:
+        candidate = Path(ascend_home).expanduser().resolve() / "bin" / "hivmc-a5"
         if candidate.exists():
             return candidate
     raise TlaBackendCompilerNotFoundError(
-        "hivmc-a5 not found. Set `TLA_DSL_HIVMC_A5`, set "
-        "`TLA_DSL_ASCENDNPU_IR_ROOT`, pass `hivmc=...`, or add `hivmc-a5` to PATH."
+        "hivmc-a5 not found on PATH. Source the CANN toolkit "
+        "(`source .../ascend-toolkit/set_env.sh`) so `hivmc-a5` is available."
     )
 
 
@@ -1672,7 +1609,6 @@ def _build_hivmc_a5_command(
                 str(kernel_path),
             ]
         )
-    command.extend(runtime.hivmc_args)
     return command
 
 
@@ -1699,7 +1635,7 @@ def _create_stamped_hivmc_input(
         helper_core_type = (
             _mixed_print_tensor_helper_core(compiler_text)
             if runtime.kernel_mode == "mix"
-            else runtime.core_type
+            else _core_type_from_arch_scope(runtime.arch_scope)
         )
         helper = {
             "aic": ("Cube", "print_tensor.aic.c310.bc"),
@@ -1836,7 +1772,7 @@ def _resolve_hivm_template_bitcode(runtime: TlaRuntimeOptions) -> str:
             "meta_op.aic.c310.bc and meta_op.aiv.c310.bc under the mlir build tree."
         )
 
-    if runtime.core_type == "aic":
+    if _core_type_from_arch_scope(runtime.arch_scope) == "aic":
         for build_dir in _mlir_build_dirs():
             candidates.extend(
                 [

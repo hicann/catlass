@@ -54,7 +54,6 @@ class TlaRuntimeState:
 
     device_id: int | None = None
     stream: Any | None = None
-    device_ptrs: tuple[int, ...] = field(default_factory=tuple)
 
 
 @dataclass
@@ -135,7 +134,6 @@ def initialize(device: int | str | None = None) -> TlaRuntimeState:
     _GLOBAL_RUNTIME_STATE = TlaRuntimeState(
         device_id=device_id,
         stream=stream,
-        device_ptrs=(),
     )
     return _GLOBAL_RUNTIME_STATE
 
@@ -150,14 +148,6 @@ def finalize() -> None:
             "tla.finalize() requires a prior call to tla.initialize()."
         )
     acl = load_acl()
-    try:
-        from . import types as types_mod
-    except Exception:
-        types_mod = None
-    for dev_ptr in state.device_ptrs:
-        check_acl_errors(acl.rt.free(dev_ptr), "acl.rt.free")
-    if types_mod is not None:
-        types_mod.invalidate_runtime_allocations(device_ptrs=state.device_ptrs)
     check_acl_errors(acl.rt.reset_device(state.device_id), "acl.rt.reset_device")
     check_acl_errors(acl.finalize(), "acl.finalize")
     _GLOBAL_RUNTIME_STATE = TlaRuntimeState()
@@ -199,19 +189,6 @@ def get_vector_core_num(device: int | str | None = None) -> int:
     vector_core_num, ret = acl.rt.get_device_info(device_id, _ACL_DEV_ATTR_VECTOR_CORE_NUM)
     check_acl_errors(ret, f"acl.rt.get_device_info({device_id}, _ACL_DEV_ATTR_VECTOR_CORE_NUM)")
     return vector_core_num
-
-
-def register_device_ptr(ptr: int) -> None:
-    """Track a device allocation for cleanup during finalize."""
-
-    global _GLOBAL_RUNTIME_STATE
-    if ptr == 0 or ptr in _GLOBAL_RUNTIME_STATE.device_ptrs:
-        return
-    _GLOBAL_RUNTIME_STATE = TlaRuntimeState(
-        device_id=_GLOBAL_RUNTIME_STATE.device_id,
-        stream=_GLOBAL_RUNTIME_STATE.stream,
-        device_ptrs=_GLOBAL_RUNTIME_STATE.device_ptrs + (int(ptr),),
-    )
 
 
 @contextmanager

@@ -5,28 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 import inspect
 from typing import Any, Callable, Mapping, Sequence
-import contextvars
 
 from . import runtime as _runtime
 from .base_dsl import BaseDSL, DSLLocation
 from .base_dsl.compiler import CompileCallable, compile
-from .execution import TlaKernelArtifact, TlaExecutionResult, TlaUnsupportedAbiError
-
-
-_JIT_TYPE_ARGS: contextvars.ContextVar[Any] = contextvars.ContextVar(
-    "tla_jit_type_args", default=None
-)
-
-
-def _get_context_type_args(kernel_name: str) -> Sequence[Any] | None:
-    type_args = _JIT_TYPE_ARGS.get()
-    if type_args is None:
-        return None
-    if isinstance(type_args, Mapping):
-        if kernel_name in type_args:
-            return type_args.get(kernel_name)
-        return type_args.get("__default__")
-    return type_args
+from .execution import TlaKernelArtifact
 
 
 def _get_typed_call_args(args: Sequence[Any]) -> Sequence[Any] | None:
@@ -62,18 +45,7 @@ class TlaJitFunction:
             return KernelLauncher(
                 self, launch_kwargs=dict(kwargs), launch_args=tuple(args)
             )
-        type_args = kwargs.pop("type_args", None)
-        if type_args is None and args:
-            inferred = _get_typed_call_args(args)
-            if inferred is not None:
-                type_args = {"__default__": inferred}
-        if type_args is None:
-            return self.fn(*args, **kwargs)
-        token = _JIT_TYPE_ARGS.set(type_args)
-        try:
-            return self.fn(*args, **kwargs)
-        finally:
-            _JIT_TYPE_ARGS.reset(token)
+        return self.fn(*args, **kwargs)
 
     def compile(
         self, *, type_args: Sequence[Any] | None = None, **kwargs: Any
@@ -86,34 +58,6 @@ class TlaJitFunction:
             runtime=runtime,
             type_args=type_args,
             decorator_location=self.decorator_location,
-        )
-
-    def run(
-        self,
-        *args: Any,
-        type_args: Sequence[Any] | None = None,
-        **kwargs: Any,
-    ) -> TlaExecutionResult:
-        launch_kwargs = dict(kwargs)
-        block_dim = launch_kwargs.get("block_dim")
-        if block_dim is not None and not isinstance(block_dim, int):
-            raise TlaUnsupportedAbiError("`block_dim` must be an int.")
-        if type_args is None and args:
-            type_args = _get_typed_call_args(args)
-        runtime = _runtime.runtime_options_from_kwargs(launch_kwargs)
-        artifact = _runtime.compile_kernel(
-            self.fn,
-            kind=self.kind,
-            options=self.options,
-            runtime=runtime,
-            type_args=type_args,
-            decorator_location=self.decorator_location,
-        )
-        return _runtime.execute_kernel(
-            artifact,
-            runtime=runtime,
-            launch_args=args,
-            launch_kwargs=launch_kwargs,
         )
 
     @property

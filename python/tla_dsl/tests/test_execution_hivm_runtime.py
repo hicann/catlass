@@ -198,7 +198,7 @@ def test_prepare_hivmc_input_selects_aic_print_tensor_helper(
     compiler_input, selected = execution._create_stamped_hivmc_input(
         mlir_path,
         execution.TlaRuntimeOptions(
-            core_type="aic", kernel_mode="aic", arch_scope="aic.c310"
+            kernel_mode="aic", arch_scope="aic.c310"
         ),
     )
 
@@ -226,7 +226,7 @@ def test_prepare_hivmc_input_rejects_outdated_print_tensor_helper(
         execution._create_stamped_hivmc_input(
             mlir_path,
             execution.TlaRuntimeOptions(
-                core_type="aiv", kernel_mode="aiv", arch_scope="aiv.c310"
+                kernel_mode="aiv", arch_scope="aiv.c310"
             ),
         )
 
@@ -680,7 +680,7 @@ def test_public_compile_dry_run_invokes_typed_bridge_and_hivmc_a5(
 
     monkeypatch.setattr(base_dsl_mod.BaseDSL, "_lower", fake_lower)
     monkeypatch.setattr(execution, "resolve_bridge_extension_path", lambda: bridge_path)
-    monkeypatch.setattr(execution, "_resolve_hivmc_a5", lambda _x: hivm_compile)
+    monkeypatch.setattr(execution, "_resolve_hivmc_a5", lambda: hivm_compile)
     monkeypatch.setattr(execution, "_tool_version", lambda _x: "test-version")
     monkeypatch.setattr(
         execution,
@@ -706,9 +706,6 @@ def test_public_compile_dry_run_invokes_typed_bridge_and_hivmc_a5(
         _zero_arg_tla_kernel,
         cache=False,
         cache_dir=tmp_path / "cache",
-        target_arch="c310",
-        core_type="aic",
-        kernel_mode="aic",
         arch_scope="aic.c310",
     )
 
@@ -746,7 +743,7 @@ def test_prepare_hivmc_input_stamps_only_debug_print_mlir(
 
     compiler_input, template_bitcode = execution._create_stamped_hivmc_input(
         mlir_path,
-        execution.TlaRuntimeOptions(core_type="aic", kernel_mode="aic"),
+        execution.TlaRuntimeOptions(kernel_mode="aic", arch_scope="aic.c310"),
     )
 
     assert compiler_input != mlir_path
@@ -770,7 +767,7 @@ def test_generated_kernel_bridge_lowers_live_module(monkeypatch, tmp_path) -> No
         lambda *_a, **_k: _FakeLowered(tlair_mlir, module=lowered_module),
     )
     monkeypatch.setattr(execution, "resolve_bridge_extension_path", lambda: None)
-    monkeypatch.setattr(execution, "_resolve_hivmc_a5", lambda _x: hivm_compile)
+    monkeypatch.setattr(execution, "_resolve_hivmc_a5", lambda: hivm_compile)
     monkeypatch.setattr(execution, "_tool_version", lambda _x: "test-version")
     monkeypatch.setattr(execution, "_mlir_build_dirs", lambda: [tmp_path])
 
@@ -823,9 +820,14 @@ def test_runtime_options_ignore_removed_target_env_vars(monkeypatch) -> None:
     monkeypatch.setenv("TLA_DSL_ARCH_SCOPE", "aic.c220")
     options = execution.runtime_options_from_kwargs({})
 
-    assert options.target_arch == "c310"
-    assert options.core_type == "aiv"
     assert options.arch_scope == "aiv.c310"
+    assert options.kernel_mode == "aiv"
+
+
+def test_runtime_options_arch_scope_sets_kernel_mode() -> None:
+    options = execution.runtime_options_from_kwargs({"arch_scope": "aic.c310"})
+    assert options.arch_scope == "aic.c310"
+    assert options.kernel_mode == "aic"
 
 
 def test_typed_bridge_raises_without_live_module(tmp_path) -> None:
@@ -1039,7 +1041,7 @@ def test_run_tla_lowering_to_mlir_raises_when_no_fallback_exists(
         )
 
 
-def test_runtime_options_from_lowered_mlir_preserves_hivmc_args() -> None:
+def test_runtime_options_from_lowered_mlir_updates_kernel_mode() -> None:
     runtime = execution.TlaRuntimeOptions()
 
     updated = execution._runtime_options_from_lowered_mlir(
@@ -1047,7 +1049,8 @@ def test_runtime_options_from_lowered_mlir_preserves_hivmc_args() -> None:
         "module { func.func @kernel() { vector.transfer_read %arg0[%c0], %cst : memref<1xf32>, vector<1xf32> } }",
     )
 
-    assert updated.hivmc_args == ()
+    assert updated.kernel_mode == "aiv"
+    assert updated.arch_scope == "aiv.c310"
 
 
 def test_build_hivmc_a5_command_links_template_bitcode_for_aic(
@@ -1065,7 +1068,7 @@ def test_build_hivmc_a5_command_links_template_bitcode_for_aic(
         mlir_path=mlir_path,
         kernel_path=kernel_path,
         runtime=execution.TlaRuntimeOptions(
-            core_type="aic", kernel_mode="aic", hivmc_args=("--extra-flag",)
+            kernel_mode="aic", arch_scope="aic.c310"
         ),
     )
 
@@ -1078,7 +1081,6 @@ def test_build_hivmc_a5_command_links_template_bitcode_for_aic(
         f"--link-aicore-bitcode={template_bc.resolve()}",
         "-o",
         str(kernel_path),
-        "--extra-flag",
     ]
 
 
@@ -1097,7 +1099,7 @@ def test_build_hivmc_a5_command_links_template_bitcode_for_aiv(
         compiler=compiler,
         mlir_path=mlir_path,
         kernel_path=kernel_path,
-        runtime=execution.TlaRuntimeOptions(core_type="aiv", kernel_mode="aiv"),
+        runtime=execution.TlaRuntimeOptions(kernel_mode="aiv", arch_scope="aiv.c310"),
     )
 
     assert command == [
@@ -1307,7 +1309,7 @@ def test_execute_kernel_decodes_and_formats_native_print_tensor_for_ordinary_cal
     execution.execute_kernel(
         _print_tensor_artifact(tmp_path, shape=(2, 2)),
         runtime=execution.TlaRuntimeOptions(
-            core_type="aic", kernel_mode="aic", arch_scope="aic.c310"
+            kernel_mode="aic", arch_scope="aic.c310"
         ),
         launch_args=[_TypedPointer(0x1000)],
         launch_kwargs={},
@@ -1337,7 +1339,7 @@ def test_execute_kernel_formats_combined_calls_and_blocks_in_arrival_order(
     execution.execute_kernel(
         _two_print_tensor_artifact(tmp_path, storage=storage),
         runtime=execution.TlaRuntimeOptions(
-            core_type="aic", kernel_mode="aic", arch_scope="aic.c310"
+            kernel_mode="aic", arch_scope="aic.c310"
         ),
         launch_args=[_TypedPointer(0x1000)],
         launch_kwargs={"block_dim": 2},
@@ -1543,7 +1545,7 @@ def test_print_tensor_record_set_rejects_invalid_output_without_public_lines(
         execution.execute_kernel(
             _two_print_tensor_artifact(tmp_path),
             runtime=execution.TlaRuntimeOptions(
-                core_type="aic", kernel_mode="aic", arch_scope="aic.c310"
+                kernel_mode="aic", arch_scope="aic.c310"
             ),
             launch_args=[_TypedPointer(0x1000)],
             launch_kwargs={},
@@ -1662,7 +1664,7 @@ def test_print_tensor_workspace_uses_fixed_one_mib_core_records(
 
     plan = execution._build_kernel_launch_plan(
         artifact=artifact,
-        runtime=execution.TlaRuntimeOptions(core_type=core_type, kernel_mode=core_type),
+        runtime=execution.TlaRuntimeOptions(kernel_mode=core_type, arch_scope=f"{core_type}.c310"),
         launch_args=[_TypedPointer(0x1000)],
         block_num=max_blocks,
     )
@@ -1672,7 +1674,7 @@ def test_print_tensor_workspace_uses_fixed_one_mib_core_records(
         execution._build_kernel_launch_plan(
             artifact=artifact,
             runtime=execution.TlaRuntimeOptions(
-                core_type=core_type, kernel_mode=core_type
+                kernel_mode=core_type, arch_scope=f"{core_type}.c310"
             ),
             launch_args=[_TypedPointer(0x1000)],
             block_num=max_blocks + 1,
@@ -1841,7 +1843,7 @@ def test_print_tensor_metadata_and_decode_are_scoped_to_second_entrypoint() -> N
 def test_print_tensor_launch_accepts_multiblock_block_dim(tmp_path, core_type) -> None:
     plan = execution._build_kernel_launch_plan(
         artifact=_print_tensor_artifact(tmp_path),
-        runtime=execution.TlaRuntimeOptions(core_type=core_type, kernel_mode=core_type),
+        runtime=execution.TlaRuntimeOptions(kernel_mode=core_type, arch_scope=f"{core_type}.c310"),
         launch_args=[_TypedPointer(0x1000)],
         block_num=2,
     )

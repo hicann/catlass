@@ -6,10 +6,7 @@ import inspect
 from typing import TYPE_CHECKING, Any, Sequence
 
 from .. import runtime as _runtime
-from ..dsl import (
-    _get_typed_call_args,
-    _get_context_type_args,
-)
+from ..dsl import _get_typed_call_args
 from ..execution import TlaExecutionResult, TlaUnsupportedAbiError
 
 if TYPE_CHECKING:
@@ -35,9 +32,9 @@ class KernelLauncher:
         self._launch_args = tuple(launch_args or ())
         self._runtime = None
         self._artifact = None
-        type_args = _get_context_type_args(self._fn.fn.__name__)
-        if type_args is None and self._launch_args:
-            type_args = _get_typed_call_args(self._launch_args)
+        type_args = (
+            _get_typed_call_args(self._launch_args) if self._launch_args else None
+        )
         should_eager_compile = (
             type_args is not None or not inspect.signature(self._fn.fn).parameters
         )
@@ -77,8 +74,6 @@ class KernelLauncher:
             if launch_args:
                 raise TlaUnsupportedAbiError("`args` specified multiple times.")
             launch_args = tuple(args)
-        if type_args is None:
-            type_args = _get_context_type_args(self._fn.fn.__name__)
         if type_args is None and launch_args:
             type_args = _get_typed_call_args(launch_args)
         launch_kwargs["block_dim"] = int(block_dim)

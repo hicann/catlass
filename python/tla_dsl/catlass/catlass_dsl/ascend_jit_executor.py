@@ -17,6 +17,7 @@ from ..execution import (
     _append_debug_print_workspace_payload,
     _capture_c_stdout,
     _checked_print_tensor_block_count,
+    _core_type_from_arch_scope,
     _decode_native_print_tensor_records,
     _extract_logical_mixed_handoff,
     _format_print_tensor_record,
@@ -81,7 +82,7 @@ def execute_kernel(
         helper_core = (
             _mixed_print_tensor_helper_core(artifact.lowered_llvm)
             if plan.kernel_mode == "mix"
-            else runtime.core_type
+            else _core_type_from_arch_scope(runtime.arch_scope)
         )
         expected_subblocks: tuple[int | None, ...] = (
             (0, 1)
@@ -131,7 +132,7 @@ def _resolve_launch_context(launch_kwargs: Mapping[str, Any]) -> tuple[int, int]
         current_stream,
     )
 
-    device = int(launch_kwargs.get("device", current_device()))
+    device = int(current_device())
     raw_stream = launch_kwargs.get("stream")
     if raw_stream is None:
         return device, int(current_stream(device))
@@ -150,7 +151,7 @@ def _build_kernel_launch_plan(
         helper_core = (
             _mixed_print_tensor_helper_core(artifact.lowered_llvm)
             if runtime.kernel_mode == "mix"
-            else runtime.core_type
+            else _core_type_from_arch_scope(runtime.arch_scope)
         )
         _validate_print_tensor_fifo_capacity(
             artifact,
