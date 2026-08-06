@@ -1427,61 +1427,57 @@ def test_print_tensor_parser_retains_logical_subblock() -> None:
 
 
 @pytest.mark.parametrize(
-    ("output", "match"),
+    "output",
     (
-        (
-            _identified_print_tensor_record(),
-            "unexpected call/block/subblock identities",
-        ),
+        "",
         (
             _identified_print_tensor_record(subblock=0)
-            + _identified_print_tensor_record(subblock=0),
-            "duplicate call/block/subblock identities",
-        ),
-        (
-            _identified_print_tensor_record(subblock=1),
-            "unexpected call/block/subblock identities",
+            + _identified_print_tensor_record(subblock=0)
         ),
     ),
-    ids=("missing-subblock", "duplicate-subblock", "unexpected-subblock"),
+    ids=("no-subblock-output", "repeated-subblock-output"),
 )
-def test_aiv_print_tensor_record_set_validates_subblock_identity(output, match) -> None:
+def test_aiv_print_tensor_record_set_allows_partial_dynamic_output(output) -> None:
     metadata = (execution._PrintTensorMetadata((2, 2), 4, "f32", "GM", call=0),)
 
-    with pytest.raises(execution.TlaExecutionError, match=match):
+    decoded = execution._decode_native_print_tensor_records(
+        output,
+        metadata=metadata,
+        expected_subblocks=(0,),
+    )
+
+    assert len(decoded) == (0 if not output else 2)
+
+
+@pytest.mark.parametrize("subblock", (None, 1), ids=("missing-tag", "wrong-tag"))
+def test_aiv_print_tensor_record_set_rejects_invalid_subblock(subblock) -> None:
+    metadata = (execution._PrintTensorMetadata((2, 2), 4, "f32", "GM", call=0),)
+
+    with pytest.raises(
+        execution.TlaExecutionError, match="unexpected call/block/subblock"
+    ):
         execution._decode_native_print_tensor_records(
-            output,
+            _identified_print_tensor_record(subblock=subblock),
             metadata=metadata,
             expected_subblocks=(0,),
         )
 
 
-def test_mixed_aiv_print_tensor_record_set_requires_both_subblocks() -> None:
+def test_mixed_aiv_print_tensor_record_set_allows_one_executed_subblock() -> None:
     metadata = (execution._PrintTensorMetadata((2, 2), 4, "f32", "GM", call=0),)
 
-    with pytest.raises(
-        execution.TlaExecutionError,
-        match=r"missing call/block/subblock identities \[\(0, 0, 1\)\]",
-    ):
-        execution._decode_native_print_tensor_records(
-            _identified_print_tensor_record(subblock=0),
-            metadata=metadata,
-            expected_subblocks=(0, 1),
-        )
+    decoded = execution._decode_native_print_tensor_records(
+        _identified_print_tensor_record(subblock=0),
+        metadata=metadata,
+        expected_subblocks=(0, 1),
+    )
+
+    assert len(decoded) == 1
 
 
 @pytest.mark.parametrize(
     ("output", "match"),
     (
-        (
-            _identified_print_tensor_record(call=0),
-            r"missing call/block/subblock identities \[\(1, 0, None\)\]",
-        ),
-        (
-            _identified_print_tensor_record(call=0)
-            + _identified_print_tensor_record(call=0),
-            r"duplicate call/block/subblock identities \[\(0, 0, None\)\]",
-        ),
         (
             _identified_print_tensor_record(call=0)
             + _identified_print_tensor_record(call=7),
@@ -1524,8 +1520,6 @@ def test_mixed_aiv_print_tensor_record_set_requires_both_subblocks() -> None:
         ),
     ),
     ids=(
-        "missing",
-        "duplicate",
         "unknown-call",
         "out-of-range-block",
         "wrong-dtype",
@@ -1571,13 +1565,8 @@ def test_print_tensor_record_set_rejects_invalid_output_without_public_lines(
             r"unexpected call/block/subblock identities "
             r"\[\(8, 0, None\), \(9, 0, None\)\]",
         ),
-        (
-            _identified_print_tensor_record(call=0)
-            + _identified_print_tensor_record(call=0),
-            r"duplicate call/block/subblock identities \[\(0, 0, None\)\]",
-        ),
     ),
-    ids=("malformed-first", "unexpected-before-duplicate", "duplicate-before-missing"),
+    ids=("malformed-first", "unexpected-before-repeated"),
 )
 def test_print_tensor_record_set_has_stable_error_priority_and_sorted_identities(
     output, match
@@ -1702,7 +1691,7 @@ def test_mixed_aiv_print_tensor_capacity_counts_both_subblocks(
         )
 
 
-def test_print_tensor_capacity_counts_all_calls_within_each_core_record(
+def test_print_tensor_capacity_allows_multiple_static_calls_within_each_core_record(
     tmp_path,
 ) -> None:
     artifact = _two_print_tensor_artifact(tmp_path)
@@ -1718,16 +1707,17 @@ def test_print_tensor_capacity_counts_all_calls_within_each_core_record(
         ),
     )
 
-    with pytest.raises(execution.TlaExecutionError, match="FIFO capacity"):
-        execution._build_kernel_launch_plan(
-            artifact=artifact,
-            runtime=execution.TlaRuntimeOptions(),
-            launch_args=[_TypedPointer(0x1000)],
-            block_num=1,
-        )
+    plan = execution._build_kernel_launch_plan(
+        artifact=artifact,
+        runtime=execution.TlaRuntimeOptions(),
+        launch_args=[_TypedPointer(0x1000)],
+        block_num=1,
+    )
+
+    assert plan.block_num == 1
 
 
-def test_print_tensor_capacity_assumes_worst_case_for_dynamic_call(
+def test_print_tensor_capacity_allows_partial_dynamic_output(
     tmp_path,
 ) -> None:
     artifact = _two_print_tensor_artifact(tmp_path)
@@ -1744,13 +1734,14 @@ def test_print_tensor_capacity_assumes_worst_case_for_dynamic_call(
     )
     assert [record.count for record in metadata] == [None, 2]
 
-    with pytest.raises(execution.TlaExecutionError, match="FIFO capacity"):
-        execution._build_kernel_launch_plan(
-            artifact=artifact,
-            runtime=execution.TlaRuntimeOptions(),
-            launch_args=[_TypedPointer(0x1000)],
-            block_num=1,
-        )
+    plan = execution._build_kernel_launch_plan(
+        artifact=artifact,
+        runtime=execution.TlaRuntimeOptions(),
+        launch_args=[_TypedPointer(0x1000)],
+        block_num=1,
+    )
+
+    assert plan.block_num == 1
 
 
 def test_print_tensor_metadata_requires_one_static_shape() -> None:

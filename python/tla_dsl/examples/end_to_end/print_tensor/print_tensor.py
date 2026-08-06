@@ -128,6 +128,21 @@ def print_tensor_aiv_two_calls_kernel(value: tla.Tensor) -> None:
 
 
 @tla.kernel
+def print_tensor_aiv_dynamic_control_flow_kernel(
+    value: tla.Tensor, enabled: tla.Int32, repeats: tla.Int32
+) -> None:
+    """Print a tensor from runtime ``if`` and ``scf.for`` control flow.
+
+    ``enabled`` deliberately permits an execution with no native print record;
+    ``repeats`` makes the one static print site emit the record repeatedly.
+    """
+    with tla.vector():
+        if enabled != 0:
+            for _ in tla.range(0, repeats, 1):
+                tla.print(value, 16)
+
+
+@tla.kernel
 def print_tensor_aic_two_calls_kernel(value: tla.Tensor) -> None:
     with tla.cube():
         tla.print(value, 16)
@@ -236,6 +251,17 @@ def print_tensor_ub_dynamic_kernel(
 
 
 def _kernel(args: argparse.Namespace) -> Callable[..., None]:
+    if args.case == "dynamic-control-flow":
+        if args.arch_scope != "aiv.c310" or args.storage != "gm":
+            raise tla.TlaExecutionError(
+                "dynamic-control-flow tensor tla.print requires GM AIV "
+                "(--arch-scope aiv.c310)"
+            )
+        if args.calls != 1:
+            raise tla.TlaExecutionError(
+                "the dynamic-control-flow case supports one static print site"
+            )
+        return print_tensor_aiv_dynamic_control_flow_kernel
     if args.storage == "ub":
         if args.arch_scope != "aiv.c310":
             raise tla.TlaExecutionError(
@@ -392,6 +418,31 @@ def _verify_multi_record_public_output(
     return "\n".join(expected)
 
 
+def _verify_dynamic_control_flow_public_output(
+    output: str,
+    spec: _DTypeSpec = DTYPE_SPECS["f32"],
+    *,
+    values: tuple[float | int, ...] | list[float | int] | None = None,
+    shape: tuple[int, ...] = SOURCE_SHAPE,
+    arch_scope: str = "aiv.c310",
+) -> str:
+    """Validate best-effort records from a dynamic tensor-print site.
+
+    A disabled branch legitimately produces no record; a loop may produce the
+    same static print site more than once.  Each emitted public record must
+    nevertheless retain the exact dtype, location, shape, count, and values.
+    """
+    expected = _format_record(spec, values=values, shape=shape, arch_scope=arch_scope)
+    records = _public_records(output)
+    malformed = [record for record in records if record != expected]
+    if malformed:
+        raise tla.TlaExecutionError(
+            "dynamic-control-flow tensor tla.print has malformed record(s): "
+            f"expected {expected!r}, got {malformed!r}"
+        )
+    return "\n".join(records)
+
+
 def _make_external_unsigned_input(
     torch: Any,
     spec: _DTypeSpec,
@@ -502,12 +553,14 @@ def _run_spec(args: argparse.Namespace, torch: Any, spec: _DTypeSpec) -> None:
                 value
                 for value in source.flatten()[: len(spec.values)].tolist()
             ]
-    kernel_args = (
-        (value, tla.Int32(SOURCE_SHAPE[0]), tla.Int32(16))
-        if (args.storage == "ub" and args.case == "dynamic")
-        or (args.storage == "gm" and args.dynamic_shape)
-        else (value,)
-    )
+    if args.case == "dynamic-control-flow":
+        kernel_args = (value, tla.Int32(args.enabled), tla.Int32(args.repeats))
+    elif (args.storage == "ub" and args.case == "dynamic") or (
+        args.storage == "gm" and args.dynamic_shape
+    ):
+        kernel_args = (value, tla.Int32(SOURCE_SHAPE[0]), tla.Int32(16))
+    else:
+        kernel_args = (value,)
     executor = _compile(args, kernel, kernel_args)
     captured = StringIO()
     with redirect_stdout(captured):
@@ -515,7 +568,15 @@ def _run_spec(args: argparse.Namespace, torch: Any, spec: _DTypeSpec) -> None:
     output_shape = (
         UB_SHAPE if args.storage == "ub" and args.case != "dynamic" else source_shape
     )
-    if args.calls == 1 and args.block_dim == 1:
+    if args.case == "dynamic-control-flow":
+        rendered = _verify_dynamic_control_flow_public_output(
+            captured.getvalue(),
+            spec,
+            values=expected_values,
+            shape=output_shape,
+            arch_scope=args.arch_scope,
+        )
+    elif args.calls == 1 and args.block_dim == 1:
         rendered = _verify_public_output(
             captured.getvalue(),
             spec,
@@ -560,6 +621,21 @@ def run(args: argparse.Namespace) -> int:
         raise tla.TlaExecutionError(
             "capacity, dynamic-shape, and column-major cases require --dtype f32"
         )
+    if args.case == "dynamic-control-flow" and (
+        args.storage != "gm"
+        or args.dynamic_shape
+        or args.layout != "row-major"
+        or args.arch_scope != "aiv.c310"
+        or args.block_dim != 1
+        or args.dtype != "f32"
+        or args.all_dtypes
+        or args.calls != 1
+        or args.repeats < 0
+    ):
+        raise tla.TlaExecutionError(
+            "the dynamic-control-flow case requires static f32 GM AIV printing, "
+            "--block-dim 1, one static call, and non-negative --repeats"
+        )
 
     import torch
     import torch_npu  # noqa: F401
@@ -590,13 +666,32 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--case",
-        choices=("base", "aligned-offset", "dynamic", "capacity"),
+        choices=(
+            "base",
+            "aligned-offset",
+            "dynamic",
+            "dynamic-control-flow",
+            "capacity",
+        ),
         default="base",
     )
     parser.add_argument("--dynamic-shape", action="store_true")
     parser.add_argument("--device", type=int, default=0)
     parser.add_argument("--block-dim", type=int, default=1)
     parser.add_argument("--calls", type=int, choices=(1, 2), default=1)
+    parser.add_argument(
+        "--enabled",
+        type=int,
+        choices=(0, 1),
+        default=1,
+        help="Runtime branch predicate for --case dynamic-control-flow.",
+    )
+    parser.add_argument(
+        "--repeats",
+        type=int,
+        default=2,
+        help="Runtime loop trip count for --case dynamic-control-flow.",
+    )
     parser.add_argument("--cache-dir", default=str(DEFAULT_CACHE_DIR))
     parser.add_argument("--force-recompile", action="store_true")
     parser.add_argument("--no-cache", action="store_true")

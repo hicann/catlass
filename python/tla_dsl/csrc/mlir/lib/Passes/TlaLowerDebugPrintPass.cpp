@@ -762,9 +762,7 @@ public:
                 StringRef name = ancestor->getName().getStringRef();
                 if (name == "scf.if" || name == "scf.for" ||
                     name == "scf.while") {
-                    op.emitError("tla.print_tensor cannot be nested in dynamic SCF");
-                    signalPassFailure();
-                    return;
+                    continue;
                 }
                 if (ancestor->getNumRegions() != 0) {
                     op.emitError("tla.print_tensor has an unrecognized multi-execution ancestor");

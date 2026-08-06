@@ -75,6 +75,29 @@ def _aiv_print_tensor_runtime_length(
 
 
 @tla.kernel
+def _aiv_print_tensor_in_dynamic_if(value: tla.Tensor, limit: int) -> None:
+    with tla.vector():
+        if limit > 0:
+            tla.print(value, 4)
+
+
+@tla.kernel
+def _aiv_print_tensor_in_dynamic_for(value: tla.Tensor, limit: int) -> None:
+    with tla.vector():
+        for _ in tla.range(0, limit, 1):
+            tla.print(value, 4)
+
+
+@tla.kernel
+def _aiv_print_tensor_in_dynamic_while(value: tla.Tensor, limit: int) -> None:
+    with tla.vector():
+        index = 0
+        while index < limit:
+            tla.print(value, 4)
+            index = index + 1
+
+
+@tla.kernel
 def _aic_print_tensor(value: tla.Tensor) -> None:
     with tla.cube():
         tla.print(value)
@@ -206,6 +229,25 @@ def test_print_tensor_accepts_runtime_integer_length() -> None:
     assert "tla.print_tensor" in mlir
     assert "arith.extsi" in mlir
     assert "length = %" in mlir
+
+
+@pytest.mark.parametrize(
+    ("kernel", "control_flow_op"),
+    (
+        (_aiv_print_tensor_in_dynamic_if, "scf.if"),
+        (_aiv_print_tensor_in_dynamic_for, "scf.for"),
+        (_aiv_print_tensor_in_dynamic_while, "scf.while"),
+    ),
+    ids=("if", "for", "while"),
+)
+def test_print_tensor_accepts_dynamic_control_flow(
+    kernel: object, control_flow_op: str
+) -> None:
+    mlir = kernel.dump_mlir(type_args=(_host_tensor(), 2))
+
+    assert control_flow_op in mlir
+    assert "tla.print_tensor" in mlir
+    assert mlir.index(control_flow_op) < mlir.index("tla.print_tensor")
 
 
 def test_print_tensor_accepts_dynamic_rank_one_shape_with_explicit_length() -> None:

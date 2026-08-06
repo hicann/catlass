@@ -463,14 +463,16 @@ def _validate_print_tensor_fifo_capacity(
     metadata = _print_tensor_static_metadata_records(
         artifact.tlair_mlir, entrypoint=artifact.entrypoint
     )
-    record_bytes = [_print_tensor_native_wire_bytes(item) for item in metadata]
-    per_block_bytes = sum(record_bytes)
-    if per_block_bytes > _PRINT_TENSOR_FIFO_BYTES:
-        raise TlaExecutionError(
-            "tla.print_tensor launch exceeds the conservative per-core FIFO capacity: "
-            f"{per_block_bytes} bytes/block, capacity is "
-            f"{_PRINT_TENSOR_FIFO_BYTES} bytes"
-        )
+    # Dynamic control flow can execute any site zero or multiple times. Keep
+    # the native per-record bound, but do not reserve the FIFO for every
+    # statically visible site.
+    for item in metadata:
+        record_bytes = _print_tensor_native_wire_bytes(item)
+        if record_bytes > _PRINT_TENSOR_FIFO_BYTES:
+            raise TlaExecutionError(
+                "tla.print_tensor record exceeds the per-print FIFO capacity: "
+                f"{record_bytes} bytes, capacity is {_PRINT_TENSOR_FIFO_BYTES} bytes"
+            )
 
 
 def _runtime_arg_values(arg: Any) -> list[int]:
@@ -1214,12 +1216,8 @@ def _decode_native_print_tensor_records(
 ) -> list[tuple[_PrintTensorMetadata, _NativePrintTensorRecord, list[float | int]]]:
     records = _parse_native_print_tensor_records(output)
     expected_metadata = {item.call: item for item in metadata}
-    expected = {
-        (item.call, block, subblock)
-        for item in metadata
-        for block in range(block_count)
-        for subblock in expected_subblocks
-    }
+    valid_blocks = set(range(block_count))
+    valid_subblocks = set(expected_subblocks)
     record_values: dict[int, list[float | int]] = {}
     malformed_identities: set[tuple[int, int, int | None]] = set()
     for record in records:
@@ -1244,8 +1242,21 @@ def _decode_native_print_tensor_records(
             f"malformed records {_sort_print_tensor_identities(malformed_identities)}"
         )
 
+    # A dynamic branch can produce no record and a loop can repeat one. Native
+    # output is therefore best-effort: validate every observed record without
+    # requiring a one-to-one correspondence with statically lowered calls.
     identities = [(record.call, record.block, record.subblock) for record in records]
-    unexpected_identities = _sort_print_tensor_identities(set(identities) - expected)
+    unexpected_identities = _sort_print_tensor_identities(
+        {
+            identity
+            for identity in identities
+            if (
+                identity[0] not in expected_metadata
+                or identity[1] not in valid_blocks
+                or identity[2] not in valid_subblocks
+            )
+        }
+    )
     if unexpected_identities:
         raise _print_tensor_decode_error(
             f"unexpected call/block/subblock identities {unexpected_identities}",
@@ -1281,23 +1292,6 @@ def _decode_native_print_tensor_records(
             raise _print_tensor_decode_error(
                 f"unexpected {label} records {_sort_print_tensor_identities(mismatch)}"
             )
-
-    observed: set[tuple[int, int, int | None]] = set()
-    duplicates = set()
-    for identity in identities:
-        if identity in observed:
-            duplicates.add(identity)
-        observed.add(identity)
-    if duplicates:
-        raise _print_tensor_decode_error(
-            "duplicate call/block/subblock identities "
-            f"{_sort_print_tensor_identities(duplicates)}"
-        )
-    missing = _sort_print_tensor_identities(expected - observed)
-    if missing:
-        raise _print_tensor_decode_error(
-            f"missing call/block/subblock identities {missing}"
-        )
 
     return [
         (expected_metadata[record.call], record, record_values[id(record)])
