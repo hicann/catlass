@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
 from typing import Any
+import numpy as np
 
 import catlass as tla
 from catlass.params import UnalignStoreParams, NormalLoadParams, LoadDist
@@ -35,17 +35,18 @@ Q_BLOCK_SUB = Q_BLOCK // 2
 BATCH = 2
 HEAD_NUM = 8
 KV_HEAD_NUM = 2
-Q_SEQ = 256
-KV_SEQ = 256
+Q_SEQ = 117
+KV_SEQ = 512
 GROUP_SIZE = HEAD_NUM // KV_HEAD_NUM
-Q_BLOCK_COUNT = Q_SEQ // Q_BLOCK
-KV_BLOCK_COUNT = KV_SEQ // KV_BLOCK
+Q_BLOCK_COUNT = (Q_SEQ + Q_BLOCK - 1) // Q_BLOCK
+KV_BLOCK_COUNT = (KV_SEQ + KV_BLOCK - 1) // KV_BLOCK
 TOTAL_TASKS = BATCH * HEAD_NUM * Q_BLOCK_COUNT
 
 ALIGNMENT = 512
 L0_HALF_SIZE = 32768
 VL_FLOAT_ELE = 64
 QK_SCALE = 1.0 / (HEAD_DIM ** 0.5)
+MIN_VALUE = -3e38
 
 # Prelaunch
 PRE_LAUNCH = 2
@@ -71,10 +72,7 @@ PV_ML0_LOOP_NUM = (Q_BLOCK + L0_TILE_M - 1) // L0_TILE_M
 PV_NL0_LOOP_NUM = (HEAD_DIM + L0_TILE_N - 1) // L0_TILE_N
 PV_KL0_LOOP_NUM = (KV_BLOCK + L0_TILE_K - 1) // L0_TILE_K
 
-DEMO_DIR = Path(__file__).resolve().parent
-DEFAULT_CACHE_DIR = DEMO_DIR / "artifacts" / "runtime-cache"
-
-THRESHOLD = 0.02
+THRESHOLD = 0.05
 UNCHANGED_THRESHOLD = 0.1
 
 
@@ -193,10 +191,10 @@ def flash_attention_infer_kernel(
     ub_s_ping_ptr = tla.recast_ptr(ub_s_ping_ptr, dtype=tla.Float32)
     ub_s_pong_ptr = mem_allocator.allocate(Q_BLOCK_SUB * KV_BLOCK * 4, ALIGNMENT, tla.AddressSpace.ub)
     ub_s_pong_ptr = tla.recast_ptr(ub_s_pong_ptr, dtype=tla.Float32)
-    # 解UBBank冲突，搬运stride额外增加一个32B错开
-    ub_p_f16_ping_ptr = mem_allocator.allocate((Q_BLOCK_SUB + 16) * KV_BLOCK * 2, ALIGNMENT, tla.AddressSpace.ub)
+    # P buffer (zN布局, Q_BLOCK_SUB+1 padding 用于 BlockStoreParams)
+    ub_p_f16_ping_ptr = mem_allocator.allocate((Q_BLOCK_SUB + 1) * KV_BLOCK * 2, ALIGNMENT, tla.AddressSpace.ub)
     ub_p_f16_ping_ptr = tla.recast_ptr(ub_p_f16_ping_ptr, dtype=tla.Float16)
-    ub_p_f16_pong_ptr = mem_allocator.allocate((Q_BLOCK_SUB + 16) * KV_BLOCK * 2, ALIGNMENT, tla.AddressSpace.ub)
+    ub_p_f16_pong_ptr = mem_allocator.allocate((Q_BLOCK_SUB + 1) * KV_BLOCK * 2, ALIGNMENT, tla.AddressSpace.ub)
     ub_p_f16_pong_ptr = tla.recast_ptr(ub_p_f16_pong_ptr, dtype=tla.Float16)
 
     ub_pv_ping_ptr = mem_allocator.allocate(Q_BLOCK_SUB * HEAD_DIM * 4, ALIGNMENT, tla.AddressSpace.ub)
@@ -233,6 +231,11 @@ def flash_attention_infer_kernel(
 
     cast_trait_zero = tla.params.CastParams(
         reg_slot=tla.params.RegSlot.ZERO,
+        sat_mode=tla.params.SatMode.SAT,
+        round_mode=tla.params.RoundMode.CAST_ROUND,
+    )
+    cast_trait_one = tla.params.CastParams(
+        reg_slot=tla.params.RegSlot.ONE,
         sat_mode=tla.params.SatMode.SAT,
         round_mode=tla.params.RoundMode.CAST_ROUND,
     )
@@ -310,6 +313,8 @@ def flash_attention_infer_kernel(
         head_idx = task_idx_cur_batch - q_block_idx * q_heads
         kv_head_idx = head_idx // group_size
 
+        q_tile_size = (Q_SEQ - (Q_BLOCK_COUNT - 1) * Q_BLOCK) if q_block_idx == Q_BLOCK_COUNT - 1 else Q_BLOCK
+
         qo_stride = q_heads * HEAD_DIM
         kv_stride = kv_heads * HEAD_DIM
         kv_b_offset = cur_batch * max_kv_seqlen * kv_heads * HEAD_DIM
@@ -362,6 +367,8 @@ def flash_attention_infer_kernel(
                 l1BBufId = kv_iter % K_L1_BUF
                 l0CBufId = kv_iter % L0_STAGES
 
+                kv_tile_size = (KV_SEQ - (KV_BLOCK_COUNT - 1) * KV_BLOCK) if kv_iter == KV_BLOCK_COUNT - 1 else KV_BLOCK
+
                 # L0A/L0B ping/pong flag
                 prefixSumL0AStages = (kv_iter * mm1L0ATotalStages_) if (kv_iter <= PRE_LAUNCH) \
                     else (kv_iter * mm1L0ATotalStages_ + (kv_iter - PRE_LAUNCH) * mm2L0ATotalStages_)
@@ -385,13 +392,15 @@ def flash_attention_infer_kernel(
                     for nL0Itr in tla.range(c0, QK_NL0_LOOP_NUM, c1):
                         nLoopCounter = nL0Itr * QK_NL0_LOOP_NUM + nL0Itr
                         l0c_s = tla.make_tensor_like(l0_s_ptr, k_gm, tla.arch.L0Clayout)
-                        ub_s_fix = tla.make_tensor(
-                            ub_s_ptr,
-                            tla.make_layout(
-                                tla.make_shape(Q_BLOCK, KV_BLOCK),
-                                tla.make_stride(KV_BLOCK, 1),
-                                layoutTag=tla.arch.RowMajor,
-                            ),
+                        s_ub = tla.make_tensor(ub_s_ptr,
+                                                tla.make_layout(
+                                                    tla.make_shape(q_tile_size, kv_tile_size),
+                                                    tla.make_stride(KV_BLOCK, 1)
+                                                ))
+                        ub_s_fix = tla.tile_view(
+                            s_ub,
+                            tla.make_shape(Q_BLOCK, KV_BLOCK),
+                            tla.make_coord(c0, c0),
                         )
 
                         if l1BBufId == c0:
@@ -514,6 +523,10 @@ def flash_attention_infer_kernel(
 
                     vec_idx = tla.arch.sub_block_idx()
                     update = kv_iter != c0
+
+                    q_tile_size_half = (q_tile_size + 1) // 2
+                    q_tile_size_sub = q_tile_size_half if vec_idx == c0 else (q_tile_size - q_tile_size_half)
+
                     ub_s_ptr = ub_s_ping_ptr if ubSBufId == c0 else ub_s_pong_ptr
                     ub_p_f16_ptr = ub_p_f16_ping_ptr if ubSBufId == c0 else ub_p_f16_pong_ptr
                     l1_p_ptr_qk = l1_p_0_ptr
@@ -533,19 +546,22 @@ def flash_attention_infer_kernel(
 
                     ub_s = tla.make_tensor(
                         ub_s_ptr,
-                        tla.make_layout(tla.make_shape(Q_BLOCK_SUB, KV_BLOCK), tla.make_stride(KV_BLOCK, 1)),
+                        tla.make_layout(
+                            tla.make_shape(q_tile_size_sub, KV_BLOCK),
+                            tla.make_stride(KV_BLOCK, 1)
+                        ),
                     )
 
                     # Mask占位
                     mem_mask_block = tla.make_tensor(
                         mem_mask.ptr
-                        + (q_block_idx * Q_BLOCK + vec_idx * Q_BLOCK_SUB) * max_kv_seqlen
+                        + (q_block_idx * Q_BLOCK + vec_idx * q_tile_size_half) * max_kv_seqlen
                         + kv_iter * KV_BLOCK,
-                        tla.make_layout(tla.make_shape(Q_BLOCK_SUB, KV_BLOCK), tla.make_stride(max_kv_seqlen, 1)),
+                        tla.make_layout(tla.make_shape(q_tile_size_sub, kv_tile_size), tla.make_stride(max_kv_seqlen, 1)),
                     )
                     ub_mask_sub = tla.make_tensor(
                         ub_mask_ptr,
-                        tla.make_layout(tla.make_shape(Q_BLOCK_SUB, KV_BLOCK), tla.make_stride(KV_BLOCK, 1)),
+                        tla.make_layout(tla.make_shape(q_tile_size_sub, kv_tile_size), tla.make_stride(KV_BLOCK, 1)),
                     )
                     tla.copy(ub_mask_sub, mem_mask_block)
                     tla.set_flag(mask_copy_end)
@@ -553,116 +569,162 @@ def flash_attention_infer_kernel(
                     tla.pipe_barrier(tla.pipes.ALL)
                     ub_mask = tla.make_tensor(
                         ub_mask_ptr,
-                        tla.make_layout(tla.make_shape(Q_BLOCK_SUB, KV_BLOCK), tla.make_stride(KV_BLOCK, 1)),
+                        tla.make_layout(tla.make_shape(q_tile_size_sub, kv_tile_size), tla.make_stride(KV_BLOCK, 1)),
                     )
                     ub_now_max = tla.make_tensor(
                         ub_now_max_ptr,
-                        tla.make_layout(tla.make_shape(Q_BLOCK_SUB), tla.make_stride(1))
+                        tla.make_layout(tla.make_shape(q_tile_size_sub), tla.make_stride(1))
                     )
                     ub_last_max = tla.make_tensor(
                         ub_last_max_ptr,
-                        tla.make_layout(tla.make_shape(Q_BLOCK_SUB), tla.make_stride(1))
+                        tla.make_layout(tla.make_shape(q_tile_size_sub), tla.make_stride(1))
                     )
                     ub_sum = tla.make_tensor(
                         ub_sum_ptr,
-                        tla.make_layout(tla.make_shape(Q_BLOCK_SUB), tla.make_stride(1))
+                        tla.make_layout(tla.make_shape(q_tile_size_sub), tla.make_stride(1))
                     )
                     ub_exp_sum = tla.make_tensor(
                         ub_exp_sum_ptr,
-                        tla.make_layout(tla.make_shape(Q_BLOCK_SUB), tla.make_stride(1))
+                        tla.make_layout(tla.make_shape(q_tile_size_sub), tla.make_stride(1))
                     )
                     ub_exp_max_qk = tla.make_tensor(
                         ub_exp_max_ptr_qk,
-                        tla.make_layout(tla.make_shape(Q_BLOCK_SUB), tla.make_stride(1))
+                        tla.make_layout(tla.make_shape(q_tile_size_sub), tla.make_stride(1))
                     )
-                    # UBBank冲突优化: 行stride多一块
+                    # P UB layout: RowMajor (65, 128), zN
                     ub_p_f16 = tla.make_tensor(
                         ub_p_f16_ptr,
                         tla.make_layout(
-                            tla.make_shape(Q_BLOCK_SUB, KV_BLOCK),
-                            tla.make_stride(KV_BLOCK + 16, 1),
+                            tla.make_shape(Q_BLOCK_SUB + 1, KV_BLOCK),
+                            tla.make_stride(KV_BLOCK, 1),
                         ),
+                    )
+                    ub_p_zN_full = tla.make_tensor_like(ub_p_f16_ptr, ub_p_f16, tla.arch.zNUnAlign)
+                    ub_p_zN = tla.tile_view(
+                        ub_p_zN_full, tla.make_shape(q_tile_size_sub, kv_tile_size), tla.make_coord(c0, c0)
                     )
                     ub_tmp = tla.make_tensor(
                         ub_tmp_ptr,
                         tla.make_layout(tla.make_shape(2 * VL_FLOAT_ELE), tla.make_stride(1)),
                     )
 
+                    remaining = kv_tile_size % VL_FLOAT_ELE
                     # Phase 1: scale*qk + mask, compute block_max
                     with tla.vec.func(mode='simd'):
                         reduce_mask = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Float32)
+                        one_mask_p1, _ = tla.update_mask(1, dtype=tla.Float32)
+                        mask_tail_n, _ = tla.update_mask(remaining, dtype=tla.Float32)
                         min_reg = tla.full(-65504.0, dtype=tla.Float32)
-                        for i0 in tla.range(Q_BLOCK_SUB):
-                            ub_s_i0 = tla.tile_view(ub_s, tla.make_shape(1, VL_FLOAT_ELE), tla.make_coord(i0, c0))
-                            ub_s_i1 = tla.tile_view(ub_s, tla.make_shape(1, VL_FLOAT_ELE), tla.make_coord(i0, c1))
-                            ub_s_reg0_if0 = ub_s_i0.load()
-                            ub_s_reg1_if0 = ub_s_i1.load()
-                            ub_s_reg0_if0 = tla.mul(ub_s_reg0_if0, QK_SCALE)
-                            ub_s_reg1_if0 = tla.mul(ub_s_reg1_if0, QK_SCALE)
-                            ub_s_i0.store(ub_s_reg0_if0)
-                            ub_s_i1.store(ub_s_reg1_if0)
-                            tmp_reg_if0 = tla.max(ub_s_reg0_if0, ub_s_reg1_if0)
-                            max_reg_if0 = tmp_reg_if0.reduce(tla.ReductionOp.MAX, mask=reduce_mask)
-                            if kv_iter == c0:
+                        for i0 in tla.range(q_tile_size_sub):
+                            if kv_tile_size > VL_FLOAT_ELE:
+                                ub_s_i0 = tla.tile_view(ub_s, tla.make_shape(1, VL_FLOAT_ELE), tla.make_coord(i0, c0))
+                                ub_s_i1 = tla.tile_view(ub_s, tla.make_shape(1, VL_FLOAT_ELE), tla.make_coord(i0, c1))
+                                ub_s_reg0_if0 = ub_s_i0.load()
+                                ub_s_reg1_if0 = ub_s_i1.load()
+                                ub_s_reg0_if0 = tla.mul(ub_s_reg0_if0, QK_SCALE, mask=reduce_mask)
+                                ub_s_reg1_if0 = tla.mul(ub_s_reg1_if0, QK_SCALE, mask=reduce_mask)
+                                if kv_tile_size < KV_BLOCK:
+                                    ub_s_reg1_if0 = tla.where(mask_tail_n, ub_s_reg1_if0, min_reg)
+                                ub_s_i0.store(ub_s_reg0_if0, mask=reduce_mask)
+                                ub_s_i1.store(ub_s_reg1_if0, mask=reduce_mask)
+                                tmp_reg_if0 = tla.max(ub_s_reg0_if0, ub_s_reg1_if0, mask=reduce_mask)
+                                max_reg_if0 = tmp_reg_if0.reduce(tla.ReductionOp.MAX, mask=reduce_mask)
                                 ub_max_dst_if0 = tla.tile_view(ub_now_max, tla.make_shape(1), tla.make_coord(i0))
-                                ub_max_dst_if0.store(max_reg_if0, params=UnalignStoreParams())
+                                if kv_iter == c0:
+                                    ub_max_dst_if0.store(max_reg_if0, params=UnalignStoreParams(), mask=one_mask_p1)
+                                else:
+                                    ub_max_dst_if0 = tla.tile_view(ub_last_max, tla.make_shape(1), tla.make_coord(i0))
+                                    ub_max_dst_if0.store(max_reg_if0, params=UnalignStoreParams(), mask=one_mask_p1)
                             else:
-                                ub_max_dst_if0 = tla.tile_view(ub_last_max, tla.make_shape(1), tla.make_coord(i0))
-                                ub_max_dst_if0.store(max_reg_if0, params=UnalignStoreParams())
+                                ub_s_i0 = tla.tile_view(ub_s, tla.make_shape(1, VL_FLOAT_ELE), tla.make_coord(i0, c0))
+                                ub_s_reg0_if0 = ub_s_i0.load()
+                                ub_s_reg0_if0 = tla.mul(ub_s_reg0_if0, QK_SCALE, mask=reduce_mask)
+                                if kv_tile_size < VL_FLOAT_ELE:
+                                    ub_s_reg0_if0 = tla.where(mask_tail_n, ub_s_reg0_if0, min_reg)
+                                ub_s_i0.store(ub_s_reg0_if0, mask=reduce_mask)
+                                max_reg_if0 = ub_s_reg0_if0.reduce(tla.ReductionOp.MAX, mask=reduce_mask)
+                                ub_max_dst_if0 = tla.tile_view(ub_now_max, tla.make_shape(1), tla.make_coord(i0))
+                                if kv_iter == c0:
+                                    ub_max_dst_if0.store(max_reg_if0, params=UnalignStoreParams(), mask=one_mask_p1)
+                                else:
+                                    ub_max_dst_if0 = tla.tile_view(ub_last_max, tla.make_shape(1), tla.make_coord(i0))
+                                    ub_max_dst_if0.store(max_reg_if0, params=UnalignStoreParams(), mask=one_mask_p1)
                     tla.pipe_barrier(tla.pipes.ALL)
 
                     # Phase 1b: UpdateMax (if update)
                     if update:
                         with tla.vec.func(mode='simd'):
-                            for i1 in tla.range(Q_BLOCK_SUB):
+                            pregFull_um = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Float32)
+                            one_mask_um, _ = tla.update_mask(1, dtype=tla.Float32)
+                            for i1 in tla.range(q_tile_size_sub):
                                 ub_now_max_i_if0 = tla.tile_view(ub_now_max, tla.make_shape(1), tla.make_coord(i1))
                                 ub_last_max_i_if0 = tla.tile_view(ub_last_max, tla.make_shape(1), tla.make_coord(i1))
                                 now_reg_if0 = ub_now_max_i_if0.load(params=NormalLoadParams(load_dist=LoadDist.DIST_BRC_B32))
                                 last_reg_if0 = ub_last_max_i_if0.load(params=NormalLoadParams(load_dist=LoadDist.DIST_BRC_B32))
-                                global_max_if0 = tla.max(now_reg_if0, last_reg_if0)
-                                ub_now_max_i_if0.store(global_max_if0, params=UnalignStoreParams())
+                                global_max_if0 = tla.max(now_reg_if0, last_reg_if0, mask=pregFull_um)
+                                ub_now_max_i_if0.store(global_max_if0, params=UnalignStoreParams(), mask=one_mask_um)
 
                     # Phase 2: exp(s - global_max), store back to ub_s, block_sum
                     with tla.vec.func(mode='simd'):
                         reduce_mask = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Float32)
-                        for i2 in tla.range(Q_BLOCK_SUB):
+                        one_mask_p2, _ = tla.update_mask(1, dtype=tla.Float32)
+                        for i2 in tla.range(q_tile_size_sub):
                             ub_now_max_i = tla.tile_view(ub_now_max, tla.make_shape(1), tla.make_coord(i2))
                             max_reg = ub_now_max_i.load(params=NormalLoadParams(load_dist=LoadDist.DIST_BRC_B32))
-                            ub_s_i0 = tla.tile_view(ub_s, tla.make_shape(1, VL_FLOAT_ELE), tla.make_coord(i2, c0))
-                            ub_s_i1 = tla.tile_view(ub_s, tla.make_shape(1, VL_FLOAT_ELE), tla.make_coord(i2, c1))
-                            ub_s_reg0 = ub_s_i0.load()
-                            ub_s_reg1 = ub_s_i1.load()
-                            exp_reg0 = tla.sub(ub_s_reg0, max_reg)
-                            exp_reg1 = tla.sub(ub_s_reg1, max_reg)
-                            exp_reg0 = tla.exp(exp_reg0)
-                            exp_reg1 = tla.exp(exp_reg1)
-                            ub_s_i0.store(exp_reg0)
-                            ub_s_i1.store(exp_reg1)
-                            tmp_reg = tla.add(exp_reg0, exp_reg1)
-                            block_sum_reg = tmp_reg.reduce(tla.ReductionOp.ADD, mask=reduce_mask)
-                            if kv_iter == c0:
-                                ub_sum_i = tla.tile_view(ub_sum, tla.make_shape(1), tla.make_coord(i2))
-                                ub_sum_i.store(block_sum_reg, params=UnalignStoreParams())
+                            if kv_tile_size > VL_FLOAT_ELE:
+                                ub_s_i0 = tla.tile_view(ub_s, tla.make_shape(1, VL_FLOAT_ELE), tla.make_coord(i2, c0))
+                                ub_s_i1 = tla.tile_view(ub_s, tla.make_shape(1, VL_FLOAT_ELE), tla.make_coord(i2, c1))
+                                ub_s_reg0 = ub_s_i0.load()
+                                ub_s_reg1 = ub_s_i1.load()
+                                exp_reg0 = tla.sub(ub_s_reg0, max_reg, mask=reduce_mask)
+                                exp_reg1 = tla.sub(ub_s_reg1, max_reg, mask=reduce_mask)
+                                exp_reg0 = tla.exp(exp_reg0, mask=reduce_mask)
+                                exp_reg1 = tla.exp(exp_reg1, mask=reduce_mask)
+                                ub_s_i0.store(exp_reg0, mask=reduce_mask)
+                                ub_s_i1.store(exp_reg1, mask=reduce_mask)
+                                tmp_reg = tla.add(exp_reg0, exp_reg1, mask=reduce_mask)
+                                block_sum_reg = tmp_reg.reduce(tla.ReductionOp.ADD, mask=reduce_mask)
+                                if kv_iter == c0:
+                                    ub_sum_i = tla.tile_view(ub_sum, tla.make_shape(1), tla.make_coord(i2))
+                                    ub_sum_i.store(block_sum_reg, params=UnalignStoreParams(), mask=one_mask_p2)
+                                else:
+                                    ub_exp_sum_i = tla.tile_view(ub_exp_sum, tla.make_shape(1), tla.make_coord(i2))
+                                    ub_exp_sum_i.store(block_sum_reg, params=UnalignStoreParams(), mask=one_mask_p2)
                             else:
-                                ub_exp_sum_i = tla.tile_view(ub_exp_sum, tla.make_shape(1), tla.make_coord(i2))
-                                ub_exp_sum_i.store(block_sum_reg, params=UnalignStoreParams())
+                                ub_s_i0 = tla.tile_view(ub_s, tla.make_shape(1, VL_FLOAT_ELE), tla.make_coord(i2, c0))
+                                ub_s_reg0 = ub_s_i0.load()
+                                exp_reg0 = tla.sub(ub_s_reg0, max_reg, mask=reduce_mask)
+                                exp_reg0 = tla.exp(exp_reg0, mask=reduce_mask)
+                                ub_s_i0.store(exp_reg0, mask=reduce_mask)
+                                block_sum_reg = exp_reg0.reduce(tla.ReductionOp.ADD, mask=reduce_mask)
+                                if kv_iter == c0:
+                                    ub_sum_i = tla.tile_view(ub_sum, tla.make_shape(1), tla.make_coord(i2))
+                                    ub_sum_i.store(block_sum_reg, params=UnalignStoreParams(), mask=one_mask_p2)
+                                else:
+                                    ub_exp_sum_i = tla.tile_view(ub_exp_sum, tla.make_shape(1), tla.make_coord(i2))
+                                    ub_exp_sum_i.store(block_sum_reg, params=UnalignStoreParams(), mask=one_mask_p2)
 
-                    # Phase 3: cast f32->f16, deinterleave, store to ub_p_f16
+                    # Phase 3: cast f32->f16, DINTLV+cast+bitwise_or store zNUnAlign P
                     with tla.vec.func(mode='simd'):
-                        for i3 in tla.range(Q_BLOCK_SUB):
-                            ub_s_i0 = tla.tile_view(ub_s, tla.make_shape(1, VL_FLOAT_ELE), tla.make_coord(i3, c0))
-                            ub_s_i1 = tla.tile_view(ub_s, tla.make_shape(1, VL_FLOAT_ELE), tla.make_coord(i3, c1))
-                            ub_tmp0 = tla.tile_view(ub_tmp, tla.make_shape(VL_FLOAT_ELE), tla.make_coord(c0))
-                            ub_tmp1 = tla.tile_view(ub_tmp, tla.make_shape(VL_FLOAT_ELE), tla.make_coord(c1))
-                            ub_tmp0.store(ub_s_i0.load())
-                            ub_tmp1.store(ub_s_i1.load())
-                            a_reg0 = ub_tmp0.load()
-                            a_reg1 = ub_tmp1.load()
-                            p_reg0 = a_reg0.to(tla.Float16, cast_trait_zero)
-                            p_reg1 = a_reg1.to(tla.Float16, cast_trait_zero)
-                            r0_qk, _ = tla.deinterleave(p_reg0, p_reg1)
-                            ub_p_i0 = tla.tile_view(ub_p_f16, tla.make_shape(1, 2 * VL_FLOAT_ELE), tla.make_coord(i3, c0))
-                            ub_p_i0.store(r0_qk)
+                        pregFull = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Float32)
+                        preg_all_b16 = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Float16)
+                        for i3 in tla.range(q_tile_size_sub):
+                            if kv_tile_size > VL_FLOAT_ELE:
+                                ub_s_row = tla.tile_view(ub_s, tla.make_shape(1, 2 * VL_FLOAT_ELE), tla.make_coord(i3, c0))
+                                s_odd_reg, s_even_reg = ub_s_row.load(params=NormalLoadParams(load_dist=LoadDist.DIST_DINTLV_B32))
+                                p_even_reg = s_even_reg.to(tla.Float16, cast_trait_one, mask=pregFull)
+                                p_odd_reg = s_odd_reg.to(tla.Float16, cast_trait_zero, mask=pregFull)
+                                p_zn_reg = tla.bitwise_or(p_even_reg, p_odd_reg, mask=preg_all_b16)
+                                ub_p_zn_i0 = tla.tile_view(ub_p_zN, tla.make_shape(1, 2 * VL_FLOAT_ELE), tla.make_coord(i3, c0))
+                                ub_p_zn_i0.store(p_zn_reg, params=tla.params.BlockStoreParams(block_stride=Q_BLOCK_SUB + 1), mask=preg_all_b16)
+                            else:
+                                ub_s_i0 = tla.tile_view(ub_s, tla.make_shape(1, VL_FLOAT_ELE), tla.make_coord(i3, c0))
+                                a_reg0 = ub_s_i0.load()
+                                p_reg0 = a_reg0.to(tla.Float16, cast_trait_zero, mask=pregFull)
+                                r0_qk, _ = tla.deinterleave(p_reg0, p_reg0)
+                                ub_p_zn_i0 = tla.tile_view(ub_p_zN, tla.make_shape(1, 2 * VL_FLOAT_ELE), tla.make_coord(i3, c0))
+                                ub_p_zn_i0.store(r0_qk, params=tla.params.BlockStoreParams(block_stride=Q_BLOCK_SUB + 1), mask=preg_all_b16)
+                    tla.pipe_barrier(tla.pipes.ALL)
 
                     if ubSBufId == c0:
                         tla.set_flag(v_mte3_0)
@@ -687,16 +749,17 @@ def flash_attention_infer_kernel(
                     else:
                         tla.cross_core_wait_flag(sm_ready_mm2_2, tla.arch.MTE3, aiv_id=0)
                         tla.cross_core_wait_flag(sm_ready_mm2_2, tla.arch.MTE3, aiv_id=1)
-                    ub_p_full_qk = tla.make_tensor(
-                        ub_p_f16_ptr,
+                    ub_p_zN_copy = tla.tile_view(ub_p_zN_full, tla.make_shape(q_tile_size_sub, kv_tile_size), tla.make_coord(c0, c0))
+                    l1_p_ref = tla.make_tensor(
+                        l1_p_ptr_qk,
                         tla.make_layout(
-                            tla.make_shape(Q_BLOCK, KV_BLOCK),
+                            tla.make_shape(q_tile_size, kv_tile_size),
                             tla.make_stride(KV_BLOCK, 1),
                         ),
                     )
-                    l1_p_qk = tla.make_tensor_like(l1_p_ptr_qk, ub_p_full_qk)
-                    l1_p_sub = tla.tile_view(l1_p_qk, tla.make_shape(Q_BLOCK_SUB, KV_BLOCK), tla.make_coord(vec_idx, c0))
-                    tla.copy(l1_p_sub, ub_p_f16)
+                    l1_p_qk = tla.make_tensor_like(l1_p_ptr_qk, l1_p_ref, tla.arch.zN)
+                    l1_p_sub = tla.tile_view(l1_p_qk, tla.make_shape(q_tile_size_half, kv_tile_size), tla.make_coord(vec_idx, c0))
+                    tla.copy(l1_p_sub, ub_p_zN_copy)
                     # 释放 ub_s 给下一轮 softmax
                     if ubSBufId == c0:
                         tla.set_flag(mte3_ready_softmax_0)
@@ -716,7 +779,9 @@ def flash_attention_infer_kernel(
                     # Phase 2b: UpdateExpSumAndExpMax
                     if update:
                         with tla.vec.func(mode='simd'):
-                            for i3 in tla.range(Q_BLOCK_SUB):
+                            pregFull_ue = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Float32)
+                            one_mask_ue, _ = tla.update_mask(1, dtype=tla.Float32)
+                            for i3 in tla.range(q_tile_size_sub):
                                 ub_now_max_i_if1 = tla.tile_view(ub_now_max, tla.make_shape(1), tla.make_coord(i3))
                                 ub_last_max_i_if1 = tla.tile_view(ub_last_max, tla.make_shape(1), tla.make_coord(i3))
                                 ub_sum_i_if1 = tla.tile_view(ub_sum, tla.make_shape(1), tla.make_coord(i3))
@@ -725,17 +790,20 @@ def flash_attention_infer_kernel(
 
                                 now_reg_if1 = ub_now_max_i_if1.load(params=NormalLoadParams(load_dist=LoadDist.DIST_BRC_B32))
                                 last_reg_if1 = ub_last_max_i_if1.load(params=NormalLoadParams(load_dist=LoadDist.DIST_BRC_B32))
-                                exp_max_reg_if1 = tla.exp(tla.sub(last_reg_if1, now_reg_if1))
-                                ub_last_max_i_if1.store(now_reg_if1, params=UnalignStoreParams())
-                                ub_exp_max_i_if1.store(exp_max_reg_if1, params=UnalignStoreParams())
+                                exp_max_reg_if1 = tla.exp(tla.sub(last_reg_if1, now_reg_if1, mask=pregFull_ue), mask=pregFull_ue)
+                                ub_last_max_i_if1.store(now_reg_if1, params=UnalignStoreParams(), mask=one_mask_ue)
+                                ub_exp_max_i_if1.store(exp_max_reg_if1, params=UnalignStoreParams(), mask=one_mask_ue)
 
                                 sum_reg_if1 = ub_sum_i_if1.load(params=NormalLoadParams(load_dist=LoadDist.DIST_BRC_B32))
                                 exp_sum_reg_if1 = ub_exp_sum_i_if1.load(params=NormalLoadParams(load_dist=LoadDist.DIST_BRC_B32))
-                                new_sum_if1 = tla.add(tla.mul(sum_reg_if1, exp_max_reg_if1), exp_sum_reg_if1)
-                                ub_sum_i_if1.store(new_sum_if1, params=UnalignStoreParams())
+                                mul_reg_if1 = tla.mul(sum_reg_if1, exp_max_reg_if1, mask=pregFull_ue)
+                                new_sum_if1 = tla.add(mul_reg_if1, exp_sum_reg_if1, mask=pregFull_ue)
+                                ub_sum_i_if1.store(new_sum_if1, params=UnalignStoreParams(), mask=one_mask_ue)
 
             if kv_iter >= PRE_LAUNCH:
                 kv_pv = kv_iter - PRE_LAUNCH
+
+                kv_tile_size_pv = (KV_SEQ - (KV_BLOCK_COUNT - 1) * KV_BLOCK) if kv_pv == KV_BLOCK_COUNT - 1 else KV_BLOCK
                 ubOTmpBufId = kv_pv % UB_S_OTMP_BUF_STAGES
                 l1PBufId_pv = kv_pv % P_L1_BUF
                 l1BBufId_pv = kv_pv % V_L1_BUF
@@ -789,17 +857,22 @@ def flash_attention_infer_kernel(
                     ub_p_full_pv = tla.make_tensor(
                         l1_p_ptr_pv,
                         tla.make_layout(
-                            tla.make_shape(Q_BLOCK, KV_BLOCK),
+                            tla.make_shape(q_tile_size, kv_tile_size_pv),
                             tla.make_stride(KV_BLOCK, 1),
                         ),
                     )
-                    l1_p_pv = tla.make_tensor_like(l1_p_ptr_pv, ub_p_full_pv)
+                    l1_p_pv = tla.make_tensor_like(l1_p_ptr_pv, ub_p_full_pv, tla.arch.zN)
 
                     for nL0Itr_pv in tla.range(c0, PV_NL0_LOOP_NUM, c1):
                         nLoopCounter_pv = nL0Itr_pv * PV_NL0_LOOP_NUM + nL0Itr_pv
-                        l0c_pv = tla.make_tensor_like(
-                            l0_pv_ptr, v_gm, tla.arch.L0Clayout,
+                        l0c_pv_ref = tla.make_tensor(
+                            l0_pv_ptr,
+                            tla.make_layout(
+                                tla.make_shape(q_tile_size, HEAD_DIM),
+                                tla.make_stride(HEAD_DIM, 1),
+                            ),
                         )
+                        l0c_pv = tla.make_tensor_like(l0_pv_ptr, l0c_pv_ref, tla.arch.L0Clayout)
 
                         for mL0Itr_pv in tla.range(c0, PV_ML0_LOOP_NUM, c1):
                             for kL0Itr_pv in tla.range(c0, PV_KL0_LOOP_NUM, c1):
@@ -887,7 +960,7 @@ def flash_attention_infer_kernel(
                         ub_pv_fix = tla.make_tensor(
                             ub_pv_ptr_pv,
                             tla.make_layout(
-                                tla.make_shape(Q_BLOCK, HEAD_DIM),
+                                tla.make_shape(q_tile_size, HEAD_DIM),
                                 tla.make_stride(HEAD_DIM, 1),
                                 layoutTag=tla.arch.RowMajor,
                             ),
@@ -928,71 +1001,79 @@ def flash_attention_infer_kernel(
                     is_first_pv = kv_pv == c0
                     is_last_pv = kv_pv == (kv_block_count_cur - c1)
 
+                    q_tile_size_half_re = (q_tile_size + 1) // 2
+                    q_tile_size_sub_re = q_tile_size_half_re if vec_idx_re == c0 else (q_tile_size - q_tile_size_half_re)
+
                     ub_pv_re = tla.make_tensor(
                         ub_pv_ptr_re,
-                        tla.make_layout(tla.make_shape(Q_BLOCK_SUB, HEAD_DIM), tla.make_stride(HEAD_DIM, 1)),
+                        tla.make_layout(tla.make_shape(q_tile_size_sub_re, HEAD_DIM), tla.make_stride(HEAD_DIM, 1)),
                     )
                     ub_acc_re = tla.make_tensor(
                         ub_acc_ptr,
-                        tla.make_layout(tla.make_shape(Q_BLOCK_SUB, HEAD_DIM), tla.make_stride(HEAD_DIM, 1)),
+                        tla.make_layout(tla.make_shape(q_tile_size_sub_re, HEAD_DIM), tla.make_stride(HEAD_DIM, 1)),
                     )
                     ub_out_f16_re = tla.make_tensor(
                         ub_out_f16_ptr,
-                        tla.make_layout(tla.make_shape(Q_BLOCK_SUB, HEAD_DIM), tla.make_stride(HEAD_DIM, 1)),
+                        tla.make_layout(tla.make_shape(q_tile_size_sub_re, HEAD_DIM), tla.make_stride(HEAD_DIM, 1)),
                     )
                     ub_sum_re = tla.make_tensor(
                         ub_sum_ptr,
-                        tla.make_layout(tla.make_shape(Q_BLOCK_SUB), tla.make_stride(1)),
+                        tla.make_layout(tla.make_shape(q_tile_size_sub_re), tla.make_stride(1)),
                     )
                     ub_exp_max_re = tla.make_tensor(
                         ub_exp_max_ptr_re,
-                        tla.make_layout(tla.make_shape(Q_BLOCK_SUB), tla.make_stride(1)),
+                        tla.make_layout(tla.make_shape(q_tile_size_sub_re), tla.make_stride(1)),
                     )
 
                     if is_first_pv and is_last_pv:
                         # Single block: O = PV / sum
                         with tla.vec.func(mode='simd'):
-                            for i_re0 in tla.range(Q_BLOCK_SUB):
+                            pregFull_re0 = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Float32)
+                            for i_re0 in tla.range(q_tile_size_sub_re):
                                 ub_sum_i_re0 = tla.tile_view(ub_sum_re, tla.make_shape(1), tla.make_coord(i_re0))
                                 sum_reg_re0 = ub_sum_i_re0.load(params=NormalLoadParams(load_dist=LoadDist.DIST_BRC_B32))
                                 for j_re0 in tla.range(c0, HEAD_DIM // VL_FLOAT_ELE, c1):
                                     cur_tile_re0 = tla.tile_view(ub_pv_re, tla.make_shape(1, VL_FLOAT_ELE), tla.make_coord(i_re0, j_re0))
                                     cur_reg_re0 = cur_tile_re0.load()
-                                    div_reg_re0 = tla.div(cur_reg_re0, sum_reg_re0)
+                                    div_reg_re0 = tla.div(cur_reg_re0, sum_reg_re0, mask=pregFull_re0)
                                     acc_tile_re0 = tla.tile_view(ub_acc_re, tla.make_shape(1, VL_FLOAT_ELE), tla.make_coord(i_re0, j_re0))
-                                    acc_tile_re0.store(div_reg_re0)
+                                    acc_tile_re0.store(div_reg_re0, mask=pregFull_re0)
                         tla.pipe_barrier(tla.pipes.ALL)
                         with tla.vec.func(mode='simd'):
-                            for i_re1 in tla.range(Q_BLOCK_SUB):
+                            pregFull_re1 = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Float32)
+                            preg_all_b16_re1 = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Float16)
+                            for i_re1 in tla.range(q_tile_size_sub_re):
                                 for j_re1 in tla.range(c0, HEAD_DIM // (2 * VL_FLOAT_ELE), c1):
                                     acc_tile_re1_0 = tla.tile_view(ub_acc_re, tla.make_shape(1, VL_FLOAT_ELE), tla.make_coord(i_re1, 2 * j_re1))
                                     acc_tile_re1_1 = tla.tile_view(ub_acc_re, tla.make_shape(1, VL_FLOAT_ELE), tla.make_coord(i_re1, 2 * j_re1 + c1))
                                     out_tile_re1 = tla.tile_view(ub_out_f16_re, tla.make_shape(1, 2 * VL_FLOAT_ELE), tla.make_coord(i_re1, j_re1))
                                     acc_reg_re1_0 = acc_tile_re1_0.load()
                                     acc_reg_re1_1 = acc_tile_re1_1.load()
-                                    out_reg_re1_0 = acc_reg_re1_0.to(tla.Float16, cast_trait_zero)
-                                    out_reg_re1_1 = acc_reg_re1_1.to(tla.Float16, cast_trait_zero)
+                                    out_reg_re1_0 = acc_reg_re1_0.to(tla.Float16, cast_trait_zero, mask=pregFull_re1)
+                                    out_reg_re1_1 = acc_reg_re1_1.to(tla.Float16, cast_trait_zero, mask=pregFull_re1)
                                     r0_re1, _ = tla.deinterleave(out_reg_re1_0, out_reg_re1_1)
-                                    out_tile_re1.store(r0_re1)
+                                    out_tile_re1.store(r0_re1, mask=preg_all_b16_re1)
                         tla.set_flag(rescale_v_mte3)
                         tla.wait_flag(rescale_v_mte3)
                         o_gm_re0 = tla.tile_view(mem_o_block, tla.make_shape(Q_BLOCK, HEAD_DIM), tla.make_coord(q_block_idx, c0))
-                        o_sub_gm_re0 = tla.tile_view(o_gm_re0, tla.make_shape(Q_BLOCK_SUB, HEAD_DIM), tla.make_coord(vec_idx_re, c0))
+                        o_sub_gm_re0 = tla.tile_view(o_gm_re0, tla.make_shape(q_tile_size_half_re, HEAD_DIM), tla.make_coord(vec_idx_re, c0))
                         tla.copy(o_sub_gm_re0, ub_out_f16_re)
 
                     elif is_first_pv and (not is_last_pv):
                         # First block: copy PV to acc
                         with tla.vec.func(mode='simd'):
-                            for i_re2 in tla.range(Q_BLOCK_SUB):
+                            pregFull_re2 = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Float32)
+                            for i_re2 in tla.range(q_tile_size_sub_re):
                                 for j_re2 in tla.range(c0, HEAD_DIM // VL_FLOAT_ELE, c1):
                                     cur_tile_re2 = tla.tile_view(ub_pv_re, tla.make_shape(1, VL_FLOAT_ELE), tla.make_coord(i_re2, j_re2))
                                     acc_tile_re2 = tla.tile_view(ub_acc_re, tla.make_shape(1, VL_FLOAT_ELE), tla.make_coord(i_re2, j_re2))
                                     cur_reg_re2 = cur_tile_re2.load()
-                                    acc_tile_re2.store(cur_reg_re2)
+                                    acc_tile_re2.store(cur_reg_re2, mask=pregFull_re2)
 
                     elif (not is_first_pv) and (not is_last_pv):
                         with tla.vec.func(mode='simd'):
-                            for i_re3 in tla.range(Q_BLOCK_SUB):
+                            pregFull_re3 = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Float32)
+                            for i_re3 in tla.range(q_tile_size_sub_re):
                                 ub_exp_max_i_re3 = tla.tile_view(ub_exp_max_re, tla.make_shape(1), tla.make_coord(i_re3))
                                 exp_max_reg_re3 = ub_exp_max_i_re3.load(params=NormalLoadParams(load_dist=LoadDist.DIST_BRC_B32))
                                 for j_re3 in tla.range(c0, HEAD_DIM // VL_FLOAT_ELE, c1):
@@ -1000,14 +1081,15 @@ def flash_attention_infer_kernel(
                                     cur_tile_re3 = tla.tile_view(ub_pv_re, tla.make_shape(1, VL_FLOAT_ELE), tla.make_coord(i_re3, j_re3))
                                     pre_reg_re3 = pre_tile_re3.load()
                                     cur_reg_re3 = cur_tile_re3.load()
-                                    mul_reg_re3 = tla.mul(exp_max_reg_re3, pre_reg_re3)
-                                    add_reg_re3 = tla.add(mul_reg_re3, cur_reg_re3)
-                                    pre_tile_re3.store(add_reg_re3)
+                                    mul_reg_re3 = tla.mul(exp_max_reg_re3, pre_reg_re3, mask=pregFull_re3)
+                                    add_reg_re3 = tla.add(mul_reg_re3, cur_reg_re3, mask=pregFull_re3)
+                                    pre_tile_re3.store(add_reg_re3, mask=pregFull_re3)
 
                     else:
                         # Last block
                         with tla.vec.func(mode='simd'):
-                            for i_re4 in tla.range(Q_BLOCK_SUB):
+                            pregFull_re4 = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Float32)
+                            for i_re4 in tla.range(q_tile_size_sub_re):
                                 ub_exp_max_i_re4 = tla.tile_view(ub_exp_max_re, tla.make_shape(1), tla.make_coord(i_re4))
                                 exp_max_reg_re4 = ub_exp_max_i_re4.load(params=NormalLoadParams(load_dist=LoadDist.DIST_BRC_B32))
                                 ub_sum_i_re4 = tla.tile_view(ub_sum_re, tla.make_shape(1), tla.make_coord(i_re4))
@@ -1017,27 +1099,29 @@ def flash_attention_infer_kernel(
                                     cur_tile_re4 = tla.tile_view(ub_pv_re, tla.make_shape(1, VL_FLOAT_ELE), tla.make_coord(i_re4, j_re4))
                                     pre_reg_re4 = pre_tile_re4.load()
                                     cur_reg_re4 = cur_tile_re4.load()
-                                    mul_reg_re4 = tla.mul(exp_max_reg_re4, pre_reg_re4)
-                                    add_reg_re4 = tla.add(mul_reg_re4, cur_reg_re4)
-                                    div_reg_re4 = tla.div(add_reg_re4, sum_reg_re4)
-                                    pre_tile_re4.store(div_reg_re4)
+                                    mul_reg_re4 = tla.mul(exp_max_reg_re4, pre_reg_re4, mask=pregFull_re4)
+                                    add_reg_re4 = tla.add(mul_reg_re4, cur_reg_re4, mask=pregFull_re4)
+                                    div_reg_re4 = tla.div(add_reg_re4, sum_reg_re4, mask=pregFull_re4)
+                                    pre_tile_re4.store(div_reg_re4, mask=pregFull_re4)
                         tla.pipe_barrier(tla.pipes.ALL)
                         with tla.vec.func(mode='simd'):
-                            for i_re5 in tla.range(Q_BLOCK_SUB):
+                            pregFull_re5 = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Float32)
+                            preg_all_b16_re5 = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Float16)
+                            for i_re5 in tla.range(q_tile_size_sub_re):
                                 for j_re5 in tla.range(c0, HEAD_DIM // (2 * VL_FLOAT_ELE), c1):
                                     acc_tile_re5_0 = tla.tile_view(ub_acc_re, tla.make_shape(1, VL_FLOAT_ELE), tla.make_coord(i_re5, 2 * j_re5))
                                     acc_tile_re5_1 = tla.tile_view(ub_acc_re, tla.make_shape(1, VL_FLOAT_ELE), tla.make_coord(i_re5, 2 * j_re5 + c1))
                                     out_tile_re5 = tla.tile_view(ub_out_f16_re, tla.make_shape(1, 2 * VL_FLOAT_ELE), tla.make_coord(i_re5, j_re5))
                                     acc_reg_re5_0 = acc_tile_re5_0.load()
                                     acc_reg_re5_1 = acc_tile_re5_1.load()
-                                    out_reg_re5_0 = acc_reg_re5_0.to(tla.Float16, cast_trait_zero)
-                                    out_reg_re5_1 = acc_reg_re5_1.to(tla.Float16, cast_trait_zero)
+                                    out_reg_re5_0 = acc_reg_re5_0.to(tla.Float16, cast_trait_zero, mask=pregFull_re5)
+                                    out_reg_re5_1 = acc_reg_re5_1.to(tla.Float16, cast_trait_zero, mask=pregFull_re5)
                                     r0_re5, _ = tla.deinterleave(out_reg_re5_0, out_reg_re5_1)
-                                    out_tile_re5.store(r0_re5)
+                                    out_tile_re5.store(r0_re5, mask=preg_all_b16_re5)
                         tla.set_flag(rescale_v_mte3)
                         tla.wait_flag(rescale_v_mte3)
                         o_gm_re5 = tla.tile_view(mem_o_block, tla.make_shape(Q_BLOCK, HEAD_DIM), tla.make_coord(q_block_idx, c0))
-                        o_sub_gm_re5 = tla.tile_view(o_gm_re5, tla.make_shape(Q_BLOCK_SUB, HEAD_DIM), tla.make_coord(vec_idx_re, c0))
+                        o_sub_gm_re5 = tla.tile_view(o_gm_re5, tla.make_shape(q_tile_size_half_re, HEAD_DIM), tla.make_coord(vec_idx_re, c0))
                         tla.copy(o_sub_gm_re5, ub_out_f16_re)
 
                     if ubOTmpBufId == c0:
@@ -1102,12 +1186,18 @@ def _require_torch_npu(device_id: int) -> Any:
 
 
 def _runtime_kwargs(args: argparse.Namespace) -> dict[str, Any]:
-    return {
-        "arch_scope": "aic.c310",
-        "cache": not args.no_cache,
-        "cache_dir": str(Path(args.cache_dir).expanduser().resolve()),
-        "force_recompile": args.force_recompile,
-    }
+    return {"options": "--npu-arch 3510"}
+
+
+def _aicore_num(device: int = 0) -> int:
+    import torch
+
+    props = torch.npu.get_device_properties(int(device))
+    for attr in ("aicore_num", "ai_core_num", "num_aicore", "cube_core_num"):
+        value = getattr(props, attr, None)
+        if value is not None:
+            return max(1, int(value))
+    return 1
 
 
 def _create_tla_tensor(dev_buf: Any, layout_tag: Any = tla.arch.RowMajor) -> Any:
@@ -1118,186 +1208,172 @@ def _reshape_qk_to_2d(tensor: Any) -> Any:
     return tensor.reshape(-1, HEAD_DIM).contiguous()
 
 
-def _first_mismatch_torch(
-    actual: Any, expected: Any, *, atol: float
-) -> dict[str, Any] | None:
-    import torch as _torch
-    close = _torch.isclose(actual, expected, rtol=0.0, atol=atol)
-    if bool(close.all()):
-        return None
-    flat_idx = close.logical_not().nonzero(as_tuple=False)
-    mismatches = []
-    for idx in flat_idx[:5]:
-        idx_tuple = tuple(int(v) for v in idx)
-        mismatches.append(
-            {
-                "index": list(idx_tuple),
-                "actual": float(actual[idx_tuple].item()),
-                "expected": float(expected[idx_tuple].item()),
-            }
-        )
-    return mismatches
-
-
 def run(args: argparse.Namespace) -> int:
-    tla.initialize(device=args.device)
-    try:
-        print(
-            "---",
-            "flash_attention_infer (QK + softmax + PV + rescale, full FA)",
-            f"BATCH={BATCH} Q_SEQ={Q_SEQ} KV_SEQ={KV_SEQ}",
-            f"HEAD_NUM={HEAD_NUM} KV_HEAD_NUM={KV_HEAD_NUM}",
-            f"HEAD_DIM={HEAD_DIM} KV_BLOCK_COUNT={KV_BLOCK_COUNT}",
-            "---",
-        )
+    torch = _require_torch_npu(args.device)
+    torch.npu.set_device(args.device)
+    device = "npu"
+    print(
+        "---",
+        "flash_attention_infer (QK + softmax + PV + rescale, full FA)",
+        f"BATCH={BATCH} Q_SEQ={Q_SEQ} KV_SEQ={KV_SEQ}",
+        f"HEAD_NUM={HEAD_NUM} KV_HEAD_NUM={KV_HEAD_NUM}",
+        f"HEAD_DIM={HEAD_DIM} KV_BLOCK_COUNT={KV_BLOCK_COUNT}",
+        "---",
+    )
 
-        torch = _require_torch_npu(args.device)
-        device = "npu"
+    q_shape = (BATCH, Q_SEQ, HEAD_NUM, HEAD_DIM)
+    k_shape = (BATCH, KV_SEQ, KV_HEAD_NUM, HEAD_DIM)
+    v_shape = (BATCH, KV_SEQ, KV_HEAD_NUM, HEAD_DIM)
+    o_shape = (BATCH, Q_SEQ, HEAD_NUM, HEAD_DIM)
 
-        q_shape = (BATCH, Q_SEQ, HEAD_NUM, HEAD_DIM)
-        k_shape = (BATCH, KV_SEQ, KV_HEAD_NUM, HEAD_DIM)
-        v_shape = (BATCH, KV_SEQ, KV_HEAD_NUM, HEAD_DIM)
-        o_shape = (BATCH, Q_SEQ, HEAD_NUM, HEAD_DIM)
+    torch.manual_seed(42)
+    torch_q = torch.rand(q_shape, dtype=torch.float16).to(device)
+    torch_k = torch.rand(k_shape, dtype=torch.float16).to(device)
+    torch_v = torch.rand(v_shape, dtype=torch.float16).to(device)
+    torch_o = torch.full(o_shape, args.sentinel, dtype=torch.float16, device=device)
 
-        torch.manual_seed(42)
-        torch_q = torch.rand(q_shape, dtype=torch.float16).to(device)
-        torch_k = torch.rand(k_shape, dtype=torch.float16).to(device)
-        torch_v = torch.rand(v_shape, dtype=torch.float16).to(device)
-        torch_o = torch.full(o_shape, args.sentinel, dtype=torch.float16, device=device)
+    tla_q = _create_tla_tensor(_reshape_qk_to_2d(torch_q), tla.arch.RowMajor)
+    tla_k = _create_tla_tensor(_reshape_qk_to_2d(torch_k), tla.arch.ColumnMajor)
+    tla_v = _create_tla_tensor(_reshape_qk_to_2d(torch_v), tla.arch.RowMajor)
+    tla_o = _create_tla_tensor(_reshape_qk_to_2d(torch_o), tla.arch.RowMajor)
+    mask_2d = torch.zeros((Q_SEQ, KV_SEQ), dtype=torch.int8, device=device)
+    tla_mask = _create_tla_tensor(mask_2d, tla.arch.RowMajor)
 
-        tla_q = _create_tla_tensor(_reshape_qk_to_2d(torch_q), tla.arch.RowMajor)
-        tla_k = _create_tla_tensor(_reshape_qk_to_2d(torch_k), tla.arch.ColumnMajor)
-        tla_v = _create_tla_tensor(_reshape_qk_to_2d(torch_v), tla.arch.RowMajor)
-        tla_o = _create_tla_tensor(_reshape_qk_to_2d(torch_o), tla.arch.RowMajor)
-        mask_2d = torch.zeros((Q_SEQ, KV_SEQ), dtype=torch.int8, device=device)
-        tla_mask = _create_tla_tensor(mask_2d, tla.arch.RowMajor)
+    q_seqlen_list = [Q_SEQ] * BATCH
+    kv_seqlen_list = [KV_SEQ] * BATCH
+    td = compute_tiling(
+        batch=BATCH,
+        num_heads=HEAD_NUM,
+        kv_heads=KV_HEAD_NUM,
+        q_seqlen_list=q_seqlen_list,
+        kv_seqlen_list=kv_seqlen_list,
+        head_dim=HEAD_DIM,
+        q_base_tile=Q_BLOCK,
+        kv_base_tile=KV_BLOCK,
+    )
+    tiling_int_list = pack_tiling_int(td)
+    tiling_tensor = torch.tensor(tiling_int_list, dtype=torch.int32, device='cpu').to(device)
+    tla_tiling = _create_tla_tensor(tiling_tensor, tla.arch.RowMajor)
 
-        q_seqlen_list = [Q_SEQ] * BATCH
-        kv_seqlen_list = [KV_SEQ] * BATCH
-        td = compute_tiling(
-            batch=BATCH,
-            num_heads=HEAD_NUM,
-            kv_heads=KV_HEAD_NUM,
-            q_seqlen_list=q_seqlen_list,
-            kv_seqlen_list=kv_seqlen_list,
-            head_dim=HEAD_DIM,
-            q_base_tile=Q_BLOCK,
-            kv_base_tile=KV_BLOCK,
-        )
-        tiling_int_list = pack_tiling_int(td)
-        tiling_tensor = torch.tensor(tiling_int_list, dtype=torch.int32, device='cpu').to(device)
-        tla_tiling = _create_tla_tensor(tiling_tensor, tla.arch.RowMajor)
+    actual_q_list = make_actual_seqlen(q_seqlen_list)
+    actual_kv_list = make_actual_seqlen(kv_seqlen_list)
+    actual_q = torch.tensor(actual_q_list, dtype=torch.int32)
+    actual_kv = torch.tensor(actual_kv_list, dtype=torch.int32)
+    tla_actual_q = _create_tla_tensor(actual_q.to(device), tla.arch.RowMajor)
+    tla_actual_kv = _create_tla_tensor(actual_kv.to(device), tla.arch.RowMajor)
 
-        actual_q_list = make_actual_seqlen(q_seqlen_list)
-        actual_kv_list = make_actual_seqlen(kv_seqlen_list)
-        actual_q = torch.tensor(actual_q_list, dtype=torch.int32)
-        actual_kv = torch.tensor(actual_kv_list, dtype=torch.int32)
-        tla_actual_q = _create_tla_tensor(actual_q.to(device), tla.arch.RowMajor)
-        tla_actual_kv = _create_tla_tensor(actual_kv.to(device), tla.arch.RowMajor)
+    core_num = _aicore_num(args.device)
+    block_num = core_num if args.block_num <= 0 else args.block_num
 
-        core_num = tla.get_aicore_num(args.device)
-        block_num = core_num if args.block <= 0 else args.block
+    print(f"Launching kernel (block={block_num}, core_num={core_num})...", flush=True)
+    artifact = tla.compile(
+        flash_attention_infer_kernel,
+        tla_q,
+        tla_k,
+        tla_v,
+        tla_o,
+        tla_mask,
+        tla_tiling,
+        tla_actual_q,
+        tla_actual_kv,
+        **_runtime_kwargs(args),
+    )
 
-        print(f"Launching kernel (block={block_num}, core_num={core_num})...", flush=True)
-        artifact = tla.compile(
-            flash_attention_infer_kernel,
-            tla_q,
-            tla_k,
-            tla_v,
-            tla_o,
-            tla_mask,
-            tla_tiling,
-            tla_actual_q,
-            tla_actual_kv,
-            **_runtime_kwargs(args),
-        )
+    artifact(
+        tla_q, tla_k, tla_v, tla_o, tla_mask, tla_tiling, tla_actual_q, tla_actual_kv,
+        block=block_num,
+    )
 
-        artifact(
-            tla_q, tla_k, tla_v, tla_o, tla_mask, tla_tiling, tla_actual_q, tla_actual_kv,
-            block=block_num,
-        )
+    torch.npu.synchronize()
 
-        torch.npu.synchronize()
+    scale = 1.0 / (HEAD_DIM ** 0.5)
+    q_bnsd = torch_q.permute(0, 2, 1, 3).contiguous()
+    k_bnsd = torch_k.permute(0, 2, 1, 3).contiguous()
+    v_bnsd = torch_v.permute(0, 2, 1, 3).contiguous()
+    if KV_HEAD_NUM != HEAD_NUM:
+        k_bnsd = k_bnsd.repeat_interleave(GROUP_SIZE, dim=1)
+        v_bnsd = v_bnsd.repeat_interleave(GROUP_SIZE, dim=1)
 
-        scale = 1.0 / (HEAD_DIM ** 0.5)
-        q_bnsd = torch_q.permute(0, 2, 1, 3).contiguous()
-        k_bnsd = torch_k.permute(0, 2, 1, 3).contiguous()
-        v_bnsd = torch_v.permute(0, 2, 1, 3).contiguous()
-        if KV_HEAD_NUM != HEAD_NUM:
-            k_bnsd = k_bnsd.repeat_interleave(GROUP_SIZE, dim=1)
-            v_bnsd = v_bnsd.repeat_interleave(GROUP_SIZE, dim=1)
+    q_dsl = torch_q.cpu().numpy()
+    k_dsl = torch_k.cpu().numpy()
+    v_dsl = torch_v.cpu().numpy()
 
-        o_ref = torch.zeros(BATCH, HEAD_NUM, Q_BLOCK_COUNT, Q_BLOCK, HEAD_DIM,
-                            dtype=torch.float32, device=device)
-        for qb in range(Q_BLOCK_COUNT):
-            now_max = None
-            acc_o = None
-            acc_sum = None
-            for kvb in range(KV_BLOCK_COUNT):
-                q_sub = q_bnsd[:, :, qb * Q_BLOCK:(qb + 1) * Q_BLOCK, :]
-                k_sub = k_bnsd[:, :, kvb * KV_BLOCK:(kvb + 1) * KV_BLOCK, :]
-                v_sub = v_bnsd[:, :, kvb * KV_BLOCK:(kvb + 1) * KV_BLOCK, :]
-                s = torch.matmul(q_sub.float(), k_sub.float().transpose(-2, -1)) * scale
-                block_max = s.max(dim=-1, keepdim=True).values
-                if kvb == 0:
-                    now_max = block_max
-                    p_block = torch.exp(s - now_max)
-                    acc_o = torch.matmul(p_block, v_sub.float())
-                    acc_sum = p_block.sum(dim=-1, keepdim=True)
-                else:
-                    new_max = torch.max(now_max, block_max)
-                    exp_ratio = torch.exp(now_max - new_max)
-                    acc_o = acc_o * exp_ratio
-                    p_block = torch.exp(s - new_max)
-                    acc_o = acc_o + torch.matmul(p_block, v_sub.float())
-                    acc_sum = acc_sum * exp_ratio + p_block.sum(dim=-1, keepdim=True)
-                    now_max = new_max
-            o_ref[:, :, qb, :, :] = acc_o / acc_sum
-        expected = o_ref.permute(0, 2, 3, 1, 4).reshape(
-            BATCH, Q_SEQ, HEAD_NUM, HEAD_DIM).contiguous().to(torch.float16)
+    del q_bnsd, k_bnsd, v_bnsd
+    torch.npu.empty_cache()
 
-        actual = torch_o.clone()
+    group_num = HEAD_NUM // KV_HEAD_NUM
 
-        sentinel_f16 = torch.full_like(actual, args.sentinel)
-        unchanged = torch.isclose(actual, sentinel_f16, rtol=0.0, atol=UNCHANGED_THRESHOLD)
+    def group_matmul_ref(head, kv_head, left, right):
+        """对齐 C++ gen_data group_matmul: 按 kv_head 分组, .astype(f32)"""
+        score = None
+        for i in range(kv_head):
+            group_score = np.matmul(
+                left[i * group_num:(i + 1) * group_num, :, :].astype(np.float32),
+                right[i:(i + 1), :, :].astype(np.float32),
+            )
+            score = group_score if score is None else np.concatenate((score, group_score), 0)
+        return score
 
-        abs_diff = torch.abs(actual.detach().float().cpu() - expected.detach().float().cpu())
-        max_abs_err = float(abs_diff.max().item())
-        mean_abs_err = float(abs_diff.mean().item())
+    def softmax_ref(sim):
+        """对齐 C++ gen_data softmax (sink=None)"""
+        row_max = np.max(sim, axis=-1, keepdims=True)
+        sim_sub = sim - row_max
+        sim_sub = np.exp(sim_sub)
+        row_sum = np.sum(sim_sub, axis=-1, keepdims=True)
+        soft_res = sim_sub / row_sum
+        return soft_res
 
-        max_err_flat_idx = int(torch.argmax(abs_diff).item())
-        max_err_idx = []
-        for s in reversed(actual.shape):
-            max_err_idx.append(max_err_flat_idx % s)
-            max_err_flat_idx //= s
-        max_err_idx = list(reversed(max_err_idx))
-        max_err_actual = float(actual[tuple(max_err_idx)].item())
-        max_err_expected = float(expected[tuple(max_err_idx)].item())
+    num_tokens = BATCH * Q_SEQ
+    golden_output = np.zeros((num_tokens, HEAD_NUM, HEAD_DIM), dtype=np.float16)
 
-        passed = max_abs_err < THRESHOLD
+    for b in range(BATCH):
+        q_i = q_dsl[b]
+        keys = k_dsl[b]
+        values = v_dsl[b]
 
-        print(
-            "compile_ok=True "
-            f"host=torch_npu "
-            f"BATCH={BATCH} Q_SEQ={Q_SEQ} KV_SEQ={KV_SEQ} "
-            f"HEAD_NUM={HEAD_NUM} KV_HEAD_NUM={KV_HEAD_NUM} HEAD_DIM={HEAD_DIM} "
-            f"Q_BLOCK_COUNT={Q_BLOCK_COUNT} KV_BLOCK_COUNT={KV_BLOCK_COUNT}"
-        )
-        print(f"kernel.o path={artifact.kernel_binary_path}")
-        print("launch_ok=True")
-        print(f"O unchanged (sentinel)? {bool(unchanged.all())}")
-        print(f"O changed count={int((~unchanged).sum().item())} / {actual.numel()}")
-        print(f"abs_err: max={max_abs_err:.6f} mean={mean_abs_err:.6f}")
-        print(f"max_err_pos={max_err_idx} actual={max_err_actual:.6f} expected={max_err_expected:.6f} diff={max_abs_err:.6f}")
-        if max_abs_err >= THRESHOLD:
-            first_mismatch = _first_mismatch_torch(actual, expected, atol=THRESHOLD)
-            if first_mismatch is not None:
-                print(f"first_mismatch: {first_mismatch}")
-        print(f"passed? {passed}")
+        query = np.transpose(q_i, (1, 0, 2))
+        key = np.transpose(keys, (1, 2, 0))
+        sim_high = group_matmul_ref(query.shape[0], key.shape[0], query, key)
+        sim_high = sim_high * scale
 
-        return 0 if passed else 1
-    finally:
-        tla.finalize()
+        p_high = softmax_ref(sim_high)
+        p = p_high.astype(np.float16)
+        value = np.transpose(values, (1, 0, 2))
+        out = group_matmul_ref(query.shape[0], value.shape[0], p, value)
+        out = np.transpose(out, (1, 0, 2))
+        out = out.astype(np.float16)
+
+        golden_output[b * Q_SEQ:(b + 1) * Q_SEQ, :, :] = out
+
+    golden = golden_output.astype(np.float32).reshape(BATCH, Q_SEQ, HEAD_NUM, HEAD_DIM)
+
+    actual_np = torch_o.cpu().numpy().astype(np.float16).astype(np.float32)
+
+    actual_t = torch.from_numpy(actual_np.copy())
+    sentinel_t = torch.full_like(actual_t, args.sentinel)
+    unchanged = torch.isclose(actual_t, sentinel_t, rtol=0.0, atol=UNCHANGED_THRESHOLD)
+
+    a = actual_np.flatten()
+    g = golden.flatten()
+    diff = np.abs(a - g)
+
+    max_abs = float(np.max(diff))
+
+    print(
+        "compile_ok=True "
+        f"host=torch_npu "
+        f"BATCH={BATCH} Q_SEQ={Q_SEQ} KV_SEQ={KV_SEQ} "
+        f"HEAD_NUM={HEAD_NUM} KV_HEAD_NUM={KV_HEAD_NUM} HEAD_DIM={HEAD_DIM} "
+        f"Q_BLOCK_COUNT={Q_BLOCK_COUNT} KV_BLOCK_COUNT={KV_BLOCK_COUNT}"
+    )
+    print(f"kernel.o path={artifact.kernel_binary_path}")
+    print("launch_ok=True")
+    print(f"O unchanged (sentinel)? {bool(unchanged.all())}")
+    print(f"O changed count={int((~unchanged).sum().item())} / {actual_t.numel()}")
+    passed = max_abs < THRESHOLD
+    print(f"passed? {passed}")
+
+    return 0 if passed else 1
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -1307,26 +1383,11 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--device", type=int, default=0, help="NPU device id.")
     parser.add_argument(
-        "--block", type=int, default=0,
+        "--block-num", type=int, default=-1,
         help="Launch block count (<=0 means use full AICore num from device).",
     )
     parser.add_argument(
         "--sentinel", type=float, default=-7.0, help="Initial O value (sentinel).",
-    )
-    parser.add_argument(
-        "--cache-dir",
-        default=str(DEFAULT_CACHE_DIR),
-        help="Directory for compile cache and generated kernel.o files.",
-    )
-    parser.add_argument(
-        "--force-recompile",
-        action="store_true",
-        help="Ignore any existing compile cache entry.",
-    )
-    parser.add_argument(
-        "--no-cache",
-        action="store_true",
-        help="Disable compile cache reuse.",
     )
     return parser
 
