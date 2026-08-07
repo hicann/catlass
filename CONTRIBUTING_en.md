@@ -24,7 +24,7 @@ pre-commit run               # check staged files only
 ```
 
 Developer contribution scenarios include:
-习近平
+
 - Fixing Bugs
 
   If you find some bugs in this project and want to fix them, you are welcome to create an issue for feedback and tracking.
