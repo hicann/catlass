@@ -2573,7 +2573,7 @@ public:
     FailureOr<Value> dstRuntimeMemref = buildRuntimeMemref(dstDesc);
     if (failed(srcRuntimeMemref) || failed(dstRuntimeMemref))
       return failure();
-    SmallVector<Value, 20> payload =
+    SmallVector<Value, 24> payload =
         ::tla::buildCopyPayloadForRoute(rewriter, copyOp.getLoc(), srcDesc, dstDesc);
     SmallVector<Type, 22> operandTypes = {(*srcRuntimeMemref).getType(),
                                           (*dstRuntimeMemref).getType()};

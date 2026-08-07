@@ -45,10 +45,11 @@ std::string getCopyRouteCallee(mlir::MLIRContext *ctx, llvm::StringRef srcAddrsp
                                TensorLayoutTag dstLayout, llvm::StringRef srcElementType,
                                llvm::StringRef dstElementType, llvm::StringRef extraDesc = "");
 
-/// The 20-element i64 runtime payload for a copy route: the src tile's layout
-/// descriptor followed by the dst tile's (linear -> shape2/stride2/coord2/origin2,
-/// NZFamily -> shape4/stride4/coord2/origin2).
-llvm::SmallVector<mlir::Value, 20> buildCopyPayloadForRoute(mlir::OpBuilder &builder,
+/// The 24-element i64 runtime payload for a copy route: the src tile's 12-field
+/// (4D) layout descriptor followed by the dst tile's. Linear descriptors carry
+/// shape[2]=shape[3]=stride[2]=stride[3]=1 (enforced by validateTensorDescriptor),
+/// so both Linear and NZFamily endpoints use the same 12-field encoding.
+llvm::SmallVector<mlir::Value, 24> buildCopyPayloadForRoute(mlir::OpBuilder &builder,
                                                             mlir::Location loc,
                                                             const TensorDescriptor &srcDesc,
                                                             const TensorDescriptor &dstDesc);

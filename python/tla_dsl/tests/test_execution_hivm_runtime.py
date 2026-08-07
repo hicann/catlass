@@ -1114,21 +1114,6 @@ def test_build_hivmc_a5_command_links_template_bitcode_for_aiv(
     ]
 
 
-@pytest.mark.skip(reason="Legacy RT ctypes loader path removed; Host launch uses PyACL")
-def test_ascend_loader_forwards_native_width_scalar_payload(monkeypatch) -> None:
-    pass
-
-
-@pytest.mark.skip(reason="Legacy RT ctypes loader path removed; Host launch uses PyACL")
-def test_ascend_loader_forwards_opaque_bytes_and_exact_byte_count(monkeypatch) -> None:
-    pass
-
-
-@pytest.mark.skip(reason="Legacy RT ctypes loader path removed; Host launch uses PyACL")
-def test_ascend_loader_pads_empty_payload(monkeypatch) -> None:
-    pass
-
-
 class _TypedPointer:
     dtype = "f32"
 
@@ -2583,11 +2568,6 @@ def test_pack_launch_args_rejects_pointer_storage_overflow() -> None:
     layout = _kernel_abi(("pointer", "pointer", "memref<8xi32>", 0, 8, 4), total_size=8)
     with pytest.raises(execution.TlaUnsupportedAbiError, match="fit"):
         execution._pack_launch_args([_HugePointer()], layout)
-
-
-@pytest.mark.skip(reason="RuntimeWrapper.cpp removed; Host launch uses pyACL + libruntime")
-def test_runtime_wrapper_c_abi_is_byte_oriented() -> None:
-    pass
 
 
 def test_build_kernel_launch_plan_uses_logical_mixed_handoff(tmp_path) -> None:

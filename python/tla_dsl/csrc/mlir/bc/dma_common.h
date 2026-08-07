@@ -9,18 +9,23 @@
 
 using bf16 = bfloat16_t;
 
-struct TensorDesc2D {
-    uint32_t shape0;
-    uint32_t shape1;
-    int64_t stride0;
-    int64_t stride1;
-    uint32_t coord0;
-    uint32_t coord1;
-    uint32_t originShape0;
-    uint32_t originShape1;
+/// Layout tags for the bc-layer DMA helpers. Mirrors the IR-side
+/// `TensorLayoutTag` enum (same enumerators, same order)
+enum class LayoutTag {
+    Unknown,
+    RowMajor,
+    ColumnMajor,
+    zN,
+    zZ,
+    nZ,
+    L0C,
+    zNUnAlign,
 };
 
-struct TensorDesc4D {
+/// Unified 4D (12-field) tensor descriptor. Linear layouts (RowMajor/
+/// ColumnMajor) carry shape2=shape3=stride2=stride3=1, so a single descriptor
+/// shape serves both Linear and NZFamily endpoints.
+struct TensorDesc {
     uint32_t shape0;
     uint32_t shape1;
     uint32_t shape2;
@@ -64,20 +69,26 @@ CATLASS_DEVICE AscendC::GlobalTensor<T> makeGlobalTensor(__gm__ T *ptr) {
     return tensor;
 }
 
+template <typename DescT>
+CATLASS_DEVICE auto makeTlaTileCoord(const DescT &desc) {
+    return tla::MakeCoord(desc.coord0, desc.coord1);
+}
+
 template <typename T>
-CATLASS_DEVICE auto makeRowMajorTlaLayout(const TensorDesc2D &desc) {
+CATLASS_DEVICE auto makeRowMajorTlaLayout(const TensorDesc &desc) {
     return tla::MakeLayout(tla::MakeShape(desc.shape0, desc.shape1),
                            tla::MakeStride(desc.stride0, tla::Int<1>{}),
                            tla::MakeShape(desc.originShape0, desc.originShape1));
 }
 
-template <typename TensorDesc>
-CATLASS_DEVICE auto makeTlaTileCoord(const TensorDesc &desc) {
-    return tla::MakeCoord(desc.coord0, desc.coord1);
+CATLASS_DEVICE auto makeColumnMajorTlaLayout(const TensorDesc &desc) {
+    return tla::MakeLayout(tla::MakeShape(desc.shape0, desc.shape1),
+                           tla::MakeStride(tla::Int<1>{}, desc.stride1),
+                           tla::MakeShape(desc.originShape0, desc.originShape1));
 }
 
 template <typename T>
-CATLASS_DEVICE auto makezNTlaLayout(const TensorDesc4D &desc) {
+CATLASS_DEVICE auto makezNTlaLayout(const TensorDesc &desc) {
     constexpr uint32_t eleNumPerC0 = Catlass::BYTE_PER_C0 / sizeof(T);
     constexpr uint32_t eleNumPerFractal = Catlass::BYTE_PER_FRACTAL / sizeof(T);
     return tla::MakeLayout(
@@ -91,7 +102,7 @@ CATLASS_DEVICE auto makezNTlaLayout(const TensorDesc4D &desc) {
 }
 
 template <typename T>
-CATLASS_DEVICE auto makeZNUnAlignTlaLayout(const TensorDesc4D &desc) {
+CATLASS_DEVICE auto makezNUnAlignTlaLayout(const TensorDesc &desc) {
     constexpr uint32_t eleNumPerC0 = Catlass::BYTE_PER_C0 / sizeof(T);
     constexpr uint32_t eleNumPerFractal = Catlass::BYTE_PER_FRACTAL / sizeof(T);
     return tla::MakeLayout(
@@ -105,21 +116,7 @@ CATLASS_DEVICE auto makeZNUnAlignTlaLayout(const TensorDesc4D &desc) {
 }
 
 template <typename T>
-CATLASS_DEVICE auto makeZzTlaLayout(const TensorDesc4D &desc) {
-    constexpr uint32_t eleNumPerC0 = Catlass::BYTE_PER_C0 / sizeof(T);
-    constexpr uint32_t eleNumPerFractal = Catlass::BYTE_PER_FRACTAL / sizeof(T);
-    return tla::MakeLayout(
-        tla::MakeShape(
-            tla::MakeShape(tla::Int<Catlass::C0_NUM_PER_FRACTAL>{}, desc.shape1),
-            tla::MakeShape(tla::Int<eleNumPerC0>{}, desc.shape3)),
-        tla::MakeStride(
-            tla::MakeStride(tla::Int<eleNumPerC0>{}, desc.stride1),
-            tla::MakeStride(tla::Int<1>{}, tla::Int<eleNumPerFractal>{})),
-        tla::MakeShape(desc.originShape0, desc.originShape1));
-}
-
-template <typename T>
-CATLASS_DEVICE auto makenZTlaLayout(const TensorDesc4D &desc) {
+CATLASS_DEVICE auto makenZTlaLayout(const TensorDesc &desc) {
     constexpr uint32_t eleNumPerC0 = Catlass::BYTE_PER_C0 / sizeof(T);
     constexpr uint32_t eleNumPerFractal = Catlass::BYTE_PER_FRACTAL / sizeof(T);
     return tla::MakeLayout(
@@ -133,7 +130,7 @@ CATLASS_DEVICE auto makenZTlaLayout(const TensorDesc4D &desc) {
 }
 
 template <typename T>
-CATLASS_DEVICE auto makeL0CTlaLayout(const TensorDesc4D &desc) {
+CATLASS_DEVICE auto makeL0CTlaLayout(const TensorDesc &desc) {
     constexpr uint32_t eleNumPerFractal = 256;
     return tla::MakeLayout(
         tla::MakeShape(
@@ -145,85 +142,98 @@ CATLASS_DEVICE auto makeL0CTlaLayout(const TensorDesc4D &desc) {
         tla::MakeShape(desc.originShape0, desc.originShape1));
 }
 
-template <typename T>
-CATLASS_DEVICE auto makeGMTensor(memref_t<__gm__ T, 2> *memref, const TensorDesc2D &desc) {
-    return tla::MakeTensor(makeGlobalTensor(basePtr(memref)), makeRowMajorTlaLayout<T>(desc),
-                           makeTlaTileCoord(desc), Catlass::Arch::PositionGM{});
+// ---------------------------------------------------------------------------
+// Position-tagged tensor constructors. LayoutTag is a non-type template
+// parameter; each Position selects the layout constructor appropriate to that
+// memory (e.g. UB zN uses the UnAlign variant, L1/L0A zN uses the aligned one).
+// ---------------------------------------------------------------------------
+
+template <LayoutTag Tag, typename T>
+CATLASS_DEVICE auto makeGMTensor(memref_t<__gm__ T, 2> *memref, const TensorDesc &desc) {
+    if constexpr (Tag == LayoutTag::RowMajor) {
+        return tla::MakeTensor(makeGlobalTensor(basePtr(memref)), makeRowMajorTlaLayout<T>(desc),
+                               makeTlaTileCoord(desc), Catlass::Arch::PositionGM{});
+    } else if constexpr (Tag == LayoutTag::ColumnMajor) {
+        return tla::MakeTensor(makeGlobalTensor(basePtr(memref)), makeColumnMajorTlaLayout(desc),
+                               makeTlaTileCoord(desc), Catlass::Arch::PositionGM{});
+    } else {
+        static_assert(Tag == LayoutTag::RowMajor || Tag == LayoutTag::ColumnMajor,
+                      "GM tensor supports RowMajor/ColumnMajor only");
+    }
 }
 
-template <typename T, size_t Dim>
-CATLASS_DEVICE auto makeUBTensor(memref_t<__ubuf__ T, Dim> *memref, const TensorDesc2D &desc) {
-    return tla::MakeTensor(AscendC::LocalTensor<T>(AscendC::TPosition::VECCALC, localAddr(memref),
-                                 elementCount(memref)),
-                           makeRowMajorTlaLayout<T>(desc), makeTlaTileCoord(desc),
-                           Catlass::Arch::PositionUB{});
+template <LayoutTag Tag, typename T>
+CATLASS_DEVICE auto makeUBTensor(memref_t<__ubuf__ T, 1> *memref, const TensorDesc &desc) {
+    AscendC::LocalTensor<T> tensor(AscendC::TPosition::VECCALC, localAddr(memref),
+                                   elementCount(memref));
+    if constexpr (Tag == LayoutTag::RowMajor) {
+        return tla::MakeTensor(tensor, makeRowMajorTlaLayout<T>(desc), makeTlaTileCoord(desc),
+                               Catlass::Arch::PositionUB{});
+    } else if constexpr (Tag == LayoutTag::ColumnMajor) {
+        return tla::MakeTensor(tensor, makeColumnMajorTlaLayout(desc), makeTlaTileCoord(desc),
+                               Catlass::Arch::PositionUB{});
+    } else if constexpr (Tag == LayoutTag::zN || Tag == LayoutTag::zNUnAlign) {
+        return tla::MakeTensor(tensor, makezNUnAlignTlaLayout<T>(desc), makeTlaTileCoord(desc),
+                               Catlass::Arch::PositionUB{});
+    } else {
+        static_assert(Tag == LayoutTag::RowMajor || Tag == LayoutTag::ColumnMajor ||
+                          Tag == LayoutTag::zN || Tag == LayoutTag::zNUnAlign,
+                      "UB tensor supports RowMajor/ColumnMajor/zN only");
+    }
 }
 
-template <typename T, size_t Dim>
-CATLASS_DEVICE auto makeUBTensor(memref_t<__ubuf__ T, Dim> *memref, const TensorDesc4D &desc) {
-    return tla::MakeTensor(AscendC::LocalTensor<T>(AscendC::TPosition::VECCALC, localAddr(memref),
-                                 elementCount(memref)),
-                           makeZNUnAlignTlaLayout<T>(desc), makeTlaTileCoord(desc),
-                           Catlass::Arch::PositionUB{});
+template <LayoutTag Tag, typename T>
+CATLASS_DEVICE auto makeL1Tensor(memref_t<__cbuf__ T, 1> *memref, const TensorDesc &desc) {
+    AscendC::LocalTensor<T> tensor(AscendC::TPosition::A1, localAddr(memref), elementCount(memref));
+    if constexpr (Tag == LayoutTag::zN) {
+        return tla::MakeTensor(tensor, makezNTlaLayout<T>(desc), makeTlaTileCoord(desc),
+                               Catlass::Arch::PositionL1{});
+    } else if constexpr (Tag == LayoutTag::nZ) {
+        return tla::MakeTensor(tensor, makenZTlaLayout<T>(desc), makeTlaTileCoord(desc),
+                               Catlass::Arch::PositionL1{});
+    } else {
+        static_assert(Tag == LayoutTag::zN || Tag == LayoutTag::nZ,
+                      "L1 tensor supports zN/nZ only");
+    }
 }
 
-CATLASS_DEVICE auto makeColumnMajorTlaLayout(const TensorDesc2D &desc) {
-    return tla::MakeLayout(tla::MakeShape(desc.shape0, desc.shape1),
-                           tla::MakeStride(tla::Int<1>{}, desc.stride1),
-                           tla::MakeShape(desc.originShape0, desc.originShape1));
+template <LayoutTag Tag, typename T>
+CATLASS_DEVICE auto makeL0ATensor(memref_t<__ca__ T, 1> *memref, const TensorDesc &desc) {
+    static_assert(Tag == LayoutTag::zN, "L0A tensor supports zN only");
+    AscendC::LocalTensor<T> tensor(AscendC::TPosition::A2, localAddr(memref), elementCount(memref));
+    return tla::MakeTensor(tensor, makezNTlaLayout<T>(desc), makeTlaTileCoord(desc),
+                           Catlass::Arch::PositionL0A{});
 }
 
-template <typename T, size_t Dim>
-CATLASS_DEVICE auto makeUBTensorColumnMajor(memref_t<__ubuf__ T, Dim> *memref, const TensorDesc2D &desc) {
-    return tla::MakeTensor(AscendC::LocalTensor<T>(AscendC::TPosition::VECCALC, localAddr(memref),
-                                 elementCount(memref)),
-                           makeColumnMajorTlaLayout(desc), makeTlaTileCoord(desc),
-                           Catlass::Arch::PositionUB{});
+template <LayoutTag Tag, typename T>
+CATLASS_DEVICE auto makeL0BTensor(memref_t<__cb__ T, 1> *memref, const TensorDesc &desc) {
+    static_assert(Tag == LayoutTag::nZ, "L0B tensor supports nZ only");
+    AscendC::LocalTensor<T> tensor(AscendC::TPosition::B2, localAddr(memref), elementCount(memref));
+    return tla::MakeTensor(tensor, makenZTlaLayout<T>(desc), makeTlaTileCoord(desc),
+                           Catlass::Arch::PositionL0B{});
 }
 
-template <typename T>
-CATLASS_DEVICE auto makeGMTensorColumnMajor(memref_t<__gm__ T, 2> *memref, const TensorDesc2D &desc) {
-    return tla::MakeTensor(makeGlobalTensor(basePtr(memref)), makeColumnMajorTlaLayout(desc),
-                           makeTlaTileCoord(desc), Catlass::Arch::PositionGM{});
+template <LayoutTag Tag, typename T>
+CATLASS_DEVICE auto makeL0CTensor(memref_t<__cc__ T, 1> *memref, const TensorDesc &desc) {
+    static_assert(Tag == LayoutTag::L0C, "L0C tensor supports L0C only");
+    AscendC::LocalTensor<T> tensor(AscendC::TPosition::CO1, localAddr(memref), elementCount(memref));
+    return tla::MakeTensor(tensor, makeL0CTlaLayout<T>(desc), makeTlaTileCoord(desc),
+                           Catlass::Arch::PositionL0C{});
 }
 
-template <typename T>
-CATLASS_DEVICE auto makeGMzNTensor(memref_t<__gm__ T, 2> *memref, const TensorDesc4D &desc) {
-    return tla::MakeTensor(makeGlobalTensor(basePtr(memref)), makezNTlaLayout<T>(desc),
-                           makeTlaTileCoord(desc), Catlass::Arch::PositionGM{});
-}
+// ---------------------------------------------------------------------------
+// C-ABI helpers for the unified 12-field descriptor. DESC_ABI_PARAMS declares
+// the 12 int64 descriptor args in a ciface signature; TENSOR_DESC_12 builds the
+// matching TensorDesc from them. Both take a prefix token (src/dst).
+// ---------------------------------------------------------------------------
+#define DESC_ABI_PARAMS(P)                                                                                   \
+    int64_t P##Shape0, int64_t P##Shape1, int64_t P##Shape2, int64_t P##Shape3,                              \
+        int64_t P##Stride0, int64_t P##Stride1, int64_t P##Stride2, int64_t P##Stride3,                      \
+        int64_t P##Coord0, int64_t P##Coord1, int64_t P##OrgShape0, int64_t P##OrgShape1
 
-template <typename T, size_t L1Dim>
-CATLASS_DEVICE auto makeL1Tensor(memref_t<__cbuf__ T, L1Dim> *memref, const TensorDesc4D &desc) {
-    return tla::MakeTensor(
-        AscendC::LocalTensor<T>(AscendC::TPosition::A1, localAddr(memref), elementCount(memref)),
-        makezNTlaLayout<T>(desc), makeTlaTileCoord(desc), Catlass::Arch::PositionL1{});
-}
-
-template <typename T, size_t L1Dim>
-CATLASS_DEVICE auto makeL1nZTensor(memref_t<__cbuf__ T, L1Dim> *memref, const TensorDesc4D &desc) {
-    return tla::MakeTensor(
-        AscendC::LocalTensor<T>(AscendC::TPosition::A1, localAddr(memref), elementCount(memref)),
-        makenZTlaLayout<T>(desc), makeTlaTileCoord(desc), Catlass::Arch::PositionL1{});
-}
-
-template <typename T>
-CATLASS_DEVICE auto makeL0ATensor(memref_t<__ca__ T, 1> *memref, const TensorDesc4D &desc) {
-    return tla::MakeTensor(
-        AscendC::LocalTensor<T>(AscendC::TPosition::A2, localAddr(memref), elementCount(memref)),
-        makezNTlaLayout<T>(desc), makeTlaTileCoord(desc), Catlass::Arch::PositionL0A{});
-}
-
-template <typename T>
-CATLASS_DEVICE auto makeL0BTensor(memref_t<__cb__ T, 1> *memref, const TensorDesc4D &desc) {
-    return tla::MakeTensor(
-        AscendC::LocalTensor<T>(AscendC::TPosition::B2, localAddr(memref), elementCount(memref)),
-        makenZTlaLayout<T>(desc), makeTlaTileCoord(desc), Catlass::Arch::PositionL0B{});
-}
-
-template <typename T>
-CATLASS_DEVICE auto makeL0CTensor(memref_t<__cc__ T, 1> *memref, const TensorDesc4D &desc) {
-    return tla::MakeTensor(
-        AscendC::LocalTensor<T>(AscendC::TPosition::CO1, localAddr(memref), elementCount(memref)),
-        makeL0CTlaLayout<T>(desc), makeTlaTileCoord(desc), Catlass::Arch::PositionL0C{});
-}
+#define TENSOR_DESC_12(P)                                                                                    \
+    TensorDesc{                                                                                              \
+        (uint32_t)P##Shape0, (uint32_t)P##Shape1, (uint32_t)P##Shape2, (uint32_t)P##Shape3,                  \
+        P##Stride0, P##Stride1, P##Stride2, P##Stride3,                                                      \
+        (uint32_t)P##Coord0, (uint32_t)P##Coord1,                                                            \
+        (uint32_t)P##OrgShape0, (uint32_t)P##OrgShape1}

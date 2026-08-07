@@ -72,7 +72,7 @@ TLA DSL 的选择是 **不重新实现，而是复用**。复用的机制就是�
 | bc | 把 stub 编译成可链接的 bitcode（**桥梁**） | `meta_op.*.c310.bc` |
 | hivmc | 运行时把 bc 链接进 kernel（**焊接**） | `--link-aicore-bitcode` |
 
-MLIR 侧只需为每种 `(路由, layout, 元素类型)` 起一个确定的 stub 名（如 `copy_gm_row_major_to_cbuf_zN_float`），并按固定布局拼好 payload；至于这个 stub 内部走 Nd2Nz 还是 Fixpipe、C0 stride 怎么算，全交给 C++ 模板。stub 被声明为 `always_inline`，链接后会被内联进调用点--**最终 `kernel.o` 里和"纯 MLIR lowering"产出的 DMA intrinsic 没有本质区别**，但开发成本和正确性保障好得多。
+MLIR 侧只需为每种 `(路由, layout, 元素类型)` 起一个确定的 stub 名（如 `copy_gm_row_major_to_l1_zN_float`），并按固定布局拼好 payload；至于这个 stub 内部走 Nd2Nz 还是 Fixpipe、C0 stride 怎么算，全交给 C++ 模板。stub 被声明为 `always_inline`，链接后会被内联进调用点--**最终 `kernel.o` 里和"纯 MLIR lowering"产出的 DMA intrinsic 没有本质区别**，但开发成本和正确性保障好得多。
 
 这就是 bc 接入整个后端的根本动机：**用最小的 MLIR 侧契约，复用 C++ 模板库全部的搬运特化能力。** 后文以 `tla.copy` 为线索，把这条链路逐步拆开。
 
@@ -100,7 +100,7 @@ LLVM IR   (call @_mlir_ciface_copy_<route>_<dtype>)
 kernel.o   (stub 被 always_inline 内联展开为 DMA intrinsic)
 ```
 
-**核心认知**：`tla.copy` 在 TlaCompile 阶段**不会** lower 成单个 HIVM datacopy op，而是 lower 成一条 `func.call`，去调用一个名字形如 `copy_gm_row_major_to_cbuf_zN_float` 的 runtime stub。这个 stub 的函数体写在 C++ 里（[csrc/mlir/bc/Cube/dma.cpp](../csrc/mlir/bc/Cube/dma.cpp)），由 Bisheng 编译器 `bisheng` 预编译成 `.bc`，再由 `hivmc` 在编译时链接进 kernel。**bc 就是填上那道裂缝的胶水。**
+**核心认知**：`tla.copy` 在 TlaCompile 阶段**不会** lower 成单个 HIVM datacopy op，而是 lower 成一条 `func.call`，去调用一个名字形如 `copy_gm_row_major_to_l1_zN_float` 的 runtime stub。这个 stub 的函数体写在 C++ 里（[csrc/mlir/bc/Cube/dma.cpp](../csrc/mlir/bc/Cube/dma.cpp)），由 Bisheng 编译器 `bisheng` 预编译成 `.bc`，再由 `hivmc` 在编译时链接进 kernel。**bc 就是填上那道裂缝的胶水。**
 
 ---
 
@@ -166,17 +166,17 @@ op 定义在 [Tla.td](../csrc/mlir/include/Dialect/Tla/IR/Tla.td)（`Tla_CopyOp`
 它们做的事：
 
 1. 从 `tla.tensor_desc`（由更早的 `tla-lower-tensor-desc` 物化）取 src/dst 的 `TensorDescriptor`。
-2. 读出 `(srcAddrspace, dstAddrspace, srcLayout, dstLayout, elemType)`，调 `getCopyRouteCallee()`（[TlaTensorToMemref.cpp](../csrc/mlir/lib/Passes/TlaTensorToMemref.cpp) 606–733 行）查表得到 stub 名，例如 `copy_gm_row_major_to_cbuf_zN_float`、`copy_cc_to_gm_row_major_float`。
+2. 读出 `(srcAddrspace, dstAddrspace, srcLayout, dstLayout, elemType)`，调 `getCopyRouteCallee()`（[TlaTensorToMemref.cpp](../csrc/mlir/lib/Passes/TlaTensorToMemref.cpp) 606–733 行）查表得到 stub 名，例如 `copy_gm_row_major_to_l1_zN_float`、`copy_l0c_to_gm_row_major_float`。
 3. `buildCopyPayloadForRoute()`（同文件 767–782 行）把 shape/stride/coord 拼成一串 `i64` payload（linear layout 8 个、packed layout 12 个，src+dst 各一份）。
 4. 生成 `func.call @copy_<route>_<dtype>(srcMemref, dstMemref, ...payload)`，原 `tla.copy` 删除。
 
 转换后的 MLIR（`tla-compile --emit mlir`）形如：
 
 ```
-func.func private @copy_gm_row_major_to_cbuf_zN_float
+func.func private @copy_gm_row_major_to_l1_zN_float
   {hivm.func_core_type = #hivm.func_core_type<AIC>, ...}
 ...
-call @copy_gm_row_major_to_cbuf_zN_float(...)
+call @copy_gm_row_major_to_l1_zN_float(...)
 ```
 
 ### 4.4 bc 侧：stub 的函数体长什么样
@@ -184,23 +184,23 @@ call @copy_gm_row_major_to_cbuf_zN_float(...)
 stub 实现在 [csrc/mlir/bc/Cube/dma.cpp](../csrc/mlir/bc/Cube/dma.cpp)（cube 端）和 [csrc/mlir/bc/Vector/dma.cpp](../csrc/mlir/bc/Vector/dma.cpp)（vector 端）。以 GM->L1 的 stub 为例（Cube/dma.cpp:131）：
 
 ```cpp
-void _mlir_ciface_copy_gm_row_major_to_cbuf_zN_float(
+void _mlir_ciface_copy_gm_row_major_to_l1_zN_float(
     memref_t<__gm__ float, 2> *src, memref_t<__cbuf__ float, 1> *dst,
     int64_t srcShape0, int64_t srcShape1, int64_t srcStride0, int64_t srcStride1,
     int64_t srcCoord0, int64_t srcCoord1, int64_t srcOrgShape0, int64_t srcOrgShape1,
     int64_t dstShape0, int64_t dstShape1, int64_t dstShape2, int64_t dstShape3,
     /* ... dstStride / dstCoord / dstOrgShape ... */) {
-    copyGmRowMajorToCbufzN<Catlass::Arch::Ascend950>(
+    copyGMRowMajorToL1zN<Catlass::Arch::Ascend950>(
         src, dst,
         TensorDesc2D{...}, TensorDesc4D{...});
 }
 
 template <class ArchTag, typename T>
-CATLASS_DEVICE void copyGmRowMajorToCbufzN(
+CATLASS_DEVICE void copyGMRowMajorToL1zN(
     memref_t<__gm__ T, 2> *src, memref_t<__cbuf__ T, 1> *dst,
     const TensorDesc2D &srcDesc, const TensorDesc4D &dstDesc) {
-    auto srcTensor = makeGMTensor(src, srcDesc);
-    auto dstTensor = makeL1Tensor(dst, dstDesc);
+    auto srcTensor = makeGMRowMajorTensor(src, srcDesc);
+    auto dstTensor = makeL1zNTensor(dst, dstDesc);
     Catlass::Gemm::Tile::TileCopyTla<ArchTag, decltype(srcTensor),
                                      decltype(dstTensor)>{}(dstTensor,
                                                             srcTensor);
@@ -296,7 +296,7 @@ llvm-link dma.aic.c310.bc mmad.aic.c310.bc mutex.aic.c310.bc ... \
 | stub 实现（vector） | [csrc/mlir/bc/Vector/dma.cpp](../csrc/mlir/bc/Vector/dma.cpp) | - |
 | bc 构建规则 | [csrc/mlir/bc/CMakeLists.txt](../csrc/mlir/bc/CMakeLists.txt) | `compile_single_cpp_to_bc` / `link_all_to_meta_op` |
 | bc 运行时链接 | [execution.py](../catlass/execution.py) | `_build_hivmc_a5_command` 1832；`_resolve_hivm_template_bitcode` 2003 |
-| IR 形态样例 | [tests/lit/tla-compile/](../tests/lit/tla-compile/) | `copy-l0c-to-gm-atomic-f32.mlir`、`make-tensor-copy-gm-cbuf-zn.mlir` |
+| IR 形态样例 | [tests/lit/tla-compile/](../tests/lit/tla-compile/) | `copy-l0c-to-gm-atomic-f32.mlir`、`make-tensor-copy-gm-l1-zn.mlir` |
 
 ---
 
@@ -308,14 +308,14 @@ tla.copy(gm_a -> l1_a)                        ← 用户 Python
         ▼
 "tla.copy"(%l1, %gm) : <l1 zN>, <gm row_major>   ← tla dialect IR
         │ tla-cube-region pass (LowerTlaCopyPattern)
-        │   getCopyRouteCallee() -> "copy_gm_row_major_to_cbuf_zN_float"
+        │   getCopyRouteCallee() -> "copy_gm_row_major_to_l1_zN_float"
         │   buildCopyPayloadForRoute() -> 8×i64 ×2
         ▼
-func.call @copy_gm_row_major_to_cbuf_zN_float(src, dst, …payload)   ← HIVM/LLVM IR
+func.call @copy_gm_row_major_to_l1_zN_float(src, dst, …payload)   ← HIVM/LLVM IR
         │ CompilePipeline: FuncToLLVM -> call @_mlir_ciface_copy_…
         │ rewriteCifaceCallsWithWrappers -> always_inline wrapper
         ▼
-LLVM IR (call @_mlir_ciface_copy_gm_row_major_to_cbuf_zN_float)
+LLVM IR (call @_mlir_ciface_copy_gm_row_major_to_l1_zN_float)
         │  ┌─────────────────────────────────────────────────────────┐
         │  │ hivmc --link-aicore-bitcode=meta_op.aic.c310.bc          │
         │  │   stub 体来自 Cube/dma.cpp (bisheng 预编译成 .bc)            │

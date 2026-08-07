@@ -33,27 +33,27 @@ module attributes {tla.module_exec_units = "cube"} {
   }) {tla.exec_units = "cube", function_type = (!tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<32,1>, !tla.shape<32,32>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>) -> (), sym_name = "copy_l0c2ub_nosplit"} : () -> ()
 }
 
-// CHECK-F16: func.func private @copy_cc_to_ubuf_row_major_nosplit_half
+// CHECK-F16: func.func private @copy_l0c_to_ub_row_major_nosplit_half
 // CHECK-F16-SAME: hacc.always_inline
 // CHECK-F16-SAME: hivm.func_core_type = #hivm.func_core_type<AIC>
 // CHECK-F16-SAME: llvm.emit_c_interface
 // CHECK-F16-LABEL: func.func @copy_l0c2ub_nosplit
 // CHECK-F16-DAG: [[CC:%.*]] = memref.cast {{%.*}} : memref<1024xf32, #hivm.address_space<cc>> to memref<?xf32, strided<[?], offset: ?>, #hivm.address_space<cc>>
 // CHECK-F16-DAG: [[UB:%.*]] = memref.cast {{%.*}} : memref<1024xf16, #hivm.address_space<ub>> to memref<?xf16, strided<[?], offset: ?>, #hivm.address_space<ub>>
-// CHECK-F16: call @copy_cc_to_ubuf_row_major_nosplit_half([[CC]], [[UB]]
+// CHECK-F16: call @copy_l0c_to_ub_row_major_nosplit_half([[CC]], [[UB]]
 // CHECK-F16-SAME: i8
 // CHECK-F16-SAME: i8
 // CHECK-F16-NOT: "tla.copy"
 // CHECK-F16-NOT: "tla.CopyL0C2DstParams"
 
-// CHECK-BF16: func.func private @copy_cc_to_ubuf_row_major_nosplit_bf16
+// CHECK-BF16: func.func private @copy_l0c_to_ub_row_major_nosplit_bf16
 // CHECK-BF16-SAME: hacc.always_inline
 // CHECK-BF16-SAME: hivm.func_core_type = #hivm.func_core_type<AIC>
 // CHECK-BF16-SAME: llvm.emit_c_interface
 // CHECK-BF16-LABEL: func.func @copy_l0c2ub_nosplit
 // CHECK-BF16-DAG: [[CC:%.*]] = memref.cast {{%.*}} : memref<1024xf32, #hivm.address_space<cc>> to memref<?xf32, strided<[?], offset: ?>, #hivm.address_space<cc>>
 // CHECK-BF16-DAG: [[UB:%.*]] = memref.cast {{%.*}} : memref<1024xbf16, #hivm.address_space<ub>> to memref<?xbf16, strided<[?], offset: ?>, #hivm.address_space<ub>>
-// CHECK-BF16: call @copy_cc_to_ubuf_row_major_nosplit_bf16([[CC]], [[UB]]
+// CHECK-BF16: call @copy_l0c_to_ub_row_major_nosplit_bf16([[CC]], [[UB]]
 // CHECK-BF16-SAME: i8
 // CHECK-BF16-SAME: i8
 // CHECK-BF16-NOT: "tla.copy"

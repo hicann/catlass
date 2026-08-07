@@ -33,28 +33,28 @@ module attributes {tla.module_exec_units = "cube"} {
 }
 
 // ---- SPLIT_M ----
-// CHECK-SPLITM: func.func private @copy_cc_to_ubuf_row_major_splitm_float
+// CHECK-SPLITM: func.func private @copy_l0c_to_ub_row_major_splitm_float
 // CHECK-SPLITM-SAME: hacc.always_inline
 // CHECK-SPLITM-SAME: hivm.func_core_type = #hivm.func_core_type<AIC>
 // CHECK-SPLITM-SAME: llvm.emit_c_interface
 // CHECK-SPLITM-LABEL: func.func @copy_l0c2ub_splitm
 // CHECK-SPLITM-DAG: [[CC:%.*]] = memref.cast {{%.*}} : memref<1024xf32, #hivm.address_space<cc>> to memref<?xf32, strided<[?], offset: ?>, #hivm.address_space<cc>>
 // CHECK-SPLITM-DAG: [[UB:%.*]] = memref.cast {{%.*}} : memref<512xf32, #hivm.address_space<ub>> to memref<?xf32, strided<[?], offset: ?>, #hivm.address_space<ub>>
-// CHECK-SPLITM: call @copy_cc_to_ubuf_row_major_splitm_float([[CC]], [[UB]]
+// CHECK-SPLITM: call @copy_l0c_to_ub_row_major_splitm_float([[CC]], [[UB]]
 // CHECK-SPLITM-SAME: i8
 // CHECK-SPLITM-SAME: i8
 // CHECK-SPLITM-NOT: "tla.copy"
 // CHECK-SPLITM-NOT: "tla.CopyL0C2DstParams"
 
 // ---- SPLIT_N ----
-// CHECK-SPLITN: func.func private @copy_cc_to_ubuf_row_major_splitn_float
+// CHECK-SPLITN: func.func private @copy_l0c_to_ub_row_major_splitn_float
 // CHECK-SPLITN-SAME: hacc.always_inline
 // CHECK-SPLITN-SAME: hivm.func_core_type = #hivm.func_core_type<AIC>
 // CHECK-SPLITN-SAME: llvm.emit_c_interface
 // CHECK-SPLITN-LABEL: func.func @copy_l0c2ub_splitn
 // CHECK-SPLITN-DAG: [[CC:%.*]] = memref.cast {{%.*}} : memref<1024xf32, #hivm.address_space<cc>> to memref<?xf32, strided<[?], offset: ?>, #hivm.address_space<cc>>
 // CHECK-SPLITN-DAG: [[UB:%.*]] = memref.cast {{%.*}} : memref<512xf32, #hivm.address_space<ub>> to memref<?xf32, strided<[?], offset: ?>, #hivm.address_space<ub>>
-// CHECK-SPLITN: call @copy_cc_to_ubuf_row_major_splitn_float([[CC]], [[UB]]
+// CHECK-SPLITN: call @copy_l0c_to_ub_row_major_splitn_float([[CC]], [[UB]]
 // CHECK-SPLITN-SAME: i8
 // CHECK-SPLITN-SAME: i8
 // CHECK-SPLITN-NOT: "tla.copy"

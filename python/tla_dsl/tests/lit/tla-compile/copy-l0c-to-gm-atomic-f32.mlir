@@ -31,7 +31,7 @@ module attributes {tla.module_exec_units = "cube"} {
 // CHECK-NEXT: hivm.hir.set_ctrl false at ctrl[8]
 // CHECK-NEXT: hivm.hir.set_ctrl false at ctrl[9]
 // CHECK-NEXT: hivm.hir.set_ctrl false at ctrl[10]
-// CHECK: call @copy_cc_to_gm_row_major_float
+// CHECK: call @copy_l0c_to_gm_row_major_float
 // CHECK: hivm.hir.set_ctrl false at ctrl[6]
 // CHECK-NEXT: hivm.hir.set_ctrl false at ctrl[7]
 // CHECK-NEXT: hivm.hir.set_ctrl false at ctrl[8]

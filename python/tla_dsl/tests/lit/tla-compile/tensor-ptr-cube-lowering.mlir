@@ -4,7 +4,7 @@
 // make_tensor_like, lowered end-to-end through the cube (TlaLowerToStd) path.
 //   gm_off = tile.ptr() + 4   -> make_tensor (row_major GM)
 //   l1_off = alloc_ptr + 8    -> make_tensor_like (zN L1)
-//   tla.copy(l1_dst, gm_src)  -> copy_gm_row_major_to_cbuf_zN_float
+//   tla.copy(l1_dst, gm_src)  -> copy_gm_row_major_to_l1_zN_float
 // After lowering, tla.tensor_ptr / tla.ptr_add / tla.make_tensor[_like] are gone.
 // Element offsets are scaled by pointee byte width into the i64 address before
 // consumer-local pointer_cast descriptors are built.
@@ -50,4 +50,4 @@
 // CHECK-NOT: "tla.ptr_add"
 // CHECK-NOT: "tla.make_tensor"
 // CHECK-NOT: "tla.make_tensor_like"
-// CHECK: call @copy_gm_row_major_to_cbuf_zN_float
+// CHECK: call @copy_gm_row_major_to_l1_zN_float

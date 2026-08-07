@@ -18,7 +18,7 @@ def _require_hivm_tla_compile() -> pathlib.Path:
 
 
 @tla.kernel
-def copy_gm_to_cbuf_kernel(mem_in: tla.Tensor) -> None:
+def copy_gm_to_l1_kernel(mem_in: tla.Tensor) -> None:
     tile = tla.tile_view(mem_in, tla.make_shape(32, 32), tla.make_coord(1, 1))
     ptr = tla.allocate((32, 32), tla.Float32, tla.AddressSpace.l1, 512)
     local = tla.make_tensor_like(ptr, tile, tla.arch.zN)
@@ -40,7 +40,7 @@ def copy_kernel_arg_directly_to_ub_kernel(mem_in: tla.Tensor) -> None:
         tla.copy(ub, mem_in)
 
 
-def test_frontend_copy_gm_to_cbuf_lowers_to_runtime_call(tmp_path) -> None:
+def test_frontend_copy_gm_to_l1_lowers_to_runtime_call(tmp_path) -> None:
     tla_compile = _require_hivm_tla_compile()
     with runtime_mod._eager_capture():
         mem = tla.Tensor(
@@ -49,12 +49,12 @@ def test_frontend_copy_gm_to_cbuf_lowers_to_runtime_call(tmp_path) -> None:
             origin_shape=tla.make_shape(128, 128),
         )
 
-    mlir = copy_gm_to_cbuf_kernel.dump_mlir(type_args=(mem,))
+    mlir = copy_gm_to_l1_kernel.dump_mlir(type_args=(mem,))
     assert "!tla.layout<!tla.shape<(16,2),(8,4)>" in mlir
     assert "!tla.ptr<f32, l1, 512>" in mlir
     assert "tla.copy" in mlir
 
-    input_path = tmp_path / "copy_gm_to_cbuf.mlir"
+    input_path = tmp_path / "copy_gm_to_l1.mlir"
     input_path.write_text(mlir)
     try:
         result = subprocess.run(
@@ -71,8 +71,8 @@ def test_frontend_copy_gm_to_cbuf_lowers_to_runtime_call(tmp_path) -> None:
         raise
 
     lowered = result.stdout
-    assert "copy_gm_row_major_to_cbuf_zN_float" in lowered
-    assert "_mlir_ciface_copy_gm_row_major_to_cbuf_zN_float" not in lowered
+    assert "copy_gm_row_major_to_l1_zN_float" in lowered
+    assert "_mlir_ciface_copy_gm_row_major_to_l1_zN_float" not in lowered
     assert "hacc.always_inline" in lowered
     assert "hivm.func_core_type = #hivm.func_core_type<AIC>" in lowered
     assert "llvm.emit_c_interface" in lowered
@@ -219,14 +219,15 @@ def test_split_m_dynamic_row_major_stride_uses_child_n_extent(tmp_path) -> None:
     )
 
     call_match = re.search(
-        r"call @copy_cc_to_ubuf_row_major_splitm_float\(([^)]*)\)",
+        r"call @copy_l0c_to_ub_row_major_splitm_float\(([^)]*)\)",
         result.stdout,
     )
     assert call_match is not None, result.stdout
     operands = [operand.strip() for operand in call_match.group(1).split(",")]
-    assert len(operands) == 24
+    # 2 memref + 12 src (L0C) + 12 dst (row-major, unified 4D) + unitFlag + subBlockId = 28.
+    assert len(operands) == 28
     dst_shape1 = operands[15]
-    dst_stride0 = operands[16]
+    dst_stride0 = operands[18]
     _assert_lowered_f32_dynamic_stride_is_32b_aligned(
         result.stdout, extent=dst_shape1, stride=dst_stride0
     )

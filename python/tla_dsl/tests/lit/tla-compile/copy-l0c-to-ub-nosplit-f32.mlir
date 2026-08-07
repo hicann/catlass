@@ -32,14 +32,14 @@ module attributes {tla.module_exec_units = "cube"} {
   }) {tla.exec_units = "cube", function_type = (!tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<32,1>, !tla.shape<32,32>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>) -> (), sym_name = "copy_l0c2ub_nosplit"} : () -> ()
 }
 
-// CHECK-F32: func.func private @copy_cc_to_ubuf_row_major_nosplit_float
+// CHECK-F32: func.func private @copy_l0c_to_ub_row_major_nosplit_float
 // CHECK-F32-SAME: hacc.always_inline
 // CHECK-F32-SAME: hivm.func_core_type = #hivm.func_core_type<AIC>
 // CHECK-F32-SAME: llvm.emit_c_interface
 // CHECK-F32-LABEL: func.func @copy_l0c2ub_nosplit
 // CHECK-F32-DAG: [[CC:%.*]] = memref.cast {{%.*}} : memref<1024xf32, #hivm.address_space<cc>> to memref<?xf32, strided<[?], offset: ?>, #hivm.address_space<cc>>
 // CHECK-F32-DAG: [[UB:%.*]] = memref.cast {{%.*}} : memref<1024xf32, #hivm.address_space<ub>> to memref<?xf32, strided<[?], offset: ?>, #hivm.address_space<ub>>
-// CHECK-F32: call @copy_cc_to_ubuf_row_major_nosplit_float([[CC]], [[UB]]
+// CHECK-F32: call @copy_l0c_to_ub_row_major_nosplit_float([[CC]], [[UB]]
 // CHECK-F32-SAME: i8
 // CHECK-F32-SAME: i8
 // CHECK-F32-NOT: "tla.copy"

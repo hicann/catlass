@@ -664,7 +664,7 @@ std::string getCopyRouteCallee(MLIRContext *ctx, StringRef srcAddrspace, StringR
     StringRef suffix = copyRuntimeElemSuffix(srcElementType);
     if (suffix.empty())
       return {};
-    return Twine("copy_gm_row_major_to_cbuf_zN_").concat(suffix).str();
+    return Twine("copy_gm_row_major_to_l1_zN_").concat(suffix).str();
   }
   if (*srcSpace == hivm::AddressSpace::GM && *dstSpace == hivm::AddressSpace::L1 &&
       srcLayout == TensorLayoutTag::ColumnMajor && dstLayout == TensorLayoutTag::nZ) {
@@ -673,7 +673,7 @@ std::string getCopyRouteCallee(MLIRContext *ctx, StringRef srcAddrspace, StringR
     StringRef suffix = copyRuntimeElemSuffix(srcElementType);
     if (suffix.empty())
       return {};
-    return Twine("copy_gm_column_major_to_cbuf_nZ_").concat(suffix).str();
+    return Twine("copy_gm_column_major_to_l1_nZ_").concat(suffix).str();
   }
   if (*srcSpace == hivm::AddressSpace::L1 && *dstSpace == hivm::AddressSpace::L0A &&
       srcLayout == TensorLayoutTag::zN && dstLayout == TensorLayoutTag::zN) {
@@ -682,7 +682,7 @@ std::string getCopyRouteCallee(MLIRContext *ctx, StringRef srcAddrspace, StringR
     StringRef suffix = copyRuntimeElemSuffix(srcElementType);
     if (suffix.empty())
       return {};
-    return Twine("copy_cbuf_zN_to_ca_zN_").concat(suffix).str();
+    return Twine("copy_l1_zN_to_l0a_zN_").concat(suffix).str();
   }
   if (*srcSpace == hivm::AddressSpace::L1 && *dstSpace == hivm::AddressSpace::L0A &&
       srcLayout == TensorLayoutTag::nZ && dstLayout == TensorLayoutTag::zN) {
@@ -691,7 +691,7 @@ std::string getCopyRouteCallee(MLIRContext *ctx, StringRef srcAddrspace, StringR
     StringRef suffix = copyRuntimeElemSuffix(srcElementType);
     if (suffix.empty())
       return {};
-    return Twine("copy_cbuf_nZ_to_ca_zN_").concat(suffix).str();
+    return Twine("copy_l1_nZ_to_l0a_zN_").concat(suffix).str();
   }
   if (*srcSpace == hivm::AddressSpace::L1 && *dstSpace == hivm::AddressSpace::L0B &&
       srcLayout == TensorLayoutTag::zN && dstLayout == TensorLayoutTag::nZ) {
@@ -700,7 +700,7 @@ std::string getCopyRouteCallee(MLIRContext *ctx, StringRef srcAddrspace, StringR
     StringRef suffix = copyRuntimeElemSuffix(srcElementType);
     if (suffix.empty())
       return {};
-    return Twine("copy_cbuf_zN_to_cb_nZ_").concat(suffix).str();
+    return Twine("copy_l1_zN_to_l0b_nZ_").concat(suffix).str();
   }
   if (*srcSpace == hivm::AddressSpace::L1 && *dstSpace == hivm::AddressSpace::L0B &&
       srcLayout == TensorLayoutTag::nZ && dstLayout == TensorLayoutTag::nZ) {
@@ -709,7 +709,7 @@ std::string getCopyRouteCallee(MLIRContext *ctx, StringRef srcAddrspace, StringR
     StringRef suffix = copyRuntimeElemSuffix(srcElementType);
     if (suffix.empty())
       return {};
-    return Twine("copy_cbuf_nZ_to_cb_nZ_").concat(suffix).str();
+    return Twine("copy_l1_nZ_to_l0b_nZ_").concat(suffix).str();
   }
   // L0C (fp32 MMAD acc) -> GM row-major: dst may be f32 / f16 / bf16 (narrowing on fixpipe).
   if (*srcSpace == hivm::AddressSpace::L0C && *dstSpace == hivm::AddressSpace::GM &&
@@ -719,7 +719,7 @@ std::string getCopyRouteCallee(MLIRContext *ctx, StringRef srcAddrspace, StringR
     StringRef suffix = copyRuntimeElemSuffix(dstElem);
     if (suffix.empty())
       return {};
-    return Twine("copy_cc_to_gm_row_major_").concat(suffix).str();
+    return Twine("copy_l0c_to_gm_row_major_").concat(suffix).str();
   }
   // L0C (fp32 MMAD acc) -> UB row-major: dst may be f32 / f16 / bf16 (narrowing on fixpipe).
   if (*srcSpace == hivm::AddressSpace::L0C && *dstSpace == hivm::AddressSpace::UB &&
@@ -729,7 +729,7 @@ std::string getCopyRouteCallee(MLIRContext *ctx, StringRef srcAddrspace, StringR
     StringRef suffix = copyRuntimeElemSuffix(dstElem);
     if (suffix.empty())
       return {};
-    return Twine("copy_cc_to_ubuf_row_major_").concat(extraDesc).concat("_").concat(suffix).str();
+    return Twine("copy_l0c_to_ub_row_major_").concat(extraDesc).concat("_").concat(suffix).str();
   }
   // L0C (fp32 MMAD acc) -> UB col-major: dst may be f32 / f16 / bf16 (narrowing on fixpipe).
   if (*srcSpace == hivm::AddressSpace::L0C && *dstSpace == hivm::AddressSpace::UB &&
@@ -744,22 +744,12 @@ std::string getCopyRouteCallee(MLIRContext *ctx, StringRef srcAddrspace, StringR
   return {};
 }
 
-static SmallVector<Value, 8> buildLinearCopyPayload(OpBuilder &builder, Location loc,
-                                                    const TensorDescriptor &desc) {
-  return {
-      castValueToI64(builder, loc, desc.shape[0]),
-      castValueToI64(builder, loc, desc.shape[1]),
-      castValueToI64(builder, loc, desc.stride[0]),
-      castValueToI64(builder, loc, desc.stride[1]),
-      castValueToI64(builder, loc, desc.coord[0]),
-      castValueToI64(builder, loc, desc.coord[1]),
-      castValueToI64(builder, loc, desc.originShape[0]),
-      castValueToI64(builder, loc, desc.originShape[1]),
-  };
-}
-
-static SmallVector<Value, 12> buildNZFamilyCopyPayload(OpBuilder &builder, Location loc,
-                                                       const TensorDescriptor &desc) {
+// Unified 12-field (4D) descriptor payload for every copy route. Linear
+// (RowMajor/ColumnMajor) descriptors carry shape[2]=shape[3]=stride[2]=stride[3]=1
+// (enforced by validateTensorDescriptor), so the same 12-field encoding serves
+// both Linear and NZFamily endpoints.
+static SmallVector<Value, 12> buildCopyPayload(OpBuilder &builder, Location loc,
+                                               const TensorDescriptor &desc) {
   return {
       castValueToI64(builder, loc, desc.shape[0]),
       castValueToI64(builder, loc, desc.shape[1]),
@@ -776,20 +766,13 @@ static SmallVector<Value, 12> buildNZFamilyCopyPayload(OpBuilder &builder, Locat
   };
 }
 
-SmallVector<Value, 20> buildCopyPayloadForRoute(OpBuilder &builder, Location loc,
+SmallVector<Value, 24> buildCopyPayloadForRoute(OpBuilder &builder, Location loc,
                                                 const TensorDescriptor &srcDesc,
                                                 const TensorDescriptor &dstDesc) {
-  SmallVector<Value, 20> payload;
+  SmallVector<Value, 24> payload;
   auto append = [&](ArrayRef<Value> values) { payload.append(values.begin(), values.end()); };
-  if (isLinearLayout(srcDesc.layoutTag))
-    append(buildLinearCopyPayload(builder, loc, srcDesc));
-  else
-    append(buildNZFamilyCopyPayload(builder, loc, srcDesc));
-
-  if (isLinearLayout(dstDesc.layoutTag))
-    append(buildLinearCopyPayload(builder, loc, dstDesc));
-  else
-    append(buildNZFamilyCopyPayload(builder, loc, dstDesc));
+  append(buildCopyPayload(builder, loc, srcDesc));
+  append(buildCopyPayload(builder, loc, dstDesc));
   return payload;
 }
 
@@ -801,14 +784,14 @@ static bool isAicTemplateRuntimeCall(StringRef name) {
     return false;
   if (!(name.ends_with("_float") || name.ends_with("_half") || name.ends_with("_bf16")))
     return false;
-  return name.starts_with("copy_gm_row_major_to_cbuf_zN_") ||
-         name.starts_with("copy_gm_column_major_to_cbuf_nZ_") ||
-         name.starts_with("copy_cbuf_zN_to_ca_zN_") ||
-         name.starts_with("copy_cbuf_nZ_to_ca_zN_") ||
-         name.starts_with("copy_cbuf_zN_to_cb_nZ_") ||
-         name.starts_with("copy_cbuf_nZ_to_cb_nZ_") ||
-         name.starts_with("copy_cc_to_ubuf_row_major_") ||
-         name.starts_with("copy_cc_to_gm_row_major_") ||
+  return name.starts_with("copy_gm_row_major_to_l1_zN_") ||
+         name.starts_with("copy_gm_column_major_to_l1_nZ_") ||
+         name.starts_with("copy_l1_zN_to_l0a_zN_") ||
+         name.starts_with("copy_l1_nZ_to_l0a_zN_") ||
+         name.starts_with("copy_l1_zN_to_l0b_nZ_") ||
+         name.starts_with("copy_l1_nZ_to_l0b_nZ_") ||
+         name.starts_with("copy_l0c_to_ub_row_major_") ||
+         name.starts_with("copy_l0c_to_gm_row_major_") ||
          name.starts_with("copy_l0c_to_ub_column_major_");
 }
 

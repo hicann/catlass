@@ -73,19 +73,19 @@ module attributes {tla.module_exec_units = "cube"} {
 // CHECK-SAME: hacc.always_inline
 // CHECK-SAME: hivm.func_core_type = #hivm.func_core_type<AIC>
 // CHECK-SAME: llvm.emit_c_interface
-// CHECK: func.func private @copy_cc_to_gm_row_major_float
+// CHECK: func.func private @copy_l0c_to_gm_row_major_float
 // CHECK-SAME: hacc.always_inline
 // CHECK-SAME: hivm.func_core_type = #hivm.func_core_type<AIC>
 // CHECK-SAME: llvm.emit_c_interface
-// CHECK: func.func private @copy_cbuf_zN_to_cb_nZ_float
+// CHECK: func.func private @copy_l1_zN_to_l0b_nZ_float
 // CHECK-SAME: hacc.always_inline
 // CHECK-SAME: hivm.func_core_type = #hivm.func_core_type<AIC>
 // CHECK-SAME: llvm.emit_c_interface
-// CHECK: func.func private @copy_cbuf_zN_to_ca_zN_float
+// CHECK: func.func private @copy_l1_zN_to_l0a_zN_float
 // CHECK-SAME: hacc.always_inline
 // CHECK-SAME: hivm.func_core_type = #hivm.func_core_type<AIC>
 // CHECK-SAME: llvm.emit_c_interface
-// CHECK: func.func private @copy_gm_row_major_to_cbuf_zN_float
+// CHECK: func.func private @copy_gm_row_major_to_l1_zN_float
 // CHECK-SAME: hacc.always_inline
 // CHECK-SAME: hivm.func_core_type = #hivm.func_core_type<AIC>
 // CHECK-SAME: llvm.emit_c_interface
@@ -99,17 +99,17 @@ module attributes {tla.module_exec_units = "cube"} {
 
 // CHECK: memref.cast{{.*}}memref<65536xf32, #hivm.address_space<cbuf>> to memref<?xf32, strided<[?], offset: ?>, #hivm.address_space<cbuf>>
 // CHECK: memref.cast{{.*}}memref<32x32xf32, #hivm.address_space<gm>> to memref<?x?xf32, strided<[?, ?], offset: ?>, #hivm.address_space<gm>>
-// CHECK: call @copy_gm_row_major_to_cbuf_zN_float
+// CHECK: call @copy_gm_row_major_to_l1_zN_float
 // CHECK: memref.cast{{.*}}memref<65536xf32, #hivm.address_space<cbuf>> to memref<?xf32, strided<[?], offset: ?>, #hivm.address_space<cbuf>>
 // CHECK: memref.cast{{.*}}memref<32x32xf32, #hivm.address_space<gm>> to memref<?x?xf32, strided<[?, ?], offset: ?>, #hivm.address_space<gm>>
-// CHECK: call @copy_gm_row_major_to_cbuf_zN_float
+// CHECK: call @copy_gm_row_major_to_l1_zN_float
 
 // CHECK: memref.cast{{.*}}memref<1024xf32, #hivm.address_space<ca>> to memref<?xf32, strided<[?], offset: ?>, #hivm.address_space<ca>>
-// CHECK: call @copy_cbuf_zN_to_ca_zN_float
+// CHECK: call @copy_l1_zN_to_l0a_zN_float
 // CHECK: memref.cast{{.*}}memref<1024xf32, #hivm.address_space<cb>> to memref<?xf32, strided<[?], offset: ?>, #hivm.address_space<cb>>
-// CHECK: call @copy_cbuf_zN_to_cb_nZ_float
+// CHECK: call @copy_l1_zN_to_l0b_nZ_float
 // CHECK: call @mmad_float_float_float
-// CHECK: call @copy_cc_to_gm_row_major_float
+// CHECK: call @copy_l0c_to_gm_row_major_float
 // CHECK: hivm.hir.pipe_barrier[<PIPE_ALL>]
 // CHECK-NOT: "tla.mmad"
 // CHECK-NOT: "tla.copy"

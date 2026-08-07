@@ -2,45 +2,34 @@
 
 #include "catlass/epilogue/tile/tile_copy.hpp"
 
-template <class ArchTag, typename T>
-CATLASS_DEVICE void copyUbRowMajorToL1zN(
-    memref_t<__ubuf__ T, 1> *src, memref_t<__cbuf__ T, 1> *dst,
-    const TensorDesc2D &srcDesc, const TensorDesc4D &dstDesc) {
-    auto srcTensor = makeUBTensor(src, srcDesc);
-    auto dstTensor = makeL1Tensor(dst, dstDesc);
-    Catlass::Epilogue::Tile::CopyUb2L1Tla<ArchTag, decltype(srcTensor),
-                                     decltype(dstTensor)>{}(dstTensor,
-                                                            srcTensor);
-}
-
-template <class ArchTag, typename T>
-CATLASS_DEVICE void copyGmRowMajorToUbRowMajor(
+template <class ArchTag, LayoutTag SrcLayout, LayoutTag DstLayout, typename T>
+CATLASS_DEVICE void copyGMToUB(
     memref_t<__gm__ T, 2> *src, memref_t<__ubuf__ T, 1> *dst,
-    const TensorDesc2D &srcDesc, const TensorDesc2D &dstDesc) {
-    auto srcTensor = makeGMTensor(src, srcDesc);
-    auto dstTensor = makeUBTensor(dst, dstDesc);
+    const TensorDesc &srcDesc, const TensorDesc &dstDesc) {
+    auto srcTensor = makeGMTensor<SrcLayout, T>(src, srcDesc);
+    auto dstTensor = makeUBTensor<DstLayout, T>(dst, dstDesc);
     Catlass::Epilogue::Tile::CopyGm2UbTla<ArchTag, decltype(srcTensor),
                                      decltype(dstTensor)>{}(dstTensor,
                                                             srcTensor);
 }
 
-template <class ArchTag, typename T>
-CATLASS_DEVICE void copyUbRowMajorToGmRowMajor(
+template <class ArchTag, LayoutTag SrcLayout, LayoutTag DstLayout, typename T>
+CATLASS_DEVICE void copyUBToGM(
     memref_t<__ubuf__ T, 1> *src, memref_t<__gm__ T, 2> *dst,
-    const TensorDesc2D &srcDesc, const TensorDesc2D &dstDesc) {
-    auto srcTensor = makeUBTensor(src, srcDesc);
-    auto dstTensor = makeGMTensor(dst, dstDesc);
+    const TensorDesc &srcDesc, const TensorDesc &dstDesc) {
+    auto srcTensor = makeUBTensor<SrcLayout, T>(src, srcDesc);
+    auto dstTensor = makeGMTensor<DstLayout, T>(dst, dstDesc);
     Catlass::Epilogue::Tile::CopyUb2GmTla<ArchTag, decltype(srcTensor),
                                      decltype(dstTensor)>{}(dstTensor,
                                                             srcTensor);
 }
 
-template <class ArchTag, typename T>
-CATLASS_DEVICE void copyUbzNToL1zN(
+template <class ArchTag, LayoutTag SrcLayout, LayoutTag DstLayout, typename T>
+CATLASS_DEVICE void copyUBToL1(
     memref_t<__ubuf__ T, 1> *src, memref_t<__cbuf__ T, 1> *dst,
-    const TensorDesc4D &srcDesc, const TensorDesc4D &dstDesc) {
-    auto srcTensor = makeUBTensor(src, srcDesc);
-    auto dstTensor = makeL1Tensor(dst, dstDesc);
+    const TensorDesc &srcDesc, const TensorDesc &dstDesc) {
+    auto srcTensor = makeUBTensor<SrcLayout, T>(src, srcDesc);
+    auto dstTensor = makeL1Tensor<DstLayout, T>(dst, dstDesc);
     Catlass::Epilogue::Tile::CopyUb2L1Tla<ArchTag, decltype(srcTensor),
                                      decltype(dstTensor)>{}(dstTensor,
                                                             srcTensor);
@@ -50,101 +39,53 @@ extern "C" {
 #if ((defined(__NPU_ARCH__) && __NPU_ARCH__ == 3510) ||                    \
      (defined(CATLASS_ARCH) && CATLASS_ARCH == 3510))
 
-#define REGISTER_UB_ROW_TO_L1_ZN(DType)                                                                          \
-[aicore] __attribute__((always_inline))                                                                              \
-void _mlir_ciface_copy_ub_row_major_to_l1_zN_##DType(                                                            \
-    memref_t<__ubuf__ DType, 1> *src, memref_t<__cbuf__ DType, 1> *dst,                                              \
-    int64_t srcShape0, int64_t srcShape1, int64_t srcStride0,                                                        \
-    int64_t srcStride1, int64_t srcCoord0, int64_t srcCoord1,                                                        \
-    int64_t srcOrgShape0, int64_t srcOrgShape1, int64_t dstShape0,                                                   \
-    int64_t dstShape1, int64_t dstShape2, int64_t dstShape3,                                                         \
-    int64_t dstStride0, int64_t dstStride1, int64_t dstStride2,                                                      \
-    int64_t dstStride3, int64_t dstCoord0, int64_t dstCoord1,                                                        \
-    int64_t dstOrgShape0, int64_t dstOrgShape1) {                                                                    \
-    copyUbRowMajorToL1zN<Catlass::Arch::Ascend950, DType>(                                                       \
-        src, dst,                                                                                                    \
-        TensorDesc2D{(uint32_t)srcShape0, (uint32_t)srcShape1, srcStride0, srcStride1,                               \
-                         (uint32_t)srcCoord0, (uint32_t)srcCoord1, (uint32_t)srcOrgShape0, (uint32_t)srcOrgShape1},  \
-        TensorDesc4D{(uint32_t)dstShape0, (uint32_t)dstShape1, (uint32_t)dstShape2, (uint32_t)dstShape3, dstStride0, \
-                       dstStride1, dstStride2, dstStride3, (uint32_t)dstCoord0, (uint32_t)dstCoord1,                 \
-                       (uint32_t)dstOrgShape0, (uint32_t)dstOrgShape1});                                             \
+#define REGISTER_GM_TO_UB(NameSrc, NameDst, EnumSrc, EnumDst, DType)                                         \
+[aicore] __attribute__((always_inline))                                                                      \
+void _mlir_ciface_copy_gm_##NameSrc##_to_ub_##NameDst##_##DType(                                             \
+    memref_t<__gm__ DType, 2> *src, memref_t<__ubuf__ DType, 1> *dst,                                        \
+    DESC_ABI_PARAMS(src), DESC_ABI_PARAMS(dst)) {                                                            \
+    copyGMToUB<Catlass::Arch::Ascend950, LayoutTag::EnumSrc, LayoutTag::EnumDst, DType>(                     \
+        src, dst, TENSOR_DESC_12(src), TENSOR_DESC_12(dst));                                                 \
 }
 
-REGISTER_UB_ROW_TO_L1_ZN(float)
-REGISTER_UB_ROW_TO_L1_ZN(half)
-REGISTER_UB_ROW_TO_L1_ZN(bf16)
-
-#define REGISTER_UB_ZN_TO_L1_ZN(DType)                                                                               \
-[aicore] __attribute__((always_inline))                                                                              \
-void _mlir_ciface_copy_ub_zN_to_l1_zN_##DType(                                                                       \
-    memref_t<__ubuf__ DType, 1> *src, memref_t<__cbuf__ DType, 1> *dst,                                              \
-    int64_t srcShape0, int64_t srcShape1, int64_t srcShape2, int64_t srcShape3,                                      \
-    int64_t srcStride0, int64_t srcStride1, int64_t srcStride2, int64_t srcStride3,                                  \
-    int64_t srcCoord0, int64_t srcCoord1, int64_t srcOrgShape0, int64_t srcOrgShape1,                                \
-    int64_t dstShape0, int64_t dstShape1, int64_t dstShape2, int64_t dstShape3,                                      \
-    int64_t dstStride0, int64_t dstStride1, int64_t dstStride2, int64_t dstStride3,                                  \
-    int64_t dstCoord0, int64_t dstCoord1, int64_t dstOrgShape0, int64_t dstOrgShape1) {                              \
-    copyUbzNToL1zN<Catlass::Arch::Ascend950, DType>(                                                             \
-        src, dst,                                                                                                    \
-        TensorDesc4D{(uint32_t)srcShape0, (uint32_t)srcShape1, (uint32_t)srcShape2, (uint32_t)srcShape3, srcStride0, \
-                       srcStride1, srcStride2, srcStride3, (uint32_t)srcCoord0, (uint32_t)srcCoord1,                 \
-                       (uint32_t)srcOrgShape0, (uint32_t)srcOrgShape1},                                              \
-        TensorDesc4D{(uint32_t)dstShape0, (uint32_t)dstShape1, (uint32_t)dstShape2, (uint32_t)dstShape3, dstStride0, \
-                       dstStride1, dstStride2, dstStride3, (uint32_t)dstCoord0, (uint32_t)dstCoord1,                 \
-                       (uint32_t)dstOrgShape0, (uint32_t)dstOrgShape1});                                             \
+#define REGISTER_UB_TO_GM(NameSrc, NameDst, EnumSrc, EnumDst, DType)                                         \
+[aicore] __attribute__((always_inline))                                                                      \
+void _mlir_ciface_copy_ub_##NameSrc##_to_gm_##NameDst##_##DType(                                             \
+    memref_t<__ubuf__ DType, 1> *src, memref_t<__gm__ DType, 2> *dst,                                        \
+    DESC_ABI_PARAMS(src), DESC_ABI_PARAMS(dst)) {                                                            \
+    copyUBToGM<Catlass::Arch::Ascend950, LayoutTag::EnumSrc, LayoutTag::EnumDst, DType>(                     \
+        src, dst, TENSOR_DESC_12(src), TENSOR_DESC_12(dst));                                                 \
 }
 
-REGISTER_UB_ZN_TO_L1_ZN(float)
-REGISTER_UB_ZN_TO_L1_ZN(half)
-REGISTER_UB_ZN_TO_L1_ZN(bf16)
+#define REGISTER_UB_TO_L1(NameSrc, NameDst, EnumSrc, EnumDst, DType)                                         \
+[aicore] __attribute__((always_inline))                                                                      \
+void _mlir_ciface_copy_ub_##NameSrc##_to_l1_##NameDst##_##DType(                                             \
+    memref_t<__ubuf__ DType, 1> *src, memref_t<__cbuf__ DType, 1> *dst,                                      \
+    DESC_ABI_PARAMS(src), DESC_ABI_PARAMS(dst)) {                                                            \
+    copyUBToL1<Catlass::Arch::Ascend950, LayoutTag::EnumSrc, LayoutTag::EnumDst, DType>(                     \
+        src, dst, TENSOR_DESC_12(src), TENSOR_DESC_12(dst));                                                 \
+}
 
-#define REGISTER_GM_ROW_TO_UB_ROW(DType)                                                                      \
-    [aicore] __attribute__((always_inline)) void _mlir_ciface_copy_gm_row_major_to_ub_row_major_##DType(      \
-        memref_t<__gm__ DType, 2>* src, memref_t<__ubuf__ DType, 1>* dst, int64_t srcShape0, int64_t srcShape1, \
-        int64_t srcStride0, int64_t srcStride1, int64_t srcCoord0, int64_t srcCoord1, int64_t srcOrgShape0,     \
-        int64_t srcOrgShape1, int64_t dstShape0, int64_t dstShape1, int64_t dstStride0, int64_t dstStride1,     \
-        int64_t dstCoord0, int64_t dstCoord1, int64_t dstOrgShape0, int64_t dstOrgShape1)                       \
-    {                                                                                                           \
-        copyGmRowMajorToUbRowMajor<Catlass::Arch::Ascend950, DType>(                                          \
-            src, dst,                                                                                           \
-            TensorDesc2D{                                                                                       \
-                (uint32_t)srcShape0, (uint32_t)srcShape1, srcStride0, srcStride1, (uint32_t)srcCoord0,          \
-                (uint32_t)srcCoord1, (uint32_t)srcOrgShape0, (uint32_t)srcOrgShape1},                           \
-            TensorDesc2D{                                                                                       \
-                (uint32_t)dstShape0, (uint32_t)dstShape1, dstStride0, dstStride1, (uint32_t)dstCoord0,          \
-                (uint32_t)dstCoord1, (uint32_t)dstOrgShape0, (uint32_t)dstOrgShape1});                          \
-    }
+REGISTER_GM_TO_UB(row_major, row_major, RowMajor, RowMajor, float)
+REGISTER_GM_TO_UB(row_major, row_major, RowMajor, RowMajor, half)
+REGISTER_GM_TO_UB(row_major, row_major, RowMajor, RowMajor, bf16)
+REGISTER_GM_TO_UB(row_major, row_major, RowMajor, RowMajor, int32_t)
+REGISTER_GM_TO_UB(row_major, row_major, RowMajor, RowMajor, int16_t)
+REGISTER_GM_TO_UB(row_major, row_major, RowMajor, RowMajor, int8_t)
 
-REGISTER_GM_ROW_TO_UB_ROW(float)
-REGISTER_GM_ROW_TO_UB_ROW(half)
-REGISTER_GM_ROW_TO_UB_ROW(bf16)
-REGISTER_GM_ROW_TO_UB_ROW(int32_t)
-REGISTER_GM_ROW_TO_UB_ROW(int16_t)
-REGISTER_GM_ROW_TO_UB_ROW(int8_t)
+REGISTER_UB_TO_GM(row_major, row_major, RowMajor, RowMajor, float)
+REGISTER_UB_TO_GM(row_major, row_major, RowMajor, RowMajor, half)
+REGISTER_UB_TO_GM(row_major, row_major, RowMajor, RowMajor, bf16)
+REGISTER_UB_TO_GM(row_major, row_major, RowMajor, RowMajor, int32_t)
+REGISTER_UB_TO_GM(row_major, row_major, RowMajor, RowMajor, int16_t)
+REGISTER_UB_TO_GM(row_major, row_major, RowMajor, RowMajor, int8_t)
 
-#define REGISTER_UB_ROW_TO_GM_ROW(DType)                                                                      \
-    [aicore] __attribute__((always_inline)) void _mlir_ciface_copy_ub_row_major_to_gm_row_major_##DType(      \
-        memref_t<__ubuf__ DType, 1>* src, memref_t<__gm__ DType, 2>* dst, int64_t srcShape0, int64_t srcShape1, \
-        int64_t srcStride0, int64_t srcStride1, int64_t srcCoord0, int64_t srcCoord1, int64_t srcOrgShape0,     \
-        int64_t srcOrgShape1, int64_t dstShape0, int64_t dstShape1, int64_t dstStride0, int64_t dstStride1,     \
-        int64_t dstCoord0, int64_t dstCoord1, int64_t dstOrgShape0, int64_t dstOrgShape1)                       \
-    {                                                                                                           \
-        copyUbRowMajorToGmRowMajor<Catlass::Arch::Ascend950, DType>(                                          \
-            src, dst,                                                                                           \
-            TensorDesc2D{                                                                                       \
-                (uint32_t)srcShape0, (uint32_t)srcShape1, srcStride0, srcStride1, (uint32_t)srcCoord0,          \
-                (uint32_t)srcCoord1, (uint32_t)srcOrgShape0, (uint32_t)srcOrgShape1},                           \
-            TensorDesc2D{                                                                                       \
-                (uint32_t)dstShape0, (uint32_t)dstShape1, dstStride0, dstStride1, (uint32_t)dstCoord0,          \
-                (uint32_t)dstCoord1, (uint32_t)dstOrgShape0, (uint32_t)dstOrgShape1});                          \
-    }
-
-REGISTER_UB_ROW_TO_GM_ROW(float)
-REGISTER_UB_ROW_TO_GM_ROW(half)
-REGISTER_UB_ROW_TO_GM_ROW(bf16)
-REGISTER_UB_ROW_TO_GM_ROW(int32_t)
-REGISTER_UB_ROW_TO_GM_ROW(int16_t)
-REGISTER_UB_ROW_TO_GM_ROW(int8_t)
+REGISTER_UB_TO_L1(row_major, zN, RowMajor, zN, float)
+REGISTER_UB_TO_L1(row_major, zN, RowMajor, zN, half)
+REGISTER_UB_TO_L1(row_major, zN, RowMajor, zN, bf16)
+REGISTER_UB_TO_L1(zN, zN, zN, zN, float)
+REGISTER_UB_TO_L1(zN, zN, zN, zN, half)
+REGISTER_UB_TO_L1(zN, zN, zN, zN, bf16)
 
 #endif
 }
