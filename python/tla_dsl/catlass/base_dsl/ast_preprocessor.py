@@ -2260,6 +2260,7 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
         planned = self._source_plan_membership.get(id(node))
         region_name = None
         region_mode = None
+        region_thread_block_dim = None
         region_guard: ast.expr | None = None
         if len(node.items) == 1 and planned is not False:
             region_name = _region_name_from_with_item(
@@ -2271,7 +2272,7 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
                     "but region recognition no longer matches"
                 )
             if region_name is not None:
-                region_mode = _region_mode_from_with_item(
+                region_mode, region_thread_block_dim = _region_mode_from_with_item(
                     node.items[0],
                     self._tla_module_aliases,
                     self._recognition_scope(),
@@ -2354,9 +2355,12 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
                     ast.Name(id=body_name, ctx=ast.Load()),
                 ],
                 keywords=(
-                    []
-                    if region_mode is None
-                    else [ast.keyword(arg="mode", value=region_mode)]
+                    ([] if region_mode is None else [ast.keyword(arg="mode", value=region_mode)])
+                    + (
+                        []
+                        if region_thread_block_dim is None
+                        else [ast.keyword(arg="thread_block_dim", value=region_thread_block_dim)]
+                    )
                 ),
             )
         )
@@ -3070,24 +3074,32 @@ def _region_mode_from_with_item(
     item: ast.withitem,
     tla_module_aliases: set[str],
     local_names: set[str],
-) -> ast.expr | None:
+) -> tuple[ast.expr | None, ast.expr | None]:
     context_expr = item.context_expr
     if not isinstance(context_expr, ast.Call):
-        return None
+        return None, None
     if not _is_tla_vec_func(
         context_expr.func, tla_module_aliases, local_names
     ):
-        return None
+        return None, None
     if context_expr.args:
         _raise_vec_func_error("mode must be passed by keyword")
     mode_expr: ast.expr | None = None
+    thread_block_dim_expr: ast.expr | None = None
     for keyword in context_expr.keywords:
-        if keyword.arg != "mode":
+        if keyword.arg == "mode":
+            if mode_expr is not None:
+                _raise_vec_func_error("mode was passed multiple times")
+            mode_expr = keyword.value
+        elif keyword.arg == "thread_block_dim":
+            if thread_block_dim_expr is not None:
+                _raise_vec_func_error("thread_block_dim was passed multiple times")
+            thread_block_dim_expr = keyword.value
+        else:
             _raise_vec_func_error(f"unknown keyword argument: {keyword.arg}")
-        if mode_expr is not None:
-            _raise_vec_func_error("mode was passed multiple times")
-        mode_expr = keyword.value
-    return mode_expr if mode_expr is not None else ast.Constant(value="simd")
+    if mode_expr is None:
+        mode_expr = ast.Constant(value="simd")
+    return mode_expr, thread_block_dim_expr
 
 
 def _is_constexpr_cf_test(

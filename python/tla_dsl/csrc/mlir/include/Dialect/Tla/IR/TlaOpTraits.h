@@ -313,9 +313,14 @@ struct NamedOpFoldRules {
 };
 
 inline constexpr NamedOpMetadata kOpMetadataByName[] = {
-    {"tla.arch.block_dim", {"control", "scalar"}},
+    {"tla.arch.thread_block_dim", {"control", "scalar"}},
     {"tla.arch.block_idx", {"control", "scalar"}},
+    {"tla.arch.block_num", {"control", "scalar"}},
+    {"tla.arch.thread_idx", {"control", "scalar"}},
     {"tla.copy", {"binary", "dependent"}},
+    {"tla.simt_add", {"binary", "scalar"}},
+    {"tla.simt_load", {"unary", "scalar"}},
+    {"tla.simt_store", {"binary", "scalar"}},
     {"tla.cross_core_set_flag", {"unary", "intermediate"}},
     {"tla.cross_core_wait_flag", {"unary", "intermediate"}},
     {"tla.cross_flag", {"unary", "intermediate"}},

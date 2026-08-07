@@ -290,7 +290,7 @@ def flash_attention_infer_kernel(
     task_range = tla.range(
         tla.arch.block_idx(),
         TOTAL_TASKS,
-        tla.arch.block_dim(),
+        tla.arch.block_num(),
     )
     cur_batch = c0
     pre_total_task_num = c0

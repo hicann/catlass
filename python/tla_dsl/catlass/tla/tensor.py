@@ -599,7 +599,15 @@ class _Tensor(TensorABC):
         )
 
         elem_type = parent.element_mlir_type()
-        result = _tla_ops_gen.scalar_load(
+        # Per-thread element access inside a SIMT region is its own op: it is
+        # lowered against the outlined vector function's memref parameter rather
+        # than through the general descriptor view.
+        emit_load = (
+            _tla_ops_gen.simt_load
+            if _runtime._in_simt_vec_func()
+            else _tla_ops_gen.scalar_load
+        )
+        result = emit_load(
             elem_type,
             source_value,
             index_values,
@@ -607,7 +615,8 @@ class _Tensor(TensorABC):
         )
         if str(result.type) != str(elem_type):
             raise TlaLoweringError(
-                f"tla.scalar_load result type mismatch: expected {elem_type}, got {result.type}"
+                f"tla scalar element load result type mismatch: expected {elem_type}, "
+                f"got {result.type}"
             )
         # Bool / i1 loads: Bool Numeric (``if tensor[i]`` via coerce).
         if mlir_ir.IntegerType.isinstance(elem_type):
@@ -711,7 +720,12 @@ class _Tensor(TensorABC):
             raise TlaLoweringError(
                 f"tla.scalar_store value type mismatch: expected {elem_type}, got {store_value.type}"
             )
-        _tla_ops_gen.scalar_store(dest_value, index_values, store_value, loc=loc)
+        emit_store = (
+            _tla_ops_gen.simt_store
+            if _runtime._in_simt_vec_func()
+            else _tla_ops_gen.scalar_store
+        )
+        emit_store(dest_value, index_values, store_value, loc=loc)
 
 def _normalize_user_loc(loc: mlir_ir.Location | None) -> mlir_ir.Location | None:
     if loc is None and _runtime._current_frontend_state() is not None:

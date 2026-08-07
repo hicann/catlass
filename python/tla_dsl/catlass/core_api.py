@@ -4567,10 +4567,19 @@ def _validate_vec_func_mode(mode: str) -> None:
 
 
 @dsl_user_op
-def _vec_func(*, mode: str = "simd", loc: mlir_ir.Location | None = None) -> TlaRegion:
+def _vec_func(
+    *,
+    mode: str = "simd",
+    thread_block_dim: Any = None,
+    loc: mlir_ir.Location | None = None,
+) -> TlaRegion:
     """Create a vector function region stub for lowering-only usage."""
     del loc
     _validate_vec_func_mode(mode)
+    if thread_block_dim is not None:
+        from . import runtime as _rt
+
+        _rt._normalize_vec_func_thread_block_dim(thread_block_dim, mode)
     return _region_stub("vec.func")
 
 
@@ -5799,12 +5808,50 @@ def arch_sub_block_idx(*, loc: mlir_ir.Location | None = None) -> Int32:
 
 
 @dsl_user_op
-def arch_block_dim(*, loc: mlir_ir.Location | None = None) -> Int32:
-    """Return block dimension in Tla execution model (``Int32``)."""
-    _require_frontend_state("arch.block_dim")
+def arch_thread_idx(
+    *, loc: mlir_ir.Location | None = None
+) -> tuple[Int32, Int32, Int32]:
+    """Return the SIMT thread index ``(x, y, z)`` inside the thread block."""
+    _require_frontend_state("arch.thread_idx")
+    if not _runtime._in_simt_vec_func():
+        _op_error(
+            "arch.thread_idx",
+            "is only available inside a tla.vec.func with mode='simt'",
+        )
     i32 = mlir_ir.IntegerType.get_signless(32)
-    value = _tla_ops_gen.arch_block_dim(i32, loc=loc)
+    values = _tla_ops_gen.arch_thread_idx(i32, i32, i32, loc=loc)
+    return (Int32(values[0]), Int32(values[1]), Int32(values[2]))
+
+
+@dsl_user_op
+def arch_block_num(*, loc: mlir_ir.Location | None = None) -> Int32:
+    """Return the number of blocks (AI cores) in the launch (``Int32``).
+
+    The grid extent, matching AscendC ``GetBlockNum()``. For the per-block
+    thread extents inside a SIMT region see :func:`arch_thread_block_dim`.
+    """
+    _require_frontend_state("arch.block_num")
+    i32 = mlir_ir.IntegerType.get_signless(32)
+    value = _tla_ops_gen.arch_block_num(i32, loc=loc)
     return Int32(value)
+
+
+@dsl_user_op
+def arch_thread_block_dim(
+    *, loc: mlir_ir.Location | None = None
+) -> tuple[Int32, Int32, Int32]:
+    """Return the enclosing thread block's ``(x, y, z)`` extents (SIMT only)."""
+    _require_frontend_state("arch.thread_block_dim")
+    if not _runtime._in_simt_vec_func():
+        _op_error(
+            "arch.thread_block_dim",
+            "is the SIMT thread-block geometry and is only available inside a "
+            "tla.vec.func with mode='simt'; use tla.arch.block_num() for the "
+            "number of blocks in the launch",
+        )
+    i32 = mlir_ir.IntegerType.get_signless(32)
+    values = _tla_ops_gen.arch_thread_block_dim(i32, i32, i32, loc=loc)
+    return (Int32(values[0]), Int32(values[1]), Int32(values[2]))
 
 
 @dsl_user_op
@@ -5982,14 +6029,21 @@ for _unary_op_name in ("exp", "log", "sqrt", "abs", "neg"):
 _require_generated("cmp")
 _require_generated("arch_block_idx")
 _require_generated("arch_sub_block_idx")
-_require_generated("arch_block_dim")
+_require_generated("arch_block_num")
+_require_generated("arch_thread_block_dim")
+_require_generated("arch_thread_idx")
+_require_generated("simt_add")
+_require_generated("simt_load")
+_require_generated("simt_store")
 _require_generated("inttoptr")
 _require_generated("recast_ptr")
 
 arch = _Namespace()
 arch._set("block_idx", arch_block_idx)
 arch._set("sub_block_idx", arch_sub_block_idx)
-arch._set("block_dim", arch_block_dim)
+arch._set("block_num", arch_block_num)
+arch._set("thread_block_dim", arch_thread_block_dim)
+arch._set("thread_idx", arch_thread_idx)
 arch._set("L1", _runtime.utils.L1)
 arch._set("L0A", _runtime.utils.L0A)
 arch._set("L0B", _runtime.utils.L0B)

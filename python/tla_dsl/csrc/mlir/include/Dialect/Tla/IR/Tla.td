@@ -441,14 +441,16 @@ def Tla_VectorTrait : NativeOpTrait<"::mlir::tla::trait::Vector">;
 def Tla_VectorBinaryOpsTrait : NativeOpTrait<"::mlir::tla::trait::VectorBinaryOps">;
 def Tla_WaitFlagTrait : NativeOpTrait<"::mlir::tla::trait::WaitFlag">;
 
-def Tla_BlockDimOp : Tla_Op<"arch.block_dim", [Pure]> {
-  let summary = "Block dimension";
+def Tla_BlockNumOp : Tla_Op<"arch.block_num", [Pure]> {
+  let summary = "Block count";
   let description = [{
-    Return the grid block dimension as signless ``i32``.
+    Return the number of blocks (AI cores) in the launch as signless ``i32``.
+    This is the grid extent, matching AscendC ``GetBlockNum()``; the per-block
+    thread extents are ``tla.arch.thread_block_dim``.
   }];
-  let results = (outs I32:$dim);
+  let results = (outs I32:$num);
   let assemblyFormat = [{
-    attr-dict `->` type($dim)
+    attr-dict `->` type($num)
   }];
 }
 
@@ -460,6 +462,51 @@ def Tla_BlockIdxOp : Tla_Op<"arch.block_idx", [Pure]> {
   let results = (outs I32:$index);
   let assemblyFormat = [{
     attr-dict `->` type($index)
+  }];
+}
+
+def Tla_ThreadIdxOp : Tla_Op<"arch.thread_idx", [Pure]> {
+  let summary = "SIMT thread index";
+  let description = [{
+    Return the current thread's ``(x, y, z)`` index inside its thread block as
+    signless ``i32``. Only meaningful inside a ``tla.vec.func`` with
+    ``mode = "simt"``; it lowers to the three separate
+    ``hivm_regbaseintrins.thread_id_{x,y,z}`` intrinsics. Results with no uses
+    are not materialized.
+  }];
+  let results = (outs I32:$x, I32:$y, I32:$z);
+  let assemblyFormat = [{
+    attr-dict `->` type($x) `,` type($y) `,` type($z)
+  }];
+}
+
+def Tla_ThreadBlockDimOp : Tla_Op<"arch.thread_block_dim", [Pure]> {
+  let summary = "SIMT thread-block dimensions";
+  let description = [{
+    Return the enclosing thread block's ``(x, y, z)`` extents as signless
+    ``i32``. This is the SIMT thread geometry; the number of blocks in the
+    launch is ``tla.arch.block_num``. Lowers to the three separate
+    ``hivm_regbaseintrins.block_dim_{x,y,z}`` intrinsics. Results with no uses
+    are not materialized.
+  }];
+  let results = (outs I32:$x, I32:$y, I32:$z);
+  let assemblyFormat = [{
+    attr-dict `->` type($x) `,` type($y) `,` type($z)
+  }];
+}
+
+def Tla_SimtAddOp : Tla_Op<"simt_add", [Pure, AllTypesMatch<["lhs", "rhs", "result"]>]> {
+  let summary = "Per-thread scalar add";
+  let description = [{
+    Add two per-thread scalars inside a ``tla.vec.func`` with ``mode = "simt"``.
+    Unlike ``tla.add``, which is a whole-vector AVE operation over
+    ``!tla.vector`` SSA, this is one thread adding one element; it lowers to
+    ``arith.addf`` / ``arith.addi`` on the element type.
+  }];
+  let arguments = (ins Tla_ScalarValueType:$lhs, Tla_ScalarValueType:$rhs);
+  let results = (outs Tla_ScalarValueType:$result);
+  let assemblyFormat = [{
+    $lhs `,` $rhs attr-dict `:` type($result)
   }];
 }
 
@@ -1169,6 +1216,37 @@ def Tla_ScalarStoreOp : Tla_Op<"scalar_store", [MemoryEffects<[MemWrite]>]> {
   }];
 }
 
+def Tla_SimtLoadOp : Tla_Op<"simt_load", [MemoryEffects<[MemRead]>]> {
+  let summary = "Per-thread tensor element read";
+  let description = [{
+    Read one element of a ``!tla.tensor`` from inside a ``tla.vec.func`` with
+    ``mode = "simt"``: one thread, one element. The SIMT counterpart of
+    ``tla.scalar_load``, which stays the general descriptor-based access.
+    ``tla-vector-region`` lowers this to ``memref.load`` on the outlined vector
+    function's parameter, so no descriptor view is materialized.
+  }];
+  let arguments = (ins Tla_TensorType:$source, Variadic<Index>:$indices);
+  let results = (outs Tla_ScalarValueType:$result);
+  let assemblyFormat = [{
+    $source `[` $indices `]` attr-dict `:` type($source) `->` type($result)
+  }];
+}
+
+def Tla_SimtStoreOp : Tla_Op<"simt_store", [MemoryEffects<[MemWrite]>]> {
+  let summary = "Per-thread tensor element write";
+  let description = [{
+    Write one element of a ``!tla.tensor`` from inside a ``tla.vec.func`` with
+    ``mode = "simt"``. The SIMT counterpart of ``tla.scalar_store``; lowered by
+    ``tla-vector-region`` to ``memref.store`` on the outlined vector function's
+    parameter.
+  }];
+  let arguments = (ins Tla_TensorType:$dest, Variadic<Index>:$indices,
+                       Tla_ScalarValueType:$value);
+  let assemblyFormat = [{
+    $dest `[` $indices `]` `,` $value attr-dict `:` type($dest) `,` type($value)
+  }];
+}
+
 class Tla_VectorBinaryOp<string mnemonic, string opSummary, string opDescription>
     : Tla_Op<mnemonic, [Pure]> {
   let summary = opSummary;
@@ -1407,6 +1485,16 @@ def Tla_VecFuncOp : Tla_Op<"vec.func", [NoTerminator, SingleBlock]> {
   let description = [{
     Group register-resident vector compute ops inside a vector region. Must be
     nested inside a ``tla.vector`` region.
+
+    ``mode`` selects the execution model: ``"simd"`` (the default when the
+    attribute is absent) runs the body as whole-vector ops, ``"simt"`` runs it
+    once per thread.
+
+    ``thread_block_dim`` gives the ``(x, y, z)`` thread extents of one block and
+    is valid only with ``mode = "simt"``, where it is required. Each extent must
+    be positive and the product may not exceed 2048 threads per block, which is
+    both the supported maximum and what fits the ``simt_entry`` attribute the
+    lowering builds from it.
   }];
   let regions = (region AnyRegion:$body);
   let hasVerifier = 1;

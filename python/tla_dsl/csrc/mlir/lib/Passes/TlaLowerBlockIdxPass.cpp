@@ -30,10 +30,10 @@ struct LowerSubBlockIdxOp : public OpRewritePattern<::tla::SubBlockIdxOp> {
   }
 };
 
-struct LowerBlockDimOp : public OpRewritePattern<::tla::BlockDimOp> {
-  using OpRewritePattern<::tla::BlockDimOp>::OpRewritePattern;
+struct LowerBlockNumOp : public OpRewritePattern<::tla::BlockNumOp> {
+  using OpRewritePattern<::tla::BlockNumOp>::OpRewritePattern;
 
-  LogicalResult matchAndRewrite(::tla::BlockDimOp op, PatternRewriter &rewriter) const override {
+  LogicalResult matchAndRewrite(::tla::BlockNumOp op, PatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
     auto hivmOp = rewriter.create<hivm::GetBlockNumOp>(loc, rewriter.getI64Type());
     auto i32Value =
@@ -205,10 +205,10 @@ public:
                            arith::ArithDialect, func::FuncDialect, ::mlir::memref::MemRefDialect,
                            ::tla::TlaDialect>();
     target.markUnknownOpDynamicallyLegal([](Operation *) { return true; });
-    target.addIllegalOp<::tla::BlockDimOp, ::tla::BlockIdxOp, ::tla::SubBlockIdxOp>();
+    target.addIllegalOp<::tla::BlockNumOp, ::tla::BlockIdxOp, ::tla::SubBlockIdxOp>();
 
     RewritePatternSet patterns(&getContext());
-    patterns.add<LowerBlockDimOp, LowerBlockIdxOp, LowerSubBlockIdxOp>(&getContext());
+    patterns.add<LowerBlockNumOp, LowerBlockIdxOp, LowerSubBlockIdxOp>(&getContext());
 
     if (failed(applyPartialConversion(module, target, std::move(patterns)))) {
       signalPassFailure();

@@ -133,6 +133,19 @@ def _binary_op(
 
         unsigned = not res_type.signed
         if op is operator.add:
+            # Inside a SIMT region a scalar '+' is a TLA op in its own right --
+            # tla.simt_add -- so the per-thread body stays recognisable as TLA IR;
+            # tla-vector-region lowers it back to the arith op below.
+            from ..runtime import _in_simt_vec_func
+
+            if _in_simt_vec_func():
+                result = mlir_ir.Operation.create(
+                    "tla.simt_add",
+                    operands=[lhs_ir, rhs_ir],
+                    results=[res_type.mlir_type()],
+                    loc=loc,
+                ).results[0]
+                return res_type(result)
             name = "arith.addf" if res_type.is_float else "arith.addi"
         elif op is operator.sub:
             name = "arith.subf" if res_type.is_float else "arith.subi"

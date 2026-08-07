@@ -282,9 +282,56 @@ mlir::LogicalResult MmadOp::verify() {
   return mlir::success();
 }
 
+// One thread block may hold at most this many threads on the supported targets.
+// The lowering packs the product into hivm_regbaseintrins::SIMT_EntryAttr, whose
+// value is a uint32_t, so an unchecked product would also truncate.
+static constexpr int64_t kMaxSimtThreadsPerBlock = 2048;
+
 mlir::LogicalResult VecFuncOp::verify() {
   if (!hasEnclosingRegion<VectorOp>(getOperation()))
     return emitOpError("must be nested inside a tla.vector region");
+
+  mlir::Operation *op = getOperation();
+  // A missing mode means "simd" -- that is the documented default and what the
+  // lowering assumes -- but a mode that is spelled out must be one we know,
+  // otherwise a typo silently lowers as SIMD.
+  bool isSimt = false;
+  if (auto modeAttr = op->getAttrOfType<mlir::StringAttr>("mode")) {
+    llvm::StringRef mode = modeAttr.getValue();
+    isSimt = mode.equals_insensitive("simt");
+    if (!isSimt && !mode.equals_insensitive("simd"))
+      return emitOpError() << "mode must be \"simd\" or \"simt\", got \"" << mode
+                           << "\"";
+  }
+
+  auto dimsAttr = op->getAttrOfType<mlir::DenseI64ArrayAttr>("thread_block_dim");
+  if (!isSimt) {
+    if (dimsAttr)
+      return emitOpError(
+          "'thread_block_dim' is only valid with mode = \"simt\"");
+    return mlir::success();
+  }
+
+  if (!dimsAttr)
+    return emitOpError(
+        "mode = \"simt\" requires a 'thread_block_dim' attribute");
+  if (dimsAttr.size() != 3)
+    return emitOpError() << "'thread_block_dim' must have exactly 3 elements, got "
+                         << dimsAttr.size();
+
+  int64_t product = 1;
+  for (int i = 0; i < 3; ++i) {
+    int64_t extent = dimsAttr[i];
+    if (extent < 1)
+      return emitOpError() << "'thread_block_dim' entries must be positive, got "
+                           << extent << " at index " << i;
+    product *= extent;
+  }
+  if (product > kMaxSimtThreadsPerBlock)
+    return emitOpError() << "thread_block_dim describes " << product
+                         << " threads per block, more than the supported maximum of "
+                         << kMaxSimtThreadsPerBlock;
+
   return mlir::success();
 }
 

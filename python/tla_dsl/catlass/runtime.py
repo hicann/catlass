@@ -73,6 +73,8 @@ class _FrontendEmitState:
     #: Stack of enclosing region wrappers, each one of "cube" / "vector" /
     #: "vec.func" (the wrapper's own name).
     active_regions: list[str] = field(default_factory=list)
+    #: Stack of ``mode`` values for the enclosing ``tla.vec.func`` regions.
+    vec_func_modes: list[str] = field(default_factory=list)
 
 
 _FRONTEND_EMIT_STATE: contextvars.ContextVar[_FrontendEmitState | None] = (
@@ -275,6 +277,14 @@ def _has_enclosing_region(kind: str) -> bool:
     if state is None:
         return True  # No frontend state to inspect; defer to the MLIR verifier.
     return kind in state.active_regions
+
+
+def _in_simt_vec_func() -> bool:
+    """True if the innermost enclosing ``tla.vec.func`` uses SIMT mode."""
+    state = _FRONTEND_EMIT_STATE.get()
+    if state is None or not state.vec_func_modes:
+        return False
+    return state.vec_func_modes[-1].lower() == "simt"
 
 
 def _require_enclosing_region(op_name: str, kind: str) -> None:
@@ -522,8 +532,51 @@ def _validate_vec_func_mode(mode: Any) -> None:
         )
 
 
+# Mirrors kMaxSimtThreadsPerBlock in TlaOps.cpp; the op verifier enforces the
+# same bound for IR that does not come through this frontend.
+_MAX_SIMT_THREADS_PER_BLOCK = 2048
+
+
+def _normalize_vec_func_thread_block_dim(thread_block_dim: Any, mode: Any) -> tuple[int, int, int]:
+    """Validate ``thread_block_dim`` and normalize it to an (x, y, z) triple.
+
+    Only meaningful for SIMT mode; an int ``n`` means ``(n, 1, 1)``.
+    """
+    if str(mode).lower() != "simt":
+        raise TlaCoreAPIError(
+            f"tla.vec.func: thread_block_dim is only allowed with mode='simt'; got mode={mode!r}"
+        )
+    if isinstance(thread_block_dim, bool):
+        raise TlaCoreAPIError("tla.vec.func: thread_block_dim must be an int or a triple of ints")
+    if isinstance(thread_block_dim, int):
+        values = (thread_block_dim, 1, 1)
+    elif isinstance(thread_block_dim, (tuple, list)):
+        if len(thread_block_dim) != 3 or any(
+            isinstance(value, bool) or not isinstance(value, int) for value in thread_block_dim
+        ):
+            raise TlaCoreAPIError(
+                "tla.vec.func: thread_block_dim must be an int or a triple of ints; "
+                f"got {thread_block_dim!r}"
+            )
+        values = (int(thread_block_dim[0]), int(thread_block_dim[1]), int(thread_block_dim[2]))
+    else:
+        raise TlaCoreAPIError(
+            "tla.vec.func: thread_block_dim must be an int or a triple of ints; "
+            f"got {type(thread_block_dim).__name__}"
+        )
+    if any(value <= 0 for value in values):
+        raise TlaCoreAPIError(f"tla.vec.func: thread_block_dim must be positive; got {thread_block_dim!r}")
+    total = values[0] * values[1] * values[2]
+    if total > _MAX_SIMT_THREADS_PER_BLOCK:
+        raise TlaCoreAPIError(
+            f"tla.vec.func: thread_block_dim describes {total} threads per block, "
+            f"more than the supported maximum of {_MAX_SIMT_THREADS_PER_BLOCK}"
+        )
+    return values
+
+
 def _internal_frontend_region(
-    kind: str, body_fn: Callable[[], Any], *, mode: Any = None
+    kind: str, body_fn: Callable[[], Any], *, mode: Any = None, thread_block_dim: Any = None
 ) -> None:
     from mlir import ir as mlir_ir  # type: ignore[assignment]
 
@@ -533,17 +586,26 @@ def _internal_frontend_region(
         if kind != "vec.func":
             raise TlaCoreAPIError(f"tla.{kind}: unexpected mode argument")
         _validate_vec_func_mode(mode)
+    thread_dims: tuple[int, int, int] | None = None
+    if thread_block_dim is not None:
+        if kind != "vec.func":
+            raise TlaCoreAPIError(f"tla.{kind}: unexpected thread_block_dim argument")
+        thread_dims = _normalize_vec_func_thread_block_dim(thread_block_dim, mode)
     if kind == "vec.func":
         _require_enclosing_region("vec.func", "vector")
     mlir_loc = _capture_caller_location()
     op = mlir_ir.Operation.create(f"tla.{kind}", regions=1, loc=mlir_loc)
     if kind == "vec.func":
         op.attributes["mode"] = mlir_ir.StringAttr.get("simd" if mode is None else mode)
+        if thread_dims is not None:
+            op.attributes["thread_block_dim"] = mlir_ir.DenseI64ArrayAttr.get(list(thread_dims))
     block = op.regions[0].blocks.append()
     state = _FRONTEND_EMIT_STATE.get()
     with mlir_ir.InsertionPoint(block):
         if state is not None:
             state.active_regions.append(kind)
+            if kind == "vec.func":
+                state.vec_func_modes.append("simd" if mode is None else str(mode))
         try:
             from . import tla_ast_decorators as _ast_decorators
 
@@ -551,6 +613,8 @@ def _internal_frontend_region(
         finally:
             if state is not None:
                 state.active_regions.pop()
+                if kind == "vec.func":
+                    state.vec_func_modes.pop()
 
 
 utils = _Utils()

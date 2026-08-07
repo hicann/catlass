@@ -358,29 +358,6 @@ def bitwise_xor(result, lhs, rhs, *, mask=None, loc=None, ip=None) -> _ods_ir.Va
   return _get_op_result_or_op_results(BitwiseXorOp(result=result, lhs=lhs, rhs=rhs, mask=mask, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
-class BlockDimOp(_ods_ir.OpView):
-  OPERATION_NAME = "tla.arch.block_dim"
-
-  _ODS_REGIONS = (0, True)
-
-  def __init__(self, dim, *, loc=None, ip=None):
-    operands = []
-    results = []
-    attributes = {}
-    regions = None
-    _ods_context = _ods_get_default_loc_context(loc)
-    results.append(dim)
-    _ods_successors = None
-    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
-
-  @builtins.property
-  def dim(self):
-    return self.operation.results[0]
-
-def arch_block_dim(dim, *, loc=None, ip=None) -> _ods_ir.Value:
-  return _get_op_result_or_op_results(BlockDimOp(dim=dim, loc=loc, ip=ip))
-
-@_ods_cext.register_operation(_Dialect)
 class BlockIdxOp(_ods_ir.OpView):
   OPERATION_NAME = "tla.arch.block_idx"
 
@@ -402,6 +379,29 @@ class BlockIdxOp(_ods_ir.OpView):
 
 def arch_block_idx(index, *, loc=None, ip=None) -> _ods_ir.Value:
   return _get_op_result_or_op_results(BlockIdxOp(index=index, loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
+class BlockNumOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.arch.block_num"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, num, *, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    _ods_context = _ods_get_default_loc_context(loc)
+    results.append(num)
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def num(self):
+    return self.operation.results[0]
+
+def arch_block_num(num, *, loc=None, ip=None) -> _ods_ir.Value:
+  return _get_op_result_or_op_results(BlockNumOp(num=num, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
 class CastOp(_ods_ir.OpView):
@@ -2394,6 +2394,108 @@ def set_flag(flag, *, loc=None, ip=None) -> _ods_ir.Operation:
   return _get_op_result_or_op_results(SetFlagOp(flag=flag, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
+class SimtAddOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.simt_add"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, result, lhs, rhs, *, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    operands.append(_get_op_result_or_value(lhs))
+    operands.append(_get_op_result_or_value(rhs))
+    _ods_context = _ods_get_default_loc_context(loc)
+    results.append(result)
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def lhs(self):
+    return self.operation.operands[0]
+
+  @builtins.property
+  def rhs(self):
+    return self.operation.operands[1]
+
+  @builtins.property
+  def result(self):
+    return self.operation.results[0]
+
+def simt_add(result, lhs, rhs, *, loc=None, ip=None) -> _ods_ir.Value:
+  return _get_op_result_or_op_results(SimtAddOp(result=result, lhs=lhs, rhs=rhs, loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
+class SimtLoadOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.simt_load"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, result, source, indices, *, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    operands.append(_get_op_result_or_value(source))
+    operands.extend(_get_op_results_or_values(indices))
+    _ods_context = _ods_get_default_loc_context(loc)
+    results.append(result)
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def source(self):
+    return self.operation.operands[0]
+
+  @builtins.property
+  def indices(self):
+    _ods_variadic_group_length = len(self.operation.operands) - 2 + 1
+    return self.operation.operands[1:1 + _ods_variadic_group_length]
+
+  @builtins.property
+  def result(self):
+    return self.operation.results[0]
+
+def simt_load(result, source, indices, *, loc=None, ip=None) -> _ods_ir.Value:
+  return _get_op_result_or_op_results(SimtLoadOp(result=result, source=source, indices=indices, loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
+class SimtStoreOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.simt_store"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, dest, indices, value, *, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    operands.append(_get_op_result_or_value(dest))
+    operands.extend(_get_op_results_or_values(indices))
+    operands.append(_get_op_result_or_value(value))
+    _ods_context = _ods_get_default_loc_context(loc)
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def dest(self):
+    return self.operation.operands[0]
+
+  @builtins.property
+  def indices(self):
+    _ods_variadic_group_length = len(self.operation.operands) - 3 + 1
+    return self.operation.operands[1:1 + _ods_variadic_group_length]
+
+  @builtins.property
+  def value(self):
+    _ods_variadic_group_length = len(self.operation.operands) - 3 + 1
+    return self.operation.operands[2 + _ods_variadic_group_length - 1]
+
+def simt_store(dest, indices, value, *, loc=None, ip=None) -> _ods_ir.Operation:
+  return _get_op_result_or_op_results(SimtStoreOp(dest=dest, indices=indices, value=value, loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
 class SqrtOp(_ods_ir.OpView):
   OPERATION_NAME = "tla.sqrt"
 
@@ -2763,6 +2865,72 @@ class TensorPtrOp(_ods_ir.OpView):
 
 def tensor_ptr(ptr, src, *, loc=None, ip=None) -> _ods_ir.Value:
   return _get_op_result_or_op_results(TensorPtrOp(ptr=ptr, src=src, loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
+class ThreadBlockDimOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.arch.thread_block_dim"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, x, y, z, *, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    _ods_context = _ods_get_default_loc_context(loc)
+    results.append(x)
+    results.append(y)
+    results.append(z)
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def x(self):
+    return self.operation.results[0]
+
+  @builtins.property
+  def y(self):
+    return self.operation.results[1]
+
+  @builtins.property
+  def z(self):
+    return self.operation.results[2]
+
+def arch_thread_block_dim(x, y, z, *, loc=None, ip=None) -> _Sequence[_ods_ir.Value]:
+  return _get_op_result_or_op_results(ThreadBlockDimOp(x=x, y=y, z=z, loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
+class ThreadIdxOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.arch.thread_idx"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, x, y, z, *, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    _ods_context = _ods_get_default_loc_context(loc)
+    results.append(x)
+    results.append(y)
+    results.append(z)
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def x(self):
+    return self.operation.results[0]
+
+  @builtins.property
+  def y(self):
+    return self.operation.results[1]
+
+  @builtins.property
+  def z(self):
+    return self.operation.results[2]
+
+def arch_thread_idx(x, y, z, *, loc=None, ip=None) -> _Sequence[_ods_ir.Value]:
+  return _get_op_result_or_op_results(ThreadIdxOp(x=x, y=y, z=z, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
 class TileViewOp(_ods_ir.OpView):

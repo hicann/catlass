@@ -6,6 +6,7 @@
 #include "bishengir/Dialect/Utils/Util.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
 #include "mlir/IR/Dominance.h"
@@ -2203,6 +2204,375 @@ static FailureOr<func::FuncOp> buildHelperFunc(ModuleOp module, func::FuncOp par
   return helper;
 }
 
+// tla.vec.func carries its execution model in a "mode" string attribute
+// ("simd" / "simt", either case). SIMD is the historical default and is assumed
+// when the attribute is absent.
+static StringRef getVecFuncMode(::tla::VecFuncOp vecFuncOp) {
+  auto modeAttr = vecFuncOp->getAttrOfType<StringAttr>("mode");
+  return modeAttr ? modeAttr.getValue() : StringRef("simd");
+}
+
+static bool isSimtVecFunc(::tla::VecFuncOp vecFuncOp) {
+  return getVecFuncMode(vecFuncOp).equals_insensitive("simt");
+}
+
+static bool isSimdVecFunc(::tla::VecFuncOp vecFuncOp) { return !isSimtVecFunc(vecFuncOp); }
+
+// Lower a TLA op with three i32 results onto three separate regbase intrinsics,
+// one per component. The intrinsics are modelled as independent nullary ops
+// (LLVM intrinsics cannot return an aggregate), so a result nobody reads simply
+// never gets an intrinsic emitted for it -- `tid, _, _ = tla.arch.thread_idx()`
+// costs exactly one instruction.
+template <typename TlaOpTy, typename XOpTy, typename YOpTy, typename ZOpTy>
+class LowerSimtTripleOpPattern : public OpRewritePattern<TlaOpTy> {
+public:
+  using OpRewritePattern<TlaOpTy>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(TlaOpTy op, PatternRewriter &rewriter) const override {
+    Location loc = op.getLoc();
+    Type i32 = rewriter.getI32Type();
+
+    if (op.getX().use_empty() && op.getY().use_empty() && op.getZ().use_empty()) {
+      rewriter.eraseOp(op);
+      return success();
+    }
+
+    // Replace uses individually rather than via replaceOp: that way an unused
+    // component needs no placeholder value and no intrinsic.
+    if (!op.getX().use_empty())
+      rewriter.replaceAllUsesWith(op.getX(), rewriter.create<XOpTy>(loc, i32).getRes());
+    if (!op.getY().use_empty())
+      rewriter.replaceAllUsesWith(op.getY(), rewriter.create<YOpTy>(loc, i32).getRes());
+    if (!op.getZ().use_empty())
+      rewriter.replaceAllUsesWith(op.getZ(), rewriter.create<ZOpTy>(loc, i32).getRes());
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
+using LowerThreadIdxPattern =
+    LowerSimtTripleOpPattern<::tla::ThreadIdxOp, hivm_regbaseintrins::ThreadIdXOp,
+                             hivm_regbaseintrins::ThreadIdYOp,
+                             hivm_regbaseintrins::ThreadIdZOp>;
+
+using LowerBlockDimPattern =
+    LowerSimtTripleOpPattern<::tla::ThreadBlockDimOp, hivm_regbaseintrins::BlockDimXOp,
+                             hivm_regbaseintrins::BlockDimYOp,
+                             hivm_regbaseintrins::BlockDimZOp>;
+
+// ---------------------------------------------------------------------------
+// SIMT vec.func outlining
+//
+// A SIMT region is per-thread scalar code, not whole-vector AVE work, so it is
+// outlined into its own function and invoked through
+// hivm_regbaseintrins.intrins.launch_func rather than being folded into the
+// enclosing AIV body. The outlined function must stay in the plain
+// memref/scf/arith form that hivmc-a5 accepts for a simt_entry function -- no
+// reinterpret_cast views, no descriptor arithmetic. Everything the body needs is
+// therefore materialized *before* the launch and handed over as arguments:
+// buffers as raw pointers (extract_aligned_pointer_as_index -> index_cast ->
+// llvm.inttoptr), thread geometry as the launch's thread_block_dim triple.
+// ---------------------------------------------------------------------------
+
+// Values produced outside `region` but used inside it. Constant-like producers
+// are reported separately: they are cloned into the outlined body instead of
+// consuming an ABI slot.
+struct SimtCaptures {
+  SmallVector<Value, 4> tensors;  // tla.tensor values reached by scalar access
+  SmallVector<Value, 4> scalars;  // everything else that must be passed in
+  SmallVector<Operation *, 8> constants; // clone into the body
+};
+
+static bool isDefinedOutside(Value value, Region &region) {
+  Region *defRegion = value.getParentRegion();
+  return !defRegion || !region.isAncestor(defRegion);
+}
+
+static void collectSimtCaptures(::tla::VecFuncOp vecFuncOp, SimtCaptures &captures) {
+  Region &region = vecFuncOp.getBody();
+  SetVector<Value> tensorSet;
+  SetVector<Value> scalarSet;
+  SetVector<Operation *> constantSet;
+
+  region.walk([&](Operation *op) {
+    // Tensor operands of scalar accesses become memref parameters.
+    if (auto load = dyn_cast<::tla::SimtLoadOp>(op)) {
+      if (isDefinedOutside(load.getSource(), region))
+        tensorSet.insert(load.getSource());
+    } else if (auto store = dyn_cast<::tla::SimtStoreOp>(op)) {
+      if (isDefinedOutside(store.getDest(), region))
+        tensorSet.insert(store.getDest());
+    }
+    for (Value operand : op->getOperands()) {
+      if (!isDefinedOutside(operand, region))
+        continue;
+      if (tensorSet.contains(operand) || isa<::tla::TlaTensorType>(operand.getType()))
+        continue;
+      if (Operation *def = operand.getDefiningOp()) {
+        if (def->hasTrait<mlir::OpTrait::ConstantLike>()) {
+          constantSet.insert(def);
+          continue;
+        }
+      }
+      scalarSet.insert(operand);
+    }
+  });
+
+  captures.tensors.assign(tensorSet.begin(), tensorSet.end());
+  captures.scalars.assign(scalarSet.begin(), scalarSet.end());
+  captures.constants.assign(constantSet.begin(), constantSet.end());
+}
+
+// Same fan-out as LowerSimtTripleOpPattern, applied directly to a finished
+// function. The outlining clones the region before the rewrite driver reaches
+// its ops, so the identity queries have to be lowered here rather than left to
+// the pattern -- the outlined function is not re-driven.
+template <typename TlaOpTy, typename XOpTy, typename YOpTy, typename ZOpTy>
+static void lowerSimtTripleOpsIn(func::FuncOp vf) {
+  SmallVector<TlaOpTy, 4> ops;
+  vf.walk([&](TlaOpTy op) { ops.push_back(op); });
+  for (TlaOpTy op : ops) {
+    OpBuilder builder(op);
+    Location loc = op.getLoc();
+    Type i32 = builder.getI32Type();
+    if (!op.getX().use_empty())
+      op.getX().replaceAllUsesWith(builder.create<XOpTy>(loc, i32).getRes());
+    if (!op.getY().use_empty())
+      op.getY().replaceAllUsesWith(builder.create<YOpTy>(loc, i32).getRes());
+    if (!op.getZ().use_empty())
+      op.getZ().replaceAllUsesWith(builder.create<ZOpTy>(loc, i32).getRes());
+    op.erase();
+  }
+}
+
+// Address space the SIMT ABI addresses device buffers through, on both the
+// launch's !llvm.ptr operands and the outlined function's memref parameters.
+// The two must agree or hivmc-a5 rejects the call signature.
+static constexpr int kSimtPointerAddressSpace = 1;
+
+// tla.simt_add is the per-thread scalar counterpart of tla.add: no vector SSA,
+// no AVE instruction, just one element plus one element. It carries its own op
+// so the SIMT body is recognisable as TLA IR rather than raw arith; here it
+// becomes the arith op for its element type.
+static void lowerSimtAddIn(func::FuncOp vf) {
+  SmallVector<::tla::SimtAddOp, 8> ops;
+  vf.walk([&](::tla::SimtAddOp op) { ops.push_back(op); });
+  for (::tla::SimtAddOp op : ops) {
+    OpBuilder builder(op);
+    Location loc = op.getLoc();
+    Value sum = isa<FloatType>(op.getResult().getType())
+                    ? builder.create<arith::AddFOp>(loc, op.getLhs(), op.getRhs())
+                          .getResult()
+                    : builder.create<arith::AddIOp>(loc, op.getLhs(), op.getRhs())
+                          .getResult();
+    op.getResult().replaceAllUsesWith(sum);
+    op.erase();
+  }
+}
+
+// Raw device pointer for a memref, the three steps the SIMT ABI expects.
+static Value memrefToRawPointer(OpBuilder &builder, Location loc, Value memref) {
+  Value index = builder.create<mlir::memref::ExtractAlignedPointerAsIndexOp>(loc, memref);
+  Value asI64 = builder.create<arith::IndexCastOp>(loc, builder.getI64Type(), index);
+  auto ptrType =
+      LLVM::LLVMPointerType::get(builder.getContext(), kSimtPointerAddressSpace);
+  return builder.create<LLVM::IntToPtrOp>(loc, ptrType, asI64);
+}
+
+class LowerSimtVecFuncPattern : public OpRewritePattern<::tla::VecFuncOp> {
+public:
+  LowerSimtVecFuncPattern(MLIRContext *context, ModuleOp module, int &nextSimtRegionId,
+                          DenseMap<Value, Value> &baseMemrefCache)
+      : OpRewritePattern<::tla::VecFuncOp>(context, /*benefit=*/3), module(module),
+        nextSimtRegionId(nextSimtRegionId), baseMemrefCache(baseMemrefCache) {}
+
+  LogicalResult matchAndRewrite(::tla::VecFuncOp vecFuncOp,
+                                PatternRewriter &rewriter) const override {
+    if (!isSimtVecFunc(vecFuncOp))
+      return rewriter.notifyMatchFailure(vecFuncOp, "not a SIMT tla.vec.func");
+    if (vecFuncOp.getBody().empty())
+      return rewriter.notifyMatchFailure(vecFuncOp, "expected tla.vec.func body");
+
+    Location loc = vecFuncOp.getLoc();
+    auto threadBlockDimAttr = vecFuncOp->getAttrOfType<DenseI64ArrayAttr>("thread_block_dim");
+    if (!threadBlockDimAttr || threadBlockDimAttr.size() != 3)
+      return vecFuncOp.emitOpError(
+                 "SIMT tla.vec.func requires a 3-element 'thread_block_dim' attribute"),
+             failure();
+    int64_t blockDimX = threadBlockDimAttr[0], blockDimY = threadBlockDimAttr[1], blockDimZ = threadBlockDimAttr[2];
+
+    SimtCaptures captures;
+    collectSimtCaptures(vecFuncOp, captures);
+    if (!captures.scalars.empty()) {
+      InFlightDiagnostic diag = vecFuncOp.emitOpError()
+                                << "SIMT region reads " << captures.scalars.size()
+                                << " runtime value(s) computed outside it; passing "
+                                   "captured scalars into a SIMT vector function is not "
+                                   "implemented yet";
+      for (Value scalar : captures.scalars)
+        diag.attachNote(scalar.getLoc()) << "captured value of type " << scalar.getType();
+      diag.attachNote() << "compile-time constants are fine (they are cloned into the "
+                           "region); only values produced by ops outside it are not";
+      return failure();
+    }
+
+    // Base memref per captured tensor. These are the ABI buffers -- plain
+    // static memrefs -- and become both the outlined parameters and, through
+    // the pointer triple, the launch arguments.
+    OpBuilder callBuilder(vecFuncOp);
+    SmallVector<Value, 4> baseMemrefs;
+    SmallVector<Type, 4> paramTypes;
+    for (auto [operandIndex, tensor] : llvm::enumerate(captures.tensors)) {
+      auto descOp = tensor.getDefiningOp<::tla::TensorDescOp>();
+      if (!descOp)
+        return vecFuncOp.emitOpError("SIMT capture expects a materialized tla.tensor_desc"),
+               failure();
+      FailureOr<TensorDescriptor> desc = descriptorFromTensorDescOp(descOp);
+      if (failed(desc))
+        return failure();
+
+      // Address space and static-shape legality were already reported by
+      // checkSimtRegionCaptures before the driver ran; bail quietly here.
+      if (desc->addrspace != "gm")
+        return failure();
+
+      FailureOr<Value> base = getOrMaterializeDescriptorBaseMemref(
+          callBuilder, loc, *desc, vecFuncOp.getOperation(), baseMemrefCache);
+      if (failed(base))
+        return failure();
+      auto baseType = dyn_cast<MemRefType>((*base).getType());
+      if (!baseType)
+        return vecFuncOp.emitOpError("SIMT capture did not materialize as a memref; got ")
+                   << (*base).getType(),
+               failure();
+      baseMemrefs.push_back(*base);
+      // Parameters are flat rank-1 views of the buffer: only the pointer is
+      // actually passed, so the ABI memref's own rank/layout (4-D dynamic for a
+      // GM tensor, 1-D static for a UB allocation) does not carry over.
+      int64_t extent = ShapedType::kDynamic;
+      if (baseType.getRank() == 1 && !baseType.isDynamicDim(0))
+        extent = baseType.getDimSize(0);
+      else if (std::optional<int64_t> constant = getConstantIntValue(desc->shape[1]))
+        extent = *constant;
+
+      if (ShapedType::isDynamic(extent))
+        return failure();
+      (void)operandIndex;
+      // The parameter must carry an *integer* address space, not
+      // #hivm.address_space<...>: only then does memref-to-llvm lower it to a
+      // bare pointer matching the !llvm.ptr the launch passes. With the hivm
+      // attribute it becomes a descriptor struct and hivmc-a5 aborts with
+      // "Calling a function with a bad signature!".
+      paramTypes.push_back(MemRefType::get({extent}, baseType.getElementType(),
+                                           MemRefLayoutAttrInterface{},
+                                           rewriter.getI64IntegerAttr(kSimtPointerAddressSpace)));
+    }
+
+    // ---- the outlined vector function ----
+    auto parentFunc = vecFuncOp->getParentOfType<func::FuncOp>();
+    std::string vfName = (parentFunc ? parentFunc.getName().str() : std::string("kernel")) +
+                         "_vf_simt" +
+                         (nextSimtRegionId ? std::to_string(nextSimtRegionId) : std::string());
+    ++nextSimtRegionId;
+
+    ModuleOp mod = module;
+    OpBuilder moduleBuilder(mod.getBodyRegion());
+    moduleBuilder.setInsertionPointToEnd(mod.getBody());
+    auto vfType = FunctionType::get(rewriter.getContext(), paramTypes, {});
+    auto vf = moduleBuilder.create<func::FuncOp>(loc, vfName, vfType);
+    MLIRContext *ctx = rewriter.getContext();
+    vf->setAttr(hivm_regbaseintrins::kDavinciCallingConvAttrName,
+                hivm_regbaseintrins::SIMT_EntryAttr::get(
+                    ctx, static_cast<uint32_t>(blockDimX * blockDimY * blockDimZ)));
+    vf->setAttr("noinline", BoolAttr::get(ctx, false));
+
+    Block *vfBody = vf.addEntryBlock();
+    OpBuilder bodyBuilder(vfBody, vfBody->begin());
+    IRMapping mapping;
+    for (auto [tensor, arg] : llvm::zip_equal(captures.tensors, vfBody->getArguments()))
+      mapping.map(tensor, arg);
+    for (Operation *constant : captures.constants)
+      bodyBuilder.clone(*constant, mapping);
+
+    // Clone the region body in. Tensor operands are remapped to the memref
+    // parameters as we go, which leaves the cloned scalar accesses momentarily
+    // holding a memref where a !tla.tensor is declared; the walk below converts
+    // them to memref.load/store, at whatever nesting depth they sit.
+    for (Operation &op : vecFuncOp.getBody().front())
+      bodyBuilder.clone(op, mapping);
+    bodyBuilder.create<func::ReturnOp>(loc);
+
+    if (failed(rewriteSimtAccessesOntoParams(vf)))
+      return failure();
+    lowerSimtTripleOpsIn<::tla::ThreadIdxOp, hivm_regbaseintrins::ThreadIdXOp,
+                         hivm_regbaseintrins::ThreadIdYOp,
+                         hivm_regbaseintrins::ThreadIdZOp>(vf);
+    lowerSimtTripleOpsIn<::tla::ThreadBlockDimOp, hivm_regbaseintrins::BlockDimXOp,
+                         hivm_regbaseintrins::BlockDimYOp,
+                         hivm_regbaseintrins::BlockDimZOp>(vf);
+    lowerSimtAddIn(vf);
+
+    // ---- the launch ----
+    SmallVector<Value, 4> launchArgs;
+    for (Value base : baseMemrefs)
+      launchArgs.push_back(memrefToRawPointer(callBuilder, loc, base));
+    auto i64 = callBuilder.getI64Type();
+    Value tx = callBuilder.create<arith::ConstantOp>(loc, i64,
+                                                     callBuilder.getI64IntegerAttr(blockDimX));
+    Value ty = callBuilder.create<arith::ConstantOp>(loc, i64,
+                                                     callBuilder.getI64IntegerAttr(blockDimY));
+    Value tz = callBuilder.create<arith::ConstantOp>(loc, i64,
+                                                     callBuilder.getI64IntegerAttr(blockDimZ));
+    callBuilder.create<hivm_regbaseintrins::LaunchFuncOp>(
+        loc, FlatSymbolRefAttr::get(ctx, vfName), tx, ty, tz, launchArgs);
+
+    rewriter.eraseOp(vecFuncOp);
+    return success();
+  }
+
+private:
+  // Convert every cloned tla.simt_load/simt_store onto the memref parameter its
+  // tensor operand was mapped to.
+  static LogicalResult rewriteSimtAccessesOntoParams(func::FuncOp vf) {
+    SmallVector<Operation *, 8> stale;
+    vf.walk([&](Operation *op) {
+      if (isa<::tla::SimtLoadOp, ::tla::SimtStoreOp>(op))
+        stale.push_back(op);
+    });
+    for (Operation *op : stale) {
+      OpBuilder builder(op);
+      // The clone remapped the tensor operand to a memref parameter, so the op
+      // no longer matches its own declared operand type. Read that operand
+      // positionally: the generated getSource()/getDest() accessors cast to
+      // TypedValue<TlaTensorType>, which asserts in an assertions-enabled build
+      // (and silently returned a mistyped value in one without).
+      if (auto load = dyn_cast<::tla::SimtLoadOp>(op)) {
+        Value source = op->getOperand(0);
+        SmallVector<Value, 2> indices(load.getIndices().begin(), load.getIndices().end());
+        if (!isa<MemRefType>(source.getType()))
+          return load.emitOpError("tla.simt_load source did not map to a memref parameter"),
+                 failure();
+        Value loaded = builder.create<mlir::memref::LoadOp>(load.getLoc(), source, indices);
+        load.getResult().replaceAllUsesWith(loaded);
+      } else {
+        auto store = cast<::tla::SimtStoreOp>(op);
+        Value dest = op->getOperand(0);
+        SmallVector<Value, 2> indices(store.getIndices().begin(), store.getIndices().end());
+        if (!isa<MemRefType>(dest.getType()))
+          return store.emitOpError("tla.simt_store dest did not map to a memref parameter"),
+                 failure();
+        builder.create<mlir::memref::StoreOp>(store.getLoc(), store.getValue(), dest, indices);
+      }
+      op->erase();
+    }
+    return success();
+  }
+
+  ModuleOp module;
+  int &nextSimtRegionId;
+  DenseMap<Value, Value> &baseMemrefCache;
+};
+
 class LowerVecFuncRegionPattern : public OpRewritePattern<::tla::VecFuncOp> {
 public:
   LowerVecFuncRegionPattern(MLIRContext *context, ModuleOp module, int &nextVectorRegionId,
@@ -2215,6 +2585,12 @@ public:
 
   LogicalResult matchAndRewrite(::tla::VecFuncOp vecFuncOp,
                                 PatternRewriter &rewriter) const override {
+    // SIMD is the only mode this outlining path models: it maps the region onto
+    // whole-vector AVE instructions. SIMT regions describe per-thread scalar
+    // work and are lowered elsewhere.
+    if (!isSimdVecFunc(vecFuncOp))
+      return rewriter.notifyMatchFailure(vecFuncOp, "not a SIMD tla.vec.func");
+
     auto *body = vecFuncOp.getBody().empty() ? nullptr : &vecFuncOp.getBody().front();
     if (!body)
       return rewriter.notifyMatchFailure(vecFuncOp, "expected tla.vec.func body");
@@ -2658,15 +3034,17 @@ static void inlineVectorRegionWrappers(func::FuncOp funcOp) {
 }
 
 static void populateTlaToVectorPatterns(RewritePatternSet &patterns, ModuleOp module,
-                                        int &nextVectorRegionId,
+                                        int &nextVectorRegionId, int &nextSimtRegionId,
                                         DenseMap<Value, Value> &loweredMemrefByValue,
                                         bool &invalidScalarAccessBase) {
   MLIRContext *ctx = patterns.getContext();
   patterns.add<InlineVectorRegionWrapperPattern>(ctx);
+  patterns.add<LowerSimtVecFuncPattern>(ctx, module, nextSimtRegionId, loweredMemrefByValue);
   patterns.add<LowerVecFuncRegionPattern>(ctx, module, nextVectorRegionId,
                                           loweredMemrefByValue,
                                           invalidScalarAccessBase);
   patterns.add<LowerCopyPattern>(ctx, loweredMemrefByValue);
+  patterns.add<LowerThreadIdxPattern, LowerBlockDimPattern>(ctx);
   // NOTE: no dead-tla-scaffolding DCE here. tla-vector-region lowers ops but
   // deliberately leaves the momentary tensor / ptr-bridge scaffolding and
   // unrealized casts in place; the downstream cleanup pass (tla-finalize-memref)
@@ -2681,8 +3059,8 @@ static bool isIllegalVecFuncArchOp(Operation *op, StringRef &dslName) {
     dslName = "tla.arch.block_idx";
     return true;
   }
-  if (isa<::tla::BlockDimOp>(op)) {
-    dslName = "tla.arch.block_dim";
+  if (isa<::tla::BlockNumOp>(op)) {
+    dslName = "tla.arch.block_num";
     return true;
   }
   if (isa<::tla::SubBlockIdxOp>(op)) {
@@ -2692,10 +3070,88 @@ static bool isIllegalVecFuncArchOp(Operation *op, StringRef &dslName) {
   return false;
 }
 
+// Validate what a SIMT region is allowed to touch, once per function and before
+// the rewrite driver runs -- a pattern would re-report on every retry, and both
+// of these are diagnosed far more clearly here than by the LLVM assertions
+// hivmc-a5 would otherwise raise. Notes are dropped by the frontend's
+// diagnostic handler, so each message is self-contained.
+static LogicalResult checkSimtRegionCaptures(func::FuncOp funcOp) {
+  LogicalResult result = success();
+  funcOp.walk([&](::tla::VecFuncOp vecFuncOp) {
+    if (!isSimtVecFunc(vecFuncOp))
+      return;
+    SimtCaptures captures;
+    collectSimtCaptures(vecFuncOp, captures);
+
+    // Gather every offender first: one diagnostic per region listing them all
+    // beats one per tensor, especially since the frontend runs the pipeline
+    // twice (typed bridge, then CLI fallback) and doubles whatever is emitted.
+    SmallVector<std::string, 4> nonGm;
+    SmallVector<unsigned, 4> dynamic;
+    for (auto [operandIndex, tensor] : llvm::enumerate(captures.tensors)) {
+      auto descOp = tensor.getDefiningOp<::tla::TensorDescOp>();
+      if (!descOp)
+        continue;
+      FailureOr<TensorDescriptor> desc = descriptorFromTensorDescOp(descOp);
+      if (failed(desc))
+        continue;
+      if (desc->addrspace != "gm")
+        nonGm.push_back((Twine("#") + Twine(operandIndex + 1) + " in '" +
+                         desc->addrspace + "'")
+                            .str());
+      else if (!getConstantIntValue(desc->shape[1]))
+        dynamic.push_back(operandIndex + 1);
+    }
+
+    auto listTensors = [&](ArrayRef<unsigned> indices) {
+      std::string text;
+      llvm::raw_string_ostream os(text);
+      llvm::interleaveComma(indices, os, [&](unsigned index) { os << "#" << index; });
+      return os.str();
+    };
+
+    // A SIMT vector function is launched with GM pointers only. A UB operand
+    // never gets a base established and silently reads as zeros, so refuse it
+    // rather than let the kernel produce wrong answers.
+    if (!nonGm.empty()) {
+      vecFuncOp.emitOpError()
+          << "a SIMT tla.vec.func can only address GM, but " << nonGm.size() << " of "
+          << captures.tensors.size() << " tensor(s) used by this region are not: "
+          << llvm::join(nonGm, ", ")
+          << ". An outlined SIMT vector function receives GM pointers only; a non-GM "
+             "operand has no base established and reads as zeros. Index the GM tensor "
+             "directly inside tla.vec.func instead of staging it through tla.allocate "
+             "+ tla.copy";
+      result = failure();
+    }
+    // One pointer per buffer crosses the launch ABI, so the parameter must be a
+    // statically shaped memref: a dynamic extent lowers to a 5-field descriptor
+    // and hivmc-a5 aborts with an opaque LLVM assertion.
+    if (!dynamic.empty()) {
+      vecFuncOp.emitOpError()
+          << "a SIMT tla.vec.func requires statically shaped buffers, but tensor(s) "
+          << listTensors(dynamic) << " of " << captures.tensors.size()
+          << " used by this region have a dynamic extent. The launch passes one "
+             "pointer per buffer, while a dynamic memref lowers to a 5-field "
+             "descriptor (base, aligned, offset, size, stride), which makes hivmc-a5 "
+             "fail with \"Calling a function with a bad signature!\". Drop "
+             "mark_compact_shape_dynamic(...) from the host tensor so its extent is "
+             "known at compile time";
+      result = failure();
+    }
+  });
+  return result;
+}
+
 // Fail compilation if any per-core identity query is used inside a tla.vec.func.
 static LogicalResult checkNoArchOpsInVecFunc(func::FuncOp funcOp) {
   LogicalResult result = success();
   funcOp.walk([&](::tla::VecFuncOp vecFuncOp) {
+    // SIMT regions are per-thread code: the identity queries are exactly how a
+    // thread finds its slice of the work, so they are legal (and required)
+    // there.
+    if (isSimtVecFunc(vecFuncOp))
+      return;
     vecFuncOp.getBody().walk([&](Operation *op) {
       StringRef dslName;
       if (isIllegalVecFuncArchOp(op, dslName)) {
@@ -2722,6 +3178,7 @@ public:
   void getDependentDialects(DialectRegistry &registry) const override {
     registry.insert<arith::ArithDialect, func::FuncDialect, mlir::memref::MemRefDialect,
                     hivm::HIVMDialect, hivmave::AVEDialect, vector::VectorDialect,
+                    hivm_regbaseintrins::HIVMRegbaseIntrinsDialect, LLVM::LLVMDialect,
                     ::tla::TlaDialect>();
   }
 
@@ -2729,6 +3186,7 @@ public:
     ModuleOp module = getOperation();
 
     nextVectorRegionId = 0;
+    nextSimtRegionId = 0;
 
     // Snapshot the functions up front: lowering a vec.func appends a new
     // vector_region helper to the module, and that helper must not be fed back
@@ -2748,7 +3206,8 @@ public:
       std::optional<hivm::TFuncCoreType> coreType = getFunctionCoreType(funcOp.getOperation());
       if (coreType != hivm::TFuncCoreType::AIV && coreType != hivm::TFuncCoreType::MIX)
         continue;
-      if (failed(checkNoArchOpsInVecFunc(funcOp))) {
+      if (failed(checkNoArchOpsInVecFunc(funcOp)) ||
+          failed(checkSimtRegionCaptures(funcOp))) {
         signalPassFailure();
         return;
       }
@@ -2759,7 +3218,7 @@ public:
       ::tla::TlaTensorMemrefLowering lowering;
       RewritePatternSet patterns(&getContext());
       bool invalidScalarAccessBase = false;
-      populateTlaToVectorPatterns(patterns, module, nextVectorRegionId,
+      populateTlaToVectorPatterns(patterns, module, nextVectorRegionId, nextSimtRegionId,
                                   lowering.loweredMemrefByValue,
                                   invalidScalarAccessBase);
       if (failed(mlir::applyPatternsGreedily(funcOp, std::move(patterns)))) {
@@ -2769,6 +3228,19 @@ public:
       if (invalidScalarAccessBase) {
         signalPassFailure();
         return;
+      }
+    }
+
+    // A launched SIMT vector function makes the entry a regbase SIMT kernel as
+    // well as a SIMD one; the two sets of entry attributes coexist.
+    if (nextSimtRegionId > 0) {
+      MLIRContext *ctx = &getContext();
+      StringRef entryAttr = hacc::stringifyEnum(hacc::HACCToLLVMIRTranslateAttr::ENTRY);
+      for (func::FuncOp funcOp : module.getOps<func::FuncOp>()) {
+        if (!funcOp->hasAttr(entryAttr))
+          continue;
+        funcOp->setAttr(hivm_regbaseintrins::kDavinciKernelAttrName, UnitAttr::get(ctx));
+        setC310RegbaseTargetAttr(funcOp.getOperation(), ctx);
       }
     }
 
@@ -2809,6 +3281,7 @@ public:
 
 private:
   int nextVectorRegionId = 0;
+  int nextSimtRegionId = 0;
 };
 
 } // namespace

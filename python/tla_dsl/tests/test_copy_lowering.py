@@ -176,7 +176,7 @@ def copy_dynamic_l0c_to_ub_split_m_kernel(gm_c: tla.Tensor) -> None:
     ub_ptr = allocator.allocate(64 * 128 * 4, 512, tla.AddressSpace.ub)
     ub_ptr = tla.recast_ptr(ub_ptr, dtype=tla.Float32)
 
-    for col in tla.range(tla.arch.block_idx(), 1, tla.arch.block_dim()):
+    for col in tla.range(tla.arch.block_idx(), 1, tla.arch.block_num()):
         gm_tile = tla.tile_view(
             gm_c, tla.make_shape(128, 128), tla.make_coord(0, col)
         )

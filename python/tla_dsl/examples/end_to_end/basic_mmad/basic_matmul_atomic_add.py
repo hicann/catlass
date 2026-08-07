@@ -84,7 +84,7 @@ def basic_mmad_kernel(
         l1_buf_idx = c0
         l0_buf_idx = c0
 
-        block_range = tla.range(tla.arch.block_idx(), total_blocks, tla.arch.block_dim())
+        block_range = tla.range(tla.arch.block_idx(), total_blocks, tla.arch.block_num())
         for block_linear in block_range:
             block_row = block_linear // grid_n
             block_col = block_linear % grid_n
