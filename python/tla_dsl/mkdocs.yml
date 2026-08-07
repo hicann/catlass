@@ -4,15 +4,17 @@ site_dir: site
 use_directory_urls: false
 
 theme:
-  name: readthedocs
-  navigation_depth: 3
-  collapse_navigation: false
+  name: material
+  features:
+    - navigation.sections
 
 nav:
   - Overview: index.md
   - Torch Tensor Binding: framework_integration.md
   - Dynamic Layout: dsl_dynamic_layout.md
   - Core API Reference: api-reference.md
+  - DSL Syntax Constraints: dsl_python_syntax_guide.md
+  - DSL Syntax Constraints (English): dsl_python_syntax_guide_en.md
   - BC Backend Integration: bc-backend-integration.md
 
 markdown_extensions:
@@ -20,6 +22,9 @@ markdown_extensions:
       permalink: true
   - tables
   - fenced_code
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true # 使用现代选项卡样式
 
 validation:
   links:

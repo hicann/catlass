@@ -1,0 +1,4 @@
+--trusted-host=pypi.org
+--trusted-host=files.pythonhosted.org
+mkdocs==1.6.1
+mkdocs-material==9.7.7
