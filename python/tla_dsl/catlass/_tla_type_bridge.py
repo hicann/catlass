@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import importlib.util
-import os
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -303,7 +302,7 @@ def _load_bridge_extension() -> ModuleType:
         _EXTENSION = False
         raise TlaTypeBridgeUnavailableError(
             "Tla type bridge extension not found. Build the native type bridge "
-            "module or set TLA_DSL_TYPE_BRIDGE_EXTENSION."
+            "module (e.g. via build.sh)."
         )
     spec = importlib.util.spec_from_file_location(
         "catlass._tla_type_bridge_native", path
@@ -318,11 +317,6 @@ def _load_bridge_extension() -> ModuleType:
 
 
 def _resolve_bridge_extension_path() -> Path | None:
-    explicit = os.getenv("TLA_DSL_TYPE_BRIDGE_EXTENSION")
-    if explicit:
-        candidate = Path(explicit).expanduser().resolve()
-        if candidate.exists():
-            return candidate
     packaged_root = Path(__file__).resolve().parent
     packaged = sorted(packaged_root.glob("_tla_type_bridge_native*.so"))
     if packaged:

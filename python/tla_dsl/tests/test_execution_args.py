@@ -6,7 +6,7 @@ import pytest
 
 pytest.importorskip("catlass", exc_type=ImportError)
 
-import catlass as tla
+import catlass.tla as tla
 from catlass import compiler_bridge, execution
 from catlass.base_dsl.jit_executor import TlaExecutionArgs
 

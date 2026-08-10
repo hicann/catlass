@@ -4,11 +4,10 @@ import argparse
 from pathlib import Path
 from typing import Any
 
-import catlass as tla
-from catlass import runtime as runtime_mod
+import catlass.tla as tla
+import sys
 
 DEMO_DIR = Path(__file__).resolve().parent
-DEFAULT_CACHE_DIR = DEMO_DIR / "artifacts" / "runtime-cache"
 
 VECTOR_ELE = 64
 ELEMENT_BYTES = 4
@@ -111,33 +110,18 @@ def load_and_store_scalar_after_reduction(
         tla.pipe_barrier(tla.pipes.ALL)
 
 
-def _tensor(shape: tuple[int, ...], data_ptr: int | None = None) -> Any:
-    with runtime_mod._eager_capture():
-        tla_shape = tla.make_shape(*shape)
-        return tla.Tensor(
-            tla_shape,
-            tla.Float32,
-            origin_shape=tla_shape,
-            coord=tla.make_coord(*(0 for _ in shape)),
-            stride=tla.make_stride(1),
-            data_ptr=data_ptr,
-        )
-
-
-def _runtime_tensor(dev_buf: Any, shape: tuple[int, ...]) -> Any:
-    tensor = _tensor(shape, int(dev_buf.contiguous().data_ptr()))
-    tensor._external_binding = True
-    return tensor
+def _runtime_tensor(dev_buf: Any) -> Any:
+    return tla.from_dlpack(
+        dev_buf.contiguous(),
+        layout_tag=tla.arch.RowMajor,
+    )
 
 
 def _compile(args: argparse.Namespace, *type_args: Any) -> Any:
     return tla.compile(
         load_and_store_scalar_after_reduction,
         *type_args,
-        arch_scope="aiv.c310",
-        cache=not args.no_cache,
-        cache_dir=str(Path(args.cache_dir).expanduser().resolve()),
-        force_recompile=args.force_recompile,
+        options="--npu-arch 3510"
     )
 
 
@@ -148,111 +132,84 @@ def main() -> int:
             "both inside tla.vec.func and directly inside tla.vector."
         )
     )
-    mode = parser.add_mutually_exclusive_group()
-    mode.add_argument("--dump-tla", action="store_true")
-    mode.add_argument("--build-only", action="store_true")
     parser.add_argument("--device", type=int, default=0)
-    parser.add_argument("--cache-dir", default=str(DEFAULT_CACHE_DIR))
-    parser.add_argument("--force-recompile", action="store_true")
-    parser.add_argument("--no-cache", action="store_true")
     args = parser.parse_args()
 
-    type_args = (
-        _tensor((VECTOR_ELE,)),
-        _tensor((VECTOR_ELE,)),
-        _tensor((1,)),
+    import torch
+    import torch_npu
+    torch.npu.set_device(args.device)
+    x = torch.linspace(
+        -17.0, 46.0, VECTOR_ELE, dtype=torch.float32, device="npu"
     )
-    if args.dump_tla:
-        print(
-            load_and_store_scalar_after_reduction.dump_mlir(type_args=type_args)
-        )
-        return 0
-    if args.build_only:
-        artifact = _compile(args, *type_args)
-        print("compile_ok=True")
-        print(f"kernel.o path={artifact.kernel_binary_path}")
-        return 0
+    stored_out = torch.full(
+        (VECTOR_ELE,), -999.0, dtype=torch.float32, device="npu"
+    )
+    reduced_out = torch.full((1,), -999.0, dtype=torch.float32, device="npu")
 
-    tla.initialize(device=args.device)
-    try:
-        import torch
-        import torch_npu  # noqa: F401
+    tla_x = _runtime_tensor(x)
+    tla_stored = _runtime_tensor(stored_out)
+    tla_reduced = _runtime_tensor(reduced_out)
+    artifact = _compile(args, tla_x, tla_stored, tla_reduced)
+    artifact(tla_x, tla_stored, tla_reduced, block_num=1)
+    torch.npu.synchronize()
 
-        torch.npu.set_device(args.device)
-        x = torch.linspace(
-            -17.0, 46.0, VECTOR_ELE, dtype=torch.float32, device="npu"
-        )
-        stored_out = torch.full(
-            (VECTOR_ELE,), -999.0, dtype=torch.float32, device="npu"
-        )
-        reduced_out = torch.full((1,), -999.0, dtype=torch.float32, device="npu")
+    expected_scalar = x.sum()
+    expected_stored = x.clone()
+    expected_stored[VEC_FUNC_STORE_INDEX] = expected_scalar
+    expected_stored[VECTOR_STORE_INDEX] = expected_scalar
 
-        tla_x = _runtime_tensor(x, (VECTOR_ELE,))
-        tla_stored = _runtime_tensor(stored_out, (VECTOR_ELE,))
-        tla_reduced = _runtime_tensor(reduced_out, (1,))
-        artifact = _compile(args, tla_x, tla_stored, tla_reduced)
-        artifact(tla_x, tla_stored, tla_reduced, block_dim=1)
-        torch.npu.synchronize()
+    reduced_ok = bool(
+        torch.isclose(reduced_out[0], expected_scalar, rtol=0.0, atol=1e-4)
+    )
+    vec_func_store_ok = bool(
+        torch.isclose(
+            stored_out[VEC_FUNC_STORE_INDEX],
+            expected_scalar,
+            rtol=0.0,
+            atol=1e-4,
+        )
+    )
+    vector_store_ok = bool(
+        torch.isclose(
+            stored_out[VECTOR_STORE_INDEX],
+            expected_scalar,
+            rtol=0.0,
+            atol=1e-4,
+        )
+    )
+    stored_ok = bool(
+        torch.isclose(stored_out, expected_stored, rtol=0.0, atol=1e-4).all()
+    )
 
-        expected_scalar = x.sum()
-        expected_stored = x.clone()
-        expected_stored[VEC_FUNC_STORE_INDEX] = expected_scalar
-        expected_stored[VECTOR_STORE_INDEX] = expected_scalar
-
-        reduced_ok = bool(
-            torch.isclose(reduced_out[0], expected_scalar, rtol=0.0, atol=1e-4)
-        )
-        vec_func_store_ok = bool(
-            torch.isclose(
-                stored_out[VEC_FUNC_STORE_INDEX],
-                expected_scalar,
-                rtol=0.0,
-                atol=1e-4,
-            )
-        )
-        vector_store_ok = bool(
-            torch.isclose(
-                stored_out[VECTOR_STORE_INDEX],
-                expected_scalar,
-                rtol=0.0,
-                atol=1e-4,
-            )
-        )
-        stored_ok = bool(
-            torch.isclose(stored_out, expected_stored, rtol=0.0, atol=1e-4).all()
-        )
-
-        print(
-            "compile_ok=True host=torch_npu "
-            "op=load_and_store_scalar_after_reduction dtype=f32"
-        )
-        print(f"kernel.o path={artifact.kernel_binary_path}")
-        print("launch_ok=True")
-        print(f"reduction UB slot equals expected scalar? {reduced_ok}")
-        print(
-            "tla.vec.func UB scalar load/store wrote index "
-            f"{VEC_FUNC_STORE_INDEX}? {vec_func_store_ok}"
-        )
-        print(
-            "tla.vector UB scalar load/store wrote index "
-            f"{VECTOR_STORE_INDEX}? {vector_store_ok}"
-        )
-        print(f"complete stored output matches expected? {stored_ok}")
-        print(f"expected scalar={float(expected_scalar.cpu())}")
-        print(f"reduced scalar={float(reduced_out[0].cpu())}")
-        print(
-            "stored scalars="
-            f"({float(stored_out[VEC_FUNC_STORE_INDEX].cpu())}, "
-            f"{float(stored_out[VECTOR_STORE_INDEX].cpu())})"
-        )
-        print(f"stored_out[:9]={stored_out[:9].cpu()}")
-        return (
-            0
-            if reduced_ok and vec_func_store_ok and vector_store_ok and stored_ok
-            else 1
-        )
-    finally:
-        tla.finalize()
+    print(
+        "compile_ok=True host=torch_npu "
+        "op=load_and_store_scalar_after_reduction dtype=f32"
+    )
+    print(f"kernel.o path={artifact.kernel_binary_path}")
+    print("launch_ok=True")
+    print(f"reduction UB slot equals expected scalar? {reduced_ok}")
+    print(
+        "tla.vec.func UB scalar load/store wrote index "
+        f"{VEC_FUNC_STORE_INDEX}? {vec_func_store_ok}"
+    )
+    print(
+        "tla.vector UB scalar load/store wrote index "
+        f"{VECTOR_STORE_INDEX}? {vector_store_ok}"
+    )
+    print(f"complete stored output matches expected? {stored_ok}")
+    print(f"expected scalar={float(expected_scalar.cpu())}")
+    print(f"reduced scalar={float(reduced_out[0].cpu())}")
+    print(
+        "stored scalars="
+        f"({float(stored_out[VEC_FUNC_STORE_INDEX].cpu())}, "
+        f"{float(stored_out[VECTOR_STORE_INDEX].cpu())})"
+    )
+    print(f"stored_out[:9]={stored_out[:9].cpu()}")
+    return (
+        0
+        if reduced_ok and vec_func_store_ok and vector_store_ok and stored_ok
+        else 1
+    )
 
 
 if __name__ == "__main__":

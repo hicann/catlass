@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-import catlass as tla
+import catlass.tla as tla
 
 
 def _ub_tensor(dtype: object, elements: int = 64) -> object:

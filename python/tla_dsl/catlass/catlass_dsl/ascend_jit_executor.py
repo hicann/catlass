@@ -9,7 +9,6 @@ from ..execution import (
     TlaExecutionResult,
     TlaKernelArtifact,
     TlaRuntimeOptions,
-    TlaUnsupportedAbiError,
     _KernelLaunchPlan,
     _POINTER_ABI_SIZE,
     _PRINT_TENSOR_WORKSPACE_SENTINEL,
@@ -40,7 +39,9 @@ def execute_kernel(
 ) -> TlaExecutionResult:
     from .. import execution as execution_mod
 
-    block_num = _normalize_block_num(launch_kwargs.get("block_dim", 1))
+    # ACL is required for load/launch; fail early once here.
+    execution_mod.load_acl()
+    block_num = launch_kwargs["block_num"]
     device, stream = _resolve_launch_context(launch_kwargs)
     if launch_args:
         _mark_tensor_launch_args_uploaded(launch_args)
@@ -116,13 +117,6 @@ def execute_kernel(
         function_handle=function_handle,
         device=device,
     )
-
-
-def _normalize_block_num(block_dim: Any) -> int:
-    """Resolve launch block count from ``block_dim``."""
-    if not isinstance(block_dim, int):
-        raise TlaUnsupportedAbiError("`block_dim` must be an int.")
-    return int(block_dim)
 
 
 def _resolve_launch_context(launch_kwargs: Mapping[str, Any]) -> tuple[int, int]:

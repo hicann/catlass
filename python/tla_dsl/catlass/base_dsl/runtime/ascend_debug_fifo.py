@@ -11,7 +11,7 @@ import ctypes
 import os
 import struct
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Callable
 
 from ...execution import TlaRuntimeUnavailableError
 from .ascend import check_acl_errors
@@ -75,33 +75,43 @@ class AscDebugFifoError(TlaRuntimeUnavailableError):
     """Raised when FIFO open/close/decode fails."""
 
 
-def _acl_malloc(acl: Any, size: int) -> int:
+def _acl_malloc(size: int) -> int:
+    import acl
+
     ptr, ret = acl.rt.malloc(int(size), _ACL_MEM_MALLOC_HUGE_FIRST)
     check_acl_errors(ret, "acl.rt.malloc", error_cls=AscDebugFifoError)
     return int(ptr)
 
 
-def _acl_malloc_host(acl: Any, size: int) -> int:
+def _acl_malloc_host(size: int) -> int:
+    import acl
+
     ptr, ret = acl.rt.malloc_host(int(size))
     check_acl_errors(ret, "acl.rt.malloc_host", error_cls=AscDebugFifoError)
     return int(ptr)
 
 
-def _acl_free(acl: Any, ptr: int) -> None:
+def _acl_free(ptr: int) -> None:
+    import acl
+
     if ptr:
         check_acl_errors(
             acl.rt.free(int(ptr)), "acl.rt.free", error_cls=AscDebugFifoError
         )
 
 
-def _acl_free_host(acl: Any, ptr: int) -> None:
+def _acl_free_host(ptr: int) -> None:
+    import acl
+
     if ptr:
         check_acl_errors(
             acl.rt.free_host(int(ptr)), "acl.rt.free_host", error_cls=AscDebugFifoError
         )
 
 
-def _acl_memcpy(acl: Any, dst: int, src: int, size: int, kind: int) -> None:
+def _acl_memcpy(dst: int, src: int, size: int, kind: int) -> None:
+    import acl
+
     check_acl_errors(
         acl.rt.memcpy(int(dst), int(size), int(src), int(size), int(kind)),
         "acl.rt.memcpy",
@@ -109,14 +119,14 @@ def _acl_memcpy(acl: Any, dst: int, src: int, size: int, kind: int) -> None:
     )
 
 
-def open_fifo(acl: Any, block_dim: int, *, mixed_handoff: bool = False) -> _FifoData:
+def open_fifo(block_num: int, *, mixed_handoff: bool = False) -> _FifoData:
     ring_offset = _ring_buffer_offset()
     block_length = _align_up(ring_offset + _RING_BUFFER_BYTES + _WRITE_SIZE, 64)
     region_size = block_length * _DEBUG_CORE_RECORDS
-    device_ptr = _acl_malloc(acl, region_size)
+    device_ptr = _acl_malloc(region_size)
     host_ptr = 0
     try:
-        host_ptr = _acl_malloc_host(acl, region_size)
+        host_ptr = _acl_malloc_host(region_size)
         ctypes.memset(host_ptr, 0, region_size)
         for i in range(_DEBUG_CORE_RECORDS):
             record = host_ptr + i * block_length
@@ -150,25 +160,25 @@ def open_fifo(acl: Any, block_dim: int, *, mixed_handoff: bool = False) -> _Fifo
                 raise AscDebugFifoError("internal FIFO write-info size mismatch")
             buf[write_off : write_off + _WRITE_SIZE] = write
         _acl_memcpy(
-            acl, device_ptr, host_ptr, region_size, _ACL_MEMCPY_HOST_TO_DEVICE
+            device_ptr, host_ptr, region_size, _ACL_MEMCPY_HOST_TO_DEVICE
         )
     except Exception:
         if host_ptr:
             try:
-                _acl_free_host(acl, host_ptr)
+                _acl_free_host(host_ptr)
             except Exception:
                 pass
         try:
-            _acl_free(acl, device_ptr)
+            _acl_free(device_ptr)
         except Exception:
             pass
         raise
-    _acl_free_host(acl, host_ptr)
+    _acl_free_host(host_ptr)
     return _FifoData(
         device_ptr=device_ptr,
         region_size=region_size,
         record_count=_DEBUG_CORE_RECORDS,
-        launch_block_count=int(block_dim),
+        launch_block_count=int(block_num),
         mixed_handoff=bool(mixed_handoff),
         block_length=block_length,
         ring_buffer_offset=ring_offset,
@@ -176,12 +186,12 @@ def open_fifo(acl: Any, block_dim: int, *, mixed_handoff: bool = False) -> _Fifo
     )
 
 
-def destroy_fifo(acl: Any, fifo: _FifoData | None) -> None:
+def destroy_fifo(fifo: _FifoData | None) -> None:
     if fifo is None:
         return
     try:
         if fifo.device_ptr:
-            _acl_free(acl, fifo.device_ptr)
+            _acl_free(fifo.device_ptr)
     finally:
         fifo.device_ptr = 0
 
@@ -625,7 +635,7 @@ def _decode_tensor_records(host: memoryview, fifo: _FifoData) -> None:
                 logical = block_idx // 2
             if logical >= fifo.launch_block_count:
                 raise AscDebugFifoError(
-                    "malformed tensor print FIFO: tensor block index exceeds launch block_dim"
+                    "malformed tensor print FIFO: tensor block index exceeds launch block_num"
                 )
             records.append((pending_shape, chunk, logical))
             pending_shape = None
@@ -642,12 +652,13 @@ def _decode_tensor_records(host: memoryview, fifo: _FifoData) -> None:
 
 
 def close_fifo(
-    acl: Any,
     fifo: _FifoData,
     stream: int,
     *,
     tensor_only: bool,
 ) -> None:
+    import acl
+
     host_ptr = 0
     try:
         check_acl_errors(
@@ -655,9 +666,8 @@ def close_fifo(
             "acl.rt.synchronize_stream(AscDebugFifo)",
             error_cls=AscDebugFifoError,
         )
-        host_ptr = _acl_malloc_host(acl, fifo.region_size)
+        host_ptr = _acl_malloc_host(fifo.region_size)
         _acl_memcpy(
-            acl,
             host_ptr,
             fifo.device_ptr,
             fifo.region_size,
@@ -672,18 +682,17 @@ def close_fifo(
     finally:
         if host_ptr:
             try:
-                _acl_free_host(acl, host_ptr)
+                _acl_free_host(host_ptr)
             except Exception:
                 pass
-        destroy_fifo(acl, fifo)
+        destroy_fifo(fifo)
 
 
 def launch_with_debug_fifo(
     *,
-    acl: Any,
     launch_kernel: Callable[[bytes], None],
     args: bytes,
-    block_dim: int,
+    block_num: int,
     stream: int,
     expects_debug_fifo: bool,
     expects_print_tensor: bool | int,
@@ -695,7 +704,7 @@ def launch_with_debug_fifo(
         return
 
     mixed = int(expects_print_tensor) == 2
-    fifo = open_fifo(acl, block_dim, mixed_handoff=mixed)
+    fifo = open_fifo(block_num, mixed_handoff=mixed)
     try:
         rewritten = prepare_launch_args(
             args,
@@ -706,10 +715,9 @@ def launch_with_debug_fifo(
         try:
             launch_kernel(rewritten)
         except Exception:
-            destroy_fifo(acl, fifo)
+            destroy_fifo(fifo)
             raise
         close_fifo(
-            acl,
             fifo,
             stream,
             tensor_only=bool(expects_print_tensor),
@@ -717,7 +725,7 @@ def launch_with_debug_fifo(
     except Exception:
         if fifo.device_ptr:
             try:
-                destroy_fifo(acl, fifo)
+                destroy_fifo(fifo)
             except Exception:
                 pass
         raise

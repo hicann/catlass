@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from mlir import ir as mlir_ir
 
-import catlass as tla
+import catlass.tla as tla
 import catlass.runtime as runtime_mod
 from catlass.base_dsl import BaseDSL
 

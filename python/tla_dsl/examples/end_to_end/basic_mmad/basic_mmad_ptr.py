@@ -9,16 +9,15 @@
 # -----------------------------------------------------------------------------------------------------------
 """Minimal ptr/make_tensor MMAD: Kernel + Host in one file.
 
-Static problem sizes. Prefer ``basic_matmul.py`` for dynamic-GM e2e.
+Static problem sizes. Host binds buffers via ``from_dlpack`` Prefer ``basic_matmul.py`` for dynamic-GM e2e.
 """
 
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
-
-import catlass as tla
-
+import catlass.tla as tla
+import torch
+import torch_npu
 M_DIM = 64
 N_DIM = 64
 K_DIM = 64
@@ -106,75 +105,63 @@ def basic_mmad_ptr(
 # Host
 # ---------------------------------------------------------------------------
 
-EXAMPLE_DIR = Path(__file__).resolve().parent
-DEFAULT_CACHE_DIR = EXAMPLE_DIR / "artifacts" / "runtime-cache"
-
-
-def golden(lhs, rhs):
-    # Kernel uses lhs ptr+offset and rhs tile at (1,0); match that window.
-    return lhs[32:, 32:] @ rhs[32:, :32]
-
 
 def run(args: argparse.Namespace) -> int:
-    import torch
-    import torch_npu  # noqa: F401
-    from catlass import runtime as runtime_mod
+    from catlass.runtime import _eager_capture
+    from catlass.tla.runtime import from_dlpack
 
-    def _create_tla_tensor(dev_buf, row: int, col: int):
-        contiguous = dev_buf.contiguous()
-        with runtime_mod._eager_capture():
-            return tla.Tensor(
-                tla.make_shape(row, col),
-                tla.Float32,
-                origin_shape=tla.make_shape(row, col),
-                coord=tla.make_coord(0, 0),
-                stride=tla.make_stride(col, 1),
-                data_ptr=int(contiguous.data_ptr()),
-            )
+    torch.npu.set_device(args.device)
+    torch.manual_seed(0)
+    a = torch.rand(M_DIM, K_DIM, dtype=torch.float32, device="cpu") * 10.0 - 5.0
+    b = torch.rand(K_DIM, N_DIM, dtype=torch.float32, device="cpu") * 10.0 - 5.0
+    c = torch.rand(L1_M_DIM, L1_N_DIM, dtype=torch.float32, device="cpu") * 10.0 - 5.0
+    # Kernel uses a ptr+offset and b tile at (1,0); match that window.
+    ref = a[32:, 32:] @ b[32:, :32]
 
-    tla.initialize(device=args.device)
-    try:
-        torch.npu.set_device(args.device)
-        torch.manual_seed(0)
-        lhs = torch.rand(M_DIM, K_DIM, dtype=torch.float32, device="cpu") * 10.0 - 5.0
-        rhs = torch.rand(K_DIM, N_DIM, dtype=torch.float32, device="cpu") * 10.0 - 5.0
-        out = torch.full((L1_M_DIM, L1_N_DIM), -9.0, dtype=torch.float32, device="npu")
-        expected = golden(lhs, rhs)
+    # Contiguous on CPU, then upload so contiguous does not run on NPU.
+    a = a.contiguous().npu()
+    b = b.contiguous().npu()
+    c = c.contiguous().npu()
+    with _eager_capture():
+        a_origin = tla.make_shape(M_DIM, K_DIM)
+        b_origin = tla.make_shape(K_DIM, N_DIM)
+        c_origin = tla.make_shape(L1_M_DIM, L1_N_DIM)
+    a_tensor = from_dlpack(
+        a, layout_tag=tla.arch.RowMajor, origin_shape=a_origin
+    )
+    b_tensor = from_dlpack(
+        b, layout_tag=tla.arch.RowMajor, origin_shape=b_origin
+    )
+    c_tensor = from_dlpack(
+        c, layout_tag=tla.arch.RowMajor, origin_shape=c_origin
+    )
 
-        tla_lhs = _create_tla_tensor(lhs.npu(), M_DIM, K_DIM)
-        tla_rhs = _create_tla_tensor(rhs.npu(), K_DIM, N_DIM)
-        tla_out = _create_tla_tensor(out, L1_M_DIM, L1_N_DIM)
+    artifact = tla.compile(
+        basic_mmad_ptr,
+        a_tensor,
+        b_tensor,
+        c_tensor,
+        options="--npu-arch 3510",
+    )
+    artifact(a_tensor, b_tensor, c_tensor, block_num=args.block_num)
+    torch.npu.synchronize()
 
-        artifact = tla.compile(
-            basic_mmad_ptr,
-            tla_lhs,
-            tla_rhs,
-            tla_out,
-            arch_scope="aic.c310",
-            cache=not args.no_cache,
-            cache_dir=str(Path(args.cache_dir).expanduser().resolve()),
-            force_recompile=args.force_recompile,
-        )
-        artifact(tla_lhs, tla_rhs, tla_out, block_dim=args.block_dim)
-        torch.npu.synchronize()
-
-        rtol = (1.0 / 256.0) if K_DIM < 2048 else (1.0 / 128.0)
-        got = out.detach().to(device="cpu", dtype=torch.float32)
-        exp = expected.detach().to(device="cpu", dtype=torch.float32)
-        passed = bool(((got - exp).abs() <= rtol * torch.maximum(torch.ones_like(exp), exp.abs())).all())
-        print(f"passed={passed} kernel.o={artifact.kernel_binary_path}")
-        return 0 if passed else 1
-    finally:
-        tla.finalize()
+    rtol = (1.0 / 256.0) if K_DIM < 2048 else (1.0 / 128.0)
+    result = c.detach().cpu().float()
+    passed = bool(
+        (
+            (result - ref).abs()
+            <= rtol * torch.maximum(torch.ones_like(ref), ref.abs())
+        ).all()
+    )
+    print(f"passed={passed} kernel.o={artifact.kernel_binary_path}")
+    return 0 if passed else 1
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Minimal ptr/make_tensor MMAD.")
     parser.add_argument("--device", type=int, default=0)
-    parser.add_argument("--block-dim", type=int, default=1)
-    parser.add_argument("--cache-dir", default=str(DEFAULT_CACHE_DIR))
-    parser.add_argument("--force-recompile", action="store_true")
-    parser.add_argument("--no-cache", action="store_true")
+    parser.add_argument("--block-num", type=int, default=1)
     return run(parser.parse_args())
 
 

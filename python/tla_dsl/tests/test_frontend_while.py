@@ -2,7 +2,7 @@ from typing import Any
 
 import pytest
 
-import catlass as tla
+import catlass.tla as tla
 import catlass.tla_ast_decorators as ast_decorators_mod
 import catlass.core_api as core_api_mod
 import catlass.runtime as runtime_mod

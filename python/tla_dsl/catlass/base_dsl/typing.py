@@ -21,7 +21,13 @@ from typing import (
 import numpy as np
 from mlir import ir as mlir_ir  # type: ignore[assignment]
 
-from .op import dsl_user_op
+from .op import (
+    dsl_user_op,
+    _bind_frontend_category,
+    _bind_frontend_value,
+    _current_frontend_state,
+    _in_simt_vec_func,
+)
 
 _T = TypeVar("_T")
 
@@ -57,9 +63,7 @@ def _binary_op(
                 return NotImplemented
             rhs = as_numeric(rhs)
 
-        from .. import runtime as _runtime
-
-        in_frontend = _runtime._current_frontend_state() is not None
+        in_frontend = _current_frontend_state() is not None
         host_fold = (
             not in_frontend
             and isinstance(lhs.value, (int, float, bool))
@@ -136,8 +140,6 @@ def _binary_op(
             # Inside a SIMT region a scalar '+' is a TLA op in its own right --
             # tla.simt_add -- so the per-thread body stays recognisable as TLA IR;
             # tla-vector-region lowers it back to the arith op below.
-            from ..runtime import _in_simt_vec_func
-
             if _in_simt_vec_func():
                 result = mlir_ir.Operation.create(
                     "tla.simt_add",
@@ -480,11 +482,9 @@ class Numeric(metaclass=NumericMeta, is_abstract=True):
                 self.value = converted.value
                 self.__tla_category__ = "numeric"
                 if isinstance(self.value, mlir_ir.Value):
-                    from .. import runtime as _runtime
-
-                    _runtime._bind_frontend_value(self, self.value)
-                    _runtime._bind_frontend_category(self, "numeric")
-                    _runtime._bind_frontend_category(self.value, "numeric")
+                    _bind_frontend_value(self, self.value)
+                    _bind_frontend_category(self, "numeric")
+                    _bind_frontend_category(self.value, "numeric")
                 return
         if isinstance(value, mlir_ir.Value):
             expected = cls.mlir_type()
@@ -507,11 +507,9 @@ class Numeric(metaclass=NumericMeta, is_abstract=True):
                     value = src_cls(value).to(cls, loc=loc).value
             self.value: Any = value
             self.__tla_category__ = "numeric"
-            from .. import runtime as _runtime
-
-            _runtime._bind_frontend_value(self, value)
-            _runtime._bind_frontend_category(self, "numeric")
-            _runtime._bind_frontend_category(value, "numeric")
+            _bind_frontend_value(self, value)
+            _bind_frontend_category(self, "numeric")
+            _bind_frontend_category(value, "numeric")
         elif isinstance(value, (bool, int, float)):
             self.value = value
             self.__tla_category__ = "numeric"
@@ -798,9 +796,7 @@ class Numeric(metaclass=NumericMeta, is_abstract=True):
     def __neg__(self, *, loc: mlir_ir.Location | None = None) -> "Numeric":
         if isinstance(self.value, (int, float, bool)):
             return type(self)(-self.value)
-        from .. import runtime as _runtime
-
-        if _runtime._current_frontend_state() is None:
+        if _current_frontend_state() is None:
             raise RuntimeError("Numeric.__neg__ on SSA requires frontend context")
         v = self.ir_value(loc=loc)
         if type(self).is_float:
@@ -818,9 +814,7 @@ class Numeric(metaclass=NumericMeta, is_abstract=True):
     def __abs__(self, *, loc: mlir_ir.Location | None = None) -> "Numeric":
         if isinstance(self.value, (int, float, bool)):
             return type(self)(abs(self.value))
-        from .. import runtime as _runtime
-
-        if _runtime._current_frontend_state() is None:
+        if _current_frontend_state() is None:
             raise RuntimeError("Numeric.__abs__ on SSA requires frontend context")
         v = self.ir_value(loc=loc)
         if type(self).is_float:
@@ -920,9 +914,7 @@ class Integer(Numeric, metaclass=IntegerMeta, width=32, mlir_type=_mlir_i(32), i
         cls = typing_cast(type[Integer], type(self))
         if isinstance(self.value, (int, bool)):
             return cls(~int(self.value))
-        from .. import runtime as _runtime
-
-        if _runtime._current_frontend_state() is None:
+        if _current_frontend_state() is None:
             raise RuntimeError("Integer.__invert__ on SSA requires frontend context")
         v = self.ir_value(loc=loc)
         ones = cls(-1).ir_value(loc=loc)

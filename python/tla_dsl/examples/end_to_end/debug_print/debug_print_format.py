@@ -9,12 +9,8 @@ import re
 import tempfile
 from typing import Any, Callable
 
-import catlass as tla
-
-
-DEFAULT_CACHE_DIR = (
-    Path(__file__).resolve().parent / "artifacts" / "format-runtime-cache"
-)
+import catlass.tla as tla
+import sys
 
 
 @tla.kernel
@@ -38,26 +34,6 @@ def debug_print_format_aiv_kernel() -> None:
         )
 
 
-@tla.kernel
-def debug_print_format_aic_kernel() -> None:
-    with tla.cube():
-        tla.print("hello")
-        tla.print("value={}", 7)
-        tla.print("i={} f={}", 7, 1.25)
-        tla.print("start")
-        tla.print("i={} f={}", 7, 1.25)
-        tla.print(
-            "all={} {} {} {} {} {} {} {}",
-            tla.Int8(-37),
-            tla.Int16(-30000),
-            tla.Int32(0),
-            tla.UInt8(255),
-            tla.UInt16(65535),
-            tla.UInt32(4294967295),
-            tla.Float16(1.25),
-            tla.Float32(-2.5),
-        )
-
 
 _PAYLOADS = (
     "hello",
@@ -73,18 +49,14 @@ _FRAMED_LINE = re.compile(
 
 
 def _kernel(args: argparse.Namespace) -> Any:
-    if args.arch_scope.startswith("aic."):
-        return debug_print_format_aic_kernel
+    del args
     return debug_print_format_aiv_kernel
 
 
 def _compile(args: argparse.Namespace) -> Any:
     return tla.compile(
         _kernel(args),
-        arch_scope=args.arch_scope,
-        cache=not args.no_cache,
-        cache_dir=str(Path(args.cache_dir).expanduser().resolve()),
-        force_recompile=args.force_recompile,
+        options="--npu-arch 3510"
     )
 
 
@@ -138,8 +110,8 @@ def _verify_case_output(output: str, *, payloads: tuple[str, ...], block: int) -
 
 def _run(args: argparse.Namespace) -> None:
     executor = _compile(args)
-    output = _capture_c_stdout(lambda: executor(block_dim=args.block_dim))
-    _verify_case_output(output, payloads=_PAYLOADS, block=args.block_dim)
+    output = _capture_c_stdout(lambda: executor(block_num=args.block_num))
+    _verify_case_output(output, payloads=_PAYLOADS, block=args.block_num)
     print(output, end="" if output.endswith("\n") else "\n")
     print("compile_ok=True")
     print(f"kernel.o path={executor.kernel_binary_path}")
@@ -152,12 +124,11 @@ def dump_tlair(args: argparse.Namespace) -> str:
 
 
 def run(args: argparse.Namespace) -> int:
-    tla.initialize(device=args.device)
-    try:
-        _run(args)
-        return 0
-    finally:
-        tla.finalize()
+    import torch
+    import torch_npu
+    torch.npu.set_device(args.device)
+    _run(args)
+    return 0
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -166,14 +137,8 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--run", action="store_true")
     parser.add_argument("--dump-tlair", action="store_true")
-    parser.add_argument(
-        "--arch-scope", choices=("aic.c310", "aiv.c310"), default="aiv.c310"
-    )
     parser.add_argument("--device", type=int, default=0)
-    parser.add_argument("--block-dim", type=int, default=1)
-    parser.add_argument("--cache-dir", default=str(DEFAULT_CACHE_DIR))
-    parser.add_argument("--force-recompile", action="store_true")
-    parser.add_argument("--no-cache", action="store_true")
+    parser.add_argument("--block-num", type=int, default=1)
     return parser
 
 

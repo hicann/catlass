@@ -8,7 +8,7 @@ compiler_bridge = pytest.importorskip(
     "catlass.compiler_bridge", exc_type=ImportError
 )
 execution = pytest.importorskip("catlass.execution", exc_type=ImportError)
-tla = pytest.importorskip("catlass", exc_type=ImportError)
+tla = pytest.importorskip("catlass.tla", exc_type=ImportError)
 runtime_mod = pytest.importorskip("catlass.runtime", exc_type=ImportError)
 
 _UNIFIED_FIELDS = (

@@ -2176,11 +2176,17 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
                 target = inspect.getattr_static(target, attribute)
             except (AttributeError, TypeError):
                 members = inspect.getattr_static(target, "_members", None)
-                if object.__getattribute__(members, "__class__") is not dict:
+                if object.__getattribute__(members, "__class__") is dict:
+                    if attribute not in members:
+                        return None
+                    target = members[attribute]
+                    continue
+                # Module exports via ``__getattr__`` (e.g. ``catlass.tla.arch``)
+                # are invisible to ``getattr_static``.
+                try:
+                    target = getattr(target, attribute)
+                except Exception:
                     return None
-                if attribute not in members:
-                    return None
-                target = members[attribute]
         return target
 
     def visit_Attribute(self, node: ast.Attribute) -> Any:

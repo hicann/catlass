@@ -10,7 +10,7 @@ from typing import Any, Mapping, Sequence
 from mlir import ir as mlir_ir  # type: ignore[assignment]
 
 from . import _tla_type_bridge
-from . import runtime as runtime_mod
+from . import runtime
 from . import tla_ast_decorators as ast_decorators
 from .base_dsl.ast_preprocessor import maybe_transform_for_lowering
 from .base_dsl import DSLLocation
@@ -118,7 +118,7 @@ def lower_jit_to_tlair_module_by_execution(
     fn = maybe_transform_for_lowering(
         fn,
         internal_for=ast_decorators._internal_frontend_for,
-        internal_region=runtime_mod._internal_frontend_region,
+        internal_region=runtime._internal_frontend_region,
         internal_if=ast_decorators._internal_frontend_if,
         internal_if_expr=ast_decorators._internal_frontend_if_expr,
         internal_bool_and=ast_decorators._internal_frontend_bool_and,
@@ -276,7 +276,7 @@ def _build_tla_func(
 
             loc = (
                 _capture_user_loc()
-                if runtime_mod._current_frontend_state() is not None
+                if runtime._current_frontend_state() is not None
                 else None
             )
             return _emit_tensor_ptr(_as_value(self), loc)
@@ -305,7 +305,7 @@ def _build_tla_func(
 
             loc = (
                 _capture_user_loc()
-                if runtime_mod._current_frontend_state() is not None
+                if runtime._current_frontend_state() is not None
                 else None
             )
             return _Tensor.__getitem__(self, crd, loc=loc)
@@ -317,7 +317,7 @@ def _build_tla_func(
 
             loc = (
                 _capture_user_loc()
-                if runtime_mod._current_frontend_state() is not None
+                if runtime._current_frontend_state() is not None
                 else None
             )
             return _Tensor.__setitem__(self, crd, data, loc=loc)
@@ -398,7 +398,7 @@ def _build_tla_func(
                 pending_dynamic_gm.append((desc, tensor_ty, metadata))
                 break
 
-        with runtime_mod._frontend_emission(
+        with runtime._frontend_emission(
             arg_bindings=arg_bindings,
             category_bindings=category_bindings,
             tensor_host_by_value=tensor_host_by_value,
@@ -415,7 +415,7 @@ def _build_tla_func(
                 _register_tla_tensor_metadata(desc, metadata)
             try:
                 fn(*call_args_for_fn)
-            except runtime_mod.TlaCoreAPIError:
+            except runtime.TlaCoreAPIError:
                 raise
             except TlaLoweringError:
                 raise

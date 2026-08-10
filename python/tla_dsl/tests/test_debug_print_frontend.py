@@ -5,7 +5,7 @@ import re
 
 import pytest
 
-import catlass as tla
+import catlass.tla as tla
 import catlass.runtime as runtime_mod
 from catlass.base_dsl import BaseDSL
 from examples.end_to_end.debug_print import debug_print as debug_print_example

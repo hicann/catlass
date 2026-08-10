@@ -55,20 +55,17 @@ class KernelLauncher:
     def launch(
         self,
         *,
-        block_dim: int | None = None,
+        block_num: int | None = None,
         type_args: Sequence[Any] | None = None,
         args: Sequence[Any] | None = None,
         **kwargs: Any,
     ) -> TlaExecutionResult:
         launch_kwargs = {**self._launch_kwargs, **kwargs}
-        if "block_dim" in launch_kwargs:
-            if block_dim is not None:
-                raise TlaUnsupportedAbiError("`block_dim` specified multiple times.")
-            block_dim = launch_kwargs.pop("block_dim")
-        if block_dim is None:
-            block_dim = 1
-        if not isinstance(block_dim, int):
-            raise TlaUnsupportedAbiError("`block_dim` must be an int.")
+        if block_num is not None:
+            launch_kwargs["block_num"] = block_num
+        block_num = launch_kwargs.pop("block_num", 1)
+        if not isinstance(block_num, int):
+            raise TlaUnsupportedAbiError("`block_num` must be an int.")
         launch_args = self._launch_args
         if args is not None:
             if launch_args:
@@ -76,7 +73,7 @@ class KernelLauncher:
             launch_args = tuple(args)
         if type_args is None and launch_args:
             type_args = _get_typed_call_args(launch_args)
-        launch_kwargs["block_dim"] = int(block_dim)
+        launch_kwargs["block_num"] = int(block_num)
         if (
             self._runtime is not None
             and "cache_dir" not in launch_kwargs

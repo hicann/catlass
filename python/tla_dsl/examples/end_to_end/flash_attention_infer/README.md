@@ -118,7 +118,7 @@ def flash_attention_infer_kernel(
 | 参数 | 类型 | 默认值 | 说明 |
 | :-- | :-- | :-- | :-- |
 | `--device` | int | `0` | NPU 设备 id |
-| `--block-num` | int | `-1` | 下发 block 数；`<=0` 表示使用设备全部 AICore（`torch.npu.get_device_properties`），实现负载均衡 |
+| `--block-num` | int | `-1` | 下发 block 数；`<=0` 表示满 AIC（`cube_core_num`），实现负载均衡 |
 | `--sentinel` | float | `-7.0` | O 的初始哨兵值，用于检测 kernel 是否真正写入 |
 
 > 容差阈值为编译期常量，`UNCHANGED_THRESHOLD` 判定 O 是否被写入，最大绝对误差 < `THRESHOLD` 判定精度是否通过。
@@ -131,6 +131,9 @@ python flash_attention_infer.py
 
 # 指定 device 和 block 数
 python flash_attention_infer.py --device 0 --block-num 28
+
+# 强制重新编译
+CATLASS_DSL_FORCE_RECOMPILE=1 python flash_attention_infer.py
 ```
 
 ### 4.3 预期输出

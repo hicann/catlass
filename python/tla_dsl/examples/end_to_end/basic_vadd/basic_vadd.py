@@ -1,16 +1,16 @@
 from __future__ import annotations
-
 import argparse
+import sys
 from pathlib import Path
 
-import catlass as tla
+import catlass.tla as tla
+from catlass.tla.runtime import from_dlpack
 
 # VECTOR_ELE is the static UB allocation upper bound (compile-time capacity).
 # GM extents come from mark_compact_shape_dynamic host tensors (no Int32 n_ele).
 VECTOR_ELE = 400
 VL_ELE = 64
 _KERNEL_DTYPE = tla.Float32
-
 
 # ---------------------------------------------------------------------------
 # Kernel
@@ -62,7 +62,6 @@ def basic_vadd(
 
         tla.copy(gm_c, ub_c)
         tla.pipe_barrier(tla.pipes.ALL)
-
 
 @tla.kernel
 def basic_vadd_mutex(
@@ -120,7 +119,6 @@ def basic_vadd_mutex(
         mutex_ub_c.unlock(pipe=tla.arch.MTE3)
         tla.pipe_barrier(tla.pipes.ALL)
 
-
 @tla.kernel
 def basic_vadd_mutex_with(
     gm_a: tla.Tensor,
@@ -169,7 +167,6 @@ def basic_vadd_mutex_with(
             tla.copy(gm_c, ub_c)
         tla.pipe_barrier(tla.pipes.ALL)
 
-
 @tla.kernel
 def basic_vadd_atomic_add(
     gm_a: tla.Tensor,
@@ -204,24 +201,33 @@ def basic_vadd_atomic_add(
             tla.pipe_barrier(tla.pipes.MTE3)
         tla.pipe_barrier(tla.pipes.ALL)
 
-
 # ---------------------------------------------------------------------------
 # Host
 # ---------------------------------------------------------------------------
 
-EXAMPLE_DIR = Path(__file__).resolve().parent
-DEFAULT_CACHE_DIR = EXAMPLE_DIR / "artifacts" / "runtime-cache"
-
-
 def golden(a, b):
     return a + b
 
+def get_block_num(block_num: int, device: int = 0, *, kind: str = "vector") -> int:
+    """Get launch ``block_num``.
+
+    Non-``-1`` uses the host argument. ``-1`` means full-device launch:
+    pure vector → ``vector_core_num`` (AIV); cube/mix → ``cube_core_num`` (AIC).
+    """
+    if int(block_num) != -1:
+        return max(1, int(block_num))
+    import torch
+
+    props = torch.npu.get_device_properties(int(device))
+    if kind == "vector":
+        return max(1, int(props.vector_core_num))
+    if kind in {"cube", "mix"}:
+        return max(1, int(props.cube_core_num))
+    raise ValueError(f"Unsupported kernel kind for block_num default: {kind!r}")
 
 def run(args: argparse.Namespace) -> int:
-    import sys
     import torch
-    import torch_npu  # noqa: F401
-    from catlass.runtime import from_dlpack
+    import torch_npu
 
     mod = sys.modules[__name__]
     dtype_name = args.dtype
@@ -265,74 +271,67 @@ def run(args: argparse.Namespace) -> int:
     else:
         kernel = basic_vadd
 
-    cache_dir = str(Path(args.cache_dir).expanduser().resolve())
     atol = float(args.atol)
 
-    tla.initialize(device=args.device)
-    try:
-        torch.npu.set_device(args.device)
-        block_dim = max(1, args.block_dim if args.block_dim != -1 else tla.get_aicore_num(args.device))
-        print(f"--- dtype={dtype_name} n={n_ele} ---")
+    torch.npu.set_device(args.device)
+    # Pure AIV kernel: default (-1) uses vector_core_num, not cube_core_num.
+    block_num = get_block_num(args.block_num, args.device, kind="vector")
+    print(f"--- dtype={dtype_name} n={n_ele} ---")
 
-        if dtype_name in {"i8", "i16", "i32"}:
-            # Integer tensors: use randint (torch.rand is float-only).
-            # Keep i8 ranges small enough that a+b stays in int8.
-            if dtype_name == "i8":
-                a = torch.randint(-25, 26, (n_ele,), dtype=torch_dtype, device="npu")
-                b = torch.randint(-15, 16, (n_ele,), dtype=torch_dtype, device="npu")
-            else:
-                a = torch.randint(-1000, 1001, (n_ele,), dtype=torch_dtype, device="npu")
-                b = torch.randint(-1000, 1001, (n_ele,), dtype=torch_dtype, device="npu")
+    if dtype_name in {"i8", "i16", "i32"}:
+        # Integer tensors: use randint (torch.rand is float-only).
+        # Keep i8 ranges small enough that a+b stays in int8.
+        if dtype_name == "i8":
+            a = torch.randint(-25, 26, (n_ele,), dtype=torch_dtype, device="npu")
+            b = torch.randint(-15, 16, (n_ele,), dtype=torch_dtype, device="npu")
         else:
-            torch.npu.manual_seed(0)
-            a = torch.rand(n_ele, dtype=torch_dtype, device="npu") * 10.0 - 5.0
-            b = torch.rand(n_ele, dtype=torch_dtype, device="npu") * 10.0 - 5.0
-        c = torch.full((n_ele,), sentinel, dtype=torch_dtype, device="npu")
-        expected = golden(a, b)
+            a = torch.randint(-1000, 1001, (n_ele,), dtype=torch_dtype, device="npu")
+            b = torch.randint(-1000, 1001, (n_ele,), dtype=torch_dtype, device="npu")
+    else:
+        torch.npu.manual_seed(0)
+        a = torch.rand(n_ele, dtype=torch_dtype, device="npu") * 10.0 - 5.0
+        b = torch.rand(n_ele, dtype=torch_dtype, device="npu") * 10.0 - 5.0
+    c = torch.full((n_ele,), sentinel, dtype=torch_dtype, device="npu")
+    expected = golden(a, b)
 
-        tla_a, tla_b, tla_c = create_tla_tensor(a), create_tla_tensor(b), create_tla_tensor(c)
-        artifact = tla.compile(
-            kernel,
-            tla_a,
-            tla_b,
-            tla_c,
-            arch_scope="aiv.c310",
-            cache=not args.no_cache,
-            cache_dir=cache_dir,
-            force_recompile=args.force_recompile,
-        )
-        artifact(tla_a, tla_b, tla_c, block_dim=block_dim)
-        torch.npu.synchronize()
+    tla_a, tla_b, tla_c = create_tla_tensor(a), create_tla_tensor(b), create_tla_tensor(c)
+    artifact = tla.compile(
+        kernel,
+        tla_a,
+        tla_b,
+        tla_c,
+        options="--npu-arch 3510"
+    )
+    artifact(tla_a, tla_b, tla_c, block_num=block_num)
+    torch.npu.synchronize()
 
-        if dtype_name in {"f32", "f16"}:
-            passed = bool(torch.isclose(c, expected, rtol=0.0, atol=atol).all())
-        else:
-            passed = bool(c.eq(expected).all())
+    if dtype_name in {"f32", "f16"}:
+        passed = bool(torch.isclose(c, expected, rtol=0.0, atol=atol).all())
+    else:
+        passed = bool(c.eq(expected).all())
 
-        print(f"passed={passed} cache_key={artifact.cache_key}")
-        print(f"kernel.o={artifact.kernel_binary_path}")
-        return 0 if passed else 1
-    finally:
-        tla.finalize()
-
+    print(f"passed={passed} cache_key={artifact.cache_key}")
+    print(f"kernel.o={artifact.kernel_binary_path}")
+    return 0 if passed else 1
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Compile and run a vector add.")
     parser.add_argument("--device", type=int, default=0)
     parser.add_argument("--n", type=int, default=VECTOR_ELE)
-    parser.add_argument("--block-dim", type=int, default=-1)
+    parser.add_argument(
+        "--block-num",
+        type=int,
+        default=-1,
+        help="Launch block count; -1 = full vector_core_num (AIV) for this pure-v kernel",
+    )
     parser.add_argument("--dtype", choices=("f32", "f16", "i8", "i16", "i32"), default="f32")
     parser.add_argument("--sentinel", type=float, default=None)
     parser.add_argument("--atol", type=float, default=1e-4)
-    parser.add_argument("--cache-dir", default=str(DEFAULT_CACHE_DIR))
-    parser.add_argument("--force-recompile", action="store_true")
-    parser.add_argument("--no-cache", action="store_true")
     sync = parser.add_mutually_exclusive_group()
     sync.add_argument("--use-mutex", action="store_true")
     sync.add_argument("--use-mutex-with", action="store_true")
     sync.add_argument("--use-atomic-add", action="store_true")
     return run(parser.parse_args())
-
 
 if __name__ == "__main__":
     raise SystemExit(main())

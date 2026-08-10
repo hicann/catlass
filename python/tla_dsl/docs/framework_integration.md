@@ -11,8 +11,8 @@
 ```python
 import torch
 import torch_npu
-import catlass as tla
-from catlass.runtime import from_dlpack
+import catlass.tla as tla
+from catlass.tla.runtime import from_dlpack
 
 @tla.kernel
 def foo(src: tla.Tensor, dst: tla.Tensor) -> None:
@@ -20,7 +20,6 @@ def foo(src: tla.Tensor, dst: tla.Tensor) -> None:
     # ... 在 vector/cube 区域内完成计算 ...
 
 torch.npu.set_device(0)
-tla.initialize(device=0)
 
 x = torch.rand(1024, dtype=torch.float32, device="npu") * 10.0 - 5.0
 y = torch.zeros_like(x)
@@ -31,8 +30,8 @@ ty = from_dlpack(y.contiguous(), layout_tag=tla.arch.RowMajor)
 tx = tx.mark_compact_shape_dynamic(0)
 ty = ty.mark_compact_shape_dynamic(0)
 
-artifact = tla.compile(foo, tx, ty, arch_scope="aiv.c310")
-artifact(tx, ty, block_dim=1)
+artifact = tla.compile(foo, tx, ty, options="--npu-arch 3510")
+artifact(tx, ty, block_num=1)
 torch.npu.synchronize()
 ```
 
@@ -81,8 +80,8 @@ def from_dlpack(
 ```python
 import torch
 import torch_npu
-import catlass as tla
-from catlass.runtime import from_dlpack
+import catlass.tla as tla
+from catlass.tla.runtime import from_dlpack
 
 torch.npu.set_device(0)
 x = torch.rand(30, 20, dtype=torch.float32, device="npu") * 10.0 - 5.0
@@ -112,42 +111,64 @@ print(y)               # !tla.tensor 类型串（编译元数据）
 
 ## 2. 绕过 DLPack 协议
 
-仍可使用 **torch / torch_npu** 上的设备张量；绕过的只是 DLPack capsule 解析与自动 layout 推导，改为用手写元数据 + `data_ptr()` 绑定。
+仍可使用 **torch / torch_npu** 上的设备张量；绕过的只是 DLPack capsule 解析与自动 layout 推导，改为用手写元数据绑定。公开入口是 `make_fake_tensor`。
 
 适用场景：
 
 1. 避免 DLPack 解析开销；  
-2. 需要完全自管 shape / stride / `layout_tag` / `origin_shape`
+2. 需要完全自管 shape / stride / `layout_tag` / `origin_shape`；  
+3. 没有真实设备缓冲，只需给 `tla.compile` 提供类型样本。
 
-做法：从 NPU 上的 `torch.Tensor` 取出 `data_ptr()`，在 `_eager_capture` 中构造 `tla.Tensor`（`data_ptr` 为 `None`/`0` 表示未绑定的 compile 期占位，`None` 会归一成 `0`；非 0 则自动视为已绑定设备缓冲）。源 `torch` 张量须在后续 compile / launch 期间保持存活。
+`data_ptr` 为 `None` / `0`（默认）表示未绑定的 compile 期占位；传入非 0 设备地址则视为已绑定缓冲。源 `torch` 张量须在后续 compile / launch 期间保持存活。
+
+手写元数据并绑定已有 NPU 缓冲：
 
 ```python
 import torch
 import torch_npu
-import catlass as tla
-from catlass import runtime as runtime_mod
+import catlass.tla as tla
+from catlass.tla.runtime import make_fake_tensor
 
 torch.npu.set_device(0)
 # 数据仍在 torch 侧；须在 NPU 上
 a = torch.rand(64, 128, dtype=torch.float32, device="npu") * 10.0 - 5.0
 rows, cols = a.shape
 
-with runtime_mod._eager_capture():
-    ta = tla.Tensor(
-        tla.make_shape(rows, cols),
-        tla.Float32,
-        origin_shape=tla.make_shape(rows, cols),
-        coord=tla.make_coord(0, 0),
-        stride=tla.make_stride(cols, 1),  # 行主紧凑，须与 a 的物理布局一致
-        layout_tag=tla.arch.RowMajor,
-        data_ptr=int(a.contiguous().data_ptr()),
-    )
+ta = make_fake_tensor(
+    tla.make_shape(rows, cols),
+    tla.Float32,
+    origin_shape=tla.make_shape(rows, cols),
+    coord=tla.make_coord(0, 0),
+    stride=tla.make_stride(cols, 1),  # 行主紧凑，须与 a 的物理布局一致
+    layout_tag=tla.arch.RowMajor,
+    data_ptr=int(a.contiguous().data_ptr()),
+)
 
 # 需要动态 GM 时可继续：
 # ta = ta.mark_layout_dynamic()
 
 artifact = tla.compile(kernel, ta, ...)
-artifact(ta, ..., block_dim=...)
+artifact(ta, ..., block_num=...)
 ```
 
 与 `from_dlpack` 路径的差别：不调用 `from_dlpack`，dtype / shape / stride / `layout_tag` 全部由 Host 手写；指针来自 `torch.Tensor.data_ptr()`。须自行保证这些元数据与物理缓冲一致；若再调用 `mark_*_dynamic`，该 tensor 的各维 `coord` 也必须为 0。
+
+仅需类型样本、不绑真实缓冲时，省略 `data_ptr`（或传 `0` / `None`）即可：
+
+```python
+import catlass.tla as tla
+from catlass.tla.runtime import make_fake_tensor
+
+rows, cols = 64, 128
+fake = make_fake_tensor(
+    tla.make_shape(rows, cols),
+    tla.Float32,
+    origin_shape=tla.make_shape(rows, cols),
+    coord=tla.make_coord(0, 0),
+    stride=tla.make_stride(cols, 1),
+    layout_tag=tla.arch.RowMajor,
+)
+artifact = tla.compile(kernel, fake, options="--npu-arch 3510")
+```
+
+有 NPU 上的框架张量时，优先走第 1 节 `from_dlpack`；需要自管元数据时走本节 `make_fake_tensor`。

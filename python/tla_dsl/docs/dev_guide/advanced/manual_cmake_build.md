@@ -7,14 +7,14 @@
 当前 shell 必须满足以下条件：
 
 - `ASCEND_HOME_PATH` 指向 CANN Toolkit 根目录。
-- `TLA_DSL_PREBUILT_ASCENDNPU_IR` 指向已构建的 AscendNPU-IR 源码根目录。
+- `CATLASS_DSL_PREBUILT_ASCENDNPU_IR` 指向已构建的 AscendNPU-IR 源码根目录。
 - 当前 Python 可以导入 `pybind11`。
 - `PYTHONPATH` 中包含 AscendNPU-IR 的 `mlir_core`。
 
 ```bash
 export ASCEND_HOME_PATH="/path/to/ascend-toolkit"
-export TLA_DSL_PREBUILT_ASCENDNPU_IR="/path/to/AscendNPU-IR"
-export PYTHONPATH="${TLA_DSL_PREBUILT_ASCENDNPU_IR}/build/install/python_packages/mlir_core${PYTHONPATH:+:${PYTHONPATH}}"
+export CATLASS_DSL_PREBUILT_ASCENDNPU_IR="/path/to/AscendNPU-IR"
+export PYTHONPATH="${CATLASS_DSL_PREBUILT_ASCENDNPU_IR}/build/install/python_packages/mlir_core${PYTHONPATH:+:${PYTHONPATH}}"
 python -c "import pybind11; import mlir"
 ```
 
@@ -47,7 +47,6 @@ build/cmake/manual/tests/lit/
 | --- | --- | --- |
 | `ENABLE_CPU_TRACE_INTRINSIC` | `OFF` | 启用 CPU trace intrinsic |
 | `BISHENGIR_BUILD_TEMPLATE` | `ON` | 构建 HIVM template bitcode |
-| `TLA_DSL_BUILD_RUNTIME_WRAPPER` | 自动检测 | 构建 Ascend runtime wrapper |
 | `CATLASS_INCLUDE_DIR` | 仓库的 `include/` | CATLASS 公共头文件目录 |
 
 示例：
@@ -56,17 +55,16 @@ build/cmake/manual/tests/lit/
 cmake -S csrc/mlir -B build/cmake/manual \
   -G Ninja \
   -DPython3_EXECUTABLE="$(command -v python)" \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DTLA_DSL_BUILD_RUNTIME_WRAPPER=OFF
+  -DCMAKE_BUILD_TYPE=Release
 ```
 
-`MLIR_DIR`、`LLVM_DIR` 和 `MLIR_TBLGEN_INCLUDE_DIR` 会根据 `TLA_DSL_PREBUILT_ASCENDNPU_IR` 自动设置。
+`MLIR_DIR`、`LLVM_DIR` 和 `MLIR_TBLGEN_INCLUDE_DIR` 会根据 `CATLASS_DSL_PREBUILT_ASCENDNPU_IR` 自动设置。
 
 ## 4. 常见错误
 
 ### 找不到 AscendNPU-IR 头文件或库
 
-确认 `TLA_DSL_PREBUILT_ASCENDNPU_IR` 指向源码根目录，而不是 `build/install`，并检查[AscendNPU-IR 文档](ascend_npu_ir.md)列出的构建产物。
+确认 `CATLASS_DSL_PREBUILT_ASCENDNPU_IR` 指向源码根目录，而不是 `build/install`，并检查[AscendNPU-IR 文档](ascend_npu_ir.md)列出的构建产物。
 
 ### 找不到 `pybind11`
 
@@ -82,4 +80,4 @@ python -c "import pybind11; print(pybind11.get_include())"
 python -c "import mlir._mlir_libs as libs; print(libs.__file__)"
 ```
 
-若导入失败，检查 `PYTHONPATH` 是否包含 `${TLA_DSL_PREBUILT_ASCENDNPU_IR}/build/install/python_packages/mlir_core`。
+若导入失败，检查 `PYTHONPATH` 是否包含 `${CATLASS_DSL_PREBUILT_ASCENDNPU_IR}/build/install/python_packages/mlir_core`。

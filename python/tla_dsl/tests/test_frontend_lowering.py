@@ -3,7 +3,7 @@ import pytest
 from mlir import ir as mlir_ir  # type: ignore[assignment]
 import inspect
 
-import catlass as tla
+import catlass.tla as tla
 import catlass.runtime as runtime_mod
 from catlass.execution_lowering import TlaLoweringError
 

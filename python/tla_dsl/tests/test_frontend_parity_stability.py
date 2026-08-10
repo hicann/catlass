@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import catlass as tla
+import catlass.tla as tla
 import catlass.execution as execution
-import catlass.runtime as runtime_mod
+from catlass import runtime
 
 
 @tla.kernel
@@ -34,14 +34,14 @@ def test_full_demo_style_compile_routes_kernel(monkeypatch) -> None:
     calls: list[tuple[str, str]] = []
 
     def fake_compile(
-        fn, *, kind, options, runtime, type_args=None, decorator_location=None
+        fn, *, kind, options, type_args=None, decorator_location=None, **kwargs
     ):
-        del options, runtime, type_args, decorator_location
+        del options, type_args, decorator_location, kwargs
         calls.append((fn.__name__, kind))
         return artifact
 
-    monkeypatch.setattr(runtime_mod, "compile_kernel", fake_compile)
-    result = tla.compile(fake_kernel, cache=False)
+    monkeypatch.setattr(runtime, "compile_kernel", fake_compile)
+    result = tla.compile(fake_kernel)
 
     assert result == artifact
     assert calls == [("fake_kernel", "kernel")]

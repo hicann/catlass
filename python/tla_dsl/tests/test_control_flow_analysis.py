@@ -10,7 +10,7 @@ from types import ModuleType
 
 import pytest
 
-import catlass as catlass_module
+import catlass.tla as catlass_module
 import catlass.core_api as core_api
 import catlass.tla_ast_decorators as ast_decorators
 from catlass.base_dsl.ast_preprocessor import (

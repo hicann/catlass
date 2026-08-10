@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-import catlass as tla
+import catlass.tla as tla
 from catlass.core_api import _category
 import catlass.runtime as runtime_mod
 

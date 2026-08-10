@@ -1,14 +1,9 @@
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
 from typing import Any
 
-import catlass as tla
-from catlass import runtime as runtime_mod
-
-DEMO_DIR = Path(__file__).resolve().parent
-DEFAULT_CACHE_DIR = DEMO_DIR / "artifacts" / "runtime-cache"
+import catlass.tla as tla
 
 VECTOR_ELE = 64
 ELEMENT_BYTES = 4
@@ -66,85 +61,50 @@ def gather_op(mem_src: tla.Tensor, mem_idx: tla.Tensor, mem_dst: tla.Tensor) -> 
         tla.pipe_barrier(tla.pipes.ALL)
 
 
-def _tensor(shape: tuple[int, ...], dtype: type[tla.Numeric], data_ptr: int | None = None) -> Any:
-    with runtime_mod._eager_capture():
-        tla_shape = tla.make_shape(*shape)
-        return tla.Tensor(
-            tla_shape,
-            dtype,
-            origin_shape=tla_shape,
-            coord=tla.make_coord(*(0 for _ in shape)),
-            stride=tla.make_stride(1),
-            data_ptr=data_ptr,
-        )
-
-
-def _runtime_tensor(dev_buf: Any, shape: tuple[int, ...], dtype: type[tla.Numeric]) -> Any:
-    tensor = _tensor(shape, dtype, int(dev_buf.contiguous().data_ptr()))
-    tensor._external_binding = True
-    return tensor
-
-
-def _compile(args: argparse.Namespace, *type_args: Any) -> Any:
-    return tla.compile(
-        gather_op,
-        *type_args,
-        arch_scope="aiv.c310",
-        cache=not args.no_cache,
-        cache_dir=str(Path(args.cache_dir).expanduser().resolve()),
-        force_recompile=args.force_recompile,
+def _runtime_tensor(dev_buf: Any) -> Any:
+    return tla.from_dlpack(
+        dev_buf.contiguous(),
+        layout_tag=tla.arch.RowMajor,
     )
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--run", action="store_true")
-    parser.add_argument("--build-only", action="store_true")
     parser.add_argument("--dtype", choices=("f32",), default="f32")
     parser.add_argument("--device", type=int, default=0)
-    parser.add_argument("--cache-dir", default=str(DEFAULT_CACHE_DIR))
-    parser.add_argument("--force-recompile", action="store_true")
-    parser.add_argument("--no-cache", action="store_true")
     args = parser.parse_args()
+    if not args.run:
+        raise SystemExit("pass --run")
 
-    if args.build_only:
-        artifact = _compile(
-            args,
-            _tensor((VECTOR_ELE,), tla.Float32),
-            _tensor((VECTOR_ELE,), tla.Int32),
-            _tensor((VECTOR_ELE,), tla.Float32),
-        )
-        print("compile_ok=True")
-        print(f"kernel.o path={artifact.kernel_binary_path}")
-        return 0
+    import torch
+    import torch_npu
+    torch.npu.set_device(args.device)
+    src = torch.linspace(-17.0, 46.0, VECTOR_ELE, dtype=torch.float32, device="npu")
+    idx = torch.arange(VECTOR_ELE - 1, -1, -1, dtype=torch.int32, device="npu")
+    dst = torch.full((VECTOR_ELE,), -999.0, dtype=torch.float32, device="npu")
 
-    tla.initialize(device=args.device)
-    try:
-        import torch
-        import torch_npu  # noqa: F401
+    tla_src = _runtime_tensor(src)
+    tla_idx = _runtime_tensor(idx)
+    tla_dst = _runtime_tensor(dst)
 
-        torch.npu.set_device(args.device)
-        src = torch.linspace(-17.0, 46.0, VECTOR_ELE, dtype=torch.float32, device="npu")
-        idx = torch.arange(VECTOR_ELE - 1, -1, -1, dtype=torch.int32, device="npu")
-        dst = torch.full((VECTOR_ELE,), -999.0, dtype=torch.float32, device="npu")
+    artifact = tla.compile(
+        gather_op,
+        tla_src,
+        tla_idx,
+        tla_dst,
+        options="--npu-arch 3510",
+    )
+    artifact(tla_src, tla_idx, tla_dst, block_num=1)
+    torch.npu.synchronize()
 
-        tla_src = _runtime_tensor(src, (VECTOR_ELE,), tla.Float32)
-        tla_idx = _runtime_tensor(idx, (VECTOR_ELE,), tla.Int32)
-        tla_dst = _runtime_tensor(dst, (VECTOR_ELE,), tla.Float32)
-
-        artifact = _compile(args, tla_src, tla_idx, tla_dst)
-        artifact(tla_src, tla_idx, tla_dst, block_dim=1)
-        torch.npu.synchronize()
-
-        expected = src[idx.to(torch.long)]
-        ok = bool(torch.isclose(dst, expected, rtol=0.0, atol=1e-4).all())
-        print(f"compile_ok=True host=torch_npu op=gather dtype=f32 layout=row")
-        print(f"kernel.o path={artifact.kernel_binary_path}")
-        print("launch_ok=True")
-        print(f"output equals expected gather? {ok}")
-        return 0 if ok else 1
-    finally:
-        tla.finalize()
+    expected = src[idx.to(torch.long)]
+    ok = bool(torch.isclose(dst, expected, rtol=0.0, atol=1e-4).all())
+    print(f"compile_ok=True host=torch_npu op=gather dtype=f32 layout=row")
+    print(f"kernel.o path={artifact.kernel_binary_path}")
+    print("launch_ok=True")
+    print(f"output equals expected gather? {ok}")
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":

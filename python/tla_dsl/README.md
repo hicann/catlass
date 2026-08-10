@@ -27,7 +27,7 @@ bash build_docker_image.sh cann:9.1.0-950-ubuntu22.04-py3.12
 
 ```bash
 cd "${CATLASS_ROOT}/python/tla_dsl"
-export TLA_DSL_PREBUILT_ASCENDNPU_IR="${CATLASS_ROOT}/python/tla_dsl/3rdparty/AscendNPU-IR"
+export CATLASS_DSL_PREBUILT_ASCENDNPU_IR="${CATLASS_ROOT}/python/tla_dsl/3rdparty/AscendNPU-IR"
 ./build.sh
 python -m pytest -q tests
 ```

@@ -21,12 +21,15 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from .base_dsl.arch import (
+    DEFAULT_NPU_ARCH,
     TlaKernelTarget,
     arch_scope_for_target as _arch_scope_for_target_impl,
     get_kernel_target as _get_kernel_target,
     parse_arch_scope as _parse_arch_scope_impl,
+    resolve_npu_arch as _resolve_npu_arch,
 )
 from .base_dsl import BaseDSL, DSLLocation
+from .base_dsl.compiler import _parse_compile_options_from_str
 from .base_dsl.typing import Numeric
 from .compiler_bridge import (
     BridgeLoweringError,
@@ -43,8 +46,8 @@ from .compiler_bridge import (
 )
 from .types import dtype_size_bytes
 
-DEFAULT_ARCH_SCOPE = "aiv.c310"
-SUPPORTED_ARCH_SCOPES = ("aiv.c310", "aic.c310")
+# CATLASS_DSL_KEEP tokens: ir / ir-debug / kernel.
+_KEEP_ALL_TOKENS: frozenset[str] = frozenset({"ir", "ir-debug", "kernel"})
 _POINTER_ABI_SIZE = 8
 _DEBUG_PRINT_WORKSPACE_SENTINEL_TEXT = b"TLA_PRNT"
 _DEBUG_PRINT_WORKSPACE_SENTINEL = int.from_bytes(
@@ -195,11 +198,14 @@ class TlaRuntimeOptions:
     cache_dir: Path | None = None
     force_recompile: bool = False
     kernel_mode: str = "aiv"
-    arch_scope: str = DEFAULT_ARCH_SCOPE
-    mlir_print_ir_before: tuple[str, ...] = ()
-    mlir_print_ir_after: tuple[str, ...] = ()
-    mlir_print_ir_before_all: bool = False
-    mlir_print_ir_after_all: bool = False
+    # Placeholder until ``_runtime_options_from_lowered_mlir``; derived from
+    # public ``--npu-arch`` default (not a separate Host knob).
+    arch_scope: str = _arch_scope_for_target_impl(
+        target_arch=_resolve_npu_arch(DEFAULT_NPU_ARCH),
+        core_type="aiv",
+    )
+    #: When True, dump IR across the lowering pipeline (env ``CATLASS_DSL_PRINT_IR``).
+    print_ir: bool = False
 
 
 @dataclass(frozen=True)
@@ -261,6 +267,7 @@ def compile_kernel(
     if runtime.cache_enabled and not runtime.force_recompile:
         cached_memory = _get_memory_cached_artifact(cache_key)
         if cached_memory is not None:
+            _copy_kept_artifacts(cached_memory)
             return cached_memory
 
     if runtime.cache_enabled and not runtime.force_recompile and manifest.exists():
@@ -294,6 +301,7 @@ def compile_kernel(
                 kernel_abi=cached_kernel_abi,
             )
             _set_memory_cached_artifact(artifact)
+            _copy_kept_artifacts(artifact)
             return artifact
 
     artifact_dir.mkdir(parents=True, exist_ok=True)
@@ -310,14 +318,14 @@ def compile_kernel(
         )
     except TlaKernelCompileError as exc:
         if exc.pass_ir_dump:
-            pass_dump_path.write_text(exc.pass_ir_dump)
+            _write_pass_ir_dump(pass_dump_path, exc.pass_ir_dump)
             raise TlaKernelCompileError(
                 f"{exc}\npass IR dump: {pass_dump_path}",
                 pass_ir_dump=exc.pass_ir_dump,
             ) from exc
         raise
     if lowering_result.pass_ir_dump:
-        pass_dump_path.write_text(lowering_result.pass_ir_dump)
+        _write_pass_ir_dump(pass_dump_path, lowering_result.pass_ir_dump)
     runtime_for_hivmc = _runtime_options_from_lowered_mlir(
         runtime, mlir_path.read_text()
     )
@@ -390,6 +398,7 @@ def compile_kernel(
     )
     if runtime.cache_enabled and not runtime.force_recompile:
         _set_memory_cached_artifact(artifact)
+    _copy_kept_artifacts(artifact)
     return artifact
 
 
@@ -1359,34 +1368,41 @@ def _format_print_tensor_record(
 
 
 def runtime_options_from_kwargs(kwargs: Mapping[str, Any]) -> TlaRuntimeOptions:
-    arch_scope = str(kwargs.get("arch_scope", DEFAULT_ARCH_SCOPE)).lower()
+    """Build runtime options from Host compile/launch kwargs.
+
+    Public arch selection::
+
+        tla.compile(fn, *args, options="--npu-arch 3510")
+
+    AIC/AIV is not a Host compile knob; it is inferred from lowered MLIR.
+    Cache / cache dir / force-recompile / IR dump use env vars
+    (``CATLASS_DSL_CACHE``, ``CATLASS_DSL_CACHE_DIR``, ``CATLASS_DSL_FORCE_RECOMPILE``,
+    ``CATLASS_DSL_PRINT_IR``, ``CATLASS_DSL_KEEP``, ``CATLASS_DSL_DUMP_DIR``).
+    """
+    parsed_options = _parse_compile_options_from_str(kwargs.get("options"))
+    npu_arch = str(parsed_options.get("npu_arch", DEFAULT_NPU_ARCH))
+    target_arch = _resolve_npu_arch(npu_arch)
+    # Placeholder until ``_runtime_options_from_lowered_mlir`` reads core type.
+    arch_scope = _arch_scope_for_target(target_arch=target_arch, core_type="aiv")
     _, core_type = _parse_arch_scope(arch_scope)
+    cache_dir_env = os.getenv("CATLASS_DSL_CACHE_DIR")
     return TlaRuntimeOptions(
-        cache_enabled=bool(
-            kwargs.get("cache", _env_truthy("TLA_DSL_CACHE", default="1"))
-        ),
+        cache_enabled=_env_truthy("CATLASS_DSL_CACHE", default="1"),
         cache_dir=(
-            Path(str(kwargs["cache_dir"])).expanduser().resolve()
-            if kwargs.get("cache_dir")
-            else None
+            Path(cache_dir_env).expanduser().resolve() if cache_dir_env else None
         ),
-        force_recompile=bool(
-            kwargs.get(
-                "force_recompile", _env_truthy("TLA_DSL_FORCE_RECOMPILE", default="0")
-            )
-        ),
+        force_recompile=_env_truthy("CATLASS_DSL_FORCE_RECOMPILE", default="0"),
         kernel_mode=core_type,
         arch_scope=arch_scope,
-        mlir_print_ir_before=_string_tuple(kwargs.get("mlir_print_ir_before", ())),
-        mlir_print_ir_after=_string_tuple(kwargs.get("mlir_print_ir_after", ())),
-        mlir_print_ir_before_all=bool(kwargs.get("mlir_print_ir_before_all", False)),
-        mlir_print_ir_after_all=bool(kwargs.get("mlir_print_ir_after_all", False)),
+        print_ir=_env_truthy("CATLASS_DSL_PRINT_IR", default="0"),
     )
 
 
 def runtime_options_for_launch(runtime: TlaRuntimeOptions) -> TlaRuntimeOptions:
     if runtime.cache_dir is not None:
         return runtime
+    if runtime.cache_enabled:
+        return replace(runtime, cache_dir=_default_cache_dir())
     temp_dir = Path(tempfile.mkdtemp(prefix="tla-dsl-kernel-")).resolve()
     return replace(runtime, cache_enabled=False, cache_dir=temp_dir)
 
@@ -1459,10 +1475,7 @@ def _cache_key(
         "hivmc_version": _tool_version(hivmc),
         "hivmc_fingerprint": _tool_fingerprint(hivmc),
         "mlir": tlair_mlir,
-        "mlir_print_ir_before": list(runtime.mlir_print_ir_before),
-        "mlir_print_ir_after": list(runtime.mlir_print_ir_after),
-        "mlir_print_ir_before_all": runtime.mlir_print_ir_before_all,
-        "mlir_print_ir_after_all": runtime.mlir_print_ir_after_all,
+        "print_ir": runtime.print_ir,
     }
     return hashlib.sha256(
         json.dumps(key_payload, sort_keys=True).encode("utf-8")
@@ -1509,7 +1522,7 @@ def _tool_fingerprint(binary: Path | None) -> str:
 
 
 def _default_cache_dir() -> Path:
-    cache = os.getenv("TLA_DSL_CACHE_DIR")
+    cache = os.getenv("CATLASS_DSL_CACHE_DIR")
     if cache:
         return Path(cache).expanduser().resolve()
     xdg = os.getenv("XDG_CACHE_HOME")
@@ -1518,11 +1531,59 @@ def _default_cache_dir() -> Path:
     return (Path.home() / ".cache" / "catlass").resolve()
 
 
+def _write_pass_ir_dump(pass_dump_path: Path, text: str) -> None:
+    """Write pass IR dump to the cache path; mirror to DUMP_DIR when set."""
+    pass_dump_path.write_text(text)
+    dump_dir_env = os.getenv("CATLASS_DSL_DUMP_DIR")
+    if not dump_dir_env:
+        return
+    dump_dir = Path(dump_dir_env).expanduser().resolve()
+    dump_dir.mkdir(parents=True, exist_ok=True)
+    (dump_dir / pass_dump_path.name).write_text(text)
+
+
+def _parse_keep_tokens(raw: str) -> frozenset[str]:
+    """Parse ``CATLASS_DSL_KEEP`` into canonical artifact tokens.
+
+    Tokens (comma-separated, case-insensitive):
+      ir        — lowered MLIR after the Ascend pipeline (``*.mlir``)
+      ir-debug  — TLA IR before HIVM lowering (``*.tlair.mlir``); also
+                  ``*.pass-ir-dump.mlir`` when pass dump text is available
+      kernel    — device object ``*.o``
+      all       — expand to every token above
+
+    Unknown tokens are ignored.
+    """
+    tokens = frozenset(t.strip().lower() for t in raw.split(",") if t.strip())
+    if "all" in tokens:
+        return _KEEP_ALL_TOKENS
+    return tokens & _KEEP_ALL_TOKENS
+
+
+def _copy_kept_artifacts(artifact: TlaKernelArtifact) -> None:
+    """Copy selected compile artifacts to DUMP_DIR (or CWD) when KEEP is set."""
+    tokens = _parse_keep_tokens(os.getenv("CATLASS_DSL_KEEP", ""))
+    if not tokens:
+        return
+    dump_dir_env = os.getenv("CATLASS_DSL_DUMP_DIR")
+    dump_dir = (
+        Path(dump_dir_env).expanduser().resolve()
+        if dump_dir_env
+        else Path.cwd().resolve()
+    )
+    dump_dir.mkdir(parents=True, exist_ok=True)
+    stem = artifact.entrypoint or artifact.cache_key
+    if "ir" in tokens:
+        (dump_dir / f"{stem}.mlir").write_text(artifact.lowered_llvm)
+    if "ir-debug" in tokens:
+        (dump_dir / f"{stem}.tlair.mlir").write_text(artifact.tlair_mlir)
+        if artifact.pass_ir_dump:
+            (dump_dir / f"{stem}.pass-ir-dump.mlir").write_text(artifact.pass_ir_dump)
+    if "kernel" in tokens and artifact.kernel_binary_path.exists():
+        shutil.copy2(artifact.kernel_binary_path, dump_dir / f"{stem}.o")
+
+
 def _parse_arch_scope(arch_scope: str) -> tuple[str, str]:
-    if arch_scope not in SUPPORTED_ARCH_SCOPES:
-        raise TlaExecutionError(
-            f"Unsupported arch_scope={arch_scope!r}. Supported: {', '.join(SUPPORTED_ARCH_SCOPES)}."
-        )
     try:
         return _parse_arch_scope_impl(arch_scope)
     except ValueError as exc:
@@ -1844,16 +1905,15 @@ def _run_typed_bridge_to_mlir(
             "String TLA MLIR lowering is not supported."
         )
     try:
+        # Host surface is a single PRINT_IR switch; bridge still takes
+        # pass-print flags — enable full pipeline dump when requested.
+        print_ir = bool(runtime.print_ir) if runtime else False
         result = lower_tlair_module_to_mlir(
             lowered_module,
-            mlir_print_ir_before=runtime.mlir_print_ir_before if runtime else (),
-            mlir_print_ir_after=runtime.mlir_print_ir_after if runtime else (),
-            mlir_print_ir_before_all=runtime.mlir_print_ir_before_all
-            if runtime
-            else False,
-            mlir_print_ir_after_all=runtime.mlir_print_ir_after_all
-            if runtime
-            else False,
+            mlir_print_ir_before=(),
+            mlir_print_ir_after=(),
+            mlir_print_ir_before_all=print_ir,
+            mlir_print_ir_after_all=print_ir,
         )
     except BridgeUnavailableError as exc:
         raise TlaCompilerBridgeUnavailableError(str(exc)) from exc
@@ -1871,10 +1931,7 @@ def _run_typed_bridge_to_mlir(
 
 
 def _resolve_tla_compile() -> Path | None:
-    explicit = os.getenv("TLA_DSL_COMPILE")
     candidates: list[Path] = []
-    if explicit:
-        candidates.append(Path(explicit).expanduser().resolve())
     for build_dir in _mlir_build_dirs():
         candidates.extend(
             [
@@ -1882,10 +1939,9 @@ def _resolve_tla_compile() -> Path | None:
                 build_dir / "tools" / "tla-compile" / "TlaCompile",
             ]
         )
-    for which_name in ("TlaCompile",):
-        which = shutil.which(which_name)
-        if which:
-            candidates.append(Path(which).resolve())
+    which = shutil.which("TlaCompile")
+    if which:
+        candidates.append(Path(which).resolve())
     for candidate in candidates:
         if candidate.exists():
             return candidate
@@ -1906,22 +1962,10 @@ def _run_tla_compile_cli_to_mlir(
     input_path = mlir_path.with_suffix(".tlair.mlir")
     input_path.write_text(tlair_mlir)
     cmd = [str(tla_compile), str(input_path), "-o", str(mlir_path)]
-    print_requested = False
-    if runtime is not None:
-        for pass_name in runtime.mlir_print_ir_before:
-            cmd.append(f"--mlir-print-ir-before={pass_name}")
-        for pass_name in runtime.mlir_print_ir_after:
-            cmd.append(f"--mlir-print-ir-after={pass_name}")
-        if runtime.mlir_print_ir_before_all:
-            cmd.append("--mlir-print-ir-before-all")
-        if runtime.mlir_print_ir_after_all:
-            cmd.append("--mlir-print-ir-after-all")
-        print_requested = bool(
-            runtime.mlir_print_ir_before
-            or runtime.mlir_print_ir_after
-            or runtime.mlir_print_ir_before_all
-            or runtime.mlir_print_ir_after_all
-        )
+    print_requested = bool(runtime is not None and runtime.print_ir)
+    if print_requested:
+        cmd.append("--mlir-print-ir-before-all")
+        cmd.append("--mlir-print-ir-after-all")
     try:
         completed = subprocess.run(
             cmd,
@@ -2026,5 +2070,6 @@ from .catlass_dsl.ascend_jit_executor import (
 )
 from .base_dsl.runtime.ascend import (
     launch_kernel,
+    load_acl,
     load_binary,
 )

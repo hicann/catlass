@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 
-import catlass as tla
+import catlass.tla as tla
 import catlass.runtime as runtime_mod
 from catlass.execution_lowering import TlaLoweringError
 from catlass.params import LoadDist, NormalLoadParams

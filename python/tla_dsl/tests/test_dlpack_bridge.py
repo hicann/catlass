@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 
 from catlass.base_dsl.runtime.dlpack_types import DLDataType, DLDataTypeCode, DLDevice, DLTensor
-from catlass.runtime import DlpackBridgeError, _Tensor, export_dlpack_capsule
+from catlass.tla.runtime import DlpackBridgeError, _Tensor, export_dlpack_capsule
 
 np = pytest.importorskip("numpy")
 

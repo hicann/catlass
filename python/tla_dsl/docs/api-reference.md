@@ -541,7 +541,7 @@ Source: `catlass.core_api.arch`
 _Namespace object
 ```
 
-Core namespace exported by `catlass.core_api`; available members: `CUBE`, `ColumnMajor`, `FIX`, `L0A`, `L0B`, `L0C`, `L0Clayout`, `L1`, `MTE1`, `MTE2`, `MTE3`, `RowMajor`, `SCALAR`, `UB`, `VECTOR`, `block_dim`, `block_idx`, `nN`, `nZ`, `sub_block_idx`, `zN`, `zNUnAlign`, `zZ`.
+Core namespace exported by `catlass.core_api`; available members: `CUBE`, `ColumnMajor`, `FIX`, `L0A`, `L0B`, `L0C`, `L0Clayout`, `L1`, `MTE1`, `MTE2`, `MTE3`, `RowMajor`, `SCALAR`, `UB`, `VECTOR`, `block_num`, `block_idx`, `nN`, `nZ`, `sub_block_idx`, `zN`, `zNUnAlign`, `zZ`.
 
 ### `LocalmemAllocator`
 

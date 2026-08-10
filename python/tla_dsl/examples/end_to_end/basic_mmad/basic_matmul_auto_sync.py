@@ -8,48 +8,43 @@ mutex synchronization required by the double-buffered scratch tensors.
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
 
-import catlass as tla
-from catlass.runtime import from_dlpack
-
-l1_tm = 256
-l1_tn = 256
-l1_tk = 128
-l0_tm = 256
-l0_tn = 256
-l0_tk = 32
-
-DESCRIPTION = "Basic MMAD automatic local mutex synchronization; dynamic GM."
-
-
-# ---------------------------------------------------------------------------
-# Kernel
-# ---------------------------------------------------------------------------
-
+import catlass.tla as tla
+import torch
+import torch_npu
+from catlass.tla.runtime import from_dlpack
 
 @tla.kernel(auto_sync="v0")
 def basic_mmad_auto_sync_kernel(
     gm_a: tla.Tensor,
     gm_b: tla.Tensor,
     gm_c: tla.Tensor,
+    l1_tm: tla.Constexpr[int],
+    l1_tn: tla.Constexpr[int],
+    l1_tk: tla.Constexpr[int],
+    l0_tm: tla.Constexpr[int],
+    l0_tn: tla.Constexpr[int],
+    l0_tk: tla.Constexpr[int],
 ) -> None:
     c0 = 0
     c1 = 1
+
+    dtype_a = gm_a.ptr.dtype
+    dtype_b = gm_b.ptr.dtype
 
     m = gm_a.origin_shape[0]
     n = gm_b.origin_shape[1]
     k = gm_a.origin_shape[1]
 
-    l1a0_ptr = tla.allocate(l1_tm * l1_tk, DTYPE_A, tla.AddressSpace.l1, 512)
-    l1a1_ptr = tla.allocate(l1_tm * l1_tk, DTYPE_A, tla.AddressSpace.l1, 512)
-    l1b0_ptr = tla.allocate(l1_tk * l1_tn, DTYPE_B, tla.AddressSpace.l1, 512)
-    l1b1_ptr = tla.allocate(l1_tk * l1_tn, DTYPE_B, tla.AddressSpace.l1, 512)
+    l1a0_ptr = tla.allocate(l1_tm * l1_tk, dtype_a, tla.AddressSpace.l1, 512)
+    l1a1_ptr = tla.allocate(l1_tm * l1_tk, dtype_a, tla.AddressSpace.l1, 512)
+    l1b0_ptr = tla.allocate(l1_tk * l1_tn, dtype_b, tla.AddressSpace.l1, 512)
+    l1b1_ptr = tla.allocate(l1_tk * l1_tn, dtype_b, tla.AddressSpace.l1, 512)
 
-    l0a0_ptr = tla.allocate(l0_tm * l0_tk, DTYPE_A, tla.AddressSpace.l0a, 512)
-    l0a1_ptr = tla.allocate(l0_tm * l0_tk, DTYPE_A, tla.AddressSpace.l0a, 512)
-    l0b0_ptr = tla.allocate(l0_tk * l0_tn, DTYPE_B, tla.AddressSpace.l0b, 512)
-    l0b1_ptr = tla.allocate(l0_tk * l0_tn, DTYPE_B, tla.AddressSpace.l0b, 512)
+    l0a0_ptr = tla.allocate(l0_tm * l0_tk, dtype_a, tla.AddressSpace.l0a, 512)
+    l0a1_ptr = tla.allocate(l0_tm * l0_tk, dtype_a, tla.AddressSpace.l0a, 512)
+    l0b0_ptr = tla.allocate(l0_tk * l0_tn, dtype_b, tla.AddressSpace.l0b, 512)
+    l0b1_ptr = tla.allocate(l0_tk * l0_tn, dtype_b, tla.AddressSpace.l0b, 512)
 
     l0c_ptr = tla.allocate(l0_tm * l0_tn, tla.Float32, tla.AddressSpace.l0c, 512)
 
@@ -74,7 +69,9 @@ def basic_mmad_auto_sync_kernel(
                 gm_b, tla.make_shape(k, l1_tn), tla.make_coord(c0, block_col)
             )
             gm_c_by_core = tla.tile_view(
-                gm_c, tla.make_shape(l1_tm, l1_tn), tla.make_coord(block_row, block_col)
+                gm_c,
+                tla.make_shape(l1_tm, l1_tn),
+                tla.make_coord(block_row, block_col),
             )
 
             k_block = gm_a_by_core.origin_shape[1]
@@ -85,10 +82,14 @@ def basic_mmad_auto_sync_kernel(
 
             for k_l1 in k_l1_range:
                 gm_a_by_l1 = tla.tile_view(
-                    gm_a_by_core, tla.make_shape(l1_tm, l1_tk), tla.make_coord(c0, k_l1)
+                    gm_a_by_core,
+                    tla.make_shape(l1_tm, l1_tk),
+                    tla.make_coord(c0, k_l1),
                 )
                 gm_b_by_l1 = tla.tile_view(
-                    gm_b_by_core, tla.make_shape(l1_tk, l1_tn), tla.make_coord(k_l1, c0)
+                    gm_b_by_core,
+                    tla.make_shape(l1_tk, l1_tn),
+                    tla.make_coord(k_l1, c0),
                 )
 
                 l1_a = tla.make_tensor_like(
@@ -143,116 +144,107 @@ def basic_mmad_auto_sync_kernel(
             )
 
 
-# ---------------------------------------------------------------------------
-# Host
-# ---------------------------------------------------------------------------
+def get_block_num(block_num: int, device: int = 0, *, kind: str = "vector") -> int:
+    """Get launch ``block_num``.
 
-EXAMPLE_DIR = Path(__file__).resolve().parent
-DEFAULT_CACHE_DIR = EXAMPLE_DIR / "artifacts" / "runtime-cache"
+    Non-``-1`` uses the host argument. ``-1`` means full-device launch:
+    pure vector → ``vector_core_num`` (AIV); cube/mix → ``cube_core_num`` (AIC).
+    """
+    if int(block_num) != -1:
+        return max(1, int(block_num))
+    props = torch.npu.get_device_properties(int(device))
+    if kind == "vector":
+        return max(1, int(props.vector_core_num))
+    if kind in {"cube", "mix"}:
+        return max(1, int(props.cube_core_num))
+    raise ValueError(f"Unsupported kernel kind for block_num default: {kind!r}")
 
 
-def golden(a, b, out_dtype):
-    import torch
-
-    expected = a.to(torch.float32) @ b.to(torch.float32)
-    if out_dtype in (torch.float16, torch.bfloat16):
-        expected = expected.to(out_dtype).to(torch.float32)
-    return expected
+def create_tla_tensor(buf, layout: str):
+    tag = tla.arch.RowMajor if layout == "row" else tla.arch.ColumnMajor
+    return from_dlpack(buf, layout_tag=tag).mark_layout_dynamic()
 
 
 def run(args: argparse.Namespace) -> int:
-    import sys
+    torch.npu.set_device(args.device)
+    print(
+        f"--- mnk=({args.m},{args.n},{args.k}) "
+        f"layout={args.layout_a}/{args.layout_b} "
+        f"dtype={args.dtype_a}/{args.dtype_b}/{args.dtype_c} ---"
+    )
+    torch.manual_seed(0)
+    dtypes = {"f16": torch.float16, "bf16": torch.bfloat16, "f32": torch.float32}
+    dtype_a = dtypes[args.dtype_a]
+    dtype_b = dtypes[args.dtype_b]
+    dtype_c = dtypes[args.dtype_c]
+    a = torch.rand(args.m, args.k, dtype=dtype_a, device="cpu") * 10.0 - 5.0
+    b = torch.rand(args.k, args.n, dtype=dtype_b, device="cpu") * 10.0 - 5.0
+    c = torch.rand(args.m, args.n, dtype=dtype_c, device="cpu") * 10.0 - 5.0
+    ref = a.float() @ b.float()
+    if dtype_c in (torch.float16, torch.bfloat16):
+        ref = ref.to(dtype_c).float()
 
-    import torch
-    import torch_npu  # noqa: F401
+    a = (
+        a.contiguous() if args.layout_a == "row" else a.permute(1, 0).contiguous()
+    ).npu()
+    b = (
+        b.contiguous() if args.layout_b == "row" else b.permute(1, 0).contiguous()
+    ).npu()
+    c = c.contiguous().npu()
+    a_tensor = create_tla_tensor(a, args.layout_a)
+    b_tensor = create_tla_tensor(b, args.layout_b)
+    c_tensor = create_tla_tensor(c, "row")
 
-    mod = sys.modules[__name__]
-    tla_of = {"f16": tla.Float16, "bf16": tla.BFloat16, "f32": tla.Float32}
-    torch_of = {"f16": torch.float16, "bf16": torch.bfloat16, "f32": torch.float32}
-    da, db, dc = args.dtype_a, args.dtype_b, args.dtype_c
-    la, lb = args.layout_a, args.layout_b
-    mi, ni, ki = int(args.m), int(args.n), int(args.k)
-    mod.DTYPE_A = tla_of[da]
-    mod.DTYPE_B = tla_of[db]
+    l1_tm, l1_tn, l1_tk = 256, 256, 128
+    l0_tm, l0_tn, l0_tk = 256, 256, 32
+    artifact = tla.compile(
+        basic_mmad_auto_sync_kernel,
+        a_tensor,
+        b_tensor,
+        c_tensor,
+        l1_tm,
+        l1_tn,
+        l1_tk,
+        l0_tm,
+        l0_tn,
+        l0_tk,
+        options="--npu-arch 3510",
+    )
+    block_num = get_block_num(args.block_num, args.device, kind="cube")
+    artifact(a_tensor, b_tensor, c_tensor, block_num=block_num)
+    torch.npu.synchronize()
 
-    def create_tla_tensor(buf, layout: str):
-        storage = (
-            buf.contiguous() if layout == "row" else buf.permute(1, 0).contiguous()
-        )
-        tag = tla.arch.RowMajor if layout == "row" else tla.arch.ColumnMajor
-        return from_dlpack(storage, layout_tag=tag).mark_layout_dynamic()
-
-    cache_dir = str(Path(args.cache_dir).expanduser().resolve())
-
-    tla.initialize(device=args.device)
-    try:
-        torch.npu.set_device(args.device)
-        print(f"--- mnk=({mi},{ni},{ki}) layout={la}/{lb} dtype={da}/{db}/{dc} ---")
-        torch.npu.manual_seed(0)
-        a = torch.rand(mi, ki, dtype=torch_of[da], device="npu") * 10.0 - 5.0
-        b = torch.rand(ki, ni, dtype=torch_of[db], device="npu") * 10.0 - 5.0
-        c = torch.full((mi, ni), args.sentinel, dtype=torch_of[dc], device="npu")
-        expected = golden(a, b, torch_of[dc])
-
-        ta = create_tla_tensor(a, la)
-        tb = create_tla_tensor(b, lb)
-        tc = create_tla_tensor(c, "row")
-        artifact = tla.compile(
-            basic_mmad_auto_sync_kernel,
-            ta,
-            tb,
-            tc,
-            arch_scope="aic.c310",
-            cache=not args.no_cache,
-            cache_dir=cache_dir,
-            force_recompile=args.force_recompile
-        )
-        block_dim = max(
-            1,
-            args.block_dim if args.block_dim != -1 else tla.get_aicore_num(args.device),
-        )
-        artifact(ta, tb, tc, block_dim=block_dim)
-        torch.npu.synchronize()
-
-        # Match catlass examples/common/golden/compare_data.hpp.
-        if dc == "bf16":
-            rtol = (1.0 / 128.0) if ki < 2048 else (1.0 / 64.0)
-            floor = 1.0 / 256.0
-        else:
-            rtol = (1.0 / 256.0) if ki < 2048 else (1.0 / 128.0)
-            floor = 1.0
-        got = c.detach().to(device="cpu", dtype=torch.float32)
-        exp = expected.detach().to(device="cpu", dtype=torch.float32)
-        passed = bool(
-            (
-                (got - exp).abs()
-                <= rtol * torch.maximum(torch.full_like(exp, floor), exp.abs())
-            ).all()
-        )
-        print(f"passed={passed} cache_key={artifact.cache_key}")
-        print(f"kernel.o={artifact.kernel_binary_path}")
-        return 0 if passed else 1
-    finally:
-        tla.finalize()
+    if args.dtype_c == "bf16":
+        rtol = (1.0 / 128.0) if args.k < 2048 else (1.0 / 64.0)
+        floor = 1.0 / 256.0
+    else:
+        rtol = (1.0 / 256.0) if args.k < 2048 else (1.0 / 128.0)
+        floor = 1.0
+    result = c.detach().cpu().float()
+    passed = bool(
+        (
+            (result - ref).abs()
+            <= rtol * torch.maximum(torch.full_like(ref, floor), ref.abs())
+        ).all()
+    )
+    print(f"passed={passed} cache_key={artifact.cache_key}")
+    print(f"kernel.o={artifact.kernel_binary_path}")
+    return 0 if passed else 1
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description=DESCRIPTION)
-    p.add_argument("--device", type=int, default=0)
-    p.add_argument("--m", type=int, default=256)
-    p.add_argument("--n", type=int, default=512)
-    p.add_argument("--k", type=int, default=1024)
-    p.add_argument("--layout-a", choices=("row", "col"), default="row")
-    p.add_argument("--layout-b", choices=("row", "col"), default="row")
-    p.add_argument("--dtype-a", choices=("f16", "bf16", "f32"), default="f16")
-    p.add_argument("--dtype-b", choices=("f16", "bf16", "f32"), default="f16")
-    p.add_argument("--dtype-c", choices=("f16", "bf16", "f32"), default="f32")
-    p.add_argument("--block-dim", type=int, default=-1)
-    p.add_argument("--sentinel", type=float, default=-7.0)
-    p.add_argument("--cache-dir", default=str(DEFAULT_CACHE_DIR))
-    p.add_argument("--force-recompile", action="store_true")
-    p.add_argument("--no-cache", action="store_true")
-    return run(p.parse_args())
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--device", type=int, default=0)
+    parser.add_argument("--m", type=int, default=256)
+    parser.add_argument("--n", type=int, default=512)
+    parser.add_argument("--k", type=int, default=1024)
+    parser.add_argument("--layout-a", choices=("row", "col"), default="row")
+    parser.add_argument("--layout-b", choices=("row", "col"), default="row")
+    parser.add_argument("--dtype-a", choices=("f16", "bf16", "f32"), default="f16")
+    parser.add_argument("--dtype-b", choices=("f16", "bf16", "f32"), default="f16")
+    parser.add_argument("--dtype-c", choices=("f16", "bf16", "f32"), default="f32")
+    parser.add_argument("--block-num", type=int, default=-1)
+    return run(parser.parse_args())
 
 
 if __name__ == "__main__":

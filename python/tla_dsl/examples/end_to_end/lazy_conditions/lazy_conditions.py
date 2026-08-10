@@ -5,12 +5,12 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-import catlass as tla
+import catlass.tla as tla
+import sys
 
 
 VALUES = (0.0, 1.0, 2.0, 4.0, -1.0)
 EXPECTED = (0, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0, 0)
-DEFAULT_CACHE_DIR = Path(__file__).resolve().parent / "artifacts" / "runtime-cache"
 
 
 @tla.kernel
@@ -43,7 +43,7 @@ def _require_torch_npu(device: int):
     import torch
 
     try:
-        import torch_npu  # noqa: F401
+        import torch_npu
     except ImportError as exc:
         raise SystemExit("torch_npu is required for this example") from exc
     torch.npu.set_device(device)
@@ -51,42 +51,34 @@ def _require_torch_npu(device: int):
 
 
 def run(args: argparse.Namespace) -> int:
-    tla.initialize(device=args.device)
-    try:
-        torch = _require_torch_npu(args.device)
-        device = f"npu:{args.device}"
-        values = torch.tensor(VALUES, dtype=torch.float32, device=device)
-        out = torch.full((4 * len(VALUES),), -1.0, dtype=torch.float32, device=device)
-        values_t = tla.from_dlpack(values, layout_tag=tla.arch.RowMajor)
-        out_t = tla.from_dlpack(out, layout_tag=tla.arch.RowMajor)
+    torch = _require_torch_npu(args.device)
+    device = f"npu:{args.device}"
+    values = torch.tensor(VALUES, dtype=torch.float32, device=device)
+    out = torch.full((4 * len(VALUES),), -1.0, dtype=torch.float32, device=device)
+    values_t = tla.from_dlpack(values, layout_tag=tla.arch.RowMajor)
+    out_t = tla.from_dlpack(out, layout_tag=tla.arch.RowMajor)
 
-        artifact = tla.compile(
-            lazy_conditions_kernel,
-            values_t,
-            out_t,
-            arch_scope="aiv.c310",
-            cache_dir=str(Path(args.cache_dir).expanduser().resolve()),
-            force_recompile=args.force_recompile,
-        )
-        artifact(values_t, out_t, block=1)
-        torch.npu.synchronize()
+    artifact = tla.compile(
+        lazy_conditions_kernel,
+        values_t,
+        out_t,
+        options="--npu-arch 3510"
+    )
+    artifact(values_t, out_t, block=1)
+    torch.npu.synchronize()
 
-        actual = [int(value) for value in out.cpu().tolist()]
-        expected = list(EXPECTED)
-        if actual != expected:
-            print(f"lazy_conditions_ok=False expected={expected} actual={actual}")
-            return 1
-        print(f"lazy_conditions_ok=True output={actual}")
-        return 0
-    finally:
-        tla.finalize()
+    actual = [int(value) for value in out.cpu().tolist()]
+    expected = list(EXPECTED)
+    if actual != expected:
+        print(f"lazy_conditions_ok=False expected={expected} actual={actual}")
+        return 1
+    print(f"lazy_conditions_ok=True output={actual}")
+    return 0
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--device", type=int, default=0)
-    parser.add_argument("--cache-dir", default=str(DEFAULT_CACHE_DIR))
-    parser.add_argument("--force-recompile", action="store_true")
     return run(parser.parse_args())
 
 

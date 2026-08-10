@@ -13,7 +13,7 @@ import types
 
 import pytest
 
-tla = pytest.importorskip("catlass", exc_type=ImportError)
+tla = pytest.importorskip("catlass.tla", exc_type=ImportError)
 execution = pytest.importorskip("catlass.execution", exc_type=ImportError)
 base_dsl_mod = pytest.importorskip("catlass.base_dsl", exc_type=ImportError)
 compiler_bridge = pytest.importorskip("catlass.compiler_bridge", exc_type=ImportError)
@@ -157,11 +157,6 @@ def test_print_tensor_output_formats_ub_physical_copy_shape() -> None:
     )
 
 
-def test_print_tensor_aic_example_output_omits_subblock() -> None:
-    example = _load_print_tensor_example()
-    record = example._format_record(example.DTYPE_SPECS["i8"], arch_scope="aic.c310")
-
-    assert " subblock=" not in record
 
 
 @pytest.mark.parametrize(
@@ -175,10 +170,10 @@ def test_print_tensor_aic_example_output_omits_subblock() -> None:
 def test_print_tensor_example_selects_ub_kernel(case, kernel_name) -> None:
     example = _load_print_tensor_example()
     args = types.SimpleNamespace(
-        storage="ub", arch_scope="aiv.c310", case=case, calls=1
+        storage="ub", case=case, calls=1
     )
 
-    assert example._kernel(args).__name__ == kernel_name
+    assert example._kernel(args).fn.__name__ == kernel_name
 
 
 def test_prepare_hivmc_input_selects_aic_print_tensor_helper(
@@ -493,7 +488,7 @@ def test_debug_print_mixed_selects_fixed_region_kernel(
     example = _load_debug_print_example(mixed=True)
     args = example._parser().parse_args(["--print-region", print_region])
 
-    assert example._kernel(args).__name__ == expected_kernel
+    assert example._kernel(args).fn.__name__ == expected_kernel
 
 
 def test_debug_print_mixed_defaults_to_both_regions() -> None:
@@ -609,17 +604,6 @@ def test_debug_print_mixed_output_rejects_invalid_native_frames(
         example._verify_mixed_debug_output(output, print_region=print_region)
 
 
-@pytest.mark.parametrize(
-    ("dtype", "expected_kernel"),
-    (("i32", "debug_print_aic_kernel"),),
-)
-def test_debug_print_aic_example_selects_cube_kernel(
-    dtype: str, expected_kernel: str
-) -> None:
-    example = _load_debug_print_example()
-    args = example._parser().parse_args(["--arch-scope", "aic.c310", "--dtype", dtype])
-
-    assert example._kernel(args).__name__ == expected_kernel
 
 
 @pytest.mark.parametrize(
@@ -665,9 +649,10 @@ def test_public_compile_dry_run_invokes_typed_bridge_and_hivmc_a5(
     lowered_module = object()
     bridge_path = tmp_path / "_tla_type_bridge_native.so"
     hivm_compile = tmp_path / "hivmc-a5"
-    template_bc = tmp_path / "meta_op.aic.c310.bc"
+    template_bc = tmp_path / "bc" / "meta_op.aiv.c310.bc"
     bridge_path.write_text("")
     hivm_compile.write_text("")
+    template_bc.parent.mkdir(parents=True)
     template_bc.write_bytes(b"bc")
 
     def fake_lower(
@@ -701,12 +686,12 @@ def test_public_compile_dry_run_invokes_typed_bridge_and_hivmc_a5(
             Path(cwd, "kernel.o").write_bytes(b"obj")
 
     monkeypatch.setattr(execution, "_run_checked", fake_run_checked)
+    monkeypatch.setenv("CATLASS_DSL_CACHE", "0")
+    monkeypatch.setenv("CATLASS_DSL_CACHE_DIR", str(tmp_path / "cache"))
 
     artifact = tla.compile(
         _zero_arg_tla_kernel,
-        cache=False,
-        cache_dir=tmp_path / "cache",
-        arch_scope="aic.c310",
+        options="--npu-arch 3510",
     )
 
     assert artifact.compiler_bridge_path == bridge_path
@@ -814,20 +799,16 @@ def test_generated_kernel_bridge_lowers_live_module(monkeypatch, tmp_path) -> No
     ]
 
 
-def test_runtime_options_ignore_removed_target_env_vars(monkeypatch) -> None:
-    monkeypatch.setenv("TLA_DSL_TARGET_ARCH", "c220")
-    monkeypatch.setenv("TLA_DSL_CORE_TYPE", "aic")
-    monkeypatch.setenv("TLA_DSL_ARCH_SCOPE", "aic.c220")
-    options = execution.runtime_options_from_kwargs({})
-
+def test_runtime_options_npu_arch_defaults_core_until_mlir() -> None:
+    options = execution.runtime_options_from_kwargs({"options": "--npu-arch 3510"})
+    # AIC/AIV is inferred later from lowered MLIR; Host only selects chip arch.
     assert options.arch_scope == "aiv.c310"
     assert options.kernel_mode == "aiv"
 
 
-def test_runtime_options_arch_scope_sets_kernel_mode() -> None:
-    options = execution.runtime_options_from_kwargs({"arch_scope": "aic.c310"})
-    assert options.arch_scope == "aic.c310"
-    assert options.kernel_mode == "aic"
+def test_runtime_options_reject_unknown_npu_arch() -> None:
+    with pytest.raises(ValueError, match="Unsupported --npu-arch"):
+        execution.runtime_options_from_kwargs({"options": "--npu-arch sm_100"})
 
 
 def test_typed_bridge_raises_without_live_module(tmp_path) -> None:
@@ -995,12 +976,7 @@ def test_tla_compile_cli_preserves_ir_dump_on_failure(monkeypatch, tmp_path) -> 
         )
 
     monkeypatch.setattr(execution.subprocess, "run", fake_run)
-    runtime = execution.TlaRuntimeOptions(
-        mlir_print_ir_before=["tla-lower-func"],
-        mlir_print_ir_after=["tla-finalize-memref"],
-        mlir_print_ir_before_all=True,
-        mlir_print_ir_after_all=True,
-    )
+    runtime = execution.TlaRuntimeOptions(print_ir=True)
 
     with pytest.raises(execution.TlaKernelCompileError) as exc_info:
         execution._run_tla_compile_cli_to_mlir(
@@ -1012,9 +988,7 @@ def test_tla_compile_cli_preserves_ir_dump_on_failure(monkeypatch, tmp_path) -> 
 
     assert exc_info.value.pass_ir_dump == pass_ir_dump
     assert "<captured in pass IR dump>" in str(exc_info.value)
-    assert calls[0][0][-4:] == [
-        "--mlir-print-ir-before=tla-lower-func",
-        "--mlir-print-ir-after=tla-finalize-memref",
+    assert calls[0][0][-2:] == [
         "--mlir-print-ir-before-all",
         "--mlir-print-ir-after-all",
     ]
@@ -1262,10 +1236,14 @@ def test_print_tensor_workspace_preserves_user_argument_and_uses_abi_marker(
 
 
 def _install_fake_launch_context(monkeypatch, *, device: int = 7, stream: int = 99) -> None:
+    from types import ModuleType
+
     from catlass.base_dsl.runtime import ascend_stream_adapter as stream_mod
 
     monkeypatch.setattr(stream_mod, "current_device", lambda: device)
     monkeypatch.setattr(stream_mod, "current_stream", lambda _device: stream)
+    # Early ACL availability check in execute_kernel.
+    monkeypatch.setattr(execution, "load_acl", lambda: ModuleType("fake_acl"))
 
 
 def _install_print_tensor_loader(monkeypatch, output: str) -> None:
@@ -1297,7 +1275,7 @@ def test_execute_kernel_decodes_and_formats_native_print_tensor_for_ordinary_cal
             kernel_mode="aic", arch_scope="aic.c310"
         ),
         launch_args=[_TypedPointer(0x1000)],
-        launch_kwargs={},
+        launch_kwargs={"block_num": 1},
     )
 
     assert capfd.readouterr().out == (
@@ -1327,7 +1305,7 @@ def test_execute_kernel_formats_combined_calls_and_blocks_in_arrival_order(
             kernel_mode="aic", arch_scope="aic.c310"
         ),
         launch_args=[_TypedPointer(0x1000)],
-        launch_kwargs={"block_dim": 2},
+        launch_kwargs={"block_num": 2},
     )
 
     assert capfd.readouterr().out == (
@@ -1367,7 +1345,7 @@ def test_execute_aiv_kernel_formats_calls_blocks_and_subblocks_in_arrival_order(
         _two_print_tensor_artifact(tmp_path),
         runtime=execution.TlaRuntimeOptions(),
         launch_args=[_TypedPointer(0x1000)],
-        launch_kwargs={"block_dim": 2},
+        launch_kwargs={"block_num": 2},
     )
 
     lines = capfd.readouterr().out.splitlines()
@@ -1527,7 +1505,7 @@ def test_print_tensor_record_set_rejects_invalid_output_without_public_lines(
                 kernel_mode="aic", arch_scope="aic.c310"
             ),
             launch_args=[_TypedPointer(0x1000)],
-            launch_kwargs={},
+            launch_kwargs={"block_num": 1},
         )
 
     assert capfd.readouterr().out == ""
@@ -1816,7 +1794,7 @@ def test_print_tensor_metadata_and_decode_are_scoped_to_second_entrypoint() -> N
 
 
 @pytest.mark.parametrize("core_type", ("aic", "aiv"))
-def test_print_tensor_launch_accepts_multiblock_block_dim(tmp_path, core_type) -> None:
+def test_print_tensor_launch_accepts_multiblock_block_num(tmp_path, core_type) -> None:
     plan = execution._build_kernel_launch_plan(
         artifact=_print_tensor_artifact(tmp_path),
         runtime=execution.TlaRuntimeOptions(kernel_mode=core_type, arch_scope=f"{core_type}.c310"),
@@ -1875,7 +1853,7 @@ def test_execute_mixed_aiv_print_preserves_position_and_subblocks(
         _print_tensor_artifact(tmp_path, shape=(2, 2), storage="ub", mixed=True),
         runtime=execution.TlaRuntimeOptions(kernel_mode="mix"),
         launch_args=[_TypedPointer(0x1000)],
-        launch_kwargs={},
+        launch_kwargs={"block_num": 1},
     )
 
     assert capfd.readouterr().out.splitlines() == [
@@ -1908,7 +1886,7 @@ def test_execute_mixed_aic_print_omits_subblock(monkeypatch, tmp_path, capfd) ->
         artifact,
         runtime=execution.TlaRuntimeOptions(kernel_mode="mix"),
         launch_args=[_TypedPointer(0x1000)],
-        launch_kwargs={},
+        launch_kwargs={"block_num": 1},
     )
 
     assert capfd.readouterr().out == (
@@ -2779,7 +2757,7 @@ def test_execute_kernel_uses_typed_launch_payload(monkeypatch, tmp_path) -> None
         artifact,
         runtime=runtime,
         launch_args=[tla.Int32(123)],
-        launch_kwargs={},
+        launch_kwargs={"block_num": 1},
     )
 
     assert result.module_handle == 11
@@ -2813,7 +2791,7 @@ def test_execute_kernel_conveys_debug_fifo_intent_to_loader(
         artifact,
         runtime=execution.TlaRuntimeOptions(),
         launch_args=[tla.Int32(7)],
-        launch_kwargs={},
+        launch_kwargs={"block_num": 1},
     )
 
     assert launches == [
@@ -2859,7 +2837,7 @@ def test_execute_kernel_uses_empty_payload_for_zero_arg(monkeypatch, tmp_path) -
         artifact,
         runtime=runtime,
         launch_args=[],
-        launch_kwargs={},
+        launch_kwargs={"block_num": 1},
     )
 
     assert result.module_handle == 11

@@ -5,6 +5,11 @@ import pytest
 arch_mod = pytest.importorskip("catlass.base_dsl.arch", exc_type=ImportError)
 
 
+def test_resolve_npu_arch_maps_public_chip_name() -> None:
+    assert arch_mod.resolve_npu_arch("3510") == "c310"
+    assert arch_mod.Arch.from_string("3510") is arch_mod.Arch.C310
+
+
 def test_arch_scope_for_target_resolves_supported_pairs() -> None:
     assert (
         arch_mod.arch_scope_for_target(target_arch="c310", core_type="aiv")
@@ -27,5 +32,5 @@ def test_get_localmem_capacity_bytes_accepts_arch_override() -> None:
 
 
 def test_c220_is_no_longer_supported() -> None:
-    with pytest.raises(ValueError, match="Unsupported target architecture"):
+    with pytest.raises(ValueError, match="Unsupported (--npu-arch|target architecture)"):
         arch_mod.arch_scope_for_target(target_arch="c220", core_type="aiv")

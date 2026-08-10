@@ -81,7 +81,7 @@ class TlaJitExecutor:
     def launch(
         self,
         *launch_args: Any,
-        block_dim: int | None = None,
+        block_num: int | None = None,
         args: Sequence[Any] | None = None,
         **kwargs: Any,
     ) -> TlaExecutionResult:
@@ -96,10 +96,11 @@ class TlaJitExecutor:
         if args is None:
             args = launch_args
         launch_kwargs = dict(kwargs)
-        if block_dim is not None:
-            if not isinstance(block_dim, int):
-                raise TlaUnsupportedAbiError("`block_dim` must be an int.")
-            launch_kwargs["block_dim"] = int(block_dim)
+        if block_num is None:
+            block_num = 1
+        if not isinstance(block_num, int):
+            raise TlaUnsupportedAbiError("`block_num` must be an int.")
+        launch_kwargs["block_num"] = int(block_num)
         runtime = self.artifact.runtime
         if runtime is None:
             raise TlaRuntimeUnavailableError(

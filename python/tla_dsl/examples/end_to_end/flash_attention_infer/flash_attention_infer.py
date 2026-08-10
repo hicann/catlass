@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import argparse
 from typing import Any
+
 import numpy as np
 
-import catlass as tla
+import catlass.tla as tla
 from catlass.params import UnalignStoreParams, NormalLoadParams, LoadDist
-from catlass.runtime import from_dlpack
+from catlass.tla.runtime import from_dlpack
 
 from fa_tiling import (
     QK_L1_TILE_M,
@@ -74,7 +75,6 @@ PV_KL0_LOOP_NUM = (KV_BLOCK + L0_TILE_K - 1) // L0_TILE_K
 
 THRESHOLD = 0.05
 UNCHANGED_THRESHOLD = 0.1
-
 
 @tla.kernel
 def flash_attention_infer_kernel(
@@ -358,7 +358,6 @@ def flash_attention_infer_kernel(
             tla.copy(l1_q, q_gm)
             tla.set_flag(q_l1_ready_l0)
             tla.wait_flag(q_l1_ready_l0)
-
 
         for kv_iter in tla.range(c0, kv_block_count_cur + PRE_LAUNCH, c1):
             if kv_iter < kv_block_count_cur:
@@ -1158,7 +1157,6 @@ def flash_attention_infer_kernel(
         tla.cross_core_wait_flag(pv_ready_1, tla.arch.FIX, aiv_id=0)
         tla.cross_core_wait_flag(pv_ready_1, tla.arch.FIX, aiv_id=1)
 
-
     with tla.vector():
         tla.cross_core_wait_flag(sm_ready_mm2_0, tla.arch.MTE3, aiv_id=0)
         tla.cross_core_wait_flag(sm_ready_mm2_0, tla.arch.MTE3, aiv_id=1)
@@ -1169,7 +1167,6 @@ def flash_attention_infer_kernel(
         tla.wait_flag(mte3_ready_softmax_0)
         tla.wait_flag(mte3_ready_softmax_1)
         tla.wait_flag(mte3_ready_rescale)
-
 
 # Host侧：构造输入、编译、调用 kernel、精度校验
 def _require_torch_npu(device_id: int) -> Any:
@@ -1184,33 +1181,34 @@ def _require_torch_npu(device_id: int) -> Any:
     torch.npu.set_device(device_id)
     return torch
 
-
 def _runtime_kwargs(args: argparse.Namespace) -> dict[str, Any]:
     return {"options": "--npu-arch 3510"}
 
+def get_block_num(block_num: int, device: int = 0, *, kind: str = "vector") -> int:
+    """Get launch ``block_num``.
 
-def _aicore_num(device: int = 0) -> int:
+    Non-``-1`` uses the host argument. ``-1`` means full-device launch:
+    pure vector → ``vector_core_num`` (AIV); cube/mix → ``cube_core_num`` (AIC).
+    """
+    if int(block_num) != -1:
+        return max(1, int(block_num))
     import torch
 
     props = torch.npu.get_device_properties(int(device))
-    for attr in ("aicore_num", "ai_core_num", "num_aicore", "cube_core_num"):
-        value = getattr(props, attr, None)
-        if value is not None:
-            return max(1, int(value))
-    return 1
-
+    if kind == "vector":
+        return max(1, int(props.vector_core_num))
+    if kind in {"cube", "mix"}:
+        return max(1, int(props.cube_core_num))
+    raise ValueError(f"Unsupported kernel kind for block_num default: {kind!r}")
 
 def _create_tla_tensor(dev_buf: Any, layout_tag: Any = tla.arch.RowMajor) -> Any:
     return from_dlpack(dev_buf.contiguous(), layout_tag=layout_tag)
 
-
 def _reshape_qk_to_2d(tensor: Any) -> Any:
     return tensor.reshape(-1, HEAD_DIM).contiguous()
 
-
 def run(args: argparse.Namespace) -> int:
-    torch = _require_torch_npu(args.device)
-    torch.npu.set_device(args.device)
+    torch_mod = _require_torch_npu(args.device)
     device = "npu"
     print(
         "---",
@@ -1226,17 +1224,17 @@ def run(args: argparse.Namespace) -> int:
     v_shape = (BATCH, KV_SEQ, KV_HEAD_NUM, HEAD_DIM)
     o_shape = (BATCH, Q_SEQ, HEAD_NUM, HEAD_DIM)
 
-    torch.manual_seed(42)
-    torch_q = torch.rand(q_shape, dtype=torch.float16).to(device)
-    torch_k = torch.rand(k_shape, dtype=torch.float16).to(device)
-    torch_v = torch.rand(v_shape, dtype=torch.float16).to(device)
-    torch_o = torch.full(o_shape, args.sentinel, dtype=torch.float16, device=device)
+    torch_mod.manual_seed(42)
+    torch_q = torch_mod.rand(q_shape, dtype=torch_mod.float16).to(device)
+    torch_k = torch_mod.rand(k_shape, dtype=torch_mod.float16).to(device)
+    torch_v = torch_mod.rand(v_shape, dtype=torch_mod.float16).to(device)
+    torch_o = torch_mod.full(o_shape, args.sentinel, dtype=torch_mod.float16, device=device)
 
     tla_q = _create_tla_tensor(_reshape_qk_to_2d(torch_q), tla.arch.RowMajor)
     tla_k = _create_tla_tensor(_reshape_qk_to_2d(torch_k), tla.arch.ColumnMajor)
     tla_v = _create_tla_tensor(_reshape_qk_to_2d(torch_v), tla.arch.RowMajor)
     tla_o = _create_tla_tensor(_reshape_qk_to_2d(torch_o), tla.arch.RowMajor)
-    mask_2d = torch.zeros((Q_SEQ, KV_SEQ), dtype=torch.int8, device=device)
+    mask_2d = torch_mod.zeros((Q_SEQ, KV_SEQ), dtype=torch_mod.int8, device=device)
     tla_mask = _create_tla_tensor(mask_2d, tla.arch.RowMajor)
 
     q_seqlen_list = [Q_SEQ] * BATCH
@@ -1252,20 +1250,24 @@ def run(args: argparse.Namespace) -> int:
         kv_base_tile=KV_BLOCK,
     )
     tiling_int_list = pack_tiling_int(td)
-    tiling_tensor = torch.tensor(tiling_int_list, dtype=torch.int32, device='cpu').to(device)
+    tiling_tensor = torch_mod.tensor(tiling_int_list, dtype=torch_mod.int32, device='cpu').to(device)
     tla_tiling = _create_tla_tensor(tiling_tensor, tla.arch.RowMajor)
 
     actual_q_list = make_actual_seqlen(q_seqlen_list)
     actual_kv_list = make_actual_seqlen(kv_seqlen_list)
-    actual_q = torch.tensor(actual_q_list, dtype=torch.int32)
-    actual_kv = torch.tensor(actual_kv_list, dtype=torch.int32)
+    actual_q = torch_mod.tensor(actual_q_list, dtype=torch_mod.int32)
+    actual_kv = torch_mod.tensor(actual_kv_list, dtype=torch_mod.int32)
     tla_actual_q = _create_tla_tensor(actual_q.to(device), tla.arch.RowMajor)
     tla_actual_kv = _create_tla_tensor(actual_kv.to(device), tla.arch.RowMajor)
 
-    core_num = _aicore_num(args.device)
-    block_num = core_num if args.block_num <= 0 else args.block_num
+    # Mix/CV kernel: -1 / <=0 defaults to cube_core_num (AIC).
+    block_num = get_block_num(
+        -1 if args.block_num <= 0 else args.block_num,
+        args.device,
+        kind="mix",
+    )
 
-    print(f"Launching kernel (block={block_num}, core_num={core_num})...", flush=True)
+    print(f"Launching kernel (block={block_num})...", flush=True)
     artifact = tla.compile(
         flash_attention_infer_kernel,
         tla_q,
@@ -1284,7 +1286,7 @@ def run(args: argparse.Namespace) -> int:
         block=block_num,
     )
 
-    torch.npu.synchronize()
+    torch_mod.npu.synchronize()
 
     scale = 1.0 / (HEAD_DIM ** 0.5)
     q_bnsd = torch_q.permute(0, 2, 1, 3).contiguous()
@@ -1299,7 +1301,7 @@ def run(args: argparse.Namespace) -> int:
     v_dsl = torch_v.cpu().numpy()
 
     del q_bnsd, k_bnsd, v_bnsd
-    torch.npu.empty_cache()
+    torch_mod.npu.empty_cache()
 
     group_num = HEAD_NUM // KV_HEAD_NUM
 
@@ -1349,9 +1351,9 @@ def run(args: argparse.Namespace) -> int:
 
     actual_np = torch_o.cpu().numpy().astype(np.float16).astype(np.float32)
 
-    actual_t = torch.from_numpy(actual_np.copy())
-    sentinel_t = torch.full_like(actual_t, args.sentinel)
-    unchanged = torch.isclose(actual_t, sentinel_t, rtol=0.0, atol=UNCHANGED_THRESHOLD)
+    actual_t = torch_mod.from_numpy(actual_np.copy())
+    sentinel_t = torch_mod.full_like(actual_t, args.sentinel)
+    unchanged = torch_mod.isclose(actual_t, sentinel_t, rtol=0.0, atol=UNCHANGED_THRESHOLD)
 
     a = actual_np.flatten()
     g = golden.flatten()
@@ -1375,7 +1377,6 @@ def run(args: argparse.Namespace) -> int:
 
     return 0 if passed else 1
 
-
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="flash_attention_infer: full FA kernel (QK + softmax + PV + rescale). "
@@ -1391,11 +1392,9 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     return parser
 
-
 def main() -> int:
     args = _build_parser().parse_args()
     return run(args)
-
 
 if __name__ == "__main__":
     raise SystemExit(main())

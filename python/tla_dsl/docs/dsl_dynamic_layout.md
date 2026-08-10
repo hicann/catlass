@@ -8,13 +8,13 @@
 
 ## 1. 静态 Layout
 
-`from_dlpack`（或手写 `tla.Tensor`）默认把当前具体 shape / stride / origin 写进 Host 元数据；这些数字进入 `!tla.tensor` 类型，在编译期已知。
+`from_dlpack` 默认把当前具体 shape / stride / origin 写进 Host 元数据；这些数字进入 `!tla.tensor` 类型，在编译期已知。
 
 ```python
 import torch
 import torch_npu
-import catlass as tla
-from catlass.runtime import from_dlpack
+import catlass.tla as tla
+from catlass.tla.runtime import from_dlpack
 
 @tla.kernel
 def foo(mem: tla.Tensor) -> None:
@@ -23,12 +23,12 @@ def foo(mem: tla.Tensor) -> None:
     # ...
 
 torch.npu.set_device(0)
-tla.initialize(device=0)
+torch.npu.set_device(0)
 
 a = torch.arange(3, dtype=torch.float32, device="npu")
 ta = from_dlpack(a.contiguous(), layout_tag=tla.arch.RowMajor)
-artifact = tla.compile(foo, ta, arch_scope="aiv.c310")
-artifact(ta, block_dim=1)
+artifact = tla.compile(foo, ta, options="--npu-arch 3510")
+artifact(ta, block_num=1)
 ```
 
 上例中，`ta` 带静态 layout（长度 3）。若再准备长度 5 的张量并沿用同一份编译产物，类型与编译期特化不一致，结果会错误或失败；通常需要针对新的静态 layout **再编译一次**：
@@ -36,8 +36,8 @@ artifact(ta, block_dim=1)
 ```python
 b = torch.arange(5, dtype=torch.float32, device="npu")
 tb = from_dlpack(b.contiguous(), layout_tag=tla.arch.RowMajor)
-artifact_5 = tla.compile(foo, tb, arch_scope="aiv.c310")
-artifact_5(tb, block_dim=1)
+artifact_5 = tla.compile(foo, tb, options="--npu-arch 3510")
+artifact_5(tb, block_num=1)
 ```
 
 也就是说：不同静态 layout（例如 `(3):(1)` 与 `(5):(1)`）对应不同的编译特化。静态 layout 适合问题尺寸固定、希望编译期尽量利用常量信息的场景。
@@ -60,8 +60,8 @@ artifact_5(tb, block_dim=1)
 ```python
 import torch
 import torch_npu
-import catlass as tla
-from catlass.runtime import from_dlpack
+import catlass.tla as tla
+from catlass.tla.runtime import from_dlpack
 
 @tla.kernel
 def foo(mem: tla.Tensor) -> None:
@@ -69,18 +69,18 @@ def foo(mem: tla.Tensor) -> None:
     # ...
 
 torch.npu.set_device(0)
-tla.initialize(device=0)
+torch.npu.set_device(0)
 
 a = torch.rand(4, 8, dtype=torch.float32, device="npu")
 ta = from_dlpack(a.contiguous(), layout_tag=tla.arch.RowMajor).mark_layout_dynamic()
 # 类型示意：shape<?,?>  stride<?,1>  origin<?,?>
 
-artifact = tla.compile(foo, ta, arch_scope="aiv.c310")
-artifact(ta, block_dim=1)
+artifact = tla.compile(foo, ta, options="--npu-arch 3510")
+artifact(ta, block_num=1)
 
 b = torch.rand(16, 32, dtype=torch.float32, device="npu")
 tb = from_dlpack(b.contiguous(), layout_tag=tla.arch.RowMajor).mark_layout_dynamic()
-artifact(tb, block_dim=1)  # 同一份编译产物可服务不同具体 shape
+artifact(tb, block_num=1)  # 同一份编译产物可服务不同具体 shape
 ```
 
 ### 2.1 `mark_layout_dynamic`
@@ -160,7 +160,7 @@ t.mark_compact_shape_dynamic(mode=1, stride_order=(0, 1))
 
 | | 静态 layout | 动态 layout |
 |--|-------------|-------------|
-| Host | 仅 `from_dlpack` / 手写 Tensor | 再 `mark_*_dynamic` |
+| Host | `from_dlpack` / `make_fake_tensor` | 再 `mark_*_dynamic` |
 | 编译类型 | 具体数字 | 动态维为 `?` |
 | 换 shape | 通常需重新编译 | 同一 artifact 可复用 |
 | 尺寸来源 | 编译期写死在类型里 | launch 时注入当次 extent |

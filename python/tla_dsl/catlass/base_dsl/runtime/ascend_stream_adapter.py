@@ -3,13 +3,12 @@
 Ascend launch takes an integer stream handle from PyACL. Resolution order:
 
 1. ``torch.npu`` current device / ``npu_stream`` (when torch_npu is available)
-2. ``tla.initialize`` / ``catlass.runtime`` current device/stream
-3. ``TLA_DSL_NPU_DEVICE`` env (device only)
+2. ``CATLASS_DSL_NPU_DEVICE`` env (device only); stream must come from torch or
+   an explicit ``stream=`` launch kwarg
 
 Preferring the torch stream matters: example harnesses fill I/O tensors with
-``torch.*`` on the torch stream, while ``tla.initialize`` creates a separate
-ACL stream. Launching on that ACL stream races with async torch init/copy and
-can leave outputs at their sentinel values.
+``torch.*`` on the torch stream. Launching on a separate ACL stream races with
+async torch init/copy and can leave outputs at their sentinel values.
 """
 
 from __future__ import annotations
@@ -24,37 +23,21 @@ def current_device() -> int:
     """Return the device id for kernel load/launch."""
     try:
         import torch
-        import torch_npu  # noqa: F401
+        import torch_npu
 
         return int(torch.npu.current_device())
     except Exception:
         pass
-    try:
-        from ... import runtime as runtime_mod
-
-        runtime_device = runtime_mod.current_device_id()
-        if runtime_device is not None:
-            return int(runtime_device)
-    except Exception:
-        pass
-    return int(os.getenv("TLA_DSL_NPU_DEVICE", "0"))
+    return int(os.getenv("CATLASS_DSL_NPU_DEVICE", "0"))
 
 
 def current_stream(device: int) -> int:
     """Return the RT stream handle for Ascend kernel launch."""
     try:
         import torch
-        import torch_npu  # noqa: F401
+        import torch_npu
 
         return int(torch.npu.current_stream(device).npu_stream)
-    except Exception:
-        pass
-    try:
-        from ... import runtime as runtime_mod
-
-        runtime_stream = runtime_mod.current_stream()
-        if runtime_stream is not None:
-            return int(runtime_stream)
     except Exception:
         pass
     raise TlaRuntimeUnavailableError(

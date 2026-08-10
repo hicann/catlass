@@ -9,7 +9,7 @@ import ctypes
 import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from types import ModuleType
 
 from ...execution import TlaRuntimeUnavailableError
 
@@ -18,9 +18,6 @@ _ACL_RT_BINARY_LOAD_OPT_MAGIC = 2
 _ACL_RT_BINARY_MAGIC_ELF_AICORE = 0x43554245
 _ACL_RT_BINARY_MAGIC_ELF_VECTOR_CORE = 0x41415246
 
-_ACL_ERROR_REPEAT_INITIALIZE = 100002
-_ACL_INITIALIZED = False
-_ACL_INIT_LOCK = threading.Lock()
 _KERNEL_CACHE: dict[tuple[str, int, str, str], "_LoadedKernel"] = {}
 _KERNEL_CACHE_LOCK = threading.Lock()
 
@@ -32,8 +29,8 @@ class _LoadedKernel:
     kernel_path: Path
 
 
-def load_acl() -> Any:
-    """Import the Ascend ``acl`` Python package."""
+def load_acl() -> ModuleType:
+    """Import the Ascend ``acl`` Python package (early availability check)."""
     try:
         import acl
     except ImportError as exc:
@@ -44,7 +41,7 @@ def load_acl() -> Any:
 
 
 def check_acl_errors(
-    ret: Any,
+    ret: object,
     op_name: str,
     *,
     error_cls: type[Exception] | None = None,
@@ -56,28 +53,11 @@ def check_acl_errors(
     raise cls(f"{op_name} failed with ret={int(ret)}")
 
 
-def _acl_status(result: Any) -> int:
+def _acl_status(result: object) -> int:
     """Normalize PyACL return value to a status code (``ret`` or ``(value, ret)``)."""
     if isinstance(result, tuple):
         return int(result[-1])
     return int(result)
-
-
-def initialize_acl_context() -> Any:
-    """Idempotent process-level ``acl.init()``; return the ``acl`` module.
-
-    Single init entry for ``tla.initialize``, ``load_binary``, and
-    ``launch_kernel``. Repeat ``acl.init`` (ret 100002) is treated as success.
-    """
-    global _ACL_INITIALIZED
-    acl = load_acl()
-    with _ACL_INIT_LOCK:
-        if not _ACL_INITIALIZED:
-            ret = int(acl.init())
-            if ret not in (0, _ACL_ERROR_REPEAT_INITIALIZE):
-                raise TlaRuntimeUnavailableError(f"acl.init failed with ret={ret}")
-            _ACL_INITIALIZED = True
-    return acl
 
 
 def _binary_load_options_for_mode(kernel_mode: str) -> list[dict[str, int]]:
@@ -117,9 +97,11 @@ def _binary_load_options_for_mode(kernel_mode: str) -> list[dict[str, int]]:
 
 
 def _register_kernel_binary(
-    *, acl: Any, kernel_path: Path, fn_name: str, kernel_mode: str
+    *, kernel_path: Path, fn_name: str, kernel_mode: str
 ) -> _LoadedKernel:
     """Load ``kernel.o`` via ``acl.rt.binary_load_from_data`` + mode magic."""
+    import acl
+
     raw = kernel_path.read_bytes()
     host_buf = (ctypes.c_char * len(raw)).from_buffer_copy(raw)
     opts = _binary_load_options_for_mode(kernel_mode)
@@ -145,7 +127,8 @@ def load_binary(
     *, name: str, kernel_path: Path, device: int
 ) -> tuple[int, int]:
     """Load ``kernel.o`` and return ``(bin_handle, function_handle)``."""
-    acl = initialize_acl_context()
+    import acl
+
     fn_name, kernel_mode = name.split(maxsplit=1)
     check_acl_errors(acl.rt.set_device(int(device)), "acl.rt.set_device")
     resolved = kernel_path.resolve()
@@ -161,7 +144,6 @@ def load_binary(
             return cached.bin_handle, cached.function_handle
 
     loaded = _register_kernel_binary(
-        acl=acl,
         kernel_path=resolved,
         fn_name=fn_name,
         kernel_mode=kernel_mode,
@@ -181,9 +163,10 @@ def launch_kernel(
     expects_print_tensor: bool | int = False,
 ) -> None:
     """Launch via PyACL ``kernel_args_*`` + ``launch_kernel_with_config`` (Host args)."""
+    import acl
+
     from .ascend_debug_fifo import launch_with_debug_fifo
 
-    acl = initialize_acl_context()
     block_num = int(block_num)
 
     def _acl_launch(launch_args: bytes) -> None:
@@ -221,10 +204,9 @@ def launch_kernel(
     needs_fifo = bool(expects_debug_fifo) or bool(expects_print_tensor)
     if needs_fifo:
         launch_with_debug_fifo(
-            acl=acl,
             launch_kernel=_acl_launch,
             args=args,
-            block_dim=block_num,
+            block_num=block_num,
             stream=int(stream),
             expects_debug_fifo=bool(expects_debug_fifo),
             expects_print_tensor=expects_print_tensor,
@@ -237,7 +219,6 @@ def launch_kernel(
 __all__ = [
     "load_acl",
     "check_acl_errors",
-    "initialize_acl_context",
     "load_binary",
     "launch_kernel",
 ]

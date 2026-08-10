@@ -13,8 +13,26 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-import catlass as tla
-from catlass.runtime import from_dlpack
+import catlass.tla as tla
+import sys
+from catlass.tla.runtime import from_dlpack
+
+def get_block_num(block_num: int, device: int = 0, *, kind: str = "vector") -> int:
+    """Get launch ``block_num``.
+
+    Non-``-1`` uses the host argument. ``-1`` means full-device launch:
+    pure vector → ``vector_core_num`` (AIV); cube/mix → ``cube_core_num`` (AIC).
+    """
+    if int(block_num) != -1:
+        return max(1, int(block_num))
+    import torch
+
+    props = torch.npu.get_device_properties(int(device))
+    if kind == "vector":
+        return max(1, int(props.vector_core_num))
+    if kind in {"cube", "mix"}:
+        return max(1, int(props.cube_core_num))
+    raise ValueError(f"Unsupported kernel kind for block_num default: {kind!r}")
 
 M_DIM = 32
 N_DIM = 32
@@ -26,7 +44,6 @@ L0B_BYTES = 32 * 32 * 4
 L0C_BYTES = 32 * 32 * 4
 
 DESCRIPTION = "Basic Mixed UB→L1 + cross_core sync; f32 only."
-
 
 # ---------------------------------------------------------------------------
 # Kernel
@@ -123,92 +140,79 @@ def basic_mixed_ub2l1(
 
         tla.pipe_barrier(tla.pipes.ALL)
 
-
 # ---------------------------------------------------------------------------
 # Host
 # ---------------------------------------------------------------------------
-
-EXAMPLE_DIR = Path(__file__).resolve().parent
-DEFAULT_CACHE_DIR = EXAMPLE_DIR / "artifacts" / "runtime-cache"
-
 
 def golden(lhs, rhs):
     import torch
 
     return lhs.to(torch.float32) @ rhs.to(torch.float32)
 
+def prepare_npu(buf, layout: str):
+    storage = buf.contiguous() if layout == "row" else buf.permute(1, 0).contiguous()
+    return storage.npu()
+
+def create_tla_tensor(buf, layout: str):
+    tag = tla.arch.RowMajor if layout == "row" else tla.arch.ColumnMajor
+    return from_dlpack(buf, layout_tag=tag)
 
 def run(args: argparse.Namespace) -> int:
     import torch
-    import torch_npu  # noqa: F401
+    import torch_npu
 
     mi, ni, ki = int(args.m), int(args.n), int(args.k)
 
-    def create_tla_tensor(buf, layout: str):
-        storage = buf.contiguous() if layout == "row" else buf.permute(1, 0).contiguous()
-        tag = tla.arch.RowMajor if layout == "row" else tla.arch.ColumnMajor
-        return from_dlpack(storage, layout_tag=tag)
+    torch.npu.set_device(args.device)
+    print(f"--- mnk=({mi},{ni},{ki}) ---")
+    lhs = torch.rand(mi, ki, dtype=torch.float32, device="cpu") * 10.0 - 5.0
+    rhs = torch.rand(ki, ni, dtype=torch.float32, device="cpu") * 10.0 - 5.0
+    out = torch.full((mi, ni), args.sentinel, dtype=torch.float32, device="cpu")
+    ref = golden(lhs, rhs)
 
-    cache_dir = str(Path(args.cache_dir).expanduser().resolve())
+    lhs = prepare_npu(lhs, args.layout_a)
+    rhs = prepare_npu(rhs, args.layout_b)
+    out = prepare_npu(out, "row")
+    a_tensor = create_tla_tensor(lhs, args.layout_a)
+    b_tensor = create_tla_tensor(rhs, args.layout_b)
+    c_tensor = create_tla_tensor(out, "row")
 
-    tla.initialize(device=args.device)
-    try:
-        torch.npu.set_device(args.device)
-        print(f"--- mnk=({mi},{ni},{ki}) ---")
-        lhs = torch.rand(mi, ki, dtype=torch.float32, device="npu") * 10.0 - 5.0
-        rhs = torch.rand(ki, ni, dtype=torch.float32, device="npu") * 10.0 - 5.0
-        out = torch.full((mi, ni), args.sentinel, dtype=torch.float32, device="npu")
-        expected = golden(lhs, rhs)
+    artifact = tla.compile(
+        basic_mixed_ub2l1,
+        a_tensor,
+        b_tensor,
+        c_tensor,
+        options="--npu-arch 3510"
+    )
+    block_num = get_block_num(args.block_num, args.device, kind="mix")
+    artifact(a_tensor, b_tensor, c_tensor, block_num=block_num)
+    torch.npu.synchronize()
 
-        ta = create_tla_tensor(lhs, args.layout_a)
-        tb = create_tla_tensor(rhs, args.layout_b)
-        tc = create_tla_tensor(out, "row")
-
-        artifact = tla.compile(
-            basic_mixed_ub2l1,
-            ta,
-            tb,
-            tc,
-            arch_scope="aic.c310",
-            cache=not args.no_cache,
-            cache_dir=cache_dir,
-            force_recompile=args.force_recompile,
-        )
-        block_dim = max(
-            1,
-            args.block_dim if args.block_dim != -1 else tla.get_aicore_num(args.device),
-        )
-        artifact(ta, tb, tc, block_dim=block_dim)
-        torch.npu.synchronize()
-
-        # dtype -- f32
-        rtol = (1.0 / 256.0) if ki < 2048 else (1.0 / 128.0)
-        floor = 1.0
-        got = out.detach().to(device="cpu", dtype=torch.float32)
-        exp = expected.detach().to(device="cpu", dtype=torch.float32)
-        passed = bool(((got - exp).abs() <= rtol * torch.maximum(torch.full_like(exp, floor), exp.abs())).all())
-        print(f"passed={passed} cache_key={artifact.cache_key}")
-        print(f"kernel.o={artifact.kernel_binary_path}")
-        return 0 if passed else 1
-    finally:
-        tla.finalize()
-
+    # dtype -- f32
+    rtol = (1.0 / 256.0) if ki < 2048 else (1.0 / 128.0)
+    floor = 1.0
+    result = out.detach().cpu().float()
+    passed = bool(
+        (
+            (result - ref).abs()
+            <= rtol * torch.maximum(torch.full_like(ref, floor), ref.abs())
+        ).all()
+    )
+    print(f"passed={passed} cache_key={artifact.cache_key}")
+    print(f"kernel.o={artifact.kernel_binary_path}")
+    return 0 if passed else 1
 
 def main() -> int:
-    p = argparse.ArgumentParser(description=DESCRIPTION)
-    p.add_argument("--device", type=int, default=0)
-    p.add_argument("--m", type=int, default=M_DIM)
-    p.add_argument("--n", type=int, default=N_DIM)
-    p.add_argument("--k", type=int, default=K_DIM)
-    p.add_argument("--layout-a", choices=("row", "col"), default="row")
-    p.add_argument("--layout-b", choices=("row", "col"), default="row")
-    p.add_argument("--block-dim", type=int, default=-1)
-    p.add_argument("--sentinel", type=float, default=-9.0)
-    p.add_argument("--cache-dir", default=str(DEFAULT_CACHE_DIR))
-    p.add_argument("--force-recompile", action="store_true")
-    p.add_argument("--no-cache", action="store_true")
-    return run(p.parse_args())
-
+    parser = argparse.ArgumentParser(description=DESCRIPTION)
+    parser.add_argument("--device", type=int, default=0)
+    parser.add_argument("--m", type=int, default=M_DIM)
+    parser.add_argument("--n", type=int, default=N_DIM)
+    parser.add_argument("--k", type=int, default=K_DIM)
+    parser.add_argument("--layout-a", choices=("row", "col"), default="row")
+    parser.add_argument("--layout-b", choices=("row", "col"), default="row")
+    parser.add_argument("--block-num", type=int, default=-1)
+    parser.add_argument("--sentinel", type=float, default=-9.0)
+    return run(parser.parse_args())
 
 if __name__ == "__main__":
     raise SystemExit(main())

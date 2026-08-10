@@ -6,7 +6,7 @@ from typing import Any
 from mlir import ir as mlir_ir
 import pytest
 
-import catlass as tla
+import catlass.tla as tla
 from catlass.address_space import AddressSpace
 from catlass.base_dsl import ast_helpers
 from catlass.base_dsl.typing import Int8

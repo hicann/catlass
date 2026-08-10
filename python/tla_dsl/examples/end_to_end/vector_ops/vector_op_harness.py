@@ -1,21 +1,14 @@
 from __future__ import annotations
 
 import argparse
-import concurrent.futures
 from dataclasses import dataclass
-import os
 from pathlib import Path
-import shutil
-import subprocess
-import sys
 import time
 from typing import Any, Callable
 
-import catlass as tla
+import catlass.tla as tla
 
 DEFAULT_SHAPES = (31, 32, 33, 63, 64, 65, 127, 128, 129, 255, 256, 257, 500, 1024, 2000)
-DEMO_DIR = Path(__file__).resolve().parent
-DEFAULT_CACHE_DIR = DEMO_DIR / "artifacts" / "runtime-cache"
 
 
 @dataclass(frozen=True)
@@ -60,7 +53,6 @@ class DirectVectorOpConfig:
     set_kernel_config: Callable[
         [str, str, tuple[int, ...] | None], tuple[type[Any], Any, float | int]
     ]
-    compile_only_type_args: Callable[[str, str, tuple[int, ...] | None], tuple[Any, ...]]
     get_vector_elements: Callable[[], int]
     get_kernel_shape: Callable[[], tuple[int, ...]]
     make_inputs: Callable[[argparse.Namespace, str, Any], tuple[Any, ...]]
@@ -68,7 +60,6 @@ class DirectVectorOpConfig:
     unsupported_case: Callable[[str, str], bool]
     print_skip: Callable[[str, str, tuple[int, ...]], None]
     script_path: Path
-    env_compile_jobs: str
     float_dtypes: frozenset[str]
     input_count: int = 0
     output_count: int = 1
@@ -129,28 +120,6 @@ def vector_kernel_config(
     )
 
 
-def make_type_args(
-    tla_dtype: Any, kernel_shape: tuple[int, ...], tensor_count: int
-) -> tuple[Any, ...]:
-    from catlass import runtime as runtime_mod
-
-    with runtime_mod._eager_capture():
-        tensor_shape = tla.make_shape(*kernel_shape)
-        tensor_coord = tla.make_coord(*(0 for _ in kernel_shape))
-        tensor_stride = tla.make_stride(1)
-        return tuple(
-            tla.Tensor(
-                tensor_shape,
-                tla_dtype,
-                origin_shape=tensor_shape,
-                coord=tensor_coord,
-                stride=tensor_stride,
-                layout_tag=tla.arch.RowMajor,
-            )
-            for _ in range(tensor_count)
-        )
-
-
 def parse_shape(value: str, *, script_name: str) -> tuple[int, ...]:
     text = value.strip().lower().replace(",", "x")
     if not text:
@@ -168,22 +137,6 @@ def parse_shape(value: str, *, script_name: str) -> tuple[int, ...]:
             f"{script_name} currently supports flat 1D vector shapes only"
         )
     return dims
-
-
-def _parse_compile_jobs(value: str) -> int | str:
-    if value == "all":
-        return value
-    try:
-        jobs = int(value)
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError(
-            "compile jobs must be a positive integer, 0 for CPU count, or 'all'"
-        ) from exc
-    if jobs < 0:
-        raise argparse.ArgumentTypeError(
-            "compile jobs must be a positive integer, 0 for CPU count, or 'all'"
-        )
-    return jobs
 
 
 def _parse_batch_size(value: str) -> int:
@@ -207,52 +160,25 @@ def operation_batches(
     )
 
 
-def _available_cpu_cores() -> list[int]:
-    if hasattr(os, "sched_getaffinity"):
-        return sorted(os.sched_getaffinity(0))
-    cpu_count = os.cpu_count() or 0
-    return list(range(cpu_count))
-
-
-def _resolve_compile_jobs(args: argparse.Namespace, case_count: int) -> int:
-    requested = args.compile_jobs
-    if requested == "all":
-        return case_count
-    jobs = (
-        int(requested)
-        if requested
-        else len(_available_cpu_cores()) or os.cpu_count() or 1
-    )
-    return max(1, min(jobs, case_count))
-
-
 def runtime_kwargs(args: argparse.Namespace) -> dict[str, Any]:
     return {
-        "arch_scope": "aiv.c310",
-        "cache": not args.no_cache,
-        "cache_dir": str(Path(args.cache_dir).expanduser().resolve()),
-        "force_recompile": args.force_recompile,
+        "options": "--npu-arch 3510"
     }
 
 
 def make_tla_tensor(
     dev_buf: Any, tla_dtype: type[Any], kernel_shape: tuple[int, ...]
 ) -> Any:
-    from catlass import runtime as runtime_mod
+    import catlass.runtime as runtime_mod
+    from catlass.tla.runtime import from_dlpack
 
-    contiguous = dev_buf.contiguous()
     with runtime_mod._eager_capture():
-        tensor_shape = tla.make_shape(*kernel_shape)
-        tensor = tla.Tensor(
-            tensor_shape,
-            tla_dtype,
-            origin_shape=tensor_shape,
-            coord=tla.make_coord(*(0 for _ in kernel_shape)),
-            stride=tla.make_stride(1),
-            data_ptr=int(contiguous.data_ptr()),
-        )
-    tensor._external_binding = True
-    return tensor
+        origin = tla.make_shape(*kernel_shape)
+    return from_dlpack(
+        dev_buf.contiguous(),
+        layout_tag=tla.arch.RowMajor,
+        origin_shape=origin,
+    )
 
 
 def require_torch_npu(device_id: int, script_name: str) -> Any:
@@ -261,7 +187,7 @@ def require_torch_npu(device_id: int, script_name: str) -> Any:
     except ImportError as exc:
         raise SystemExit(f"{script_name} requires PyTorch.") from exc
     try:
-        import torch_npu  # noqa: F401
+        import torch_npu
     except ImportError as exc:
         raise SystemExit(f"{script_name} requires torch_npu.") from exc
     torch.npu.set_device(device_id)
@@ -276,111 +202,13 @@ class DirectVectorOpHarness:
     def _runtime_kwargs(self, args: argparse.Namespace) -> dict[str, Any]:
         return runtime_kwargs(args)
 
-    def _case_cache_dir(
-        self, args: argparse.Namespace, op_name: str, dtype_name: str, shape: tuple[int, ...]
-    ) -> Path:
-        return Path(args.cache_dir).expanduser() / op_name / f"{dtype_name}_{shape_label(shape)}"
-
     def _case_args(
         self, args: argparse.Namespace, dtype_name: str, shape: tuple[int, ...]
     ) -> argparse.Namespace:
         case_args = argparse.Namespace(**vars(args))
         case_args.dtype = dtype_name
         case_args.shape = shape
-        case_args.cache_dir = str(self._case_cache_dir(args, args.op, dtype_name, shape))
         return case_args
-
-    def _precompile_case_command(
-        self, args: argparse.Namespace, dtype_name: str, shape: tuple[int, ...], index: int
-    ) -> list[str]:
-        command = [
-            sys.executable,
-            str(self.config.script_path),
-            args.op,
-            "--build-only",
-            "--dtype",
-            dtype_name,
-            "--shape",
-            shape_label(shape),
-            "--cache-dir",
-            str(self._case_cache_dir(args, args.op, dtype_name, shape)),
-            "--force-recompile",
-        ]
-        taskset = shutil.which("taskset")
-        cores = _available_cpu_cores()
-        if taskset is None or not cores:
-            return command
-        return [taskset, "-c", str(cores[index % len(cores)]), *command]
-
-    @staticmethod
-    def _print_process_output(process: subprocess.CompletedProcess[str]) -> None:
-        if process.stdout:
-            print(process.stdout, end="" if process.stdout.endswith("\n") else "\n")
-        if process.stderr:
-            print(process.stderr, end="" if process.stderr.endswith("\n") else "\n")
-
-    def precompile_sweep(self, args: argparse.Namespace) -> int:
-        cases = []
-        skipped = 0
-        for dtype_name in args.dtypes:
-            for shape in args.shapes:
-                if self.config.unsupported_case(args.op, dtype_name):
-                    skipped += 1
-                    print(
-                        f"===== PRECOMPILE SKIP {args.op} dtype={dtype_name} "
-                        f"shape={shape_label(shape)} ====="
-                    )
-                    self.config.print_skip(args.op, dtype_name, shape)
-                    continue
-                cases.append((dtype_name, shape))
-        if not cases:
-            print(
-                f"{args.op} precompile summary: "
-                f"passed=0 failed=0 skipped={skipped} total={skipped}"
-            )
-            return 0
-        jobs = _resolve_compile_jobs(args, len(cases))
-        print("precompile_sweep_enabled=True")
-        print(f"precompile_sweep_jobs={jobs}")
-
-        def run_case(
-            index: int, dtype_name: str, shape: tuple[int, ...]
-        ) -> tuple[str, tuple[int, ...], subprocess.CompletedProcess[str]]:
-            process = subprocess.run(
-                self._precompile_case_command(args, dtype_name, shape, index),
-                check=False,
-                capture_output=True,
-                text=True,
-                env=os.environ.copy(),
-            )
-            return dtype_name, shape, process
-
-        failed = 0
-        start = time.perf_counter()
-        with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as executor:
-            futures = [
-                executor.submit(run_case, index, dtype_name, shape)
-                for index, (dtype_name, shape) in enumerate(cases)
-            ]
-            for future in concurrent.futures.as_completed(futures):
-                dtype_name, shape, process = future.result()
-                label = f"{args.op} dtype={dtype_name} shape={shape_label(shape)}"
-                if process.returncode == 0:
-                    print(f"===== PRECOMPILE PASS {label} =====")
-                    continue
-                failed += 1
-                print(f"===== PRECOMPILE FAIL {label} rc={process.returncode} =====")
-                self._print_process_output(process)
-                if args.fail_fast:
-                    break
-
-        print(f"timing.sweep_precompile_seconds={time.perf_counter() - start:.6f}")
-        print(
-            f"{args.op} precompile summary: "
-            f"passed={len(cases) - failed} failed={failed} "
-            f"skipped={skipped} total={len(cases) + skipped}"
-        )
-        return 0 if failed == 0 else 1
 
     def _run_single_case(
         self, args: argparse.Namespace, dtype_name: str, torch: Any
@@ -426,7 +254,7 @@ class DirectVectorOpHarness:
             *tla_outputs,
             **self._runtime_kwargs(args),
         )
-        artifact(*tla_inputs, *tla_outputs, block_dim=args.block_dim)
+        artifact(*tla_inputs, *tla_outputs, block_num=args.block_num)
 
         torch.npu.synchronize()
         first_mismatch: dict[str, Any] | None = None
@@ -463,30 +291,6 @@ class DirectVectorOpHarness:
         print(f"outputs equal expected {args.op}? {all(output_matches)}")
         print(f"first mismatch={first_mismatch}")
         return 0 if first_mismatch is None else 1
-
-    def _batch_cache_dir(
-        self,
-        args: argparse.Namespace,
-        dtype_name: str,
-        shape: tuple[int, ...],
-        ops: tuple[str, ...],
-    ) -> Path:
-        descriptor = "__".join(ops)
-        return (
-            Path(args.cache_dir).expanduser()
-            / "batches"
-            / f"{dtype_name}_{shape_label(shape)}"
-            / descriptor
-        )
-
-    def _batch_type_args(
-        self, tla_dtype: type[Any], packed_shape: tuple[int, ...]
-    ) -> tuple[Any, ...]:
-        return make_type_args(
-            tla_dtype,
-            packed_shape,
-            self.config.input_count + self.config.output_count,
-        )
 
     def _verify_batch_case(
         self,
@@ -591,17 +395,13 @@ class DirectVectorOpHarness:
         tla_outputs = tuple(
             make_tla_tensor(value, tla_dtype, packed_shape) for value in packed_outputs
         )
-        batch_args = argparse.Namespace(**vars(args))
-        batch_args.cache_dir = str(
-            self._batch_cache_dir(args, dtype_name, shape, ops)
-        )
         artifact = tla.compile(
             batch_kernel,
             *tla_inputs,
             *tla_outputs,
-            **self._runtime_kwargs(batch_args),
+            **self._runtime_kwargs(args),
         )
-        artifact(*tla_inputs, *tla_outputs, block_dim=len(ops))
+        artifact(*tla_inputs, *tla_outputs, block_num=len(ops))
         torch.npu.synchronize()
 
         extent = shape_num_elements(shape)
@@ -622,101 +422,6 @@ class DirectVectorOpHarness:
         )
         print(f"kernel.o path={artifact.kernel_binary_path}")
         return failed
-
-    def build_batch(self, args: argparse.Namespace) -> int:
-        batch_kernel = self.config.batch_kernel
-        configure_batch = self.config.configure_batch
-        if batch_kernel is None or configure_batch is None:
-            raise SystemExit(
-                f"{self.script_name} does not support operation batching"
-            )
-        ops = tuple(args.batch_build)
-        tla_dtype, _, _ = configure_batch(ops, args.dtype, args.shape)
-        packed_shape = (len(ops) * shape_num_elements(args.shape),)
-        batch_args = argparse.Namespace(**vars(args))
-        batch_args.cache_dir = str(
-            self._batch_cache_dir(args, args.dtype, args.shape, ops)
-        )
-        artifact = tla.compile(
-            batch_kernel,
-            *self._batch_type_args(tla_dtype, packed_shape),
-            **self._runtime_kwargs(batch_args),
-        )
-        print(
-            f"batch_compile_ok=True dtype={args.dtype} "
-            f"ops={','.join(ops)} blocks={len(ops)}"
-        )
-        print(f"kernel.o path={artifact.kernel_binary_path}")
-        return 0
-
-    def _batch_build_command(
-        self,
-        args: argparse.Namespace,
-        ops: tuple[str, ...],
-        dtype_name: str,
-        index: int,
-    ) -> list[str]:
-        command = [
-            sys.executable,
-            str(self.config.script_path),
-            "--batch-build",
-            *ops,
-            "--dtype",
-            dtype_name,
-            "--shape",
-            shape_label(args.shape),
-            "--cache-dir",
-            str(args.cache_dir),
-            "--force-recompile",
-        ]
-        taskset = shutil.which("taskset")
-        cores = _available_cpu_cores()
-        if taskset is None or not cores:
-            return command
-        return [taskset, "-c", str(cores[index % len(cores)]), *command]
-
-    def precompile_batches(
-        self,
-        args: argparse.Namespace,
-        batches: tuple[tuple[str, tuple[str, ...]], ...],
-    ) -> int:
-        jobs = _resolve_compile_jobs(args, len(batches))
-        print("batch_precompile_enabled=True")
-        print(f"batch_precompile_jobs={jobs}")
-
-        def run_batch(
-            index: int, dtype_name: str, ops: tuple[str, ...]
-        ) -> tuple[str, tuple[str, ...], subprocess.CompletedProcess[str]]:
-            process = subprocess.run(
-                self._batch_build_command(args, ops, dtype_name, index),
-                check=False,
-                capture_output=True,
-                text=True,
-                env=os.environ.copy(),
-            )
-            return dtype_name, ops, process
-
-        failed = 0
-        start = time.perf_counter()
-        with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as executor:
-            futures = [
-                executor.submit(run_batch, index, dtype_name, ops)
-                for index, (dtype_name, ops) in enumerate(batches)
-            ]
-            for future in concurrent.futures.as_completed(futures):
-                dtype_name, ops, process = future.result()
-                label = f"dtype={dtype_name} ops={','.join(ops)}"
-                if process.returncode == 0:
-                    print(f"===== BATCH PRECOMPILE PASS {label} =====")
-                else:
-                    failed += 1
-                    print(
-                        f"===== BATCH PRECOMPILE FAIL {label} "
-                        f"rc={process.returncode} ====="
-                    )
-                    self._print_process_output(process)
-        print(f"timing.batch_precompile_seconds={time.perf_counter() - start:.6f}")
-        return 0 if failed == 0 else 1
 
     def batch_run(self, args: argparse.Namespace) -> int:
         if self.config.batch_kernel is None or self.config.configure_batch is None:
@@ -740,105 +445,84 @@ class DirectVectorOpHarness:
         if not batches:
             print(f"batch summary: passed=0 failed=0 skipped={skipped} batches=0")
             return 0
-        if self.precompile_batches(args, tuple(batches)) != 0:
-            return 1
         launch_args = argparse.Namespace(**vars(args))
-        launch_args.force_recompile = False
-        launch_args.no_cache = False
-        tla.initialize(device=args.device)
-        try:
-            torch = require_torch_npu(args.device, self.script_name)
-            failed = 0
-            passed = 0
-            batch_count = 0
-            for dtype_name, ops in batches:
-                batch_count += 1
-                batch_failed = self._run_batch(
-                    launch_args, ops, dtype_name, torch
-                )
-                failed += batch_failed
-                passed += len(ops) - batch_failed
-                if batch_failed and args.fail_fast:
-                    break
-            print(
-                f"batch summary: passed={passed} failed={failed} skipped={skipped} "
-                f"batches={batch_count} total={passed + failed + skipped}"
+        torch = require_torch_npu(args.device, self.script_name)
+        torch.npu.set_device(args.device)
+        failed = 0
+        passed = 0
+        batch_count = 0
+        for dtype_name, ops in batches:
+            batch_count += 1
+            batch_failed = self._run_batch(
+                launch_args, ops, dtype_name, torch
             )
-            return 0 if failed == 0 else 1
-        finally:
-            tla.finalize()
+            failed += batch_failed
+            passed += len(ops) - batch_failed
+            if batch_failed and args.fail_fast:
+                break
+        print(
+            f"batch summary: passed={passed} failed={failed} skipped={skipped} "
+            f"batches={batch_count} total={passed + failed + skipped}"
+        )
+        return 0 if failed == 0 else 1
 
     def sweep(self, args: argparse.Namespace) -> int:
-        if args.precompile_sweep:
-            precompile_rc = self.precompile_sweep(args)
-            if precompile_rc != 0:
-                return precompile_rc
-            args = argparse.Namespace(**vars(args))
-            args.no_cache = False
-            args.force_recompile = False
-
-        tla.initialize(device=args.device)
-        try:
-            torch = require_torch_npu(args.device, self.script_name)
-            total = 0
-            passed = 0
-            failed = 0
-            skipped = 0
-            start = time.perf_counter()
-            for dtype_name in args.dtypes:
-                for shape in args.shapes:
-                    total += 1
-                    case_args = self._case_args(args, dtype_name, shape)
-                    if self.config.unsupported_case(args.op, dtype_name):
-                        skipped += 1
-                        print(
-                            f"===== SKIP {args.op} dtype={dtype_name} "
-                            f"shape={shape_label(shape)} ====="
-                        )
-                        self.config.print_skip(args.op, dtype_name, shape)
-                        continue
+        torch = require_torch_npu(args.device, self.script_name)
+        torch.npu.set_device(args.device)
+        total = 0
+        passed = 0
+        failed = 0
+        skipped = 0
+        start = time.perf_counter()
+        for dtype_name in args.dtypes:
+            for shape in args.shapes:
+                total += 1
+                case_args = self._case_args(args, dtype_name, shape)
+                if self.config.unsupported_case(args.op, dtype_name):
+                    skipped += 1
                     print(
-                        f"===== START {args.op} dtype={dtype_name} "
+                        f"===== SKIP {args.op} dtype={dtype_name} "
                         f"shape={shape_label(shape)} ====="
                     )
-                    rc = self._run_single_case(case_args, dtype_name, torch)
-                    if rc == 0:
-                        passed += 1
-                        print(
-                            f"===== PASS {args.op} dtype={dtype_name} "
-                            f"shape={shape_label(shape)} ====="
-                        )
-                    else:
-                        failed += 1
-                        print(
-                            f"===== FAIL {args.op} dtype={dtype_name} "
-                            f"shape={shape_label(shape)} rc={rc} ====="
-                        )
-                        if args.fail_fast:
-                            break
-                if failed and args.fail_fast:
-                    break
-            print(
-                f"{args.op} summary: passed={passed} failed={failed} "
-                f"skipped={skipped} total={total}"
-            )
-            print(f"timing.sweep_total_seconds={time.perf_counter() - start:.6f}")
-            return 0 if failed == 0 else 1
-        finally:
-            tla.finalize()
+                    self.config.print_skip(args.op, dtype_name, shape)
+                    continue
+                print(
+                    f"===== START {args.op} dtype={dtype_name} "
+                    f"shape={shape_label(shape)} ====="
+                )
+                rc = self._run_single_case(case_args, dtype_name, torch)
+                if rc == 0:
+                    passed += 1
+                    print(
+                        f"===== PASS {args.op} dtype={dtype_name} "
+                        f"shape={shape_label(shape)} ====="
+                    )
+                else:
+                    failed += 1
+                    print(
+                        f"===== FAIL {args.op} dtype={dtype_name} "
+                        f"shape={shape_label(shape)} rc={rc} ====="
+                    )
+                    if args.fail_fast:
+                        break
+            if failed and args.fail_fast:
+                break
+        print(
+            f"{args.op} summary: passed={passed} failed={failed} "
+            f"skipped={skipped} total={total}"
+        )
+        print(f"timing.sweep_total_seconds={time.perf_counter() - start:.6f}")
+        return 0 if failed == 0 else 1
 
     def run(self, args: argparse.Namespace) -> int:
-        tla.initialize(device=args.device)
-        try:
-            torch = require_torch_npu(args.device, self.script_name)
-            failed = 0
-            dtypes = self.config.all_dtypes if args.all_dtypes else (args.dtype,)
-            for dtype_name in dtypes:
-                print("---", f"op={args.op}", f"dtype={dtype_name}", "---")
-                failed += self._run_single_case(args, dtype_name, torch)
-            return 0 if failed == 0 else 1
-        finally:
-            tla.finalize()
+        torch = require_torch_npu(args.device, self.script_name)
+        torch.npu.set_device(args.device)
+        failed = 0
+        dtypes = self.config.all_dtypes if args.all_dtypes else (args.dtype,)
+        for dtype_name in dtypes:
+            print("---", f"op={args.op}", f"dtype={dtype_name}", "---")
+            failed += self._run_single_case(args, dtype_name, torch)
+        return 0 if failed == 0 else 1
 
     def _build_parser(self) -> argparse.ArgumentParser:
         parser = argparse.ArgumentParser(description=self.config.description)
@@ -848,21 +532,14 @@ class DirectVectorOpHarness:
             nargs="?",
         )
         mode = parser.add_mutually_exclusive_group()
-        mode.add_argument("--build-only", action="store_true")
         mode.add_argument("--sweep", action="store_true")
         mode.add_argument(
             "--batch-run",
             choices=tuple(sorted(self.config.operator_specs())),
             nargs="+",
         )
-        mode.add_argument(
-            "--batch-build",
-            choices=tuple(sorted(self.config.operator_specs())),
-            nargs="+",
-            help=argparse.SUPPRESS,
-        )
         parser.add_argument("--device", type=int, default=2)
-        parser.add_argument("--block-dim", type=int, default=None)
+        parser.add_argument("--block-num", type=int, default=None)
         parser.add_argument("--dtype", choices=self.config.all_dtypes, default="f32")
         parser.add_argument(
             "--shape",
@@ -892,40 +569,17 @@ class DirectVectorOpHarness:
         parser.add_argument("--batch-size", type=_parse_batch_size, default=4)
         parser.add_argument("--sentinel", type=float, default=None)
         parser.add_argument("--atol", type=float, default=None)
-        parser.add_argument("--cache-dir", default=str(DEFAULT_CACHE_DIR))
-        parser.add_argument("--force-recompile", action="store_true")
-        parser.add_argument("--no-cache", action="store_true")
         parser.add_argument("--fail-fast", action="store_true")
-        parser.add_argument(
-            "--precompile-sweep",
-            action="store_true",
-            default=True,
-            help="For --sweep, compile all cases in parallel subprocesses before running.",
-        )
-        parser.add_argument(
-            "--no-precompile-sweep",
-            action="store_false",
-            dest="precompile_sweep",
-        )
-        parser.add_argument(
-            "--compile-jobs",
-            type=_parse_compile_jobs,
-            default=_parse_compile_jobs(os.environ.get(self.config.env_compile_jobs, "all")),
-        )
         return parser
 
     def main(self) -> int:
         args = self._build_parser().parse_args()
-        if args.block_dim is None:
-            args.block_dim = self.config.launch_blocks
+        if args.block_num is None:
+            args.block_num = self.config.launch_blocks
         if args.batch_run is not None:
             if args.op is not None:
                 raise SystemExit("positional op cannot be combined with --batch-run")
             return self.batch_run(args)
-        if args.batch_build is not None:
-            if args.op is not None:
-                raise SystemExit("positional op cannot be combined with --batch-build")
-            return self.build_batch(args)
         if args.op is None:
             raise SystemExit("a positional op is required unless --batch-run is used")
         if args.atol is None:

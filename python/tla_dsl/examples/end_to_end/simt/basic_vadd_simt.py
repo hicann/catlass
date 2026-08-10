@@ -8,13 +8,12 @@ each thread loads its own two elements and stores one.
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
 
-import catlass as tla
+import catlass.tla as tla
+from catlass.tla.runtime import from_dlpack
 
 VECTOR_ELE = 400
 _KERNEL_DTYPE = tla.Float32
-
 
 # ---------------------------------------------------------------------------
 # Kernel
@@ -35,19 +34,30 @@ def basic_vadd_simt(
 
         tla.pipe_barrier(tla.pipes.ALL)
 
-
 # ---------------------------------------------------------------------------
 # Host
 # ---------------------------------------------------------------------------
 
-EXAMPLE_DIR = Path(__file__).resolve().parent
-DEFAULT_CACHE_DIR = EXAMPLE_DIR / "artifacts" / "runtime-cache"
+def get_block_num(block_num: int, device: int = 0, *, kind: str = "vector") -> int:
+    """Get launch ``block_num``.
 
+    Non-``-1`` uses the host argument. ``-1`` means full-device launch:
+    pure vector → ``vector_core_num`` (AIV); cube/mix → ``cube_core_num`` (AIC).
+    """
+    if int(block_num) != -1:
+        return max(1, int(block_num))
+    import torch
+
+    props = torch.npu.get_device_properties(int(device))
+    if kind == "vector":
+        return max(1, int(props.vector_core_num))
+    if kind in {"cube", "mix"}:
+        return max(1, int(props.cube_core_num))
+    raise ValueError(f"Unsupported kernel kind for block_num default: {kind!r}")
 
 def run(args: argparse.Namespace) -> int:
     import torch
-    import torch_npu  # noqa: F401
-    from catlass.runtime import from_dlpack
+    import torch_npu
 
     n_ele = VECTOR_ELE
 
@@ -57,53 +67,42 @@ def run(args: argparse.Namespace) -> int:
         # launch ABI.
         return from_dlpack(dev_buf.contiguous(), layout_tag=tla.arch.RowMajor)
 
-    cache_dir = str(Path(args.cache_dir).expanduser().resolve())
+    torch.npu.set_device(args.device)
+    block_num = get_block_num(args.block_num, args.device, kind="vector")
+    print(f"--- basic_vadd_simt n={n_ele} thread_block_dim={VECTOR_ELE} ---")
 
-    tla.initialize(device=args.device)
-    try:
-        torch.npu.set_device(args.device)
-        block_dim = max(
-            1, args.block_dim if args.block_dim != -1 else tla.get_aicore_num(args.device)
-        )
-        print(f"--- basic_vadd_simt n={n_ele} thread_block_dim={VECTOR_ELE} ---")
+    a = torch.rand(n_ele, dtype=torch.float32, device="npu") * 10.0 - 5.0
+    b = torch.rand(n_ele, dtype=torch.float32, device="npu") * 10.0 - 5.0
+    c = torch.full((n_ele,), -7.0, dtype=torch.float32, device="npu")
+    expected = a + b
 
-        a = torch.rand(n_ele, dtype=torch.float32, device="npu") * 10.0 - 5.0
-        b = torch.rand(n_ele, dtype=torch.float32, device="npu") * 10.0 - 5.0
-        c = torch.full((n_ele,), -7.0, dtype=torch.float32, device="npu")
-        expected = a + b
+    tla_a, tla_b, tla_c = create_tla_tensor(a), create_tla_tensor(b), create_tla_tensor(c)
+    artifact = tla.compile(
+        basic_vadd_simt,
+        tla_a,
+        tla_b,
+        tla_c,
+        options="--npu-arch 3510",
+    )
+    artifact(tla_a, tla_b, tla_c, block_num=block_num)
+    torch.npu.synchronize()
 
-        tla_a, tla_b, tla_c = create_tla_tensor(a), create_tla_tensor(b), create_tla_tensor(c)
-        artifact = tla.compile(
-            basic_vadd_simt,
-            tla_a,
-            tla_b,
-            tla_c,
-            arch_scope="aiv.c310",
-            cache=not args.no_cache,
-            cache_dir=cache_dir,
-            force_recompile=args.force_recompile,
-        )
-        artifact(tla_a, tla_b, tla_c, block_dim=block_dim)
-        torch.npu.synchronize()
-
-        passed = bool(torch.isclose(c, expected, rtol=0.0, atol=float(args.atol)).all())
-        print(f"passed={passed} cache_key={artifact.cache_key}")
-        print(f"kernel.o={artifact.kernel_binary_path}")
-        return 0 if passed else 1
-    finally:
-        tla.finalize()
-
+    passed = bool(torch.isclose(c, expected, rtol=0.0, atol=float(args.atol)).all())
+    print(f"passed={passed} cache_key={artifact.cache_key}")
+    print(f"kernel.o={artifact.kernel_binary_path}")
+    return 0 if passed else 1
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Compile and run the SIMT vector add.")
     parser.add_argument("--device", type=int, default=0)
-    parser.add_argument("--block-dim", type=int, default=-1)
+    parser.add_argument(
+        "--block-num",
+        type=int,
+        default=-1,
+        help="Launch block count; -1 = full vector_core_num (AIV) for this pure-v kernel",
+    )
     parser.add_argument("--atol", type=float, default=1e-4)
-    parser.add_argument("--cache-dir", default=str(DEFAULT_CACHE_DIR))
-    parser.add_argument("--force-recompile", action="store_true")
-    parser.add_argument("--no-cache", action="store_true")
     return run(parser.parse_args())
-
 
 if __name__ == "__main__":
     raise SystemExit(main())

@@ -4,8 +4,7 @@ from typing import Any
 
 import pytest
 
-import catlass as tla
-from catlass import initialize as runtime_initialize
+import catlass.tla as tla
 import catlass.tla_ast_decorators as ast_decorators_mod
 import catlass.core_api as core_api_mod
 import catlass.runtime as runtime_mod
@@ -647,14 +646,7 @@ def bad_runtime_lazy_forged_metadata_kernel(limit: int) -> None:
 @tla.kernel
 def bad_statement_if_runtime_lazy_module_call_kernel(limit: int) -> None:
     for i in tla.range(0, limit, 1):
-        if i == 0 and tla.initialize():
-            tla.make_coord(i, 0)
-
-
-@tla.kernel
-def bad_statement_if_runtime_lazy_imported_call_kernel(limit: int) -> None:
-    for i in tla.range(0, limit, 1):
-        if i == 0 and runtime_initialize():
+        if i == 0 and tla.compile():
             tla.make_coord(i, 0)
 
 
@@ -1517,18 +1509,9 @@ def test_forged_dsl_metadata_rejects_before_call() -> None:
     assert _forged_call_count == 0
 
 
-@pytest.mark.parametrize(
-    "kernel",
-    [
-        bad_statement_if_runtime_lazy_module_call_kernel,
-        bad_statement_if_runtime_lazy_imported_call_kernel,
-    ],
-)
-def test_statement_if_rejects_non_lowerable_catlass_call_in_lazy_region(
-    kernel: Any,
-) -> None:
+def test_statement_if_rejects_non_lowerable_catlass_call_in_lazy_region() -> None:
     with pytest.raises(Exception, match="trace-time effect unknown"):
-        kernel.dump_mlir(type_args=(2,))
+        bad_statement_if_runtime_lazy_module_call_kernel.dump_mlir(type_args=(2,))
 
 
 def test_statement_if_allows_lowerable_arch_call_in_lazy_region() -> None:

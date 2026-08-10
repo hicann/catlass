@@ -1,15 +1,14 @@
 from __future__ import annotations
 
+import sys
 import argparse
 from pathlib import Path
 from typing import Any
 
-import catlass as tla
-from catlass import runtime as runtime_mod
+import catlass.tla as tla
 from catlass.params import UnalignStoreParams
 
 DEMO_DIR = Path(__file__).resolve().parent
-DEFAULT_CACHE_DIR = DEMO_DIR / "artifacts" / "runtime-cache"
 
 VECTOR_ELE = 128
 ELEMENT_BYTES = 4
@@ -137,23 +136,11 @@ def _set_op(op: str) -> None:
     }[op]
 
 
-def _tensor(shape: tuple[int, ...], data_ptr: int | None = None) -> Any:
-    with runtime_mod._eager_capture():
-        tla_shape = tla.make_shape(*shape)
-        return tla.Tensor(
-            tla_shape,
-            tla.Float32,
-            origin_shape=tla_shape,
-            coord=tla.make_coord(*(0 for _ in shape)),
-            stride=tla.make_stride(1),
-            data_ptr=data_ptr,
-        )
-
-
-def _runtime_tensor(dev_buf: Any, shape: tuple[int, ...]) -> Any:
-    tensor = _tensor(shape, int(dev_buf.contiguous().data_ptr()))
-    tensor._external_binding = True
-    return tensor
+def _runtime_tensor(dev_buf: Any) -> Any:
+    return tla.from_dlpack(
+        dev_buf.contiguous(),
+        layout_tag=tla.arch.RowMajor,
+    )
 
 
 def _expected(op: str, x: Any) -> Any:
@@ -168,10 +155,7 @@ def _compile(args: argparse.Namespace, *type_args: Any) -> Any:
     return tla.compile(
         reduction_op,
         *type_args,
-        arch_scope="aiv.c310",
-        cache=not args.no_cache,
-        cache_dir=str(Path(args.cache_dir).expanduser().resolve()),
-        force_recompile=args.force_recompile,
+        options="--npu-arch 3510",
     )
 
 
@@ -179,10 +163,7 @@ def _compile_batch(args: argparse.Namespace, *type_args: Any) -> Any:
     return tla.compile(
         reduction_op_batch,
         *type_args,
-        arch_scope="aiv.c310",
-        cache=not args.no_cache,
-        cache_dir=str(Path(args.cache_dir).expanduser().resolve() / "batch_add_max_min"),
-        force_recompile=args.force_recompile,
+        options="--npu-arch 3510",
     )
 
 
@@ -190,105 +171,88 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("op", choices=("add", "max", "min"), nargs="?")
     parser.add_argument("--run", action="store_true")
-    parser.add_argument("--build-only", action="store_true")
     parser.add_argument("--dtype", choices=("f32",), default="f32")
     parser.add_argument("--device", type=int, default=0)
-    parser.add_argument("--cache-dir", default=str(DEFAULT_CACHE_DIR))
-    parser.add_argument("--force-recompile", action="store_true")
-    parser.add_argument("--no-cache", action="store_true")
     parser.add_argument("--batch-run", action="store_true")
     args = parser.parse_args()
 
     if args.batch_run:
         if args.op is not None:
             raise SystemExit("positional op cannot be combined with --batch-run")
-        tla.initialize(device=args.device)
-        try:
-            import torch
-            import torch_npu  # noqa: F401
-
-            torch.npu.set_device(args.device)
-            tile_ele = 64
-            base = torch.linspace(
-                -17.0, 46.0, VECTOR_ELE, dtype=torch.float32, device="npu"
+        import torch
+        import torch_npu
+        torch.npu.set_device(args.device)
+        tile_ele = 64
+        base = torch.linspace(
+            -17.0, 46.0, VECTOR_ELE, dtype=torch.float32, device="npu"
+        )
+        x = torch.cat((base, base, base))
+        z = torch.full((6,), -999.0, dtype=torch.float32, device="npu")
+        tla_x = _runtime_tensor(x)
+        tla_z = _runtime_tensor(z)
+        artifact = _compile_batch(args, tla_x, tla_z)
+        artifact(tla_x, tla_z, block_num=3)
+        torch.npu.synchronize()
+        failed = 0
+        for index, op_name in enumerate(("add", "max", "min")):
+            actual = z[index * 2 : index * 2 + 2]
+            expected = torch.cat(
+                (
+                    _expected(op_name, base[:tile_ele]),
+                    _expected(op_name, base[tile_ele:]),
+                )
             )
-            x = torch.cat((base, base, base))
-            z = torch.full((6,), -999.0, dtype=torch.float32, device="npu")
-            tla_x = _runtime_tensor(x, (3 * VECTOR_ELE,))
-            tla_z = _runtime_tensor(z, (6,))
-            artifact = _compile_batch(args, tla_x, tla_z)
-            artifact(tla_x, tla_z, block_dim=3)
-            torch.npu.synchronize()
-            failed = 0
-            for index, op_name in enumerate(("add", "max", "min")):
-                actual = z[index * 2 : index * 2 + 2]
-                expected = torch.cat(
-                    (
-                        _expected(op_name, base[:tile_ele]),
-                        _expected(op_name, base[tile_ele:]),
-                    )
-                )
-                ok = bool(
-                    torch.isclose(actual, expected, rtol=0.0, atol=1e-4).all()
-                )
-                failed += not ok
-                print(
-                    f"batch_case op={op_name} dtype=f32 passed={ok} "
-                    f"actual={actual.cpu().tolist()} expected={expected.cpu().tolist()}"
-                )
-            print(f"batch_kernel_ok={failed == 0} ops=add,max,min blocks=3")
-            print(f"kernel.o path={artifact.kernel_binary_path}")
-            return 0 if failed == 0 else 1
-        finally:
-            tla.finalize()
+            ok = bool(
+                torch.isclose(actual, expected, rtol=0.0, atol=1e-4).all()
+            )
+            failed += not ok
+            print(
+                f"batch_case op={op_name} dtype=f32 passed={ok} "
+                f"actual={actual.cpu().tolist()} expected={expected.cpu().tolist()}"
+            )
+        print(f"batch_kernel_ok={failed == 0} ops=add,max,min blocks=3")
+        print(f"kernel.o path={artifact.kernel_binary_path}")
+        return 0 if failed == 0 else 1
     if args.op is None:
         raise SystemExit("a positional op is required unless --batch-run is used")
     _set_op(args.op)
-    if args.build_only:
-        artifact = _compile(args, _tensor((VECTOR_ELE,)), _tensor((2,)))
-        print("compile_ok=True")
-        print(f"kernel.o path={artifact.kernel_binary_path}")
-        return 0
+    if not args.run:
+        raise SystemExit("pass --run")
 
-    tla.initialize(device=args.device)
-    try:
-        import torch
-        import torch_npu  # noqa: F401
+    import torch
+    import torch_npu
+    torch.npu.set_device(args.device)
 
-        torch.npu.set_device(args.device)
+    TILE_ELE = 64
+    x = torch.linspace(-17.0, 46.0, VECTOR_ELE, dtype=torch.float32, device="npu")
+    z = torch.full((2,), -999.0, dtype=torch.float32, device="npu")
+    tla_x = _runtime_tensor(x)
+    tla_z = _runtime_tensor(z)
+    artifact = _compile(args, tla_x, tla_z)
+    artifact(tla_x, tla_z, block_num=1)
+    torch.npu.synchronize()
 
-        TILE_ELE = 64
-        x = torch.linspace(-17.0, 46.0, VECTOR_ELE, dtype=torch.float32, device="npu")
-        z = torch.full((2,), -999.0, dtype=torch.float32, device="npu")
-        tla_x = _runtime_tensor(x, (VECTOR_ELE,))
-        tla_z = _runtime_tensor(z, (2,))
-        artifact = _compile(args, tla_x, tla_z)
-        artifact(tla_x, tla_z, block_dim=1)
-        torch.npu.synchronize()
+    exp0 = _expected(args.op, x[:TILE_ELE])
+    exp1 = _expected(args.op, x[TILE_ELE:])
+    z0_cpu = z[0].cpu()
+    z1_cpu = z[1].cpu()
+    exp0_cpu = exp0.cpu()
+    exp1_cpu = exp1.cpu()
+    print(f"z[0] actual  = {z0_cpu.item():.6f}")
+    print(f"z[0] expected= {exp0_cpu.item():.6f}")
+    ok0 = bool(torch.isclose(z[0].reshape(1), exp0, rtol=0.0, atol=1e-4).all())
+    print(f"z[1] actual  = {z1_cpu.item():.6f}")
+    print(f"z[1] expected= {exp1_cpu.item():.6f}")
+    ok1 = bool(torch.isclose(z[1].reshape(1), exp1, rtol=0.0, atol=1e-4).all())
+    ok = ok0 and ok1
+    print(f"tile0 (coord=0, aligned)   match? {ok0}")
+    print(f"tile1 (coord=1, unalign)   match? {ok1}")
 
-        exp0 = _expected(args.op, x[:TILE_ELE])
-        exp1 = _expected(args.op, x[TILE_ELE:])
-        z0_cpu = z[0].cpu()
-        z1_cpu = z[1].cpu()
-        exp0_cpu = exp0.cpu()
-        exp1_cpu = exp1.cpu()
-        print(f"z[0] actual  = {z0_cpu.item():.6f}")
-        print(f"z[0] expected= {exp0_cpu.item():.6f}")
-        ok0 = bool(torch.isclose(z[0].reshape(1), exp0, rtol=0.0, atol=1e-4).all())
-        print(f"z[1] actual  = {z1_cpu.item():.6f}")
-        print(f"z[1] expected= {exp1_cpu.item():.6f}")
-        ok1 = bool(torch.isclose(z[1].reshape(1), exp1, rtol=0.0, atol=1e-4).all())
-        ok = ok0 and ok1
-        print(f"tile0 (coord=0, aligned)   match? {ok0}")
-        print(f"tile1 (coord=1, unalign)   match? {ok1}")
-
-        print(f"compile_ok=True host=torch_npu op={args.op} dtype=f32 layout=row")
-        print(f"kernel.o path={artifact.kernel_binary_path}")
-        print("launch_ok=True")
-        print(f"output equals expected reduction? {ok}")
-        return 0 if ok else 1
-    finally:
-        tla.finalize()
+    print(f"compile_ok=True host=torch_npu op={args.op} dtype=f32 layout=row")
+    print(f"kernel.o path={artifact.kernel_binary_path}")
+    print("launch_ok=True")
+    print(f"output equals expected reduction? {ok}")
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":

@@ -6308,6 +6308,10 @@ _TRUSTED_DSL_TYPE_MODULES = frozenset(
         "catlass.utils.localmem_allocator",
     }
 )
+# Trusted module identity for ``import catlass.tla as tla`` alias recognition.
+# Must be ``catlass.tla`` (not ``catlass``): the preprocessor matches
+# ``value is identities.module`` against user globals.
+_dsl_module = sys.modules["catlass.tla"]
 _ast_preprocessor._register_trusted_lazy_callables(
     tuple(
         value
@@ -6317,7 +6321,7 @@ _ast_preprocessor._register_trusted_lazy_callables(
         and not inspect.isclass(value)
     )
     + (_runtime.const_expr,),
-    sys.modules["catlass"],
+    _dsl_module,
     range_callable=range,
     range_constexpr_callable=range_constexpr,
     const_expr_callable=_runtime.const_expr,

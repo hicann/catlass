@@ -20,10 +20,9 @@ Control-flow patterns in this example:
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
 from typing import TYPE_CHECKING
 
-import catlass as tla
+import catlass.tla as tla
 
 if TYPE_CHECKING:
     import torch
@@ -175,9 +174,7 @@ def _gm_vector_contiguous(meta_1d) -> tla.Tensor:
 
 def _run_static_1d_2d(args: argparse.Namespace, torch, device: str) -> int:
     rows, cols = 4, COLS
-    base = torch.arange(rows * cols, dtype=torch.float32, device=device).reshape(
-        rows, cols
-    )
+    base = torch.rand(rows, cols, dtype=torch.float32, device=device) * 10.0 - 5.0
     expected_markers = torch.tensor(
         [[base[ROW, 0].item(), base[ROW, SCALAR_COL].item()]],
         dtype=torch.float32,
@@ -194,10 +191,8 @@ def _run_static_1d_2d(args: argparse.Namespace, torch, device: str) -> int:
         meta,
         meta_row,
         markers_t,
-        cache_dir=args.cache_dir,
-        force_recompile=args.force_recompile,
     )
-    artifact(meta, meta_row, markers_t, block_dim=args.block_dim)
+    artifact(meta, meta_row, markers_t, block_num=args.block_num)
     torch.npu.synchronize()
     if not torch.allclose(markers, expected_markers, rtol=0.0, atol=1e-4):
         print(
@@ -214,10 +209,8 @@ def _run_literal_store(args: argparse.Namespace, torch, device: str) -> int:
     artifact = tla.compile(
         scalar_index_literal_store_kernel,
         out_t,
-        cache_dir=args.cache_dir,
-        force_recompile=args.force_recompile,
     )
-    artifact(out_t, block_dim=args.block_dim)
+    artifact(out_t, block_num=args.block_num)
     torch.npu.synchronize()
     expected = torch.tensor([1.1125, 42.0], dtype=torch.float32, device=device)
     if not torch.allclose(out, expected, rtol=0.0, atol=1e-4):
@@ -232,19 +225,18 @@ def _run_literal_store(args: argparse.Namespace, torch, device: str) -> int:
 def _run_loop_copy(
     args: argparse.Namespace,
     torch,
+    meta: "torch.Tensor",
     meta_t: tla.Tensor,
     out_t: tla.Tensor,
     out: "torch.Tensor",
 ) -> int:
-    expected = torch.arange(LENGTH, dtype=torch.float32, device=out.device)
+    expected = meta.clone()
     artifact = tla.compile(
         scalar_index_loop_kernel,
         meta_t,
         out_t,
-        cache_dir=args.cache_dir,
-        force_recompile=args.force_recompile,
     )
-    artifact(meta_t, out_t, block_dim=args.block_dim)
+    artifact(meta_t, out_t, block_num=args.block_num)
     torch.npu.synchronize()
     if not torch.allclose(out, expected, rtol=0.0, atol=1e-4):
         print(f"loop_copy_failed expected={expected.tolist()} actual={out.tolist()}")
@@ -256,23 +248,21 @@ def _run_loop_copy(
 def _run_dynamic_if(
     args: argparse.Namespace,
     torch,
+    meta: "torch.Tensor",
     meta_t: tla.Tensor,
     out_t: tla.Tensor,
     out: "torch.Tensor",
 ) -> int:
-    base = torch.arange(LENGTH, dtype=torch.float32, device=out.device)
+    # Kernel: read_idx = i if i == 0 else 0 → every out[i] is meta[0].
     expected = torch.full(
-        (LENGTH,), base[0].item(), dtype=torch.float32, device=out.device
+        (LENGTH,), meta[0].item(), dtype=torch.float32, device=out.device
     )
-    expected[0] = base[0]
     artifact = tla.compile(
         scalar_index_dynamic_if_kernel,
         meta_t,
         out_t,
-        cache_dir=args.cache_dir,
-        force_recompile=args.force_recompile,
     )
-    artifact(meta_t, out_t, block_dim=args.block_dim)
+    artifact(meta_t, out_t, block_num=args.block_num)
     torch.npu.synchronize()
     if not torch.allclose(out, expected, rtol=0.0, atol=1e-4):
         print(f"dynamic_if_failed expected={expected.tolist()} actual={out.tolist()}")
@@ -287,7 +277,7 @@ def _run_value_through_dynamic_if(
     device: str,
 ) -> int:
     """Numeric value selected by a dynamic host/runtime ``selector`` int."""
-    meta = torch.arange(LENGTH, dtype=torch.float32, device=device)
+    meta = torch.rand(LENGTH, dtype=torch.float32, device=device) * 10.0 - 5.0
     out = torch.full((1,), -1.0, dtype=torch.float32, device=device)
     meta_t = _gm_vector_contiguous(meta)
     out_t = _gm_vector_contiguous(out)
@@ -300,10 +290,8 @@ def _run_value_through_dynamic_if(
         artifact = tla.compile(
             scalar_index_value_through_dynamic_if_kernel,
             type_args=(out_t, meta_t, selector),
-            cache_dir=args.cache_dir,
-            force_recompile=args.force_recompile,
         )
-        artifact(out_t, meta_t, selector, block_dim=args.block_dim)
+        artifact(out_t, meta_t, selector, block_num=args.block_num)
         torch.npu.synchronize()
         actual = float(out[0].item())
         if abs(actual - expected_val) > 1e-4:
@@ -328,10 +316,8 @@ def _run_store_in_dynamic_control_flow(
         artifact = tla.compile(
             scalar_index_store_in_dynamic_control_flow_kernel,
             type_args=(out_t, selector),
-            cache_dir=args.cache_dir,
-            force_recompile=args.force_recompile,
         )
-        artifact(out_t, selector, block_dim=args.block_dim)
+        artifact(out_t, selector, block_num=args.block_num)
         torch.npu.synchronize()
         actual = [int(value) for value in out.cpu().tolist()]
         if actual != expected:
@@ -349,20 +335,18 @@ def _run_store_in_dynamic_control_flow(
 def _run_constexpr_if(
     args: argparse.Namespace,
     torch,
+    meta: "torch.Tensor",
     meta_t: tla.Tensor,
     out_t: tla.Tensor,
     out: "torch.Tensor",
 ) -> int:
-    base = torch.arange(LENGTH, dtype=torch.float32, device=out.device)
     for reverse in (False, True):
-        expected = base.flip(0) if reverse else base
+        expected = meta.flip(0) if reverse else meta
         artifact = tla.compile(
             scalar_index_constexpr_if_kernel,
             type_args=(meta_t, out_t, reverse),
-            cache_dir=args.cache_dir,
-            force_recompile=args.force_recompile,
         )
-        artifact(meta_t, out_t, block_dim=args.block_dim)
+        artifact(meta_t, out_t, block_num=args.block_num)
         torch.npu.synchronize()
         if not torch.allclose(out, expected, rtol=0.0, atol=1e-4):
             print(
@@ -377,19 +361,18 @@ def _run_constexpr_if(
 def _run_vec_func(
     args: argparse.Namespace,
     torch,
+    meta: "torch.Tensor",
     meta_t: tla.Tensor,
     out_t: tla.Tensor,
     out: "torch.Tensor",
 ) -> int:
-    expected = torch.arange(LENGTH, dtype=torch.float32, device=out.device)
+    expected = meta.clone()
     artifact = tla.compile(
         scalar_index_vec_func_kernel,
         meta_t,
         out_t,
-        cache_dir=args.cache_dir,
-        force_recompile=args.force_recompile,
     )
-    artifact(meta_t, out_t, block_dim=args.block_dim)
+    artifact(meta_t, out_t, block_num=args.block_num)
     torch.npu.synchronize()
     if not torch.allclose(out, expected, rtol=0.0, atol=1e-4):
         print(f"vec_func_failed expected={expected.tolist()} actual={out.tolist()}")
@@ -399,8 +382,8 @@ def _run_vec_func(
 
 
 def _run_numeric_compare_if(args: argparse.Namespace, torch, device: str) -> int:
-    # [-2, -1, 0, 1] → +1 if <0 else +2 → [-1, 0, 2, 3]
-    src = torch.tensor([-2, -1, 0, 1], dtype=torch.int32, device=device)
+    # Mixed signs so both ``value < 0`` branches are covered; golden from input.
+    src = torch.randint(-5, 6, (COMPARE_LEN,), dtype=torch.int32, device=device)
     out = torch.full((COMPARE_LEN,), -99, dtype=torch.int32, device=device)
     src_t = _gm_vector_contiguous(src)
     out_t = _gm_vector_contiguous(out)
@@ -409,13 +392,11 @@ def _run_numeric_compare_if(args: argparse.Namespace, torch, device: str) -> int
         scalar_index_numeric_compare_if_kernel,
         src_t,
         out_t,
-        cache_dir=args.cache_dir,
-        force_recompile=args.force_recompile,
     )
-    artifact(src_t, out_t, block_dim=args.block_dim)
+    artifact(src_t, out_t, block_num=args.block_num)
     torch.npu.synchronize()
 
-    expected = [-1, 0, 2, 3]
+    expected = [int(v.item()) + (1 if int(v.item()) < 0 else 2) for v in src]
     actual = [int(out[i].item()) for i in range(COMPARE_LEN)]
     if actual != expected:
         print(f"numeric_compare_if_failed expected={expected} actual={actual}")
@@ -425,8 +406,8 @@ def _run_numeric_compare_if(args: argparse.Namespace, torch, device: str) -> int
 
 
 def _run_index_vs_numeric_compare(args: argparse.Namespace, torch, device: str) -> int:
-    # limit=2 → for i in 0..3: flag = 1 if i >= 2 else 0 → [0, 0, 1, 1]
-    tile_range = torch.tensor([2], dtype=torch.int32, device=device)
+    limit = int(torch.randint(0, COMPARE_LEN + 1, (1,), device="cpu").item())
+    tile_range = torch.tensor([limit], dtype=torch.int32, device=device)
     out = torch.full((COMPARE_LEN,), -99, dtype=torch.int32, device=device)
     tile_t = _gm_vector_contiguous(tile_range)
     out_t = _gm_vector_contiguous(out)
@@ -435,13 +416,11 @@ def _run_index_vs_numeric_compare(args: argparse.Namespace, torch, device: str) 
         scalar_index_vs_numeric_compare_kernel,
         tile_t,
         out_t,
-        cache_dir=args.cache_dir,
-        force_recompile=args.force_recompile,
     )
-    artifact(tile_t, out_t, block_dim=args.block_dim)
+    artifact(tile_t, out_t, block_num=args.block_num)
     torch.npu.synchronize()
 
-    expected = [0, 0, 1, 1]
+    expected = [1 if i >= limit else 0 for i in range(COMPARE_LEN)]
     actual = [int(out[i].item()) for i in range(COMPARE_LEN)]
     if actual != expected:
         print(f"index_vs_numeric_compare_failed expected={expected} actual={actual}")
@@ -451,36 +430,33 @@ def _run_index_vs_numeric_compare(args: argparse.Namespace, torch, device: str) 
 
 
 def run(args: argparse.Namespace) -> int:
-    tla.initialize(device=args.device)
     torch = _require_torch_npu(args.device)
-    try:
-        device = f"npu:{args.device}"
-        meta = torch.arange(LENGTH, dtype=torch.float32, device=device)
-        out = torch.full((LENGTH,), -1.0, dtype=torch.float32, device=device)
-        meta_t = _gm_vector_contiguous(meta)
-        out_t = _gm_vector_contiguous(out)
+    device = f"npu:{args.device}"
+    torch.manual_seed(0)
+    meta = torch.rand(LENGTH, dtype=torch.float32, device=device) * 10.0 - 5.0
+    out = torch.full((LENGTH,), -1.0, dtype=torch.float32, device=device)
+    meta_t = _gm_vector_contiguous(meta)
+    out_t = _gm_vector_contiguous(out)
 
-        runners = (
-            lambda: _run_static_1d_2d(args, torch, device),
-            lambda: _run_literal_store(args, torch, device),
-            lambda: _run_loop_copy(args, torch, meta_t, out_t, out),
-            lambda: _run_dynamic_if(args, torch, meta_t, out_t, out),
-            lambda: _run_value_through_dynamic_if(args, torch, device),
-            lambda: _run_store_in_dynamic_control_flow(args, torch, device),
-            lambda: _run_constexpr_if(args, torch, meta_t, out_t, out),
-            lambda: _run_vec_func(args, torch, meta_t, out_t, out),
-            lambda: _run_numeric_compare_if(args, torch, device),
-            lambda: _run_index_vs_numeric_compare(args, torch, device),
-        )
-        for runner in runners:
-            rc = runner()
-            if rc != 0:
-                return rc
-            out.fill_(-1.0)
-        print("verification_ok=True")
-        return 0
-    finally:
-        tla.finalize()
+    runners = (
+        lambda: _run_static_1d_2d(args, torch, device),
+        lambda: _run_literal_store(args, torch, device),
+        lambda: _run_loop_copy(args, torch, meta, meta_t, out_t, out),
+        lambda: _run_dynamic_if(args, torch, meta, meta_t, out_t, out),
+        lambda: _run_value_through_dynamic_if(args, torch, device),
+        lambda: _run_store_in_dynamic_control_flow(args, torch, device),
+        lambda: _run_constexpr_if(args, torch, meta, meta_t, out_t, out),
+        lambda: _run_vec_func(args, torch, meta, meta_t, out_t, out),
+        lambda: _run_numeric_compare_if(args, torch, device),
+        lambda: _run_index_vs_numeric_compare(args, torch, device),
+    )
+    for runner in runners:
+        rc = runner()
+        if rc != 0:
+            return rc
+        out.fill_(-1.0)
+    print("verification_ok=True")
+    return 0
 
 
 def main() -> int:
@@ -488,12 +464,7 @@ def main() -> int:
         description="GM tensor scalar indexing E2E (1D/2D layouts, control flow, vec.func)."
     )
     parser.add_argument("--device", type=int, default=0)
-    parser.add_argument("--block-dim", type=int, default=1)
-    parser.add_argument(
-        "--cache-dir",
-        default=str(Path(__file__).resolve().parent / "artifacts" / "runtime-cache"),
-    )
-    parser.add_argument("--force-recompile", action="store_true")
+    parser.add_argument("--block-num", type=int, default=1)
     return run(parser.parse_args())
 
 

@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 import pytest
 
-import catlass as tla
+import catlass.tla as tla
 from catlass import _tla_type_bridge
 import catlass.core_api as core_api_mod
 import catlass.runtime as runtime_mod

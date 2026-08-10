@@ -8,14 +8,10 @@ import tempfile
 from pathlib import Path
 from typing import Callable
 
-import catlass as tla
+import catlass.tla as tla
+import sys
 
 from debug_print import DTYPE_SPECS
-
-
-DEFAULT_CACHE_DIR = (
-    Path(__file__).resolve().parent / "artifacts" / "mixed-runtime-cache"
-)
 _CANN_DIAGNOSTIC = re.compile(
     r"^TLA printf: core=[0-9]+ block=[0-9]+ "
     r"(?:\[WARNING\]: CANN TimeStamp is invalid.*|"
@@ -206,44 +202,40 @@ def dump_tlair(args: argparse.Namespace) -> str:
 
 
 def run(args: argparse.Namespace) -> int:
-    tla.initialize(device=args.device)
-    try:
-        kernel_paths = []
-        cases = DTYPE_SPECS.items() if args.all_dtypes else ((None, None),)
-        for dtype, spec in cases:
-            if spec is None:
-                type_args = (tla.Float32(1.0), tla.Float32(0.25))
-                expected_value = None
-            else:
-                type_args = (getattr(tla, spec.scalar_type)(spec.value),)
-                expected_value = spec.expected
-            executor = tla.compile(
-                _kernel(args),
-                *type_args,
-                arch_scope="aic.c310",
-                cache=not args.no_cache,
-                cache_dir=str(Path(args.cache_dir).expanduser().resolve()),
-                force_recompile=args.force_recompile,
-            )
-            output = _capture_c_stdout(
-                lambda: executor(*type_args, block_dim=1)
-            )
-            _verify_mixed_debug_output(
-                output,
-                print_region=args.print_region,
-                dtype=dtype,
-                expected_value=expected_value,
-            )
-            print(output, end="" if output.endswith("\n") else "\n")
-            kernel_paths.append(executor.kernel_binary_path)
-        print("compile_ok=True")
-        for path in kernel_paths:
-            print(f"kernel.o path={path}")
-        print("launch_ok=True")
-        print("output_ok=True")
-        return 0
-    finally:
-        tla.finalize()
+    import torch
+    import torch_npu
+    torch.npu.set_device(args.device)
+    kernel_paths = []
+    cases = DTYPE_SPECS.items() if args.all_dtypes else ((None, None),)
+    for dtype, spec in cases:
+        if spec is None:
+            type_args = (tla.Float32(1.0), tla.Float32(0.25))
+            expected_value = None
+        else:
+            type_args = (getattr(tla, spec.scalar_type)(spec.value),)
+            expected_value = spec.expected
+        executor = tla.compile(
+            _kernel(args),
+            *type_args,
+            options="--npu-arch 3510"
+        )
+        output = _capture_c_stdout(
+            lambda: executor(*type_args, block_num=1)
+        )
+        _verify_mixed_debug_output(
+            output,
+            print_region=args.print_region,
+            dtype=dtype,
+            expected_value=expected_value,
+        )
+        print(output, end="" if output.endswith("\n") else "\n")
+        kernel_paths.append(executor.kernel_binary_path)
+    print("compile_ok=True")
+    for path in kernel_paths:
+        print(f"kernel.o path={path}")
+    print("launch_ok=True")
+    print("output_ok=True")
+    return 0
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -254,9 +246,6 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--dump-tlair", action="store_true")
     parser.add_argument("--all-dtypes", action="store_true")
     parser.add_argument("--device", type=int, default=0)
-    parser.add_argument("--cache-dir", default=str(DEFAULT_CACHE_DIR))
-    parser.add_argument("--force-recompile", action="store_true")
-    parser.add_argument("--no-cache", action="store_true")
     parser.add_argument(
         "--print-region", choices=("cube", "vector", "both"), default="both"
     )

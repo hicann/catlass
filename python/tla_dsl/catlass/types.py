@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib
 from dataclasses import dataclass
 from typing import Any, Iterable, Iterator, Literal, TypeAlias
 
@@ -13,7 +12,7 @@ from .base_dsl.typing import (
 
 from mlir import ir as mlir_ir  # type: ignore[assignment]
 
-from ._mlir_bindings import tla_ops_gen as _tla_ops_gen  # noqa: F401 — register ``tla`` dialect
+from ._mlir_bindings import tla_ops_gen as _tla_ops_gen
 from . import _tla_type_bridge
 from .address_space import AddressSpace
 
@@ -542,8 +541,11 @@ _ANNOTATION_CATEGORY = {
     PointerABC: "pointer",
 }
 
-def annotation_to_category(annotation: Any) -> str | None:
-    return _ANNOTATION_CATEGORY.get(annotation)
+from .base_dsl.op import annotation_to_category, register_annotation_category
+
+for _annotation, _category in _ANNOTATION_CATEGORY.items():
+    register_annotation_category(_annotation, _category)
+del _annotation, _category
 
 _TENSOR_DTYPE_SIZES: dict[str, int] = {
     "i1": 1,

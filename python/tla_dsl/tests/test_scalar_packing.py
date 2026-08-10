@@ -1,6 +1,6 @@
 import struct
 
-import catlass as tla
+import catlass.tla as tla
 
 
 def test_float16_packing_basic() -> None:

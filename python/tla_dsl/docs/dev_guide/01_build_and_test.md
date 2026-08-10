@@ -6,14 +6,14 @@
 
 ```bash
 cd "${CATLASS_ROOT}/python/tla_dsl"
-export TLA_DSL_PREBUILT_ASCENDNPU_IR="${CATLASS_ROOT}/python/tla_dsl/3rdparty/AscendNPU-IR"
+export CATLASS_DSL_PREBUILT_ASCENDNPU_IR="${CATLASS_ROOT}/python/tla_dsl/3rdparty/AscendNPU-IR"
 ./build.sh
 ```
 
 默认构建为 Debug。`build.sh` 会：
 
 1. 检查 `ASCEND_HOME_PATH`。
-2. 从 `${TLA_DSL_PREBUILT_ASCENDNPU_IR}/build/install` 设置 MLIR/LLVM 路径。
+2. 从 `${CATLASS_DSL_PREBUILT_ASCENDNPU_IR}/build/install` 设置 MLIR/LLVM 路径。
 3. 调用 `setup.py build_ext --inplace` 生成 Python op 绑定并编译 `tla-compiler`。
 4. 以可编辑模式安装 Python 包，但不重复安装运行时依赖。
 
@@ -81,6 +81,6 @@ bash tests/run_dsl_test.sh --device 0
 | 变量 | 含义 |
 | --- | --- |
 | `ASCEND_HOME_PATH` | CANN toolkit 根目录 |
-| `TLA_DSL_PREBUILT_ASCENDNPU_IR` | 已构建的 AscendNPU-IR 源码根目录 |
+| `CATLASS_DSL_PREBUILT_ASCENDNPU_IR` | 已构建的 AscendNPU-IR 源码根目录 |
 | `CONDA_ENV` | Conda 环境名，默认 `ascend-catlass-dsl` |
 | `DEVICE_ID` | NPU device id，默认 `1`，可由 `--device` 覆盖 |

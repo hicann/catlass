@@ -10,6 +10,7 @@ theme:
 
 nav:
   - Overview: index.md
+  - Environment Variables: environment_variables.md
   - Torch Tensor Binding: framework_integration.md
   - Dynamic Layout: dsl_dynamic_layout.md
   - Core API Reference: api-reference.md

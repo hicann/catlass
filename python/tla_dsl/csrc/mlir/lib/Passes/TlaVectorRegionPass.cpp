@@ -3051,7 +3051,7 @@ static void populateTlaToVectorPatterns(RewritePatternSet &patterns, ModuleOp mo
   // is responsible for DCE'ing them.
 }
 
-// Per-core identity queries (block_idx / block_dim / sub_block_idx) must be
+// Per-core identity queries (block_idx / block_num / sub_block_idx) must be
 // computed outside a tla.vec.func and passed in; emitting them inside the vector
 // region produces an op the vector backend cannot codegen.
 static bool isIllegalVecFuncArchOp(Operation *op, StringRef &dslName) {

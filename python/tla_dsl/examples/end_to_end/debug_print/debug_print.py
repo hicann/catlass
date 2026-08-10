@@ -9,9 +9,8 @@ from pathlib import Path
 import re
 from typing import Any, Callable, NamedTuple
 
-import catlass as tla
-
-DEFAULT_CACHE_DIR = Path(__file__).resolve().parent / "artifacts" / "runtime-cache"
+import catlass.tla as tla
+import sys
 
 
 class ScalarSpec(NamedTuple):
@@ -55,22 +54,12 @@ def debug_print_aiv_kernel(value: object) -> None:
         tla.print(value)
 
 
-@tla.kernel
-def debug_print_aic_kernel(value: object) -> None:
-    with tla.cube():
-        tla.print(value)
-
 
 @tla.kernel
 def debug_print_expression_aiv_kernel(lhs: object, rhs: object) -> None:
     with tla.vector():
         tla.print(lhs + rhs)
 
-
-@tla.kernel
-def debug_print_expression_aic_kernel(lhs: object, rhs: object) -> None:
-    with tla.cube():
-        tla.print(lhs + rhs)
 
 
 def _kernel(args: argparse.Namespace) -> Any:
@@ -80,11 +69,7 @@ def _kernel(args: argparse.Namespace) -> Any:
             raise ValueError(
                 f"--expression does not support {args.dtype}; expected one of {supported}"
             )
-        if args.arch_scope.startswith("aic."):
-            return debug_print_expression_aic_kernel
         return debug_print_expression_aiv_kernel
-    if args.arch_scope.startswith("aic."):
-        return debug_print_aic_kernel
     return debug_print_aiv_kernel
 
 
@@ -117,10 +102,7 @@ def _compile(args: argparse.Namespace) -> Any:
     return tla.compile(
         _kernel(args),
         *_type_args(args),
-        arch_scope=args.arch_scope,
-        cache=not args.no_cache,
-        cache_dir=str(Path(args.cache_dir).expanduser().resolve()),
-        force_recompile=args.force_recompile,
+        options="--npu-arch 3510"
     )
 
 
@@ -205,40 +187,39 @@ def _selected_cases(
 
 
 def run(args: argparse.Namespace) -> int:
-    tla.initialize(device=args.device)
-    try:
-        kernel_paths = []
-        for dtype, value, rhs in _selected_cases(args):
-            case_args = _case_args(args, dtype=dtype, value=value, rhs=rhs)
-            executor = _compile(case_args)
-            output = _capture_c_stdout(
-                lambda: executor(*_type_args(case_args), block_dim=args.block_dim)
+    import torch
+    import torch_npu
+    torch.npu.set_device(args.device)
+    kernel_paths = []
+    for dtype, value, rhs in _selected_cases(args):
+        case_args = _case_args(args, dtype=dtype, value=value, rhs=rhs)
+        executor = _compile(case_args)
+        output = _capture_c_stdout(
+            lambda: executor(*_type_args(case_args), block_num=args.block_num)
+        )
+        result = value + rhs if args.expression else value
+        if args.all_dtypes:
+            expected_value = (
+                EXPRESSION_SPECS[dtype].expected
+                if args.expression
+                else DTYPE_SPECS[dtype].expected
             )
-            result = value + rhs if args.expression else value
-            if args.all_dtypes:
-                expected_value = (
-                    EXPRESSION_SPECS[dtype].expected
-                    if args.expression
-                    else DTYPE_SPECS[dtype].expected
-                )
-            else:
-                expected_value = _expected_value(dtype, result)
-            _verify_debug_output(
-                output,
-                dtype=dtype,
-                expected_value=expected_value,
-                expect_count=args.expect_count,
-            )
-            print(output, end="" if output.endswith("\n") else "\n")
-            kernel_paths.append(executor.kernel_binary_path)
-        print("compile_ok=True")
-        for path in kernel_paths:
-            print(f"kernel.o path={path}")
-        print("launch_ok=True")
-        print("output_ok=True")
-        return 0
-    finally:
-        tla.finalize()
+        else:
+            expected_value = _expected_value(dtype, result)
+        _verify_debug_output(
+            output,
+            dtype=dtype,
+            expected_value=expected_value,
+            expect_count=args.expect_count,
+        )
+        print(output, end="" if output.endswith("\n") else "\n")
+        kernel_paths.append(executor.kernel_binary_path)
+    print("compile_ok=True")
+    for path in kernel_paths:
+        print(f"kernel.o path={path}")
+    print("launch_ok=True")
+    print("output_ok=True")
+    return 0
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -256,15 +237,9 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--value", default="3")
     parser.add_argument("--expression", action="store_true")
     parser.add_argument("--rhs", default="0")
-    parser.add_argument(
-        "--arch-scope", choices=("aic.c310", "aiv.c310"), default="aiv.c310"
-    )
     parser.add_argument("--device", type=int, default=2)
-    parser.add_argument("--block-dim", type=int, default=1)
+    parser.add_argument("--block-num", type=int, default=1)
     parser.add_argument("--expect-count", type=int, default=1)
-    parser.add_argument("--cache-dir", default=str(DEFAULT_CACHE_DIR))
-    parser.add_argument("--force-recompile", action="store_true")
-    parser.add_argument("--no-cache", action="store_true")
     return parser
 
 

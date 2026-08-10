@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import catlass as tla
+import catlass.tla as tla
 import catlass.runtime as runtime_mod
 from catlass._mlir_bindings import tla_ops_gen
 

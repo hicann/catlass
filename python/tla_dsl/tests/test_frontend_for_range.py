@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-import catlass as tla
+import catlass.tla as tla
 import catlass.core_api as core_api_mod
 import catlass.runtime as runtime_mod
 from catlass.base_dsl import BaseDSL

@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 
-import catlass as tla
+import catlass.tla as tla
 import catlass.runtime as runtime_mod
 from catlass.core_api import MaskSSA, TlaCoreAPIError
 from catlass.params import MaskLoadParams, MaskStoreParams

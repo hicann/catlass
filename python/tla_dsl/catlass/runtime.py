@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import contextvars
 import inspect
 from contextlib import contextmanager
-from dataclasses import dataclass, field  # noqa: F401 — field used below
 from typing import Any, Callable
 
 from .base_dsl.runtime.dlpack_types import (
@@ -27,17 +25,20 @@ from .execution import (
     runtime_options_for_launch,
     runtime_options_from_kwargs,
 )
-from .base_dsl.runtime.ascend import (
-    check_acl_errors,
-    initialize_acl_context,
-    load_acl,
+from .base_dsl.op import (
+    _FRONTEND_EMIT_STATE,
+    _FrontendEmitState,
+    _bind_frontend_category,
+    _bind_frontend_value,
+    _current_frontend_state,
+    _frontend_emission,
+    _has_enclosing_region,
+    _in_simt_vec_func,
+    _resolve_frontend_bound_category,
+    _resolve_frontend_bound_value,
+    _resolve_identity_binding,
 )
 from .types import RuntimeTensorError
-
-_IdentityBinding = tuple[Any, Any]
-
-_ACL_DEV_ATTR_AICORE_CORE_NUM = 101
-_ACL_DEV_ATTR_VECTOR_CORE_NUM = 201
 
 
 class TlaIRNotExecutableError(RuntimeError):
@@ -46,173 +47,6 @@ class TlaIRNotExecutableError(RuntimeError):
 
 class TlaCoreAPIError(RuntimeError):
     """Raised when a user-facing Tla API call violates preconditions."""
-
-
-@dataclass(frozen=True)
-class TlaRuntimeState:
-    """Global initialized runtime state."""
-
-    device_id: int | None = None
-    stream: Any | None = None
-
-
-@dataclass
-class _FrontendEmitState:
-    """Active frontend emission state."""
-
-    arg_bindings: dict[int, _IdentityBinding]
-    category_bindings: dict[int, _IdentityBinding]
-    module: Any | None = None
-    #: ``mlir.Value`` -> host :class:`~catlass.tla.runtime._Tensor` for execution lowering.
-    tensor_host_by_value: dict[Any, Any] = field(default_factory=dict)
-    #: ``mlir.Value`` -> structured Tla tensor type descriptor.
-    tensor_type_by_value: dict[Any, Any] = field(default_factory=dict)
-    #: ``mlir.Value`` -> resolved tensor metadata fields (shape/stride/coord/origin_shape/...).
-    tensor_metadata_by_value: dict[Any, dict[str, Any]] = field(default_factory=dict)
-    mutex_guard_depth: int = 0
-    #: Stack of enclosing region wrappers, each one of "cube" / "vector" /
-    #: "vec.func" (the wrapper's own name).
-    active_regions: list[str] = field(default_factory=list)
-    #: Stack of ``mode`` values for the enclosing ``tla.vec.func`` regions.
-    vec_func_modes: list[str] = field(default_factory=list)
-
-
-_FRONTEND_EMIT_STATE: contextvars.ContextVar[_FrontendEmitState | None] = (
-    contextvars.ContextVar("tla_frontend_emit_state", default=None)
-)
-_GLOBAL_RUNTIME_STATE = TlaRuntimeState()
-
-
-def _normalize_runtime_device(device: int | str | None = None) -> int:
-    if device is None:
-        return 0
-    if isinstance(device, int):
-        device_id = device
-    elif isinstance(device, str):
-        stripped = device.strip()
-        if stripped.isdigit():
-            device_id = int(stripped)
-        elif stripped.startswith("npu:") and stripped[4:].isdigit():
-            device_id = int(stripped[4:])
-        else:
-            raise TlaCoreAPIError(
-                "tla.initialize device must be an integer 0-7 or 'npu:0' through 'npu:7'."
-            )
-    else:
-        raise TlaCoreAPIError(
-            "tla.initialize device must be an integer 0-7 or 'npu:0' through 'npu:7'."
-        )
-    if device_id < 0 or device_id > 7:
-        raise TlaCoreAPIError(
-            "tla.initialize device must be an integer 0-7 or 'npu:0' through 'npu:7'."
-        )
-    return device_id
-
-
-def initialize(device: int | str | None = None) -> TlaRuntimeState:
-    """Initialize the global Ascend runtime state and create a stream."""
-
-    global _GLOBAL_RUNTIME_STATE
-    if _GLOBAL_RUNTIME_STATE.device_id is not None:
-        raise TlaExecutionError(
-            "tla.initialize() was already called. Call tla.finalize() before reinitializing."
-        )
-    device_id = _normalize_runtime_device(device)
-    acl = initialize_acl_context()
-    try:
-        check_acl_errors(acl.rt.set_device(device_id), "acl.rt.set_device")
-        stream, ret = acl.rt.create_stream()
-        check_acl_errors(ret, "acl.rt.create_stream")
-    except Exception:
-        try:
-            acl.rt.reset_device(device_id)
-        except Exception:
-            pass
-        try:
-            acl.finalize()
-        except Exception:
-            pass
-        raise
-    _GLOBAL_RUNTIME_STATE = TlaRuntimeState(
-        device_id=device_id,
-        stream=stream,
-    )
-    return _GLOBAL_RUNTIME_STATE
-
-
-def finalize() -> None:
-    """Finalize the global Ascend runtime state."""
-
-    global _GLOBAL_RUNTIME_STATE
-    state = _GLOBAL_RUNTIME_STATE
-    if state.device_id is None:
-        raise TlaExecutionError(
-            "tla.finalize() requires a prior call to tla.initialize()."
-        )
-    acl = load_acl()
-    check_acl_errors(acl.rt.reset_device(state.device_id), "acl.rt.reset_device")
-    check_acl_errors(acl.finalize(), "acl.finalize")
-    _GLOBAL_RUNTIME_STATE = TlaRuntimeState()
-
-
-def runtime_state() -> TlaRuntimeState:
-    """Return the current global runtime state snapshot."""
-
-    return _GLOBAL_RUNTIME_STATE
-
-
-def current_device_id() -> int | None:
-    """Return the initialized device id, if any."""
-
-    return _GLOBAL_RUNTIME_STATE.device_id
-
-
-def current_stream() -> Any | None:
-    """Return the initialized runtime stream, if any."""
-
-    return _GLOBAL_RUNTIME_STATE.stream
-
-
-def get_aicore_num(device: int | str | None = None) -> int:
-    """Return the number of AICore on the current device."""
-    device_id = _normalize_runtime_device(device)
-    acl = load_acl()
-
-    aicore_num, ret = acl.rt.get_device_info(device_id, _ACL_DEV_ATTR_AICORE_CORE_NUM)
-    check_acl_errors(ret, f"acl.rt.get_device_info({device_id}, _ACL_DEV_ATTR_AICORE_CORE_NUM)")
-    return aicore_num
-
-
-def get_vector_core_num(device: int | str | None = None) -> int:
-    """Return the number of VectorCore on the current device."""
-    device_id = _normalize_runtime_device(device)
-    acl = load_acl()
-
-    vector_core_num, ret = acl.rt.get_device_info(device_id, _ACL_DEV_ATTR_VECTOR_CORE_NUM)
-    check_acl_errors(ret, f"acl.rt.get_device_info({device_id}, _ACL_DEV_ATTR_VECTOR_CORE_NUM)")
-    return vector_core_num
-
-
-@contextmanager
-def _frontend_emission(
-    *,
-    arg_bindings: dict[int, _IdentityBinding] | None = None,
-    category_bindings: dict[int, _IdentityBinding] | None = None,
-    tensor_host_by_value: dict[Any, Any] | None = None,
-    module: Any | None = None,
-) -> Any:
-    """Activate frontend direct-op emission context."""
-    state = _FrontendEmitState(
-        arg_bindings=dict(arg_bindings or {}),
-        category_bindings=dict(category_bindings or {}),
-        tensor_host_by_value=dict(tensor_host_by_value or {}),
-        module=module,
-    )
-    token = _FRONTEND_EMIT_STATE.set(state)
-    try:
-        yield state
-    finally:
-        _FRONTEND_EMIT_STATE.reset(token)
 
 
 @contextmanager
@@ -228,63 +62,6 @@ def _eager_capture() -> Any:
             with mlir_ir.InsertionPoint(module.body):
                 with _frontend_emission(module=module) as state:
                     yield state
-
-
-def _current_frontend_state() -> _FrontendEmitState | None:
-    return _FRONTEND_EMIT_STATE.get()
-
-
-def _resolve_frontend_bound_value(value: Any) -> Any | None:
-    state = _FRONTEND_EMIT_STATE.get()
-    if state is None:
-        return None
-    return _resolve_identity_binding(state.arg_bindings, value)
-
-
-def _bind_frontend_value(proxy: Any, value: Any) -> None:
-    state = _FRONTEND_EMIT_STATE.get()
-    if state is None:
-        return
-    state.arg_bindings[id(proxy)] = (proxy, value)
-
-
-def _bind_frontend_category(value: Any, category: str) -> None:
-    state = _FRONTEND_EMIT_STATE.get()
-    if state is None:
-        return
-    state.category_bindings[id(value)] = (value, category)
-
-
-def _resolve_identity_binding(
-    bindings: dict[int, _IdentityBinding], value: Any
-) -> Any | None:
-    binding = bindings.get(id(value))
-    if binding is None or binding[0] is not value:
-        return None
-    return binding[1]
-
-
-def _has_enclosing_region(kind: str) -> bool:
-    """True if some enclosing region is ``kind`` (``cube`` / ``vector`` / ``vec.func``).
-
-    Walks all active region wrappers, so an op nested several levels deep (e.g.
-    inside an ``scf.for`` inside a ``tla.vec.func``) still matches. A ``tla.vec.func``
-    is always nested inside a ``tla.vector`` (enforced when it is entered), so a
-    ``"vector"`` requirement stays satisfied from inside a ``vec.func`` via the
-    enclosing region on the stack.
-    """
-    state = _FRONTEND_EMIT_STATE.get()
-    if state is None:
-        return True  # No frontend state to inspect; defer to the MLIR verifier.
-    return kind in state.active_regions
-
-
-def _in_simt_vec_func() -> bool:
-    """True if the innermost enclosing ``tla.vec.func`` uses SIMT mode."""
-    state = _FRONTEND_EMIT_STATE.get()
-    if state is None or not state.vec_func_modes:
-        return False
-    return state.vec_func_modes[-1].lower() == "simt"
 
 
 def _require_enclosing_region(op_name: str, kind: str) -> None:
@@ -303,13 +80,6 @@ def _require_enclosing_cube_or_vector(op_name: str) -> None:
         raise TlaCoreAPIError(
             f"tla.{op_name} must be nested inside tla.cube() or tla.vector()"
         )
-
-
-def _resolve_frontend_bound_category(value: Any) -> str | None:
-    state = _FRONTEND_EMIT_STATE.get()
-    if state is None:
-        return None
-    return _resolve_identity_binding(state.category_bindings, value)
 
 
 def _coerce_bool_value(value: Any) -> Any:
@@ -742,7 +512,6 @@ __all__ = [
     "TlaUnsupportedAbiError",
     "TlaKernelArtifact",
     "TlaExecutionResult",
-    "TlaRuntimeState",
     "RuntimeTensorError",
     "DlpackBridgeError",
     "ASCEND_DEVICE_TYPES",
@@ -753,16 +522,9 @@ __all__ = [
     "_Tensor",
     "arch",
     "const_expr",
-    "current_device_id",
-    "current_stream",
-    "get_aicore_num",
-    "get_vector_core_num",
-    "finalize",
-    "initialize",
     "jit",
     "kernel",
     "pipes",
-    "runtime_state",
     "utils",
     *_CORE_API_EXPORTS,
 ]

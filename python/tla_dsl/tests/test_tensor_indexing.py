@@ -9,7 +9,7 @@ import tempfile
 
 import pytest
 
-import catlass as tla
+import catlass.tla as tla
 import catlass.runtime as runtime_mod
 from catlass.base_dsl.ast_preprocessor import (
     _FrontendControlFlowTransformer,

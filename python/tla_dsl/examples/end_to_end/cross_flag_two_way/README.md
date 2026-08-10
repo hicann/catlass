@@ -16,14 +16,14 @@ restricts each operation to the matching `sub_block_idx`.
 Build without a device launch:
 
 ```bash
-python cross_flag_two_way.py --build-only --force-recompile
+CATLASS_DSL_FORCE_RECOMPILE=1 python cross_flag_two_way.py --build-only
 ```
 
 Run on an Ascend 950 device:
 
 ```bash
 python cross_flag_two_way.py \
-  --run --device 0 --block-dim 1 --force-recompile
+  --run --device 0 --block-num 1
 ```
 
 A passing run prints `aiv0_row_ok=True`, `aiv1_row_ok=True`, and

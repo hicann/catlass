@@ -4,7 +4,7 @@ from collections.abc import Callable
 
 import pytest
 
-import catlass as tla
+import catlass.tla as tla
 from catlass.execution_lowering import UnsupportedExecutionLowering
 import catlass.runtime as runtime_mod
 

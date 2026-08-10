@@ -103,9 +103,9 @@ RUN find /opt/AscendNPU-IR \
   -prune \
   -exec rm -rf '{}' +
 
-ENV TLA_DSL_PREBUILT_ASCENDNPU_IR=/opt/AscendNPU-IR
-ENV MLIR_TBLGEN_INCLUDE_DIR=${TLA_DSL_PREBUILT_ASCENDNPU_IR}/build/install/include
-ENV PYTHONPATH="${TLA_DSL_PREBUILT_ASCENDNPU_IR}/build/install/python_packages/mlir_core:${PYTHONPATH:-}"
+ENV CATLASS_DSL_PREBUILT_ASCENDNPU_IR=/opt/AscendNPU-IR
+ENV MLIR_TBLGEN_INCLUDE_DIR=${CATLASS_DSL_PREBUILT_ASCENDNPU_IR}/build/install/include
+ENV PYTHONPATH="${CATLASS_DSL_PREBUILT_ASCENDNPU_IR}/build/install/python_packages/mlir_core:${PYTHONPATH:-}"
 ENV BISHENG_COMPILER_PATH=${ASCEND_HOME_PATH}/bin
-ENV MLIR_DIR=${TLA_DSL_PREBUILT_ASCENDNPU_IR}/build/install/lib/cmake/mlir
-ENV LLVM_DIR=${TLA_DSL_PREBUILT_ASCENDNPU_IR}/build/install/lib/cmake/llvm
+ENV MLIR_DIR=${CATLASS_DSL_PREBUILT_ASCENDNPU_IR}/build/install/lib/cmake/mlir
+ENV LLVM_DIR=${CATLASS_DSL_PREBUILT_ASCENDNPU_IR}/build/install/lib/cmake/llvm

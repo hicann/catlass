@@ -15,7 +15,7 @@ Options:
 
 Environment variables (auto-detected where possible):
   ASCEND_HOME_PATH                  CANN / ascend-toolkit root (REQUIRED)
-  TLA_DSL_PREBUILT_ASCENDNPU_IR     AscendNPU-IR build root (REQUIRED)
+  CATLASS_DSL_PREBUILT_ASCENDNPU_IR     AscendNPU-IR build root (REQUIRED)
                                     e.g. /path/to/AscendNPU-IR
 EOF
 }
@@ -65,23 +65,23 @@ if [[ -z "${ASCEND_HOME_PATH:-}" ]]; then
   exit 1
 fi
 
-if [[ -z "${TLA_DSL_PREBUILT_ASCENDNPU_IR:-}" ]]; then
-  TLA_DSL_PREBUILT_ASCENDNPU_IR="${repo_root}/3rdparty/AscendNPU-IR"
-  echo "==> TLA_DSL_PREBUILT_ASCENDNPU_IR not set, using repo default: ${TLA_DSL_PREBUILT_ASCENDNPU_IR}"
+if [[ -z "${CATLASS_DSL_PREBUILT_ASCENDNPU_IR:-}" ]]; then
+  CATLASS_DSL_PREBUILT_ASCENDNPU_IR="${repo_root}/3rdparty/AscendNPU-IR"
+  echo "==> CATLASS_DSL_PREBUILT_ASCENDNPU_IR not set, using repo default: ${CATLASS_DSL_PREBUILT_ASCENDNPU_IR}"
 fi
 # Export so child processes (setup.py / pip build subprocesses) can see it.
-export TLA_DSL_PREBUILT_ASCENDNPU_IR
+export CATLASS_DSL_PREBUILT_ASCENDNPU_IR
 
 # ============================================================================
 # 2. Auto-derive MLIR paths (consumed by setup.py / CMake / generate_tla_python_bindings)
-#    Layout: $TLA_DSL_PREBUILT_ASCENDNPU_IR/build/install/{include,lib/cmake/{mlir,llvm}}
+#    Layout: $CATLASS_DSL_PREBUILT_ASCENDNPU_IR/build/install/{include,lib/cmake/{mlir,llvm}}
 # ============================================================================
 
-npu_ir_install="${TLA_DSL_PREBUILT_ASCENDNPU_IR}/build/install"
+npu_ir_install="${CATLASS_DSL_PREBUILT_ASCENDNPU_IR}/build/install"
 
 if [[ ! -d "$npu_ir_install" ]]; then
   echo "ERROR: AscendNPU-IR install prefix not found: $npu_ir_install" >&2
-  echo "  Build AscendNPU-IR first, or fix TLA_DSL_PREBUILT_ASCENDNPU_IR." >&2
+  echo "  Build AscendNPU-IR first, or fix CATLASS_DSL_PREBUILT_ASCENDNPU_IR." >&2
   exit 1
 fi
 
@@ -96,7 +96,7 @@ if [[ -d "$mlir_core" ]]; then
 fi
 
 echo "==> ASCEND_HOME_PATH=${ASCEND_HOME_PATH}"
-echo "==> TLA_DSL_PREBUILT_ASCENDNPU_IR=${TLA_DSL_PREBUILT_ASCENDNPU_IR}"
+echo "==> CATLASS_DSL_PREBUILT_ASCENDNPU_IR=${CATLASS_DSL_PREBUILT_ASCENDNPU_IR}"
 echo "==> MLIR_TBLGEN_INCLUDE_DIR=${MLIR_TBLGEN_INCLUDE_DIR}"
 echo "==> MLIR_DIR=${MLIR_DIR}"
 

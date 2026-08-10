@@ -4,7 +4,7 @@ import ast
 import importlib.util
 from pathlib import Path
 
-import catlass as tla
+import catlass.tla as tla
 import catlass.runtime as runtime_mod
 
 
@@ -105,9 +105,8 @@ def test_runtime_expected_output_keeps_if_prefix_and_adds_while_results() -> Non
     )
 
 
-def test_cli_supports_forced_compile_and_cache_reuse() -> None:
+def test_example_uses_torch_npu_device_and_env_cache() -> None:
     source = _EXAMPLE.read_text()
-    assert 'parser.add_argument("--force-recompile", action="store_true")' in source
-    assert 'parser.add_argument("--cache-dir"' in source
-    assert "force_recompile=args.force_recompile" in source
-    assert "cache_dir=str(Path(args.cache_dir).expanduser().resolve())" in source
+    assert "torch.npu.set_device(" in source
+    assert "configure_compile_cache(" not in source
+    assert "_npu_host" not in source

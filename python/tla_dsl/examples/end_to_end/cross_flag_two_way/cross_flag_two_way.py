@@ -14,12 +14,12 @@ import argparse
 from pathlib import Path
 from typing import Any
 
-import catlass as tla
+import catlass.tla as tla
+import sys
 
 ROWS = 2
 COLS = 64
 DEMO_DIR = Path(__file__).resolve().parent
-DEFAULT_CACHE_DIR = DEMO_DIR / "artifacts" / "runtime-cache"
 
 
 @tla.kernel
@@ -89,29 +89,27 @@ def cross_flag_two_way(
 
 
 def _tensor_type() -> Any:
-    return tla.Tensor(
-        tla.make_shape(ROWS, COLS),
-        tla.Float32,
-        origin_shape=tla.make_shape(ROWS, COLS),
-        coord=tla.make_coord(0, 0),
-        stride=tla.make_stride(COLS, 1),
-        layout_tag=tla.arch.RowMajor,
-    )
+    import catlass.runtime as runtime_mod
+    from catlass.tla.runtime import make_fake_tensor
+
+    with runtime_mod._eager_capture():
+        return make_fake_tensor(
+            tla.make_shape(ROWS, COLS),
+            tla.Float32,
+            origin_shape=tla.make_shape(ROWS, COLS),
+            coord=tla.make_coord(0, 0),
+            stride=tla.make_stride(COLS, 1),
+            layout_tag=tla.arch.RowMajor,
+        )
 
 
 def _compile_only_type_args() -> tuple[Any, Any, Any]:
-    from catlass import runtime as runtime_mod
-
-    with runtime_mod._eager_capture():
-        return (_tensor_type(), _tensor_type(), _tensor_type())
+    return (_tensor_type(), _tensor_type(), _tensor_type())
 
 
 def _runtime_kwargs(args: argparse.Namespace) -> dict[str, Any]:
     return {
-        "arch_scope": "aic.c310",
-        "cache": not args.no_cache,
-        "cache_dir": str(Path(args.cache_dir).expanduser().resolve()),
-        "force_recompile": args.force_recompile,
+        "options": "--npu-arch 3510"
     }
 
 
@@ -136,7 +134,7 @@ def _require_torch_npu(device_id: int) -> Any:
     except ImportError as exc:
         raise SystemExit("cross_flag_two_way --run requires PyTorch.") from exc
     try:
-        import torch_npu  # noqa: F401
+        import torch_npu
     except ImportError as exc:
         raise SystemExit("cross_flag_two_way --run requires torch_npu.") from exc
     torch.npu.set_device(device_id)
@@ -144,68 +142,51 @@ def _require_torch_npu(device_id: int) -> Any:
 
 
 def _create_tla_tensor(dev_buf: Any) -> Any:
-    from catlass import runtime as runtime_mod
-
-    contiguous = dev_buf.contiguous()
-    with runtime_mod._eager_capture():
-        tensor = tla.Tensor(
-            tla.make_shape(ROWS, COLS),
-            tla.Float32,
-            origin_shape=tla.make_shape(ROWS, COLS),
-            coord=tla.make_coord(0, 0),
-            stride=tla.make_stride(COLS, 1),
-            data_ptr=int(contiguous.data_ptr()),
-        )
-    tensor._external_binding = True
-    return tensor
+    return tla.from_dlpack(dev_buf.contiguous(), layout_tag=tla.arch.RowMajor)
 
 
 def run(args: argparse.Namespace) -> int:
-    tla.initialize(device=args.device)
-    try:
-        torch = _require_torch_npu(args.device)
-        x = torch.arange(ROWS * COLS, dtype=torch.float32, device="npu").reshape(
-            ROWS, COLS
-        )
-        y = (x * 2.0) + 3.0
-        out = torch.full_like(x, -99.0)
-        expected = x + y
+    torch = _require_torch_npu(args.device)
+    x = torch.arange(ROWS * COLS, dtype=torch.float32, device="npu").reshape(
+        ROWS, COLS
+    )
+    y = (x * 2.0) + 3.0
+    out = torch.full_like(x, -99.0)
+    expected = x + y
 
-        tla_x = _create_tla_tensor(x)
-        tla_y = _create_tla_tensor(y)
-        tla_out = _create_tla_tensor(out)
-        artifact = tla.compile(
-            cross_flag_two_way,
-            tla_x,
-            tla_y,
-            tla_out,
-            **_runtime_kwargs(args),
-        )
-        artifact(tla_x, tla_y, tla_out, block_dim=args.block_dim)
-        torch.npu.synchronize()
+    tla_x = _create_tla_tensor(x)
+    tla_y = _create_tla_tensor(y)
+    tla_out = _create_tla_tensor(out)
+    artifact = tla.compile(
+        cross_flag_two_way,
+        tla_x,
+        tla_y,
+        tla_out,
+        **_runtime_kwargs(args),
+    )
+    artifact(tla_x, tla_y, tla_out, block_num=args.block_num)
+    torch.npu.synchronize()
 
-        matches = torch.isclose(out, expected, rtol=0.0, atol=args.atol)
-        row_matches = [bool(matches[row].all()) for row in range(ROWS)]
-        mismatch = matches.logical_not().nonzero(as_tuple=False)
-        first_mismatch: dict[str, Any] | None = None
-        if mismatch.numel():
-            row, col = (int(v) for v in mismatch[0].tolist())
-            first_mismatch = {
-                "index": [row, col],
-                "actual": out[row, col].item(),
-                "expected": expected[row, col].item(),
-            }
+    matches = torch.isclose(out, expected, rtol=0.0, atol=args.atol)
+    row_matches = [bool(matches[row].all()) for row in range(ROWS)]
+    mismatch = matches.logical_not().nonzero(as_tuple=False)
+    first_mismatch: dict[str, Any] | None = None
+    if mismatch.numel():
+        row, col = (int(v) for v in mismatch[0].tolist())
+        first_mismatch = {
+            "index": [row, col],
+            "actual": out[row, col].item(),
+            "expected": expected[row, col].item(),
+        }
 
-        print("compile_ok=True")
-        print(f"kernel.o path={artifact.kernel_binary_path}")
-        print("launch_ok=True")
-        print(f"aiv0_row_ok={row_matches[0]}")
-        print(f"aiv1_row_ok={row_matches[1]}")
-        print(f"out_equals_expected={bool(matches.all())}")
-        print(f"first_mismatch={first_mismatch}")
-        return 0 if first_mismatch is None else 1
-    finally:
-        tla.finalize()
+    print("compile_ok=True")
+    print(f"kernel.o path={artifact.kernel_binary_path}")
+    print("launch_ok=True")
+    print(f"aiv0_row_ok={row_matches[0]}")
+    print(f"aiv1_row_ok={row_matches[1]}")
+    print(f"out_equals_expected={bool(matches.all())}")
+    print(f"first_mismatch={first_mismatch}")
+    return 0 if first_mismatch is None else 1
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -216,11 +197,8 @@ def _build_parser() -> argparse.ArgumentParser:
     mode.add_argument("--build-only", action="store_true")
     mode.add_argument("--run", action="store_true")
     parser.add_argument("--device", type=int, default=0)
-    parser.add_argument("--block-dim", type=int, default=1)
+    parser.add_argument("--block-num", type=int, default=1)
     parser.add_argument("--atol", type=float, default=1e-4)
-    parser.add_argument("--cache-dir", default=str(DEFAULT_CACHE_DIR))
-    parser.add_argument("--force-recompile", action="store_true")
-    parser.add_argument("--no-cache", action="store_true")
     parser.add_argument("--dump-tlair", action="store_true")
     return parser
 

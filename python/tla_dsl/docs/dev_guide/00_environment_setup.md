@@ -79,7 +79,7 @@ docker run \
     -it ascend-catlass-dsl:9.1.0-950-ubuntu22.04-py3.12 bash
 ```
 
-镜像不包含 CATLASS 源码；上述命令会将完整 CATLASS 仓库挂载到 `/workspace/catlass`，并默认进入 `/workspace/catlass/python/tla_dsl`。镜像已配置 `TLA_DSL_PREBUILT_ASCENDNPU_IR`、`MLIR_TBLGEN_INCLUDE_DIR` 等构建所需环境变量，可直接编译。
+镜像不包含 CATLASS 源码；上述命令会将完整 CATLASS 仓库挂载到 `/workspace/catlass`，并默认进入 `/workspace/catlass/python/tla_dsl`。镜像已配置 `CATLASS_DSL_PREBUILT_ASCENDNPU_IR`、`MLIR_TBLGEN_INCLUDE_DIR` 等构建所需环境变量，可直接编译。
 
 ### 手动部署
 

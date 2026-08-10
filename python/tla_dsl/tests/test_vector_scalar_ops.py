@@ -4,7 +4,7 @@ from collections.abc import Callable
 
 import pytest
 
-import catlass as tla
+import catlass.tla as tla
 import catlass.runtime as runtime_mod
 
 

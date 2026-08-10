@@ -7,20 +7,49 @@ from enum import Enum
 
 
 class Arch(str, Enum):
+    """Internal toolchain arch id (hivmc ``dav-c310-*`` / bitcode layout).
+
+    Public Host compile uses the Ascend chip name via ``options="--npu-arch 3510"``;
+    ``3510`` maps here (see :func:`resolve_npu_arch`).
+    """
+
     C310 = "c310"
 
     @classmethod
     def from_string(cls, value: str | "Arch") -> "Arch":
         if isinstance(value, cls):
             return value
-        normalized = str(value).strip().lower()
+        token = str(value).strip().lower()
         try:
-            return cls(normalized)
+            return cls(token)
+        except ValueError:
+            pass
+        try:
+            return cls(resolve_npu_arch(token))
         except ValueError as exc:
             supported = ", ".join(arch.value for arch in cls)
             raise ValueError(
                 f"Unsupported target architecture {value!r}. Supported: {supported}."
             ) from exc
+
+
+# Public ``--npu-arch`` token → internal Arch.value used by KERNEL_TARGETS / cce_arch.
+_NPU_ARCH_TO_TARGET: dict[str, str] = {
+    "3510": "c310",
+}
+DEFAULT_NPU_ARCH = "3510"
+
+
+def resolve_npu_arch(npu_arch: str) -> str:
+    """Map public ``--npu-arch`` (e.g. ``3510``) to internal target arch (``c310``)."""
+    normalized = str(npu_arch).strip().lower()
+    target = _NPU_ARCH_TO_TARGET.get(normalized)
+    if target is None:
+        supported = ", ".join(sorted(_NPU_ARCH_TO_TARGET) or ["3510"])
+        raise ValueError(
+            f"Unsupported --npu-arch={npu_arch!r}. Supported: {supported}."
+        )
+    return target
 
 
 @dataclass(frozen=True)
@@ -60,7 +89,7 @@ KERNEL_TARGETS: dict[tuple[Arch, str], TlaKernelTarget] = {
 
 
 def default_target_arch() -> Arch:
-    return Arch.C310
+    return Arch.from_string(resolve_npu_arch(DEFAULT_NPU_ARCH))
 
 
 def get_current_arch() -> Arch:
@@ -130,6 +159,7 @@ def get_localmem_capacity_bytes(mem_scope: str, arch: str | Arch | None = None) 
 
 __all__ = [
     "Arch",
+    "DEFAULT_NPU_ARCH",
     "TlaKernelTarget",
     "KERNEL_TARGETS",
     "LOCALMEM_CAPACITY_BYTES",
@@ -139,4 +169,5 @@ __all__ = [
     "get_kernel_target",
     "get_localmem_capacity_bytes",
     "parse_arch_scope",
+    "resolve_npu_arch",
 ]

@@ -61,11 +61,8 @@ $$
 ```text
 basic_vadd.py [-h] [--device DEVICE] [--n N]
               [--dtype {f32,f16,i8,i16,i32}]
-              [--block-dim BLOCK_DIM]
+              [--block-num BLOCK_DIM]
               [--sentinel SENTINEL]
-              [--cache-dir CACHE_DIR] 
-              [--force-recompile] 
-              [--no-cache]
               [--use-mutex | --use-mutex-with | --use-atomic-add]
 ```
 
@@ -75,12 +72,9 @@ basic_vadd.py [-h] [--device DEVICE] [--n N]
 |------|--------|------|
 | `--device` | `0` | TLA 和 PyTorch 使用的 NPU 设备号。 |
 | `--n` | `400` | 向量长度，范围 `[1, VECTOR_ELE]`。 |
-| `--block-dim` | `-1`（哨兵值，后续替换为 `tla.get_aicore_num(device)`） | 启动的 AI Core 核数。 |
+| `--block-num` | `-1`（哨兵：按算子类型取满核；本示例为纯 Vector，默认 `vector_core_num`） | 启动 block 数。非 `-1` 时用入参；`-1` 时纯 v 用 AIV 物理核数，cube/mix 用 AIC 物理核数。 |
 | `--dtype` | `"f32"` | 数据类型，可选 `"f32"`、`"f16"`、`"i8"`、`"i16"`、`"i32"`。 |
 | `--sentinel` | 按 dtype 自适应 | Kernel 启动前写入输出的哨兵值。 |
-| `--cache-dir` | `artifacts/runtime-cache` | 编译缓存目录。 |
-| `--force-recompile` | `False` | 忽略已有缓存并强制重新编译。 |
-| `--no-cache` | `False` | 禁用编译缓存。 |
 | `--use-mutex` | 关闭 | 切换到显式 Mutex lock/unlock 同步。 |
 | `--use-mutex-with` | 关闭 | 切换到 `with tla.mutex_guard(...)` 同步。 |
 | `--use-atomic-add` | 关闭 | 切换到原子加同步（先 copy A→C，再 atomic_add B→C）。 |

@@ -18,6 +18,10 @@ def _get_typed_call_args(args: Sequence[Any]) -> Sequence[Any] | None:
         resolver = getattr(arg, "__get_mlir_types__", None)
         if callable(resolver):
             inferred.append(arg)
+        elif isinstance(arg, (bool, int, float)):
+            # Preserve host literals for ``tla.Constexpr[...]`` / numeric params.
+            # Plain ints must not be erased to None or Constexpr lowering sees NoneType.
+            inferred.append(arg)
         else:
             inferred.append(None)
     if all(item is None for item in inferred):

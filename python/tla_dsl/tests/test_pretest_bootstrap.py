@@ -23,16 +23,6 @@ def _load_bootstrap(repo_root: Path):  # type: ignore[no-untyped-def]
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_ensure_pretest_mlir_build_respects_skip_env(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """TLA_DSL_SKIP_PRETEST_BUILD=1 suppresses the missing-binary error."""
-    bootstrap = _load_bootstrap(REPO_ROOT)
-    monkeypatch.setenv("TLA_DSL_SKIP_PRETEST_BUILD", "1")
-    # tmp_path has no binaries, but the skip flag prevents the check.
-    bootstrap.ensure_pretest_mlir_build(tmp_path)
-
-
 def test_ensure_pretest_mlir_build_runs_cmake_and_ninja_targets(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -45,7 +35,6 @@ def test_ensure_pretest_mlir_build_runs_cmake_and_ninja_targets(
 
     monkeypatch.setenv("MLIR_TBLGEN_INCLUDE_DIR", str(include_dir))
     monkeypatch.setenv("MLIR_DIR", str(mlir_dir))
-    monkeypatch.delenv("TLA_DSL_SKIP_PRETEST_BUILD", raising=False)
     monkeypatch.delenv("CC", raising=False)
     monkeypatch.delenv("CXX", raising=False)
 
@@ -60,8 +49,7 @@ def test_ensure_pretest_mlir_build_uses_llvm_config_fallback(
     bootstrap = _load_bootstrap(REPO_ROOT)
     monkeypatch.delenv("MLIR_TBLGEN_INCLUDE_DIR", raising=False)
     monkeypatch.delenv("MLIR_DIR", raising=False)
-    monkeypatch.delenv("TLA_DSL_PREBUILT_ASCENDNPU_IR", raising=False)
-    monkeypatch.delenv("TLA_DSL_SKIP_PRETEST_BUILD", raising=False)
+    monkeypatch.delenv("CATLASS_DSL_PREBUILT_ASCENDNPU_IR", raising=False)
     monkeypatch.delenv("CC", raising=False)
     monkeypatch.delenv("CXX", raising=False)
 
@@ -74,7 +62,6 @@ def test_resolve_include_dir_rejects_invalid_env_path(
 ) -> None:
     """A bad MLIR_TBLGEN_INCLUDE_DIR doesn't change the binary-missing error."""
     bootstrap = _load_bootstrap(REPO_ROOT)
-    monkeypatch.delenv("TLA_DSL_SKIP_PRETEST_BUILD", raising=False)
     bad_include = tmp_path / "bad-include"
     bad_include.mkdir()
     monkeypatch.setenv("MLIR_TBLGEN_INCLUDE_DIR", str(bad_include))
@@ -102,7 +89,6 @@ def test_ensure_pretest_mlir_build_resets_stale_compiler_cache(
 
     monkeypatch.setenv("MLIR_TBLGEN_INCLUDE_DIR", str(include_dir))
     monkeypatch.setenv("MLIR_DIR", str(mlir_dir))
-    monkeypatch.delenv("TLA_DSL_SKIP_PRETEST_BUILD", raising=False)
     monkeypatch.delenv("CC", raising=False)
     monkeypatch.delenv("CXX", raising=False)
 
@@ -111,25 +97,3 @@ def test_ensure_pretest_mlir_build_resets_stale_compiler_cache(
 
     # The cache file must NOT be removed — no build logic runs.
     assert cache.is_file()
-
-
-def test_ensure_pretest_mlir_build_honors_runtime_wrapper_env_toggle(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """TLA_DSL_BUILD_RUNTIME_WRAPPER is ignored — no build logic runs."""
-    bootstrap = _load_bootstrap(REPO_ROOT)
-    include_dir = tmp_path / "include"
-    include_dir.mkdir(parents=True)
-    mlir_dir = tmp_path / "cmake" / "mlir"
-    mlir_dir.mkdir(parents=True)
-
-    monkeypatch.setenv("MLIR_TBLGEN_INCLUDE_DIR", str(include_dir))
-    monkeypatch.setenv("MLIR_DIR", str(mlir_dir))
-    monkeypatch.setenv("TLA_DSL_BUILD_RUNTIME_WRAPPER", "ON")
-    monkeypatch.delenv("TLA_DSL_SKIP_PRETEST_BUILD", raising=False)
-    monkeypatch.delenv("CC", raising=False)
-    monkeypatch.delenv("CXX", raising=False)
-
-    with pytest.raises(bootstrap.PretestBuildError, match="Pre-built MLIR"):
-        bootstrap.ensure_pretest_mlir_build(tmp_path)
-

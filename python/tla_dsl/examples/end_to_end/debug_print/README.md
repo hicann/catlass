@@ -16,4 +16,5 @@ execution, producing two `v` frames from distinct cores. Record order is not
 defined.
 
 Device expression coverage uses `debug_print.py --expression --rhs VALUE`; it
-prints the runtime `lhs + rhs` result for both `i32` and `f32` on AIV and AIC.
+prints the runtime `lhs + rhs` result for both `i32` and `f32` via
+`tla.vector()` (AIV). There is no Host `--core-type` switch.

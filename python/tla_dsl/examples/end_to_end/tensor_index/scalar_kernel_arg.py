@@ -11,7 +11,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-import catlass as tla
+import catlass.tla as tla
+import sys
 
 
 @tla.kernel
@@ -35,7 +36,7 @@ def _require_torch_npu(device: int):
     import torch
 
     try:
-        import torch_npu  # noqa: F401
+        import torch_npu
     except ImportError as exc:
         raise SystemExit("torch_npu is required for this example") from exc
     torch.npu.set_device(device)
@@ -54,11 +55,9 @@ def _run_int_arg_arith(args: argparse.Namespace, torch, device: str) -> int:
     artifact = tla.compile(
         scalar_int_arg_arith_kernel,
         out_t,
-        a,
-        cache_dir=args.cache_dir,
-        force_recompile=args.force_recompile,
+        a
     )
-    artifact(out_t, a, block_dim=args.block_dim)
+    artifact(out_t, a, block_num=args.block_num)
     torch.npu.synchronize()
 
     expected = [20 + 6, 20 * 6, 20 // 6, 20 % 6]
@@ -78,11 +77,9 @@ def _run_float_arg_arith(args: argparse.Namespace, torch, device: str) -> int:
     artifact = tla.compile(
         scalar_float_arg_arith_kernel,
         out_t,
-        a,
-        cache_dir=args.cache_dir,
-        force_recompile=args.force_recompile,
+        a
     )
-    artifact(out_t, a, block_dim=args.block_dim)
+    artifact(out_t, a, block_num=args.block_num)
     torch.npu.synchronize()
 
     expected = torch.tensor([5.0, 6.0, 1.5], dtype=torch.float32, device=device)
@@ -96,21 +93,17 @@ def _run_float_arg_arith(args: argparse.Namespace, torch, device: str) -> int:
 
 
 def run(args: argparse.Namespace) -> int:
-    tla.initialize(device=args.device)
     torch = _require_torch_npu(args.device)
-    try:
-        device = f"npu:{args.device}"
-        for runner in (
-            lambda: _run_int_arg_arith(args, torch, device),
-            lambda: _run_float_arg_arith(args, torch, device),
-        ):
-            rc = runner()
-            if rc != 0:
-                return rc
-        print("verification_ok=True")
-        return 0
-    finally:
-        tla.finalize()
+    device = f"npu:{args.device}"
+    for runner in (
+        lambda: _run_int_arg_arith(args, torch, device),
+        lambda: _run_float_arg_arith(args, torch, device),
+    ):
+        rc = runner()
+        if rc != 0:
+            return rc
+    print("verification_ok=True")
+    return 0
 
 
 def main() -> int:
@@ -118,12 +111,7 @@ def main() -> int:
         description="Host Numeric kernel args used in scalar arithmetic E2E."
     )
     parser.add_argument("--device", type=int, default=0)
-    parser.add_argument("--block-dim", type=int, default=1)
-    parser.add_argument(
-        "--cache-dir",
-        default=str(Path(__file__).resolve().parent / "artifacts" / "runtime-cache"),
-    )
-    parser.add_argument("--force-recompile", action="store_true")
+    parser.add_argument("--block-num", type=int, default=1)
     return run(parser.parse_args())
 
 

@@ -15,19 +15,13 @@ class PretestBuildError(RuntimeError):
     """Raised when the pre-test MLIR binary check fails."""
 
 
-def _is_truthy(value: str | None) -> bool:
-    if value is None:
-        return False
-    return value.strip().lower() in {"1", "true", "on", "yes"}
-
-
 def _resolve_mlir_core_python_path(*, env: Mapping[str, str]) -> str | None:
-    """Derive the mlir_core Python package path from ``TLA_DSL_PREBUILT_ASCENDNPU_IR``.
+    """Derive the mlir_core Python package path from ``CATLASS_DSL_PREBUILT_ASCENDNPU_IR``.
 
     Returns a path suitable for prepending to ``PYTHONPATH``, or ``None``
     if the path does not exist on disk.
     """
-    prebuilt = env.get("TLA_DSL_PREBUILT_ASCENDNPU_IR")
+    prebuilt = env.get("CATLASS_DSL_PREBUILT_ASCENDNPU_IR")
     if prebuilt:
         mlir_core = (
             Path(prebuilt) / "build" / "install" / "python_packages" / "mlir_core"
@@ -54,11 +48,6 @@ def ensure_pretest_mlir_build(repo_root: Path) -> None:
     Regardless of the binary state, the function always sets up
     ``PYTHONPATH`` (and ``sys.path``) so that ``import mlir`` works during
     test collection.
-
-    Environment variables
-    ---------------------
-    TLA_DSL_SKIP_PRETEST_BUILD : str
-        If truthy (1/true/on/yes), skip the binary existence check entirely.
     """
     env = dict(os.environ)
 
@@ -77,14 +66,10 @@ def ensure_pretest_mlir_build(repo_root: Path) -> None:
         if mlir_core_path not in sys.path:
             sys.path.insert(0, mlir_core_path)
 
-    if _is_truthy(env.get("TLA_DSL_SKIP_PRETEST_BUILD")):
-        return
-
     build_dir = repo_root / "csrc" / "mlir" / "build"
 
     if not _prebuilt_binaries_exist(build_dir):
         raise PretestBuildError(
             "Pre-built MLIR binaries not found. "
-            "Run `build.sh` (or `build.sh --debug`) first, or set "
-            "TLA_DSL_SKIP_PRETEST_BUILD=1 to skip this check."
+            "Run `build.sh` (or `build.sh --debug`) first."
         )

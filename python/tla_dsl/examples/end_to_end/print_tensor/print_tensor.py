@@ -9,10 +9,10 @@ from io import StringIO
 from pathlib import Path
 from typing import Any, Callable, NamedTuple
 
-import catlass as tla
+import catlass.tla as tla
+import sys
 
 
-DEFAULT_CACHE_DIR = Path(__file__).resolve().parent / "artifacts" / "runtime-cache"
 SOURCE_SHAPE = (8, 4)
 UB_SHAPE = (4, 8)
 CAPACITY_SHAPE = (262_112,)
@@ -114,11 +114,6 @@ def print_tensor_aiv_kernel(value: tla.Tensor) -> None:
         tla.print(value, 16)
 
 
-@tla.kernel
-def print_tensor_aic_kernel(value: tla.Tensor) -> None:
-    with tla.cube():
-        tla.print(value, 16)
-
 
 @tla.kernel
 def print_tensor_aiv_two_calls_kernel(value: tla.Tensor) -> None:
@@ -142,12 +137,6 @@ def print_tensor_aiv_dynamic_control_flow_kernel(
                 tla.print(value, 16)
 
 
-@tla.kernel
-def print_tensor_aic_two_calls_kernel(value: tla.Tensor) -> None:
-    with tla.cube():
-        tla.print(value, 16)
-        tla.print(value, 8)
-
 
 @tla.kernel
 def print_tensor_dynamic_aiv_kernel(
@@ -158,25 +147,12 @@ def print_tensor_dynamic_aiv_kernel(
         tla.print(tensor, length)
 
 
-@tla.kernel
-def print_tensor_dynamic_aic_kernel(
-    value: tla.Tensor, rows: tla.Int32, length: tla.Int32
-) -> None:
-    tensor = tla.make_tensor(value.ptr, _dynamic_row_major_layout(rows))
-    with tla.cube():
-        tla.print(tensor, length)
-
 
 @tla.kernel
 def print_tensor_capacity_aiv_kernel(value: tla.Tensor) -> None:
     with tla.vector():
         tla.print(value, CAPACITY_SHAPE[0])
 
-
-@tla.kernel
-def print_tensor_capacity_aic_kernel(value: tla.Tensor) -> None:
-    with tla.cube():
-        tla.print(value, CAPACITY_SHAPE[0])
 
 
 @tla.kernel
@@ -252,10 +228,9 @@ def print_tensor_ub_dynamic_kernel(
 
 def _kernel(args: argparse.Namespace) -> Callable[..., None]:
     if args.case == "dynamic-control-flow":
-        if args.arch_scope != "aiv.c310" or args.storage != "gm":
+        if args.storage != "gm":
             raise tla.TlaExecutionError(
-                "dynamic-control-flow tensor tla.print requires GM AIV "
-                "(--arch-scope aiv.c310)"
+                "dynamic-control-flow tensor tla.print requires GM storage"
             )
         if args.calls != 1:
             raise tla.TlaExecutionError(
@@ -263,10 +238,6 @@ def _kernel(args: argparse.Namespace) -> Callable[..., None]:
             )
         return print_tensor_aiv_dynamic_control_flow_kernel
     if args.storage == "ub":
-        if args.arch_scope != "aiv.c310":
-            raise tla.TlaExecutionError(
-                "UB tensor tla.print requires --arch-scope aiv.c310"
-            )
         kernels = {
             ("base", 1): print_tensor_ub_base_kernel,
             ("base", 2): print_tensor_ub_base_two_calls_kernel,
@@ -282,29 +253,23 @@ def _kernel(args: argparse.Namespace) -> Callable[..., None]:
     if args.case == "capacity":
         if args.calls != 1:
             raise tla.TlaExecutionError("the capacity case supports one call")
-        if args.arch_scope == "aic.c310":
-            return print_tensor_capacity_aic_kernel
-        if args.arch_scope == "aiv.c310":
-            return print_tensor_capacity_aiv_kernel
+        return print_tensor_capacity_aiv_kernel
     if args.dynamic_shape:
         if args.calls != 1:
             raise tla.TlaExecutionError("the dynamic GM case supports one call")
-        if args.arch_scope == "aic.c310":
-            return print_tensor_dynamic_aic_kernel
-        if args.arch_scope == "aiv.c310":
-            return print_tensor_dynamic_aiv_kernel
+        return print_tensor_dynamic_aiv_kernel
     kernels = {
-        ("aic.c310", 1): print_tensor_aic_kernel,
-        ("aiv.c310", 1): print_tensor_aiv_kernel,
-        ("aic.c310", 2): print_tensor_aic_two_calls_kernel,
-        ("aiv.c310", 2): print_tensor_aiv_two_calls_kernel,
+        1: print_tensor_aiv_kernel,
+        2: print_tensor_aiv_two_calls_kernel,
     }
     try:
-        return kernels[(args.arch_scope, args.calls)]
+        return kernels[args.calls]
     except KeyError as exc:
         raise tla.TlaExecutionError(
-            "tensor tla.print supports --arch-scope aic.c310 or aiv.c310"
+            "tensor tla.print example supports --calls 1 or 2"
         ) from exc
+
+
 
 
 def _format_record(
@@ -312,7 +277,6 @@ def _format_record(
     *,
     values: tuple[float | int, ...] | list[float | int] | None = None,
     shape: tuple[int, ...] = SOURCE_SHAPE,
-    arch_scope: str = "aiv.c310",
 ) -> str:
     from catlass.execution import _format_print_tensor_record
 
@@ -326,7 +290,7 @@ def _format_record(
         record_values,
         shape=shape,
         dtype=spec.token,
-        subblock=0 if arch_scope.startswith("aiv.") else None,
+        subblock=0,
     )
 
 
@@ -344,9 +308,8 @@ def _verify_public_output(
     *,
     values: tuple[float | int, ...] | list[float | int] | None = None,
     shape: tuple[int, ...] = SOURCE_SHAPE,
-    arch_scope: str = "aiv.c310",
 ) -> str:
-    expected = _format_record(spec, values=values, shape=shape, arch_scope=arch_scope)
+    expected = _format_record(spec, values=values, shape=shape)
     records = _public_records(output)
     if records != [expected]:
         raise tla.TlaExecutionError(
@@ -364,15 +327,12 @@ def _verify_multi_record_public_output(
     spec: _DTypeSpec = DTYPE_SPECS["f32"],
     values: tuple[float | int, ...] | list[float | int] | None = None,
     shape: tuple[int, ...] = SOURCE_SHAPE,
-    arch_scope: str = "aiv.c310",
 ) -> str:
     from catlass.execution import _format_print_tensor_record
 
     record_values = spec.values if values is None else values
     records = _public_records(output)
-    subblocks: tuple[int | None, ...] = (
-        (0,) if arch_scope.startswith("aiv.") else (None,)
-    )
+    subblocks: tuple[int | None, ...] = (0,)
     expected_identities = {
         (call, block, subblock)
         for call in range(calls)
@@ -424,7 +384,6 @@ def _verify_dynamic_control_flow_public_output(
     *,
     values: tuple[float | int, ...] | list[float | int] | None = None,
     shape: tuple[int, ...] = SOURCE_SHAPE,
-    arch_scope: str = "aiv.c310",
 ) -> str:
     """Validate best-effort records from a dynamic tensor-print site.
 
@@ -432,7 +391,7 @@ def _verify_dynamic_control_flow_public_output(
     same static print site more than once.  Each emitted public record must
     nevertheless retain the exact dtype, location, shape, count, and values.
     """
-    expected = _format_record(spec, values=values, shape=shape, arch_scope=arch_scope)
+    expected = _format_record(spec, values=values, shape=shape)
     records = _public_records(output)
     malformed = [record for record in records if record != expected]
     if malformed:
@@ -461,11 +420,12 @@ def _make_external_unsigned_input(
         .contiguous()
     )
 
-    from catlass import runtime as runtime_mod
+    import catlass.runtime as runtime_mod
+    from catlass.tla.runtime import make_fake_tensor
 
     with runtime_mod._eager_capture():
         shape_value = tla.make_shape(*shape)
-        value = tla.Tensor(
+        value = make_fake_tensor(
             shape_value,
             getattr(tla, spec.tla_dtype),
             origin_shape=shape_value,
@@ -514,10 +474,7 @@ def _compile(
     return tla.compile(
         kernel,
         *kernel_args,
-        arch_scope=args.arch_scope,
-        cache=not args.no_cache,
-        cache_dir=str(Path(args.cache_dir).expanduser().resolve()),
-        force_recompile=args.force_recompile,
+        options="--npu-arch 3510"
     )
 
 
@@ -547,7 +504,7 @@ def _run_spec(args: argparse.Namespace, torch: Any, spec: _DTypeSpec) -> None:
         value = runtime_input.value
         expected_values = list(spec.values)
         if args.layout == "column-major":
-            source = source.permute(1, 0).contiguous()
+            source = source.detach().cpu().permute(1, 0).contiguous().npu()
             value = tla.from_dlpack(source, layout_tag=tla.arch.ColumnMajor)
             expected_values = [
                 value
@@ -564,7 +521,7 @@ def _run_spec(args: argparse.Namespace, torch: Any, spec: _DTypeSpec) -> None:
     executor = _compile(args, kernel, kernel_args)
     captured = StringIO()
     with redirect_stdout(captured):
-        executor(*kernel_args, block_dim=args.block_dim)
+        executor(*kernel_args, block_num=args.block_num)
     output_shape = (
         UB_SHAPE if args.storage == "ub" and args.case != "dynamic" else source_shape
     )
@@ -574,25 +531,22 @@ def _run_spec(args: argparse.Namespace, torch: Any, spec: _DTypeSpec) -> None:
             spec,
             values=expected_values,
             shape=output_shape,
-            arch_scope=args.arch_scope,
         )
-    elif args.calls == 1 and args.block_dim == 1:
+    elif args.calls == 1 and args.block_num == 1:
         rendered = _verify_public_output(
             captured.getvalue(),
             spec,
             values=expected_values,
             shape=output_shape,
-            arch_scope=args.arch_scope,
         )
     else:
         rendered = _verify_multi_record_public_output(
             captured.getvalue(),
             calls=args.calls,
-            block_count=args.block_dim,
+            block_count=args.block_num,
             spec=spec,
             values=expected_values,
             shape=output_shape,
-            arch_scope=args.arch_scope,
         )
     print(rendered)
     print(f"case dtype={spec.token} compile_ok=True")
@@ -602,10 +556,10 @@ def _run_spec(args: argparse.Namespace, torch: Any, spec: _DTypeSpec) -> None:
 
 def run(args: argparse.Namespace) -> int:
     if args.case == "capacity" and (
-        args.storage != "gm" or args.dynamic_shape or args.block_dim != 1
+        args.storage != "gm" or args.dynamic_shape or args.block_num != 1
     ):
         raise tla.TlaExecutionError(
-            "the capacity case requires static GM printing with --block-dim 1"
+            "the capacity case requires static GM printing with --block-num 1"
         )
     if args.layout == "column-major" and (
         args.storage != "gm" or args.case != "base" or args.dynamic_shape
@@ -625,30 +579,24 @@ def run(args: argparse.Namespace) -> int:
         args.storage != "gm"
         or args.dynamic_shape
         or args.layout != "row-major"
-        or args.arch_scope != "aiv.c310"
-        or args.block_dim != 1
+        or args.block_num != 1
         or args.dtype != "f32"
         or args.all_dtypes
         or args.calls != 1
         or args.repeats < 0
     ):
         raise tla.TlaExecutionError(
-            "the dynamic-control-flow case requires static f32 GM AIV printing, "
-            "--block-dim 1, one static call, and non-negative --repeats"
+            "the dynamic-control-flow case requires static f32 GM printing, "
+            "--block-num 1, one static call, and non-negative --repeats"
         )
 
     import torch
-    import torch_npu  # noqa: F401
-
-    tla.initialize(device=args.device)
-    try:
-        torch.npu.set_device(args.device)
-        specs = DTYPE_SPECS.values() if args.all_dtypes else (DTYPE_SPECS[args.dtype],)
-        for spec in specs:
-            _run_spec(args, torch, spec)
-        return 0
-    finally:
-        tla.finalize()
+    import torch_npu
+    torch.npu.set_device(args.device)
+    specs = DTYPE_SPECS.values() if args.all_dtypes else (DTYPE_SPECS[args.dtype],)
+    for spec in specs:
+        _run_spec(args, torch, spec)
+    return 0
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -657,7 +605,6 @@ def _parser() -> argparse.ArgumentParser:
     dtype = parser.add_mutually_exclusive_group()
     dtype.add_argument("--dtype", choices=tuple(DTYPE_SPECS), default="f32")
     dtype.add_argument("--all-dtypes", action="store_true")
-    parser.add_argument("--arch-scope", default="aiv.c310")
     parser.add_argument("--storage", choices=("gm", "ub"), default="gm")
     parser.add_argument(
         "--layout",
@@ -677,7 +624,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--dynamic-shape", action="store_true")
     parser.add_argument("--device", type=int, default=0)
-    parser.add_argument("--block-dim", type=int, default=1)
+    parser.add_argument("--block-num", type=int, default=1)
     parser.add_argument("--calls", type=int, choices=(1, 2), default=1)
     parser.add_argument(
         "--enabled",
@@ -692,9 +639,6 @@ def _parser() -> argparse.ArgumentParser:
         default=2,
         help="Runtime loop trip count for --case dynamic-control-flow.",
     )
-    parser.add_argument("--cache-dir", default=str(DEFAULT_CACHE_DIR))
-    parser.add_argument("--force-recompile", action="store_true")
-    parser.add_argument("--no-cache", action="store_true")
     return parser
 
 

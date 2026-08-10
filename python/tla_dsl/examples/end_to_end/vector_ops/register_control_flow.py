@@ -3,12 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-import catlass as tla
+import catlass.tla as tla
 
 from vector_op_harness import (
     DirectVectorOpConfig,
     DirectVectorOpHarness,
-    make_type_args,
     vector_kernel_config,
 )
 
@@ -78,11 +77,6 @@ def _set_kernel_config(
     return config.tla_dtype, config.torch_dtype, 0.0
 
 
-def _compile_only_type_args(
-    op_name: str, dtype_name: str, shape: tuple[int, ...] | None = None
-) -> tuple[Any, Any]:
-    tla_dtype, _, _ = _set_kernel_config(op_name, dtype_name, shape)
-    return make_type_args(tla_dtype, _KERNEL_SHAPE, 2)
 
 
 def _make_inputs(args: Any, dtype_name: str, torch: Any) -> tuple[Any, ...]:
@@ -116,7 +110,6 @@ HARNESS = DirectVectorOpHarness(
         all_dtypes=ALL_DTYPES,
         operator_specs=_operator_specs,
         set_kernel_config=_set_kernel_config,
-        compile_only_type_args=_compile_only_type_args,
         get_vector_elements=lambda: VECTOR_ELE,
         get_kernel_shape=lambda: _KERNEL_SHAPE,
         make_inputs=_make_inputs,
@@ -124,7 +117,6 @@ HARNESS = DirectVectorOpHarness(
         unsupported_case=_is_unsupported_case,
         print_skip=_print_skip,
         script_path=Path(__file__).resolve(),
-        env_compile_jobs="TLADSL_REGISTER_CONTROL_FLOW_COMPILE_JOBS",
         float_dtypes=frozenset({"f32"}),
     )
 )

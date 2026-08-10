@@ -13,26 +13,25 @@ launch_ok=True
 output_ok=True
 ```
 
-Vector-core output includes the logical C310 vector `subblock` (`0` or `1`).
-Cube-core output keeps the same format without a `subblock` field.
+Kernels use `with tla.vector():` (AIV). Vector-core output includes the logical
+C310 vector `subblock` (`0` or `1`). AIC/AIV is inferred from the region at
+compile time; there is no Host `--core-type` switch.
 
-Run GM on either supported core scope:
+Run GM:
 
 ```bash
-python print_tensor.py --run --arch-scope aiv.c310 --device 0 --block-dim 1 --force-recompile
-python print_tensor.py --run --arch-scope aic.c310 --device 0 --block-dim 1 --force-recompile
-python print_tensor.py --run --dynamic-shape --arch-scope aiv.c310 --device 0 --block-dim 1 --force-recompile
-python print_tensor.py --run --dynamic-shape --arch-scope aic.c310 --device 0 --block-dim 1 --force-recompile
+CATLASS_DSL_FORCE_RECOMPILE=1 python print_tensor.py --run --device 0 --block-num 1
+CATLASS_DSL_FORCE_RECOMPILE=1 python print_tensor.py --run --dynamic-shape --device 0 --block-num 1
 ```
 
-Exercise a tensor print inside runtime control flow on AIV. `--enabled 0`
+Exercise a tensor print inside runtime control flow. `--enabled 0`
 takes the false branch and validly emits no tensor record. With `--enabled 1`,
 the runtime-bounded loop emits one record for each executed iteration; this
 example verifies each available record rather than requiring a fixed count:
 
 ```bash
-python print_tensor.py --run --case dynamic-control-flow --enabled 0 --repeats 2 --arch-scope aiv.c310 --device 0 --block-dim 1 --force-recompile
-python print_tensor.py --run --case dynamic-control-flow --enabled 1 --repeats 2 --arch-scope aiv.c310 --device 0 --block-dim 1 --force-recompile
+CATLASS_DSL_FORCE_RECOMPILE=1 python print_tensor.py --run --case dynamic-control-flow --enabled 0 --repeats 2 --device 0 --block-num 1
+CATLASS_DSL_FORCE_RECOMPILE=1 python print_tensor.py --run --case dynamic-control-flow --enabled 1 --repeats 2 --device 0 --block-num 1
 ```
 
 Exercise raw physical-prefix semantics with column-major GM storage. The
@@ -40,37 +39,37 @@ logical output shape remains `[8,4]`, while values follow the contiguous
 transposed backing buffer:
 
 ```bash
-python print_tensor.py --run --layout column-major --arch-scope aiv.c310 --device 0 --block-dim 1 --force-recompile
+CATLASS_DSL_FORCE_RECOMPILE=1 python print_tensor.py --run --layout column-major --device 0 --block-num 1
 ```
 
 Exercise the exact 262,112-element GM capacity boundary (redirect the large
 canonical record when running in automation):
 
 ```bash
-python print_tensor.py --run --case capacity --arch-scope aiv.c310 --device 0 --block-dim 1 --force-recompile > capacity.log
+CATLASS_DSL_FORCE_RECOMPILE=1 python print_tensor.py --run --case capacity --device 0 --block-num 1 > capacity.log
 ```
 
-Run the UB base-address and aligned-offset cases on AIV. The kernel explicitly
+Run the UB base-address and aligned-offset cases. The kernel explicitly
 uses a 32-byte row width and completes the producer-side GM-to-UB copy before
 printing:
 
 ```bash
-python print_tensor.py --run --storage ub --case base --arch-scope aiv.c310 --device 0 --block-dim 1 --force-recompile
-python print_tensor.py --run --storage ub --case aligned-offset --arch-scope aiv.c310 --device 0 --block-dim 1 --force-recompile
-python print_tensor.py --run --storage ub --case dynamic --arch-scope aiv.c310 --device 0 --block-dim 1 --force-recompile
+CATLASS_DSL_FORCE_RECOMPILE=1 python print_tensor.py --run --storage ub --case base --device 0 --block-num 1
+CATLASS_DSL_FORCE_RECOMPILE=1 python print_tensor.py --run --storage ub --case aligned-offset --device 0 --block-num 1
+CATLASS_DSL_FORCE_RECOMPILE=1 python print_tensor.py --run --storage ub --case dynamic --device 0 --block-num 1
 ```
 
 ## Support matrix
 
 | Property | Supported | Rejected |
 | --- | --- | --- |
-| Core scope | AIV-only `aiv.c310`; AIC-only `aic.c310` | Mixed AIC/AIV; regionless use |
+| Core scope | AIV via `tla.vector()` (inferred from IR) | Host `--core-type` / `compile(core_type=...)` |
 | Launch grid | One block | Multi-block launches |
 | Storage | GM; 32-byte-aligned effective UB address on AIV | L1, L0, or host invocation |
 | Dtype | `float32` | Every other dtype |
 | Shape | Rank-1/rank-2 static or runtime-shaped tensors | Empty, rank above 2, or mismatched runtime metadata |
 | Length | Static or integer-SSA 1–262,112 element prefix, no greater than runtime tensor size | Zero, negative, over 262,112, or over tensor size |
-| Dynamic control flow | AIV GM print sites under runtime `if` and `tla.range` | AIC, multi-block, or dynamic-shape variants of this example case |
+| Dynamic control flow | GM print sites under runtime `if` and `tla.range` | multi-block or dynamic-shape variants of this example case |
 | Layout | Row-major, column-major, padded/strided, and packed TLA layouts | Layouts outside the TLA layout enum |
 | Baseline | Ascend950PR, CANN 9.1.0 or later | Other device/CANN combinations are not declared |
 

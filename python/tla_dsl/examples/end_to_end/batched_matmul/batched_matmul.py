@@ -20,8 +20,8 @@ import argparse
 from pathlib import Path
 from typing import Any, Literal
 
-import catlass as tla
-from catlass.runtime import from_dlpack
+import catlass.tla as tla
+from catlass.tla.runtime import from_dlpack
 
 DEMO_DIR = Path(__file__).resolve().parent
 DEFAULT_CACHE_DIR = DEMO_DIR / "artifacts" / "runtime-cache"
