@@ -285,3 +285,59 @@ def test_numeric_add_captures_user_loc() -> None:
             loc_str = str(result.ir_value().owner.location)
             assert "test_numeric_arith.py" in loc_str
             assert "unknown" not in loc_str.lower()
+
+
+def test_bool_host_to_signed_and_unsigned() -> None:
+    """``Bool`` converts to signed and unsigned integers as 0/1 (host path)."""
+    assert tla.Bool(True).to(tla.Int8).value == 1
+    assert tla.Bool(False).to(tla.Int8).value == 0
+    assert tla.Bool(True).to(tla.Int16).value == 1
+    assert tla.Bool(True).to(tla.Int32).value == 1
+    assert tla.Bool(True).to(tla.UInt8).value == 1
+    assert tla.Bool(True).to(tla.UInt16).value == 1
+    assert tla.Bool(False).to(tla.UInt8).value == 0
+
+
+def test_bool_ssa_to_signed_and_unsigned_zero_extends() -> None:
+    """SSA ``Bool`` widens with ``arith.extui``: True == 1 for any wider int."""
+    from mlir import ir as mlir_ir
+
+    ctx = mlir_ir.Context()
+    ctx.allow_unregistered_dialects = True
+    with ctx, mlir_ir.Location.unknown(), mlir_ir.InsertionPoint(
+        mlir_ir.Module.create().body
+    ):
+        with runtime_mod._frontend_emission(module=None):
+            i1 = mlir_ir.IntegerType.get_signless(1)
+            one = mlir_ir.Operation.create(
+                "arith.constant",
+                results=[i1],
+                attributes={"value": mlir_ir.IntegerAttr.get(i1, 1)},
+            ).results[0]
+            b = tla.Bool(one)
+            for target in (tla.Int8, tla.Int16, tla.Int32, tla.UInt8, tla.UInt16):
+                result = b.to(target)
+                assert isinstance(result, target)
+                assert result.value.owner.name == "arith.extui", (
+                    f"Bool.to({target.__name__}) must zero-extend (arith.extui)"
+                )
+
+
+def test_bool_ssa_to_float_uitofp() -> None:
+    from mlir import ir as mlir_ir
+
+    ctx = mlir_ir.Context()
+    ctx.allow_unregistered_dialects = True
+    with ctx, mlir_ir.Location.unknown(), mlir_ir.InsertionPoint(
+        mlir_ir.Module.create().body
+    ):
+        with runtime_mod._frontend_emission(module=None):
+            i1 = mlir_ir.IntegerType.get_signless(1)
+            one = mlir_ir.Operation.create(
+                "arith.constant",
+                results=[i1],
+                attributes={"value": mlir_ir.IntegerAttr.get(i1, 1)},
+            ).results[0]
+            result = tla.Bool(one).to(tla.Float32)
+            assert isinstance(result, tla.Float32)
+            assert result.value.owner.name == "arith.uitofp"

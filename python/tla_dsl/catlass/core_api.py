@@ -802,7 +802,8 @@ def _vector_lane_count(element_bytes: int) -> int:
 def _as_index_value(value: Any) -> mlir_ir.Value:
     resolved = _resolve_bound_value(value)
     if isinstance(resolved, Numeric):
-        # Index path: signed Int*/Bool only. Reject UInt* — use .to(Int*).
+        # Index path: signed Int* only. Reject UInt* and Bool (Bool is 0/1 and
+        # ``signed=False``) — use .to(Int32) (or another Int*) before indexing.
         if not (type(resolved).is_integer and type(resolved).signed):
             raise TlaLoweringError(
                 f"Expected signed integer Numeric index, got {type(resolved).__name__}; "

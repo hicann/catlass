@@ -387,8 +387,8 @@ def _coerce_index_value(value: Any) -> Any:
             f"Expected index-like SSA value, got type {ssa.type}"
         )
 
-    # Signed Integer Numeric (Int*/Bool) → index, with ``index_cast`` for
-    # element SSA. Reject UInt* the same way as ``core_api._as_index_value``.
+    # Signed Integer Numeric → index, with ``index_cast`` for element SSA.
+    # Reject UInt* and Bool the same way as ``core_api._as_index_value``.
     if isinstance(value, Numeric):
         if not (type(value).is_integer and type(value).signed):
             raise TlaCoreAPIError(

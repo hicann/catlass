@@ -1002,7 +1002,10 @@ class Float(Numeric, metaclass=FloatMeta, width=32, mlir_type=_mlir_f32, is_abst
     """Abstract floating-point numeric family."""
 
 
-class Bool(Integer, metaclass=IntegerMeta, width=1, dtype="i1", signed=True, mlir_type=_mlir_i(1)):
+class Bool(Integer, metaclass=IntegerMeta, width=1, dtype="i1", signed=False, mlir_type=_mlir_i(1)):
+    # ``signed=False``: a Bool is a 0/1 truth value. Widening must zero-extend so
+    # ``Bool(True).to(Int8)`` == 1 (``arith.extui``), not -1 (``arith.extsi``);
+    # unsigned targets like UInt8/UInt16 are also reachable this way.
     pass
 
 
