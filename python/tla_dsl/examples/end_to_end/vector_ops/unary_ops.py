@@ -44,11 +44,8 @@ _OPERATOR_SPECS: dict[str, dict[str, Any]] = {
 _SCRIPT_PATH = Path(__file__).resolve()
 
 
-def _make_ub_tensor(allocator: Any, gm_tile: Any) -> Any:
-    ptr = allocator.allocate(
-        VECTOR_ELE * _KERNEL_ELEMENT_BYTES, 256, tla.AddressSpace.ub
-    )
-    ptr = tla.recast_ptr(ptr, dtype=_KERNEL_DTYPE)
+def _make_ub_tensor(gm_tile: Any) -> Any:
+    ptr = tla.allocate(VECTOR_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 256)
     return tla.make_tensor_like(ptr, gm_tile, tla.arch.RowMajor)
 
 
@@ -67,19 +64,17 @@ def vector_unary(
     ub_loaded = tla.flag("ub_loaded", tla.arch.MTE2, tla.arch.VECTOR)
     vec_done = tla.flag("vec_done", tla.arch.VECTOR, tla.arch.MTE3)
 
-    allocator = tla.utils.LocalmemAllocator()
-
     x_gm = tla.tile_view(mem_x, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
     z_gm = tla.tile_view(mem_z, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
     rlog_gm = tla.tile_view(mem_rlog, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
     rsqrt_gm = tla.tile_view(mem_rsqrt, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
     rabs_gm = tla.tile_view(mem_rabs, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
 
-    x_ub = _make_ub_tensor(allocator, x_gm)
-    z_ub = _make_ub_tensor(allocator, z_gm)
-    rlog_ub = _make_ub_tensor(allocator, rlog_gm)
-    rsqrt_ub = _make_ub_tensor(allocator, rsqrt_gm)
-    rabs_ub = _make_ub_tensor(allocator, rabs_gm)
+    x_ub = _make_ub_tensor(x_gm)
+    z_ub = _make_ub_tensor(z_gm)
+    rlog_ub = _make_ub_tensor(rlog_gm)
+    rsqrt_ub = _make_ub_tensor(rsqrt_gm)
+    rabs_ub = _make_ub_tensor(rabs_gm)
 
     with tla.vector():
         tla.copy(x_ub, x_gm)
@@ -198,8 +193,6 @@ def vector_unary_batch(
     ub_loaded = tla.flag("ub_loaded", tla.arch.MTE2, tla.arch.VECTOR)
     vec_done = tla.flag("vec_done", tla.arch.VECTOR, tla.arch.MTE3)
     block_idx = tla.arch.block_idx()
-    allocator = tla.utils.LocalmemAllocator()
-
     x_gm = tla.tile_view(
         mem_x, tla.make_shape(VECTOR_ELE), tla.make_coord(block_idx)
     )
@@ -215,11 +208,11 @@ def vector_unary_batch(
     rabs_gm = tla.tile_view(
         mem_rabs, tla.make_shape(VECTOR_ELE), tla.make_coord(block_idx)
     )
-    x_ub = _make_ub_tensor(allocator, x_gm)
-    z_ub = _make_ub_tensor(allocator, z_gm)
-    rlog_ub = _make_ub_tensor(allocator, rlog_gm)
-    rsqrt_ub = _make_ub_tensor(allocator, rsqrt_gm)
-    rabs_ub = _make_ub_tensor(allocator, rabs_gm)
+    x_ub = _make_ub_tensor(x_gm)
+    z_ub = _make_ub_tensor(z_gm)
+    rlog_ub = _make_ub_tensor(rlog_gm)
+    rsqrt_ub = _make_ub_tensor(rsqrt_gm)
+    rabs_ub = _make_ub_tensor(rabs_gm)
 
     with tla.vector():
         tla.copy(x_ub, x_gm)

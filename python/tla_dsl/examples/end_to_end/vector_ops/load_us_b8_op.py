@@ -33,15 +33,13 @@ def load_us_b8_op(mem_src: tla.Tensor, mem_dst: tla.Tensor) -> None:
     ub_loaded = tla.flag("ub_loaded", tla.arch.MTE2, tla.arch.VECTOR)
     vec_done = tla.flag("vec_done", tla.arch.VECTOR, tla.arch.MTE3)
 
-    allocator = tla.utils.LocalmemAllocator()
-
     src_gm = tla.tile_view(mem_src, tla.make_shape(SRC_ELE), tla.make_coord(0))
     # Copy back only the lanes the kernel writes; host-initialized sentinel
     # remains in the unused tail of mem_dst.
     dst_gm = tla.tile_view(mem_dst, tla.make_shape(OUT_VALID_ELE), tla.make_coord(0))
 
-    src_ub = _make_ub_tensor(allocator, src_gm, SRC_ELE)
-    dst_ub = _make_ub_tensor(allocator, dst_gm, OUT_VALID_ELE)
+    src_ub = _make_ub_tensor(src_gm, SRC_ELE)
+    dst_ub = _make_ub_tensor(dst_gm, OUT_VALID_ELE)
 
     with tla.vector():
         tla.copy(src_ub, src_gm)
@@ -70,11 +68,8 @@ def load_us_b8_op(mem_src: tla.Tensor, mem_dst: tla.Tensor) -> None:
         tla.pipe_barrier(tla.pipes.ALL)
 
 
-def _make_ub_tensor(allocator: Any, like_tensor: Any, num_ele: int) -> Any:
-    ptr = allocator.allocate(
-        num_ele * _KERNEL_ELEMENT_BYTES, 256, tla.AddressSpace.ub
-    )
-    ptr = tla.recast_ptr(ptr, dtype=_KERNEL_DTYPE)
+def _make_ub_tensor(like_tensor: Any, num_ele: int) -> Any:
+    ptr = tla.allocate(num_ele, _KERNEL_DTYPE, tla.AddressSpace.ub, 256)
     return tla.make_tensor_like(ptr, like_tensor, tla.arch.RowMajor)
 
 

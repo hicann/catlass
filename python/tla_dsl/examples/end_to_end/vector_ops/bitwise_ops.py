@@ -38,8 +38,6 @@ def bitwise_ops(
     ub_loaded = tla.flag("ub_loaded", tla.arch.MTE2, tla.arch.VECTOR)
     vec_done = tla.flag("vec_done", tla.arch.VECTOR, tla.arch.MTE3)
 
-    allocator = tla.utils.LocalmemAllocator()
-
     a_gm = tla.tile_view(mem_a, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
     b_gm = tla.tile_view(mem_b, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
     mask_not_gm = tla.tile_view(mem_mask_not, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
@@ -51,16 +49,16 @@ def bitwise_ops(
     reg_or_gm = tla.tile_view(mem_reg_or, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
     reg_xor_gm = tla.tile_view(mem_reg_xor, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
 
-    a_ub = _make_ub_tensor(allocator, a_gm)
-    b_ub = _make_ub_tensor(allocator, b_gm)
-    mask_not_ub = _make_ub_tensor(allocator, mask_not_gm)
-    mask_and_ub = _make_ub_tensor(allocator, mask_and_gm)
-    mask_or_ub = _make_ub_tensor(allocator, mask_or_gm)
-    mask_xor_ub = _make_ub_tensor(allocator, mask_xor_gm)
-    reg_not_ub = _make_ub_tensor(allocator, reg_not_gm)
-    reg_and_ub = _make_ub_tensor(allocator, reg_and_gm)
-    reg_or_ub = _make_ub_tensor(allocator, reg_or_gm)
-    reg_xor_ub = _make_ub_tensor(allocator, reg_xor_gm)
+    a_ub = _make_ub_tensor(a_gm)
+    b_ub = _make_ub_tensor(b_gm)
+    mask_not_ub = _make_ub_tensor(mask_not_gm)
+    mask_and_ub = _make_ub_tensor(mask_and_gm)
+    mask_or_ub = _make_ub_tensor(mask_or_gm)
+    mask_xor_ub = _make_ub_tensor(mask_xor_gm)
+    reg_not_ub = _make_ub_tensor(reg_not_gm)
+    reg_and_ub = _make_ub_tensor(reg_and_gm)
+    reg_or_ub = _make_ub_tensor(reg_or_gm)
+    reg_xor_ub = _make_ub_tensor(reg_xor_gm)
 
     with tla.vector():
         tla.copy(a_ub, a_gm)
@@ -163,13 +161,9 @@ def bitwise_ops(
         tla.pipe_barrier(tla.pipes.ALL)
 
 
-def _make_ub_tensor(allocator: Any, like_tensor: Any) -> Any:
-    ptr = allocator.allocate(
-        VECTOR_ELE * _KERNEL_ELEMENT_BYTES, 32, tla.AddressSpace.ub
-    )
-    return tla.make_tensor_like(
-        tla.recast_ptr(ptr, dtype=_KERNEL_DTYPE), like_tensor, tla.arch.RowMajor
-    )
+def _make_ub_tensor(like_tensor: Any) -> Any:
+    ptr = tla.allocate(VECTOR_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 32)
+    return tla.make_tensor_like(ptr, like_tensor, tla.arch.RowMajor)
 
 
 def _chunk(tensor: Any, chunk_idx: Any) -> Any:

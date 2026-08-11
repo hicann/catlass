@@ -102,8 +102,7 @@ def _skip_if_mmad_rank2_tile_view_regression(exc: BaseException) -> None:
 @tla.kernel
 def alloc_kernel(mem_a: tla.Tensor) -> None:
     gm_tile = tla.tile_view(mem_a, tla.make_shape(16, 16), tla.make_coord(0, 0))
-    allocator = tla.utils.LocalmemAllocator()
-    ptr = allocator.allocate(16 * 16 * 2, 512, tla.AddressSpace.l1)
+    ptr = tla.allocate((16, 16), tla.Float16, tla.AddressSpace.l1, 512)
     _ = ptr
     tla.copy(gm_tile, gm_tile)
 
@@ -111,9 +110,7 @@ def alloc_kernel(mem_a: tla.Tensor) -> None:
 @tla.kernel
 def alloc_ptr_kernel(mem_a: tla.Tensor) -> None:
     gm_tile = tla.tile_view(mem_a, tla.make_shape(16, 16), tla.make_coord(0, 0))
-    allocator = tla.utils.LocalmemAllocator()
-    ptr = allocator.allocate(16 * 16 * 2, 512, tla.AddressSpace.l1)
-    ptr = tla.recast_ptr(ptr, dtype=tla.Float16)
+    ptr = tla.allocate((16, 16), tla.Float16, tla.AddressSpace.l1, 512)
     local_tile = tla.make_tensor_like(ptr, gm_tile, tla.arch.zN)
     _ = local_tile
     tla.copy(gm_tile, gm_tile)
@@ -125,23 +122,20 @@ def bad_flag_name(x: int) -> None:
 
 
 @tla.kernel
-def bad_allocator_unknown_addrspace(mem_a: tla.Tensor) -> None:
-    allocator = tla.utils.LocalmemAllocator()
-    allocator.allocate(128, 64, "dram")
+def bad_allocate_unknown_addrspace(mem_a: tla.Tensor) -> None:
+    tla.allocate(128, tla.Int8, "dram", 64)
 
 
 @tla.kernel
-def bad_allocator_gm_addrspace(mem_a: tla.Tensor) -> None:
-    allocator = tla.utils.LocalmemAllocator()
-    allocator.allocate(128, 64, "gm")
+def bad_allocate_gm_addrspace(mem_a: tla.Tensor) -> None:
+    tla.allocate(128, tla.Int8, tla.AddressSpace.gm, 64)
 
 
 @tla.kernel
-def allocator_recast_ptr_kernel() -> None:
-    allocator = tla.utils.LocalmemAllocator()
-    lhs = allocator.allocate(4096, 512, tla.AddressSpace.ub)
-    rhs = allocator.allocate(4096, 512, tla.AddressSpace.ub)
-    dst = allocator.allocate(4096, 512, tla.AddressSpace.ub)
+def allocate_recast_ptr_kernel() -> None:
+    lhs = tla.allocate(4096, tla.Int8, tla.AddressSpace.ub, 512)
+    rhs = tla.allocate(4096, tla.Int8, tla.AddressSpace.ub, 512)
+    dst = tla.allocate(4096, tla.Int8, tla.AddressSpace.ub, 512)
     lhs = tla.recast_ptr(lhs, dtype=tla.Float32)
     rhs = tla.recast_ptr(rhs, dtype=tla.Float32)
     dst = tla.recast_ptr(dst, dtype=tla.Float32)
@@ -151,9 +145,8 @@ def allocator_recast_ptr_kernel() -> None:
 
 
 @tla.kernel
-def odd_allocator_recast_size() -> None:
-    allocator = tla.utils.LocalmemAllocator()
-    ptr = allocator.allocate(3, 512, tla.AddressSpace.ub)
+def odd_allocate_recast_size() -> None:
+    ptr = tla.allocate(3, tla.Int8, tla.AddressSpace.ub, 512)
     tla.recast_ptr(ptr, dtype=tla.Float16)
 
 
@@ -267,8 +260,7 @@ def bad_pipe_barrier_aiv_cube_kernel() -> None:
 
 @tla.kernel
 def constexpr_alloc_kernel(limit: tla.Constexpr[int], mem_a: tla.Tensor) -> None:
-    allocator = tla.utils.LocalmemAllocator()
-    allocator.allocate(limit, 64, tla.AddressSpace.l1)
+    tla.allocate(limit, tla.Int8, tla.AddressSpace.l1, 64)
 
 
 @tla.kernel
@@ -298,11 +290,8 @@ def range_alias_kernel(mem_a: tla.Tensor) -> None:
 @tla.kernel
 def pointer_conditional_kernel(mem_a: tla.Tensor) -> None:
     root = tla.tile_view(mem_a, tla.make_shape(16, 8), tla.make_coord(0, 0))
-    allocator = tla.utils.LocalmemAllocator()
-    ptr0 = allocator.allocate(16 * 4 * 2, 512, tla.AddressSpace.l1)
-    ptr0 = tla.recast_ptr(ptr0, dtype=tla.Float16)
-    ptr1 = allocator.allocate(16 * 4 * 2, 512, tla.AddressSpace.l1)
-    ptr1 = tla.recast_ptr(ptr1, dtype=tla.Float16)
+    ptr0 = tla.allocate((16, 4), tla.Float16, tla.AddressSpace.l1, 512)
+    ptr1 = tla.allocate((16, 4), tla.Float16, tla.AddressSpace.l1, 512)
     with tla.cube():
         loop_range = tla.range(0, 2, 1)
         for i in loop_range:
@@ -349,11 +338,7 @@ def f32_mmad_generated_addrspace_kernel(
 @tla.kernel
 def make_tensor_like_addrspace_kernel(mem_a: tla.Tensor) -> None:
     root = tla.tile_view(mem_a, tla.make_shape(16, 16), tla.make_coord(0, 0))
-    allocator = tla.utils.LocalmemAllocator()
-    l0a_ptr = tla.recast_ptr(
-        allocator.allocate(16 * 16 * 2, 512, tla.AddressSpace.l0a),
-        dtype=tla.Float16,
-    )
+    l0a_ptr = tla.allocate((16, 16), tla.Float16, tla.AddressSpace.l0a, 512)
     _ = tla.make_tensor_like(l0a_ptr, root, tla.arch.zN)
 
 
@@ -366,9 +351,7 @@ def tile_view_shape_metadata_kernel(mem_a: tla.Tensor) -> None:
 @tla.kernel
 def make_tensor_like_shape_metadata_kernel(mem_a: tla.Tensor) -> None:
     root = tla.tile_view(mem_a, tla.make_shape(16, 8), tla.make_coord(0, 0))
-    allocator = tla.utils.LocalmemAllocator()
-    ptr = allocator.allocate(16 * 8 * 2, 512, tla.AddressSpace.l1)
-    ptr = tla.recast_ptr(ptr, dtype=tla.Float16)
+    ptr = tla.allocate((16, 8), tla.Float16, tla.AddressSpace.l1, 512)
     _ = tla.make_tensor_like(ptr, root, tla.arch.zN)
     tla.make_shape(16, 8)
 
@@ -384,9 +367,7 @@ def dynamic_make_tensor_like_shape_metadata_kernel(
     mem_a: tla.Tensor, dim: "index"
 ) -> None:
     root = tla.tile_view(mem_a, tla.make_shape(dim, 8), tla.make_coord(dim, 0))
-    allocator = tla.utils.LocalmemAllocator()
-    ptr = allocator.allocate(16 * 8 * 2, 512, tla.AddressSpace.l1)
-    ptr = tla.recast_ptr(ptr, dtype=tla.Float16)
+    ptr = tla.allocate((16, 8), tla.Float16, tla.AddressSpace.l1, 512)
     _ = tla.make_tensor_like(ptr, root, tla.arch.zN)
     # After ``zN``, ``make_tensor_like`` rewrites nested shape metadata: the first
     # ``.shape`` leaf is often a static fractal size, not the flat ``?`` from ``root``.
@@ -397,9 +378,7 @@ def dynamic_make_tensor_like_shape_metadata_kernel(
 @tla.kernel
 def dynamic_tensor_full_metadata_kernel(mem_a: tla.Tensor, dim: "index") -> None:
     root = tla.tile_view(mem_a, tla.make_shape(dim, 8), tla.make_coord(dim, 0))
-    allocator = tla.utils.LocalmemAllocator()
-    ptr = allocator.allocate(16 * 8 * 2, 512, tla.AddressSpace.l1)
-    ptr = tla.recast_ptr(ptr, dtype=tla.Float16)
+    ptr = tla.allocate((16, 8), tla.Float16, tla.AddressSpace.l1, 512)
     l1 = tla.make_tensor_like(ptr, root, tla.arch.zN)
     tla.make_shape(l1.origin_shape[0], l1.origin_shape[1] // 2)
     tla.make_coord(l1.coord[0], l1.coord[1])
@@ -418,14 +397,14 @@ def test_lowering_emits_typed_args_and_alloc_attrs(compiler_tlair) -> None:
     assert "tla.copy" in mlir
 
 
-def test_allocator_api_emits_raw_alloc_and_tensor_reconstruction_ops() -> None:
+def test_allocate_emits_typed_alloc_and_tensor_reconstruction_ops() -> None:
     with runtime_mod._eager_capture():
         mem = tla.Tensor(
             tla.make_shape(16, 16), tla.Float16, origin_shape=tla.make_shape(16, 16)
         )
     mlir = alloc_ptr_kernel.dump_mlir(type_args=(mem,))
     assert "tla.alloc_ptr" in mlir
-    assert "tla.recast_ptr" in mlir
+    assert "tla.recast_ptr" not in mlir
     assert "tla.make_tensor_like" in mlir
     assert (
         "<!tla.layout<!tla.shape<(16,1),(16,1)>, !tla.stride<(16,256),(1,256)>, !tla.shape<16,16>, zN>, !tla.coord<0,0>, !tla.ptr<f16, l1, 512>>"
@@ -434,16 +413,16 @@ def test_allocator_api_emits_raw_alloc_and_tensor_reconstruction_ops() -> None:
     assert "tla.copy" in mlir
 
 
-def test_allocator_backed_recast_ptr_preserves_pointer_type() -> None:
-    mlir = allocator_recast_ptr_kernel.dump_mlir()
+def test_allocate_backed_recast_ptr_preserves_pointer_type() -> None:
+    mlir = allocate_recast_ptr_kernel.dump_mlir()
     assert mlir.count("tla.alloc_ptr") == 3
     assert mlir.count("tla.recast_ptr") == 3
     assert "!tla.ptr<f32, ub, 512>" in mlir
     assert "!tla.memref<" not in mlir
 
 
-def test_allocator_backed_recast_ptr_allows_indivisible_size() -> None:
-    mlir = odd_allocator_recast_size.dump_mlir()
+def test_allocate_backed_recast_ptr_allows_indivisible_size() -> None:
+    mlir = odd_allocate_recast_size.dump_mlir()
     assert "size_bytes = 3" in mlir
     assert "!tla.ptr<f16, ub, 512>" in mlir
 
@@ -453,26 +432,26 @@ def test_non_const_attr_raises_specific_error() -> None:
         _ = bad_flag_name.dump_mlir(type_args=(1,))
 
 
-def test_allocator_rejects_unknown_addrspace() -> None:
+def test_allocate_rejects_unknown_addrspace() -> None:
     with runtime_mod._eager_capture():
         mem = tla.Tensor(
             tla.make_shape(1, 2), tla.Float16, origin_shape=tla.make_shape(1, 2)
         )
     with pytest.raises(
-        tla.TlaCoreAPIError, match="tla.utils.LocalmemAllocator.allocate"
+        tla.TlaCoreAPIError, match="tla.allocate"
     ):
-        _ = bad_allocator_unknown_addrspace.dump_mlir(type_args=(mem,))
+        _ = bad_allocate_unknown_addrspace.dump_mlir(type_args=(mem,))
 
 
-def test_allocator_rejects_gm_addrspace_for_allocate() -> None:
+def test_allocate_rejects_gm_addrspace() -> None:
     with runtime_mod._eager_capture():
         mem = tla.Tensor(
             tla.make_shape(1, 2), tla.Float16, origin_shape=tla.make_shape(1, 2)
         )
     with pytest.raises(
-        tla.TlaCoreAPIError, match="tla.utils.LocalmemAllocator.allocate"
+        tla.TlaCoreAPIError, match="tla.allocate"
     ):
-        _ = bad_allocator_gm_addrspace.dump_mlir(type_args=(mem,))
+        _ = bad_allocate_gm_addrspace.dump_mlir(type_args=(mem,))
 
 
 def test_mmad_compute_order_emits_attr() -> None:

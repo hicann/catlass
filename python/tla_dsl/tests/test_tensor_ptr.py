@@ -12,9 +12,7 @@ import catlass.runtime as runtime_mod
 @tla.kernel
 def ptr_extract_kernel(mem_in: tla.Tensor) -> None:
     tile = tla.tile_view(mem_in, tla.make_shape(16, 16), tla.make_coord(0, 0))
-    allocator = tla.utils.LocalmemAllocator()
-    ptr = allocator.allocate(16 * 16 * 4, 256, tla.AddressSpace.l1)
-    ptr = tla.recast_ptr(ptr, dtype=tla.Float32)
+    ptr = tla.allocate((16, 16), tla.Float32, tla.AddressSpace.l1, 256)
     # Extract a pointer from a GM kernel-arg tile, offset by 4 elements, and build a
     # row-major GM tensor from it via make_tensor.
     gm_ptr = tile.ptr
@@ -55,9 +53,7 @@ def test_ptr_emits_tensor_ptr_and_ptr_add() -> None:
 def test_ptr_add_rejects_float_offset() -> None:
     @tla.kernel
     def bad_kernel(mem_in: tla.Tensor) -> None:
-        allocator = tla.utils.LocalmemAllocator()
-        ptr = allocator.allocate(64, 256, tla.AddressSpace.l1)
-        ptr = tla.recast_ptr(ptr, dtype=tla.Float32)
+        ptr = tla.allocate(16, tla.Float32, tla.AddressSpace.l1, 256)
         _ = tla.make_tensor(
             ptr + 1.5,  # type: ignore[operator]
             tla.make_layout(tla.make_shape(4, 4), tla.make_stride(4, 1)),

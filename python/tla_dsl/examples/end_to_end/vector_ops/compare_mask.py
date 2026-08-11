@@ -37,15 +37,13 @@ def compare_mask(mem_a: tla.Tensor, mem_b: tla.Tensor, mem_out: tla.Tensor) -> N
     ub_loaded = tla.flag("ub_loaded", tla.arch.MTE2, tla.arch.VECTOR)
     vec_done = tla.flag("vec_done", tla.arch.VECTOR, tla.arch.MTE3)
 
-    allocator = tla.utils.LocalmemAllocator()
-
     a_gm = tla.tile_view(mem_a, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
     b_gm = tla.tile_view(mem_b, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
     out_gm = tla.tile_view(mem_out, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
 
-    a_ub = _make_ub_tensor(allocator, a_gm)
-    b_ub = _make_ub_tensor(allocator, b_gm)
-    out_ub = _make_ub_tensor(allocator, out_gm)
+    a_ub = _make_ub_tensor(a_gm)
+    b_ub = _make_ub_tensor(b_gm)
+    out_ub = _make_ub_tensor(out_gm)
 
     with tla.vector():
         tla.copy(a_ub, a_gm)
@@ -114,8 +112,6 @@ def compare_mask_batch(
     ub_loaded = tla.flag("ub_loaded", tla.arch.MTE2, tla.arch.VECTOR)
     vec_done = tla.flag("vec_done", tla.arch.VECTOR, tla.arch.MTE3)
     block_idx = tla.arch.block_idx()
-    allocator = tla.utils.LocalmemAllocator()
-
     a_gm = tla.tile_view(
         mem_a, tla.make_shape(VECTOR_ELE), tla.make_coord(block_idx)
     )
@@ -125,9 +121,9 @@ def compare_mask_batch(
     out_gm = tla.tile_view(
         mem_out, tla.make_shape(VECTOR_ELE), tla.make_coord(block_idx)
     )
-    a_ub = _make_ub_tensor(allocator, a_gm)
-    b_ub = _make_ub_tensor(allocator, b_gm)
-    out_ub = _make_ub_tensor(allocator, out_gm)
+    a_ub = _make_ub_tensor(a_gm)
+    b_ub = _make_ub_tensor(b_gm)
+    out_ub = _make_ub_tensor(out_gm)
 
     with tla.vector():
         tla.copy(a_ub, a_gm)
@@ -165,11 +161,9 @@ def compare_mask_batch(
         tla.pipe_barrier(tla.pipes.ALL)
 
 
-def _make_ub_tensor(allocator: Any, like_tensor: Any) -> Any:
-    ptr = allocator.allocate(VECTOR_ELE * _KERNEL_ELEMENT_BYTES, 256, tla.AddressSpace.ub)
-    return tla.make_tensor_like(
-        tla.recast_ptr(ptr, dtype=_KERNEL_DTYPE), like_tensor, tla.arch.RowMajor
-    )
+def _make_ub_tensor(like_tensor: Any) -> Any:
+    ptr = tla.allocate(VECTOR_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 256)
+    return tla.make_tensor_like(ptr, like_tensor, tla.arch.RowMajor)
 
 
 def _chunk(tensor: Any, chunk_idx: Any) -> Any:

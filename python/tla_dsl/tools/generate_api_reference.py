@@ -75,7 +75,7 @@ def public_core_op_names(core_api: Any) -> list[str]:
 
 
 def support_names(core_api: Any) -> list[str]:
-    candidates = ["arch", "LocalmemAllocator", "TlaCoreAPIError"]
+    candidates = ["arch", "TlaCoreAPIError"]
     return [name for name in candidates if hasattr(core_api, name)]
 
 

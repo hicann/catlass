@@ -29,12 +29,10 @@ def arange_op(mem_out: tla.Tensor) -> None:
     ub_loaded = tla.flag("ub_loaded", tla.arch.MTE2, tla.arch.VECTOR)
     vec_done = tla.flag("vec_done", tla.arch.VECTOR, tla.arch.MTE3)
 
-    allocator = tla.utils.LocalmemAllocator()
     out_gm = tla.tile_view(mem_out, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
-    out_ub_ptr = allocator.allocate(
-        VECTOR_ELE * _KERNEL_ELEMENT_BYTES, 256, tla.AddressSpace.ub
+    out_ub_ptr = tla.allocate(
+        VECTOR_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 256
     )
-    out_ub_ptr = tla.recast_ptr(out_ub_ptr, dtype=_KERNEL_DTYPE)
     out_ub = tla.make_tensor_like(out_ub_ptr, out_gm, tla.arch.RowMajor)
 
     with tla.vector():
@@ -65,18 +63,13 @@ def arange_op_batch(mem_out: tla.Tensor) -> None:
     ub_loaded = tla.flag("ub_loaded", tla.arch.MTE2, tla.arch.VECTOR)
     vec_done = tla.flag("vec_done", tla.arch.VECTOR, tla.arch.MTE3)
     block_idx = tla.arch.block_idx()
-    allocator = tla.utils.LocalmemAllocator()
     out_gm = tla.tile_view(
         mem_out, tla.make_shape(VECTOR_ELE), tla.make_coord(block_idx)
     )
-    out_ub_ptr = allocator.allocate(
-        VECTOR_ELE * _KERNEL_ELEMENT_BYTES, 256, tla.AddressSpace.ub
+    out_ub_ptr = tla.allocate(
+        VECTOR_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 256
     )
-    out_ub = tla.make_tensor_like(
-        tla.recast_ptr(out_ub_ptr, dtype=_KERNEL_DTYPE),
-        out_gm,
-        tla.arch.RowMajor,
-    )
+    out_ub = tla.make_tensor_like(out_ub_ptr, out_gm, tla.arch.RowMajor)
 
     with tla.vector():
         tla.set_flag(ub_loaded)

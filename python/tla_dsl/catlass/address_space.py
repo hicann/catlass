@@ -1,8 +1,7 @@
-"""Address-space enum and **architecture** tokens for ``!tla.ptr`` / :func:`make_ptr`.
+"""Address-space enum and **architecture** tokens for ``!tla.ptr`` pointers.
 
-:class:`catlass.utils.localmem_allocator.LocalmemAllocator` uses the same :class:`AddressSpace`
-check as :func:`~catlass.core_api.make_ptr` (:func:`catlass.core_api._require_pointer_addrspace`);
-capacity lookup still requires a supported local-memory scope key (see :func:`~catlass.base_dsl.arch.get_localmem_capacity_bytes`).
+:func:`~catlass.core_api.make_ptr` and :func:`~catlass.core_api.allocate` use
+:class:`AddressSpace` to select the pointer memory space.
 
 Pointer addrspace uses :class:`AddressSpace` only, as a :class:`~enum.IntEnum`; MLIR asm
 keywords match **member names** (``generic``, ``gm``, ``l0c``, …) and are produced via

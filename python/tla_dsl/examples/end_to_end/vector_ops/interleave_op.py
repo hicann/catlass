@@ -33,17 +33,15 @@ def interleave_op(
     ub_loaded = tla.flag("ub_loaded", tla.arch.MTE2, tla.arch.VECTOR)
     vec_done = tla.flag("vec_done", tla.arch.VECTOR, tla.arch.MTE3)
 
-    allocator = tla.utils.LocalmemAllocator()
-
     a_gm = tla.tile_view(mem_a, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
     b_gm = tla.tile_view(mem_b, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
     out0_gm = tla.tile_view(mem_out0, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
     out1_gm = tla.tile_view(mem_out1, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
 
-    a_ub = _make_ub_tensor(allocator, a_gm)
-    b_ub = _make_ub_tensor(allocator, b_gm)
-    out0_ub = _make_ub_tensor(allocator, out0_gm)
-    out1_ub = _make_ub_tensor(allocator, out1_gm)
+    a_ub = _make_ub_tensor(a_gm)
+    b_ub = _make_ub_tensor(b_gm)
+    out0_ub = _make_ub_tensor(out0_gm)
+    out1_ub = _make_ub_tensor(out1_gm)
 
     with tla.vector():
         tla.copy(a_ub, a_gm)
@@ -96,7 +94,6 @@ def interleave_op_batch(
     ub_loaded = tla.flag("ub_loaded", tla.arch.MTE2, tla.arch.VECTOR)
     vec_done = tla.flag("vec_done", tla.arch.VECTOR, tla.arch.MTE3)
     block_idx = tla.arch.block_idx()
-    allocator = tla.utils.LocalmemAllocator()
     a_gm = tla.tile_view(
         mem_a, tla.make_shape(VECTOR_ELE), tla.make_coord(block_idx)
     )
@@ -109,10 +106,10 @@ def interleave_op_batch(
     out1_gm = tla.tile_view(
         mem_out1, tla.make_shape(VECTOR_ELE), tla.make_coord(block_idx)
     )
-    a_ub = _make_ub_tensor(allocator, a_gm)
-    b_ub = _make_ub_tensor(allocator, b_gm)
-    out0_ub = _make_ub_tensor(allocator, out0_gm)
-    out1_ub = _make_ub_tensor(allocator, out1_gm)
+    a_ub = _make_ub_tensor(a_gm)
+    b_ub = _make_ub_tensor(b_gm)
+    out0_ub = _make_ub_tensor(out0_gm)
+    out1_ub = _make_ub_tensor(out1_gm)
     with tla.vector():
         tla.copy(a_ub, a_gm)
         tla.copy(b_ub, b_gm)
@@ -147,11 +144,8 @@ def interleave_op_batch(
         tla.pipe_barrier(tla.pipes.ALL)
 
 
-def _make_ub_tensor(allocator: Any, like_tensor: Any) -> Any:
-    ptr = allocator.allocate(
-        VECTOR_ELE * _KERNEL_ELEMENT_BYTES, 256, tla.AddressSpace.ub
-    )
-    ptr = tla.recast_ptr(ptr, dtype=_KERNEL_DTYPE)
+def _make_ub_tensor(like_tensor: Any) -> Any:
+    ptr = tla.allocate(VECTOR_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 256)
     return tla.make_tensor_like(ptr, like_tensor, tla.arch.RowMajor)
 
 

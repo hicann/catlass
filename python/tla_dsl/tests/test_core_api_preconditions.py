@@ -9,7 +9,6 @@ import pytest
 import catlass.tla as tla
 from catlass.address_space import AddressSpace
 from catlass.base_dsl import ast_helpers
-from catlass.base_dsl.typing import Int8
 from catlass.core_api import _category
 from catlass.execution_lowering import TlaLoweringError
 import catlass.runtime as runtime_mod
@@ -48,93 +47,6 @@ def test_copy_preconditions_require_tiles() -> None:
     with runtime_mod._eager_capture():
         with pytest.raises(tla.TlaCoreAPIError, match="tla.copy"):
             tla.copy(tla.make_shape(1, 2), tla.make_shape(1, 2))
-
-
-def test_allocator_allocate_requires_supported_addrspace() -> None:
-    with runtime_mod._eager_capture():
-        allocator = tla.utils.LocalmemAllocator()
-        with pytest.raises(
-            tla.TlaCoreAPIError, match="tla.utils.LocalmemAllocator.allocate"
-        ):
-            allocator.allocate(128, 32, "gm")
-
-
-def test_allocator_capacity_in_bytes_defaults_to_l1_capacity() -> None:
-    assert tla.utils.LocalmemAllocator.capacity_in_bytes() == 512 * 1024
-
-
-def test_allocator_capacity_in_bytes_accepts_supported_scope() -> None:
-    assert (
-        tla.utils.LocalmemAllocator.capacity_in_bytes(tla.AddressSpace.ub) == 248 * 1024
-    )
-
-
-def test_allocator_capacity_in_bytes_rejects_unknown_scope() -> None:
-    with pytest.raises(
-        tla.TlaCoreAPIError, match="tla.utils.LocalmemAllocator.capacity_in_bytes"
-    ):
-        tla.utils.LocalmemAllocator.capacity_in_bytes("gm")
-
-
-def test_allocator_allocate_returns_pointer_category() -> None:
-    @tla.jit
-    def kernel(mem: tla.Tensor) -> None:
-        allocator = tla.utils.LocalmemAllocator()
-        ptr = allocator.allocate(16, 32, tla.AddressSpace.l1)
-        assert _category(ptr) == "pointer"
-        _ = mem
-
-    with runtime_mod._eager_capture():
-        mem_arg = tla.Tensor(
-            tla.make_shape(8, 8),
-            tla.Float16,
-            addrspace=tla.AddressSpace.ub,
-            origin_shape=tla.make_shape(8, 8),
-        )
-    _ = kernel.dump_mlir(type_args=(mem_arg,))
-
-
-def test_allocator_pointer_exposes_default_i8_dtype_and_value_type() -> None:
-    with runtime_mod._eager_capture():
-        allocator = tla.utils.LocalmemAllocator()
-        ptr = allocator.allocate(64, 32, tla.AddressSpace.l1)
-        assert ptr.dtype is Int8
-        assert ptr.value_type is Int8
-
-
-def test_allocator_pointer_mlir_marshalling_round_trips_metadata() -> None:
-    with runtime_mod._eager_capture():
-        allocator = tla.utils.LocalmemAllocator()
-        ptr = allocator.allocate(64, 32, tla.AddressSpace.l1)
-        mlir_types = ptr.__get_mlir_types__()
-        values = ptr.__extract_mlir_values__()
-        clone = ptr.__new_from_mlir_values__(values)
-        assert len(mlir_types) == 1
-        assert str(mlir_types[0]).startswith("!tla.ptr<")
-        assert len(values) == 1
-        assert str(values[0].type).startswith("!tla.ptr<")
-        assert _category(clone) == "pointer"
-        assert clone.addrspace == AddressSpace.l1
-        assert clone.alignment == 32
-        assert clone.dtype is Int8
-        assert runtime_mod._resolve_frontend_bound_value(clone) is None
-        assert clone.value is values[0]
-
-
-def test_allocator_second_allocate_aligns_cursor() -> None:
-    with runtime_mod._eager_capture():
-        allocator = tla.utils.LocalmemAllocator()
-        p0 = allocator.allocate(100, 256, tla.AddressSpace.l1)
-        p1 = allocator.allocate(64, 512, tla.AddressSpace.l1)
-        assert _category(p0) == "pointer"
-        assert _category(p1) == "pointer"
-        assert p0.alignment == 256
-        assert p1.alignment == 512
-
-
-def test_allocator_public_surface_does_not_expose_loc() -> None:
-    allocator = tla.utils.LocalmemAllocator()
-    assert "loc" not in inspect.signature(allocator.allocate).parameters
 
 
 def test_allocate_returns_typed_pointer_metadata() -> None:

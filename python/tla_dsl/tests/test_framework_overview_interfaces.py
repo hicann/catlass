@@ -228,41 +228,6 @@ def test_interface_recast_ptr() -> None:
     assert "!tla.ptr<f16, l0c, 4>" in mlir
 
 
-# -----------------------------------------------------------------------------
-# 6. LocalmemAllocator.allocate → ``tla.alloc_ptr {size_bytes = N : i64} -> !tla.ptr<…>`` (Tla-like)
-# -----------------------------------------------------------------------------
-
-
-@tla.kernel
-def _kernel_localmem_allocator_allocate() -> None:
-    allocator = tla.utils.LocalmemAllocator()
-    p_l1 = allocator.allocate(1023, 512, tla.AddressSpace.l1)
-    _ = tla.recast_ptr(p_l1, dtype=tla.Float16)
-    p_l0c = allocator.allocate(256, 256, tla.AddressSpace.l0c)
-    _ = p_l0c
-    # IR output:
-    # module {
-    #   "tla.func"() ({
-    #     %0 = "tla.alloc_ptr"() {size_bytes = 1023 : i64} : () -> !tla.ptr<i8, l1, 512>
-    #     %r = "tla.recast_ptr"(%0) : (!tla.ptr<i8, l1, 512>) -> !tla.ptr<f16, l1, 512>
-    #     %1 = "tla.alloc_ptr"() {size_bytes = 256 : i64} : () -> !tla.ptr<i8, l0c, 256>
-    #     "tla.return"() : () -> ()
-    #   }) {function_type = () -> (), sym_name = "_kernel_localmem_allocator_allocate"} : () -> ()
-    # }
-
-
-def test_interface_localmem_allocator_allocate() -> None:
-    """Tla-like scratch alloc: single ``size_bytes`` attr; addrspace + align only on ``!tla.ptr``."""
-    mlir = _kernel_localmem_allocator_allocate.dump_mlir()
-    assert "tla.alloc_ptr" in mlir
-    assert "tla.recast_ptr" in mlir
-    assert "size_bytes = 1023" in mlir
-    assert "size_bytes = 256" in mlir
-    assert "<i8, l1, 512>" in mlir
-    assert "!tla.ptr<f16, l1, 512>" in mlir
-    assert "<i8, l0c, 256>" in mlir
-
-
 @tla.kernel
 def _kernel_allocate_typed_ptr() -> None:
     _ = tla.allocate((16, 16), tla.Float16, tla.AddressSpace.l1, 512)
@@ -377,24 +342,6 @@ def _kernel_make_tensor_like_ptr_dtype(mem: tla.Tensor) -> None:
     _ = tla.make_tensor_like(ptr, root, tla.arch.RowMajor)
 
 
-@tla.kernel
-def _kernel_make_tensor_like_deprecated_dtype(mem: tla.Tensor) -> None:
-    root = tla.tile_view(mem, tla.make_shape(16, 16), tla.make_coord(0, 0))
-    ptr = tla.allocate((16, 16), tla.Float32, tla.AddressSpace.l1, 512)
-    _ = tla.make_tensor_like(
-        ptr, root, tla.arch.RowMajor, dst_dtype=tla.Float32
-    )
-
-
-@tla.kernel
-def _kernel_make_tensor_like_overriding_dtype(mem: tla.Tensor) -> None:
-    root = tla.tile_view(mem, tla.make_shape(16, 16), tla.make_coord(0, 0))
-    ptr = tla.allocate((16, 16), tla.Float32, tla.AddressSpace.l1, 512)
-    _ = tla.make_tensor_like(
-        ptr, root, tla.arch.RowMajor, dst_dtype=tla.Float16
-    )
-
-
 def _make_f16_tensor() -> tla.Tensor:
     with runtime_mod._eager_capture():
         return tla.Tensor(
@@ -415,23 +362,6 @@ def test_make_tensor_like_uses_ptr_dtype_instead_of_like_dtype() -> None:
     assert "!tla.ptr<f16, gm, 2>" in mlir
     assert "!tla.ptr<f32, l1, 512>" in mlir
     assert "!tla.ptr<f16, l1, 512>" not in mlir
-
-
-def test_make_tensor_like_matching_dst_dtype_warns() -> None:
-    with pytest.warns(FutureWarning, match=r"dst_dtype.*deprecated"):
-        mlir = _kernel_make_tensor_like_deprecated_dtype.dump_mlir(
-            type_args=(_make_f16_tensor(),)
-        )
-    assert "!tla.ptr<f32, l1, 512>" in mlir
-
-
-def test_make_tensor_like_dst_dtype_warns_and_overrides_ptr_dtype() -> None:
-    with pytest.warns(FutureWarning, match=r"dst_dtype.*deprecated"):
-        mlir = _kernel_make_tensor_like_overriding_dtype.dump_mlir(
-            type_args=(_make_f16_tensor(),)
-        )
-    assert "!tla.ptr<f32, l1, 512>" in mlir
-    assert "!tla.ptr<f16, l1, 512>" in mlir
 
 
 # -----------------------------------------------------------------------------
@@ -504,10 +434,8 @@ def _kernel_tile_view_comprehensive(mem: tla.Tensor, tile_row: tla.types.TlaInde
     # (1,1)×(8,8) would exceed that on the static path and is rejected by the frontend.
     leaf = tla.tile_view(root, tla.make_shape(8, 8), tla.make_coord(0, 0))
     _ = tla.tile_view(leaf, tla.make_shape(4, 4), tla.make_coord(tile_row, 0))
-    allocator = tla.utils.LocalmemAllocator()
     # 8 x 8 x f16 bytes — on-chip tile shaped like ``leaf``
-    l1_ptr = allocator.allocate(8 * 8 * 2, 512, tla.AddressSpace.l1)
-    l1_ptr = tla.recast_ptr(l1_ptr, dtype=tla.Float16)
+    l1_ptr = tla.allocate((8, 8), tla.Float16, tla.AddressSpace.l1, 512)
     _ = tla.make_tensor_like(l1_ptr, leaf, tla.arch.zN)
     # IR output:
     # module {
@@ -527,9 +455,8 @@ def _kernel_tile_view_comprehensive(mem: tla.Tensor, tile_row: tla.types.TlaInde
     #     %10 = arith.muli %arg1, %c4 : index
     #     %11 = "tla.make_coord"(%10) : (index) -> !tla.coord<?,0>
     #     %12 = "tla.tile_view"(%7, %8, %11) : (!tla.tensor<!tla.layout<!tla.shape<8,8>, !tla.stride<80,1>, !tla.shape<5,5>, row_major>, !tla.coord<55,55>, !tla.ptr<f16, gm, 2>>, !tla.shape<4,4>, !tla.coord<?,0>) -> !tla.tensor<!tla.layout<!tla.shape<4,4>, !tla.stride<80,1>, !tla.shape<4,4>, row_major>, !tla.coord<?,55>, !tla.ptr<f16, gm, 2>>
-    #     %13 = "tla.alloc_ptr"() {size_bytes = 128 : i64} : () -> !tla.ptr<i8, l1, 512>
-    #     %14 = "tla.recast_ptr"(%13) : (!tla.ptr<i8, l1, 512>) -> !tla.ptr<f16, l1, 512>
-    #     %15 = "tla.make_tensor_like"(%14, %7) {layoutTag = "zN"} : (!tla.ptr<f16, l1, 512>, !tla.tensor<!tla.layout<!tla.shape<8,8>, !tla.stride<80,1>, !tla.shape<5,5>, row_major>, !tla.coord<55,55>, !tla.ptr<f16, gm, 2>>) -> !tla.tensor<!tla.layout<!tla.shape<(16,1),(16,1)>, !tla.stride<(16,256),(1,256)>, !tla.shape<5,5>, zN>, !tla.coord<0,0>, !tla.ptr<f16, l1, 2>>
+    #     %13 = "tla.alloc_ptr"() {size_bytes = 128 : i64} : () -> !tla.ptr<f16, l1, 512>
+    #     %14 = "tla.make_tensor_like"(%13, %7) {layoutTag = "zN"} : (!tla.ptr<f16, l1, 512>, !tla.tensor<!tla.layout<!tla.shape<8,8>, !tla.stride<80,1>, !tla.shape<5,5>, row_major>, !tla.coord<55,55>, !tla.ptr<f16, gm, 2>>) -> !tla.tensor<!tla.layout<!tla.shape<(16,1),(16,1)>, !tla.stride<(16,256),(1,256)>, !tla.shape<5,5>, zN>, !tla.coord<0,0>, !tla.ptr<f16, l1, 512>>
     #     "tla.return"() : () -> ()
     #   }) {function_type = (!tla.tensor<!tla.layout<!tla.shape<80,80>, !tla.stride<80,1>, !tla.shape<50,50>, row_major>, !tla.coord<10,10>, !tla.ptr<f16, gm, 2>>, index) -> (), sym_name = "_kernel_tile_view_comprehensive"} : () -> ()
     # }
@@ -641,9 +568,7 @@ def _kernel_copy_gm_row_major_to_l1_zn(mem: tla.Tensor, mem_i8: tla.Tensor) -> N
     ``make_coord(1,1)``/``(0,0)`` 与 ``32×32`` tile 须在 ``mem`` 的 ``origin_shape`` 裁剪范围内合法（与 ``mem`` 的逻辑 ``shape`` 可不一致）。"""
     tile_a = tla.tile_view(mem, tla.make_shape(32, 32), tla.make_coord(1, 1))
     tile_b = tla.tile_view(mem, tla.make_shape(32, 32), tla.make_coord(0, 0))
-    allocator = tla.utils.LocalmemAllocator()
-    ptr = allocator.allocate(32 * 32 * 4, 512, tla.AddressSpace.l1)
-    ptr = tla.recast_ptr(ptr, dtype=tla.Float32)
+    ptr = tla.allocate((32, 32), tla.Float32, tla.AddressSpace.l1, 512)
     local = tla.make_tensor_like(ptr, tile_a, tla.arch.zN)
     with tla.cube():
         tla.copy(local, tile_a)
@@ -654,7 +579,7 @@ def test_interface_copy_gm_to_l1_zn_two_copies_dsl_mlir() -> None:
     """Eager ``Tensor`` → ``dump_mlir``：``mem`` / ``mem_i8`` 的 **逻辑 shape** 与 **origin_shape** 均不同，
     且 **origin 不含 128**；``stride`` 按各自 layout ``shape`` 构造合法的行主布局，
     以确保相邻行不重叠，同时保留 ``shape`` 与 ``origin_shape`` 不同的覆盖。
-    两路 f32 ``tile_view``、两次 ``tla.copy``、单次 4096B alloc + recast/like；第二参数仅用于入口类型差异。"""
+    两路 f32 ``tile_view``、两次 ``tla.copy``、单次 4096B typed alloc + like；第二参数仅用于入口类型差异。"""
     with runtime_mod._eager_capture():
         # Layout shape 大于 origin；row-major stride 按 layout shape 的列数构造。
         mem = tla.Tensor(
@@ -679,7 +604,7 @@ def test_interface_copy_gm_to_l1_zn_two_copies_dsl_mlir() -> None:
     assert "tla.tile_view" in mlir
     assert "tla.copy" in mlir
     assert "tla.make_tensor_like" in mlir
-    assert "tla.recast_ptr" in mlir
+    assert "tla.recast_ptr" not in mlir
     assert (
         "<!tla.layout<!tla.shape<(16,2),(8,4)>, !tla.stride<(8,128),(1,256)>, !tla.shape<32,32>, zN>, !tla.coord<0,0>, !tla.ptr<f32, l1, 512>>"
         in mlir

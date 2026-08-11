@@ -114,8 +114,7 @@ def _formatted_typed_scalar_kernel(value: object) -> None:
 
 @tla.kernel
 def _pointer_kernel() -> None:
-    allocator = tla.utils.LocalmemAllocator()
-    ptr = allocator.allocate(64, 32, tla.AddressSpace.ub)
+    ptr = tla.allocate(64, tla.Int8, tla.AddressSpace.ub, 32)
     with tla.vector():
         tla.print(ptr)
 

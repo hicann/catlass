@@ -27,23 +27,13 @@ def squeeze_op(mem_src: tla.Tensor, mem_dst: tla.Tensor) -> None:
     ub_loaded = tla.flag("ub_loaded", tla.arch.MTE2, tla.arch.VECTOR)
     vec_done = tla.flag("vec_done", tla.arch.VECTOR, tla.arch.MTE3)
 
-    allocator = tla.utils.LocalmemAllocator()
-
     src_gm = tla.tile_view(mem_src, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
     dst_gm = tla.tile_view(mem_dst, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
 
-    src_ub_ptr = allocator.allocate(
-        VECTOR_ELE * _KERNEL_ELEMENT_BYTES, 256, tla.AddressSpace.ub
-    )
-    dst_ub_ptr = allocator.allocate(
-        VECTOR_ELE * _KERNEL_ELEMENT_BYTES, 256, tla.AddressSpace.ub
-    )
-    src_ub = tla.make_tensor_like(
-        tla.recast_ptr(src_ub_ptr, dtype=_KERNEL_DTYPE), src_gm, tla.arch.RowMajor
-    )
-    dst_ub = tla.make_tensor_like(
-        tla.recast_ptr(dst_ub_ptr, dtype=_KERNEL_DTYPE), dst_gm, tla.arch.RowMajor
-    )
+    src_ub_ptr = tla.allocate(VECTOR_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 256)
+    dst_ub_ptr = tla.allocate(VECTOR_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 256)
+    src_ub = tla.make_tensor_like(src_ub_ptr, src_gm, tla.arch.RowMajor)
+    dst_ub = tla.make_tensor_like(dst_ub_ptr, dst_gm, tla.arch.RowMajor)
 
     with tla.vector():
         tla.copy(src_ub, src_gm)

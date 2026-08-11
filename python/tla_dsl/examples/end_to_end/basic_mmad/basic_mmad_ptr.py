@@ -24,7 +24,6 @@ K_DIM = 64
 L1_M_DIM = 32
 L1_N_DIM = 32
 L1_K_DIM = 32
-L1_STAGE_BYTES = 256 * 1024
 L0A_BYTES = 32 * 32 * 4
 L0B_BYTES = 32 * 32 * 4
 L0C_BYTES = 32 * 32 * 4
@@ -44,18 +43,11 @@ def basic_mmad_ptr(
     l1_loaded = tla.flag("l1_loaded", tla.arch.MTE2, tla.arch.MTE1)
     l0_loaded = tla.flag("l0_loaded", tla.arch.MTE1, tla.arch.CUBE)
 
-    allocator = tla.utils.LocalmemAllocator()
-
-    l1a_ptr = allocator.allocate(L1_STAGE_BYTES, 512, tla.AddressSpace.l1)
-    l1a_ptr = tla.recast_ptr(l1a_ptr, dtype=tla.Float32)
-    l1b_ptr = allocator.allocate(L1_STAGE_BYTES, 512, tla.AddressSpace.l1)
-    l1b_ptr = tla.recast_ptr(l1b_ptr, dtype=tla.Float32)
-    l0a_ptr = allocator.allocate(L0A_BYTES, 512, tla.AddressSpace.l0a)
-    l0a_ptr = tla.recast_ptr(l0a_ptr, dtype=tla.Float32)
-    l0b_ptr = allocator.allocate(L0B_BYTES, 512, tla.AddressSpace.l0b)
-    l0b_ptr = tla.recast_ptr(l0b_ptr, dtype=tla.Float32)
-    l0c_ptr = allocator.allocate(L0C_BYTES, 512, tla.AddressSpace.l0c)
-    l0c_ptr = tla.recast_ptr(l0c_ptr, dtype=tla.Float32)
+    l1a_ptr = tla.allocate(L1_M_DIM * L1_K_DIM, tla.Float32, tla.AddressSpace.l1, 512)
+    l1b_ptr = tla.allocate(L1_K_DIM * L1_N_DIM, tla.Float32, tla.AddressSpace.l1, 512)
+    l0a_ptr = tla.allocate(L0A_BYTES // 4, tla.Float32, tla.AddressSpace.l0a, 512)
+    l0b_ptr = tla.allocate(L0B_BYTES // 4, tla.Float32, tla.AddressSpace.l0b, 512)
+    l0c_ptr = tla.allocate(L0C_BYTES // 4, tla.Float32, tla.AddressSpace.l0c, 512)
 
     with tla.cube():
         gm_a = tla.make_tensor(

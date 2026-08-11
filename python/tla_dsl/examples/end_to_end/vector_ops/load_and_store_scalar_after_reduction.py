@@ -10,7 +10,6 @@ import sys
 DEMO_DIR = Path(__file__).resolve().parent
 
 VECTOR_ELE = 64
-ELEMENT_BYTES = 4
 VEC_FUNC_STORE_INDEX = 7
 VECTOR_STORE_INDEX = 8
 
@@ -28,24 +27,13 @@ def load_and_store_scalar_after_reduction(
     )
     scalar_to_mte3 = tla.flag("scalar_to_mte3", tla.arch.SCALAR, tla.arch.MTE3)
 
-    allocator = tla.utils.LocalmemAllocator()
-
     x_gm = tla.tile_view(mem_x, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
     stored_gm = tla.tile_view(mem_stored, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
     reduced_gm = tla.tile_view(mem_reduced, tla.make_shape(1), tla.make_coord(0))
 
-    x_ptr = tla.recast_ptr(
-        allocator.allocate(VECTOR_ELE * ELEMENT_BYTES, 256, tla.AddressSpace.ub),
-        dtype=tla.Float32,
-    )
-    stored_ptr = tla.recast_ptr(
-        allocator.allocate(VECTOR_ELE * ELEMENT_BYTES, 256, tla.AddressSpace.ub),
-        dtype=tla.Float32,
-    )
-    reduced_ptr = tla.recast_ptr(
-        allocator.allocate(ELEMENT_BYTES, 256, tla.AddressSpace.ub),
-        dtype=tla.Float32,
-    )
+    x_ptr = tla.allocate(VECTOR_ELE, tla.Float32, tla.AddressSpace.ub, 256)
+    stored_ptr = tla.allocate(VECTOR_ELE, tla.Float32, tla.AddressSpace.ub, 256)
+    reduced_ptr = tla.allocate(1, tla.Float32, tla.AddressSpace.ub, 256)
     x_ub = tla.make_tensor_like(x_ptr, x_gm, tla.arch.RowMajor)
     stored_ub = tla.make_tensor_like(stored_ptr, stored_gm, tla.arch.RowMajor)
     reduced_ub = tla.make_tensor_like(reduced_ptr, reduced_gm, tla.arch.RowMajor)

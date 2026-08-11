@@ -44,18 +44,13 @@ _KERNEL_SHAPE = (VECTOR_ELE,)
 
 
 def _make_ub_tensor(
-    allocator: Any,
     like_tensor: Any,
     dtype: type[Any],
     element_bytes: int,
 ) -> Any:
     alignment = 512 if element_bytes == 8 else 256
-    ptr = allocator.allocate(
-        VECTOR_ELE * element_bytes, alignment, tla.AddressSpace.ub
-    )
-    return tla.make_tensor_like(
-        tla.recast_ptr(ptr, dtype=dtype), like_tensor, tla.arch.RowMajor
-    )
+    ptr = tla.allocate(VECTOR_ELE, dtype, tla.AddressSpace.ub, alignment)
+    return tla.make_tensor_like(ptr, like_tensor, tla.arch.RowMajor)
 
 
 @tla.kernel
@@ -65,8 +60,6 @@ def store_pack(
 ) -> None:
     ub_loaded = tla.flag("ub_loaded", tla.arch.MTE2, tla.arch.VECTOR)
     vec_done = tla.flag("vec_done", tla.arch.VECTOR, tla.arch.MTE3)
-
-    allocator = tla.utils.LocalmemAllocator()
 
     a_gm = tla.tile_view(mem_a, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
     # The shared harness binds mem_out with the input dtype. Reinterpret only
@@ -81,10 +74,10 @@ def store_pack(
     )
 
     a_ub = _make_ub_tensor(
-        allocator, a_gm, _KERNEL_DTYPE, _ELEMENT_BYTES_MAP[_KERNEL_DTYPE]
+        a_gm, _KERNEL_DTYPE, _ELEMENT_BYTES_MAP[_KERNEL_DTYPE]
     )
     out_ub = _make_ub_tensor(
-        allocator, out_gm, _OUTPUT_DTYPE, _ELEMENT_BYTES_MAP[_OUTPUT_DTYPE]
+        out_gm, _OUTPUT_DTYPE, _ELEMENT_BYTES_MAP[_OUTPUT_DTYPE]
     )
 
     with tla.vector():

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import inspect
+
 import catlass.tla as tla
 import catlass.runtime as runtime_mod
 from catlass._mlir_bindings import tla_ops_gen
@@ -168,13 +170,14 @@ def test_public_api_exports_representative_helpers() -> None:
     assert callable(tla.mutex)
     assert callable(tla.mutex_guard)
     assert callable(tla.make_tensor_like)
+    assert "dst_dtype" not in inspect.signature(tla.make_tensor_like).parameters
+    assert not hasattr(tla.utils, "LocalmemAllocator")
     assert callable(tla.const_expr)
     assert hasattr(tla, "Constexpr")
     assert callable(tla.range_constexpr)
     assert not hasattr(tla, "constexpr")
     assert not hasattr(runtime_mod, "constexpr")
     assert callable(tla.arch.block_idx)
-    assert callable(tla.utils.LocalmemAllocator)
     assert callable(tla.allocate)
     assert callable(tla.recast_ptr)
     assert callable(tla.bitwise_not)

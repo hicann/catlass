@@ -6,7 +6,6 @@ import builtins as _builtins
 import inspect
 import math
 import sys
-import warnings
 from enum import Enum
 from itertools import chain
 from typing import Any, Callable, Iterable, NoReturn, Sequence, TypeAlias
@@ -33,7 +32,6 @@ from .base_dsl.typing import Pointer as PointerABC
 from .base_dsl.typing import Pointer as PointerTypeHint
 from .tla.tensor import normalize_tile_view_coord
 from .tla.typing import Tensor
-from .utils.localmem_allocator import LocalmemAllocator
 from . import runtime as _runtime
 from .tla.tensor import _Tensor
 from .runtime import (
@@ -2975,7 +2973,7 @@ def _require_cross_mode(op_name: str, value: Any, position: int) -> None:
 
 
 def _require_pointer_addrspace(op_name: str, value: Any, position: int) -> str:
-    """Require :class:`AddressSpace` for ``make_ptr`` / :class:`~catlass.utils.localmem_allocator.LocalmemAllocator`.
+    """Require :class:`AddressSpace` for pointer construction and allocation.
 
     Returns the MLIR addrspace keyword (``str(enum)`` == ``enum.name``). Callers that only validate may ignore it.
     """
@@ -3695,9 +3693,8 @@ def make_tensor(
     flat logical 2-D coord/origin. If their ``origin_shape`` was omitted from
     :func:`make_layout`, the padded logical pair is inferred from the physical
     shape. Like :func:`make_tensor_like`, a full compile requires ``ptr`` to
-    carry backing storage; an allocator-backed pointer (from
-    :class:`~catlass.utils.LocalmemAllocator` + :func:`recast_ptr`) is the
-    supported form for runnable kernels.
+    carry backing storage; a pointer returned by :func:`allocate` is the supported
+    form for runnable kernels.
     """
     _require_category("make_tensor", "ptr", ptr, "pointer", 0)
     if not isinstance(layout, _Layout):
@@ -3862,7 +3859,6 @@ def make_tensor_like(
     ptr: Any,
     like: TileLike,
     layoutTag: Any | None = None,
-    dst_dtype: DTypeLike | None = None,
     *,
     loc: mlir_ir.Location | None = None,
 ) -> TlaTensor:
@@ -3874,28 +3870,15 @@ def make_tensor_like(
     **origin_shape** tree; nested origin trees skip remap. **shape** and **stride** are recomputed
     from that pair (e.g. ``zN`` nested 2×2 fractal spelling). **coord** is always ``0,0`` for
     every layout tag that participates in remap; **origin_shape** in the result matches the same
-    flat logical pair. The tensor element type defaults to ``ptr``'s ``!tla.ptr``
+    flat logical pair. The tensor element type is taken from ``ptr``'s ``!tla.ptr``
     pointee, while its address space follows the pointer's memspace; L0 pointer names
     are remapped to tensor ABI names. ``like`` supplies only the tensor
-    shape/layout/coord structure. ``dst_dtype`` is deprecated but continues to override
-    the pointer element type when provided; it will be removed in a future release. It
-    accepts a concrete
-    :class:`~catlass.base_dsl.typing.Numeric` (e.g. ``tla.Float32``) or an
-    ``mlir_ir.Type``; string dtype tokens are not accepted.
+    shape/layout/coord structure.
     Only destination pointers in on-chip address spaces are accepted.
     The ``ptr`` operand is required by
     ``tla.make_tensor_like`` for lowering to attach backing storage.
     """
     _require_category("make_tensor_like", "like", like, "tensor", 1)
-    if dst_dtype is not None:
-        warnings.warn(
-            "tla.make_tensor_like argument `dst_dtype` is deprecated and will be "
-            "removed in a future release; it currently overrides the element type, "
-            "so use a typed `ptr` instead.",
-            category=FutureWarning,
-            stacklevel=3,
-        )
-        _require_dtype("make_tensor_like", "dst_dtype", dst_dtype, 3)
     _require_frontend_state("make_tensor_like")
     ptr_value = _as_value(ptr)
     like_value = _as_value(like)
@@ -3913,16 +3896,13 @@ def make_tensor_like(
         )
     # Keep frontend MLIR pointer spelling aligned with the pointer operand.
     ptr_ty = PtrType(ptr_value.type)
-    if dst_dtype is not None:
-        dtype = _dtype_to_str(dst_dtype).lower()
-    else:
-        try:
-            dtype = _dtype_to_str(ptr_ty.pointee).lower()
-        except TypeError as exc:
-            raise TlaLoweringError(
-                "tla.make_tensor_like cannot derive element type from ptr pointee "
-                f"{ptr_ty.pointee}"
-            ) from exc
+    try:
+        dtype = _dtype_to_str(ptr_ty.pointee).lower()
+    except TypeError as exc:
+        raise TlaLoweringError(
+            "tla.make_tensor_like cannot derive element type from ptr pointee "
+            f"{ptr_ty.pointee}"
+        ) from exc
     if dtype not in _MAKE_TENSOR_SUPPORTED_ELEMENT_TYPES:
         raise TlaLoweringError(
             f"tla.make_tensor_like expects a supported element type, got [{dtype}]"
@@ -6219,8 +6199,6 @@ def _resolve_arch_layout_tag(value: Any | None, *, for_op: str) -> str:
     return token
 
 
-setattr(_runtime.utils, "LocalmemAllocator", LocalmemAllocator)
-
 __all__ = [
     "TlaCoreAPIError",
     "dsl_user_op",
@@ -6284,7 +6262,6 @@ __all__ = [
     "_Pointer",
     "VectorSSA",
     "MaskSSA",
-    "LocalmemAllocator",
 ]
 
 
@@ -6305,7 +6282,6 @@ _TRUSTED_DSL_TYPE_MODULES = frozenset(
         "catlass.tla.tensor",
         "catlass.tla.typing",
         "catlass.types",
-        "catlass.utils.localmem_allocator",
     }
 )
 # Trusted module identity for ``import catlass.tla as tla`` alias recognition.

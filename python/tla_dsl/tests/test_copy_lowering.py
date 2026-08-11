@@ -135,12 +135,9 @@ def test_kernel_gm_arg_copies_directly_to_ub(tmp_path) -> None:
 @tla.kernel
 def copy_l0c_to_ub_split_mismatch_dtype_kernel(gm_c: tla.Tensor) -> None:
     """L0C(f32)->UB(f16) with SPLIT_M, dtype mismatch must be rejected."""
-    allocator = tla.utils.LocalmemAllocator()
-    l0c_ptr = allocator.allocate(32 * 32 * 4, 512, tla.AddressSpace.l0c)
-    l0c_ptr = tla.recast_ptr(l0c_ptr, dtype=tla.Float32)
+    l0c_ptr = tla.allocate((32, 32), tla.Float32, tla.AddressSpace.l0c, 512)
     l0c = tla.make_tensor_like(l0c_ptr, gm_c, tla.arch.L0Clayout)
-    ub_ptr = allocator.allocate(16 * 32 * 4, 256, tla.AddressSpace.ub)
-    ub_ptr = tla.recast_ptr(ub_ptr, dtype=tla.Float16)
+    ub_ptr = tla.allocate((32, 32), tla.Float16, tla.AddressSpace.ub, 256)
     ub = tla.make_tensor_like(ub_ptr, gm_c, tla.arch.RowMajor)
     with tla.cube():
         tla.copy(
@@ -170,11 +167,8 @@ def test_copy_l0c_to_ub_split_mismatch_dtype_raises() -> None:
 @tla.kernel
 def copy_dynamic_l0c_to_ub_split_m_kernel(gm_c: tla.Tensor) -> None:
     """Reproduce a dynamically clipped N extent flowing from L0C into UB."""
-    allocator = tla.utils.LocalmemAllocator()
-    l0c_ptr = allocator.allocate(128 * 128 * 4, 512, tla.AddressSpace.l0c)
-    l0c_ptr = tla.recast_ptr(l0c_ptr, dtype=tla.Float32)
-    ub_ptr = allocator.allocate(64 * 128 * 4, 512, tla.AddressSpace.ub)
-    ub_ptr = tla.recast_ptr(ub_ptr, dtype=tla.Float32)
+    l0c_ptr = tla.allocate((128, 128), tla.Float32, tla.AddressSpace.l0c, 512)
+    ub_ptr = tla.allocate((64, 128), tla.Float32, tla.AddressSpace.ub, 512)
 
     for col in tla.range(tla.arch.block_idx(), 1, tla.arch.block_num()):
         gm_tile = tla.tile_view(
@@ -261,11 +255,8 @@ def make_tensor_like_layout_pair_kernel(
             layoutTag=tla.arch.RowMajor,
         ),
     )
-    allocator = tla.utils.LocalmemAllocator()
-    parent_ptr = allocator.allocate(128 * 128 * 4, 512, tla.AddressSpace.l1)
-    parent_ptr = tla.recast_ptr(parent_ptr, dtype=tla.Float32)
-    child_ptr = allocator.allocate(128 * 128 * 4, 512, tla.AddressSpace.l1)
-    child_ptr = tla.recast_ptr(child_ptr, dtype=tla.Float32)
+    parent_ptr = tla.allocate((128, 128), tla.Float32, tla.AddressSpace.l1, 512)
+    child_ptr = tla.allocate((128, 128), tla.Float32, tla.AddressSpace.l1, 512)
     with tla.cube():
         parent = tla.make_tensor_like(
             parent_ptr, root, _MAKE_TENSOR_LIKE_PARENT_LAYOUT
@@ -447,11 +438,9 @@ def test_make_tensor_like_supports_every_layout_pair(
 
 @tla.kernel
 def nested_ub_subtile_copy_kernel(mem_in: tla.Tensor, mem_out: tla.Tensor) -> None:
-    allocator = tla.utils.LocalmemAllocator()
     gm_in = tla.tile_view(mem_in, tla.make_shape(64, 64), tla.make_coord(0, 0))
     gm_out = tla.tile_view(mem_out, tla.make_shape(32, 32), tla.make_coord(0, 0))
-    ub_ptr = allocator.allocate(64 * 64 * 4, 256, tla.AddressSpace.ub)
-    ub_ptr = tla.recast_ptr(ub_ptr, dtype=tla.Float32)
+    ub_ptr = tla.allocate((64, 64), tla.Float32, tla.AddressSpace.ub, 256)
     ub_root = tla.make_tensor_like(ub_ptr, gm_in, tla.arch.RowMajor)
     ub_tile = tla.tile_view(ub_root, tla.make_shape(32, 32), tla.make_coord(1, 1))
     with tla.vector():
@@ -497,9 +486,7 @@ def test_nested_ub_subtile_copy_lowers(tmp_path) -> None:
 def ptradd_ub_subtile_copy_kernel(mem_in: tla.Tensor, mem_src: tla.Tensor) -> None:
     gm_root = tla.tile_view(mem_in, tla.make_shape(64, 64), tla.make_coord(0, 0))
     gm_src = tla.tile_view(mem_src, tla.make_shape(32, 32), tla.make_coord(0, 0))
-    allocator = tla.utils.LocalmemAllocator()
-    ub_ptr = allocator.allocate((64 * 64 + 16) * 4, 256, tla.AddressSpace.ub)
-    ub_ptr = tla.recast_ptr(ub_ptr, dtype=tla.Float32) + 16
+    ub_ptr = tla.allocate(64 * 64 + 16, tla.Float32, tla.AddressSpace.ub, 256) + 16
     ub_root = tla.make_tensor_like(ub_ptr, gm_root, tla.arch.RowMajor)
     ub_tile = tla.tile_view(ub_root, tla.make_shape(32, 32), tla.make_coord(1, 1))
     with tla.vector():

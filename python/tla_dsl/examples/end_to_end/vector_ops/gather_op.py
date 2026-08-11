@@ -6,8 +6,6 @@ from typing import Any
 import catlass.tla as tla
 
 VECTOR_ELE = 64
-ELEMENT_BYTES = 4
-_IDX_ELEMENT_BYTES = 4
 
 
 @tla.kernel
@@ -15,24 +13,13 @@ def gather_op(mem_src: tla.Tensor, mem_idx: tla.Tensor, mem_dst: tla.Tensor) -> 
     x_loaded = tla.flag("x_loaded", tla.arch.MTE2, tla.arch.VECTOR)
     idx_loaded = tla.flag("idx_loaded", tla.arch.MTE2, tla.arch.VECTOR)
     done = tla.flag("done", tla.arch.VECTOR, tla.arch.MTE3)
-    allocator = tla.utils.LocalmemAllocator()
-
     src_gm = tla.tile_view(mem_src, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
     idx_gm = tla.tile_view(mem_idx, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
     dst_gm = tla.tile_view(mem_dst, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
 
-    src_ptr = tla.recast_ptr(
-        allocator.allocate(VECTOR_ELE * ELEMENT_BYTES, 256, tla.AddressSpace.ub),
-        dtype=tla.Float32,
-    )
-    idx_ptr = tla.recast_ptr(
-        allocator.allocate(VECTOR_ELE * _IDX_ELEMENT_BYTES, 256, tla.AddressSpace.ub),
-        dtype=tla.Int32,
-    )
-    dst_ptr = tla.recast_ptr(
-        allocator.allocate(VECTOR_ELE * ELEMENT_BYTES, 256, tla.AddressSpace.ub),
-        dtype=tla.Float32,
-    )
+    src_ptr = tla.allocate(VECTOR_ELE, tla.Float32, tla.AddressSpace.ub, 256)
+    idx_ptr = tla.allocate(VECTOR_ELE, tla.Int32, tla.AddressSpace.ub, 256)
+    dst_ptr = tla.allocate(VECTOR_ELE, tla.Float32, tla.AddressSpace.ub, 256)
 
     src_ub = tla.make_tensor_like(src_ptr, src_gm, tla.arch.RowMajor)
     idx_ub = tla.make_tensor_like(idx_ptr, idx_gm, tla.arch.RowMajor)

@@ -294,7 +294,7 @@ def kernel_func(...):
 
 在Host侧，根据原指针显式创建 `tla.Tensor`表示。例如：
 ```python
-import catlass as dsl
+import catlass.tla as tla
 
 # ...
 
@@ -313,15 +313,11 @@ with runtime_mod._eager_capture():
    )
 ```
 
-在 Device 侧，通过 `tla.utils.LocalmemAllocator()` 分配片上空间，以此直接取得各数据指针，例如在分配 L1A 和 L1B 大小时：
+在 Device 侧，通过 `tla.allocate()` 按元素数量和数据类型分配片上空间，直接取得 typed pointer。例如分配 L1A 和 L1B：
 ```python
-import catlass as dsl
+import catlass.tla as tla
 
 # ...
-allocator = tla.utils.LocalmemAllocator()
-
-l1a_ptr = allocator.allocate(L1_STAGE_BYTES, 512, tla.AddressSpace.l1)
-l1a_ptr = tla.recast_ptr(l1a_ptr, dtype=tla.Float32) # 按照 A 的类型
-l1b_ptr = allocator.allocate(L1_STAGE_BYTES, 512, tla.AddressSpace.l1)
-l1b_ptr = tla.recast_ptr(l1b_ptr, dtype=tla.Float32)
+l1a_ptr = tla.allocate(L1_M_DIM * L1_K_DIM, tla.Float32, tla.AddressSpace.l1, 512)
+l1b_ptr = tla.allocate(L1_K_DIM * L1_N_DIM, tla.Float32, tla.AddressSpace.l1, 512)
 ```
