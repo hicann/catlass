@@ -14,6 +14,9 @@ static constexpr unsigned int OverrideSaturationBit = 60;
 // CTRL[56] is the mask-control bit; it must be cleared on AIV (vector) kernels.
 static constexpr unsigned int MaskControlBit = 56;
 
+// CTRL[51] is the mmad M/N compute-direction priority bit.
+static constexpr unsigned int ComputeOrderBit = 51;
+
 class TlaPrologueEpiloguePass
     : public PassWrapper<TlaPrologueEpiloguePass, OperationPass<ModuleOp>> {
 public:
@@ -48,14 +51,21 @@ public:
       Operation *terminator = entry.getTerminator();
       Operation *lastBodyOp = terminator ? terminator->getPrevNode() : nullptr;
       if (auto barrier = llvm::dyn_cast_or_null<hivm::PipeBarrierOp>(lastBodyOp)) {
-        if (barrier.getPipe().getPipe() == hivm::PIPE::PIPE_ALL)
+        if (barrier.getPipe().getPipe() == hivm::PIPE::PIPE_ALL) {
+          // Already has a trailing PIPE_ALL barrier: restore CTRL[51] to the
+          // hardware default just before it.
+          builder.setInsertionPoint(barrier);
+          builder.create<hivm::SetCtrlOp>(loc, /*enable=*/false, ComputeOrderBit);
           continue;
+        }
       }
 
       if (terminator)
         builder.setInsertionPoint(terminator);
       else
         builder.setInsertionPointToEnd(&entry);
+      // Restore CTRL[51] to the hardware default, then add the trailing barrier.
+      builder.create<hivm::SetCtrlOp>(loc, /*enable=*/false, ComputeOrderBit);
       builder.create<hivm::PipeBarrierOp>(loc, pipeAll);
     }
   }

@@ -17,14 +17,19 @@
 namespace tla {
 namespace {
 
+// CTRL[51] selects the mmad M/N compute-direction priority
+static constexpr unsigned int ComputeOrderBit = 51;
+
   struct LowerTlaMmadPattern : public OpRewritePattern<::tla::MmadOp> {
     LowerTlaMmadPattern(MLIRContext *ctx,
                         DenseMap<Value, TensorDescriptor> &tensorDescriptorByValue,
                         SmallVectorImpl<Operation *> &toErase,
-                        DenseMap<Value, Value> &loweredMemrefByValue)
+                        DenseMap<Value, Value> &loweredMemrefByValue,
+                        bool funcLevelComputeOrderSet)
         : OpRewritePattern<::tla::MmadOp>(ctx),
           tensorDescriptorByValue(tensorDescriptorByValue), toErase(toErase),
-          loweredMemrefByValue(loweredMemrefByValue) {}
+          loweredMemrefByValue(loweredMemrefByValue),
+          funcLevelComputeOrderSet(funcLevelComputeOrderSet) {}
 
     LogicalResult matchAndRewrite(::tla::MmadOp op, PatternRewriter &rewriter) const override {
       if (op->getNumOperands() < 3)
@@ -183,6 +188,11 @@ namespace {
           *lhsRuntime, *rhsRuntime, *accRuntime,           mI64,
           nI64,        kI64,        initCVal,              unitFlagVal
       };
+      if (!funcLevelComputeOrderSet) {
+        auto computeOrderAttr = op->getAttrOfType<::tla::ComputeOrderAttr>("compute_order");
+        bool isNFirst = computeOrderAttr.getValue() == ComputeOrder::N_FIRST;
+        rewriter.create<hivm::SetCtrlOp>(op.getLoc(), isNFirst, ComputeOrderBit);
+      }
       rewriter.create<func::CallOp>(op.getLoc(), callee, operands);
       toErase.push_back(op.getOperation());
       return success();
@@ -192,6 +202,7 @@ namespace {
     DenseMap<Value, TensorDescriptor> &tensorDescriptorByValue;
     SmallVectorImpl<Operation *> &toErase;
     DenseMap<Value, Value> &loweredMemrefByValue;
+    bool funcLevelComputeOrderSet;
   };
 
   struct LowerTlaCopyPattern : public OpRewritePattern<::tla::CopyOp> {
@@ -513,8 +524,32 @@ public:
     }
 
     // Lower tla.mmad.
+    // CTRL[51] (mmad M/N compute-direction priority) is global and persists once
+    // set, so when every mmad in this function agrees on compute_order it is set
+    // once at the function entry. If the function mixes M_FIRST/N_FIRST the
+    // per-mmad path in LowerTlaMmadPattern is used instead.
+    std::optional<ComputeOrder> funcLevelComputeOrder;
+    bool computeOrderConflict = false;
+    root->walk([&](::tla::MmadOp op) {
+      auto attr = op->getAttrOfType<::tla::ComputeOrderAttr>("compute_order");
+      ComputeOrder order = attr.getValue();
+      if (funcLevelComputeOrder && *funcLevelComputeOrder != order)
+        computeOrderConflict = true;
+      else if (!funcLevelComputeOrder)
+        funcLevelComputeOrder = order;
+    });
+    bool funcLevelComputeOrderSet = false;
+    if (funcLevelComputeOrder && !computeOrderConflict) {
+      Block &entry = funcOp.getBody().front();
+      PatternRewriter builder(funcOp.getContext());
+      builder.setInsertionPointToStart(&entry);
+      bool isNFirst = *funcLevelComputeOrder == ComputeOrder::N_FIRST;
+      builder.create<hivm::SetCtrlOp>(funcOp.getLoc(), isNFirst, ComputeOrderBit);
+      funcLevelComputeOrderSet = true;
+    }
     LowerTlaMmadPattern lowerMmad(&getContext(), tensorDescriptorByValue, toErase,
-                                  lowering.loweredMemrefByValue);
+                                  lowering.loweredMemrefByValue,
+                                  funcLevelComputeOrderSet);
     SmallVector<Operation *, 16> mmadOps;
     root->walk([&](Operation *op) {
       if (llvm::isa<::tla::MmadOp>(op))

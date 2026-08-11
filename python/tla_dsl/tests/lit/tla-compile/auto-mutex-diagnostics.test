@@ -148,7 +148,7 @@ module {
     %c = "tla.make_tensor_like"(%pc, %gm) {layoutTag = "L0Clayout"} : (!tla.ptr<f32, l0c, 512>, !gm) -> !l0c
     %init = arith.constant true
     "tla.cube"() ({
-      tla.mmad %c, %a, %b, %init, %unit : !l0c, !l0a, !l0b, i1, i64
+      tla.mmad %c, %a, %b, %init, %unit {compute_order = #tla.compute_order<M_FIRST>} : !l0c, !l0a, !l0b, i1, i64
     }) : () -> ()
     tla.return
   }
@@ -176,7 +176,7 @@ module {
       scf.yield %two : i64
     }
     "tla.cube"() ({
-      tla.mmad %c, %a, %b, %init, %unit : !mixed_l0c, !mixed_l0a, !mixed_l0b, i1, i64
+      tla.mmad %c, %a, %b, %init, %unit {compute_order = #tla.compute_order<M_FIRST>} : !mixed_l0c, !mixed_l0a, !mixed_l0b, i1, i64
     }) : () -> ()
     tla.return
   }

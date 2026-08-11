@@ -111,7 +111,7 @@ def grouped_matmul_slice_m_kernel(
         l0_buf_idx = c0
         # Carry core offset across groups (C++ startCoreIdx) for load balance.
         start_core_idx = c0
-        core_num = tla.arch.block_dim()
+        core_num = tla.arch.block_num()
         core_idx = tla.arch.block_idx()
 
         for g in tla.range(c0, group_cnt, c1):
@@ -359,7 +359,10 @@ def grouped_matmul_slice_m_kernel(
                                     unit_flag = 0b10
                             init_c = True if k_l1 == 0 and k_l0 == 0 else False
                             tla.mmad(
-                                l0_c, l0_a, l0_b, init_c=init_c, unit_flag=unit_flag
+                                l0_c, l0_a, l0_b,
+                                init_c=init_c,
+                                unit_flag=unit_flag,
+                                compute_order=tla.params.ComputeOrder.N_FIRST,
                             )
                             if l0_buf_idx == c0:
                                 tla.set_flag(l0a0_copy_start)

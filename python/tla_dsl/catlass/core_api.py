@@ -65,7 +65,7 @@ from .types import (
     dtype_size_bytes,
     _replace_flat_leaves_in_tree,
 )
-from .params import CopyParams, CopyL0C2DstParams, QuantMode, L0C2UBMode, AtomicMode, MemType
+from .params import CopyParams, CopyL0C2DstParams, QuantMode, L0C2UBMode, AtomicMode, ComputeOrder, MemType
 
 
 _PIPE_VALUES = {
@@ -4591,16 +4591,13 @@ def mmad(
     rhs: TileLike,
     init_c: bool | Bool | None = None,
     unit_flag: IndexLike | None = None,
-    acc_type: DTypeLike | None = None,
+    compute_order: ComputeOrder = ComputeOrder.M_FIRST,
     loc: mlir_ir.Location | None = None,
     **extra_kwargs: Any,
 ) -> None:
     """Emit a matrix-multiply-accumulate operation over Tla tiles.
-
     ``init_c`` accepts only a Python ``bool`` or an SSA value of type ``i1``.
-    When ``acc_type`` is provided, it must be a concrete
-    :class:`~catlass.base_dsl.typing.Numeric` (e.g. ``tla.Float32``) or an ``mlir_ir.Type``;
-    string dtype tokens are not accepted.
+    ``compute_order`` selects the M/N compute-direction priority, defaulting to ``M_FIRST``.
     """
     if extra_kwargs:
         _op_error(
@@ -4635,14 +4632,16 @@ def mmad(
     else:
         raise TlaLoweringError("tla.mmad unit_flag must be a int")
 
-    if acc_type is not None:
-        _require_dtype("mmad", "acc_type", acc_type, 5)
-        acc_type_value = _dtype_to_str(acc_type).lower()
-        if acc_type_value not in {"f16", "bf16", "f32"}:
-            raise TlaLoweringError(
-                "tla.mmad attribute 'acc_type' expects dtype(s) [bf16, f16, f32], "
-                f"got [{acc_type_value}]"
-            )
+    if not isinstance(compute_order, ComputeOrder):
+        raise TlaLoweringError(
+            "tla.mmad attribute 'compute_order' must be a "
+            f"{ComputeOrder}, got {type(compute_order).__name__}"
+        )
+    ctx = loc.context if loc is not None else mlir_ir.Context.current
+    compute_order_attr = mlir_ir.Attribute.parse(
+        f"#tla.compute_order<{str(compute_order)}>", context=ctx
+    )
+
     acc_value = _as_value(acc)
     lhs_value = _as_value(lhs)
     rhs_value = _as_value(rhs)
@@ -4654,6 +4653,7 @@ def mmad(
         init_c_value,
         unit_flag_value,
         loc=loc,
+        compute_order=compute_order_attr,
     )
 
 

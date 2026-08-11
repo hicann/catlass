@@ -31,7 +31,7 @@ module {
     "tla.cube"() ({
       tla.copy %l1, %gm : !l1, !gm
       tla.copy %l0a, %l1 : !l0a, !l1
-      tla.mmad %l0c, %l0a, %l0b, %init, %unit : !l0c, !l0a, !l0b, i1, i64
+      tla.mmad %l0c, %l0a, %l0b, %init, %unit {compute_order = #tla.compute_order<M_FIRST>} : !l0c, !l0a, !l0b, i1, i64
       "tla.copy"(%ub, %l0c, %params) : (!ub, !l0c, !tla.copy_l0c2dst_params) -> ()
     }) : () -> ()
     "tla.vector"() ({
@@ -112,7 +112,7 @@ module {
     %unit64 = arith.extsi %unit32 : i32 to i64
     %params = "tla.CopyL0C2DstParams"() <{unit_flag = 3 : i64, relu_enable = false, quant_mode = #tla.quant_mode<NO_QUANT>, l0c2ub_mode = #tla.l0c2ub_mode<NO_SPLIT_VEC_0>}> : () -> !tla.copy_l0c2dst_params
     "tla.cube"() ({
-      tla.mmad %c, %a, %b, %init, %unit64 : !unit_l0c, !unit_l0a, !unit_l0b, i1, i64
+      tla.mmad %c, %a, %b, %init, %unit64 {compute_order = #tla.compute_order<M_FIRST>} : !unit_l0c, !unit_l0a, !unit_l0b, i1, i64
       "tla.copy"(%ub, %c, %params) : (!unit_ub, !unit_l0c, !tla.copy_l0c2dst_params) -> ()
     }) : () -> ()
     tla.return

@@ -362,6 +362,26 @@ def Tla_AtomicModeAttr : Tla_EnumAttr<"AtomicMode", "atomic_mode"> {
   }];
 }
 
+// ComputeOrder: mmad M/N compute-direction priority (CTRL[51]).
+// M_FIRST(0) is the hardware default; N_FIRST(1) flips the priority. Lowered to
+// hivm::SetCtrlOp in TlaCubeRegionPass; absence keeps the hardware default.
+def Tla_ComputeOrder_MFirst : I32EnumAttrCase<"M_FIRST", 0>;
+def Tla_ComputeOrder_NFirst : I32EnumAttrCase<"N_FIRST", 1>;
+def Tla_ComputeOrder_Enum : Tla_I32Enum<"ComputeOrder",
+  "mmad compute order (M/N direction priority)", [
+  Tla_ComputeOrder_MFirst, Tla_ComputeOrder_NFirst
+]>;
+def Tla_ComputeOrderAttr : Tla_EnumAttr<"ComputeOrder", "compute_order"> {
+  let parameters = (ins EnumParameter<Tla_ComputeOrder_Enum>:$value);
+  let assemblyFormat = "`<` params `>`";
+  let description = [{
+    mmad compute-direction priority, lowered to SPR.CTRL[51]:
+
+      - M_FIRST (0): M-direction priority (hardware default)
+      - N_FIRST (1): N-direction priority
+  }];
+}
+
 // SatMode: overflow behaviour of the cast (AVE `sat` BoolAttr).
 def Tla_SatMode_Unknown : I32EnumAttrCase<"unknown", 0>;
 def Tla_SatMode_Sat : I32EnumAttrCase<"sat", 1>;
@@ -831,8 +851,16 @@ def Tla_MmadOp : Tla_Op<"mmad", []> {
   let description = [{
     Perform a matrix multiply-accumulate on tensor views. Must be nested inside a
     ``tla.cube`` region.
+
+    ``compute_order`` is always supplied by the frontend. The lowering emits
+    ``hivm.set_ctrl`` on ``CTRL[51]`` (0 = ``M_FIRST``, 1 = ``N_FIRST``): when
+    every mmad in a function agrees on the value it is emitted once at the
+    function entry; if a function mixes values it is emitted ahead of each mmad
+    runtime call instead.
   }];
-  let arguments = (ins Tla_TensorType:$acc, Tla_TensorType:$lhs, Tla_TensorType:$rhs, I1:$init_c, I64:$unit_flag);
+  let arguments = (ins Tla_TensorType:$acc, Tla_TensorType:$lhs, Tla_TensorType:$rhs,
+                       I1:$init_c, I64:$unit_flag,
+                       Tla_ComputeOrderAttr:$compute_order);
   let assemblyFormat = [{
     $acc `,` $lhs `,` $rhs `,` $init_c `,` $unit_flag attr-dict `:`
     qualified(type($acc)) `,` qualified(type($lhs)) `,` qualified(type($rhs)) `,` type($init_c) `,` type($unit_flag)

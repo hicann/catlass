@@ -36,9 +36,6 @@ def test_wrapped_async_dsl_functions_are_rejected(decorator) -> None:
     with pytest.raises(SyntaxError, match=r"async .*not supported"):
         decorator(wrapper)
 
-_TYPE_CTX = mlir_ir.Context()
-F64_TYPE = mlir_ir.Type.parse("f64", _TYPE_CTX)
-
 
 def _operation_occurs_in_scf_if(mlir: str, operation: str) -> bool:
     stack: list[str] = []
@@ -161,15 +158,6 @@ def odd_allocator_recast_size() -> None:
 
 
 @tla.kernel
-def bad_mmad_acc_dtype(mem_a: tla.Tensor) -> None:
-    acc = tla.tile_view(mem_a, tla.make_shape(16, 16), tla.make_coord(0, 0))
-    lhs = tla.tile_view(mem_a, tla.make_shape(16, 16), tla.make_coord(0, 0))
-    rhs = tla.tile_view(mem_a, tla.make_shape(16, 16), tla.make_coord(0, 0))
-    with tla.cube():
-        tla.mmad(acc, lhs, rhs, acc_type=F64_TYPE)
-
-
-@tla.kernel
 def cube_mmad_without_region_kernel(
     mem_a: tla.Tensor, mem_b: tla.Tensor, mem_c: tla.Tensor
 ) -> None:
@@ -178,6 +166,30 @@ def cube_mmad_without_region_kernel(
     acc = tla.tile_view(mem_c, tla.make_shape(16, 16), tla.make_coord(0, 0))
     with tla.cube():
         tla.mmad(acc, lhs, rhs, init_c=False)
+
+
+@tla.kernel
+def mmad_compute_order_nfirst_kernel(
+    lhs: tla.Tensor, rhs: tla.Tensor, acc: tla.Tensor
+) -> None:
+    with tla.cube():
+        tla.mmad(acc, lhs, rhs, init_c=True, compute_order=tla.params.ComputeOrder.N_FIRST)
+
+
+@tla.kernel
+def mmad_default_compute_order_kernel(
+    lhs: tla.Tensor, rhs: tla.Tensor, acc: tla.Tensor
+) -> None:
+    with tla.cube():
+        tla.mmad(acc, lhs, rhs, init_c=True)
+
+
+@tla.kernel
+def mmad_bad_compute_order_kernel(
+    lhs: tla.Tensor, rhs: tla.Tensor, acc: tla.Tensor
+) -> None:
+    with tla.cube():
+        tla.mmad(acc, lhs, rhs, init_c=True, compute_order="N_FIRST")
 
 
 @tla.kernel
@@ -463,13 +475,24 @@ def test_allocator_rejects_gm_addrspace_for_allocate() -> None:
         _ = bad_allocator_gm_addrspace.dump_mlir(type_args=(mem,))
 
 
-def test_mmad_rejects_unsupported_acc_type() -> None:
-    with runtime_mod._eager_capture():
-        mem = tla.Tensor(
-            tla.make_shape(1, 2), tla.Float16, origin_shape=tla.make_shape(1, 2)
-        )
+def test_mmad_compute_order_emits_attr() -> None:
+    ta, tb, tc = _mmad_tensor_args()
+    mlir = mmad_compute_order_nfirst_kernel.dump_mlir(type_args=(ta, tb, tc))
+    assert "tla.mmad" in mlir
+    assert "compute_order = #tla.compute_order<N_FIRST>" in mlir
+
+
+def test_mmad_default_compute_order_is_mfirst() -> None:
+    ta, tb, tc = _mmad_tensor_args()
+    mlir = mmad_default_compute_order_kernel.dump_mlir(type_args=(ta, tb, tc))
+    assert "tla.mmad" in mlir
+    assert "compute_order = #tla.compute_order<M_FIRST>" in mlir
+
+
+def test_mmad_rejects_invalid_compute_order() -> None:
+    ta, tb, tc = _mmad_tensor_args()
     with pytest.raises(TlaLoweringError):
-        _ = bad_mmad_acc_dtype.dump_mlir(type_args=(mem,))
+        _ = mmad_bad_compute_order_kernel.dump_mlir(type_args=(ta, tb, tc))
 
 
 def test_mmad_without_region_lowers() -> None:

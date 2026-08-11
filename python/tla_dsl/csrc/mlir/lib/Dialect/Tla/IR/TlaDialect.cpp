@@ -201,6 +201,20 @@ Attribute TlaDialect::parseAttribute(DialectAsmParser &parser, Type type) const 
     return ::tla::StoreDistAttr::get(getContext(), *symbolized);
   }
 
+  if (attrTag == "compute_order") {
+    if (parser.parseLess())
+      return {};
+    StringRef orderKeyword;
+    if (parser.parseKeyword(&orderKeyword) || parser.parseGreater())
+      return {};
+    auto symbolized = ::symbolizeComputeOrder(orderKeyword);
+    if (!symbolized) {
+      parser.emitError(parser.getNameLoc()) << "invalid tla.compute_order value: " << orderKeyword;
+      return {};
+    }
+    return ::tla::ComputeOrderAttr::get(getContext(), *symbolized);
+  }
+
   StringRef mnemonic = attrTag;
   Attribute value;
   OptionalParseResult parseResult = generatedAttributeParser(parser, &mnemonic, type, value);

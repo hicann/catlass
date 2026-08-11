@@ -23,6 +23,14 @@ class L0C2UBMode(enum.IntEnum):
     def __str__(self):
         return self.name  # "NO_SPLIT_VEC_0"/..
 
+class ComputeOrder(enum.IntEnum):
+    M_FIRST = 0
+    N_FIRST = 1
+
+    def __str__(self):
+        return self.name  # "M_FIRST"/"N_FIRST"
+
+
 class AtomicMode(enum.Enum):
     """Atomic operation mode"""
     

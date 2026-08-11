@@ -136,7 +136,7 @@ def batched_matmul_kernel(
         l0_buf_idx = c0
 
         block_range = tla.range(
-            tla.arch.block_idx(), total_blocks, tla.arch.block_dim()
+            tla.arch.block_idx(), total_blocks, tla.arch.block_num()
         )
         for loop_idx in block_range:
             batch_idx = loop_idx // mn_blocks
@@ -291,7 +291,12 @@ def batched_matmul_kernel(
                         else:
                             unit_flag = 0b10
                     init_c = True if k_l1 == 0 and k_l0 == 0 else False
-                    tla.mmad(l0_c, l0_a, l0_b, init_c=init_c, unit_flag=unit_flag)
+                    tla.mmad(
+                        l0_c, l0_a, l0_b,
+                        init_c=init_c,
+                        unit_flag=unit_flag,
+                        compute_order=tla.params.ComputeOrder.N_FIRST,
+                    )
                     if l0_buf_idx == c0:
                         tla.set_flag(l0a0_copy_start)
                         tla.set_flag(l0b0_copy_start)
