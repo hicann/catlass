@@ -14,14 +14,14 @@ Function: Sets the ping-pong buffer for L1 and L0A/B in the A2 architecture.
 Parameters:
 
 - `STAGES`: number of buffers in a multi-buffer scenario.
-- `ENABLE_UINT_FLAG`: indicates whether to enable `uintflag` optimization and fine-grained parallelism between MMAD computation and the data transfers of L0C results back to GM.
+- `ENABLE_UNIT_FLAG`: indicates whether to enable `unitflag` optimization and fine-grained parallelism between MMAD computation and the data transfers of L0C results back to GM.
 
 Sample code:
 
 ```c++
 struct MmadAtlasA2Pingpong {
     static constexpr uint32_t STAGES = 2;
-    static constexpr bool ENABLE_UINT_FLAG = true;
+    static constexpr bool ENABLE_UNIT_FLAG = true;
 };
 ```
 
@@ -34,7 +34,7 @@ Function: Uses the ping-pong buffer for L1 and L0A/B in the A2 architecture, and
 Parameters:
 
 - `STAGES`: number of buffers in a multi-buffer scenario.
-- `ENABLE_UINT_FLAG`: indicates whether to enable `uintflag` optimization and fine-grained parallelism between MMAD computation and the data transfers of L0C results back to GM.
+- `ENABLE_UNIT_FLAG`: indicates whether to enable `unitflag` optimization and fine-grained parallelism between MMAD computation and the data transfers of L0C results back to GM.
 - `ENABLE_SHUFFLE_K`: indicates whether to enable the ShuffleK policy.
 
 Sample code:
@@ -42,7 +42,7 @@ Sample code:
 ```c++
 struct MmadAtlasA2Preload {
     static constexpr uint32_t STAGES = 2;
-    static constexpr bool ENABLE_UINT_FLAG = true;
+    static constexpr bool ENABLE_UNIT_FLAG = true;
     static constexpr bool ENABLE_SHUFFLE_K = true;
 };
 ```
@@ -60,7 +60,7 @@ Parameters:
 - `L0A_STAGES`: specifies the number of buffers enabled for L0A. The following condition must be met: L0TileShape's (M\*K\*Number of bytes of the element data type of matrix A) <= L0A size
 - `L0B_STAGES`: specifies the number of buffers enabled for L0B. The following condition must be met: (K\*N\*Number of bytes of the element data type of matrix B) <= L0B size
 - `L0C_STAGES`: specifies the number of buffers enabled for L0C. The following condition must be met: (M\*N\*Number of bytes of the Mmad calculation data type) <= L0C size
-- `ENABLE_UINT_FLAG`: indicates whether to enable `uintflag` optimization and fine-grained parallelism between MMAD computation and the data transfers of L0C results back to GM.
+- `ENABLE_UNIT_FLAG`: indicates whether to enable `unitflag` optimization and fine-grained parallelism between MMAD computation and the data transfers of L0C results back to GM.
 - `ENABLE_SHUFFLE_K`: indicates whether to enable the ShuffleK policy.
 
 Sample code:
@@ -72,7 +72,7 @@ struct MmadAtlasA2PreloadAsync {
     static constexpr uint32_t L0A_STAGES = 2;
     static constexpr uint32_t L0B_STAGES = 2;
     static constexpr uint32_t L0C_STAGES = 1;
-    static constexpr bool ENABLE_UINT_FLAG = false;
+    static constexpr bool ENABLE_UNIT_FLAG = false;
     static constexpr bool ENABLE_SHUFFLE_K = true;
 };
 ```
@@ -90,7 +90,7 @@ Parameters:
 - `L0A_STAGES`: specifies the number of buffers enabled for L0A. The following condition must be met: (M\*K\*Number of bytes of the element data type of matrix A) <= L0A size
 - `L0B_STAGES`: specifies the number of buffers enabled for L0B. The following condition must be met: (K\*N\*Number of bytes of the element data type of matrix B) <= L0B size
 - `L0C_STAGES`: specifies the number of buffers enabled for L0C. The following condition must be met: (M\*N\*Number of bytes of the Mmad calculation data type) <= L0C size
-- `ENABLE_UINT_FLAG`: indicates whether to enable `uintflag` optimization and fine-grained parallelism between MMAD computation and the data transfers of L0C results back to GM.
+- `ENABLE_UNIT_FLAG`: indicates whether to enable `unitflag` optimization and fine-grained parallelism between MMAD computation and the data transfers of L0C results back to GM.
 - `ENABLE_SHUFFLE_K`: indicates whether to enable the ShuffleK policy.
 
 Sample code:
@@ -102,7 +102,7 @@ struct MmadAtlasA2PreloadAsyncWithCallback {
     static constexpr uint32_t L0A_STAGES = 2;
     static constexpr uint32_t L0B_STAGES = 2;
     static constexpr uint32_t L0C_STAGES = 1;
-    static constexpr bool ENABLE_UINT_FLAG = false;
+    static constexpr bool ENABLE_UNIT_FLAG = false;
     static constexpr bool ENABLE_SHUFFLE_K = true;
 };
 ```

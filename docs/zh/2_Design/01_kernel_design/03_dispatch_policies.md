@@ -14,14 +14,14 @@ DispatchPolicy是BlockMmad的一个重要模板参数，各个DispatchPolicy定�
 参数说明：
 
 - `STAGES`：多Buffer场景的Buffer片数。
-- `ENABLE_UINT_FLAG`：用于表示是否启用uintflag优化，启用Mmad运算与L0C结果拷贝到全局内存的细粒度并行。
+- `ENABLE_UNIT_FLAG`：用于表示是否启用unitflag优化，启用Mmad运算与L0C结果拷贝到全局内存的细粒度并行。
 
 示例代码：
 
 ```cpp
 struct MmadAtlasA2Pingpong {
     static constexpr uint32_t STAGES = 2;
-    static constexpr bool ENABLE_UINT_FLAG = true;
+    static constexpr bool ENABLE_UNIT_FLAG = true;
 };
 ```
 
@@ -34,7 +34,7 @@ struct MmadAtlasA2Pingpong {
 参数说明：
 
 - `STAGES`：多Buffer场景的Buffer片数。
-- `ENABLE_UINT_FLAG`：用于表示是否启用uintflag优化，启用Mmad运算与L0C结果拷贝到全局内存的细粒度并行。
+- `ENABLE_UNIT_FLAG`：用于表示是否启用unitflag优化，启用Mmad运算与L0C结果拷贝到全局内存的细粒度并行。
 - `ENABLE_SHUFFLE_K`：用于表示是否启用shufflek策略。
 
 示例代码：
@@ -42,7 +42,7 @@ struct MmadAtlasA2Pingpong {
 ```cpp
 struct MmadAtlasA2Preload {
     static constexpr uint32_t STAGES = 2;
-    static constexpr bool ENABLE_UINT_FLAG = true;
+    static constexpr bool ENABLE_UNIT_FLAG = true;
     static constexpr bool ENABLE_SHUFFLE_K = true;
 };
 ```
@@ -60,7 +60,7 @@ struct MmadAtlasA2Preload {
 - `L0A_STAGES`：用于表示L0A开的Buffer数量，需要满足L0TileShape的M\*K\*矩阵A元素数据类型字节数<=L0A大小。
 - `L0B_STAGES`：用于表示L0B开的Buffer数量，需要满足L0TileShape的K\*N\*矩阵B元素数据类型字节数<=L0B大小。
 - `L0C_STAGES`：用于表示L0C开的Buffer数量，需要满足L0TileShape的M\*N\*Mmad计算数据类型字节数<=L0C大小。
-- `ENABLE_UINT_FLAG`：用于表示是否启用uintflag优化，启用Mmad运算与L0C结果拷贝到全局内存的细粒度并行。
+- `ENABLE_UNIT_FLAG`：用于表示是否启用unitflag优化，启用Mmad运算与L0C结果拷贝到全局内存的细粒度并行。
 - `ENABLE_SHUFFLE_K`：用于表示是否启用shufflek策略。
 
 示例代码：
@@ -72,7 +72,7 @@ struct MmadAtlasA2PreloadAsync {
     static constexpr uint32_t L0A_STAGES = 2;
     static constexpr uint32_t L0B_STAGES = 2;
     static constexpr uint32_t L0C_STAGES = 1;
-    static constexpr bool ENABLE_UINT_FLAG = false;
+    static constexpr bool ENABLE_UNIT_FLAG = false;
     static constexpr bool ENABLE_SHUFFLE_K = true;
 };
 ```
@@ -90,7 +90,7 @@ struct MmadAtlasA2PreloadAsync {
 - `L0A_STAGES`：用于表示L0A开的Buffer数量，需要满足L0TileShape的M\*K\*矩阵A元素数据类型字节数<=L0A大小。
 - `L0B_STAGES`：用于表示L0B开的Buffer数量，需要满足L0TileShape的K\*N\*矩阵B元素数据类型字节数<=L0B大小。
 - `L0C_STAGES`：用于表示L0C开的Buffer数量，需要满足L0TileShape的M\*N\*Mmad计算数据类型字节数<=L0C大小。
-- `ENABLE_UINT_FLAG`：用于表示是否启用uintflag优化，启用Mmad运算与L0C结果拷贝到全局内存的细粒度并行。
+- `ENABLE_UNIT_FLAG`：用于表示是否启用unitflag优化，启用Mmad运算与L0C结果拷贝到全局内存的细粒度并行。
 - `ENABLE_SHUFFLE_K`：用于表示是否启用shufflek策略。
 
 示例代码：
@@ -102,7 +102,7 @@ struct MmadAtlasA2PreloadAsyncWithCallback {
     static constexpr uint32_t L0A_STAGES = 2;
     static constexpr uint32_t L0B_STAGES = 2;
     static constexpr uint32_t L0C_STAGES = 1;
-    static constexpr bool ENABLE_UINT_FLAG = false;
+    static constexpr bool ENABLE_UNIT_FLAG = false;
     static constexpr bool ENABLE_SHUFFLE_K = true;
 };
 ```
