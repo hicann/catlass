@@ -2345,10 +2345,23 @@ static void lowerSimtTripleOpsIn(func::FuncOp vf) {
   }
 }
 
-// Address space the SIMT ABI addresses device buffers through, on both the
+// Address spaces the SIMT ABI addresses device buffers through, on both the
 // launch's !llvm.ptr operands and the outlined function's memref parameters.
-// The two must agree or hivmc-a5 rejects the call signature.
-static constexpr int kSimtPointerAddressSpace = 1;
+// The two must agree or hivmc-a5 rejects the call signature. These are the
+// integer forms: #hivm.address_space<...> lowers to a descriptor struct rather
+// than a bare pointer, which does not match what launch_func passes.
+static constexpr int kSimtGmAddressSpace = 1;
+static constexpr int kSimtUbAddressSpace = 6;
+
+// Integer address space for a descriptor's address space name, or failure for
+// one a SIMT vector function cannot reach.
+static std::optional<int> simtAddressSpaceFor(StringRef addrspace) {
+  if (addrspace == "gm")
+    return kSimtGmAddressSpace;
+  if (addrspace == "ub")
+    return kSimtUbAddressSpace;
+  return std::nullopt;
+}
 
 // tla.simt_add is the per-thread scalar counterpart of tla.add: no vector SSA,
 // no AVE instruction, just one element plus one element. It carries its own op
@@ -2371,12 +2384,138 @@ static void lowerSimtAddIn(func::FuncOp vf) {
 }
 
 // Raw device pointer for a memref, the three steps the SIMT ABI expects.
-static Value memrefToRawPointer(OpBuilder &builder, Location loc, Value memref) {
+static Value memrefToRawPointer(OpBuilder &builder, Location loc, Value memref,
+                                int addressSpace) {
   Value index = builder.create<mlir::memref::ExtractAlignedPointerAsIndexOp>(loc, memref);
   Value asI64 = builder.create<arith::IndexCastOp>(loc, builder.getI64Type(), index);
-  auto ptrType =
-      LLVM::LLVMPointerType::get(builder.getContext(), kSimtPointerAddressSpace);
+  auto ptrType = LLVM::LLVMPointerType::get(builder.getContext(), addressSpace);
   return builder.create<LLVM::IntToPtrOp>(loc, ptrType, asI64);
+}
+
+// tla.arch.sync_threads is a block-wide barrier between the threads of a SIMT
+// vector function; it maps straight onto the regbase intrinsic.
+static void lowerSimtSyncThreadsIn(func::FuncOp vf) {
+  SmallVector<::tla::SyncThreadsOp, 4> ops;
+  vf.walk([&](::tla::SyncThreadsOp op) { ops.push_back(op); });
+  for (::tla::SyncThreadsOp op : ops) {
+    OpBuilder builder(op);
+    builder.create<hivm_regbaseintrins::SyncThreadsOp>(op.getLoc());
+    op.erase();
+  }
+}
+
+// Element offset of a descriptor's view within its allocation, or a null Value
+// when the view starts at the allocation's own base.
+//
+// The SIMT launch ABI passes a bare pointer -- there is no descriptor on the
+// other side -- so a view that starts partway in has to have that start folded
+// into the pointer. The formula is the one TlaLowerScalarAccessPass uses for the
+// general path (coord[0]*stride[0] + coord[1]*stride[1], in elements); the two
+// must agree or the same tensor means different things inside and outside a
+// SIMT region.
+static bool isZeroConstantValue(Value value) {
+  std::optional<int64_t> constant = getConstantIntValue(value);
+  return constant && *constant == 0;
+}
+
+static FailureOr<Value> simtViewElementOffset(OpBuilder &builder, Location loc,
+                                              const TensorDescriptor &desc,
+                                              Operation *diagnosticOp) {
+  if (isZeroConstantValue(desc.coord[0]) && isZeroConstantValue(desc.coord[1]))
+    return Value();
+
+  // No contiguity requirement: linearizeSimtAccessesIn folds the tensor's real
+  // strides into every index, so the pointer only has to carry the view's
+  // *start*. A strided view -- tile_view of a wider parent at a non-zero
+  // coordinate -- is handled by the two together: this offset moves the base,
+  // and the linearized index walks the rows.
+
+  Value rowOffset = builder.createOrFold<arith::MulIOp>(loc, desc.coord[0], desc.stride[0]);
+  Value colOffset = builder.createOrFold<arith::MulIOp>(loc, desc.coord[1], desc.stride[1]);
+  return builder.createOrFold<arith::AddIOp>(loc, rowOffset, colOffset);
+}
+
+// Collapse a rank-2 per-thread access into a single linear index, using the
+// tensor's own strides.
+//
+// The SIMT launch passes one bare pointer per buffer and nothing else, so a
+// memref parameter's strides are implicit and packed. A view whose rows are not
+// packed -- tile_view of a wider parent, say (2,4) out of (2,8) where the rows
+// are 8 apart -- cannot be described that way: memref<2x4xf32> addresses [1,2]
+// as 1*4+2 instead of 1*8+2, silently reading the wrong row.
+//
+// Rewriting t[i, j] to flat[i*stride0 + j*stride1] removes the problem: the
+// parameter stays flat and the real strides live in the arithmetic. Constant
+// indices fold, so the common cases cost nothing.
+static LogicalResult linearizeSimtAccessesIn(::tla::VecFuncOp vecFuncOp) {
+  SmallVector<Operation *, 8> multiIndex;
+  vecFuncOp.getBody().walk([&](Operation *op) {
+    if (!isa<::tla::SimtLoadOp, ::tla::SimtStoreOp>(op))
+      return;
+    unsigned indexCount = op->getNumOperands() - (isa<::tla::SimtStoreOp>(op) ? 2 : 1);
+    if (indexCount > 1) {
+      multiIndex.push_back(op);
+      return;
+    }
+    // A rank-1 view can be strided too (every other element, say). Its single
+    // index still has to be scaled, or t[1] reads the neighbour instead.
+    if (indexCount == 1) {
+      FailureOr<ParsedTensorInfo> info = parseTensorInfo(op->getOperand(0).getType());
+      if (succeeded(info) && !info->strides.empty() &&
+          !ShapedType::isDynamic(info->strides.back()) && info->strides.back() != 1)
+        multiIndex.push_back(op);
+    }
+  });
+
+  for (Operation *op : multiIndex) {
+    bool isStore = isa<::tla::SimtStoreOp>(op);
+    Value tensor = op->getOperand(0);
+    FailureOr<ParsedTensorInfo> info = parseTensorInfo(tensor.getType());
+    if (failed(info) || info->strides.empty())
+      return op->emitOpError(
+                 "cannot linearize a per-thread access: the tensor's strides are unknown"),
+             failure();
+    for (int64_t stride : info->strides)
+      if (ShapedType::isDynamic(stride))
+        return op->emitOpError(
+                   "cannot linearize a per-thread access: this tensor has a dynamic "
+                   "stride, and the SIMT launch passes no stride alongside the pointer"),
+               failure();
+
+    OpBuilder builder(op);
+    Location loc = op->getLoc();
+    // operands are: tensor, indices..., (value for a store)
+    OperandRange indexRange = op->getOperands().drop_front(1);
+    if (isStore)
+      indexRange = indexRange.drop_back(1);
+    SmallVector<Value, 2> indices(indexRange.begin(), indexRange.end());
+    if (indices.size() != info->strides.size())
+      return op->emitOpError("per-thread access has ")
+                 << indices.size() << " indices but the tensor has "
+                 << info->strides.size() << " strides",
+             failure();
+
+    Value linear;
+    for (auto [dim, index] : llvm::enumerate(indices)) {
+      Value scaled = index;
+      if (info->strides[dim] != 1) {
+        Value stride = builder.create<arith::ConstantIndexOp>(loc, info->strides[dim]);
+        scaled = builder.createOrFold<arith::MulIOp>(loc, index, stride);
+      }
+      linear = linear ? builder.createOrFold<arith::AddIOp>(loc, linear, scaled) : scaled;
+    }
+
+    if (isStore) {
+      builder.create<::tla::SimtStoreOp>(loc, tensor, ValueRange{linear},
+                                         op->getOperands().back());
+    } else {
+      Value loaded = builder.create<::tla::SimtLoadOp>(loc, op->getResult(0).getType(),
+                                                       tensor, ValueRange{linear});
+      op->getResult(0).replaceAllUsesWith(loaded);
+    }
+    op->erase();
+  }
+  return success();
 }
 
 class LowerSimtVecFuncPattern : public OpRewritePattern<::tla::VecFuncOp> {
@@ -2422,6 +2561,9 @@ public:
     OpBuilder callBuilder(vecFuncOp);
     SmallVector<Value, 4> baseMemrefs;
     SmallVector<Type, 4> paramTypes;
+    SmallVector<int, 4> addressSpaces;
+    SmallVector<Value, 4> viewOffsets;   // null == view starts at the base
+    SmallVector<Type, 4> elementTypes;
     for (auto [operandIndex, tensor] : llvm::enumerate(captures.tensors)) {
       auto descOp = tensor.getDefiningOp<::tla::TensorDescOp>();
       if (!descOp)
@@ -2433,8 +2575,10 @@ public:
 
       // Address space and static-shape legality were already reported by
       // checkSimtRegionCaptures before the driver ran; bail quietly here.
-      if (desc->addrspace != "gm")
+      std::optional<int> addressSpace = simtAddressSpaceFor(desc->addrspace);
+      if (!addressSpace)
         return failure();
+      addressSpaces.push_back(*addressSpace);
 
       FailureOr<Value> base = getOrMaterializeDescriptorBaseMemref(
           callBuilder, loc, *desc, vecFuncOp.getOperation(), baseMemrefCache);
@@ -2446,26 +2590,63 @@ public:
                    << (*base).getType(),
                failure();
       baseMemrefs.push_back(*base);
-      // Parameters are flat rank-1 views of the buffer: only the pointer is
-      // actually passed, so the ABI memref's own rank/layout (4-D dynamic for a
-      // GM tensor, 1-D static for a UB allocation) does not carry over.
-      int64_t extent = ShapedType::kDynamic;
-      if (baseType.getRank() == 1 && !baseType.isDynamicDim(0))
-        extent = baseType.getDimSize(0);
-      else if (std::optional<int64_t> constant = getConstantIntValue(desc->shape[1]))
-        extent = *constant;
+      elementTypes.push_back(baseType.getElementType());
 
+      // Fold the view's start into the pointer we hand the launch, so two views
+      // of one allocation stay distinguishable on the other side.
+      FailureOr<Value> viewOffset =
+          simtViewElementOffset(callBuilder, loc, *desc, vecFuncOp.getOperation());
+      if (failed(viewOffset))
+        return failure();
+      viewOffsets.push_back(*viewOffset);
+      // Parameters are always flat. One bare pointer per buffer crosses the
+      // launch ABI, so a memref's implicit packed strides are the only ones it
+      // could ever express; rank-2 accesses were linearized above with the
+      // tensor's real strides, so the parameter only has to *span* the view --
+      // the largest index that arithmetic can produce, plus one.
+      FailureOr<ParsedTensorInfo> info = parseTensorInfo(tensor.getType());
+      if (failed(info))
+        return failure();
+      size_t logicalRank = info->shape.size();
+      if (logicalRank != 1 && logicalRank != 2)
+        return vecFuncOp.emitOpError()
+                   << "a SIMT tla.vec.func captures tensors of logical rank 1 or 2, got "
+                   << logicalRank,
+               failure();
+
+      int64_t extent = ShapedType::kDynamic;
+      if (logicalRank == 2 && info->strides.size() == 2 &&
+          !ShapedType::isDynamic(info->shape[0]) && !ShapedType::isDynamic(info->shape[1]) &&
+          !ShapedType::isDynamic(info->strides[0]) &&
+          !ShapedType::isDynamic(info->strides[1])) {
+        // A strided view reaches past rows*cols: its last row starts at
+        // (rows-1)*stride0, so bounding by rows*cols would cut the buffer short
+        // and the verifier would reject the very access we just linearized.
+        extent = (info->shape[0] - 1) * info->strides[0] +
+                 (info->shape[1] - 1) * info->strides[1] + 1;
+      } else if (*viewOffset) {
+        // The pointer now starts at the view, so the parameter must be bounded
+        // by the view too: keeping the allocation's extent would let an index
+        // run off the end of the buffer.
+        if (std::optional<int64_t> constant = getConstantIntValue(desc->shape[1]))
+          extent = *constant;
+      } else if (baseType.getRank() == 1 && !baseType.isDynamicDim(0)) {
+        extent = baseType.getDimSize(0);
+      } else if (std::optional<int64_t> constant = getConstantIntValue(desc->shape[1])) {
+        extent = *constant;
+      }
       if (ShapedType::isDynamic(extent))
         return failure();
+      SmallVector<int64_t, 1> paramShape{extent};
       (void)operandIndex;
       // The parameter must carry an *integer* address space, not
       // #hivm.address_space<...>: only then does memref-to-llvm lower it to a
       // bare pointer matching the !llvm.ptr the launch passes. With the hivm
       // attribute it becomes a descriptor struct and hivmc-a5 aborts with
       // "Calling a function with a bad signature!".
-      paramTypes.push_back(MemRefType::get({extent}, baseType.getElementType(),
+      paramTypes.push_back(MemRefType::get(paramShape, baseType.getElementType(),
                                            MemRefLayoutAttrInterface{},
-                                           rewriter.getI64IntegerAttr(kSimtPointerAddressSpace)));
+                                           rewriter.getI64IntegerAttr(*addressSpace)));
     }
 
     // ---- the outlined vector function ----
@@ -2511,11 +2692,23 @@ public:
                          hivm_regbaseintrins::BlockDimYOp,
                          hivm_regbaseintrins::BlockDimZOp>(vf);
     lowerSimtAddIn(vf);
+    lowerSimtSyncThreadsIn(vf);
 
     // ---- the launch ----
     SmallVector<Value, 4> launchArgs;
-    for (Value base : baseMemrefs)
-      launchArgs.push_back(memrefToRawPointer(callBuilder, loc, base));
+    for (auto [base, addressSpace, viewOffset, elementType] :
+         llvm::zip_equal(baseMemrefs, addressSpaces, viewOffsets, elementTypes)) {
+      Value pointer = memrefToRawPointer(callBuilder, loc, base, addressSpace);
+      if (viewOffset) {
+        Value index = callBuilder.createOrFold<arith::IndexCastOp>(
+            loc, callBuilder.getI64Type(), viewOffset);
+        auto pointerType =
+            LLVM::LLVMPointerType::get(callBuilder.getContext(), addressSpace);
+        pointer = callBuilder.create<LLVM::GEPOp>(loc, pointerType, elementType, pointer,
+                                                  ValueRange{index});
+      }
+      launchArgs.push_back(pointer);
+    }
     auto i64 = callBuilder.getI64Type();
     Value tx = callBuilder.create<arith::ConstantOp>(loc, i64,
                                                      callBuilder.getI64IntegerAttr(blockDimX));
@@ -3075,6 +3268,21 @@ static bool isIllegalVecFuncArchOp(Operation *op, StringRef &dslName) {
 // of these are diagnosed far more clearly here than by the LLVM assertions
 // hivmc-a5 would otherwise raise. Notes are dropped by the frontend's
 // diagnostic handler, so each message is self-contained.
+// Rank-2 index folding, run once per function *before* the rewrite driver.
+// It must not happen inside a pattern: mutating the tla.vec.func body with a
+// plain builder while the greedy driver is matching on it leaves freed ops on
+// the driver's worklist, which segfaults rather than failing cleanly.
+static LogicalResult linearizeSimtAccesses(func::FuncOp funcOp) {
+  LogicalResult result = success();
+  funcOp.walk([&](::tla::VecFuncOp vecFuncOp) {
+    if (!isSimtVecFunc(vecFuncOp))
+      return;
+    if (failed(linearizeSimtAccessesIn(vecFuncOp)))
+      result = failure();
+  });
+  return result;
+}
+
 static LogicalResult checkSimtRegionCaptures(func::FuncOp funcOp) {
   LogicalResult result = success();
   funcOp.walk([&](::tla::VecFuncOp vecFuncOp) {
@@ -3095,7 +3303,7 @@ static LogicalResult checkSimtRegionCaptures(func::FuncOp funcOp) {
       FailureOr<TensorDescriptor> desc = descriptorFromTensorDescOp(descOp);
       if (failed(desc))
         continue;
-      if (desc->addrspace != "gm")
+      if (!simtAddressSpaceFor(desc->addrspace))
         nonGm.push_back((Twine("#") + Twine(operandIndex + 1) + " in '" +
                          desc->addrspace + "'")
                             .str());
@@ -3115,13 +3323,11 @@ static LogicalResult checkSimtRegionCaptures(func::FuncOp funcOp) {
     // rather than let the kernel produce wrong answers.
     if (!nonGm.empty()) {
       vecFuncOp.emitOpError()
-          << "a SIMT tla.vec.func can only address GM, but " << nonGm.size() << " of "
-          << captures.tensors.size() << " tensor(s) used by this region are not: "
-          << llvm::join(nonGm, ", ")
-          << ". An outlined SIMT vector function receives GM pointers only; a non-GM "
-             "operand has no base established and reads as zeros. Index the GM tensor "
-             "directly inside tla.vec.func instead of staging it through tla.allocate "
-             "+ tla.copy";
+          << "a SIMT tla.vec.func can only address GM or UB, but " << nonGm.size()
+          << " of " << captures.tensors.size()
+          << " tensor(s) used by this region are not: " << llvm::join(nonGm, ", ")
+          << ". Buffers reach an outlined SIMT vector function as raw pointers, and "
+             "only the GM and UB address spaces have a SIMT pointer form";
       result = failure();
     }
     // One pointer per buffer crosses the launch ABI, so the parameter must be a
@@ -3207,7 +3413,8 @@ public:
       if (coreType != hivm::TFuncCoreType::AIV && coreType != hivm::TFuncCoreType::MIX)
         continue;
       if (failed(checkNoArchOpsInVecFunc(funcOp)) ||
-          failed(checkSimtRegionCaptures(funcOp))) {
+          failed(checkSimtRegionCaptures(funcOp)) ||
+          failed(linearizeSimtAccesses(funcOp))) {
         signalPassFailure();
         return;
       }

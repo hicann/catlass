@@ -5805,6 +5805,18 @@ def arch_thread_idx(
 
 
 @dsl_user_op
+def arch_sync_threads(*, loc: mlir_ir.Location | None = None) -> None:
+    """Barrier across the threads of the enclosing SIMT ``tla.vec.func``."""
+    _require_frontend_state("arch.sync_threads")
+    if not _runtime._in_simt_vec_func():
+        _op_error(
+            "arch.sync_threads",
+            "is only available inside a tla.vec.func with mode='simt'",
+        )
+    _tla_ops_gen.arch_sync_threads(loc=loc)
+
+
+@dsl_user_op
 def arch_block_num(*, loc: mlir_ir.Location | None = None) -> Int32:
     """Return the number of blocks (AI cores) in the launch (``Int32``).
 
@@ -6016,6 +6028,7 @@ _require_generated("arch_thread_idx")
 _require_generated("simt_add")
 _require_generated("simt_load")
 _require_generated("simt_store")
+_require_generated("arch_sync_threads")
 _require_generated("inttoptr")
 _require_generated("recast_ptr")
 
@@ -6025,6 +6038,7 @@ arch._set("sub_block_idx", arch_sub_block_idx)
 arch._set("block_num", arch_block_num)
 arch._set("thread_block_dim", arch_thread_block_dim)
 arch._set("thread_idx", arch_thread_idx)
+arch._set("sync_threads", arch_sync_threads)
 arch._set("L1", _runtime.utils.L1)
 arch._set("L0A", _runtime.utils.L0A)
 arch._set("L0B", _runtime.utils.L0B)

@@ -2765,6 +2765,24 @@ def subs(result, lhs, rhs, *, mask=None, loc=None, ip=None) -> _ods_ir.Value:
   return _get_op_result_or_op_results(SubsOp(result=result, lhs=lhs, rhs=rhs, mask=mask, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
+class SyncThreadsOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.arch.sync_threads"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, *, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    _ods_context = _ods_get_default_loc_context(loc)
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+def arch_sync_threads(*, loc=None, ip=None) -> _ods_ir.Operation:
+  return _get_op_result_or_op_results(SyncThreadsOp(loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
 class TensorDescOp(_ods_ir.OpView):
   OPERATION_NAME = "tla.tensor_desc"
 

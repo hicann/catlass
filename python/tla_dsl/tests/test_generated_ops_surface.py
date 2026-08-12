@@ -83,6 +83,7 @@ def test_generated_binding_symbols_exist_for_wrapped_ops() -> None:
         "simt_add",
         "simt_load",
         "simt_store",
+        "arch_sync_threads",
         "recast_ptr",
         "adds",
         "subs",

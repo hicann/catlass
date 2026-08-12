@@ -1244,6 +1244,16 @@ def Tla_ScalarStoreOp : Tla_Op<"scalar_store", [MemoryEffects<[MemWrite]>]> {
   }];
 }
 
+def Tla_SyncThreadsOp : Tla_Op<"arch.sync_threads", []> {
+  let summary = "SIMT block-wide thread barrier";
+  let description = [{
+    Synchronize every thread of the enclosing ``tla.vec.func`` with
+    ``mode = "simt"``. Required between a write and a read of shared data by
+    different threads. Lowers to ``hivm_regbaseintrins.sync_threads``.
+  }];
+  let assemblyFormat = [{ attr-dict }];
+}
+
 def Tla_SimtLoadOp : Tla_Op<"simt_load", [MemoryEffects<[MemRead]>]> {
   let summary = "Per-thread tensor element read";
   let description = [{

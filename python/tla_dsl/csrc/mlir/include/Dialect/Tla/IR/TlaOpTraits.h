@@ -316,6 +316,7 @@ inline constexpr NamedOpMetadata kOpMetadataByName[] = {
     {"tla.arch.thread_block_dim", {"control", "scalar"}},
     {"tla.arch.block_idx", {"control", "scalar"}},
     {"tla.arch.block_num", {"control", "scalar"}},
+    {"tla.arch.sync_threads", {"control", "intermediate"}},
     {"tla.arch.thread_idx", {"control", "scalar"}},
     {"tla.copy", {"binary", "dependent"}},
     {"tla.simt_add", {"binary", "scalar"}},
