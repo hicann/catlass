@@ -138,6 +138,115 @@ public:
     }
 
 private:
+    template <bool isPertensor, QuantMode x1QuantMode, bool isBiasEpilogue, class BiasDtype>
+    __simd_vf__ static void VFDoDequant(
+        __ubuf__ DataTypeOut* dst, __ubuf__ DataTypeIn* l0cOut, __ubuf__ DataTypeX2Scale* scale2,
+        __ubuf__ DataTypeX1Scale* x1Scale, __ubuf__ BiasDtype* bias, float x1ScaleScalar, float x2ScaleScalar,
+        uint16_t mSize, uint16_t nSize)
+    {
+        uint32_t eleNumPerVf = AscendC::VECTOR_REG_WIDTH / sizeof(DataTypeIn);
+        uint32_t nSrcUbAligned = RoundUp(nSize, static_cast<uint16_t>(UB_ALIGN_SIZE / sizeof(DataTypeIn)));
+        uint32_t nDstUbAligned = RoundUp(nSize, static_cast<uint16_t>(UB_ALIGN_SIZE / sizeof(DataTypeOut)));
+        uint16_t nLoopCnt = (nSize + eleNumPerVf - 1) / eleNumPerVf;
+
+        constexpr static AscendC::MicroAPI::CastTrait ctInt322Fp32 = {
+            AscendC::MicroAPI::RegLayout::UNKNOWN, AscendC::MicroAPI::SatMode::UNKNOWN,
+            AscendC::MicroAPI::MaskMergeMode::ZEROING, AscendC::RoundMode::CAST_RINT};
+        constexpr static AscendC::MicroAPI::CastTrait ctFp322Half = {
+            AscendC::MicroAPI::RegLayout::ZERO, AscendC::MicroAPI::SatMode::NO_SAT,
+            AscendC::MicroAPI::MaskMergeMode::ZEROING, AscendC::RoundMode::CAST_RINT};
+        constexpr static AscendC::MicroAPI::CastTrait ctHalf2Fp32Zero = {
+            AscendC::MicroAPI::RegLayout::ZERO, AscendC::MicroAPI::SatMode::UNKNOWN,
+            AscendC::MicroAPI::MaskMergeMode::ZEROING, AscendC::RoundMode::UNKNOWN};
+        constexpr static AscendC::MicroAPI::CastTrait ctHalf2Fp32One = {
+            AscendC::MicroAPI::RegLayout::ONE, AscendC::MicroAPI::SatMode::UNKNOWN,
+            AscendC::MicroAPI::MaskMergeMode::ZEROING, AscendC::RoundMode::UNKNOWN};
+
+        AscendC::MicroAPI::MaskReg maskN4B16 =
+            AscendC::MicroAPI::CreateMask<bfloat16_t, AscendC::MicroAPI::MaskPattern::ALL>();
+        for (uint16_t mIdx = 0; mIdx < mSize; mIdx++) {
+            uint32_t elementNum = nSize;
+            for (uint16_t vfBlockIdx = 0; vfBlockIdx < nLoopCnt; vfBlockIdx++) {
+                AscendC::MicroAPI::RegTensor<DataTypeIn> l0cOutReg;
+                AscendC::MicroAPI::RegTensor<DataTypeX2Scale> scaleReg;
+                AscendC::MicroAPI::RegTensor<DataTypeX1Scale> perTokenScaleReg;
+                AscendC::MicroAPI::RegTensor<BiasDtype> biasReg;
+                AscendC::MicroAPI::RegTensor<float> castSrcOutReg, castScaleReg, castScaleOneReg, mulScaleOutReg,
+                    mulPtScaleOutReg, castBiasReg, castBiasOneReg, addBiasOutReg;
+                AscendC::MicroAPI::RegTensor<DataTypeOut> castResultOutReg;
+                AscendC::MicroAPI::MaskReg maskN = AscendC::MicroAPI::UpdateMask<DataTypeIn>(elementNum);
+                // copy input from ub to register, addr of ub should align to 32B
+                uint32_t l0cOutOffset = mIdx * nSrcUbAligned + vfBlockIdx * eleNumPerVf;
+                AscendC::MicroAPI::DataCopy(l0cOutReg, l0cOut + l0cOutOffset);
+                // cast l0cOut from int32 to float
+                if constexpr (AscendC::IsSameType<DataTypeIn, int32_t>::value) {
+                    AscendC::MicroAPI::Cast<float, DataTypeIn, ctInt322Fp32>(castSrcOutReg, l0cOutReg, maskN);
+                } else {
+                    castSrcOutReg = l0cOutReg;
+                }
+                // l0c_out * scale2
+                if constexpr (isPertensor) {
+                    AscendC::MicroAPI::Muls(mulScaleOutReg, castSrcOutReg, x2ScaleScalar, maskN);
+                } else {
+                    AscendC::MicroAPI::DataCopy(scaleReg, scale2 + vfBlockIdx * eleNumPerVf);
+                    if constexpr (!AscendC::IsSameType<DataTypeX2Scale, float>::value) { // cast scale2 from bf16 to
+                                                                                         // float
+                        AscendC::MicroAPI::Cast<float, DataTypeX2Scale, ctHalf2Fp32Zero>(castScaleReg, scaleReg, maskN);
+                        AscendC::MicroAPI::Cast<float, DataTypeX2Scale, ctHalf2Fp32One>(
+                            castScaleOneReg, scaleReg, maskN4B16);
+                        AscendC::MicroAPI::Interleave(castScaleReg, castScaleOneReg, castScaleReg, castScaleOneReg);
+                    } else {
+                        castScaleReg = scaleReg;
+                    }
+                    AscendC::MicroAPI::Mul(mulScaleOutReg, castSrcOutReg, castScaleReg, maskN);
+                }
+                // out * x1Scale
+                if constexpr (x1QuantMode == QuantMode::PERTENSOR_MODE) {
+                    AscendC::MicroAPI::Muls(mulPtScaleOutReg, mulScaleOutReg, x1ScaleScalar, maskN);
+                } else if constexpr (x1QuantMode == QuantMode::PERTOKEN_MODE) {
+                    AscendC::MicroAPI::DataCopy<DataTypeX1Scale, AscendC::MicroAPI::LoadDist::DIST_BRC_B32>(
+                        perTokenScaleReg, x1Scale + mIdx);
+                    AscendC::MicroAPI::Mul(mulPtScaleOutReg, mulScaleOutReg, perTokenScaleReg, maskN);
+                } else {
+                    mulPtScaleOutReg = mulScaleOutReg;
+                }
+                // out + bias
+                if constexpr (isBiasEpilogue) {
+                    AscendC::MicroAPI::DataCopy(biasReg, bias + vfBlockIdx * eleNumPerVf);
+                    // cast bias from bf16/fp16 to float
+                    if constexpr (
+                        AscendC::IsSameType<BiasDtype, bfloat16_t>::value ||
+                        AscendC::IsSameType<BiasDtype, half>::value) {
+                        AscendC::MicroAPI::Cast<float, BiasDtype, ctHalf2Fp32Zero>(castBiasReg, biasReg, maskN);
+                        AscendC::MicroAPI::Cast<float, BiasDtype, ctHalf2Fp32One>(castBiasOneReg, biasReg, maskN4B16);
+                        AscendC::MicroAPI::Interleave(castBiasReg, castBiasOneReg, castBiasReg, castBiasOneReg);
+                    } else {
+                        castBiasReg = biasReg;
+                    }
+                    AscendC::MicroAPI::Add(addBiasOutReg, mulPtScaleOutReg, castBiasReg, maskN);
+                } else {
+                    addBiasOutReg = mulPtScaleOutReg;
+                }
+                // cast dequant result from float to fp16/bf16
+                if constexpr (!AscendC::IsSameType<DataTypeOut, float>::value) {
+                    AscendC::MicroAPI::Cast<DataTypeOut, float, ctFp322Half>(castResultOutReg, addBiasOutReg, maskN);
+                } else {
+                    castResultOutReg = addBiasOutReg;
+                }
+                // copy out from register to ub
+                uint32_t dstUbOffset = mIdx * nDstUbAligned + vfBlockIdx * eleNumPerVf;
+                if constexpr (AscendC::IsSameType<DataTypeOut, float>::value) {
+                    AscendC::MicroAPI::DataCopy<DataTypeOut, AscendC::MicroAPI::StoreDist::DIST_NORM_B32>(
+                        dst + dstUbOffset, castResultOutReg, maskN);
+                } else {
+                    AscendC::MicroAPI::DataCopy<DataTypeOut, AscendC::MicroAPI::StoreDist::DIST_PACK_B32>(
+                        dst + dstUbOffset, castResultOutReg, maskN);
+                }
+            }
+        }
+    }
+
+private:
     CATLASS_DEVICE void UpdateTensorGlobalBuffer(Params const& params);
     CATLASS_DEVICE void CopyDataFromGm2Ub();
     CATLASS_DEVICE void CopyX1ScaleFromGm2Ub(
@@ -155,11 +264,6 @@ private:
         __ubuf__ DataTypeOut* dequantOutInUbAddr, __ubuf__ DataTypeIn* l0cOutUbAddr, uint16_t mSize);
     CATLASS_DEVICE void VFDoDequantWithoutX1Scale(
         __ubuf__ DataTypeOut* dequantOutInUbAddr, __ubuf__ DataTypeIn* l0cOutUbAddr, uint16_t mSize);
-    template <bool isPertensor, QuantMode x1QuantMode, bool isBiasEpilogue, class BiasDtype>
-    __simd_vf__ static void VFDoDequant(
-        __ubuf__ DataTypeOut* dst, __ubuf__ DataTypeIn* l0cOut, __ubuf__ DataTypeX2Scale* scale2,
-        __ubuf__ DataTypeX1Scale* x1Scale, __ubuf__ BiasDtype* bias, float x1ScaleScalar, float x2ScaleScalar,
-        uint16_t mSize, uint16_t nSize);
 
     // GM ADDR
     AscendC::GlobalTensor<DataTypeOut> yGlobal_;
@@ -488,113 +592,6 @@ CATLASS_DEVICE void BlockEpilogue<QMM_BLOCK_EPILOGUE_DEQUANT_FUNC_LOCAL_PARAMS>:
                 VFDoDequant<false, QuantMode::DEFAULT, true, bfloat16_t>(
                     dequantOutInUbAddr, l0cOutUbAddr, (__ubuf__ DataTypeX2Scale*)x2ScaleUb_.GetPhyAddr(), nullptr,
                     (__ubuf__ bfloat16_t*)biasUbB16_.GetPhyAddr(), x1ScaleScalar_, x2ScaleScalar_, mSize, singleN_);
-            }
-        }
-    }
-}
-
-QMM_BLOCK_EPILOGUE_DEQUANT_CLASS_LOCAL_PARAMS
-template <bool isPertensor, QuantMode x1QuantMode, bool isBiasEpilogue, class BiasDtype>
-__simd_vf__ void BlockEpilogue<QMM_BLOCK_EPILOGUE_DEQUANT_FUNC_LOCAL_PARAMS>::VFDoDequant(
-    __ubuf__ DataTypeOut* dst, __ubuf__ DataTypeIn* l0cOut, __ubuf__ DataTypeX2Scale* scale2,
-    __ubuf__ DataTypeX1Scale* x1Scale, __ubuf__ BiasDtype* bias, float x1ScaleScalar, float x2ScaleScalar,
-    uint16_t mSize, uint16_t nSize)
-{
-    uint32_t eleNumPerVf = AscendC::VECTOR_REG_WIDTH / sizeof(DataTypeIn);
-    uint32_t nSrcUbAligned = RoundUp(nSize, static_cast<uint16_t>(UB_ALIGN_SIZE / sizeof(DataTypeIn)));
-    uint32_t nDstUbAligned = RoundUp(nSize, static_cast<uint16_t>(UB_ALIGN_SIZE / sizeof(DataTypeOut)));
-    uint16_t nLoopCnt = (nSize + eleNumPerVf - 1) / eleNumPerVf;
-
-    constexpr static AscendC::MicroAPI::CastTrait ctInt322Fp32 = {
-        AscendC::MicroAPI::RegLayout::UNKNOWN, AscendC::MicroAPI::SatMode::UNKNOWN,
-        AscendC::MicroAPI::MaskMergeMode::ZEROING, AscendC::RoundMode::CAST_RINT};
-    constexpr static AscendC::MicroAPI::CastTrait ctFp322Half = {
-        AscendC::MicroAPI::RegLayout::ZERO, AscendC::MicroAPI::SatMode::NO_SAT,
-        AscendC::MicroAPI::MaskMergeMode::ZEROING, AscendC::RoundMode::CAST_RINT};
-    constexpr static AscendC::MicroAPI::CastTrait ctHalf2Fp32Zero = {
-        AscendC::MicroAPI::RegLayout::ZERO, AscendC::MicroAPI::SatMode::UNKNOWN,
-        AscendC::MicroAPI::MaskMergeMode::ZEROING, AscendC::RoundMode::UNKNOWN};
-    constexpr static AscendC::MicroAPI::CastTrait ctHalf2Fp32One = {
-        AscendC::MicroAPI::RegLayout::ONE, AscendC::MicroAPI::SatMode::UNKNOWN,
-        AscendC::MicroAPI::MaskMergeMode::ZEROING, AscendC::RoundMode::UNKNOWN};
-
-    AscendC::MicroAPI::MaskReg maskN4B16 =
-        AscendC::MicroAPI::CreateMask<bfloat16_t, AscendC::MicroAPI::MaskPattern::ALL>();
-    for (uint16_t mIdx = 0; mIdx < mSize; mIdx++) {
-        uint32_t elementNum = nSize;
-        for (uint16_t vfBlockIdx = 0; vfBlockIdx < nLoopCnt; vfBlockIdx++) {
-            AscendC::MicroAPI::RegTensor<DataTypeIn> l0cOutReg;
-            AscendC::MicroAPI::RegTensor<DataTypeX2Scale> scaleReg;
-            AscendC::MicroAPI::RegTensor<DataTypeX1Scale> perTokenScaleReg;
-            AscendC::MicroAPI::RegTensor<BiasDtype> biasReg;
-            AscendC::MicroAPI::RegTensor<float> castSrcOutReg, castScaleReg, castScaleOneReg, mulScaleOutReg,
-                mulPtScaleOutReg, castBiasReg, castBiasOneReg, addBiasOutReg;
-            AscendC::MicroAPI::RegTensor<DataTypeOut> castResultOutReg;
-            AscendC::MicroAPI::MaskReg maskN = AscendC::MicroAPI::UpdateMask<DataTypeIn>(elementNum);
-            // copy input from ub to register, addr of ub should align to 32B
-            uint32_t l0cOutOffset = mIdx * nSrcUbAligned + vfBlockIdx * eleNumPerVf;
-            AscendC::MicroAPI::DataCopy(l0cOutReg, l0cOut + l0cOutOffset);
-            // cast l0cOut from int32 to float
-            if constexpr (AscendC::IsSameType<DataTypeIn, int32_t>::value) {
-                AscendC::MicroAPI::Cast<float, DataTypeIn, ctInt322Fp32>(castSrcOutReg, l0cOutReg, maskN);
-            } else {
-                castSrcOutReg = l0cOutReg;
-            }
-            // l0c_out * scale2
-            if constexpr (isPertensor) {
-                AscendC::MicroAPI::Muls(mulScaleOutReg, castSrcOutReg, x2ScaleScalar, maskN);
-            } else {
-                AscendC::MicroAPI::DataCopy(scaleReg, scale2 + vfBlockIdx * eleNumPerVf);
-                if constexpr (!AscendC::IsSameType<DataTypeX2Scale, float>::value) { // cast scale2 from bf16 to float
-                    AscendC::MicroAPI::Cast<float, DataTypeX2Scale, ctHalf2Fp32Zero>(castScaleReg, scaleReg, maskN);
-                    AscendC::MicroAPI::Cast<float, DataTypeX2Scale, ctHalf2Fp32One>(
-                        castScaleOneReg, scaleReg, maskN4B16);
-                    AscendC::MicroAPI::Interleave(castScaleReg, castScaleOneReg, castScaleReg, castScaleOneReg);
-                } else {
-                    castScaleReg = scaleReg;
-                }
-                AscendC::MicroAPI::Mul(mulScaleOutReg, castSrcOutReg, castScaleReg, maskN);
-            }
-            // out * x1Scale
-            if constexpr (x1QuantMode == QuantMode::PERTENSOR_MODE) {
-                AscendC::MicroAPI::Muls(mulPtScaleOutReg, mulScaleOutReg, x1ScaleScalar, maskN);
-            } else if constexpr (x1QuantMode == QuantMode::PERTOKEN_MODE) {
-                AscendC::MicroAPI::DataCopy<DataTypeX1Scale, AscendC::MicroAPI::LoadDist::DIST_BRC_B32>(
-                    perTokenScaleReg, x1Scale + mIdx);
-                AscendC::MicroAPI::Mul(mulPtScaleOutReg, mulScaleOutReg, perTokenScaleReg, maskN);
-            } else {
-                mulPtScaleOutReg = mulScaleOutReg;
-            }
-            // out + bias
-            if constexpr (isBiasEpilogue) {
-                AscendC::MicroAPI::DataCopy(biasReg, bias + vfBlockIdx * eleNumPerVf);
-                // cast bias from bf16/fp16 to float
-                if constexpr (
-                    AscendC::IsSameType<BiasDtype, bfloat16_t>::value || AscendC::IsSameType<BiasDtype, half>::value) {
-                    AscendC::MicroAPI::Cast<float, BiasDtype, ctHalf2Fp32Zero>(castBiasReg, biasReg, maskN);
-                    AscendC::MicroAPI::Cast<float, BiasDtype, ctHalf2Fp32One>(castBiasOneReg, biasReg, maskN4B16);
-                    AscendC::MicroAPI::Interleave(castBiasReg, castBiasOneReg, castBiasReg, castBiasOneReg);
-                } else {
-                    castBiasReg = biasReg;
-                }
-                AscendC::MicroAPI::Add(addBiasOutReg, mulPtScaleOutReg, castBiasReg, maskN);
-            } else {
-                addBiasOutReg = mulPtScaleOutReg;
-            }
-            // cast dequant result from float to fp16/bf16
-            if constexpr (!AscendC::IsSameType<DataTypeOut, float>::value) {
-                AscendC::MicroAPI::Cast<DataTypeOut, float, ctFp322Half>(castResultOutReg, addBiasOutReg, maskN);
-            } else {
-                castResultOutReg = addBiasOutReg;
-            }
-            // copy out from register to ub
-            uint32_t dstUbOffset = mIdx * nDstUbAligned + vfBlockIdx * eleNumPerVf;
-            if constexpr (AscendC::IsSameType<DataTypeOut, float>::value) {
-                AscendC::MicroAPI::DataCopy<DataTypeOut, AscendC::MicroAPI::StoreDist::DIST_NORM_B32>(
-                    dst + dstUbOffset, castResultOutReg, maskN);
-            } else {
-                AscendC::MicroAPI::DataCopy<DataTypeOut, AscendC::MicroAPI::StoreDist::DIST_PACK_B32>(
-                    dst + dstUbOffset, castResultOutReg, maskN);
             }
         }
     }
