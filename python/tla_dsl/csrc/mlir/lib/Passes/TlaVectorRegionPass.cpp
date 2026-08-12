@@ -2448,59 +2448,107 @@ static FailureOr<Value> simtViewElementOffset(OpBuilder &builder, Location loc,
 // parameter stays flat and the real strides live in the arithmetic. Constant
 // indices fold, so the common cases cost nothing.
 static LogicalResult linearizeSimtAccessesIn(::tla::VecFuncOp vecFuncOp) {
-  SmallVector<Operation *, 8> multiIndex;
+  // Logical dim d of a rank-R tensor lives at descriptor slot d + (2 - R): a
+  // rank-1 tensor keeps its extent/stride in slot 1, a rank-2 one in slots 0
+  // and 1. (The same convention TlaLowerScalarAccessPass uses.)
+  auto descriptorSlot = [](size_t dim, size_t rank) { return dim + (2 - rank); };
+
+  SmallVector<Operation *, 8> needsFolding;
   vecFuncOp.getBody().walk([&](Operation *op) {
     if (!isa<::tla::SimtLoadOp, ::tla::SimtStoreOp>(op))
       return;
     unsigned indexCount = op->getNumOperands() - (isa<::tla::SimtStoreOp>(op) ? 2 : 1);
     if (indexCount > 1) {
-      multiIndex.push_back(op);
+      needsFolding.push_back(op);
       return;
     }
-    // A rank-1 view can be strided too (every other element, say). Its single
-    // index still has to be scaled, or t[1] reads the neighbour instead.
+    // A rank-1 view can be strided too -- every other element, say -- and its
+    // single index has to be scaled or t[1] reads the neighbour. Note the
+    // stride may be a *runtime* value, so this cannot be decided from the
+    // static type alone: anything not provably 1 gets folded.
     if (indexCount == 1) {
-      FailureOr<ParsedTensorInfo> info = parseTensorInfo(op->getOperand(0).getType());
-      if (succeeded(info) && !info->strides.empty() &&
-          !ShapedType::isDynamic(info->strides.back()) && info->strides.back() != 1)
-        multiIndex.push_back(op);
+      // Skip only what is *provably* unit-stride. When the descriptor is not
+      // available, fall back to the static type; if that cannot prove stride 1
+      // either, collect the op anyway so the loop below reports it. Silently
+      // skipping here is what made a strided access read its neighbour.
+      auto descOp = op->getOperand(0).getDefiningOp<::tla::TensorDescOp>();
+      std::optional<int64_t> constant;
+      if (descOp) {
+        FailureOr<TensorDescriptor> desc = descriptorFromTensorDescOp(descOp);
+        if (succeeded(desc))
+          constant = getConstantIntValue(desc->stride[1]);
+      } else if (FailureOr<ParsedTensorInfo> info =
+                     parseTensorInfo(op->getOperand(0).getType());
+                 succeeded(info) && !info->strides.empty() &&
+                 !ShapedType::isDynamic(info->strides.back())) {
+        constant = info->strides.back();
+      }
+      if (!constant || *constant != 1)
+        needsFolding.push_back(op);
     }
   });
 
-  for (Operation *op : multiIndex) {
+  // One narrowing per distinct stride value, not per access: each cast becomes a
+  // captured scalar and therefore a launch argument, so emitting one per access
+  // would grow the ABI linearly with the number of accesses.
+  DenseMap<Value, Value> narrowedStrides;
+
+  for (Operation *op : needsFolding) {
     bool isStore = isa<::tla::SimtStoreOp>(op);
     Value tensor = op->getOperand(0);
-    FailureOr<ParsedTensorInfo> info = parseTensorInfo(tensor.getType());
-    if (failed(info) || info->strides.empty())
-      return op->emitOpError(
-                 "cannot linearize a per-thread access: the tensor's strides are unknown"),
-             failure();
-    for (int64_t stride : info->strides)
-      if (ShapedType::isDynamic(stride))
-        return op->emitOpError(
-                   "cannot linearize a per-thread access: this tensor has a dynamic "
-                   "stride, and the SIMT launch passes no stride alongside the pointer"),
-               failure();
 
-    OpBuilder builder(op);
-    Location loc = op->getLoc();
+    // Take the strides from the descriptor rather than the type: they are SSA
+    // values, so a stride computed at runtime (tla.arch.block_num() + 1, say)
+    // works exactly like a constant one. The multiply lands inside the region,
+    // which makes the stride a captured scalar -- the launch forwards it after
+    // the buffers.
+    auto descOp = tensor.getDefiningOp<::tla::TensorDescOp>();
+    if (!descOp)
+      return op->emitOpError("cannot linearize a per-thread access: expected a "
+                             "materialized tla.tensor_desc"),
+             failure();
+    FailureOr<TensorDescriptor> desc = descriptorFromTensorDescOp(descOp);
+    if (failed(desc))
+      return failure();
+
     // operands are: tensor, indices..., (value for a store)
     OperandRange indexRange = op->getOperands().drop_front(1);
     if (isStore)
       indexRange = indexRange.drop_back(1);
     SmallVector<Value, 2> indices(indexRange.begin(), indexRange.end());
-    if (indices.size() != info->strides.size())
-      return op->emitOpError("per-thread access has ")
-                 << indices.size() << " indices but the tensor has "
-                 << info->strides.size() << " strides",
+    if (indices.size() != 1 && indices.size() != 2)
+      return op->emitOpError("per-thread access expects one or two indices, got ")
+                 << indices.size(),
              failure();
 
+    OpBuilder builder(op);
+    Location loc = op->getLoc();
     Value linear;
     for (auto [dim, index] : llvm::enumerate(indices)) {
+      Value stride = desc->stride[descriptorSlot(dim, indices.size())];
       Value scaled = index;
-      if (info->strides[dim] != 1) {
-        Value stride = builder.create<arith::ConstantIndexOp>(loc, info->strides[dim]);
-        scaled = builder.createOrFold<arith::MulIOp>(loc, index, stride);
+      std::optional<int64_t> constant = getConstantIntValue(stride);
+      if (!constant || *constant != 1) {
+        Value strideInRegion = stride;
+        if (!constant) {
+          // A runtime stride crosses the launch as a captured scalar, and an
+          // index-typed launch argument reaches hivmc as an
+          // unrealized_conversion_cast and fails to translate. Narrow to i32
+          // outside the region -- that is what gets captured -- and widen back
+          // inside. NOTE: this truncates a stride of 2^31 or more; such a stride
+          // would exceed any addressable buffer on this target, but it is a
+          // silent bound rather than a checked one.
+          Value asI32 = narrowedStrides.lookup(stride);
+          if (!asI32) {
+            OpBuilder outside(vecFuncOp);
+            asI32 = outside.createOrFold<arith::IndexCastOp>(loc, outside.getI32Type(),
+                                                             stride);
+            narrowedStrides.insert({stride, asI32});
+          }
+          strideInRegion =
+              builder.create<arith::IndexCastOp>(loc, builder.getIndexType(), asI32);
+        }
+        scaled = builder.createOrFold<arith::MulIOp>(loc, index, strideInRegion);
       }
       linear = linear ? builder.createOrFold<arith::AddIOp>(loc, linear, scaled) : scaled;
     }
@@ -2542,17 +2590,32 @@ public:
 
     SimtCaptures captures;
     collectSimtCaptures(vecFuncOp, captures);
-    if (!captures.scalars.empty()) {
-      InFlightDiagnostic diag = vecFuncOp.emitOpError()
-                                << "SIMT region reads " << captures.scalars.size()
-                                << " runtime value(s) computed outside it; passing "
-                                   "captured scalars into a SIMT vector function is not "
-                                   "implemented yet";
-      for (Value scalar : captures.scalars)
-        diag.attachNote(scalar.getLoc()) << "captured value of type " << scalar.getType();
-      diag.attachNote() << "compile-time constants are fine (they are cloned into the "
-                           "region); only values produced by ops outside it are not";
-      return failure();
+    // Runtime values computed outside the region (a core index, a block count,
+    // a dynamic bound) are forwarded as extra launch arguments after the
+    // buffers. Only scalars fit through that ABI.
+    for (Value scalar : captures.scalars) {
+      if (!scalar.getType().isIntOrIndexOrFloat())
+        return vecFuncOp.emitOpError()
+                   << "a SIMT tla.vec.func can only capture scalar runtime values, "
+                      "but this region reads one of type "
+                   << scalar.getType()
+                   << " computed outside it. Buffers must be captured as tensors; "
+                      "anything else has no SIMT launch-argument form",
+               failure();
+      // An index-typed launch argument survives TlaCompile but dies in hivmc
+      // with "LLVM Translation failed for operation:
+      // builtin.unrealized_conversion_cast". Integers and floats cross fine
+      // (verified on device), so index is the one type that has to be narrowed
+      // rather than rejected -- callers legitimately capture index-typed values
+      // such as a tensor's stride.
+      if (scalar.getType().isIndex())
+        return vecFuncOp.emitOpError()
+                   << "a SIMT tla.vec.func cannot capture an index-typed runtime value "
+                      "(" << scalar.getType()
+                   << "): the launch ABI carries integers and floats, and an index "
+                      "argument fails to translate in hivmc. Cast it to i32 outside the "
+                      "region first",
+               failure();
     }
 
     // Base memref per captured tensor. These are the ABI buffers -- plain
@@ -2656,6 +2719,9 @@ public:
                          (nextSimtRegionId ? std::to_string(nextSimtRegionId) : std::string());
     ++nextSimtRegionId;
 
+    for (Value scalar : captures.scalars)
+      paramTypes.push_back(scalar.getType());
+
     ModuleOp mod = module;
     OpBuilder moduleBuilder(mod.getBodyRegion());
     moduleBuilder.setInsertionPointToEnd(mod.getBody());
@@ -2670,8 +2736,11 @@ public:
     Block *vfBody = vf.addEntryBlock();
     OpBuilder bodyBuilder(vfBody, vfBody->begin());
     IRMapping mapping;
-    for (auto [tensor, arg] : llvm::zip_equal(captures.tensors, vfBody->getArguments()))
+    ArrayRef<BlockArgument> vfArgs = vfBody->getArguments();
+    for (auto [tensor, arg] : llvm::zip_equal(captures.tensors, vfArgs.take_front(captures.tensors.size())))
       mapping.map(tensor, arg);
+    for (auto [scalar, arg] : llvm::zip_equal(captures.scalars, vfArgs.drop_front(captures.tensors.size())))
+      mapping.map(scalar, arg);
     for (Operation *constant : captures.constants)
       bodyBuilder.clone(*constant, mapping);
 
@@ -2709,6 +2778,10 @@ public:
       }
       launchArgs.push_back(pointer);
     }
+    // Captured runtime scalars follow the buffers, in capture order: the ABI is
+    // positional, so this must match the parameter list built above.
+    for (Value scalar : captures.scalars)
+      launchArgs.push_back(scalar);
     auto i64 = callBuilder.getI64Type();
     Value tx = callBuilder.create<arith::ConstantOp>(loc, i64,
                                                      callBuilder.getI64IntegerAttr(blockDimX));
