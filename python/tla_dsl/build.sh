@@ -129,6 +129,12 @@ else
   export CMAKE_BUILD_TYPE="Debug"
   export CMAKE_BUILD_DIR="csrc/mlir/build"
   python setup.py build_ext --inplace
-  python -m pip install -e . --no-deps
+  # PEP 517 metadata generation leaves an in-tree *.egg-info directory. Start
+  # pip outside the project and isolate its Python process from PYTHONPATH so
+  # that source metadata cannot shadow the site-packages installation.
+  (
+    cd "$repo_root/.."
+    python -I -m pip install -e "$repo_root" --no-deps
+  )
   echo "Debug build and install complete."
 fi
