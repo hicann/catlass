@@ -1,0 +1,49 @@
+// Reject linear tla.tensor_desc when shape[2:4]/stride[2:4] are not constant 1.
+// Each case is a separate compile so coverage does not depend on MLIR verifying
+// multiple IsolatedFromAbove funcs in parallel (single-thread stops after the first).
+//
+// RUN: sed -n '/^\/\/ BEGIN_SHAPE_TAIL$/,/^\/\/ END_SHAPE_TAIL$/p' %s | sed '1d;$d;s|^// ||' > %t.shape.mlir && not %tla_compile %t.shape.mlir -o %t 2>&1 | %filecheck %s --check-prefix=SHAPE
+// RUN: sed -n '/^\/\/ BEGIN_STRIDE_TAIL$/,/^\/\/ END_STRIDE_TAIL$/p' %s | sed '1d;$d;s|^// ||' > %t.stride.mlir && not %tla_compile %t.stride.mlir -o %t 2>&1 | %filecheck %s --check-prefix=STRIDE
+
+// SHAPE: error: 'tla.tensor_desc' op linear layout shape[2:4] and stride[2:4] must be constant 1
+// STRIDE: error: 'tla.tensor_desc' op linear layout shape[2:4] and stride[2:4] must be constant 1
+
+// BEGIN_SHAPE_TAIL
+// !tile = !tla.tensor<!tla.layout<!tla.shape<2,4>, !tla.stride<4,1>, !tla.shape<2,4>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, ub, 4>>
+// module {
+//   func.func @reject_non_unit_linear_tail(
+//       %base: memref<2x4xf32, #hivm.address_space<ub>>) {
+//     %c0 = arith.constant 0 : index
+//     %c1 = arith.constant 1 : index
+//     %c2 = arith.constant 2 : index
+//     %c4 = arith.constant 4 : index
+//     %bad = tla.tensor_desc %base
+//       shape[%c2, %c4, %c2, %c1]
+//       stride[%c4, %c1, %c1, %c1]
+//       origin_shape[%c2, %c4]
+//       coord[%c0, %c0]
+//       : memref<2x4xf32, #hivm.address_space<ub>> -> !tile
+//     return
+//   }
+// }
+// END_SHAPE_TAIL
+
+// BEGIN_STRIDE_TAIL
+// !tile = !tla.tensor<!tla.layout<!tla.shape<2,4>, !tla.stride<4,1>, !tla.shape<2,4>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, ub, 4>>
+// module {
+//   func.func @reject_non_unit_linear_stride_tail(
+//       %base: memref<2x4xf32, #hivm.address_space<ub>>) {
+//     %c0 = arith.constant 0 : index
+//     %c1 = arith.constant 1 : index
+//     %c2 = arith.constant 2 : index
+//     %c4 = arith.constant 4 : index
+//     %bad = tla.tensor_desc %base
+//       shape[%c2, %c4, %c1, %c1]
+//       stride[%c4, %c1, %c2, %c1]
+//       origin_shape[%c2, %c4]
+//       coord[%c0, %c0]
+//       : memref<2x4xf32, #hivm.address_space<ub>> -> !tile
+//     return
+//   }
+// }
+// END_STRIDE_TAIL
