@@ -22,6 +22,7 @@ class TlaExecutionArgs:
     signature: Mapping[str, Any] | None = None
     kernel_abi: Any | None = None
     expected_arg_count: int | None = None
+    abi_packer: Any | None = None
 
     def filter_runtime_signature(
         self, signature: Mapping[str, Any] | None = None
@@ -68,6 +69,10 @@ class TlaExecutionArgs:
             raise execution_mod.TlaUnsupportedAbiError(
                 "launch argument count does not match expected signature: "
                 f"got {len(rectified)}, expected {self.expected_arg_count}"
+            )
+        if self.abi_packer is not None:
+            return execution_mod._pack_launch_args_prepared(
+                rectified, self.abi_packer
             )
         return execution_mod._pack_launch_args(rectified, self.kernel_abi)
 

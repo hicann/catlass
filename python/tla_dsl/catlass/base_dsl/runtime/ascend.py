@@ -6,7 +6,6 @@ Module-level ``load_binary`` / ``launch_kernel``.
 from __future__ import annotations
 
 import ctypes
-import threading
 from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
@@ -17,9 +16,6 @@ from ...execution import TlaRuntimeUnavailableError
 _ACL_RT_BINARY_LOAD_OPT_MAGIC = 2
 _ACL_RT_BINARY_MAGIC_ELF_AICORE = 0x43554245
 _ACL_RT_BINARY_MAGIC_ELF_VECTOR_CORE = 0x41415246
-
-_KERNEL_CACHE: dict[tuple[str, int, str, str], "_LoadedKernel"] = {}
-_KERNEL_CACHE_LOCK = threading.Lock()
 
 
 @dataclass
@@ -132,24 +128,11 @@ def load_binary(
     fn_name, kernel_mode = name.split(maxsplit=1)
     check_acl_errors(acl.rt.set_device(int(device)), "acl.rt.set_device")
     resolved = kernel_path.resolve()
-    cache_key = (
-        str(resolved),
-        resolved.stat().st_mtime_ns,
-        fn_name,
-        kernel_mode,
-    )
-    with _KERNEL_CACHE_LOCK:
-        cached = _KERNEL_CACHE.get(cache_key)
-        if cached is not None:
-            return cached.bin_handle, cached.function_handle
-
     loaded = _register_kernel_binary(
         kernel_path=resolved,
         fn_name=fn_name,
         kernel_mode=kernel_mode,
     )
-    with _KERNEL_CACHE_LOCK:
-        _KERNEL_CACHE[cache_key] = loaded
     return loaded.bin_handle, loaded.function_handle
 
 

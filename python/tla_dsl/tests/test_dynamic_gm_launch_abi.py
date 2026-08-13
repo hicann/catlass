@@ -112,6 +112,33 @@ def test_build_memref_launch_fields_rank2() -> None:
     }
 
 
+def test_build_memref_launch_fields_reuses_metadata_and_tracks_pointer_change() -> None:
+    with runtime_mod._eager_capture():
+        tensor = tla.Tensor(
+            tla.make_shape(4, 8),
+            tla.Float16,
+            origin_shape=tla.make_shape(4, 8),
+            coord=tla.make_coord(0, 0),
+            stride=tla.make_stride(8, 1),
+            layout_tag=tla.arch.RowMajor,
+            data_ptr=0x1000,
+        )
+    tensor._external_binding = True
+
+    first = tensor.build_memref_launch_fields()
+    assert tensor.build_memref_launch_fields() is first
+
+    tensor.data_ptr = 0x2000
+    rebound = tensor.build_memref_launch_fields()
+    assert rebound is not first
+    assert rebound["allocated"] == 0x2000
+    assert rebound["aligned"] == 0x2000
+    assert rebound["offset"] == 0
+    assert {key: value for key, value in rebound.items() if key not in {"allocated", "aligned"}} == {
+        key: value for key, value in first.items() if key not in {"allocated", "aligned"}
+    }
+
+
 def test_pack_launch_args_expands_unified_memref_fields() -> None:
     with runtime_mod._eager_capture():
         tensor = tla.Tensor(
@@ -232,4 +259,3 @@ def test_mixed_handoff_uses_logical_abi_count_for_dynamic_gm(tmp_path) -> None:
     values = struct.unpack("<26Q", plan.payload)
     assert values[0:13] == (0x1000, 0x1000, 0, 32, 16, 1, 1, 16, 1, 1, 1, 32, 16)
     assert values[13:26] == (0x2000, 0x2000, 0, 16, 32, 1, 1, 32, 1, 1, 1, 16, 32)
-

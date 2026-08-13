@@ -114,6 +114,7 @@ class _Tensor(TensorABC):
         self._dynamic_shape_tree: Any | None = None
         self._dynamic_origin_shape_tree: Any | None = None
         self._dynamic_stride_tree: Any | None = None
+        self._memref_launch_fields_cache: dict[str, int] | None = None
 
         # None is treated as unbound (compile-time placeholder tensors).
         self.data_ptr = 0 if data_ptr is None else int(data_ptr)
@@ -401,6 +402,11 @@ class _Tensor(TensorABC):
     def build_memref_launch_fields(self) -> dict[str, int]:
         """Build unified schema-v4 GM launch fields (13 slots, pad unused with 1)."""
         self._require_bound()
+        data_ptr = int(self.data_ptr)
+        cached = self._memref_launch_fields_cache
+        if cached is not None and cached["allocated"] == data_ptr:
+            return cached
+
         shape = tuple(int(dim) for dim in (self._shape_tuple or ()))
         if not shape:
             raise RuntimeTensorError(
@@ -429,8 +435,7 @@ class _Tensor(TensorABC):
         origin0 = int(origin_leaves[0]) if len(origin_leaves) >= 1 else 1
         origin1 = int(origin_leaves[1]) if len(origin_leaves) >= 2 else 1
 
-        data_ptr = int(self.data_ptr)
-        return {
+        fields = {
             "allocated": data_ptr,
             "aligned": data_ptr,
             "offset": 0,
@@ -445,6 +450,8 @@ class _Tensor(TensorABC):
             "originShape0": origin0,
             "originShape1": origin1,
         }
+        self._memref_launch_fields_cache = fields
+        return fields
 
     def _layout_shape_components(self) -> tuple[Any, ...]:
         shape_components = self._shape_components

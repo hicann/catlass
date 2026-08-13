@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import ctypes
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 import hashlib
 import importlib.util
 import json
@@ -182,6 +182,58 @@ class TlaKernelArtifact:
     runtime: "TlaRuntimeOptions | None" = None
     pass_ir_dump: str = ""
     kernel_abi: KernelAbiLayout | None = None
+    expects_print_tensor: bool = False
+    expects_debug_fifo: bool = False
+    logical_mixed_handoff: "_LogicalMixedHandoff | None" = None
+    _artifact_metadata_prepared: bool = field(
+        default=False, repr=False, compare=False, hash=False
+    )
+    _abi_packer: "_PreparedAbiPacker | None" = field(
+        default=None, repr=False, compare=False, hash=False
+    )
+    _runtime_handle: tuple[int, int] | None = field(
+        default=None, init=False, repr=False, compare=False, hash=False
+    )
+    _runtime_handle_lock: threading.RLock = field(
+        default_factory=threading.RLock,
+        init=False,
+        repr=False,
+        compare=False,
+        hash=False,
+    )
+
+    def __post_init__(self) -> None:
+        # Production compile/cache-load paths pass precomputed metadata. Keep
+        # direct construction useful for tests and internal callers while still
+        # establishing the same invariant at Artifact construction time.
+        if not self._artifact_metadata_prepared:
+            metadata = _analyze_artifact_static_metadata(
+                self.tlair_mlir, self.lowered_llvm
+            )
+            object.__setattr__(
+                self, "expects_print_tensor", metadata.expects_print_tensor
+            )
+            object.__setattr__(
+                self, "expects_debug_fifo", metadata.expects_debug_fifo
+            )
+            object.__setattr__(
+                self, "logical_mixed_handoff", metadata.logical_mixed_handoff
+            )
+            object.__setattr__(self, "_artifact_metadata_prepared", True)
+
+        if self.kernel_abi is not None and self._abi_packer is None:
+            expected_entrypoint = (
+                self.logical_mixed_handoff.entrypoint
+                if self.logical_mixed_handoff is not None
+                else self.entrypoint
+            )
+            object.__setattr__(
+                self,
+                "_abi_packer",
+                _prepare_abi_packer(
+                    self.kernel_abi, expected_entrypoint=expected_entrypoint
+                ),
+            )
 
 
 @dataclass(frozen=True)
@@ -221,9 +273,40 @@ class _KernelLaunchPlan:
 
 
 @dataclass(frozen=True)
+class _PreparedAbiSlot:
+    argument: Any
+    logical_index: int
+    start: int
+    end: int
+
+
+@dataclass(frozen=True)
+class _PreparedMemrefRun:
+    logical_index: int
+    start: int
+    fields: tuple[str, ...]
+    packer: struct.Struct
+
+
+@dataclass(frozen=True)
+class _PreparedAbiPacker:
+    logical_count: int
+    host_size: int
+    slots: tuple[_PreparedAbiSlot, ...]
+    memref_runs: tuple[_PreparedMemrefRun, ...]
+
+
+@dataclass(frozen=True)
 class _LogicalMixedHandoff:
     entrypoint: str
     user_arg_types: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class _ArtifactStaticMetadata:
+    expects_print_tensor: bool
+    expects_debug_fifo: bool
+    logical_mixed_handoff: _LogicalMixedHandoff | None
 
 
 _MEMORY_COMPILE_CACHE_LOCK = threading.RLock()
@@ -272,7 +355,6 @@ def compile_kernel(
 
     if runtime.cache_enabled and not runtime.force_recompile and manifest.exists():
         cached = _load_manifest(manifest)
-        cached_kernel_abi = _kernel_abi_from_manifest(cached)
         kernel_path = artifact_dir / str(cached["kernel_binary"])
         mlir_path = artifact_dir / str(cached["lowered_mlir"])
         cached_pass_dump = cached.get("pass_ir_dump")
@@ -285,6 +367,17 @@ def compile_kernel(
             and mlir_path.exists()
         ):
             lowered_llvm = mlir_path.read_text()
+            static_metadata = _analyze_compiled_artifact_static_metadata(
+                tlair_mlir, lowered_llvm
+            )
+            expected_abi_entrypoint = (
+                static_metadata.logical_mixed_handoff.entrypoint
+                if static_metadata.logical_mixed_handoff is not None
+                else entrypoint
+            )
+            cached_kernel_abi, cached_abi_packer = _prepared_kernel_abi_from_manifest(
+                cached, expected_entrypoint=expected_abi_entrypoint
+            )
             artifact = TlaKernelArtifact(
                 cache_key=cache_key,
                 cache_dir=artifact_dir,
@@ -294,11 +387,22 @@ def compile_kernel(
                 compiler_bridge_path=compiler_bridge_path,
                 hivmc_path=hivmc,
                 kernel_binary_path=kernel_path,
-                runtime=_runtime_options_from_lowered_mlir(runtime, lowered_llvm),
+                runtime=_runtime_options_from_lowered_mlir(
+                    runtime,
+                    lowered_llvm,
+                    has_logical_mixed_handoff=(
+                        static_metadata.logical_mixed_handoff is not None
+                    ),
+                ),
                 pass_ir_dump=pass_dump_path.read_text()
                 if pass_dump_path and pass_dump_path.exists()
                 else "",
                 kernel_abi=cached_kernel_abi,
+                expects_print_tensor=static_metadata.expects_print_tensor,
+                expects_debug_fifo=static_metadata.expects_debug_fifo,
+                logical_mixed_handoff=static_metadata.logical_mixed_handoff,
+                _artifact_metadata_prepared=True,
+                _abi_packer=cached_abi_packer,
             )
             _set_memory_cached_artifact(artifact)
             _copy_kept_artifacts(artifact)
@@ -326,8 +430,25 @@ def compile_kernel(
         raise
     if lowering_result.pass_ir_dump:
         _write_pass_ir_dump(pass_dump_path, lowering_result.pass_ir_dump)
+    lowered_llvm = mlir_path.read_text()
+    static_metadata = _analyze_compiled_artifact_static_metadata(
+        tlair_mlir, lowered_llvm
+    )
     runtime_for_hivmc = _runtime_options_from_lowered_mlir(
-        runtime, mlir_path.read_text()
+        runtime,
+        lowered_llvm,
+        has_logical_mixed_handoff=(
+            static_metadata.logical_mixed_handoff is not None
+        ),
+    )
+    kernel_abi = getattr(lowering_result, "kernel_abi", None)
+    expected_abi_entrypoint = (
+        static_metadata.logical_mixed_handoff.entrypoint
+        if static_metadata.logical_mixed_handoff is not None
+        else entrypoint
+    )
+    abi_packer = _prepare_compiled_abi_packer(
+        kernel_abi, expected_entrypoint=expected_abi_entrypoint
     )
     hivmc_mlir_path, template_bitcode = _create_stamped_hivmc_input(
         mlir_path, runtime_for_hivmc
@@ -374,9 +495,7 @@ def compile_kernel(
                 ),
                 "hivmc": str(hivmc),
                 "arch_scope": runtime_for_hivmc.arch_scope,
-                "kernel_abi": kernel_abi_to_dict(
-                    getattr(lowering_result, "kernel_abi", None)
-                ),
+                "kernel_abi": kernel_abi_to_dict(kernel_abi),
             },
             indent=2,
             sort_keys=True,
@@ -387,16 +506,21 @@ def compile_kernel(
         cache_key=cache_key,
         cache_dir=artifact_dir,
         tlair_mlir=tlair_mlir,
-        lowered_llvm=mlir_path.read_text(),
+        lowered_llvm=lowered_llvm,
         entrypoint=entrypoint,
         compiler_bridge_path=compiler_bridge_path,
         hivmc_path=hivmc,
         kernel_binary_path=kernel_path,
         pass_ir_dump=lowering_result.pass_ir_dump,
         runtime=runtime_for_hivmc,
-        kernel_abi=getattr(lowering_result, "kernel_abi", None),
+        kernel_abi=kernel_abi,
+        expects_print_tensor=static_metadata.expects_print_tensor,
+        expects_debug_fifo=static_metadata.expects_debug_fifo,
+        logical_mixed_handoff=static_metadata.logical_mixed_handoff,
+        _artifact_metadata_prepared=True,
+        _abi_packer=abi_packer,
     )
-    if runtime.cache_enabled and not runtime.force_recompile:
+    if runtime.cache_enabled:
         _set_memory_cached_artifact(artifact)
     _copy_kept_artifacts(artifact)
     return artifact
@@ -630,34 +754,16 @@ def _logical_launch_arg_count(layout: KernelAbiLayout) -> int:
     )
 
 
-def _memref_launch_field_value(tensor: Any, field: str) -> int:
-    builder = getattr(tensor, "build_memref_launch_fields", None)
-    if not callable(builder):
-        raise TlaUnsupportedAbiError(
-            "dynamic GM memref launch requires Tensor.build_memref_launch_fields()"
-        )
-    fields = builder()
-    if field not in fields:
-        raise TlaUnsupportedAbiError(
-            f"memref launch field {field!r} missing from tensor descriptor"
-        )
-    return int(fields[field])
-
-
-def _pack_launch_args(
-    args: Sequence[Any], layout: KernelAbiLayout | None = None
-) -> bytes:
-    _validate_kernel_abi_layout(layout)
+def _prepare_abi_packer(
+    layout: KernelAbiLayout | None, *, expected_entrypoint: str | None = None
+) -> _PreparedAbiPacker:
+    if expected_entrypoint is None:
+        _validate_kernel_abi_layout(layout)
+    else:
+        _validate_kernel_abi_layout(layout, expected_entrypoint=expected_entrypoint)
     if layout is None:
         raise TlaUnsupportedAbiError("kernel ABI layout is missing")
     logical_count = _logical_launch_arg_count(layout)
-    if len(args) != logical_count:
-        raise TlaUnsupportedAbiError(
-            "kernel launch argument count does not match ABI layout: "
-            f"got {len(args)}, expected {logical_count}"
-        )
-    if layout.total_size < 0:
-        raise TlaUnsupportedAbiError("kernel ABI layout has an invalid total size")
     host_offsets: list[int] = []
     host_size = 0
     for argument in layout.arguments:
@@ -672,32 +778,81 @@ def _pack_launch_args(
         raise TlaUnsupportedAbiError(
             "kernel ABI host payload exceeds the supported maximum size"
         )
-    payload = bytearray(host_size)
+    all_slots = []
     for index, argument in enumerate(layout.arguments):
-        if argument.index != index:
-            raise TlaUnsupportedAbiError(
-                "kernel ABI arguments must be ordered by contiguous index"
-            )
         logical_index = (
             argument.index if argument.logical_index is None else argument.logical_index
         )
-        if logical_index < 0 or logical_index >= len(args):
-            raise TlaUnsupportedAbiError(
-                f"kernel ABI argument {index} logical_index {logical_index} is out of range"
-            )
-        value = args[logical_index]
         start = host_offsets[index]
         end = start + argument.storage_size
-        if start < 0 or argument.storage_size <= 0 or end < start or end > host_size:
-            raise TlaUnsupportedAbiError(
-                f"kernel ABI argument {index} storage does not fit in payload"
+        all_slots.append(_PreparedAbiSlot(argument, logical_index, start, end))
+
+    slots: list[_PreparedAbiSlot] = []
+    memref_runs: list[_PreparedMemrefRun] = []
+    index = 0
+    while index < len(all_slots):
+        slot = all_slots[index]
+        if slot.argument.kind is not KernelAbiArgumentKind.MEMREF_FIELD:
+            slots.append(slot)
+            index += 1
+            continue
+        fields = []
+        run_start = slot.start
+        logical_index = slot.logical_index
+        previous_end = slot.start
+        while index < len(all_slots):
+            candidate = all_slots[index]
+            argument = candidate.argument
+            if (
+                argument.kind is not KernelAbiArgumentKind.MEMREF_FIELD
+                or candidate.logical_index != logical_index
+                or candidate.start != previous_end
+            ):
+                break
+            if argument.field is None:
+                raise TlaUnsupportedAbiError(
+                    f"kernel ABI memref_field argument {argument.index} "
+                    "requires a field name"
+                )
+            fields.append(argument.field)
+            previous_end = candidate.end
+            index += 1
+        memref_runs.append(
+            _PreparedMemrefRun(
+                logical_index=logical_index,
+                start=run_start,
+                fields=tuple(fields),
+                packer=struct.Struct("<" + "Q" * len(fields)),
             )
+        )
+    return _PreparedAbiPacker(
+        logical_count, host_size, tuple(slots), tuple(memref_runs)
+    )
+
+
+def _pack_launch_args_prepared(
+    args: Sequence[Any], packer: _PreparedAbiPacker
+) -> bytes:
+    if len(args) != packer.logical_count:
+        raise TlaUnsupportedAbiError(
+            "kernel launch argument count does not match ABI layout: "
+            f"got {len(args)}, expected {packer.logical_count}"
+        )
+    payload = bytearray(packer.host_size)
+    pointer_values: dict[int, list[int]] = {}
+    for slot in packer.slots:
+        argument = slot.argument
+        logical_index = slot.logical_index
+        value = args[logical_index]
         if argument.kind is KernelAbiArgumentKind.POINTER:
             if isinstance(value, Numeric) or type(value) in (bool, int, float):
                 raise TlaUnsupportedAbiError(
-                    f"kernel ABI argument {index} requires a pointer"
+                    f"kernel ABI argument {argument.index} requires a pointer"
                 )
-            values = _runtime_arg_values(value)
+            values = pointer_values.get(logical_index)
+            if values is None:
+                values = _runtime_arg_values(value)
+                pointer_values[logical_index] = values
             if len(values) != 1:
                 raise TlaUnsupportedAbiError(
                     "each logical launch argument must provide exactly one host value"
@@ -714,28 +869,10 @@ def _pack_launch_args(
             encoded = pointer.to_bytes(
                 argument.storage_size, byteorder="little", signed=False
             )
-        elif argument.kind is KernelAbiArgumentKind.MEMREF_FIELD:
-            if argument.field is None:
-                raise TlaUnsupportedAbiError(
-                    f"kernel ABI memref_field argument {index} has no field name"
-                )
-            if argument.storage_size != _POINTER_ABI_SIZE:
-                raise TlaUnsupportedAbiError(
-                    f"unsupported memref_field storage size {argument.storage_size}"
-                )
-            field_value = _memref_launch_field_value(value, argument.field)
-            if field_value < 0 or field_value >= (1 << (argument.storage_size * 8)):
-                raise TlaUnsupportedAbiError(
-                    f"memref field {argument.field!r} does not fit in "
-                    f"{argument.storage_size} bytes"
-                )
-            encoded = field_value.to_bytes(
-                argument.storage_size, byteorder="little", signed=False
-            )
         elif argument.kind is KernelAbiArgumentKind.SCALAR:
             if argument.scalar is None:
                 raise TlaUnsupportedAbiError(
-                    f"kernel ABI scalar argument {index} has no scalar descriptor"
+                    f"kernel ABI scalar argument {argument.index} has no scalar descriptor"
                 )
             encoded = _pack_scalar_argument(
                 value,
@@ -747,14 +884,48 @@ def _pack_launch_args(
             raise TlaUnsupportedAbiError(
                 f"unsupported kernel ABI argument kind {argument.kind!r}"
             )
-        payload[start:end] = encoded
+        payload[slot.start : slot.end] = encoded
+
+    memref_fields: dict[int, Mapping[str, int]] = {}
+    for run in packer.memref_runs:
+        value = args[run.logical_index]
+        fields = memref_fields.get(run.logical_index)
+        if fields is None:
+            builder = getattr(value, "build_memref_launch_fields", None)
+            if not callable(builder):
+                raise TlaUnsupportedAbiError(
+                    "dynamic GM memref launch requires "
+                    "Tensor.build_memref_launch_fields()"
+                )
+            fields = builder()
+            memref_fields[run.logical_index] = fields
+        missing = [field for field in run.fields if field not in fields]
+        if missing:
+            raise TlaUnsupportedAbiError(
+                f"memref launch field {missing[0]!r} missing from tensor descriptor"
+            )
+        encoded_values = tuple(int(fields[field]) for field in run.fields)
+        for field_name, field_value in zip(run.fields, encoded_values, strict=True):
+            if field_value < 0 or field_value >= (1 << 64):
+                raise TlaUnsupportedAbiError(
+                    f"memref field {field_name!r} does not fit in 8 bytes"
+                )
+        run.packer.pack_into(payload, run.start, *encoded_values)
     return bytes(payload)
 
 
-def _append_debug_print_workspace_payload(
-    payload: bytes, artifact: TlaKernelArtifact
+def _pack_launch_args(
+    args: Sequence[Any], layout: KernelAbiLayout | None = None
 ) -> bytes:
-    if not _has_debug_print_workspace(artifact):
+    return _pack_launch_args_prepared(args, _prepare_abi_packer(layout))
+
+
+def _append_debug_print_workspace_payload(
+    payload: bytes,
+    *,
+    enabled: bool,
+) -> bytes:
+    if not enabled:
         return payload
     extension = bytearray(payload)
     _align_payload(extension, _POINTER_ABI_SIZE)
@@ -788,6 +959,7 @@ def _validate_kernel_abi_layout(
         )
     if layout.total_size % 8 != 0:
         raise TlaUnsupportedAbiError("kernel ABI total size must be rounded to 8 bytes")
+    logical_count = _logical_launch_arg_count(layout)
     previous_end = 0
     for index, argument in enumerate(layout.arguments):
         if argument.index != index:
@@ -806,6 +978,13 @@ def _validate_kernel_abi_layout(
         if argument.storage_size <= 0:
             raise TlaUnsupportedAbiError(
                 f"kernel ABI argument {index} storage size must be positive"
+            )
+        logical_index = (
+            argument.index if argument.logical_index is None else argument.logical_index
+        )
+        if logical_index < 0 or logical_index >= logical_count:
+            raise TlaUnsupportedAbiError(
+                f"kernel ABI argument {index} logical_index {logical_index} is out of range"
             )
         if argument.kind is KernelAbiArgumentKind.POINTER:
             if argument.scalar is not None:
@@ -854,6 +1033,17 @@ def _validate_kernel_abi_layout(
         raise TlaUnsupportedAbiError(
             "kernel ABI total size is not exactly sufficient for its arguments"
         )
+
+
+def _prepare_compiled_abi_packer(
+    layout: KernelAbiLayout | None, *, expected_entrypoint: str
+) -> _PreparedAbiPacker:
+    try:
+        return _prepare_abi_packer(layout, expected_entrypoint=expected_entrypoint)
+    except TlaUnsupportedAbiError as exc:
+        raise TlaKernelCompileError(
+            f"Invalid compiler-produced kernel ABI descriptor: {exc}"
+        ) from exc
 
 
 def _split_top_level_csv(text: str) -> list[str]:
@@ -970,9 +1160,26 @@ def _extract_logical_mixed_handoff(mlir_text: str) -> _LogicalMixedHandoff | Non
     return _LogicalMixedHandoff(base_name, _mixed_handoff_user_arg_types(params))
 
 
-def _extract_logical_mixed_handoff_entrypoint(mlir_text: str) -> str | None:
-    handoff = _extract_logical_mixed_handoff(mlir_text)
-    return None if handoff is None else handoff.entrypoint
+def _analyze_artifact_static_metadata(
+    tlair_mlir: str, lowered_llvm: str
+) -> _ArtifactStaticMetadata:
+    mlir_text = lowered_llvm or tlair_mlir
+    return _ArtifactStaticMetadata(
+        expects_print_tensor="tla.print_tensor.workspace" in mlir_text,
+        expects_debug_fifo="tla.debug_print.workspace" in mlir_text,
+        logical_mixed_handoff=_extract_logical_mixed_handoff(mlir_text),
+    )
+
+
+def _analyze_compiled_artifact_static_metadata(
+    tlair_mlir: str, lowered_llvm: str
+) -> _ArtifactStaticMetadata:
+    try:
+        return _analyze_artifact_static_metadata(tlair_mlir, lowered_llvm)
+    except TlaUnsupportedAbiError as exc:
+        raise TlaKernelCompileError(
+            f"Invalid compiler-produced launch metadata: {exc}"
+        ) from exc
 
 
 def _build_logical_mixed_handoff_launch_args(
@@ -994,16 +1201,6 @@ def _build_logical_mixed_handoff_launch_args(
             f"got {len(launch_args)}, expected {expected}"
         )
     return _pack_launch_args(launch_args, kernel_abi)
-
-
-def _has_debug_print_workspace(artifact: TlaKernelArtifact) -> bool:
-    mlir_text = artifact.lowered_llvm or artifact.tlair_mlir
-    return "tla.debug_print.workspace" in mlir_text
-
-
-def _has_print_tensor_workspace(artifact: TlaKernelArtifact) -> bool:
-    mlir_text = artifact.lowered_llvm or artifact.tlair_mlir
-    return "tla.print_tensor.workspace" in mlir_text
 
 
 def _capture_c_stdout(launch: Callable[[], None]) -> str:
@@ -1408,12 +1605,15 @@ def runtime_options_for_launch(runtime: TlaRuntimeOptions) -> TlaRuntimeOptions:
 
 
 def _runtime_options_from_lowered_mlir(
-    runtime: TlaRuntimeOptions, mlir_text: str
+    runtime: TlaRuntimeOptions,
+    mlir_text: str,
+    *,
+    has_logical_mixed_handoff: bool,
 ) -> TlaRuntimeOptions:
     target_arch, core_type = _parse_arch_scope(runtime.arch_scope)
     kernel_mode = runtime.kernel_mode
 
-    if _extract_logical_mixed_handoff_entrypoint(mlir_text) is not None:
+    if has_logical_mixed_handoff:
         core_type = "aic"
         kernel_mode = "mix"
     elif (
@@ -2032,7 +2232,9 @@ def _cache_manifest_has_current_workspace_abis(
     ) and _cache_manifest_has_current_print_tensor_workspace_abi(manifest)
 
 
-def _kernel_abi_from_manifest(manifest: Mapping[str, Any]) -> KernelAbiLayout:
+def _prepared_kernel_abi_from_manifest(
+    manifest: Mapping[str, Any], *, expected_entrypoint: str | None = None
+) -> tuple[KernelAbiLayout, _PreparedAbiPacker]:
     if "kernel_abi" not in manifest or manifest["kernel_abi"] is None:
         raise TlaKernelCompileError(
             "Cached artifact has no compiler-produced kernel_abi descriptor; "
@@ -2049,13 +2251,27 @@ def _kernel_abi_from_manifest(manifest: Mapping[str, Any]) -> KernelAbiLayout:
             "Invalid cached kernel ABI descriptor: decoded to no layout"
         )
     try:
-        _validate_kernel_abi_layout(
-            layout, expected_entrypoint=str(manifest.get("entrypoint", ""))
+        packer = _prepare_abi_packer(
+            layout,
+            expected_entrypoint=(
+                expected_entrypoint
+                if expected_entrypoint is not None
+                else str(manifest.get("entrypoint", ""))
+            ),
         )
     except TlaUnsupportedAbiError as exc:
         raise TlaKernelCompileError(
             f"Invalid cached kernel ABI descriptor: {exc}"
         ) from exc
+    return layout, packer
+
+
+def _kernel_abi_from_manifest(
+    manifest: Mapping[str, Any], *, expected_entrypoint: str | None = None
+) -> KernelAbiLayout:
+    layout, _ = _prepared_kernel_abi_from_manifest(
+        manifest, expected_entrypoint=expected_entrypoint
+    )
     return layout
 
 

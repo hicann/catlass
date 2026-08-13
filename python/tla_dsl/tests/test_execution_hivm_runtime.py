@@ -9,6 +9,7 @@ import os
 import re
 import struct
 import sys
+import threading
 import types
 
 import pytest
@@ -17,6 +18,9 @@ tla = pytest.importorskip("catlass.tla", exc_type=ImportError)
 execution = pytest.importorskip("catlass.execution", exc_type=ImportError)
 base_dsl_mod = pytest.importorskip("catlass.base_dsl", exc_type=ImportError)
 compiler_bridge = pytest.importorskip("catlass.compiler_bridge", exc_type=ImportError)
+ascend_runtime = pytest.importorskip(
+    "catlass.base_dsl.runtime.ascend", exc_type=ImportError
+)
 
 
 def _load_debug_print_example(*, mixed: bool = False):
@@ -637,6 +641,15 @@ def _zero_arg_kernel() -> None:
     pass
 
 
+def _zero_arg_kernel_abi() -> compiler_bridge.KernelAbiLayout:
+    return compiler_bridge.KernelAbiLayout(
+        schema_version=3,
+        entrypoint="zero_arg_kernel",
+        total_size=0,
+        arguments=(),
+    )
+
+
 @tla.kernel
 def _zero_arg_tla_kernel() -> None:
     pass
@@ -671,7 +684,8 @@ def test_public_compile_dry_run_invokes_typed_bridge_and_hivmc_a5(
         execution,
         "lower_tlair_module_to_mlir",
         lambda module, **_kwargs: compiler_bridge.TlaLoweringResult(
-            "module { func.func @zero_arg_kernel() }\n"
+            "module { func.func @zero_arg_kernel() }\n",
+            kernel_abi=_zero_arg_kernel_abi(),
         ),
     )
     monkeypatch.setattr(execution, "_mlir_build_dirs", lambda: [tmp_path])
@@ -696,6 +710,10 @@ def test_public_compile_dry_run_invokes_typed_bridge_and_hivmc_a5(
 
     assert artifact.compiler_bridge_path == bridge_path
     assert artifact.lowered_llvm == "module { func.func @zero_arg_kernel() }\n"
+    assert artifact.expects_print_tensor is False
+    assert artifact.expects_debug_fifo is False
+    assert artifact.logical_mixed_handoff is None
+    assert artifact._abi_packer is not None
     assert not (artifact.cache_dir / "lowered.hivmc-input.mlir").exists()
     assert recorded == [
         (
@@ -761,7 +779,8 @@ def test_generated_kernel_bridge_lowers_live_module(monkeypatch, tmp_path) -> No
     def fake_lower_tlair_module_to_mlir(module, **kwargs):
         bridge_calls.append((module, kwargs))
         return compiler_bridge.TlaLoweringResult(
-            "module { func.func @zero_arg_kernel() }\n"
+            "module { func.func @zero_arg_kernel() }\n",
+            kernel_abi=_zero_arg_kernel_abi(),
         )
 
     monkeypatch.setattr(
@@ -797,6 +816,149 @@ def test_generated_kernel_bridge_lowers_live_module(monkeypatch, tmp_path) -> No
             },
         )
     ]
+
+
+def test_force_recompile_refreshes_launched_artifact_in_memory_cache(
+    monkeypatch, tmp_path
+) -> None:
+    tlair_mlir = "module { tla.func @zero_arg_kernel() { tla.return } }"
+    lowered_module = object()
+    hivm_compile = tmp_path / "hivmc-a5"
+    template_bc = tmp_path / "bc" / "meta_op.aiv.c310.bc"
+    hivm_compile.write_text("")
+    template_bc.parent.mkdir(parents=True)
+    template_bc.write_bytes(b"bc")
+
+    monkeypatch.setattr(execution, "_MEMORY_COMPILE_CACHE", {})
+    monkeypatch.setattr(
+        base_dsl_mod.BaseDSL,
+        "_lower",
+        lambda *_args, **_kwargs: _FakeLowered(
+            tlair_mlir, module=lowered_module
+        ),
+    )
+    monkeypatch.setattr(execution, "resolve_bridge_extension_path", lambda: None)
+    monkeypatch.setattr(execution, "_resolve_hivmc_a5", lambda: hivm_compile)
+    monkeypatch.setattr(execution, "_tool_version", lambda _path: "test-version")
+    monkeypatch.setattr(execution, "_mlir_build_dirs", lambda: [tmp_path])
+    monkeypatch.setattr(
+        execution,
+        "lower_tlair_module_to_mlir",
+        lambda *_args, **_kwargs: compiler_bridge.TlaLoweringResult(
+            "module { func.func @zero_arg_kernel() }\n",
+            kernel_abi=_zero_arg_kernel_abi(),
+        ),
+    )
+
+    compiled_binaries: list[bytes] = []
+
+    def fake_run_checked(cmd, *, label, cwd, stdin_text=None):
+        del cmd, stdin_text
+        assert label == "hivmc-a5"
+        binary = f"obj-{len(compiled_binaries) + 1}".encode()
+        compiled_binaries.append(binary)
+        Path(cwd, "kernel.o").write_bytes(binary)
+
+    monkeypatch.setattr(execution, "_run_checked", fake_run_checked)
+
+    loaded_binaries: list[bytes] = []
+    launched_functions: list[int] = []
+    _install_fake_launch_context(monkeypatch, device=0, stream=90)
+
+    def fake_load_binary(**kwargs):
+        loaded_binaries.append(kwargs["kernel_path"].read_bytes())
+        sequence = len(loaded_binaries)
+        return 100 + sequence, 200 + sequence
+
+    monkeypatch.setattr(execution, "load_binary", fake_load_binary)
+    monkeypatch.setattr(
+        execution,
+        "launch_kernel",
+        lambda **kwargs: launched_functions.append(kwargs["function"]),
+    )
+
+    runtime = execution.TlaRuntimeOptions(
+        cache_enabled=True, cache_dir=tmp_path / "cache"
+    )
+    first = execution.compile_kernel(
+        _zero_arg_kernel,
+        kind="kernel",
+        options={},
+        runtime=runtime,
+    )
+    execution.execute_kernel(
+        first,
+        runtime=runtime,
+        launch_args=[],
+        launch_kwargs={"block_num": 1},
+    )
+
+    recompiled = execution.compile_kernel(
+        _zero_arg_kernel,
+        kind="kernel",
+        options={},
+        runtime=replace(runtime, force_recompile=True),
+    )
+    cached = execution.compile_kernel(
+        _zero_arg_kernel,
+        kind="kernel",
+        options={},
+        runtime=runtime,
+    )
+    assert cached is recompiled
+    assert cached is not first
+
+    execution.execute_kernel(
+        cached,
+        runtime=runtime,
+        launch_args=[],
+        launch_kwargs={"block_num": 1},
+    )
+
+    assert compiled_binaries == [b"obj-1", b"obj-2"]
+    assert loaded_binaries == [b"obj-1", b"obj-2"]
+    assert launched_functions == [201, 202]
+
+
+def test_compile_rejects_invalid_kernel_abi_before_hivmc(
+    monkeypatch, tmp_path
+) -> None:
+    tlair_mlir = "module { tla.func @zero_arg_kernel() { tla.return } }"
+    hivmc = tmp_path / "hivmc-a5"
+    hivmc.write_text("")
+    invalid_abi = replace(_zero_arg_kernel_abi(), entrypoint="wrong_kernel")
+
+    monkeypatch.setattr(
+        base_dsl_mod.BaseDSL,
+        "_lower",
+        lambda *_args, **_kwargs: _FakeLowered(tlair_mlir, module=object()),
+    )
+    monkeypatch.setattr(execution, "resolve_bridge_extension_path", lambda: None)
+    monkeypatch.setattr(execution, "_resolve_hivmc_a5", lambda: hivmc)
+    monkeypatch.setattr(execution, "_tool_version", lambda _path: "test-version")
+    monkeypatch.setattr(
+        execution,
+        "lower_tlair_module_to_mlir",
+        lambda *_args, **_kwargs: compiler_bridge.TlaLoweringResult(
+            "module { func.func @zero_arg_kernel() }\n",
+            kernel_abi=invalid_abi,
+        ),
+    )
+    monkeypatch.setattr(
+        execution,
+        "_run_checked",
+        lambda *_args, **_kwargs: pytest.fail("hivmc must not run"),
+    )
+
+    with pytest.raises(execution.TlaKernelCompileError, match="does not match"):
+        execution.compile_kernel(
+            _zero_arg_kernel,
+            kind="kernel",
+            options={},
+            runtime=execution.TlaRuntimeOptions(
+                cache_enabled=False, cache_dir=tmp_path / "cache"
+            ),
+        )
 
 
 def test_runtime_options_npu_arch_defaults_core_until_mlir() -> None:
@@ -1021,6 +1183,7 @@ def test_runtime_options_from_lowered_mlir_updates_kernel_mode() -> None:
     updated = execution._runtime_options_from_lowered_mlir(
         runtime,
         "module { func.func @kernel() { vector.transfer_read %arg0[%c0], %cst : memref<1xf32>, vector<1xf32> } }",
+        has_logical_mixed_handoff=False,
     )
 
     assert updated.kernel_mode == "aiv"
@@ -2346,6 +2509,50 @@ def test_pack_launch_args_naturally_aligns_trailing_host_pointer() -> None:
     )
 
 
+def test_pack_launch_args_builds_dynamic_memref_fields_once_per_tensor() -> None:
+    class _DynamicTensor:
+        def __init__(self) -> None:
+            self.build_calls = 0
+
+        def build_memref_launch_fields(self):
+            self.build_calls += 1
+            return {
+                "aligned": 0x1234,
+                "offset": 7,
+                "size_0": 31,
+                "stride_0": 1,
+            }
+
+    fields = ("aligned", "offset", "size_0", "stride_0")
+    layout = compiler_bridge.KernelAbiLayout(
+        schema_version=3,
+        entrypoint="kernel",
+        total_size=32,
+        arguments=tuple(
+            compiler_bridge.KernelAbiArgument(
+                index=index,
+                kind=compiler_bridge.KernelAbiArgumentKind.MEMREF_FIELD,
+                scalar=None,
+                mlir_type="memref<?xf16>",
+                offset=index * 8,
+                storage_size=8,
+                alignment=4,
+                logical_index=0,
+                field=field,
+            )
+            for index, field in enumerate(fields)
+        ),
+    )
+    tensor = _DynamicTensor()
+
+    first = execution._pack_launch_args([tensor], layout)
+    second = execution._pack_launch_args([tensor], layout)
+
+    assert first == struct.pack("<QQQQ", 0x1234, 7, 31, 1)
+    assert second == first
+    assert tensor.build_calls == 2
+
+
 def test_pack_launch_args_host_payload_can_exceed_compiler_payload() -> None:
     class _Ptr:
         def __c_pointers__(self):
@@ -2501,6 +2708,15 @@ def test_kernel_abi_layout_entrypoint_must_match_artifact() -> None:
         execution._validate_kernel_abi_layout(layout, expected_entrypoint="kernel")
 
 
+def test_compiler_produced_kernel_abi_is_validated_before_artifact() -> None:
+    layout = _kernel_abi(total_size=0, entrypoint="other")
+
+    with pytest.raises(execution.TlaKernelCompileError, match="does not match"):
+        execution._prepare_compiled_abi_packer(
+            layout, expected_entrypoint="kernel"
+        )
+
+
 def test_corrupt_manifest_layout_is_compile_error() -> None:
     layout = _kernel_abi(
         ("scalar", "i32", "i32", 0, 4, 4),
@@ -2513,6 +2729,25 @@ def test_corrupt_manifest_layout_is_compile_error() -> None:
     with pytest.raises(execution.TlaKernelCompileError, match="exactly sufficient"):
         execution._kernel_abi_from_manifest(
             {"entrypoint": "kernel", "kernel_abi": descriptor}
+        )
+
+
+def test_corrupt_manifest_logical_index_is_compile_error() -> None:
+    layout = _kernel_abi(
+        ("pointer", "pointer", "!llvm.ptr", 0, 8, 4),
+        total_size=8,
+    )
+    layout = replace(
+        layout,
+        arguments=(replace(layout.arguments[0], logical_index=-1),),
+    )
+
+    with pytest.raises(execution.TlaKernelCompileError, match="logical_index"):
+        execution._kernel_abi_from_manifest(
+            {
+                "entrypoint": "kernel",
+                "kernel_abi": compiler_bridge.kernel_abi_to_dict(layout),
+            }
         )
 
 
@@ -2855,3 +3090,170 @@ def test_execute_kernel_uses_empty_payload_for_zero_arg(monkeypatch, tmp_path) -
             "expects_print_tensor": False,
         },
     ) in launches
+
+
+def test_ascend_runtime_load_binary_does_not_cache(monkeypatch, tmp_path) -> None:
+    calls: list[tuple[Path, str, str]] = []
+    set_device_calls: list[int] = []
+    resolve_calls: list[Path] = []
+
+    class _FakeRt:
+        @staticmethod
+        def set_device(device):
+            set_device_calls.append(device)
+            return 0
+
+    fake_acl = types.SimpleNamespace(rt=_FakeRt())
+    monkeypatch.setitem(sys.modules, "acl", fake_acl)
+    original_resolve = Path.resolve
+
+    def _resolve(path, *args, **kwargs):
+        resolve_calls.append(path)
+        return original_resolve(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "resolve", _resolve)
+
+    def _register(*, kernel_path, fn_name, kernel_mode):
+        calls.append((kernel_path, fn_name, kernel_mode))
+        sequence = len(calls)
+        return ascend_runtime._LoadedKernel(
+            100 + sequence, 200 + sequence, kernel_path
+        )
+
+    monkeypatch.setattr(ascend_runtime, "_register_kernel_binary", _register)
+    kwargs = {
+        "name": "kernel aiv",
+        "kernel_path": tmp_path / "kernel.o",
+        "device": 0,
+    }
+
+    assert ascend_runtime.load_binary(**kwargs) == (101, 201)
+    assert ascend_runtime.load_binary(**kwargs) == (102, 202)
+    assert len(calls) == 2
+    assert set_device_calls == [0, 0]
+    assert resolve_calls == [tmp_path / "kernel.o", tmp_path / "kernel.o"]
+
+
+def _runtime_cached_artifact(tmp_path, *, cache_key: str) -> execution.TlaKernelArtifact:
+    return execution.TlaKernelArtifact(
+        cache_key=cache_key,
+        cache_dir=tmp_path,
+        tlair_mlir=(
+            'module { "tla.func"() ({}) '
+            '{function_type = () -> (), sym_name = "kernel"} : () -> () }'
+        ),
+        lowered_llvm="module {}",
+        entrypoint="kernel",
+        compiler_bridge_path=None,
+        hivmc_path=tmp_path / "hivmc-a5",
+        kernel_binary_path=tmp_path / f"{cache_key}.o",
+        kernel_abi=_kernel_abi(total_size=0),
+    )
+
+
+def test_launch_does_not_repeat_static_artifact_analysis(
+    monkeypatch, tmp_path
+) -> None:
+    artifact = _runtime_cached_artifact(tmp_path, cache_key="validated")
+
+    def _unexpected_validation(*_args, **_kwargs):
+        raise AssertionError("launch repeated static Artifact analysis")
+
+    monkeypatch.setattr(execution, "_validate_kernel_abi_layout", _unexpected_validation)
+
+    plan = execution._build_kernel_launch_plan(
+        artifact=artifact,
+        runtime=execution.TlaRuntimeOptions(),
+        launch_args=[],
+        block_num=1,
+    )
+
+    assert plan.payload == b""
+
+
+def test_artifact_runtime_handles_are_cached_per_artifact(
+    monkeypatch, tmp_path
+) -> None:
+    loads: list[tuple[str, int]] = []
+    _install_fake_launch_context(monkeypatch, device=0, stream=90)
+
+    def _load_binary(**kwargs):
+        loads.append((kwargs["kernel_path"].name, kwargs["device"]))
+        sequence = len(loads)
+        return 100 + sequence, 200 + sequence
+
+    monkeypatch.setattr(execution, "load_binary", _load_binary)
+    monkeypatch.setattr(execution, "launch_kernel", lambda **_kwargs: None)
+
+    artifact = _runtime_cached_artifact(tmp_path, cache_key="first")
+    runtime = execution.TlaRuntimeOptions()
+    first = execution.execute_kernel(
+        artifact,
+        runtime=runtime,
+        launch_args=[],
+        launch_kwargs={"block_num": 1},
+    )
+    repeated = execution.execute_kernel(
+        artifact,
+        runtime=runtime,
+        launch_args=[],
+        launch_kwargs={"block_num": 1},
+    )
+    assert (first.module_handle, first.function_handle) == (101, 201)
+    assert (repeated.module_handle, repeated.function_handle) == (101, 201)
+    assert artifact._runtime_handle == (101, 201)
+
+    other = _runtime_cached_artifact(tmp_path, cache_key="second")
+    other_result = execution.execute_kernel(
+        other,
+        runtime=runtime,
+        launch_args=[],
+        launch_kwargs={"block_num": 1},
+    )
+    assert (other_result.module_handle, other_result.function_handle) == (102, 202)
+    assert other._runtime_handle == (102, 202)
+    assert loads == [("first.o", 0), ("second.o", 0)]
+
+
+def test_artifact_runtime_handle_load_is_serialized(monkeypatch, tmp_path) -> None:
+    artifact = _runtime_cached_artifact(tmp_path, cache_key="concurrent")
+    _install_fake_launch_context(monkeypatch, device=3, stream=99)
+    entered = threading.Event()
+    release = threading.Event()
+    loads: list[int] = []
+    failures: list[BaseException] = []
+
+    def _load_binary(**_kwargs):
+        loads.append(1)
+        entered.set()
+        assert release.wait(timeout=5)
+        return 101, 202
+
+    monkeypatch.setattr(execution, "load_binary", _load_binary)
+    monkeypatch.setattr(execution, "launch_kernel", lambda **_kwargs: None)
+
+    def _execute() -> None:
+        try:
+            execution.execute_kernel(
+                artifact,
+                runtime=execution.TlaRuntimeOptions(),
+                launch_args=[],
+                launch_kwargs={"block_num": 1},
+            )
+        except BaseException as exc:
+            failures.append(exc)
+
+    first = threading.Thread(target=_execute)
+    second = threading.Thread(target=_execute)
+    first.start()
+    assert entered.wait(timeout=5)
+    second.start()
+    release.set()
+    first.join(timeout=5)
+    second.join(timeout=5)
+
+    assert not failures
+    assert not first.is_alive()
+    assert not second.is_alive()
+    assert len(loads) == 1
+    assert artifact._runtime_handle == (101, 202)

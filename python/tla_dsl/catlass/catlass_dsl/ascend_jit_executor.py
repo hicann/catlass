@@ -18,14 +18,10 @@ from ..execution import (
     _checked_print_tensor_block_count,
     _core_type_from_arch_scope,
     _decode_native_print_tensor_records,
-    _extract_logical_mixed_handoff,
     _format_print_tensor_record,
-    _has_debug_print_workspace,
-    _has_print_tensor_workspace,
     _logical_launch_arg_count,
     _mixed_print_tensor_helper_core,
     _print_tensor_static_metadata_records,
-    _validate_kernel_abi_layout,
     _validate_print_tensor_fifo_capacity,
 )
 
@@ -59,11 +55,16 @@ def execute_kernel(
         else None
     )
 
-    module_handle, function_handle = execution_mod.load_binary(
-        name=f"{plan.entrypoint} {plan.kernel_mode}",
-        kernel_path=artifact.kernel_binary_path,
-        device=device,
-    )
+    with artifact._runtime_handle_lock:
+        handles = artifact._runtime_handle
+        if handles is None:
+            handles = execution_mod.load_binary(
+                name=f"{plan.entrypoint} {plan.kernel_mode}",
+                kernel_path=artifact.kernel_binary_path,
+                device=device,
+            )
+            object.__setattr__(artifact, "_runtime_handle", handles)
+    binary_handle, function_handle = handles
 
     def launch() -> None:
         execution_mod.launch_kernel(
@@ -113,7 +114,7 @@ def execute_kernel(
             )
     return TlaExecutionResult(
         artifact=artifact,
-        module_handle=module_handle,
+        module_handle=binary_handle,
         function_handle=function_handle,
         device=device,
     )
@@ -140,7 +141,7 @@ def _build_kernel_launch_plan(
     launch_args: Sequence[Any],
     block_num: int,
 ) -> _KernelLaunchPlan:
-    expects_print_tensor = _has_print_tensor_workspace(artifact)
+    expects_print_tensor = artifact.expects_print_tensor
     if expects_print_tensor:
         helper_core = (
             _mixed_print_tensor_helper_core(artifact.lowered_llvm)
@@ -153,15 +154,12 @@ def _build_kernel_launch_plan(
             helper_core=helper_core,
             mixed=runtime.kernel_mode == "mix",
         )
-    logical_mixed_handoff = _extract_logical_mixed_handoff(artifact.lowered_llvm)
-    expected_abi_entrypoint = (
-        logical_mixed_handoff.entrypoint
-        if logical_mixed_handoff is not None and runtime.kernel_mode == "mix"
-        else artifact.entrypoint
-    )
-    _validate_kernel_abi_layout(
-        artifact.kernel_abi, expected_entrypoint=expected_abi_entrypoint
-    )
+    logical_mixed_handoff = artifact.logical_mixed_handoff
+    abi_packer = artifact._abi_packer
+    if abi_packer is None:
+        raise TlaUnsupportedAbiError(
+            "kernel ABI was not validated while constructing the compiled artifact"
+        )
     if logical_mixed_handoff is not None and runtime.kernel_mode == "mix":
         # Host passes one object per *logical* argument. Dynamic-GM / memref
         # ABI expands each Tensor into many layout slots; ``user_arg_types`` is
@@ -175,8 +173,11 @@ def _build_kernel_launch_plan(
         payload = TlaExecutionArgs(
             expected_arg_count=expected_count,
             kernel_abi=artifact.kernel_abi,
+            abi_packer=abi_packer,
         ).generate_launch_payload(launch_args)
-        payload = _append_debug_print_workspace_payload(payload, artifact)
+        payload = _append_debug_print_workspace_payload(
+            payload, enabled=artifact.expects_debug_fifo
+        )
         if expects_print_tensor:
             extension = bytearray(payload)
             _align_payload(extension, _POINTER_ABI_SIZE)
@@ -191,17 +192,16 @@ def _build_kernel_launch_plan(
             kernel_mode="mix",
             block_num=int(block_num),
             payload=payload,
-            expects_debug_fifo=_has_debug_print_workspace(artifact),
+            expects_debug_fifo=artifact.expects_debug_fifo,
             expects_print_tensor=2 if expects_print_tensor else False,
         )
-    payload = (
-        TlaExecutionArgs(kernel_abi=artifact.kernel_abi).generate_launch_payload(
-            launch_args
-        )
-        if launch_args
-        else b""
+    payload = TlaExecutionArgs(
+        kernel_abi=artifact.kernel_abi,
+        abi_packer=abi_packer,
+    ).generate_launch_payload(launch_args)
+    payload = _append_debug_print_workspace_payload(
+        payload, enabled=artifact.expects_debug_fifo
     )
-    payload = _append_debug_print_workspace_payload(payload, artifact)
     if expects_print_tensor:
         extension = bytearray(payload)
         _align_payload(extension, _POINTER_ABI_SIZE)
@@ -216,7 +216,7 @@ def _build_kernel_launch_plan(
         kernel_mode=runtime.kernel_mode,
         block_num=int(block_num),
         payload=payload,
-        expects_debug_fifo=_has_debug_print_workspace(artifact),
+        expects_debug_fifo=artifact.expects_debug_fifo,
         expects_print_tensor=expects_print_tensor,
     )
 
