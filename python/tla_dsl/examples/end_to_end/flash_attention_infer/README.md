@@ -1,25 +1,10 @@
-# Readme
+# FlashAttentionInfer端到端示例
 
-基于catlass DSL框架，在Ascend950上实现的推理FlashAttention算子，对齐 C++ 参考实现 `examples/70_ascend950_flash_attention_chunk_prefill`
+本目录下的样例演示 **CATLASS DSL** 下基于 Ascend950 的推理 FlashAttention 算子实现，对齐 C++ 参考实现 `examples/70_ascend950_flash_attention_chunk_prefill`。
 
-## 1. 代码组织
+## 功能说明
 
-```text
-├── flash_attention_infer/
-│   ├── flash_attention_infer.py     # @tla.kernel + Host：构造输入、编译、调用kernel、精度校验
-│   ├── fa_tiling.py                 # Tiling
-│   └── README.md
-```
-
-`flash_attention_infer.py` 在同一文件内同时包含设备侧 `@tla.kernel` 函数与 host 侧运行/校验逻辑。编译期输入的 shape 参数集中定义在该文件顶部，kernel 与 host 同文件共享，改一处即两端同步生效。
-
-## 2. 功能
-
-### 2.1 算子功能
-
-适配 Prefill 场景的 FlashAttention 算子，通过分块（Tiling）策略和 OnlineSoftmax 技术，避免物化完整的 $N \times N$ 注意力分数矩阵，将内存复杂度从 $O(N^2)$ 降至 $O(N)$，实现等价的attention计算。
-
-计算公式：
+FlashAttention 算子通过分块（Tiling）策略和 Online Softmax 技术，避免物化完整的 $N \times N$ 注意力分数矩阵，将内存复杂度从 $O(N^2)$ 降至 $O(N)$，实现等价的 attention 计算。计算公式为：
 
 $$
 \text{Attention}(Q, K, V) = \text{softmax}\left(\frac{QK^T}{\sqrt{d_k}}\right) V
@@ -31,7 +16,7 @@ $$
 S_{ij} = \text{scale} \cdot (Q_i K_j^T) \in \mathbb{R}^{B_r \times B_c}
 $$
 
-其中 $\text{scale} = 1/\sqrt{d_k}$（代码中 `QK_SCALE = 1.0 / (HEAD_DIM ** 0.5)`），$B_r$、$B_c$ 分别为 Q/KV 基块大小（`Q_BLOCK`、`KV_BLOCK`，Ascend950均适配为128）。
+其中 $\text{scale} = 1/\sqrt{d_k}$，$B_r$、$B_c$ 分别为 Q/KV 基块大小（`Q_BLOCK`、`KV_BLOCK`，均适配为 128）。
 
 增量更新过程（Online Softmax）：
 
@@ -55,121 +40,96 @@ $$
 m = m_{\text{new}}
 $$
 
-内层循环结束后归一化输出 $O_{\text{final}} = O / l$，结果转回 FP16 写回 GM。
+内层循环结束后归一化输出 $O_{\text{final}} = O / l$，结果转回 FP16/BF16 写回 GM。
 
-### 2.2 已支持特性
+## 代码组织
 
-| 特性 | 说明 |
-| :--: | :-- |
-| 完整 FA | QK + Online Softmax + PV + Rescale 四阶段全链路 |
-| Prelaunch=2 流水 | Cube 超前 Vec 2 个基块，CV 跨迭代并行，避免PV计算因Vector侧softmax未完成而阻塞 |
-| GQA | `KV_HEAD_NUM < HEAD_NUM`，`kv_head_idx = head_idx // GROUP_SIZE` |
-| Ascend950 新通路 | L0C→UB（S/OTmp）、UB→L1（P），中间矩阵不落 GM |
-| Tiling 框架 | tilingdata / actual_seqlen 参数化，负载均衡（block=核数） |
-| 多缓冲 | K/V double、P triple、S/OTmp double、L0C QK/PV 各自 double |
+本目录组织结构如下所示：
 
-### 2.3 当前限制
-
-- 形状为编译期常量驱动，运行期不支持动态 shape；改 shape 需改 `flash_attention_infer.py` 顶部常量并重新编译。
-- `mask` 仅占位（全0），暂不支持0/1 mask。
-- 暂不支持 PagedAttention（KV cache存放）。
-- 仅支持 FP16 输入输出、FP32 中间计算、`HEAD_DIM=128`。
-
-## 3. 接口
-
-### 3.1 Kernel 接口
-
-```python
-@tla.kernel
-def flash_attention_infer_kernel(
-    mem_q: tla.Tensor,            # Q，GM，FP16，2D ND，[-1, HEAD_DIM]（BSND 展平），RowMajor
-    mem_k: tla.Tensor,            # K，GM，FP16，2D ND，[-1, HEAD_DIM]（BSND 展平），ColumnMajor
-    mem_v: tla.Tensor,            # V，GM，FP16，2D ND，[-1, HEAD_DIM]（BSND 展平），RowMajor
-    mem_o: tla.Tensor,            # O，GM，FP16，2D ND，[-1, HEAD_DIM]（BSND 展平），输出，RowMajor
-    mem_mask: tla.Tensor,         # mask，GM，INT8，2D ND [Q_SEQ, KV_SEQ]，暂不支持，只能为全 0
-    tiling_data: tla.Tensor,      # tilingdata，Int32 1D（见 fa_tiling.pack_tiling_int）
-    actual_q_seqlen: tla.Tensor,  # Q 前缀和序列，Int32，长度 batch+1（从0开始，actual_q_seqlen[0] = 0）
-    actual_kv_seqlen: tla.Tensor, # KV 前缀和序列，Int32，长度 batch+1
-)
+```plain
+./flash_attention_infer
+├── flash_attention_infer.py     # @tla.kernel + Host：构造输入、编译、调用 kernel、精度校验
+├── fa_tiling.py                 # Tiling 参数计算与打包
+└── README.md
 ```
 
-> 注：Host 侧将 `[BATCH, Q_SEQ, HEAD_NUM, HEAD_DIM]` 的 BSND 张量经 `reshape(-1, HEAD_DIM)` 展平为 2D 后再传入 kernel（见 `_reshape_qk_to_2d`）。K 以 ColumnMajor 传入以适配 $K^T$ 的矩阵乘布局。
+| 文件 | 概述 |
+|------|------|
+| [**`flash_attention_infer.py`**](flash_attention_infer.py) | 设备侧 `@tla.kernel` 与 host 侧运行/校验逻辑同文件。编译期 shape 参数集中于文件顶部，CLI 可覆盖，kernel 在 `tla.compile` trace 时读取最新值。 |
+| [**`fa_tiling.py`**](fa_tiling.py) | Tilingdata 计算与打包。 |
 
-### 3.2 编译期形状参数（`flash_attention_infer.py` 顶部）
+## 约束说明
 
-| 参数 | 默认值 | 说明 |
-| :-- | :-- | :-- |
-| `HEAD_DIM` | 128 | 头维度 |
-| `Q_BLOCK` | 128 | Q 基块（qBaseTile） |
-| `KV_BLOCK` | 128 | KV 基块（kvBaseTile） |
-| `Q_BLOCK_SUB` | 64 | UB 子块（Q_BLOCK // 2，配合 SPLIT_M 双 AIV及双缓冲） |
-| `BATCH` | 2 | batch 数 |
-| `HEAD_NUM` | 8 | Q 头数 |
-| `KV_HEAD_NUM` | 2 | KV 头数（GQA） |
-| `Q_SEQ` | 256 | Q 序列长度 |
-| `KV_SEQ` | 256 | KV 序列长度 |
-| `PRE_LAUNCH` | 2 | Cube 超前 Vec 的基块数 |
-| `QK_SCALE` | $1/\sqrt{128}$ | 缩放系数 |
+- 输入输出数据类型支持如下组合，中间计算恒为 FP32：
 
-## 4. 如何执行
+| 输入 (Q/K/V/O) | 中间计算 (S/PV/acc) |
+|:-:|:-:|
+| f16 | f32 |
+| bf16 | f32 |
 
-### 4.1 Host 参数
+- GQA 约束：`HEAD_NUM` 必须是 `KV_HEAD_NUM` 的整数倍。
+- `mask` 仅占位（全 0），暂不支持 0/1 mask。
+- 暂不支持 PagedAttention（KV cache 分页）。
 
-| 参数 | 类型 | 默认值 | 说明 |
-| :-- | :-- | :-- | :-- |
-| `--device` | int | `0` | NPU 设备 id |
-| `--block-num` | int | `-1` | 下发 block 数；`<=0` 表示满 AIC（`cube_core_num`），实现负载均衡 |
-| `--sentinel` | float | `-7.0` | O 的初始哨兵值，用于检测 kernel 是否真正写入 |
+## 使用示例
 
-> 容差阈值为编译期常量，`UNCHANGED_THRESHOLD` 判定 O 是否被写入，最大绝对误差 < `THRESHOLD` 判定精度是否通过。
+要运行本路径下的样例，请参考[环境配置](../../../docs/dev_guide/00_environment_setup.md)完成部署。
 
-### 4.2 执行命令
-
-```bash
-# 默认参数（全核、device 0）
-python flash_attention_infer.py
-
-# 指定 device 和 block 数
-python flash_attention_infer.py --device 0 --block-num 28
-
-# 强制重新编译
-CATLASS_DSL_FORCE_RECOMPILE=1 python flash_attention_infer.py
-```
-
-### 4.3 预期输出
+### 命令行参数
 
 ```text
-compile_ok=True host=torch_npu BATCH=2 Q_SEQ=117 KV_SEQ=512 HEAD_NUM=8 KV_HEAD_NUM=2 HEAD_DIM=128 ...
-kernel.o path=...
-launch_ok=True
-O unchanged (sentinel)? False
-O changed count=... / ...
-passed? True
+flash_attention_infer.py [-h] [--device DEVICE] [--dtype {f16,bf16}]
+                         [--batch BATCH] [--headnum HEADNUM] [--kvheadnum KVHEADNUM]
+                         [--qseqlen QSEQLEN] [--kvseqlen KVSEQLEN]
+                         [--block-num BLOCK_NUM] [--sentinel SENTINEL]
 ```
 
-### 4.4 精度校验
+上述命令行参数具体说明如下：
 
-Host 侧 (`flash_attention_infer.py`) 实现对齐 C++ `gen_data` 的 `ref_masked_attention`（全量 softmax，`group_matmul` 按 kv_head 分组 f32 matmul，P cast f16 做 PV）参考计算，与 kernel 输出比对：
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `--device` | `0` | 上板执行使用的 NPU 设备号。 |
+| `--dtype` | `"f16"` | 输入/输出数据类型，可选 `"f16"` 或 `"bf16"`，中间计算恒为 FP32。改值触发重新编译。 |
+| `--batch` | `1` | batch 数，覆盖编译期 `BATCH`。改值触发重新编译。 |
+| `--headnum` | `8` | Q 头数，覆盖 `HEAD_NUM`，须被 `--kvheadnum` 整除。 |
+| `--kvheadnum` | `1` | KV 头数，覆盖 `KV_HEAD_NUM`。 |
+| `--qseqlen` | `117` | Q 序列长度，覆盖 `Q_SEQ`。 |
+| `--kvseqlen` | `512` | KV 序列长度，覆盖 `KV_SEQ`。 |
+| `--block-num` | `-1` | 所启用的 AI Core 核数；`-1` 表示满 AIC（`cube_core_num`）。 |
+| `--sentinel` | `-7.0` | O 的初始哨兵值，用于检测 kernel 是否真正写入。 |
 
-- `O unchanged (sentinel)?`：检测 O 是否被 kernel 写过（哨兵值未变即为异常）；
-- `passed?`：最大绝对误差 `max_abs` < `THRESHOLD`判定通过。
+### 执行示例
 
-## 5. 未来待实现的功能
+在 `python/tla_dsl` 目录下执行：
 
-以下功能已在 C++ 参考实现中支持，DSL 版本待开发。
+```bash
+cd python/tla_dsl
 
-### 5.1 mask处理
+# 默认参数（全核、device 0）
+python examples/end_to_end/flash_attention_infer/flash_attention_infer.py
 
-当前 `mem_mask` 仅占位（全 0，GM→UB copy 但不参与计算），开发中。
+# 指定 NPU ID 以及核数
+python examples/end_to_end/flash_attention_infer/flash_attention_infer.py --block-num 1 --device 1
 
-### 5.2 PagedAttention / PagedCache
-
-当前 K/V 在 GM 中连续存放（TND）。待支持 PagedAttention（KV cache 分页），K/V 的 shape 为 `PAGE_ND[num_blocks, kv_head_num, block_size, head_dim]` ，通过 `blockTable` 做逻辑到物理的地址映射：
-
+# 覆盖编译期形状及数据类型
+python examples/end_to_end/flash_attention_infer/flash_attention_infer.py \
+  --batch 1 --qseqlen 5678 --kvseqlen 10000 --headnum 8 --kvheadnum 1 --dtype bf16
 ```
-blockTableIdx = kvSTileIdx * 128 / blockSize
-blockOffset   = kvSTileIdx * 128 % blockSize
-blockIdx      = blockTable[blockTableIdx]
-物理地址       = blockIdx × blockSize + blockOffset
+
+执行测试后，预期输出：
+```plain
+--- BATCH=(1,117,512) HEAD=(8,1) HEAD_DIM=128 dtype=f16 sentinel=-7.0 ---
+host=torch_npu BATCH=1 Q_SEQ=117 KV_SEQ=512 ...
+O unchanged (sentinel)? False changed_count=... / ...
+dtype=f16 eps=0.007812
+  numerator  (kernel vs truth):   MARE=... MERE=... RMSE=...
+  denominator(benchmark vs truth): MARE=... MERE=... RMSE=...
+  ratio: MARE=... (<=2)  MERE=... (<=1.2)  RMSE=... (<=1.2)
+passed=True cache_key=<cache_key>
+kernel.o=<cache_dir>/<cache_key>/kernel.o
 ```
+
+其中 `passed` 结果为 `True` 或 `False` 表明 NPU 计算结果与精度校验是否通过；`cache_dir` 是缓存目录，`cache_key` 是编译缓存的哈希值。
+
+精度判定采用**双标杆比值法**：以全量 f32 attention 为真值（truth），分块 online softmax 为标杆（benchmark），分别计算 kernel/标杆 相对真值的 MARE/MERE/RMSE，取比值 `分子 / max(分母, eps)`，判定 `MARE 比值 ≤ 2`、`MERE 比值 ≤ 1.2`、`RMSE 比值 ≤ 1.2` 为通过。
 

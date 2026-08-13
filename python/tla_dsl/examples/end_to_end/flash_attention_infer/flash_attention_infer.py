@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import argparse
-from typing import Any
 
-import numpy as np
+import torch
+import torch_npu
 
 import catlass.tla as tla
 from catlass.params import UnalignStoreParams, NormalLoadParams, LoadDist
@@ -32,10 +32,11 @@ Q_BLOCK = 128
 KV_BLOCK = 128
 Q_BLOCK_SUB = Q_BLOCK // 2
 
-# 编译期形状参数
-BATCH = 2
+# 编译期形状参数（默认值，可由命令行 --batch/--headnum/--kvheadnum/--qseqlen/--kvseqlen 覆盖；
+# run() 会按命令行参数重写这些模块全局并重算派生量，tla.compile 在 trace 时读取最新值）
+BATCH = 1
 HEAD_NUM = 8
-KV_HEAD_NUM = 2
+KV_HEAD_NUM = 1
 Q_SEQ = 117
 KV_SEQ = 512
 GROUP_SIZE = HEAD_NUM // KV_HEAD_NUM
@@ -73,7 +74,6 @@ PV_ML0_LOOP_NUM = (Q_BLOCK + L0_TILE_M - 1) // L0_TILE_M
 PV_NL0_LOOP_NUM = (HEAD_DIM + L0_TILE_N - 1) // L0_TILE_N
 PV_KL0_LOOP_NUM = (KV_BLOCK + L0_TILE_K - 1) // L0_TILE_K
 
-THRESHOLD = 0.05
 UNCHANGED_THRESHOLD = 0.1
 
 @tla.kernel
@@ -147,21 +147,24 @@ def flash_attention_infer_kernel(
     c0 = 0
     c1 = 1
 
-    l1_q_ptr = tla.allocate(Q_BLOCK * HEAD_DIM, tla.Float16, tla.AddressSpace.l1, ALIGNMENT)
-    l1_k_ping_ptr = tla.allocate(HEAD_DIM * KV_BLOCK, tla.Float16, tla.AddressSpace.l1, ALIGNMENT)
-    l1_k_pong_ptr = tla.allocate(HEAD_DIM * KV_BLOCK, tla.Float16, tla.AddressSpace.l1, ALIGNMENT)
-    l1_v_ping_ptr = tla.allocate(KV_BLOCK * HEAD_DIM, tla.Float16, tla.AddressSpace.l1, ALIGNMENT)
-    l1_v_pong_ptr = tla.allocate(KV_BLOCK * HEAD_DIM, tla.Float16, tla.AddressSpace.l1, ALIGNMENT)
+    # Q/K/V/O 均为 b16（f16/bf16），中间 S/PV/acc 为 f32
+    io_dtype = mem_q.ptr.dtype
+
+    l1_q_ptr = tla.allocate(Q_BLOCK * HEAD_DIM, io_dtype, tla.AddressSpace.l1, ALIGNMENT)
+    l1_k_ping_ptr = tla.allocate(HEAD_DIM * KV_BLOCK, io_dtype, tla.AddressSpace.l1, ALIGNMENT)
+    l1_k_pong_ptr = tla.allocate(HEAD_DIM * KV_BLOCK, io_dtype, tla.AddressSpace.l1, ALIGNMENT)
+    l1_v_ping_ptr = tla.allocate(KV_BLOCK * HEAD_DIM, io_dtype, tla.AddressSpace.l1, ALIGNMENT)
+    l1_v_pong_ptr = tla.allocate(KV_BLOCK * HEAD_DIM, io_dtype, tla.AddressSpace.l1, ALIGNMENT)
     # P L1 buffer: pL1BufNum=3
-    l1_p_0_ptr = tla.allocate(Q_BLOCK * KV_BLOCK, tla.Float16, tla.AddressSpace.l1, ALIGNMENT)
-    l1_p_1_ptr = tla.allocate(Q_BLOCK * KV_BLOCK, tla.Float16, tla.AddressSpace.l1, ALIGNMENT)
-    l1_p_2_ptr = tla.allocate(Q_BLOCK * KV_BLOCK, tla.Float16, tla.AddressSpace.l1, ALIGNMENT)
+    l1_p_0_ptr = tla.allocate(Q_BLOCK * KV_BLOCK, io_dtype, tla.AddressSpace.l1, ALIGNMENT)
+    l1_p_1_ptr = tla.allocate(Q_BLOCK * KV_BLOCK, io_dtype, tla.AddressSpace.l1, ALIGNMENT)
+    l1_p_2_ptr = tla.allocate(Q_BLOCK * KV_BLOCK, io_dtype, tla.AddressSpace.l1, ALIGNMENT)
 
     # L0A/L0B ping/pong 各 2 份, QK/PV 共用，全局递增
-    l0a_ping_ptr = tla.allocate(L0_HALF_SIZE // 2, tla.Float16, tla.AddressSpace.l0a, ALIGNMENT)
-    l0a_pong_ptr = tla.allocate(L0_HALF_SIZE // 2, tla.Float16, tla.AddressSpace.l0a, ALIGNMENT)
-    l0b_ping_ptr = tla.allocate(L0_HALF_SIZE // 2, tla.Float16, tla.AddressSpace.l0b, ALIGNMENT)
-    l0b_pong_ptr = tla.allocate(L0_HALF_SIZE // 2, tla.Float16, tla.AddressSpace.l0b, ALIGNMENT)
+    l0a_ping_ptr = tla.allocate(L0_HALF_SIZE // 2, io_dtype, tla.AddressSpace.l0a, ALIGNMENT)
+    l0a_pong_ptr = tla.allocate(L0_HALF_SIZE // 2, io_dtype, tla.AddressSpace.l0a, ALIGNMENT)
+    l0b_ping_ptr = tla.allocate(L0_HALF_SIZE // 2, io_dtype, tla.AddressSpace.l0b, ALIGNMENT)
+    l0b_pong_ptr = tla.allocate(L0_HALF_SIZE // 2, io_dtype, tla.AddressSpace.l0b, ALIGNMENT)
 
     l0_s_ping_ptr = tla.allocate(Q_BLOCK * KV_BLOCK, tla.Float32, tla.AddressSpace.l0c, ALIGNMENT)
     l0_s_pong_ptr = tla.allocate(Q_BLOCK * KV_BLOCK, tla.Float32, tla.AddressSpace.l0c, ALIGNMENT)
@@ -172,15 +175,15 @@ def flash_attention_infer_kernel(
     ub_s_ping_ptr = tla.allocate(Q_BLOCK_SUB * KV_BLOCK, tla.Float32, tla.AddressSpace.ub, ALIGNMENT)
     ub_s_pong_ptr = tla.allocate(Q_BLOCK_SUB * KV_BLOCK, tla.Float32, tla.AddressSpace.ub, ALIGNMENT)
     # P buffer (zN布局, Q_BLOCK_SUB+1 padding 用于 BlockStoreParams)
-    ub_p_f16_ping_ptr = tla.allocate((Q_BLOCK_SUB + 1) * KV_BLOCK, tla.Float16, tla.AddressSpace.ub, ALIGNMENT)
-    ub_p_f16_pong_ptr = tla.allocate((Q_BLOCK_SUB + 1) * KV_BLOCK, tla.Float16, tla.AddressSpace.ub, ALIGNMENT)
+    ub_p_f16_ping_ptr = tla.allocate((Q_BLOCK_SUB + 1) * KV_BLOCK, io_dtype, tla.AddressSpace.ub, ALIGNMENT)
+    ub_p_f16_pong_ptr = tla.allocate((Q_BLOCK_SUB + 1) * KV_BLOCK, io_dtype, tla.AddressSpace.ub, ALIGNMENT)
 
     ub_pv_ping_ptr = tla.allocate(Q_BLOCK_SUB * HEAD_DIM, tla.Float32, tla.AddressSpace.ub, ALIGNMENT)
     ub_pv_pong_ptr = tla.allocate(Q_BLOCK_SUB * HEAD_DIM, tla.Float32, tla.AddressSpace.ub, ALIGNMENT)
 
     ub_acc_ptr = tla.allocate(Q_BLOCK_SUB * HEAD_DIM, tla.Float32, tla.AddressSpace.ub, ALIGNMENT)
 
-    ub_out_f16_ptr = tla.allocate(Q_BLOCK_SUB * HEAD_DIM, tla.Float16, tla.AddressSpace.ub, ALIGNMENT)
+    ub_out_f16_ptr = tla.allocate(Q_BLOCK_SUB * HEAD_DIM, io_dtype, tla.AddressSpace.ub, ALIGNMENT)
 
     ub_now_max_ptr = tla.allocate(Q_BLOCK_SUB, tla.Float32, tla.AddressSpace.ub, ALIGNMENT)
     ub_last_max_ptr = tla.allocate(Q_BLOCK_SUB, tla.Float32, tla.AddressSpace.ub, ALIGNMENT)
@@ -530,7 +533,6 @@ def flash_attention_infer_kernel(
                     tla.copy(ub_mask_sub, mem_mask_block)
                     tla.set_flag(mask_copy_end)
                     tla.wait_flag(mask_copy_end)
-                    tla.pipe_barrier(tla.pipes.ALL)
                     ub_mask = tla.make_tensor(
                         ub_mask_ptr,
                         tla.make_layout(tla.make_shape(q_tile_size_sub, kv_tile_size), tla.make_stride(KV_BLOCK, 1)),
@@ -578,7 +580,7 @@ def flash_attention_infer_kernel(
                         reduce_mask = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Float32)
                         one_mask_p1, _ = tla.update_mask(1, dtype=tla.Float32)
                         mask_tail_n, _ = tla.update_mask(remaining, dtype=tla.Float32)
-                        min_reg = tla.full(-65504.0, dtype=tla.Float32)
+                        min_reg = tla.full(MIN_VALUE, dtype=tla.Float32)
                         for i0 in tla.range(q_tile_size_sub):
                             if kv_tile_size > VL_FLOAT_ELE:
                                 ub_s_i0 = tla.tile_view(ub_s, tla.make_shape(1, VL_FLOAT_ELE), tla.make_coord(i0, c0))
@@ -613,7 +615,6 @@ def flash_attention_infer_kernel(
                                 else:
                                     ub_max_dst_if0 = tla.tile_view(ub_last_max, tla.make_shape(1), tla.make_coord(i0))
                                     ub_max_dst_if0.store(max_reg_if0, params=UnalignStoreParams(), mask=one_mask_p1)
-                    tla.pipe_barrier(tla.pipes.ALL)
 
                     # Phase 1b: UpdateMax (if update)
                     if update:
@@ -627,6 +628,7 @@ def flash_attention_infer_kernel(
                                 last_reg_if0 = ub_last_max_i_if0.load(params=NormalLoadParams(load_dist=LoadDist.DIST_BRC_B32))
                                 global_max_if0 = tla.max(now_reg_if0, last_reg_if0, mask=pregFull_um)
                                 ub_now_max_i_if0.store(global_max_if0, params=UnalignStoreParams(), mask=one_mask_um)
+                                ub_last_max_i_if0.store(now_reg_if0, params=UnalignStoreParams(), mask=one_mask_um)
 
                     # Phase 2: exp(s - global_max), store back to ub_s, block_sum
                     with tla.vec.func(mode='simd'):
@@ -671,24 +673,23 @@ def flash_attention_infer_kernel(
                     # Phase 3: cast f32->f16, DINTLV+cast+bitwise_or store zNUnAlign P
                     with tla.vec.func(mode='simd'):
                         pregFull = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Float32)
-                        preg_all_b16 = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Float16)
+                        preg_all_b16 = tla.create_mask(pattern=tla.mask.ALL, dtype=io_dtype)
                         for i3 in tla.range(q_tile_size_sub):
                             if kv_tile_size > VL_FLOAT_ELE:
                                 ub_s_row = tla.tile_view(ub_s, tla.make_shape(1, 2 * VL_FLOAT_ELE), tla.make_coord(i3, c0))
                                 s_odd_reg, s_even_reg = ub_s_row.load(params=NormalLoadParams(load_dist=LoadDist.DIST_DINTLV_B32))
-                                p_even_reg = s_even_reg.to(tla.Float16, cast_trait_one, mask=pregFull)
-                                p_odd_reg = s_odd_reg.to(tla.Float16, cast_trait_zero, mask=pregFull)
+                                p_even_reg = s_even_reg.to(io_dtype, cast_trait_one, mask=pregFull)
+                                p_odd_reg = s_odd_reg.to(io_dtype, cast_trait_zero, mask=pregFull)
                                 p_zn_reg = tla.bitwise_or(p_even_reg, p_odd_reg, mask=preg_all_b16)
                                 ub_p_zn_i0 = tla.tile_view(ub_p_zN, tla.make_shape(1, 2 * VL_FLOAT_ELE), tla.make_coord(i3, c0))
                                 ub_p_zn_i0.store(p_zn_reg, params=tla.params.BlockStoreParams(block_stride=Q_BLOCK_SUB + 1), mask=preg_all_b16)
                             else:
                                 ub_s_i0 = tla.tile_view(ub_s, tla.make_shape(1, VL_FLOAT_ELE), tla.make_coord(i3, c0))
                                 a_reg0 = ub_s_i0.load()
-                                p_reg0 = a_reg0.to(tla.Float16, cast_trait_zero, mask=pregFull)
+                                p_reg0 = a_reg0.to(io_dtype, cast_trait_zero, mask=pregFull)
                                 r0_qk, _ = tla.deinterleave(p_reg0, p_reg0)
                                 ub_p_zn_i0 = tla.tile_view(ub_p_zN, tla.make_shape(1, 2 * VL_FLOAT_ELE), tla.make_coord(i3, c0))
                                 ub_p_zn_i0.store(r0_qk, params=tla.params.BlockStoreParams(block_stride=Q_BLOCK_SUB + 1), mask=preg_all_b16)
-                    tla.pipe_barrier(tla.pipes.ALL)
 
                     if ubSBufId == c0:
                         tla.set_flag(v_mte3_0)
@@ -1002,10 +1003,9 @@ def flash_attention_infer_kernel(
                                     div_reg_re0 = tla.div(cur_reg_re0, sum_reg_re0, mask=pregFull_re0)
                                     acc_tile_re0 = tla.tile_view(ub_acc_re, tla.make_shape(1, VL_FLOAT_ELE), tla.make_coord(i_re0, j_re0))
                                     acc_tile_re0.store(div_reg_re0, mask=pregFull_re0)
-                        tla.pipe_barrier(tla.pipes.ALL)
                         with tla.vec.func(mode='simd'):
                             pregFull_re1 = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Float32)
-                            preg_all_b16_re1 = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Float16)
+                            preg_all_b16_re1 = tla.create_mask(pattern=tla.mask.ALL, dtype=io_dtype)
                             for i_re1 in tla.range(q_tile_size_sub_re):
                                 for j_re1 in tla.range(c0, HEAD_DIM // (2 * VL_FLOAT_ELE), c1):
                                     acc_tile_re1_0 = tla.tile_view(ub_acc_re, tla.make_shape(1, VL_FLOAT_ELE), tla.make_coord(i_re1, 2 * j_re1))
@@ -1013,8 +1013,8 @@ def flash_attention_infer_kernel(
                                     out_tile_re1 = tla.tile_view(ub_out_f16_re, tla.make_shape(1, 2 * VL_FLOAT_ELE), tla.make_coord(i_re1, j_re1))
                                     acc_reg_re1_0 = acc_tile_re1_0.load()
                                     acc_reg_re1_1 = acc_tile_re1_1.load()
-                                    out_reg_re1_0 = acc_reg_re1_0.to(tla.Float16, cast_trait_zero, mask=pregFull_re1)
-                                    out_reg_re1_1 = acc_reg_re1_1.to(tla.Float16, cast_trait_zero, mask=pregFull_re1)
+                                    out_reg_re1_0 = acc_reg_re1_0.to(io_dtype, cast_trait_zero, mask=pregFull_re1)
+                                    out_reg_re1_1 = acc_reg_re1_1.to(io_dtype, cast_trait_zero, mask=pregFull_re1)
                                     r0_re1, _ = tla.deinterleave(out_reg_re1_0, out_reg_re1_1)
                                     out_tile_re1.store(r0_re1, mask=preg_all_b16_re1)
                         tla.set_flag(rescale_v_mte3)
@@ -1067,10 +1067,9 @@ def flash_attention_infer_kernel(
                                     add_reg_re4 = tla.add(mul_reg_re4, cur_reg_re4, mask=pregFull_re4)
                                     div_reg_re4 = tla.div(add_reg_re4, sum_reg_re4, mask=pregFull_re4)
                                     pre_tile_re4.store(div_reg_re4, mask=pregFull_re4)
-                        tla.pipe_barrier(tla.pipes.ALL)
                         with tla.vec.func(mode='simd'):
                             pregFull_re5 = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Float32)
-                            preg_all_b16_re5 = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Float16)
+                            preg_all_b16_re5 = tla.create_mask(pattern=tla.mask.ALL, dtype=io_dtype)
                             for i_re5 in tla.range(q_tile_size_sub_re):
                                 for j_re5 in tla.range(c0, HEAD_DIM // (2 * VL_FLOAT_ELE), c1):
                                     acc_tile_re5_0 = tla.tile_view(ub_acc_re, tla.make_shape(1, VL_FLOAT_ELE), tla.make_coord(i_re5, 2 * j_re5))
@@ -1078,8 +1077,8 @@ def flash_attention_infer_kernel(
                                     out_tile_re5 = tla.tile_view(ub_out_f16_re, tla.make_shape(1, 2 * VL_FLOAT_ELE), tla.make_coord(i_re5, j_re5))
                                     acc_reg_re5_0 = acc_tile_re5_0.load()
                                     acc_reg_re5_1 = acc_tile_re5_1.load()
-                                    out_reg_re5_0 = acc_reg_re5_0.to(tla.Float16, cast_trait_zero, mask=pregFull_re5)
-                                    out_reg_re5_1 = acc_reg_re5_1.to(tla.Float16, cast_trait_zero, mask=pregFull_re5)
+                                    out_reg_re5_0 = acc_reg_re5_0.to(io_dtype, cast_trait_zero, mask=pregFull_re5)
+                                    out_reg_re5_1 = acc_reg_re5_1.to(io_dtype, cast_trait_zero, mask=pregFull_re5)
                                     r0_re5, _ = tla.deinterleave(out_reg_re5_0, out_reg_re5_1)
                                     out_tile_re5.store(r0_re5, mask=preg_all_b16_re5)
                         tla.set_flag(rescale_v_mte3)
@@ -1134,21 +1133,6 @@ def flash_attention_infer_kernel(
         tla.wait_flag(mte3_ready_rescale)
 
 # Host侧：构造输入、编译、调用 kernel、精度校验
-def _require_torch_npu(device_id: int) -> Any:
-    try:
-        import torch
-    except ImportError as exc:
-        raise SystemExit("Host-side tensors require PyTorch. pip install torch") from exc
-    try:
-        import torch_npu
-    except ImportError as exc:
-        raise SystemExit("This example requires torch_npu for device DLPack bindings.") from exc
-    torch.npu.set_device(device_id)
-    return torch
-
-def _runtime_kwargs(args: argparse.Namespace) -> dict[str, Any]:
-    return {"options": "--npu-arch 3510"}
-
 def get_block_num(block_num: int, device: int = 0, *, kind: str = "vector") -> int:
     """Get launch ``block_num``.
 
@@ -1157,8 +1141,6 @@ def get_block_num(block_num: int, device: int = 0, *, kind: str = "vector") -> i
     """
     if int(block_num) != -1:
         return max(1, int(block_num))
-    import torch
-
     props = torch.npu.get_device_properties(int(device))
     if kind == "vector":
         return max(1, int(props.vector_core_num))
@@ -1166,22 +1148,52 @@ def get_block_num(block_num: int, device: int = 0, *, kind: str = "vector") -> i
         return max(1, int(props.cube_core_num))
     raise ValueError(f"Unsupported kernel kind for block_num default: {kind!r}")
 
-def _create_tla_tensor(dev_buf: Any, layout_tag: Any = tla.arch.RowMajor) -> Any:
-    return from_dlpack(dev_buf.contiguous(), layout_tag=layout_tag)
 
-def _reshape_qk_to_2d(tensor: Any) -> Any:
+def create_tla_tensor(buf, layout_tag=tla.arch.RowMajor):
+    return from_dlpack(buf.contiguous(), layout_tag=layout_tag)
+
+
+def reshape_qk_to_2d(tensor):
     return tensor.reshape(-1, HEAD_DIM).contiguous()
 
+
+def apply_shape_args(args: argparse.Namespace) -> None:
+    """按命令行参数覆盖编译期形状全局，并重算派生量。
+
+    kernel 体在 tla.compile(...) 时被 trace，通过 Python LOAD_GLOBAL 读取这些
+    模块全局；在 compile 之前覆盖即可让新形状生效，缓存 key 也会按新 MLIR 区分。
+    """
+    global BATCH, HEAD_NUM, KV_HEAD_NUM, Q_SEQ, KV_SEQ
+    global GROUP_SIZE, Q_BLOCK_COUNT, KV_BLOCK_COUNT, TOTAL_TASKS
+
+    if args.headnum % args.kvheadnum != 0:
+        raise SystemExit(
+            f"--headnum ({args.headnum}) must be a multiple of "
+            f"--kvheadnum ({args.kvheadnum}) for GQA"
+        )
+
+    BATCH = args.batch
+    HEAD_NUM = args.headnum
+    KV_HEAD_NUM = args.kvheadnum
+    Q_SEQ = args.qseqlen
+    KV_SEQ = args.kvseqlen
+    GROUP_SIZE = HEAD_NUM // KV_HEAD_NUM
+    Q_BLOCK_COUNT = (Q_SEQ + Q_BLOCK - 1) // Q_BLOCK
+    KV_BLOCK_COUNT = (KV_SEQ + KV_BLOCK - 1) // KV_BLOCK
+    TOTAL_TASKS = BATCH * HEAD_NUM * Q_BLOCK_COUNT
+
+
 def run(args: argparse.Namespace) -> int:
-    torch_mod = _require_torch_npu(args.device)
-    device = "npu"
+    torch.npu.set_device(args.device)
+    apply_shape_args(args)
+    dtypes = {"f16": torch.float16, "bf16": torch.bfloat16}
+    dtype = dtypes[args.dtype]
     print(
-        "---",
-        "flash_attention_infer (QK + softmax + PV + rescale, full FA)",
-        f"BATCH={BATCH} Q_SEQ={Q_SEQ} KV_SEQ={KV_SEQ}",
-        f"HEAD_NUM={HEAD_NUM} KV_HEAD_NUM={KV_HEAD_NUM}",
-        f"HEAD_DIM={HEAD_DIM} KV_BLOCK_COUNT={KV_BLOCK_COUNT}",
-        "---",
+        f"--- BATCH=({BATCH},{Q_SEQ},{KV_SEQ}) "
+        f"HEAD=({HEAD_NUM},{KV_HEAD_NUM}) "
+        f"HEAD_DIM={HEAD_DIM} "
+        f"dtype={args.dtype} "
+        f"sentinel={args.sentinel} ---"
     )
 
     q_shape = (BATCH, Q_SEQ, HEAD_NUM, HEAD_DIM)
@@ -1189,18 +1201,18 @@ def run(args: argparse.Namespace) -> int:
     v_shape = (BATCH, KV_SEQ, KV_HEAD_NUM, HEAD_DIM)
     o_shape = (BATCH, Q_SEQ, HEAD_NUM, HEAD_DIM)
 
-    torch_mod.manual_seed(42)
-    torch_q = torch_mod.rand(q_shape, dtype=torch_mod.float16).to(device)
-    torch_k = torch_mod.rand(k_shape, dtype=torch_mod.float16).to(device)
-    torch_v = torch_mod.rand(v_shape, dtype=torch_mod.float16).to(device)
-    torch_o = torch_mod.full(o_shape, args.sentinel, dtype=torch_mod.float16, device=device)
+    torch.manual_seed(42)
+    torch_q = torch.rand(q_shape, dtype=dtype).npu()
+    torch_k = torch.rand(k_shape, dtype=dtype).npu()
+    torch_v = torch.rand(v_shape, dtype=dtype).npu()
+    torch_o = torch.full(o_shape, args.sentinel, dtype=dtype).npu()
 
-    tla_q = _create_tla_tensor(_reshape_qk_to_2d(torch_q), tla.arch.RowMajor)
-    tla_k = _create_tla_tensor(_reshape_qk_to_2d(torch_k), tla.arch.ColumnMajor)
-    tla_v = _create_tla_tensor(_reshape_qk_to_2d(torch_v), tla.arch.RowMajor)
-    tla_o = _create_tla_tensor(_reshape_qk_to_2d(torch_o), tla.arch.RowMajor)
-    mask_2d = torch_mod.zeros((Q_SEQ, KV_SEQ), dtype=torch_mod.int8, device=device)
-    tla_mask = _create_tla_tensor(mask_2d, tla.arch.RowMajor)
+    tla_q = create_tla_tensor(reshape_qk_to_2d(torch_q), tla.arch.RowMajor)
+    tla_k = create_tla_tensor(reshape_qk_to_2d(torch_k), tla.arch.ColumnMajor)
+    tla_v = create_tla_tensor(reshape_qk_to_2d(torch_v), tla.arch.RowMajor)
+    tla_o = create_tla_tensor(reshape_qk_to_2d(torch_o), tla.arch.RowMajor)
+    mask_2d = torch.zeros((Q_SEQ, KV_SEQ), dtype=torch.int8).npu()
+    tla_mask = create_tla_tensor(mask_2d, tla.arch.RowMajor)
 
     q_seqlen_list = [Q_SEQ] * BATCH
     kv_seqlen_list = [KV_SEQ] * BATCH
@@ -1215,24 +1227,16 @@ def run(args: argparse.Namespace) -> int:
         kv_base_tile=KV_BLOCK,
     )
     tiling_int_list = pack_tiling_int(td)
-    tiling_tensor = torch_mod.tensor(tiling_int_list, dtype=torch_mod.int32, device='cpu').to(device)
-    tla_tiling = _create_tla_tensor(tiling_tensor, tla.arch.RowMajor)
+    tiling_tensor = torch.tensor(tiling_int_list, dtype=torch.int32).npu()
+    tla_tiling = create_tla_tensor(tiling_tensor, tla.arch.RowMajor)
 
     actual_q_list = make_actual_seqlen(q_seqlen_list)
     actual_kv_list = make_actual_seqlen(kv_seqlen_list)
-    actual_q = torch_mod.tensor(actual_q_list, dtype=torch_mod.int32)
-    actual_kv = torch_mod.tensor(actual_kv_list, dtype=torch_mod.int32)
-    tla_actual_q = _create_tla_tensor(actual_q.to(device), tla.arch.RowMajor)
-    tla_actual_kv = _create_tla_tensor(actual_kv.to(device), tla.arch.RowMajor)
+    actual_q = torch.tensor(actual_q_list, dtype=torch.int32).npu()
+    actual_kv = torch.tensor(actual_kv_list, dtype=torch.int32).npu()
+    tla_actual_q = create_tla_tensor(actual_q, tla.arch.RowMajor)
+    tla_actual_kv = create_tla_tensor(actual_kv, tla.arch.RowMajor)
 
-    # Mix/CV kernel: -1 / <=0 defaults to cube_core_num (AIC).
-    block_num = get_block_num(
-        -1 if args.block_num <= 0 else args.block_num,
-        args.device,
-        kind="mix",
-    )
-
-    print(f"Launching kernel (block={block_num})...", flush=True)
     artifact = tla.compile(
         flash_attention_infer_kernel,
         tla_q,
@@ -1243,123 +1247,164 @@ def run(args: argparse.Namespace) -> int:
         tla_tiling,
         tla_actual_q,
         tla_actual_kv,
-        **_runtime_kwargs(args),
+        options="--npu-arch 3510",
     )
-
+    block_num = get_block_num(args.block_num, args.device, kind="mix")
     artifact(
         tla_q, tla_k, tla_v, tla_o, tla_mask, tla_tiling, tla_actual_q, tla_actual_kv,
-        block=block_num,
+        block_num=block_num,
     )
+    torch.npu.synchronize()
 
-    torch_mod.npu.synchronize()
-
+    # ==================== 双标杆精度判定 ====================
     scale = 1.0 / (HEAD_DIM ** 0.5)
-    q_bnsd = torch_q.permute(0, 2, 1, 3).contiguous()
-    k_bnsd = torch_k.permute(0, 2, 1, 3).contiguous()
-    v_bnsd = torch_v.permute(0, 2, 1, 3).contiguous()
-    if KV_HEAD_NUM != HEAD_NUM:
-        k_bnsd = k_bnsd.repeat_interleave(GROUP_SIZE, dim=1)
-        v_bnsd = v_bnsd.repeat_interleave(GROUP_SIZE, dim=1)
+    q_cpu = torch_q.cpu()
+    k_cpu = torch_k.cpu()
+    v_cpu = torch_v.cpu()
 
-    q_dsl = torch_q.cpu().numpy()
-    k_dsl = torch_k.cpu().numpy()
-    v_dsl = torch_v.cpu().numpy()
+    # --- 真值: 全量 f32 attention ---
+    golden_truth = torch.empty(BATCH, Q_SEQ, HEAD_NUM, HEAD_DIM, dtype=torch.float32)
+    for b in range(BATCH):
+        q_b = q_cpu[b].permute(1, 0, 2).float()    # [H, Sq, D] f32
+        k_b = k_cpu[b].permute(1, 0, 2).float()    # [Hkv, Svk, D] f32
+        v_b = v_cpu[b].permute(1, 0, 2).float()
+        if KV_HEAD_NUM != HEAD_NUM:
+            k_b = k_b.repeat_interleave(GROUP_SIZE, dim=0)
+            v_b = v_b.repeat_interleave(GROUP_SIZE, dim=0)
+        scores = torch.matmul(q_b, k_b.transpose(-2, -1)) * scale
+        probs = torch.softmax(scores, dim=-1)
+        out = torch.matmul(probs, v_b)
+        golden_truth[b] = out.permute(1, 0, 2)
 
-    del q_bnsd, k_bnsd, v_bnsd
-    torch_mod.npu.empty_cache()
-
-    group_num = HEAD_NUM // KV_HEAD_NUM
-
-    def group_matmul_ref(head, kv_head, left, right):
-        """对齐 C++ gen_data group_matmul: 按 kv_head 分组, .astype(f32)"""
+    # --- 标杆: ref_flash_attention (分块 online softmax, 对齐 kernel 实现) ---
+    def _group_matmul(head, kv_head, left, right):
+        gn = head // kv_head
         score = None
         for i in range(kv_head):
-            group_score = np.matmul(
-                left[i * group_num:(i + 1) * group_num, :, :].astype(np.float32),
-                right[i:(i + 1), :, :].astype(np.float32),
-            )
-            score = group_score if score is None else np.concatenate((score, group_score), 0)
+            gs = torch.matmul(left[i * gn:(i + 1) * gn, :, :].half(),
+                              right[i:(i + 1), :, :].half()).float()
+            score = gs if score is None else torch.cat((score, gs), 0)
         return score
 
-    def softmax_ref(sim):
-        """对齐 C++ gen_data softmax (sink=None)"""
-        row_max = np.max(sim, axis=-1, keepdims=True)
-        sim_sub = sim - row_max
-        sim_sub = np.exp(sim_sub)
-        row_sum = np.sum(sim_sub, axis=-1, keepdims=True)
-        soft_res = sim_sub / row_sum
-        return soft_res
+    def _qkMM1(query, key):
+        result = None
+        qk_k = key.shape[1]
+        for s in range(0, qk_k, 128):
+            sub = min(128, qk_k - s)
+            pq = query[:, :, s:s + sub]
+            pk = key[:, s:s + sub, :]
+            split = _group_matmul(pq.shape[0], pk.shape[0], pq, pk)
+            result = split if result is None else result + split
+        return result
 
-    num_tokens = BATCH * Q_SEQ
-    golden_output = np.zeros((num_tokens, HEAD_NUM, HEAD_DIM), dtype=np.float16)
+    def _pvMM2(p, value):
+        result = None
+        pv_k = value.shape[1]
+        for s in range(0, pv_k, 128):
+            sub = min(128, pv_k - s)
+            pp = p[:, :, s:s + sub]
+            pv = value[:, s:s + sub, :]
+            split = _group_matmul(pp.shape[0], pv.shape[0], pp, pv)
+            result = split if result is None else result + split
+        return result
 
+    dt = torch.float16 if args.dtype == "f16" else torch.bfloat16
+    golden_bm = torch.empty(BATCH, Q_SEQ, HEAD_NUM, HEAD_DIM, dtype=dt)
     for b in range(BATCH):
-        q_i = q_dsl[b]
-        keys = k_dsl[b]
-        values = v_dsl[b]
+        query = q_cpu[b].permute(1, 0, 2)      # [H, Sq, D]
+        key = k_cpu[b].permute(1, 2, 0)        # [Hkv, D, Svk]
+        value = v_cpu[b].permute(1, 0, 2)      # [Hkv, Svk, D]
+        context_len = key.shape[2]
+        gl = None
+        gm = None
+        go = None
+        for kv_start in range(0, context_len, KV_BLOCK):
+            sub_len = min(KV_BLOCK, context_len - kv_start)
+            sub_key = key[:, :, kv_start:kv_start + sub_len]
+            sub_value = value[:, kv_start:kv_start + sub_len]
+            qk_result = _qkMM1(query, sub_key).float()
+            qk_result = qk_result * scale
+            # online softmax
+            lm = torch.max(qk_result, dim=-1, keepdims=True)[0]
+            if kv_start == 0:
+                hm = lm
+                dm = 0
+            else:
+                hm = torch.maximum(gm, lm)
+                dm = gm - hm
+            gm = hm
+            sim_sub = torch.exp(qk_result - hm)
+            row_sum = torch.sum(sim_sub, dim=-1, keepdims=True)
+            p_result = sim_sub.to(dt)
+            lo = _pvMM2(p_result, sub_value).float()
+            if kv_start == 0:
+                gl = row_sum
+                go = lo
+            else:
+                dm = torch.exp(dm)
+                gl = gl * dm + row_sum
+                go = go * dm + lo
+        go = go / gl
+        go = torch.nan_to_num(go, nan=0.0)
+        golden_bm[b] = go.permute(1, 0, 2)
 
-        query = np.transpose(q_i, (1, 0, 2))
-        key = np.transpose(keys, (1, 2, 0))
-        sim_high = group_matmul_ref(query.shape[0], key.shape[0], query, key)
-        sim_high = sim_high * scale
+    # --- 比值计算 ---
+    result = torch_o.cpu().float()
+    sentinel_t = torch.full_like(result, args.sentinel)
+    unchanged = torch.isclose(result, sentinel_t, rtol=0.0, atol=UNCHANGED_THRESHOLD)
 
-        p_high = softmax_ref(sim_high)
-        p = p_high.astype(np.float16)
-        value = np.transpose(values, (1, 0, 2))
-        out = group_matmul_ref(query.shape[0], value.shape[0], p, value)
-        out = np.transpose(out, (1, 0, 2))
-        out = out.astype(np.float16)
+    epsilon = 1e-7
+    def _metrics(actual, golden):
+        a = actual.float()
+        g = golden.float()
+        diff = (a - g).abs()
+        rel = diff / (g.abs() + epsilon)
+        mare = rel.max().item()
+        mere = rel.mean().item()
+        rmse = torch.sqrt((diff ** 2).mean()).item()
+        max_abs = diff.max().item()
+        mean_abs = diff.mean().item()
+        return mare, mere, rmse, max_abs, mean_abs
 
-        golden_output[b * Q_SEQ:(b + 1) * Q_SEQ, :, :] = out
-
-    golden = golden_output.astype(np.float32).reshape(BATCH, Q_SEQ, HEAD_NUM, HEAD_DIM)
-
-    actual_np = torch_o.cpu().numpy().astype(np.float16).astype(np.float32)
-
-    actual_t = torch_mod.from_numpy(actual_np.copy())
-    sentinel_t = torch_mod.full_like(actual_t, args.sentinel)
-    unchanged = torch_mod.isclose(actual_t, sentinel_t, rtol=0.0, atol=UNCHANGED_THRESHOLD)
-
-    a = actual_np.flatten()
-    g = golden.flatten()
-    diff = np.abs(a - g)
-
-    max_abs = float(np.max(diff))
+    mare_n, mere_n, rmse_n, maxabs_n, meanabs_n = _metrics(result, golden_truth)
+    mare_d, mere_d, rmse_d, maxabs_d, meanabs_d = _metrics(golden_bm, golden_truth)
+    eps = (2.0 ** -7) if args.dtype == "f16" else (2.0 ** -6)
+    mare_ratio = mare_n / max(mare_d, eps)
+    mere_ratio = mere_n / max(mere_d, eps)
+    rmse_ratio = rmse_n / max(rmse_d, eps)
+    passed = mare_ratio <= 2.0 and mere_ratio <= 1.2 and rmse_ratio <= 1.2
 
     print(
-        "compile_ok=True "
-        f"host=torch_npu "
-        f"BATCH={BATCH} Q_SEQ={Q_SEQ} KV_SEQ={KV_SEQ} "
+        f"host=torch_npu BATCH={BATCH} Q_SEQ={Q_SEQ} KV_SEQ={KV_SEQ} "
         f"HEAD_NUM={HEAD_NUM} KV_HEAD_NUM={KV_HEAD_NUM} HEAD_DIM={HEAD_DIM} "
         f"Q_BLOCK_COUNT={Q_BLOCK_COUNT} KV_BLOCK_COUNT={KV_BLOCK_COUNT}"
     )
-    print(f"kernel.o path={artifact.kernel_binary_path}")
-    print("launch_ok=True")
-    print(f"O unchanged (sentinel)? {bool(unchanged.all())}")
-    print(f"O changed count={int((~unchanged).sum().item())} / {actual_t.numel()}")
-    passed = max_abs < THRESHOLD
-    print(f"passed? {passed}")
-
+    print(f"O unchanged (sentinel)? {bool(unchanged.all())} "
+          f"changed_count={int((~unchanged).sum().item())} / {result.numel()}")
+    print(f"dtype={args.dtype} eps={eps:.6f}")
+    print(f"  numerator  (kernel vs truth):   MARE={mare_n:.6e} MERE={mere_n:.6e} RMSE={rmse_n:.6e}  abs[max]={maxabs_n:.6e} abs[mean]={meanabs_n:.6e}")
+    print(f"  denominator(benchmark vs truth): MARE={mare_d:.6e} MERE={mere_d:.6e} RMSE={rmse_d:.6e}  abs[max]={maxabs_d:.6e} abs[mean]={meanabs_d:.6e}")
+    print(f"  ratio: MARE={mare_ratio:.4f} (<=2)  MERE={mere_ratio:.4f} (<=1.2)  RMSE={rmse_ratio:.4f} (<=1.2)")
+    print(f"passed={passed} cache_key={artifact.cache_key}")
+    print(f"kernel.o={artifact.kernel_binary_path}")
     return 0 if passed else 1
 
-def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description="flash_attention_infer: full FA kernel (QK + softmax + PV + rescale). "
-                    "Used to isolate 507015 to the PV cube block."
-    )
-    parser.add_argument("--device", type=int, default=0, help="NPU device id.")
-    parser.add_argument(
-        "--block-num", type=int, default=-1,
-        help="Launch block count (<=0 means use full AICore num from device).",
-    )
-    parser.add_argument(
-        "--sentinel", type=float, default=-7.0, help="Initial O value (sentinel).",
-    )
-    return parser
 
 def main() -> int:
-    args = _build_parser().parse_args()
-    return run(args)
+    parser = argparse.ArgumentParser(
+        description="flash_attention_infer: full FA kernel (QK + softmax + PV + rescale)."
+    )
+    parser.add_argument("--device", type=int, default=0)
+    parser.add_argument("--dtype", choices=("f16", "bf16"), default="f16")
+    parser.add_argument("--batch", type=int, default=BATCH)
+    parser.add_argument("--headnum", type=int, default=HEAD_NUM)
+    parser.add_argument("--kvheadnum", type=int, default=KV_HEAD_NUM)
+    parser.add_argument("--qseqlen", type=int, default=Q_SEQ)
+    parser.add_argument("--kvseqlen", type=int, default=KV_SEQ)
+    parser.add_argument("--block-num", type=int, default=-1)
+    parser.add_argument("--sentinel", type=float, default=-7.0)
+    return run(parser.parse_args())
+
 
 if __name__ == "__main__":
     raise SystemExit(main())
