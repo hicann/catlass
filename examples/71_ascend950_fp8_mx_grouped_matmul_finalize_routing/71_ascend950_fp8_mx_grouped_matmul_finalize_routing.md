@@ -29,21 +29,21 @@
 
 | 组件           | 模板类                                                                                                            | 说明                                                       |
 | -------------- | ----------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| Kernel         | [GroupedMxMatmulFinalizeRoutingTla](../../../include/catlass/gemm/kernel/grouped_mx_matmul_finalize_routing_tla.hpp) | AIC/AIV双核协作，按group遍历，CrossCore Flag流水线同步     |
-| BlockMmad      | [BlockMmadTla](../../../include/catlass/gemm/block/block_mmad_pingpong_tla.hpp)                                      | MX量化矩阵乘，DispatchPolicy=`MmadMx<Ascend950, true, 16>` |
-| TileCopy       | [PackedMxTileCopyTla](../../../include/catlass/gemm/block/block_mmad.hpp)                                            | GM→L1→UB数据搬运                                           |
-| BlockEpilogue  | [BlockEpilogueFinalizeRouting](../../../include/catlass/epilogue/block/block_epilogue_finalize_routing.hpp)          | 输出清零 + SharedInput赋值 + Logit加权 + Scatter Add       |
-| BlockScheduler | [ColumnBlockSwizzle](../../../include/catlass/gemm/block/block_swizzle.hpp)                                          | 按列分块调度，分配到各AICore                               |
+| Kernel         | [GroupedMxMatmulFinalizeRoutingTla](../../include/catlass/gemm/kernel/grouped_mx_matmul_finalize_routing_tla.hpp) | AIC/AIV双核协作，按group遍历，CrossCore Flag流水线同步     |
+| BlockMmad      | [BlockMmadTla](../../include/catlass/gemm/block/block_mmad_pingpong_tla.hpp)                                      | MX量化矩阵乘，DispatchPolicy=`MmadMx<Ascend950, true, 16>` |
+| TileCopy       | [PackedMxTileCopyTla](../../include/catlass/gemm/block/block_mmad.hpp)                                            | GM→L1→UB数据搬运                                           |
+| BlockEpilogue  | [BlockEpilogueFinalizeRouting](../../include/catlass/epilogue/block/block_epilogue_finalize_routing.hpp)          | 输出清零 + SharedInput赋值 + Logit加权 + Scatter Add       |
+| BlockScheduler | [ColumnBlockSwizzle](../../include/catlass/gemm/block/block_swizzle.hpp)                                          | 按列分块调度，分配到各AICore                               |
 
 #### 非确定性版（no_deter）
 
 | 组件 | 模板类 | 说明 |
 |------|--------|------|
-| Kernel | [GroupedMxMatmulFinalizeRoutingNoDeterTla](../../../include/catlass/gemm/kernel/grouped_mx_matmul_finalize_routing_no_deter_tla.hpp) | AIC/AIV双核协作，采用ASWT滚动调度，CrossCore Flag流水线同步 |
-| BlockMmad | [BlockMmadTla](../../../include/catlass/gemm/block/block_mmad_pingpong_tla.hpp) | MX量化矩阵乘，DispatchPolicy=`MmadMx<Ascend950, true, 16>`（与确定性版相同） |
-| TileCopy | [PackedMxTileCopyTla](../../../include/catlass/gemm/block/block_mmad.hpp) | GM→L1→UB数据搬运（与确定性版相同） |
-| BlockEpilogue | [BlockEpilogueFinalizeRoutingNoDeter](../../../include/catlass/epilogue/block/block_epilogue_finalize_routing_no_deter.hpp) | 输出清零 + SharedInput赋值 + Logit加权 + Scatter Add，AIV按M维切分 |
-| BlockScheduler | [GemmGroupedAswtTailSplitSwizzle](../../../include/catlass/gemm/block/block_swizzle_grouped_aswt.hpp) | 滚动核分配 + 窗口调度，支持尾块多核拆分 |
+| Kernel | [GroupedMxMatmulFinalizeRoutingNoDeterTla](../../include/catlass/gemm/kernel/grouped_mx_matmul_finalize_routing_no_deter_tla.hpp) | AIC/AIV双核协作，采用ASWT滚动调度，CrossCore Flag流水线同步 |
+| BlockMmad | [BlockMmadTla](../../include/catlass/gemm/block/block_mmad_pingpong_tla.hpp) | MX量化矩阵乘，DispatchPolicy=`MmadMx<Ascend950, true, 16>`（与确定性版相同） |
+| TileCopy | [PackedMxTileCopyTla](../../include/catlass/gemm/block/block_mmad.hpp) | GM→L1→UB数据搬运（与确定性版相同） |
+| BlockEpilogue | [BlockEpilogueFinalizeRoutingNoDeter](../../include/catlass/epilogue/block/block_epilogue_finalize_routing_no_deter.hpp) | 输出清零 + SharedInput赋值 + Logit加权 + Scatter Add，AIV按M维切分 |
+| BlockScheduler | [GemmGroupedAswtTailSplitSwizzle](../../include/catlass/gemm/block/block_swizzle_grouped_aswt.hpp) | 滚动核分配 + 窗口调度，支持尾块多核拆分 |
 
 ### AIC/AIV双核协作
 
@@ -186,7 +186,7 @@ $$\mathbb{1}_{\text{shared}}(r) = \begin{cases} 1, & \text{SharedInput} \neq \te
 
 确定性版使用 `ColumnBlockSwizzle` 按列分块调度，每个 group 的 tile 按固定列顺序分配给 AICore。
 
-非确定性版改用 [GemmGroupedAswtTailSplitSwizzle](../../../include/catlass/gemm/block/block_swizzle_grouped_aswt.hpp)，主要特性：
+非确定性版改用 [GemmGroupedAswtTailSplitSwizzle](../../include/catlass/gemm/block/block_swizzle_grouped_aswt.hpp)，主要特性：
 
 1. **滚动核分配**：`startBlockIdx_` 跨 group 滚动，避免所有 group 的起始核固定对齐，提升多核利用率
 2. **窗口调度**：通过滑动窗口限制同时在飞的 tile 数，降低资源竞争

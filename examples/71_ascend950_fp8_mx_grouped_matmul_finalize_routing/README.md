@@ -1,7 +1,5 @@
 # MXFP8GroupedMatmulFinalizeRouting Example Readme
 
-> **注意**：本样例位于 `experimental/` 目录下，如需编译运行，请先将样例目录拷贝至 `examples/` 下，并在 `examples/CMakeLists.txt` 中添加样例名称 `ascend950_fp8_mx_grouped_matmul_finalize_routing`。
-
 ## 功能介绍
 
 - 演示 Ascend 950 上的 **Grouped MXFP8矩阵乘 + Finalize Routing** 融合算子：
@@ -16,10 +14,10 @@
 ```text
 experimental
 ├── gmm
-│   ├── ascend950_fp8_mx_grouped_matmul_finalize_routing
+│   ├── 71_ascend950_fp8_mx_grouped_matmul_finalize_routing
 │   │   ├── CMakeLists.txt                          # CMake 编译配置
 │   │   ├── README.md
-│   │   ├── ascend950_fp8_mx_grouped_matmul_finalize_routing.md  # 设计文档
+│   │   ├── 71_ascend950_fp8_mx_grouped_matmul_finalize_routing.md  # 设计文档
 │   │   ├── gen_data_compare.py                     # 生成 data/input/ 与 golden/，执行对比
 │   │   ├── fp8_mx_grouped_matmul_finalize_routing.cpp          # 确定性版主程序
 │   │   └── fp8_mx_grouped_matmul_finalize_routing_no_deter.cpp # 非确定性版主程序
@@ -27,7 +25,7 @@ experimental
 
 ## 使用示例
 
-- 获取代码之后编译相应的算子可执行文件，可参考 [quickstart](../../../docs/zh/1_Practice/01_quick_start.md#编译执行)，本用例为 Ascend950（3510）算子，编译时需加 `-DCATLASS_ARCH=3510`。
+- 获取代码之后编译相应的算子可执行文件，可参考 [quickstart](../../docs/zh/1_Practice/01_quick_start.md#编译执行)，本用例为 Ascend950（3510）算子，编译时需加 `-DCATLASS_ARCH=3510`。
 - 本目录提供两个版本：**确定性版**（`ColumnBlockSwizzle`调度）和**非确定性版**（`GemmGroupedAswtTailSplitSwizzle`调度，多核利用率更高），两者输入参数与精度一致，仅调度策略不同。
 - 输入参数说明：`problem_count, m, n, k, trans_b, group_list_type, enable_bias, batch, data_parallel_size, enable_shared_input, shared_input_weight, shared_input_offset, quant_type, device_id`（Device ID 可选，默认为 0）
 
@@ -35,26 +33,26 @@ experimental
 
 ```bash
 # 编译
-bash scripts/build.sh ascend950_fp8_mx_grouped_matmul_finalize_routing -DCATLASS_ARCH=3510
+bash scripts/build.sh 71_ascend950_fp8_mx_grouped_matmul_finalize_routing -DCATLASS_ARCH=3510
 
 # 生成测试样例并执行精度对比（在 data/ 下生成 input/ 与 golden/）
-python3 examples/ascend950_fp8_mx_grouped_matmul_finalize_routing/gen_data_compare.py 4 128 128 128 0 0 0 16 2 0 0.0 0 float8_e5m2 0 --deter
+python3 examples/71_ascend950_fp8_mx_grouped_matmul_finalize_routing/gen_data_compare.py 4 128 128 128 0 0 0 16 2 0 0.0 0 float8_e5m2 0 --deter
 
 # 单独执行测试样例
-./output/bin/ascend950_fp8_mx_grouped_matmul_finalize_routing 4 128 128 128 0 0 0 16 2 0 0.0 0 float8_e5m2 0
+./output/bin/71_ascend950_fp8_mx_grouped_matmul_finalize_routing 4 128 128 128 0 0 0 16 2 0 0.0 0 float8_e5m2 0
 ```
 
 ### 非确定性版（no_deter）
 
 ```
 # 编译
-bash scripts/build.sh ascend950_fp8_mx_grouped_matmul_finalize_routing_no_deter -DCATLASS_ARCH=3510
+bash scripts/build.sh 71_ascend950_fp8_mx_grouped_matmul_finalize_routing_no_deter -DCATLASS_ARCH=3510
 
 # 生成测试样例并执行精度对比（在 data/ 下生成 input/ 与 golden/）
-python3 examples/ascend950_fp8_mx_grouped_matmul_finalize_routing/gen_data_compare.py 4 128 128 128 0 0 0 16 2 0 0.0 0 float8_e5m2 0
+python3 examples/71_ascend950_fp8_mx_grouped_matmul_finalize_routing/gen_data_compare.py 4 128 128 128 0 0 0 16 2 0 0.0 0 float8_e5m2 0
 
 # 单独执行测试样例
-./output/bin/ascend950_fp8_mx_grouped_matmul_finalize_routing_no_deter 4 128 128 128 0 0 0 16 2 0 0.0 0 float8_e5m2 0
+./output/bin/71_ascend950_fp8_mx_grouped_matmul_finalize_routing_no_deter 4 128 128 128 0 0 0 16 2 0 0.0 0 float8_e5m2 0
 ```
 
 执行结果如下，说明精度比对成功。
@@ -94,13 +92,13 @@ B转置的shape为(problem_count, n, k), MxScaleB的shape为(problem_count, n, c
 
 ## 确定性版与非确定性版（no_deter）差异
 
-| 对比项 | 确定性版 | 非确定性版（no_deter） |
-|--------|---------|----------------------|
-| Kernel | `GroupedMxMatmulFinalizeRoutingTla` | `GroupedMxMatmulFinalizeRoutingNoDeterTla` |
-| BlockScheduler | `ColumnBlockSwizzle`（按列分块调度） | `GemmGroupedAswtTailSplitSwizzle`（滚动核分配 + 窗口调度） |
-| BlockEpilogue | `BlockEpilogueFinalizeRouting`（AIV按N维切分） | `BlockEpilogueFinalizeRoutingNoDeter`（AIV按M维切分） |
-| 尾块处理 | 无尾块拆分 | 支持尾部tile多核拆分（`UpdateTailTile`），最后一个group在满足条件时自动启用 |
-| 可执行文件 | `ascend950_fp8_mx_grouped_matmul_finalize_routing` | `ascend950_fp8_mx_grouped_matmul_finalize_routing_no_deter` |
+| 对比项         | 确定性版                                                | 非确定性版（no_deter）                                                        |
+| -------------- | ------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Kernel         | `GroupedMxMatmulFinalizeRoutingTla`                   | `GroupedMxMatmulFinalizeRoutingNoDeterTla`                                  |
+| BlockScheduler | `ColumnBlockSwizzle`（按列分块调度）                  | `GemmGroupedAswtTailSplitSwizzle`（滚动核分配 + 窗口调度）                  |
+| BlockEpilogue  | `BlockEpilogueFinalizeRouting`（AIV按N维切分）        | `BlockEpilogueFinalizeRoutingNoDeter`（AIV按M维切分）                       |
+| 尾块处理       | 无尾块拆分                                              | 支持尾部tile多核拆分（`UpdateTailTile`），最后一个group在满足条件时自动启用 |
+| 可执行文件     | `71_ascend950_fp8_mx_grouped_matmul_finalize_routing` | `71_ascend950_fp8_mx_grouped_matmul_finalize_routing_no_deter`              |
 
 - 非确定性版采用 `GemmGroupedAswtTailSplitSwizzle` 调度器，`startBlockIdx_` 跨 group 滚动，提升多核利用率和尾块负载均衡，适用于对确定性无要求的场景。
 - 两版的输入参数、数据格式、精度计算逻辑完全一致，仅调度与AIV后处理切分方向不同。

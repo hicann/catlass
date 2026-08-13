@@ -434,6 +434,30 @@ class CatlassExampleTest(unittest.TestCase):
         self._ret_check(ret)
 
     @only_on_3510
+    def test_63_ascend950_dual_level_quant_mx_batch_matmul(self):
+        case_py = [str(i) for i in [1, 128, 128, 128]]  # batch_count, m, n, k
+        subprocess.run(
+            ["python", os.path.join(
+                CMAKE_EXAMPLES_PATH, "63_ascend950_dual_level_quant_mx_batch_matmul", "gen_data.py")] + case_py,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            )
+        case_cpp = [str(i) for i in [1, 128, 128, 128, 0]]
+        self.run_case("63_ascend950_dual_level_quant_mx_batch_matmul", case_cpp)
+
+    @only_on_3510
+    def test_65_ascend950_fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant(self):
+        case_py = [str(i) for i in [2, 128, 128, 128]]  # batch_count, m, n, k
+        subprocess.run(
+            ["python", os.path.join(
+                CMAKE_EXAMPLES_PATH, "65_ascend950_fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant", "gen_data.py")] + case_py,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            )
+        case_cpp = [str(i) for i in [2, 128, 128, 128, 0]]
+        self.run_case("65_ascend950_fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant", case_cpp)
+
+    @only_on_3510
     def test_70_ascend950_flash_attention_chunk_prefill(self):
         case_py = [str(i) for i in [1, 100, 138, 8, 1, 128, 128, 0]] + ["half"] + [str(i) for i in [2, 0, 128]] + ["nd"]
         ret = subprocess.run(["python", os.path.join(
@@ -441,6 +465,17 @@ class CatlassExampleTest(unittest.TestCase):
         case_cpp = [str(i) for i in [1, 100, 138, 8, 1, 128, 128, 0, 2, 128]] + ["--dtype", "half", "--cache_layout", "nd","--device", "1",
         "--datapath", os.path.join(CMAKE_EXAMPLES_PATH, "70_ascend950_flash_attention_chunk_prefill", "data")]
         self.run_case("70_ascend950_flash_attention_chunk_prefill", case_cpp)
+
+    @only_on_3510
+    def test_71_ascend950_fp8_mx_grouped_matmul_finalize_routing(self):
+        case_py = [str(i) for i in [4, 128, 128, 128, 0, 0, 0, 16, 2, 0, 0.0, 0]] + ["float8_e5m2", "0"]
+        ret = subprocess.run(
+            ["python", os.path.join(
+                CMAKE_EXAMPLES_PATH, "71_ascend950_fp8_mx_grouped_matmul_finalize_routing", "gen_data_compare.py")] + case_py,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            )
+        self._ret_check(ret)
 
     @only_on_3510
     def test_74_ascend950_weight_quant_a8w4_grouped_mx_matmul(self):

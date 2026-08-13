@@ -959,7 +959,7 @@ if __name__ == "__main__":
     # 获取算子路径并执行算子用例
     current_dir = os.path.dirname(os.path.abspath(__file__))
     catlass_home_dir = os.path.dirname(os.path.dirname(current_dir))
-    op_name = "ascend950_fp8_mx_grouped_matmul_finalize_routing"
+    op_name = "71_ascend950_fp8_mx_grouped_matmul_finalize_routing"
     if not args.deter:
         op_name += "_no_deter"
     op_path = os.path.join(catlass_home_dir, "output", "bin", op_name)
