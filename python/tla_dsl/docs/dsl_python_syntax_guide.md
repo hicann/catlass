@@ -377,7 +377,64 @@ def vec_region_kernel(mem_a: tla.Tensor, mem_b: tla.Tensor, mem_c: tla.Tensor) -
         tla.pipe_barrier(tla.pipes.ALL)
 ```
 
-### 4.7 错误信息速查
+### 4.7 struct-like args
+
+用`@dataclass`创建的类实例可以作为kernel入参，也可以在kernel内创建。
+
+```python
+from __future__ import annotations
+from dataclasses import dataclass
+import catlass.tla as tla
+
+@dataclass(frozen=True, kw_only=True)
+class TilingData:
+    TILE_M: tla.Constexpr[int]    # 编译期常量，不进 ABI,生成的IR不占用入参
+    tiling_gm_out: tla.Tensor     # 支持tla.Tensor入参
+    tiling_int16: tla.Int16       # Int16 标量
+    tiling_float: tla.Float32     # Float32 标量
+    tiling_int: int               # python int, 编译期为int，运行期为tla.Int32
+
+@dataclass(frozen=True)
+class Info:
+    tile_m: int
+    tile_n: int
+
+def print_tiling(tiling: TilingData):
+    tla.print("tiling_int={}", tiling.tiling_int)
+
+@tla.kernel
+def struct_arg_kernel(tiling: TilingData, out: tla.Tensor) -> None:
+    out[0] = tiling.tiling_int16
+    ptr = tla.allocate(tiling.TILE_M, ...)
+    print_tiling(tiling)    # 在kernel内作为其他函数的参数使用，跟普通变量一致
+    info = Info(tile_m=tiling.tiling_int, ...)  # 在kernel侧实例化
+
+
+tiling = TilingData(TILE_M=128, ...)
+artifact = tla.compile(struct_arg_kernel, tiling, out)
+artifact(tiling, out)
+```
+
+**实例使用范围**:
+- 在host侧创建实例，作为kernel入参, 字段类型支持标量和tensor
+- 在kernel侧创建实例
+
+**dataclass 允许自定义的选项**：仅 `frozen/kw_only`，其他参数不支持修改为非默认值。`frozen=True`实例化后不支持修改字段值，`kw_only=True`时实例化时必须显式指定key，例如`tiling=Tiling(TILE_M=128, tiling_int16=128, ...)`，不支持`tiling=TilingData(128, 128, ...)`
+
+**`tla.Constexpr[...]` 字段**：
+
+- 视作编译期常量：kernel内只读, 可用于`tla.allocate`、`tla.range_constexpr`等。
+- 不进入 kernel ABI / IR：`tla.func` 无对应块参数。
+
+**入参支持的类型**：
+
+- `tla.*` 标量：`tla.Bool`、`tla.Int8/16/32/64`、`tla.UInt8/16/32/64`、`tla.Float16/32`、`tla.BFloat16`。
+- 纯 Python 标量：`bool`→`i1`、`int`→`i32`、`float`→`f32`。
+- `tla.Tensor`。
+
+**注意**：字段实际类型由**字段值**决定（与 Python 动态语义一致），构造 dataclass 时不会强制转换成注解类型。
+
+### 4.8 错误信息速查
 
 | 错误信息（关键词） | 原因 | 处理 |
 | --- | --- | --- |

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -800,3 +801,65 @@ def test_native_bridge_dynamic_zn_gm_materializes_four_slot_descriptor() -> None
     assert result.kernel_abi is not None
     assert result.kernel_abi.schema_version == 4
     assert result.kernel_abi.total_size == 104
+
+
+@dataclass
+class _ScalarArgs:
+    predicate: tla.Bool
+    a: tla.Int16
+    b: tla.Int16
+
+
+@tla.kernel
+def _native_scalar_then_tensor_abi(
+    scalars: _ScalarArgs,
+    tensor: tla.Tensor,
+    c: tla.Int32,
+) -> None:
+    pass
+
+
+def test_dataclass_kernel_arg_layout_abi() -> None:
+    """ABI packs parameters with uniform 4-byte alignment, not struct layout.
+
+    The dataclass scalars (Bool / Int16 / Int16) unpack to the leading 4-byte
+    aligned args; even the 8-byte tensor pointer sits at a 4-byte-aligned offset
+    (12), which is sufficient. The total payload is rounded up to a multiple of 8.
+    """
+    with runtime_mod._eager_capture():
+        tensor = tla.Tensor(
+            tla.make_shape(8),
+            tla.Float32,
+            addrspace=tla.AddressSpace.gm,
+            origin_shape=tla.make_shape(8),
+            coord=tla.make_coord(0),
+            stride=tla.make_stride(1),
+            layout_tag=tla.arch.RowMajor,
+        )
+    result = _native_lower(
+        _native_scalar_then_tensor_abi,
+        type_args=(
+            _ScalarArgs(tla.Bool(True), tla.Int16(1), tla.Int16(2)),
+            tensor,
+            tla.Int32(3),
+        ),
+    )
+    abi = result.kernel_abi
+    assert abi is not None
+    arguments = [
+        (a.kind.value, a.storage_size, a.offset, a.alignment)
+        for a in abi.arguments
+    ]
+    assert arguments == [
+        ("scalar", 1, 0, 4),  # dataclass Bool
+        ("scalar", 2, 4, 4),  # dataclass Int16
+        ("scalar", 2, 8, 4),  # dataclass Int16
+        ("pointer", 8, 12, 4),  # tensor — 8-byte param at a 4-byte-aligned offset
+        ("scalar", 4, 20, 4),  # Int32
+    ]
+    # Uniform 4-byte alignment: every arg offset is aligned to its declared 4.
+    for argument in abi.arguments:
+        assert argument.alignment == 4
+        assert argument.offset % 4 == 0
+    assert abi.total_size == 24
+    assert abi.total_size % 8 == 0

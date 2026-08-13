@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, is_dataclass
 import inspect
 from typing import Any, Callable, Mapping, Sequence
 
@@ -17,6 +17,10 @@ def _get_typed_call_args(args: Sequence[Any]) -> Sequence[Any] | None:
     for arg in args:
         resolver = getattr(arg, "__get_mlir_types__", None)
         if callable(resolver):
+            inferred.append(arg)
+        elif is_dataclass(arg) and not isinstance(arg, type):
+            # Plain stdlib ``@dataclass`` instances are unpacked into per-field
+            # scalar kernel args; keep the instance so lowering can read fields.
             inferred.append(arg)
         elif isinstance(arg, (bool, int, float)):
             # Preserve host literals for ``tla.Constexpr[...]`` / numeric params.

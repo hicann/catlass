@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import inspect
 import linecache
 from dataclasses import dataclass
@@ -14,7 +15,7 @@ from . import runtime
 from . import tla_ast_decorators as ast_decorators
 from .base_dsl.ast_preprocessor import maybe_transform_for_lowering
 from .base_dsl import DSLLocation
-from .base_dsl.typing import Constexpr, Numeric
+from .base_dsl.typing import Numeric, is_constexpr_annotation
 from .tla.typing import Tensor
 
 
@@ -237,6 +238,12 @@ def _build_tla_func(
             start = len(mlir_arg_types)
             mlir_arg_types.extend([gm_memref, index_ty, index_ty])
             block_slots[name] = (start, start + 1, start + 2)
+        elif isinstance(spec, tuple) and len(spec) == 2 and spec[0] == "scalar_group":
+            # Dataclass args lower to one scalar block arg per field.
+            group_types = spec[1]
+            start = len(mlir_arg_types)
+            mlir_arg_types.extend(_coerce_type(ctx, ty) for ty in group_types)
+            block_slots[name] = tuple(range(start, start + len(group_types)))
         else:
             start = len(mlir_arg_types)
             mlir_arg_types.append(_coerce_type(ctx, resolved_arg_types.get(name)))
@@ -325,12 +332,21 @@ def _build_tla_func(
     call_args_for_fn = list(call_args)
     arg_bindings: dict[int, tuple[Any, Any]] = {}
     category_bindings: dict[int, tuple[Any, Any]] = {}
+    #: ``arg index -> (dataclass instance, block slots)`` — rebuilt inside the
+    #: frontend emission context so the field Numerics auto-bind to their SSA.
+    pending_dataclass_rebuilds: dict[int, tuple[Any, tuple[int, ...]]] = {}
     for i, name in enumerate(arg_names):
         if name in constexpr_names:
             continue
+        host_arg = call_args[i]
+        if _is_dataclass_instance(host_arg):
+            _validate_dataclass_kernel_arg(host_arg)
+            # Rebuilt later (inside the frontend emission context) from its
+            # dynamic block args plus its compile-time ``Constexpr`` host values.
+            pending_dataclass_rebuilds[i] = (host_arg, block_slots[name])
+            continue
         slots = block_slots[name]
         ssa = entry.arguments[slots[0]]
-        host_arg = call_args[i]
         # Numeric host args must stay typed Numeric around the block SSA so
         # operators (``a + b``, ``a // 2``, …) lower via Numeric.__*__.
         if isinstance(host_arg, Numeric):
@@ -368,6 +384,31 @@ def _build_tla_func(
         v = call_args[pos]
         if isinstance(v, Tensor) and name not in dynamic_gm_tensor_tys:
             tensor_host_by_value[entry.arguments[block_slots[name][0]]] = v
+
+    # Dataclass tensor fields also map block SSA -> host tensor for metadata.
+    for pos, name in enumerate(arg_names):
+        if name in constexpr_names:
+            continue
+        host = call_args[pos]
+        if not _is_dataclass_instance(host):
+            continue
+        constexpr_names = _dataclass_constexpr_field_names(host)
+        slots = block_slots[name]
+        slot_iter = iter(slots)
+        for field in dataclasses.fields(host):
+            if field.name in constexpr_names:
+                continue
+            field_value = getattr(host, field.name)
+            if isinstance(field_value, Tensor):
+                if is_dynamic_gm_tensor_arg(field_value):
+                    raise TlaLoweringError(
+                        f"dataclass field {name}.{field.name} is a dynamic-GM tensor, "
+                        "which is not supported inside a dataclass; use a static tensor "
+                        "or a top-level kernel argument"
+                    )
+                tensor_host_by_value[entry.arguments[next(slot_iter)]] = field_value
+            else:
+                next(slot_iter)
 
     with mlir_ir.InsertionPoint(entry):
         # Materialize dynamic GM root descriptors before the user body so
@@ -413,6 +454,40 @@ def _build_tla_func(
             for desc, tensor_ty, metadata in pending_dynamic_gm:
                 _register_tla_tensor_type(desc, tensor_ty)
                 _register_tla_tensor_metadata(desc, metadata)
+            if pending_dataclass_rebuilds:
+                from .core_api import _wrap_frontend_value
+
+                call_args_for_fn = list(call_args_for_fn)
+                for index, (instance, slots) in pending_dataclass_rebuilds.items():
+                    # Rebuild the stdlib dataclass in field order: ``Constexpr``
+                    # fields keep their host value (compile-time constant), dynamic
+                    # fields consume one block arg wrapped in the matching frontend
+                    # object (Numeric for scalars, _Tensor for tensors).
+                    constexpr_names = _dataclass_constexpr_field_names(instance)
+                    slot_iter = iter(slots)
+                    field_names: list[str] = []
+                    rebuilt_values: list[Any] = []
+                    for field in dataclasses.fields(instance):
+                        field_names.append(field.name)
+                        if field.name in constexpr_names:
+                            rebuilt_values.append(getattr(instance, field.name))
+                        else:
+                            rebuilt_values.append(
+                                _wrap_frontend_value(
+                                    entry.arguments[next(slot_iter)]
+                                )
+                            )
+                    # kw_only dataclasses reject positional args; keyword
+                    # reconstruction works for both kw_only and plain dataclasses.
+                    kwargs = dict(zip(field_names, rebuilt_values))
+                    if constexpr_names:
+                        ro_cls = _constexpr_readonly_dataclass_cls(
+                            type(instance), constexpr_names
+                        )
+                        call_args_for_fn[index] = ro_cls(**kwargs)
+                    else:
+                        call_args_for_fn[index] = type(instance)(**kwargs)
+                call_args_for_fn = tuple(call_args_for_fn)
             try:
                 fn(*call_args_for_fn)
             except runtime.TlaCoreAPIError:
@@ -491,8 +566,15 @@ def _resolve_execution_arg_types(
             if callable(mlir_types_getter):
                 resolved_types = mlir_types_getter(ctx)
                 if resolved_types:
-                    resolved[name] = resolved_types[0]
+                    if len(resolved_types) == 1:
+                        resolved[name] = resolved_types[0]
+                    else:
+                        resolved[name] = ("scalar_group", tuple(resolved_types))
                     continue
+            if _is_dataclass_instance(value):
+                # Unpack a stdlib dataclass into one scalar type per field.
+                resolved[name] = ("scalar_group", _resolve_dataclass_field_types(value, ctx))
+                continue
             if isinstance(value, bool):
                 resolved[name] = "i1"
             elif isinstance(value, int):
@@ -502,26 +584,145 @@ def _resolve_execution_arg_types(
     return resolved
 
 
+def _resolve_dataclass_field_types(
+    value: Any, ctx: mlir_ir.Context
+) -> tuple[Any, ...]:
+    """Resolve one MLIR type per **dynamic** field of a stdlib dataclass instance.
+
+    Fields annotated ``tla.Constexpr[...]`` are compile-time constants: they
+    produce no MLIR type and no kernel block arg. Mirrors ``_get_typed_call_args``:
+    any other field value exposing ``__get_mlir_types__`` (``tla.*`` Numerics,
+    ``tla.Tensor``, …) contributes its own type; plain ``bool``/``int``/``float``
+    map to ``i1``/``i32``/``f32``.
+    """
+    constexpr_names = _dataclass_constexpr_field_names(value)
+    field_types: list[Any] = []
+    for field in dataclasses.fields(value):
+        if field.name in constexpr_names:
+            continue
+        field_value = getattr(value, field.name)
+        mlir_types_getter = getattr(field_value, "__get_mlir_types__", None)
+        if callable(mlir_types_getter):
+            resolved = mlir_types_getter(ctx)
+            if not resolved:
+                raise TlaLoweringError(
+                    f"dataclass field {field.name!r} resolved to no MLIR type"
+                )
+            field_types.append(resolved[0])
+        elif isinstance(field_value, bool):
+            field_types.append("i1")
+        elif isinstance(field_value, int):
+            field_types.append("i32")
+        elif isinstance(field_value, float):
+            field_types.append("f32")
+        else:
+            raise TlaLoweringError(
+                f"unsupported dataclass field {field.name!r} type "
+                f"{type(field_value).__name__}; fields must expose __get_mlir_types__ "
+                "(e.g. tla.Int32 / tla.Float32 / tla.Tensor) or be plain bool/int/float"
+            )
+    return tuple(field_types)
+
+
 def _load_execution_dialects(ctx: mlir_ir.Context) -> None:
     _tla_type_bridge.load_tla_dialect(ctx)
     for dialect in ("arith", "scf", "memref"):
         ctx.dialects[dialect]
 
 
+def _is_dataclass_instance(value: Any) -> bool:
+    """True when ``value`` is a stdlib ``@dataclass`` instance (not the class)."""
+    return dataclasses.is_dataclass(value) and not isinstance(value, type)
+
+
+#: stdlib ``@dataclass`` options that must keep their default values for a TLA
+#: kernel-argument dataclass. Only ``frozen`` and ``kw_only`` may be customized.
+#: The env's ``_DataclassParams`` may not record every option, so each check is
+#: guarded by ``hasattr``.
+_DATACLASS_DEFAULT_ONLY_PARAMS: tuple[tuple[str, object], ...] = (
+    ("init", True),
+    ("repr", True),
+    ("eq", True),
+    ("order", False),
+    ("unsafe_hash", False),
+    ("match_args", True),
+    ("slots", False),
+    ("weakref_slot", False),
+)
+
+
+def _validate_dataclass_kernel_arg(instance: Any) -> None:
+    """Reject dataclasses whose stdlib options were customized beyond frozen/kw_only.
+
+    The TLA frontend unpacks dataclass fields as kernel arguments and assumes the
+    default dataclass semantics; options such as ``slots=True`` or ``init=False``
+    would silently diverge from that, so they are rejected at compile time.
+    """
+    cls = type(instance)
+    params = getattr(cls, "__dataclass_params__", None)
+    if params is not None:
+        for name, default in _DATACLASS_DEFAULT_ONLY_PARAMS:
+            if hasattr(params, name) and getattr(params, name) != default:
+                raise TlaLoweringError(
+                    f"dataclass {cls.__name__} is used as a kernel argument but was "
+                    f"declared with {name}={getattr(params, name)!r} (default "
+                    f"{default!r}); only frozen= and kw_only= may be customized"
+                )
+    # ``slots=True`` is not recorded in ``_DataclassParams`` on some builds;
+    # a slots dataclass defines ``__slots__`` on the class itself.
+    if getattr(cls, "__slots__", None):
+        raise TlaLoweringError(
+            f"dataclass {cls.__name__} is used as a kernel argument but was declared "
+            "with slots=True; only frozen= and kw_only= may be customized"
+        )
+
+
+def _dataclass_constexpr_field_names(value: Any) -> frozenset[str]:
+    """Names of dataclass fields annotated ``tla.Constexpr[...]`` (compile-time)."""
+    return frozenset(
+        field.name
+        for field in dataclasses.fields(value)
+        if is_constexpr_annotation(field.type)
+    )
+
+
+_CONSTEXPR_RO_CLASS_CACHE: dict[tuple[Any, tuple[str, ...]], type] = {}
+
+
+def _constexpr_readonly_dataclass_cls(
+    cls: type, constexpr_names: frozenset[str]
+) -> type:
+    """Return a subclass of ``cls`` whose ``tla.Constexpr`` fields are read-only.
+
+    The first write to a field (during ``__init__``) is allowed; any later
+    assignment to a constexpr field raises ``AttributeError``, so compile-time
+    constants cannot be reassigned inside a kernel body. ``super().__setattr__``
+    preserves frozen-dataclass semantics for non-constexpr fields.
+    """
+    key = (cls, tuple(sorted(constexpr_names)))
+    cached = _CONSTEXPR_RO_CLASS_CACHE.get(key)
+    if cached is not None:
+        return cached
+
+    def __setattr__(self: Any, name: str, value: Any) -> None:
+        if name in constexpr_names and name in self.__dict__:
+            raise AttributeError(
+                f"{cls.__name__}.{name} is a tla.Constexpr field and is read-only "
+                "(compile-time constant)"
+            )
+        cls.__setattr__(self, name, value)
+
+    ro_cls = type(
+        f"{cls.__name__}ConstexprRO", (cls,), {"__setattr__": __setattr__}
+    )
+    _CONSTEXPR_RO_CLASS_CACHE[key] = ro_cls
+    return ro_cls
+
+
 def _is_constexpr_annotation(annotation: Any) -> bool:
     if annotation is inspect._empty:
         return False
-    if Constexpr.is_constexpr_annotation(annotation):
-        return True
-    if isinstance(annotation, str):
-        compact = annotation.replace(" ", "")
-        return (
-            compact == "Constexpr"
-            or compact.startswith("Constexpr[")
-            or compact == "tla.Constexpr"
-            or compact.startswith("tla.Constexpr[")
-        )
-    return False
+    return is_constexpr_annotation(annotation)
 
 
 __all__ = [

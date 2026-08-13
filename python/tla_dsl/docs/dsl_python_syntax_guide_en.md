@@ -306,7 +306,64 @@ def vec_region_kernel(mem_a: tla.Tensor, mem_b: tla.Tensor, mem_c: tla.Tensor) -
         tla.pipe_barrier(tla.pipes.ALL)
 ```
 
-### 4.7 Error Reference
+### 4.7 struct-like args
+
+Class instances created with `@dataclass` can be used as kernel arguments, and can also be created inside the kernel.
+
+```python
+from __future__ import annotations
+from dataclasses import dataclass
+import catlass.tla as tla
+
+@dataclass(frozen=True, kw_only=True)
+class TilingData:
+    TILE_M: tla.Constexpr[int]    # compile-time constant, not in the ABI; takes no argument slot in the generated IR
+    tiling_gm_out: tla.Tensor     # supports tla.Tensor arguments
+    tiling_int16: tla.Int16       # Int16 scalar
+    tiling_float: tla.Float32     # Float32 scalar
+    tiling_int: int               # python int: compile-time int, runtime tla.Int32
+
+@dataclass(frozen=True)
+class Info:
+    tile_m: int
+    tile_n: int
+
+def print_tiling(tiling: TilingData):
+    tla.print("tiling_int={}", tiling.tiling_int)
+
+@tla.kernel
+def struct_arg_kernel(tiling: TilingData, out: tla.Tensor) -> None:
+    out[0] = tiling.tiling_int16
+    ptr = tla.allocate(tiling.TILE_M, ...)
+    print_tiling(tiling)    # can be passed to other functions inside the kernel, just like a plain variable
+    info = Info(tile_m=tiling.tiling_int, ...)  # can be instantiated on the kernel side
+
+
+tiling = TilingData(TILE_M=128, ...)
+artifact = tla.compile(struct_arg_kernel, tiling, out)
+artifact(tiling, out)
+```
+
+**Usage scope**:
+- Create an instance on the host side and pass it as a kernel argument, fields should be numeric and tensor
+- Create an instance on the kernel side
+
+**Customizable dataclass options**: only `frozen/kw_only`; the other options cannot be changed from their defaults. With `frozen=True` field values cannot be modified after instantiation; with `kw_only=True` fields must be passed by keyword, e.g. `tiling=TilingData(TILE_M=128, tiling_int16=128, ...)`, not `tiling=TilingData(128, 128, ...)`.
+
+**`tla.Constexpr[...]` fields**:
+
+- Treated as compile-time constants: read-only inside the kernel; usable in `tla.allocate`, `tla.range_constexpr`, etc.
+- Do not enter the kernel ABI / IR: `tla.func` has no corresponding block argument.
+
+**Supported argument types**:
+
+- `tla.*` scalars: `tla.Bool`, `tla.Int8/16/32/64`, `tla.UInt8/16/32/64`, `tla.Float16/32`, `tla.BFloat16`.
+- Plain Python scalars: `bool`→`i1`, `int`→`i32`, `float`→`f32`.
+- `tla.Tensor`.
+
+**Note**: the actual field type is determined by the **field value** (consistent with Python's dynamic semantics); constructing the dataclass does not coerce values to the annotated type.
+
+### 4.8 Error Reference
 
 | Error message (keyword) | Cause | Fix |
 | --- | --- | --- |

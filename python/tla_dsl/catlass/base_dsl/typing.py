@@ -1101,6 +1101,24 @@ class Constexpr(Generic[_T]):
         return origin is cls
 
 
+def is_constexpr_annotation(annotation: Any) -> bool:
+    """True for ``Constexpr`` / ``tla.Constexpr`` markers, including string forms.
+
+    String annotations (``from __future__ import annotations``) like
+    ``"tla.Constexpr[int]"`` are matched textually since they cannot be resolved
+    without module globals here.
+    """
+    if Constexpr.is_constexpr_annotation(annotation):
+        return True
+    if isinstance(annotation, str):
+        compact = annotation.replace(" ", "")
+        return (
+            compact == "Constexpr" or compact.startswith("Constexpr[")
+            or compact == "tla.Constexpr" or compact.startswith("tla.Constexpr[")
+        )
+    return False
+
+
 @runtime_checkable
 class JitArgument(Protocol):
     """Protocol for objects that can be passed to JIT-compiled Tla functions."""

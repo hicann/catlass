@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, fields, is_dataclass
 from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
 if TYPE_CHECKING:
@@ -38,10 +38,25 @@ class TlaExecutionArgs:
             JitArgAdapterRegistry,
             _adapt_from_data_ptr,
         )
-        from .typing import Numeric
+        from .typing import Numeric, as_numeric, is_constexpr_annotation
 
         rectified: list[Any] = []
         for arg in launch_args:
+            if is_dataclass(arg) and not isinstance(arg, type):
+                # Unpack a stdlib dataclass into one entry per **dynamic** field,
+                # matching the frontend's scalar_group block args / ABI slots.
+                # ``Constexpr`` fields are compile-time constants with no ABI slot.
+                # Numerics and tensor-like fields (``__c_pointers__``) pass through;
+                # plain scalars become Numerics via ``as_numeric``.
+                for field in fields(arg):
+                    if is_constexpr_annotation(field.type):
+                        continue
+                    value = getattr(arg, field.name)
+                    if isinstance(value, Numeric) or hasattr(value, "__c_pointers__"):
+                        rectified.append(value)
+                    else:
+                        rectified.append(as_numeric(value))
+                continue
             if isinstance(arg, Numeric) or hasattr(arg, "__c_pointers__"):
                 rectified.append(arg)
             else:

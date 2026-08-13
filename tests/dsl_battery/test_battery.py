@@ -277,6 +277,12 @@ def _cases(device: int) -> Iterator[tuple[str, list[list[str]]]]:
         [["scalar_arg_alignment/scalar_arg_alignment.py", *dev]],
     )
 
+    # --- dataclass_arg (stdlib @dataclass unpacked into scalar kernel args) ---
+    yield (
+        "dataclass-arg",
+        [["dataclass_arg/dataclass_arg.py", *dev]],
+    )
+
     # --- print_tensor, UB storage ---
     for case_name, blocks, calls, dtype_args in PRINT_TENSOR_UB_VARIANTS:
         yield (

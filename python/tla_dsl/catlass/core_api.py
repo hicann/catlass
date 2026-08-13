@@ -994,7 +994,11 @@ def _wrap_frontend_value(value: mlir_ir.Value) -> Any:
             # i1 surfaces as Bool Numeric.
             return Bool(value)
         return Numeric.from_mlir_type(value.type)(value)
-    return value
+    try:
+        # f16 / bf16 / f32 (and other scalar Numerics) wrap into Numerics.
+        return Numeric.from_mlir_type(value.type)(value)
+    except TypeError:
+        return value
 
 
 def unpack_to_irvalue(

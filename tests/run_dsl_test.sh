@@ -23,6 +23,8 @@
 # python/tla_dsl/examples/end_to_end/debug_print (debug_print.py, debug_print_mixed.py,
 # debug_print_format.py).
 # python/tla_dsl/examples/end_to_end/scalar_arg_alignment (scalar_arg_alignment.py).
+# python/tla_dsl/examples/end_to_end/dataclass_arg (dataclass_arg.py: stdlib
+# @dataclass instance unpacked into scalar kernel args).
 # python/tla_dsl/examples/end_to_end/print_tensor (print_tensor.py: all eight
 # supported GM/UB dtypes plus multi-block and multi-call cases).
 #
@@ -164,6 +166,8 @@ Run end-to-end validation for:
   - debug_print_mixed (all scalar dtypes in cube-only, vector-only, and combined regions)
   - debug_print_format (formatted multicall and multiblock prints on AIV and AIC)
   - scalar_arg_alignment (scalar_arg_alignment.py: tensor-i16-tensor host ABI)
+  - dataclass_arg (dataclass_arg.py: stdlib @dataclass instance unpacked into
+    per-field scalar kernel args; constexpr + tensor + scalar fields)
   - print_tensor (print_tensor.py: all supported GM/UB dtypes with AIV/AIC
     multi-block and multi-call coverage)
 Runs the basic_mmad flag-sync matrix with irregular CLI shapes (333×444×555
