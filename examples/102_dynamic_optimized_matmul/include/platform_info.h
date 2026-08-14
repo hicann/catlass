@@ -13,8 +13,7 @@
 
 #include "tiling/platform/platform_ascendc.h"
 
-struct PlatformInfo
-{
+struct PlatformInfo {
     uint32_t coreNum{24};
     uint64_t ubSize{192 * 1024};
     uint64_t l1Size{512 * 1024};
@@ -37,7 +36,8 @@ struct PlatformInfo
             platform_ascendc::CoreMemType::L0_C, l0CSize);
     }
 
-    ~PlatformInfo() {}
+    ~PlatformInfo()
+    {}
 };
 
-#endif  // PLATFORM_INFO_H
+#endif // PLATFORM_INFO_H

@@ -11,7 +11,7 @@ Tile 组件采用高度优化的实现，充分利用硬件特性，包括：
 - 针对不同架构的优化
 - 高效的内存访问模式
 
-本文将以 `TileMmad` 为例，详细讲解 Tile 组件的代码结构、主要接口和设计思想，同时也会涉及 TileCopy 等其他 Tile 组件的共性特点。
+本文将以 [TileMmad](../../../include/catlass/gemm/tile/tile_mmad.hpp) 为例，详细讲解 Tile 组件的代码结构、主要接口和设计思想，同时也会涉及 TileCopy 等其他 Tile 组件的共性特点。
 
 ## 2. 模板组装机制
 
@@ -40,7 +40,7 @@ struct TileMmad {
 | ArchTag_  | 架构标签，用于区分不同的 NPU 架构（如 2201、3510 等） |
 | AType_    | 矩阵 A 的类型，包含元素类型和布局信息                 |
 | BType_    | 矩阵 B 的类型，包含元素类型和布局信息                 |
-| BiasType_ | 偏置的类型，默认为空类型                              |
+| BiasType_ | 偏置的类型                                          |
 
 这些模板参数允许 Tile 组件灵活适配不同的硬件架构和计算需求。
 

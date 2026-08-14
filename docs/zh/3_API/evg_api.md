@@ -650,57 +650,66 @@ layout 相关要求放在这里看最合适：
 
 `computeLength` 表示当前链路在每次迭代里处理的元素个数。这个值理论上越大越有利于减少迭代次数、提升效率，但它不能超过当前 UB 空间所能容纳的上限，所以实际使用时通常是先计算一个可接受的最大值，再据此选定 `computeLength`。
 
-计算时看三件事：
+计算时看四件事：
 
-- 可分给 EVG 的 UB 总量
-- 同时驻留的 UB buffer 数量
-- 是否启用双缓冲
+- 可分给 EVG 的 UB 总量（GM 通路用 `ArchTag::UB_SIZE`；UB 通路用 `evgUbBudget`）
+- 同时驻留的 UB buffer 数量（记为 `evgUbNodes`）
+- epilogue 双缓冲阶段数（记为 `evgUbStages`，当前样例固定为 `2`）
+- 按 `BYTE_PER_C0` 向下对齐（用 `RoundDown`）
 
-最终结果还要按 `BYTE_PER_C0` 向下对齐。
-
-### 计算示例 1：GM workspace 通路的 `D = C + X`
-
-这类链路通常会同时驻留三块 UB 数据：
-
-- `C`
-- `X`
-- `Out`
-
-并且使用双缓冲，所以最大 `computeLength` 可以直接写成：
+### GM workspace 通路
 
 ```cpp
-constexpr uint32_t computeLength =
-    (ArchTag::UB_SIZE / 3 / 2 / sizeof(ElementC)) / BYTE_PER_C0 * BYTE_PER_C0;
+constexpr uint32_t evgUbNodes = N;    // 当前 EVG 中单独占 UB 的 Visitor 数
+constexpr uint32_t evgUbStages = 2;   // epilogue 双缓冲
+constexpr uint32_t computeLength = RoundDown(
+    ArchTag::UB_SIZE / evgUbNodes / evgUbStages / sizeof(ElementC), BYTE_PER_C0);
 ```
 
-Ascend950架构中，EVG 样例里通常不会直接按满额去算，按 `216 * 1024` 作为可用预算来计算 `computeLength`，避免实际运行时触发 UB 空间相关报错。写法可以记成：
+`evgUbNodes` 为图中单独占 UB 的 Visitor 数，按各节点实现逐一对照。公式中的 `sizeof(ElementC)` 假设各槽元素类型一致；含 `VisitorCast` 时各槽 `sizeof` 不同，不能直接套用。
+
+| Visitor | 计入 `evgUbNodes` | 单槽字节 | 说明 |
+|---------|-------------------|----------|------|
+| `VisitorAccLoad`（GM 通路） | 是 | `sizeof(Element)` | `USE_UB_WORKSPACE = false` |
+| `VisitorAccLoad`（UB 通路） | 否 | — | `USE_UB_WORKSPACE = true`，复用 MMAD 写入 UB 的 `C` |
+| `VisitorAuxLoad` | 是 | `sizeof(Element)` | |
+| `VisitorRowBroadcast` | 是 | `sizeof(Element)` | |
+| `VisitorCompute` | 是 | `sizeof(ElementCompute)` | |
+| `VisitorCast` | 是 | `sizeof(ElementTo)` | 混合精度时不能统一用 `sizeof(ElementC)` |
+| `VisitorAuxStore` | 否 | — | 当前实现不写回 UB 计算 buffer |
+
+### 计算示例 1：GM workspace 通路的 `D = C + X`（add）
+
+`AccLoad`、`AuxLoad`、`Compute` 各占一块 UB，`evgUbNodes = 3`：
 
 ```cpp
-constexpr uint32_t computeLength =
-    (216 * 1024 / 3 / 2 / sizeof(ElementC)) / BYTE_PER_C0 * BYTE_PER_C0;
+constexpr uint32_t evgUbNodes = 3;    // AccLoad + AuxLoad + Compute
+constexpr uint32_t evgUbStages = 2;
+constexpr uint32_t computeLength = RoundDown(
+    ArchTag::UB_SIZE / evgUbNodes / evgUbStages / sizeof(ElementC), BYTE_PER_C0);
 ```
 
-这里的 `216 * 1024` 是Ascend950架构中的保守可用预算。
+### 计算示例 2：GM workspace 单算子（sigmoid / silu / leaky_relu）
 
-### 计算示例 2：UB workspace 通路的 `D = C + X`
+`AccLoad + Compute`，`evgUbNodes = 2`。
 
-如果走 UB 通路，`VisitorAccLoad<..., true>` 不再额外申请一块 UB buffer，所以这类链路通常只需要再为下面两块数据留空间：
+### 计算示例 3：TopologicalVisitor（tanh）
 
-- `X`
-- `Out`
+`AccLoad` 与 7 个 `Compute` 各占 UB，`evgUbNodes = 8`。
 
-但这时 EVG 不能使用整块 UB，因为前半部分已经预留给 MMAD 结果。当前实现里，EVG 的起始分配位置是 `ArchTag::L0C_SIZE / 2`，也沿用同样的保守预算口径，把可用于计算的总 UB 先按 `216 * 1024` 代入，所以最大 `computeLength` 可写成：
+### 计算示例 4：UB workspace 通路的 `D = C + X`（add_ub）
+
+`VisitorAccLoad<..., true>` 复用 MMAD 写入 UB 前半段的 `C`，不单独占槽；`[0, L0C_SIZE/2)` 预留给 MMAD 结果，EVG 从 `L0C_SIZE/2` 起分配：
 
 ```cpp
-constexpr uint32_t computeLength =
-    ((216 * 1024 - ArchTag::L0C_SIZE / 2) / 2 / 2 / sizeof(ElementC)) /
-    BYTE_PER_C0 * BYTE_PER_C0;
+constexpr uint32_t evgUbNodes = 2;    // AuxLoad + Compute
+constexpr uint32_t evgUbStages = 2;
+constexpr uint32_t evgUbBudget = ArchTag::UB_SIZE - ArchTag::L0C_SIZE / 2;
+constexpr uint32_t computeLength = RoundDown(
+    evgUbBudget / evgUbNodes / evgUbStages / sizeof(ElementC), BYTE_PER_C0);
 ```
 
 ### 使用规则
 
-- 每新增一个会单独申请 UB 的节点，就把分母里的 buffer 数量加一
-- `VisitorAuxStore` 一般不单独占计算 buffer，通常不计入
-- GM 通路下，`VisitorCast`、`VisitorCompute`、`VisitorAuxLoad`、`VisitorAccLoad`、`VisitorRowBroadcast` 通常都要计入
-- UB 通路下，`VisitorAccLoad<..., true>` 通常不单独计入，因为它直接复用 MMAD 已经放在 UB 里的结果
-- UB 通路下，要先扣掉留给 MMAD 的那部分 UB，再计算最大值
+- 扩展 EVG 图或接入自定义 Visitor 时，按其实现确认是否占 UB 及单槽 `sizeof`
+- UB 通路下，用 `evgUbBudget = UB_SIZE - L0C_SIZE/2` 代替整段 `UB_SIZE`

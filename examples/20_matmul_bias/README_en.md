@@ -2,7 +2,7 @@
 
 ## Code Organization
 
-```
+```text
 ├── 20_matmul_bias
 │   ├── CMakeLists.txt # CMake build file
 │   ├── README.md
@@ -21,7 +21,7 @@ using L0TileShape = GemmShape<112, 128, 64>;
 
 - Execute the operator.
 
-```
+```bash
 # Compiling a specified case
 bash scripts/build.sh 20_matmul_bias
 cd output/bin
@@ -32,6 +32,6 @@ cd output/bin
 
 If the following result is displayed, precision verification is successful.
 
-```
+```text
 Compare success.
 ```

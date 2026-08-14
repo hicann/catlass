@@ -42,25 +42,12 @@ struct TileCopyDynamicOptimized : public Catlass::Gemm::Tile::TileCopy<ArchTag, 
 };
 
 template <
-    class ArchTag,
-    class ElementA,
-    class LayoutA,
-    class ElementB,
-    class LayoutB,
-    class ElementC,
-    class LayoutC,
-    PaddingTag paddingTagA,
-    PaddingTag paddingTagB>
+    class ArchTag, class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC,
+    PaddingTag paddingTagA, PaddingTag paddingTagB>
 [[bisheng::core_ratio(1, 2)]] CATLASS_GLOBAL void PaddingStreamkMatmulKernel(
-    uint64_t hardwareSyncAddr,
-    __gm__ uint8_t *__restrict__ gmA,
-    __gm__ uint8_t *__restrict__ gmB,
-    __gm__ uint8_t *__restrict__ gmC,
-    __gm__ uint8_t *__restrict__ gmWA,
-    __gm__ uint8_t *__restrict__ gmWB,
-    __gm__ uint8_t *__restrict__ gmReduceW,
-    __gm__ uint8_t *__restrict__ tilingData
-)
+    uint64_t hardwareSyncAddr, __gm__ uint8_t* __restrict__ gmA, __gm__ uint8_t* __restrict__ gmB,
+    __gm__ uint8_t* __restrict__ gmC, __gm__ uint8_t* __restrict__ gmWA, __gm__ uint8_t* __restrict__ gmWB,
+    __gm__ uint8_t* __restrict__ gmReduceW, __gm__ uint8_t* __restrict__ tilingData)
 {
     AscendC::SetSyncBaseAddr(hardwareSyncAddr);
     Catlass::Arch::Resource<ArchTag> resource;
@@ -93,7 +80,7 @@ template <
     ReadTilingParams(tilingParams, tilingData, TILING_PARAMS_BYTES);
     // The byte size of the TilingParams structure may exceed TILING_PARAMS_BYTES.
     // Please avoid using pointers to access data beyond TILING_PARAMS_BYTES !!!
-    TilingParams *tiling = (TilingParams *)(tilingParams);
+    TilingParams* tiling = (TilingParams*)(tilingParams);
 
     int64_t strideA = static_cast<int64_t>(tiling->strideA);
     int64_t strideB = static_cast<int64_t>(tiling->strideB);
@@ -144,33 +131,18 @@ template <
         PaddingA, PaddingB, BlockMmad, BlockEpilogue, BlockScheduler, ReduceAdd>;
     typename MatmulKernel::Params params{
         problemShape, l1TileShape, gmA,  layoutA,   gmB,           layoutB,         gmC,
-        layoutC,      gmWA,        gmWB, gmReduceW, swizzleOffset, swizzleDirection
-    };
+        layoutC,      gmWA,        gmWB, gmReduceW, swizzleOffset, swizzleDirection};
     // call a kernel
     MatmulKernel matmul;
     matmul(params, resource);
 }
 
 template <
-    class ArchTag,
-    class ElementA,
-    class LayoutA,
-    class ElementB,
-    class LayoutB,
-    class ElementC,
-    class LayoutC,
-    PaddingTag paddingTagA,
-    PaddingTag paddingTagB>
+    class ArchTag, class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC,
+    PaddingTag paddingTagA, PaddingTag paddingTagB>
 void LaunchPaddingStreamkMatmulKernel(
-    aclrtStream &stream,
-    uint64_t hardwareSyncAddr,
-    uint8_t *dA,
-    uint8_t *dB,
-    uint8_t *dC,
-    uint8_t *dW,
-    uint8_t *dTilingParams,
-    TilingParams &tilingParams
-)
+    aclrtStream& stream, uint64_t hardwareSyncAddr, uint8_t* dA, uint8_t* dB, uint8_t* dC, uint8_t* dW,
+    uint8_t* dTilingParams, TilingParams& tilingParams)
 {
     using PaddingBuilderA = Catlass::Gemm::Kernel::PaddingBuilder<paddingTagA, ArchTag, ElementA, LayoutA>;
     using PaddingBuilderB = Catlass::Gemm::Kernel::PaddingBuilder<paddingTagB, ArchTag, ElementB, LayoutB>;
@@ -180,9 +152,9 @@ void LaunchPaddingStreamkMatmulKernel(
     uint32_t m1 = static_cast<uint32_t>(tilingParams.m1);
     uint32_t n1 = static_cast<uint32_t>(tilingParams.n1);
     uint32_t k1 = static_cast<uint32_t>(tilingParams.k1);
-    uint8_t *dWA = nullptr;
-    uint8_t *dWB = nullptr;
-    uint8_t *dReduceW = nullptr;
+    uint8_t* dWA = nullptr;
+    uint8_t* dWB = nullptr;
+    uint8_t* dReduceW = nullptr;
     size_t sizeWA = 0, sizeWB = 0;
 
     dWA = dW;
@@ -207,21 +179,15 @@ void LaunchPaddingStreamkMatmulKernel(
 
     dReduceW = dW + sizeWA + sizeWB;
 
-    PaddingStreamkMatmulKernel<ArchTag, ElementA, LayoutA, ElementB, LayoutB, ElementC, LayoutC, paddingTagA, paddingTagB>
+    PaddingStreamkMatmulKernel<
+        ArchTag, ElementA, LayoutA, ElementB, LayoutB, ElementC, LayoutC, paddingTagA, paddingTagB>
         <<<tilingParams.blockDim, nullptr, stream>>>(hardwareSyncAddr, dA, dB, dC, dWA, dWB, dReduceW, dTilingParams);
 }
 
 template <
-    class ArchTag,
-    class ElementA,
-    class LayoutA,
-    class ElementB,
-    class LayoutB,
-    class ElementC,
-    class LayoutC,
-    PaddingTag paddingTagA,
-    PaddingTag paddingTagB>
-size_t PaddingStreamkMatmulKernelGetWorkspaceSize(TilingParams &tilingParams)
+    class ArchTag, class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC,
+    PaddingTag paddingTagA, PaddingTag paddingTagB>
+size_t PaddingStreamkMatmulKernelGetWorkspaceSize(TilingParams& tilingParams)
 {
     using PaddingBuilderA = Catlass::Gemm::Kernel::PaddingBuilder<paddingTagA, ArchTag, ElementA, LayoutA>;
     using PaddingBuilderB = Catlass::Gemm::Kernel::PaddingBuilder<paddingTagB, ArchTag, ElementB, LayoutB>;

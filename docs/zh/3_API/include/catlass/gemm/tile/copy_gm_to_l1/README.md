@@ -56,7 +56,7 @@ uint32_t row = 256;
 uint32_t col = 256;
 
 // 构造 GM 上的 RowMajor layout
-auto layoutSrc =LayoutTagSrc::MakeLayout<ElementSrc>(row, col);
+auto layoutSrc = LayoutTagSrc::MakeLayout<ElementSrc>(row, col);
 // 构造 L1 上的 zN layout
 auto layoutDst = LayoutTagDst::MakeLayout<ElementDst>(row, col);
 

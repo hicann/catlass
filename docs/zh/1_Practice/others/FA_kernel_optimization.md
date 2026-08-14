@@ -165,7 +165,7 @@ MTE2相关问题通常来自：
 
 如果业务侧无法改变输入物理布局，可以考虑新增专用`LayoutTag`或TileCopy适配。但这类修改会同时影响QK、PV和mask访问路径，必须重新验证正确性和性能。
 
-FixPipe相关问题通常出现在O写回路径，尤其是小`embed`、尾块多、O地址不对齐或workspace分段不对齐时。建议保证Q/K/V/O首地址尽量按512B对齐，连续维stride尽量满足搬运对齐要求。若后续引入GM workspace缓存中间结果，分配多个workspace分段时应使用类似`RoundUp(offset, 512)`的方式保证每段起始地址对齐。
+FixPipe相关问题通常出现在O写回路径，尤其是小`embed`、尾块多、O地址不对齐或workspace分段不对齐时。建议保证Q/K/V/O首地址尽量按512Byte对齐，连续维stride尽量满足搬运对齐要求。若后续引入GM workspace缓存中间结果，分配多个workspace分段时应使用类似`RoundUp(offset, 512)`的方式保证每段起始地址对齐。
 
 ### 优化Paged Attention路径
 

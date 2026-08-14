@@ -20,7 +20,7 @@ namespace CatlassKernelWrapper::MatmulLike {
 using namespace CatlassKernel;
 using OutputType = at::Tensor;
 
-OutputType AllocOutput(KernelInfo &kernelInfo);
-KernelInfo GetKernelInfo(const at::Tensor &mat1, const at::Tensor &mat2, const std::string &outDType);
+OutputType AllocOutput(KernelInfo& kernelInfo);
+KernelInfo GetKernelInfo(const at::Tensor& mat1, const at::Tensor& mat2, const std::string& outDType);
 } // namespace CatlassKernelWrapper::MatmulLike
 #endif

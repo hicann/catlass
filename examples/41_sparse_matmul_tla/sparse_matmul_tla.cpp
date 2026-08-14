@@ -4,8 +4,9 @@
  * This file is a part of the CANN Open Software.
  * Licensed under CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
- * See LICENSE in the root of the software repository for the full text of the License.
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+ * BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE. See LICENSE in the root of
+ * the software repository for the full text of the License.
  */
 
 // By setting the K_MAX_SHAPE_DIM macro, the dimension of the AscendC Tensor's ShapeInfo is configured to 0,
@@ -44,7 +45,7 @@ struct MatmulShape {
 };
 
 template <class L1Shape_>
-static int64_t GetTotalBlockNum(int atomic, const MatmulShape &shape)
+static int64_t GetTotalBlockNum(int atomic, const MatmulShape& shape)
 {
     const int l1M = tla::get<0>(L1Shape_{});
     const int l1N = tla::get<1>(L1Shape_{});
@@ -63,7 +64,7 @@ static int64_t GetTotalBlockNum(int atomic, const MatmulShape &shape)
     return blockNum;
 }
 
-static void Run(const Options &options)
+static void Run(const Options& options)
 {
     aclrtStream stream{nullptr};
 
@@ -80,14 +81,14 @@ static void Run(const Options &options)
     using ElementC = int32_t;
 
     using LayoutTagA = layout::RowMajor;
-    using LayoutTagB = layout::ColumnMajor;  // trans B
+    using LayoutTagB = layout::ColumnMajor; // trans B
     using LayoutTagC = layout::RowMajor;
     LayoutTagA tagA = LayoutTagA::MakeLayout<ElementA>(m, k);
     LayoutTagB tagB = LayoutTagB::MakeLayout<ElementB>(k / 2, n);
     LayoutTagC tagC = LayoutTagC::MakeLayout<ElementC>(m, n);
 
     size_t lenA = tagA.Capacity();
-    size_t lenB = tagB.Capacity();              // For 4:2 sparse pattern, only half of the elements are stored
+    size_t lenB = tagB.Capacity(); // For 4:2 sparse pattern, only half of the elements are stored
     size_t lenC = tagC.Capacity();
     size_t lenIdx = static_cast<size_t>((n * k + 7) / 8); // For index matrix
 
@@ -98,34 +99,33 @@ static void Run(const Options &options)
     size_t goldenSize = lenC * sizeof(int32_t);
     size_t sizeWorkspace;
 
-    uint8_t *hostA;
-    ACL_CHECK(aclrtMallocHost((void **)(&hostA), sizeA));
+    uint8_t* hostA;
+    ACL_CHECK(aclrtMallocHost((void**)(&hostA), sizeA));
     ReadFile("./input/x1_gm.bin", hostA, sizeA);
-    uint8_t *deviceA{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceA{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceA, sizeA, hostA, sizeA, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *hostB;
-    ACL_CHECK(aclrtMallocHost((void **)(&hostB), sizeB));
+    uint8_t* hostB;
+    ACL_CHECK(aclrtMallocHost((void**)(&hostB), sizeB));
     ReadFile("./input/x2_gm.bin", hostB, sizeB);
-    uint8_t *deviceB{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceB{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceB, sizeB, hostB, sizeB, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *deviceC{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceC{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
 
-    uint8_t *deviceBias = nullptr;
+    uint8_t* deviceBias = nullptr;
 
-    uint8_t *hostIdx;
-    ACL_CHECK(aclrtMallocHost((void **)(&hostIdx), sizeIdx));
+    uint8_t* hostIdx;
+    ACL_CHECK(aclrtMallocHost((void**)(&hostIdx), sizeIdx));
     ReadFile("./input/index_gm.bin", hostIdx, sizeIdx);
-    uint8_t *deviceIdx{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceIdx), sizeIdx, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceIdx{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceIdx), sizeIdx, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceIdx, sizeIdx, hostIdx, sizeIdx, ACL_MEMCPY_HOST_TO_DEVICE));
 
-
-    uint8_t *deviceWorkspace{nullptr};
+    uint8_t* deviceWorkspace{nullptr};
 
     // Get the number of cube cores of the current hardware
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
@@ -155,10 +155,9 @@ static void Run(const Options &options)
     using MatmulKernel = Gemm::Kernel::KernelSparseMatmul<ProblemShape, BlockMmad, BlockEpilogue, BlockScheduler>;
     using Arguments = typename MatmulKernel::Arguments;
     Arguments args = {
-        shape,                                               // problem shape
-        {deviceA, deviceB, deviceC, deviceBias, deviceIdx, layoutA, layoutB, layoutC},  // mmad args
-        aicCoreNum
-    };
+        shape,                                                                         // problem shape
+        {deviceA, deviceB, deviceC, deviceBias, deviceIdx, layoutA, layoutB, layoutC}, // mmad args
+        aicCoreNum};
 
     using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
 
@@ -166,12 +165,12 @@ static void Run(const Options &options)
     matmulOp.CanImplement(args);
     sizeWorkspace = matmulOp.GetWorkspaceSize(args);
     if (sizeWorkspace > 0) {
-        ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
+        ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
     }
     matmulOp.Initialize(args, deviceWorkspace);
     int blockNum = GetTotalBlockNum<L1TileShape>(aicCoreNum, shape);
     matmulOp(stream, blockNum);
-    
+
     ACL_CHECK(aclrtSynchronizeStream(stream));
 
     std::vector<int32_t> hostC(lenC);
@@ -198,7 +197,7 @@ static void Run(const Options &options)
     ACL_CHECK(aclFinalize());
 }
 
-int main(int argc, const char **argv)
+int main(int argc, const char** argv)
 {
     Options options;
     if (options.Parse(argc, argv) != 0) {

@@ -21,12 +21,7 @@
 namespace Catlass::Gemm::Kernel {
 
 // Template for grouped matmul kernel. Compute grouped C = A * B
-template <
-    class BlockMmadTla_,
-    class BlockEpilogue_,
-    class BlockScheduler_,
-    class ElementGroupList_
->
+template <class BlockMmadTla_, class BlockEpilogue_, class BlockScheduler_, class ElementGroupList_>
 class GroupedMatmulSliceMFixpipeDequantTla {
 public:
     using BlockMmadTla = BlockMmadTla_;
@@ -50,80 +45,82 @@ public:
         // Data members
         GemmCoord problemShape;
         uint32_t problemCount;
-        __gm__ ElementGroupList *ptrGroupList;
-        __gm__ ElementA *ptrA;
+        __gm__ ElementGroupList* ptrGroupList;
+        __gm__ ElementA* ptrA;
         LayoutA layoutA;
-        __gm__ ElementB *ptrB;
+        __gm__ ElementB* ptrB;
         LayoutB layoutB;
-        __gm__ ElementC *ptrC;
+        __gm__ ElementC* ptrC;
         LayoutC layoutC;
         float perTensorScale;
-        __gm__ uint64_t *ptrPerChannelScale;
+        __gm__ uint64_t* ptrPerChannelScale;
 
         // Methods
         CATLASS_HOST_DEVICE
-        Params() {}
+        Params()
+        {}
 
         CATLASS_HOST_DEVICE
         Params(
-            GemmCoord const &problemShape_, uint32_t problemCount_, GM_ADDR ptrGroupList_,
-            GM_ADDR ptrA_, LayoutA const &layoutA_,
-            GM_ADDR ptrB_, LayoutB const &layoutB_,
-            GM_ADDR ptrC_, LayoutC const &layoutC_,
-            float perTensorScale_, GM_ADDR ptrPerChannelScale_
-        ) : problemShape(problemShape_),
-            problemCount(problemCount_), ptrGroupList(reinterpret_cast<__gm__ ElementGroupList *>(ptrGroupList_)),
-            ptrA(reinterpret_cast<__gm__ ElementA *>(ptrA_)), layoutA(layoutA_),
-            ptrB(reinterpret_cast<__gm__ ElementB *>(ptrB_)), layoutB(layoutB_),
-            ptrC(reinterpret_cast<__gm__ ElementC *>(ptrC_)), layoutC(layoutC_),
-            perTensorScale(perTensorScale_),
-            ptrPerChannelScale(reinterpret_cast<__gm__ uint64_t *>(ptrPerChannelScale_))
-        {
-        }
+            GemmCoord const& problemShape_, uint32_t problemCount_, GM_ADDR ptrGroupList_, GM_ADDR ptrA_,
+            LayoutA const& layoutA_, GM_ADDR ptrB_, LayoutB const& layoutB_, GM_ADDR ptrC_, LayoutC const& layoutC_,
+            float perTensorScale_, GM_ADDR ptrPerChannelScale_)
+            : problemShape(problemShape_),
+              problemCount(problemCount_),
+              ptrGroupList(reinterpret_cast<__gm__ ElementGroupList*>(ptrGroupList_)),
+              ptrA(reinterpret_cast<__gm__ ElementA*>(ptrA_)),
+              layoutA(layoutA_),
+              ptrB(reinterpret_cast<__gm__ ElementB*>(ptrB_)),
+              layoutB(layoutB_),
+              ptrC(reinterpret_cast<__gm__ ElementC*>(ptrC_)),
+              layoutC(layoutC_),
+              perTensorScale(perTensorScale_),
+              ptrPerChannelScale(reinterpret_cast<__gm__ uint64_t*>(ptrPerChannelScale_))
+        {}
     };
-    struct Arguments{
+    struct Arguments {
         GemmCoord problemShape;
         uint32_t problemCount;
-        uint8_t *ptrGroupList;
-        uint8_t *ptrA; LayoutA layoutA;
-        uint8_t *ptrB; LayoutB layoutB;
-        uint8_t *ptrC; LayoutC layoutC;
-        float perTensorScale; 
-        uint8_t *ptrPerChannelScale;
+        uint8_t* ptrGroupList;
+        uint8_t* ptrA;
+        LayoutA layoutA;
+        uint8_t* ptrB;
+        LayoutB layoutB;
+        uint8_t* ptrC;
+        LayoutC layoutC;
+        float perTensorScale;
+        uint8_t* ptrPerChannelScale;
     };
-    static bool CanImplement(const Arguments &args)
+    static bool CanImplement(const Arguments& args)
     {
         return true;
     }
-    static size_t GetWorkspaceSize(const Arguments &args)
+    static size_t GetWorkspaceSize(const Arguments& args)
     {
         return 0;
     }
-    static Params ToUnderlyingArguments(const Arguments &args, void* workspace)
+    static Params ToUnderlyingArguments(const Arguments& args, void* workspace)
     {
-        Params params{args.problemShape, args.problemCount, args.ptrGroupList,
-            args.ptrA, args.layoutA,
-            args.ptrB, args.layoutB,
-            args.ptrC, args.layoutC,
-            args.perTensorScale, args.ptrPerChannelScale
-        };
+        Params params{args.problemShape, args.problemCount,   args.ptrGroupList,      args.ptrA,
+                      args.layoutA,      args.ptrB,           args.layoutB,           args.ptrC,
+                      args.layoutC,      args.perTensorScale, args.ptrPerChannelScale};
 
         return params;
     }
     // Methods
     CATLASS_HOST_DEVICE
-    GroupedMatmulSliceMFixpipeDequantTla() {}
+    GroupedMatmulSliceMFixpipeDequantTla()
+    {}
     // Methods
     CATLASS_HOST_DEVICE
-    ~GroupedMatmulSliceMFixpipeDequantTla(){}
+    ~GroupedMatmulSliceMFixpipeDequantTla()
+    {}
 
     template <int32_t CORE_TYPE = g_coreType>
-    CATLASS_DEVICE
-    void operator()(Params const &params);
+    CATLASS_DEVICE void operator()(Params const& params);
 
     template <>
-    CATLASS_DEVICE
-    void operator()<AscendC::AIC>(Params const &params)
+    CATLASS_DEVICE void operator()<AscendC::AIC>(Params const& params)
     {
         int64_t curBlockIdx = AscendC::GetBlockIdx();
         int64_t blockNum = AscendC::GetBlockNum();
@@ -148,11 +145,11 @@ public:
         auto tensorA = tla::MakeTensor(gmA, params.layoutA, Arch::PositionGM{});
         auto tensorC = tla::MakeTensor(gmC, params.layoutC, Arch::PositionGM{});
         auto layoutQuant = tla::MakeLayout(params.problemShape.n());
-        auto tensorQuant = tla::MakeTensor(gmScale, layoutQuant, Arch::PositionGM{}); 
+        auto tensorQuant = tla::MakeTensor(gmScale, layoutQuant, Arch::PositionGM{});
 
         for (uint32_t groupIdx = 0; groupIdx < params.problemCount; ++groupIdx) {
             uint32_t currentM = (groupIdx == 0) ? groupList.GetValue(groupIdx) :
-                (groupList.GetValue(groupIdx) - groupList.GetValue(groupIdx - 1));
+                                                  (groupList.GetValue(groupIdx) - groupList.GetValue(groupIdx - 1));
 
             GemmCoord inGroupProblemShape{currentM, params.problemShape.n(), params.problemShape.k()};
             blockScheduler.UpdateGroupParams(inGroupProblemShape);
@@ -173,7 +170,7 @@ public:
             for (uint32_t loopIdx = 0; loopIdx < coreLoops; ++loopIdx) {
                 // Compute block information
                 bool isLastGroupRound = groupIdx == params.problemCount - 1 && loopIdx == coreLoops - 1 &&
-                    curBlockIdx <= blockScheduler.endBlockIdx_; 
+                                        curBlockIdx <= blockScheduler.endBlockIdx_;
                 blockScheduler.UpdateMNTileIdx(loopIdx, isLastGroupRound);
                 blockScheduler.UpdateBlockShape(loopIdx, isLastGroupRound);
                 auto blockShape = blockScheduler.GetBlockShape();
@@ -188,28 +185,18 @@ public:
                 uint32_t blockK = blockShape.k();
 
                 // Make tiled views
-                auto tensorBlockA = GetTile(tensorA,
-                                            tla::MakeCoord(mStart + mCoord, kCoord),
-                                            tla::MakeShape(blockM, blockK));
-                auto tensorBlockB = GetTile(tensorB,
-                                            tla::MakeCoord(kCoord, nCoord),
-                                            tla::MakeShape(blockK, blockN));
-                auto tensorBlockC = GetTile(tensorC,
-                                            tla::MakeCoord(mStart + mCoord, nCoord),
-                                            tla::MakeShape(blockM, blockN));
-                auto tensorBlockQuant = GetTile(tensorQuant,
-                                            tla::MakeCoord(nCoord),
-                                            tla::MakeShape(blockN));
-                
-                GemmCoord blockShapeMNK{static_cast<uint32_t>(blockM), static_cast<uint32_t>(blockN), static_cast<uint32_t>(blockK)};
+                auto tensorBlockA =
+                    GetTile(tensorA, tla::MakeCoord(mStart + mCoord, kCoord), tla::MakeShape(blockM, blockK));
+                auto tensorBlockB = GetTile(tensorB, tla::MakeCoord(kCoord, nCoord), tla::MakeShape(blockK, blockN));
+                auto tensorBlockC =
+                    GetTile(tensorC, tla::MakeCoord(mStart + mCoord, nCoord), tla::MakeShape(blockM, blockN));
+                auto tensorBlockQuant = GetTile(tensorQuant, tla::MakeCoord(nCoord), tla::MakeShape(blockN));
+
+                GemmCoord blockShapeMNK{
+                    static_cast<uint32_t>(blockM), static_cast<uint32_t>(blockN), static_cast<uint32_t>(blockK)};
                 // Compute block-scoped matrix multiply-add
                 blockMmadTla(
-                    tensorBlockA, tensorBlockB, tensorBlockC,
-                    blockShape,
-                    {},
-                    tensorBlockQuant,
-                    params.perTensorScale
-                );
+                    tensorBlockA, tensorBlockB, tensorBlockC, blockShape, {}, tensorBlockQuant, params.perTensorScale);
             }
             mStart += inGroupProblemShape.m();
             gmGroupOffsetB += static_cast<int64_t>(inGroupProblemShape.k()) * inGroupProblemShape.n();
@@ -219,10 +206,8 @@ public:
     }
 
     template <>
-    CATLASS_DEVICE
-    void operator()<AscendC::AIV>(Params const &params)
-    {
-    }
+    CATLASS_DEVICE void operator()<AscendC::AIV>(Params const& params)
+    {}
 };
 
 } // namespace Catlass::Gemm::Kernel

@@ -21,20 +21,18 @@ template <
     /// Compute data type
     class ComputeType_,
     /// Length of the compute buffer
-    class TileShape_
->
+    class TileShape_>
 struct TileBroadcastInplaceByColumn {
     using ArchTag = ArchTag_;
     using ElementCompute = typename ComputeType_::Element;
     using TileShape = TileShape_;
 
     CATLASS_DEVICE
-    TileBroadcastInplaceByColumn() {}
+    TileBroadcastInplaceByColumn()
+    {}
 
     CATLASS_DEVICE
-    void operator()(
-        AscendC::LocalTensor<ElementCompute> const &ubInOut
-    )
+    void operator()(AscendC::LocalTensor<ElementCompute> const& ubInOut)
     {
         constexpr uint32_t eleNumPerBlk = BYTE_PER_BLK / sizeof(ElementCompute);
         constexpr uint32_t blkNumPerRow = TileShape::COLUMN / eleNumPerBlk;
@@ -54,10 +52,8 @@ struct TileBroadcastInplaceByColumn {
             uint64_t mask = ((TileShape::ROW - rowOffset) >= BLK_NUM_PER_VECTOR_FRACTAL) ? defaultMask : tailMask;
             for (uint32_t colOffset = eleNumPerBlk; colOffset < TileShape::COLUMN; colOffset += eleNumPerBlk) {
                 AscendC::Copy(
-                    ubInOut[rowOffset * TileShape::COLUMN + colOffset],
-                    ubInOut[rowOffset * TileShape::COLUMN],
-                    mask, 1, repeatParams
-                );
+                    ubInOut[rowOffset * TileShape::COLUMN + colOffset], ubInOut[rowOffset * TileShape::COLUMN], mask, 1,
+                    repeatParams);
             }
         }
     }

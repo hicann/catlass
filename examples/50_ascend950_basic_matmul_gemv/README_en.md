@@ -4,7 +4,7 @@ Note: The community package does not support the 950 capability currently. Stay 
 
 ## Code Organization
 
-```
+```text
 ├── 50_ascend950_basic_matmul_gemv
 │   ├── CMakeLists.txt     # CMake build file
 │   ├── README.md
@@ -13,10 +13,10 @@ Note: The community package does not support the 950 capability currently. Stay 
 
 ## Example
 
-- After obtaining the code, build the corresponding operator executable file. For details, see [Template Library Quick Start](../../docs/zh/1_Practice/01_quick_start.md#build-and-execution). This test case is an Ascend 950 operator. During compilation, you need to add -DCATLASS_ARCH=3510.
+- After obtaining the code, build the corresponding operator executable file. For details, see [Template Library Quick Start](../../docs/en/1_Practice/01_quick_start.md#build-and-execution). This test case is an Ascend 950 operator. During compilation, you need to add -DCATLASS_ARCH=3510.
 - Execute the operator.
 
-```
+```bash
 # Build a specified test case.
 bash scripts/build.sh 50_ascend950_basic_matmul_gemv -DCATLASS_ARCH=3510
 cd output/bin
@@ -27,7 +27,7 @@ cd output/bin
 
 If the following information is displayed, the accuracy comparison is successful.
 
-```
+```text
 Compare success.
 ```
 
@@ -49,6 +49,6 @@ The `DispatchPolicy MmadPingpong` used by `BasicMatmul` by default supports the 
 
 Assume that the matrix shape is `M N K`, the tile size on L1 is `m1 n1 k1`, the number of blocks in the M direction is `mTiles = CeilDiv(M, m1)`, the number of blocks in the N direction is `nTiles = CeilDiv(N, n1)`, and the total number of tasks is `taskBlocks = mTiles × nTiles`. In the following two cases, `enableL1Resident` can be enabled:
 
-1. `mTlies = 11, `nTiles > CoreNum`, and `K < 2 * k1`. In this case, you can also set `l0CStages=2` (`enableUnitFlag`must be disabled). If the space is insufficient and`l0CStages=2`cannot be set, set`n1` to half of the original value.
+1. `mTiles = 11`, `nTiles > CoreNum`, and `K < 2 * k1`. In this case, you can also set `l0CStages=2` (`enableUnitFlag`must be disabled). If the space is insufficient and`l0CStages=2`cannot be set, set`n1` to half of the original value.
 
-2. `nTlies = 1`, `mTiles > CoreNum`, and `K < 2 * k1`. In this case, you can also set `l0CStages=2` (`enableUnitFlag` must be disabled). If the space is insufficient and `l0CStages=2` cannot be set, set `m1` to half of the original value.
+2. `nTiles = 1`, `mTiles > CoreNum`, and `K < 2 * k1`. In this case, you can also set `l0CStages=2` (`enableUnitFlag` must be disabled). If the space is insufficient and `l0CStages=2` cannot be set, set `m1` to half of the original value.

@@ -2,7 +2,7 @@
 
 ## Code Organization
 
-```
+```text
 ├── 21_basic_matmul_preload_zN
 │   ├── CMakeLists.txt # CMake build file
 │   ├── README.md
@@ -18,7 +18,7 @@ This operator supports NZ format input for matrix B (zN for non-transposed usage
 - After obtaining the code, compile the operator executable file. For details, see [Template Library Quick Start](../../docs/en/1_Practice/01_quick_start.md#build-and-execution).
 - Execute the operator.
 
-```
+```bash
 # Compiling a specified case
 bash scripts/build.sh 21_basic_matmul_preload_zN
 cd /output/bin
@@ -29,6 +29,6 @@ cd /output/bin
 
 If the following result is displayed, precision verification is successful.
 
-```
+```text
 Compare success.
 ```

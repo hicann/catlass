@@ -13,12 +13,11 @@
 import os
 import argparse
 import torch
-import torch.nn as nn
 import math
-from typing import Tuple, Optional, Union, List
-import numpy as np
+from typing import Tuple
 
 WORKSPACE = os.path.dirname(os.path.abspath(__file__))
+
 
 class MXFP8MatrixQuantizer:
     """
@@ -32,43 +31,45 @@ class MXFP8MatrixQuantizer:
 
     # MXFP8 数据格式定义
     DATA_FORMATS = {
-        'E4M3': {
-            'exp_bits': 4,
-            'mantissa_bits': 3,
-            'bias': 7,
-            'emax': 8,
-            'max_value': 448.0,
-            'min_value': -448.0
+        "E4M3": {
+            "exp_bits": 4,
+            "mantissa_bits": 3,
+            "bias": 7,
+            "emax": 8,
+            "max_value": 448.0,
+            "min_value": -448.0,
         },
-        'E5M2': {
-            'exp_bits': 5,
-            'mantissa_bits': 2,
-            'bias': 15,
-            'emax': 15,
-            'max_value': 57344.0,
-            'min_value': -57344.0
-        }
+        "E5M2": {
+            "exp_bits": 5,
+            "mantissa_bits": 2,
+            "bias": 15,
+            "emax": 15,
+            "max_value": 57344.0,
+            "min_value": -57344.0,
+        },
     }
 
     # FP8_E8M0FNU 缩放格式定义
     SCALE_FORMAT = {
-        'name': 'FP8_E8M0FNU',
-        'exp_bits': 8,
-        'mantissa_bits': 0,
-        'bias': 128,  # 偏置为128，0表示指数-128
-        'max_exp': 127,
-        'min_exp': -128,
-        'max_value': 2**127,   # 约 1.7e38
-        'min_value': 2**-128,  # 约 2.9e-39
-        'signed': False,       # 无符号，仅正数
-        'allow_zero': True     # 允许零值（指数-128表示零）
+        "name": "FP8_E8M0FNU",
+        "exp_bits": 8,
+        "mantissa_bits": 0,
+        "bias": 128,  # 偏置为128，0表示指数-128
+        "max_exp": 127,
+        "min_exp": -128,
+        "max_value": 2**127,  # 约 1.7e38
+        "min_value": 2**-128,  # 约 2.9e-39
+        "signed": False,  # 无符号，仅正数
+        "allow_zero": True,  # 允许零值（指数-128表示零）
     }
 
-    def __init__(self,
-                 data_format: str = 'E4M3',
-                 axis: int = 1,
-                 block_size: int = 32,
-                 epsilon: float = 1e-12):
+    def __init__(
+        self,
+        data_format: str = "E4M3",
+        axis: int = 1,
+        block_size: int = 32,
+        epsilon: float = 1e-12,
+    ):
         """
         初始化 MXFP8 矩阵量化器
 
@@ -79,7 +80,9 @@ class MXFP8MatrixQuantizer:
             epsilon: 防止除零的小值
         """
         if data_format not in self.DATA_FORMATS:
-            raise ValueError(f"不支持的数据格式: {data_format}，支持: {list(self.DATA_FORMATS.keys())}")
+            raise ValueError(
+                f"不支持的数据格式: {data_format}，支持: {list(self.DATA_FORMATS.keys())}"
+            )
 
         if axis not in [0, 1]:
             raise ValueError("axis 必须是 0 (行) 或 1 (列)")
@@ -98,7 +101,7 @@ class MXFP8MatrixQuantizer:
 
     def _build_fp8_lookup_table(self):
         """构建 FP8 值查找表"""
-        if self.data_format == 'E4M3':
+        if self.data_format == "E4M3":
             self._build_e4m3_lookup_table()
         else:
             self._build_e5m2_lookup_table()
@@ -120,31 +123,33 @@ class MXFP8MatrixQuantizer:
             if val == 0:
                 value = 0.0
             elif val == 127:  # NaN，替换为最大值
-                value = sign * self.config['max_value']
+                value = sign * self.config["max_value"]
             else:
                 exp = (val >> 3) & 0x0F
                 mantissa = val & 0x07
 
                 if exp == 0:
                     # 次正规数
-                    value = (mantissa / 8.0) * (2.0 ** (1 - self.config['bias']))
+                    value = (mantissa / 8.0) * (2.0 ** (1 - self.config["bias"]))
                 else:
                     # 正规数
-                    value = (1.0 + mantissa / 8.0) * (2.0 ** (exp - self.config['bias']))
+                    value = (1.0 + mantissa / 8.0) * (
+                        2.0 ** (exp - self.config["bias"])
+                    )
 
                 value = sign * value
 
             # 钳位到有效范围
-            if value > self.config['max_value']:
-                value = self.config['max_value']
-            elif value < self.config['min_value']:
-                value = self.config['min_value']
+            if value > self.config["max_value"]:
+                value = self.config["max_value"]
+            elif value < self.config["min_value"]:
+                value = self.config["min_value"]
 
             values.append(value)
 
         self.fp8_lut = torch.tensor(values, dtype=torch.float32)
-        self.fp8_min = self.config['min_value']
-        self.fp8_max = self.config['max_value']
+        self.fp8_min = self.config["min_value"]
+        self.fp8_max = self.config["max_value"]
 
     def _build_e5m2_lookup_table(self):
         """构建 E5M2 值查找表"""
@@ -162,31 +167,33 @@ class MXFP8MatrixQuantizer:
             if val == 0:
                 value = 0.0
             elif val >= 124 and val <= 127:  # NaN/Inf，替换为最大值
-                value = sign * self.config['max_value']
+                value = sign * self.config["max_value"]
             else:
                 exp = (val >> 2) & 0x1F
                 mantissa = val & 0x03
 
                 if exp == 0:
                     # 次正规数
-                    value = (mantissa / 4.0) * (2.0 ** (1 - self.config['bias']))
+                    value = (mantissa / 4.0) * (2.0 ** (1 - self.config["bias"]))
                 else:
                     # 正规数
-                    value = (1.0 + mantissa / 4.0) * (2.0 ** (exp - self.config['bias']))
+                    value = (1.0 + mantissa / 4.0) * (
+                        2.0 ** (exp - self.config["bias"])
+                    )
 
                 value = sign * value
 
             # 钳位到有效范围
-            if value > self.config['max_value']:
-                value = self.config['max_value']
-            elif value < self.config['min_value']:
-                value = self.config['min_value']
+            if value > self.config["max_value"]:
+                value = self.config["max_value"]
+            elif value < self.config["min_value"]:
+                value = self.config["min_value"]
 
             values.append(value)
 
         self.fp8_lut = torch.tensor(values, dtype=torch.float32)
-        self.fp8_min = self.config['min_value']
-        self.fp8_max = self.config['max_value']
+        self.fp8_min = self.config["min_value"]
+        self.fp8_max = self.config["max_value"]
 
     def _compute_scale_fp8_e8m0fnu(self, block_data: torch.Tensor) -> Tuple[float, int]:
         """
@@ -210,14 +217,13 @@ class MXFP8MatrixQuantizer:
             log2_scale = -128  # 最小值
 
         # 四舍五入到最近的整数 (指数)
-        exp = int(math.floor(log2_scale)) - self.config['emax']
+        exp = int(math.floor(log2_scale)) - self.config["emax"]
 
         # 钳位到 E8M0FNU 范围 [-128, 127]
-        exp = max(self.SCALE_FORMAT['min_exp'],
-                    min(exp, self.SCALE_FORMAT['max_exp']))
+        exp = max(self.SCALE_FORMAT["min_exp"], min(exp, self.SCALE_FORMAT["max_exp"]))
 
         # 计算缩放因子
-        scale = 2.0 ** exp
+        scale = 2.0**exp
 
         return scale, exp
 
@@ -239,10 +245,12 @@ class MXFP8MatrixQuantizer:
         distances = torch.abs(data_clamped.unsqueeze(1) - self.fp8_lut.unsqueeze(0))
         min_idx = torch.argmin(distances, dim=1)
         quantized_flat = self.fp8_lut[min_idx]
-        
+
         return quantized_flat.view(original_shape)
 
-    def _process_block(self, block_data: torch.Tensor) -> Tuple[torch.Tensor, float, int]:
+    def _process_block(
+        self, block_data: torch.Tensor
+    ) -> Tuple[torch.Tensor, float, int]:
         """
         处理单个分块
 
@@ -265,8 +273,9 @@ class MXFP8MatrixQuantizer:
 
         return quantized_scaled, scale, exp
 
-    def quantize_matrix(self,
-                       matrix: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def quantize_matrix(
+        self, matrix: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         量化二维矩阵
 
@@ -288,9 +297,9 @@ class MXFP8MatrixQuantizer:
         else:  # 列方向量化
             return self._quantize_by_cols(matrix, M, N)
 
-    def _quantize_by_rows(self,
-                         matrix: torch.Tensor,
-                         M: int, N: int) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _quantize_by_rows(
+        self, matrix: torch.Tensor, M: int, N: int
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         按行方向量化
 
@@ -326,9 +335,9 @@ class MXFP8MatrixQuantizer:
 
         return quantized_matrix, scale_matrix
 
-    def _quantize_by_cols(self,
-                         matrix: torch.Tensor,
-                         M: int, N: int) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _quantize_by_cols(
+        self, matrix: torch.Tensor, M: int, N: int
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         按列方向量化
 
@@ -364,9 +373,9 @@ class MXFP8MatrixQuantizer:
 
         return quantized_matrix, scale_matrix
 
-    def dequantize_matrix(self,
-                         quantized_matrix: torch.Tensor,
-                         scale_matrix: torch.Tensor) -> torch.Tensor:
+    def dequantize_matrix(
+        self, quantized_matrix: torch.Tensor, scale_matrix: torch.Tensor
+    ) -> torch.Tensor:
         """
         反量化矩阵
 
@@ -385,10 +394,9 @@ class MXFP8MatrixQuantizer:
         else:  # 列方向
             return self._dequantize_by_cols(quantized_matrix, scale_matrix, M, N)
 
-    def _dequantize_by_rows(self,
-                           quantized_matrix: torch.Tensor,
-                           scale_matrix: torch.Tensor,
-                           M: int, N: int) -> torch.Tensor:
+    def _dequantize_by_rows(
+        self, quantized_matrix: torch.Tensor, scale_matrix: torch.Tensor, M: int, N: int
+    ) -> torch.Tensor:
         """行方向反量化"""
         num_blocks = scale_matrix.shape[0]
         dequantized_matrix = torch.zeros_like(quantized_matrix)
@@ -405,16 +413,15 @@ class MXFP8MatrixQuantizer:
                         quantized_matrix[start_row:end_row, col] * scale
                     )
                 else:
-                    dequantized_matrix[start_row:end_row, col] = (
-                        quantized_matrix[start_row:end_row, col]
-                    )
+                    dequantized_matrix[start_row:end_row, col] = quantized_matrix[
+                        start_row:end_row, col
+                    ]
 
         return dequantized_matrix
 
-    def _dequantize_by_cols(self,
-                           quantized_matrix: torch.Tensor,
-                           scale_matrix: torch.Tensor,
-                           M: int, N: int) -> torch.Tensor:
+    def _dequantize_by_cols(
+        self, quantized_matrix: torch.Tensor, scale_matrix: torch.Tensor, M: int, N: int
+    ) -> torch.Tensor:
         """列方向反量化"""
         num_blocks = scale_matrix.shape[1]
         dequantized_matrix = torch.zeros_like(quantized_matrix)
@@ -431,52 +438,40 @@ class MXFP8MatrixQuantizer:
                         quantized_matrix[row, start_col:end_col] * scale
                     )
                 else:
-                    dequantized_matrix[row, start_col:end_col] = (
-                        quantized_matrix[row, start_col:end_col]
-                    )
+                    dequantized_matrix[row, start_col:end_col] = quantized_matrix[
+                        row, start_col:end_col
+                    ]
 
         return dequantized_matrix
+
 
 def gen_data_fp8_e4m3(row, col, axis):
     matrix = torch.randn((row, col), dtype=torch.float32) * 10
 
-    quantizer = MXFP8MatrixQuantizer(
-        data_format='E4M3',
-        axis=axis,
-        block_size=32
-    )
+    quantizer = MXFP8MatrixQuantizer(data_format="E4M3", axis=axis, block_size=32)
 
     # 量化
     quantized_matrix, scale_matrix = quantizer.quantize_matrix(matrix)
 
     # 反量化
-    dequantized_matrix = quantizer.dequantize_matrix(
-        quantized_matrix,
-        scale_matrix
-    )
+    dequantized_matrix = quantizer.dequantize_matrix(quantized_matrix, scale_matrix)
 
     quantized_matrix = quantized_matrix.to(torch.float8_e4m3fn)
     scale_matrix = scale_matrix.to(torch.float8_e8m0fnu)
 
     return quantized_matrix, scale_matrix, dequantized_matrix
 
+
 def gen_data_fp8_e5m2(row, col, axis):
     matrix = torch.randn((row, col), dtype=torch.float32)
 
-    quantizer = MXFP8MatrixQuantizer(
-        data_format='E5M2',
-        axis=axis,
-        block_size=32
-    )
+    quantizer = MXFP8MatrixQuantizer(data_format="E5M2", axis=axis, block_size=32)
 
     # 量化
     quantized_matrix, scale_matrix = quantizer.quantize_matrix(matrix)
 
     # 反量化
-    dequantized_matrix = quantizer.dequantize_matrix(
-        quantized_matrix,
-        scale_matrix
-    )
+    dequantized_matrix = quantizer.dequantize_matrix(quantized_matrix, scale_matrix)
 
     quantized_matrix = quantized_matrix.to(torch.float8_e5m2)
     scale_matrix = scale_matrix.to(torch.float8_e8m0fnu)
@@ -528,13 +523,21 @@ def gen_data(batch, m, n, k, trans_a, trans_b):
     b_scale_batch = torch.stack(b_scale_list, dim=0)
     c_fp32_batch = torch.stack(c_fp32_list, dim=0)
 
-    a_np = torch.tensor(a_fp8_batch.flatten().untyped_storage(), dtype=torch.int8).numpy()
-    b_np = torch.tensor(b_fp8_batch.flatten().untyped_storage(), dtype=torch.int8).numpy()
+    a_np = torch.tensor(
+        a_fp8_batch.flatten().untyped_storage(), dtype=torch.int8
+    ).numpy()
+    b_np = torch.tensor(
+        b_fp8_batch.flatten().untyped_storage(), dtype=torch.int8
+    ).numpy()
     a_np.tofile(os.path.join(input_dir, "a_8.bin"))
     b_np.tofile(os.path.join(input_dir, "b_8.bin"))
 
-    a_scale_np = torch.tensor(a_scale_batch.flatten().untyped_storage(), dtype=torch.int8).numpy()
-    b_scale_np = torch.tensor(b_scale_batch.flatten().untyped_storage(), dtype=torch.int8).numpy()
+    a_scale_np = torch.tensor(
+        a_scale_batch.flatten().untyped_storage(), dtype=torch.int8
+    ).numpy()
+    b_scale_np = torch.tensor(
+        b_scale_batch.flatten().untyped_storage(), dtype=torch.int8
+    ).numpy()
     a_scale_np.tofile(os.path.join(input_dir, "a_scale.bin"))
     b_scale_np.tofile(os.path.join(input_dir, "b_scale.bin"))
 
@@ -544,11 +547,11 @@ def gen_data(batch, m, n, k, trans_a, trans_b):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('batch', type=int)
-    parser.add_argument('m', type=int)
-    parser.add_argument('n', type=int)
-    parser.add_argument('k', type=int)
-    parser.add_argument('trans_a', type=int)
-    parser.add_argument('trans_b', type=int)
+    parser.add_argument("batch", type=int)
+    parser.add_argument("m", type=int)
+    parser.add_argument("n", type=int)
+    parser.add_argument("k", type=int)
+    parser.add_argument("trans_a", type=int)
+    parser.add_argument("trans_b", type=int)
     args = parser.parse_args()
     gen_data(args.batch, args.m, args.n, args.k, args.trans_a, args.trans_b)

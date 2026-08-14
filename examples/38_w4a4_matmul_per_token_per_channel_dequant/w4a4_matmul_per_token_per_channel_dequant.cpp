@@ -37,7 +37,7 @@
 using namespace Catlass;
 using Options = GemmOptions;
 
-static void Run(Options const &options)
+static void Run(Options const& options)
 {
     aclrtStream stream{nullptr};
     ACL_CHECK(aclInit(nullptr));
@@ -82,22 +82,22 @@ static void Run(Options const &options)
     LayoutD layoutD{m, n};
 
     // Read data from `.dat`  files
-    void *hostA = nullptr;
+    void* hostA = nullptr;
     ACL_CHECK(aclrtMallocHost(&hostA, sizeA));
     std::string inFileAName = "../../examples/38_w4a4_matmul_per_token_per_channel_dequant/data/inputA.dat";
     ReadFile(inFileAName, hostA, sizeA);
 
-    void *hostB = nullptr;
+    void* hostB = nullptr;
     ACL_CHECK(aclrtMallocHost(&hostB, sizeB));
     std::string inFileBName = "../../examples/38_w4a4_matmul_per_token_per_channel_dequant/data/inputB.dat";
     ReadFile(inFileBName, hostB, sizeB);
 
-    void *hostScale = nullptr;
+    void* hostScale = nullptr;
     ACL_CHECK(aclrtMallocHost(&hostScale, sizeScale));
     std::string inputScalePath = "../../examples/38_w4a4_matmul_per_token_per_channel_dequant/data/inputScale.dat";
     ReadFile(inputScalePath, hostScale, sizeScale);
 
-    void *hostPerTokenScale = nullptr;
+    void* hostPerTokenScale = nullptr;
     ACL_CHECK(aclrtMallocHost(&hostPerTokenScale, sizePerTokenScale));
     std::string inputPerTokenScalePath =
         "../../examples/38_w4a4_matmul_per_token_per_channel_dequant/data/inputPerTokenScale.dat";
@@ -112,20 +112,19 @@ static void Run(Options const &options)
     ACL_CHECK(aclrtGetHardwareSyncAddr(reinterpret_cast<void**>(&hardwareSyncAddr)));
 
     uint8_t *deviceA, *deviceB, *deviceScale, *devicePerTokenScale;
-    uint8_t *deviceD;
+    uint8_t* deviceD;
 
-    ACL_CHECK(aclrtMalloc((void **)&deviceA, sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
-    ACL_CHECK(aclrtMalloc((void **)&deviceB, sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
-    ACL_CHECK(aclrtMalloc((void **)&deviceScale, sizeScale, ACL_MEM_MALLOC_HUGE_FIRST));
-    ACL_CHECK(aclrtMalloc((void **)&devicePerTokenScale, sizePerTokenScale, ACL_MEM_MALLOC_HUGE_FIRST));
-    ACL_CHECK(aclrtMalloc((void **)&deviceD, sizeD, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMalloc((void**)&deviceA, sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMalloc((void**)&deviceB, sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMalloc((void**)&deviceScale, sizeScale, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMalloc((void**)&devicePerTokenScale, sizePerTokenScale, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMalloc((void**)&deviceD, sizeD, ACL_MEM_MALLOC_HUGE_FIRST));
 
     ACL_CHECK(aclrtMemcpy(deviceA, sizeA, hostA, sizeA, ACL_MEMCPY_HOST_TO_DEVICE));
     ACL_CHECK(aclrtMemcpy(deviceB, sizeB, hostB, sizeB, ACL_MEMCPY_HOST_TO_DEVICE));
     ACL_CHECK(aclrtMemcpy(deviceScale, sizeScale, hostScale, sizeScale, ACL_MEMCPY_HOST_TO_DEVICE));
     ACL_CHECK(aclrtMemcpy(
-        devicePerTokenScale, sizePerTokenScale, hostPerTokenScale, sizePerTokenScale, ACL_MEMCPY_HOST_TO_DEVICE
-    ));
+        devicePerTokenScale, sizePerTokenScale, hostPerTokenScale, sizePerTokenScale, ACL_MEMCPY_HOST_TO_DEVICE));
 
     using ArchTag = Arch::AtlasA2;
     constexpr uint32_t preloadStages = 1;
@@ -191,9 +190,9 @@ static void Run(Options const &options)
     }
 
     size_t sizeWorkspace = matmulOp.GetWorkspaceSize(arguments);
-    uint8_t *deviceWorkspace = nullptr;
+    uint8_t* deviceWorkspace = nullptr;
     if (sizeWorkspace > 0) {
-        ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
+        ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
     }
 
     matmulOp.Initialize(arguments, deviceWorkspace);
@@ -230,7 +229,7 @@ static void Run(Options const &options)
     ACL_CHECK(aclFinalize());
 }
 
-int main(int argc, const char **argv)
+int main(int argc, const char** argv)
 {
     Options options;
     if (options.Parse(argc, argv) != 0) {

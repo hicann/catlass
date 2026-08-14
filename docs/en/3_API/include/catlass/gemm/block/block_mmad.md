@@ -1,5 +1,5 @@
 # Block MMAD Basic Template
-
+>
 > [Code location](../../../../../../../include/catlass/gemm/block/block_mmad.hpp)
 
 [TOC]
@@ -12,7 +12,7 @@ Block-level MMAD computation, non-TLA implementation. The actual computation is 
 
 ### Template Description
 
-```cpp
+```
 template <
     class DispatchPolicy,   // Dispatch policy used
     class L1TileShape,      // L1 basic block
@@ -29,7 +29,7 @@ struct BlockMmad {
 };
 ```
 
-Note that among the template parameters, `BiasType` defaults to `void`, `TileCopy` defaults to [Gemm::Tile::TileCopy](../tile/tile_copy.md), and `TileMmad` defaults to [Gemm::Tile::TileMmad](../tile/tile_mmad.md).
+Note that among the template parameters, `BiasType` defaults to `void`, `TileCopy` defaults to [Gemm::Tile::TileCopy](../tile/tile_copy/README.md), and `TileMmad` defaults to [Gemm::Tile::TileMmad](../tile/tile_mmad/README.md).
 
 ## BlockMmadTla
 

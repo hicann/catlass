@@ -26,13 +26,8 @@ namespace Catlass::Gemm::Kernel {
 #if (defined(CATLASS_ARCH) && CATLASS_ARCH == 3510)
 
 template <
-    class BlockMmad_,
-    class BlockEpilogue_,
-    class BlockScheduler_,
-    class ElementGroupList_,
-    class LayoutQ_,
-    class LayoutQScale_
->
+    class BlockMmad_, class BlockEpilogue_, class BlockScheduler_, class ElementGroupList_, class LayoutQ_,
+    class LayoutQScale_>
 class GroupedMxMatmulSliceMSwigluMxQuantTla {
 public:
     using BlockMmad = BlockMmad_;
@@ -78,97 +73,96 @@ public:
     struct Params {
         GemmCoord problemShape;
         uint32_t problemCount;
-        __gm__ ElementGroupList *ptrGroupList;
-        __gm__ ElementA *ptrA;
+        __gm__ ElementGroupList* ptrGroupList;
+        __gm__ ElementA* ptrA;
         LayoutA layoutA;
-        __gm__ ElementB *ptrB;
+        __gm__ ElementB* ptrB;
         LayoutB layoutB;
-        __gm__ ElementMxScaleA *ptrMxScaleA;
+        __gm__ ElementMxScaleA* ptrMxScaleA;
         LayoutMxScaleA layoutMxScaleA;
-        __gm__ ElementMxScaleB *ptrMxScaleB;
+        __gm__ ElementMxScaleB* ptrMxScaleB;
         LayoutMxScaleB layoutMxScaleB;
-        __gm__ ElementQ *ptrQ;
+        __gm__ ElementQ* ptrQ;
         LayoutQ layoutQ;
-        __gm__ ElementQScale *ptrQScale;
+        __gm__ ElementQScale* ptrQScale;
         LayoutQScale layoutQScale;
         BlockEpilogueParams epilogueParams;
 
         CATLASS_HOST_DEVICE
-        Params() {}
+        Params()
+        {}
 
         CATLASS_HOST_DEVICE
         Params(
-            GemmCoord const &problemShape_, uint32_t problemCount_, GM_ADDR ptrGroupList_,
-            GM_ADDR ptrA_, LayoutA const &layoutA_,
-            GM_ADDR ptrB_, LayoutB const &layoutB_,
-            GM_ADDR ptrMxScaleA_, LayoutMxScaleA layoutMxScaleA_,
-            GM_ADDR ptrMxScaleB_, LayoutMxScaleB layoutMxScaleB_,
-            GM_ADDR ptrQ_, LayoutQ const &layoutQ_,
-            GM_ADDR ptrQScale_, LayoutQScale const &layoutQScale_,
-            BlockEpilogueParams epilogueParams_
-        ) : problemShape(problemShape_),
-            problemCount(problemCount_), ptrGroupList(reinterpret_cast<__gm__ ElementGroupList *>(ptrGroupList_)),
-            ptrA(reinterpret_cast<__gm__ ElementA *>(ptrA_)), layoutA(layoutA_),
-            ptrB(reinterpret_cast<__gm__ ElementB *>(ptrB_)), layoutB(layoutB_),
-            ptrMxScaleA(reinterpret_cast<__gm__ ElementMxScaleA *>(ptrMxScaleA_)), layoutMxScaleA(layoutMxScaleA_),
-            ptrMxScaleB(reinterpret_cast<__gm__ ElementMxScaleB *>(ptrMxScaleB_)), layoutMxScaleB(layoutMxScaleB_),
-            ptrQ(reinterpret_cast<__gm__ ElementQ *>(ptrQ_)), layoutQ(layoutQ_),
-            ptrQScale(reinterpret_cast<__gm__ ElementQScale *>(ptrQScale_)), layoutQScale(layoutQScale_),
-            epilogueParams(epilogueParams_)
+            GemmCoord const& problemShape_, uint32_t problemCount_, GM_ADDR ptrGroupList_, GM_ADDR ptrA_,
+            LayoutA const& layoutA_, GM_ADDR ptrB_, LayoutB const& layoutB_, GM_ADDR ptrMxScaleA_,
+            LayoutMxScaleA layoutMxScaleA_, GM_ADDR ptrMxScaleB_, LayoutMxScaleB layoutMxScaleB_, GM_ADDR ptrQ_,
+            LayoutQ const& layoutQ_, GM_ADDR ptrQScale_, LayoutQScale const& layoutQScale_,
+            BlockEpilogueParams epilogueParams_)
+            : problemShape(problemShape_),
+              problemCount(problemCount_),
+              ptrGroupList(reinterpret_cast<__gm__ ElementGroupList*>(ptrGroupList_)),
+              ptrA(reinterpret_cast<__gm__ ElementA*>(ptrA_)),
+              layoutA(layoutA_),
+              ptrB(reinterpret_cast<__gm__ ElementB*>(ptrB_)),
+              layoutB(layoutB_),
+              ptrMxScaleA(reinterpret_cast<__gm__ ElementMxScaleA*>(ptrMxScaleA_)),
+              layoutMxScaleA(layoutMxScaleA_),
+              ptrMxScaleB(reinterpret_cast<__gm__ ElementMxScaleB*>(ptrMxScaleB_)),
+              layoutMxScaleB(layoutMxScaleB_),
+              ptrQ(reinterpret_cast<__gm__ ElementQ*>(ptrQ_)),
+              layoutQ(layoutQ_),
+              ptrQScale(reinterpret_cast<__gm__ ElementQScale*>(ptrQScale_)),
+              layoutQScale(layoutQScale_),
+              epilogueParams(epilogueParams_)
         {}
     };
 
     struct Arguments {
         GemmCoord problemShape;
         uint32_t problemCount;
-        uint8_t *ptrGroupList;
-        uint8_t *ptrA;
+        uint8_t* ptrGroupList;
+        uint8_t* ptrA;
         LayoutA layoutA;
-        uint8_t *ptrB;
+        uint8_t* ptrB;
         LayoutB layoutB;
-        uint8_t *ptrMxScaleA;
+        uint8_t* ptrMxScaleA;
         LayoutMxScaleA layoutMxScaleA;
-        uint8_t *ptrMxScaleB;
+        uint8_t* ptrMxScaleB;
         LayoutMxScaleB layoutMxScaleB;
-        uint8_t *ptrQ;
+        uint8_t* ptrQ;
         LayoutQ layoutQ;
-        uint8_t *ptrQScale;
+        uint8_t* ptrQScale;
         LayoutQScale layoutQScale;
         BlockEpilogueParams epilogueParams;
     };
 
-    static bool CanImplement(const Arguments &args)
+    static bool CanImplement(const Arguments& args)
     {
         return AscendC::Std::is_one_of_v<ElementA, float8_e4m3_t, float8_e5m2_t> &&
                AscendC::Std::is_one_of_v<ElementB, float8_e4m3_t, float8_e5m2_t> &&
-               std::is_same_v<ElementMxScaleA, float8_e8m0_t> &&
-               std::is_same_v<ElementMxScaleB, float8_e8m0_t> &&
+               std::is_same_v<ElementMxScaleA, float8_e8m0_t> && std::is_same_v<ElementMxScaleB, float8_e8m0_t> &&
                AscendC::Std::is_one_of_v<ElementQ, float8_e4m3_t, float8_e5m2_t> &&
-               std::is_same_v<ElementQScale, float8_e8m0_t> &&
-               args.problemCount <= 1024 &&
+               std::is_same_v<ElementQScale, float8_e8m0_t> && args.problemCount <= 1024 &&
                args.problemShape.n() % 128 == 0;
     }
 
-    static size_t GetWorkspaceSize(const Arguments &args)
+    static size_t GetWorkspaceSize(const Arguments& args)
     {
         return 0;
     }
 
-    static Params ToUnderlyingArguments(const Arguments &args, [[maybe_unused]] uint8_t* workspace)
+    static Params ToUnderlyingArguments(const Arguments& args, [[maybe_unused]] uint8_t* workspace)
     {
-        Params params{args.problemShape, args.problemCount, args.ptrGroupList,
-            args.ptrA, args.layoutA,
-            args.ptrB, args.layoutB,
-            args.ptrMxScaleA, args.layoutMxScaleA,
-            args.ptrMxScaleB, args.layoutMxScaleB,
-            args.ptrQ, args.layoutQ,
-            args.ptrQScale, args.layoutQScale,
-            args.epilogueParams};
+        Params params{args.problemShape,   args.problemCount, args.ptrGroupList,   args.ptrA,
+                      args.layoutA,        args.ptrB,         args.layoutB,        args.ptrMxScaleA,
+                      args.layoutMxScaleA, args.ptrMxScaleB,  args.layoutMxScaleB, args.ptrQ,
+                      args.layoutQ,        args.ptrQScale,    args.layoutQScale,   args.epilogueParams};
         return params;
     }
 
     CATLASS_DEVICE
-    GroupedMxMatmulSliceMSwigluMxQuantTla() 
+    GroupedMxMatmulSliceMSwigluMxQuantTla()
     {
         oriOverflowMode = AscendC::GetCtrlSpr<FLOAT_OVERFLOW_MODE_CTRL, FLOAT_OVERFLOW_MODE_CTRL>();
         // enable overflow mode to avoid nan/inf value
@@ -181,12 +175,10 @@ public:
     }
 
     template <int32_t CORE_TYPE = g_coreType>
-    CATLASS_DEVICE
-    void operator()(Params const &params);
+    CATLASS_DEVICE void operator()(Params const& params);
 
     template <>
-    CATLASS_DEVICE
-    void operator()<AscendC::AIC>(Params const &params)
+    CATLASS_DEVICE void operator()<AscendC::AIC>(Params const& params)
     {
         AscendC::ICachePreLoad(1);
         BlockMmad blockMmad(resource);
@@ -195,21 +187,21 @@ public:
         uint32_t coreNum = AscendC::GetBlockNum();
 
         AscendC::GlobalTensor<ElementA> gmA;
-        gmA.SetGlobalBuffer((__gm__ ElementA *)params.ptrA);
+        gmA.SetGlobalBuffer((__gm__ ElementA*)params.ptrA);
         AscendC::GlobalTensor<ElementQ> gmQ;
-        gmQ.SetGlobalBuffer((__gm__ ElementQ *)params.ptrQ);
+        gmQ.SetGlobalBuffer((__gm__ ElementQ*)params.ptrQ);
         AscendC::GlobalTensor<ElementGroupList> groupList;
         groupList.SetGlobalBuffer(params.ptrGroupList);
 
         constexpr uint32_t elems = UB_TWO_BANK_ELEMS_B32 * PER_BLOCK_SIZE;
         mmResUb_ping_ = AscendC::LocalTensor<ElementC>(AscendC::TPosition::VECCALC, 0, elems);
-        mmResUb_pong_ = AscendC::LocalTensor<ElementC>(AscendC::TPosition::VECCALC,
-            elems * sizeof(ElementC), elems);
+        mmResUb_pong_ = AscendC::LocalTensor<ElementC>(AscendC::TPosition::VECCALC, elems * sizeof(ElementC), elems);
 
         int64_t gmGroupOffsetB = 0;
         int64_t gmGroupOffsetMxScaleA = 0;
         int64_t gmGroupOffsetMxScaleB = 0;
-        int64_t mxScaleAlignedK = static_cast<int64_t>(CeilDiv<MX_BASEK_FACTOR>(params.problemShape.k()) * MX_SCALE_COPY_GROUP_NUM);
+        int64_t mxScaleAlignedK =
+            static_cast<int64_t>(CeilDiv<MX_BASEK_FACTOR>(params.problemShape.k()) * MX_SCALE_COPY_GROUP_NUM);
 
         int64_t totalM = 0;
         uint32_t startCoreIdx = 0;
@@ -218,7 +210,8 @@ public:
 
         for (uint32_t groupIdx = 0; groupIdx < params.problemCount; ++groupIdx) {
             uint32_t currentM = groupList.GetValue(groupIdx);
-            if (currentM == 0) continue;
+            if (currentM == 0)
+                continue;
 
             uint32_t N = params.problemShape.n();
             uint32_t N_half = N / N_HALF;
@@ -259,12 +252,12 @@ public:
                 uint32_t actualN = actualBlockShape.n();
                 uint32_t actualN_half = actualN;
 
-                auto tensorBlockA = GetTile(tensorA,
-                    tla::MakeCoord(totalM + blockCoord.m() * L1_TILE_M, blockCoord.k() * L1_TILE_K),
+                auto tensorBlockA = GetTile(
+                    tensorA, tla::MakeCoord(totalM + blockCoord.m() * L1_TILE_M, blockCoord.k() * L1_TILE_K),
                     tla::MakeShape(actualBlockShape.m(), actualBlockShape.k()));
 
-                auto tensorBlockB_act = GetTile(tensorB,
-                    tla::MakeCoord(blockCoord.k() * L1_TILE_K, blockCoord.n() * L1_TILE_N),
+                auto tensorBlockB_act = GetTile(
+                    tensorB, tla::MakeCoord(blockCoord.k() * L1_TILE_K, blockCoord.n() * L1_TILE_N),
                     tla::MakeShape(actualBlockShape.k(), actualN_half));
 
                 auto tensorBlockMxScaleA_act = GetTile(
@@ -277,40 +270,37 @@ public:
                     tla::MakeCoord(blockCoord.k() * L1_TILE_K / MX_SCALE_GROUP_NUM, blockCoord.n() * L1_TILE_N),
                     tla::MakeShape(CeilDiv<MX_SCALE_GROUP_NUM>(actualBlockShape.k()), actualN_half));
 
-
                 auto ubLayoutAct = tla::MakeLayout(
                     tla::MakeShape(actualBlockShape.m(), actualN_half),
-                    tla::MakeStride(static_cast<int64_t>(actualN_half), tla::Int<1>{})
-                );
+                    tla::MakeStride(static_cast<int64_t>(actualN_half), tla::Int<1>{}));
                 auto tensorBlockC_act = tla::MakeTensor(mmResUb_ping_, ubLayoutAct, Arch::PositionUB{});
                 if (isVecSetSyncCom_) {
                     AscendC::CrossCoreWaitFlag<AIC_SYNC_AIV_MODE, PIPE_FIX>(AIV_SYNC_AIC_FLAG);
                 }
                 GemmCoord actBlockShape{actualBlockShape.m(), actualN_half, actualBlockShape.k()};
-                blockMmad(tensorBlockA, tensorBlockB_act,
-                          tensorBlockC_act, actBlockShape,
-                          tensorBlockMxScaleA_act, tensorBlockMxScaleB_act);
+                blockMmad(
+                    tensorBlockA, tensorBlockB_act, tensorBlockC_act, actBlockShape, tensorBlockMxScaleA_act,
+                    tensorBlockMxScaleB_act);
 
-                auto tensorBlockB_gate = GetTile(tensorB,
-                    tla::MakeCoord(blockCoord.k() * L1_TILE_K, N_half + blockCoord.n() * L1_TILE_N),
+                auto tensorBlockB_gate = GetTile(
+                    tensorB, tla::MakeCoord(blockCoord.k() * L1_TILE_K, N_half + blockCoord.n() * L1_TILE_N),
                     tla::MakeShape(actualBlockShape.k(), actualN_half));
 
                 auto tensorBlockMxScaleB_gate = GetTile(
                     tensorMxScaleB,
-                    tla::MakeCoord(blockCoord.k() * L1_TILE_K / MX_SCALE_GROUP_NUM,
-                                   N_half + blockCoord.n() * L1_TILE_N),
+                    tla::MakeCoord(
+                        blockCoord.k() * L1_TILE_K / MX_SCALE_GROUP_NUM, N_half + blockCoord.n() * L1_TILE_N),
                     tla::MakeShape(CeilDiv<MX_SCALE_GROUP_NUM>(actualBlockShape.k()), actualN_half));
 
                 auto ubLayoutGate = tla::MakeLayout(
                     tla::MakeShape(actualBlockShape.m(), actualN_half),
-                    tla::MakeStride(static_cast<int64_t>(actualN_half), tla::Int<1>{})
-                );
+                    tla::MakeStride(static_cast<int64_t>(actualN_half), tla::Int<1>{}));
                 auto tensorBlockC_gate = tla::MakeTensor(mmResUb_pong_, ubLayoutGate, Arch::PositionUB{});
 
                 GemmCoord gateBlockShape{actualBlockShape.m(), actualN_half, actualBlockShape.k()};
-                blockMmad(tensorBlockA, tensorBlockB_gate,
-                          tensorBlockC_gate, gateBlockShape,
-                          tensorBlockMxScaleA_act, tensorBlockMxScaleB_gate);
+                blockMmad(
+                    tensorBlockA, tensorBlockB_gate, tensorBlockC_gate, gateBlockShape, tensorBlockMxScaleA_act,
+                    tensorBlockMxScaleB_gate);
 
                 AscendC::CrossCoreSetFlag<AIC_SYNC_AIV_MODE, PIPE_FIX>(AIC_SYNC_AIV_FLAG);
                 isVecSetSyncCom_ = true;
@@ -332,8 +322,7 @@ public:
     }
 
     template <>
-    CATLASS_DEVICE
-    void operator()<AscendC::AIV>(Params const &params)
+    CATLASS_DEVICE void operator()<AscendC::AIV>(Params const& params)
     {
         BlockEpilogue blockEpilogue;
         blockEpilogue.Init(&params.epilogueParams);
@@ -342,9 +331,9 @@ public:
         uint32_t aicoreNum = AscendC::GetBlockNum();
 
         AscendC::GlobalTensor<ElementQ> gmQ;
-        gmQ.SetGlobalBuffer((__gm__ ElementQ *)params.ptrQ);
+        gmQ.SetGlobalBuffer((__gm__ ElementQ*)params.ptrQ);
         AscendC::GlobalTensor<ElementQScale> gmQScale;
-        gmQScale.SetGlobalBuffer((__gm__ ElementQScale *)params.ptrQScale);
+        gmQScale.SetGlobalBuffer((__gm__ ElementQScale*)params.ptrQScale);
         AscendC::GlobalTensor<ElementGroupList> groupList;
         groupList.SetGlobalBuffer(params.ptrGroupList);
 
@@ -352,11 +341,11 @@ public:
 
         constexpr uint32_t elems = UB_TWO_BANK_ELEMS_B32 * PER_BLOCK_SIZE;
         mmResUb_ping_ = AscendC::LocalTensor<ElementC>(AscendC::TPosition::VECCALC, 0, elems);
-        mmResUb_pong_ = AscendC::LocalTensor<ElementC>(AscendC::TPosition::VECCALC,
-            elems * sizeof(ElementC), elems);
+        mmResUb_pong_ = AscendC::LocalTensor<ElementC>(AscendC::TPosition::VECCALC, elems * sizeof(ElementC), elems);
 
         int64_t gmGroupOffsetMxScaleA = 0;
-        int64_t mxScaleAlignedK = static_cast<int64_t>(CeilDiv<MX_BASEK_FACTOR>(params.problemShape.k()) * MX_SCALE_COPY_GROUP_NUM);
+        int64_t mxScaleAlignedK =
+            static_cast<int64_t>(CeilDiv<MX_BASEK_FACTOR>(params.problemShape.k()) * MX_SCALE_COPY_GROUP_NUM);
 
         int64_t totalM = 0;
         uint32_t startCoreIdx = 0;
@@ -366,7 +355,8 @@ public:
 
         for (uint32_t groupIdx = 0; groupIdx < params.problemCount; ++groupIdx) {
             uint32_t currentM = groupList.GetValue(groupIdx);
-            if (currentM == 0) continue;
+            if (currentM == 0)
+                continue;
 
             GemmCoord inGroupProblemShape{currentM, N_half, params.problemShape.k()};
 
@@ -391,8 +381,7 @@ public:
                 AscendC::CrossCoreWaitFlag<AIC_SYNC_AIV_MODE, PIPE_V>(AIC_SYNC_AIV_FLAG);
 
                 GemmCoord resShape{actualBlockShape.m(), actualN_half, actualBlockShape.k()};
-                blockEpilogue(resShape, totalM, blockCoord,
-                              mmResUb_ping_, mmResUb_pong_, L1_TILE_M, L1_TILE_N);
+                blockEpilogue(resShape, totalM, blockCoord, mmResUb_ping_, mmResUb_pong_, L1_TILE_M, L1_TILE_N);
 
                 AscendC::CrossCoreSetFlag<AIC_SYNC_AIV_MODE, PIPE_V>(AIV_SYNC_AIC_FLAG);
             }

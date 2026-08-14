@@ -119,7 +119,7 @@ extern "C" void run(uint32_t blockNum, aclrtStream stream, const CatlassKernel::
     using TileCopy = Catlass::Gemm::Tile::PackedMxTileCopyTla<
         ArchTag, ElementA, LayoutTagA, ElementB, LayoutTagB, ElementMxScale, decltype(layoutMxScaleA), ElementMxScale,
         decltype(layoutMxScaleB), ElementC, LayoutTagC, ElementBias>;
-    using BlockMmad = Catlass::Gemm::Block::BlockMmadTla<
+    using BlockMmad = Catlass::Gemm::Block::BlockMmadMxFinalizeRoutingTla<
         DispatchPolicy, L1TileShape, L0TileShape, ElementA, ElementB, ElementC, ElementBias, TileCopy>;
 
     constexpr uint32_t UB_STAGES = 1;
@@ -132,15 +132,29 @@ extern "C" void run(uint32_t blockNum, aclrtStream stream, const CatlassKernel::
         BlockMmad, BlockEpilogue, BlockScheduler, ElementGroupList, ElementSharedInput>;
 
     typename MatmulKernel::Arguments arguments{
-        aicCoreUsed, problemShape, problemCount,
-        deviceGroupList, deviceA, layoutA, deviceB, layoutB,
-        deviceMxScaleA, layoutMxScaleA, deviceMxScaleB, layoutMxScaleB,
-        nullptr, layoutC,
+        aicCoreUsed,
+        problemShape,
+        problemCount,
+        deviceGroupList,
+        deviceA,
+        layoutA,
+        deviceB,
+        layoutB,
+        deviceMxScaleA,
+        layoutMxScaleA,
+        deviceMxScaleB,
+        layoutMxScaleB,
+        nullptr,
+        layoutC,
         deviceBias,
-        deviceLogit, deviceRowIndex,
-        deviceSharedInput, groupListType, sharedInputWeight,
+        deviceLogit,
+        deviceRowIndex,
+        deviceSharedInput,
+        groupListType,
+        sharedInputWeight,
         static_cast<int64_t>(sharedInputOffset),
-        static_cast<int64_t>(batch), static_cast<int64_t>(bsdp),
+        static_cast<int64_t>(batch),
+        static_cast<int64_t>(bsdp),
         deviceOut};
 
     Catlass::RunKernel<MatmulKernel>(arguments, stream, aicCoreUsed);

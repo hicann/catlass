@@ -135,7 +135,6 @@ set(EXAMPLE_ATLASA2
     34_single_core_splitk_matmul
     37_streamk_matmul
     38_w4a4_matmul_per_token_per_channel_dequant
-    39_big_matmul_tla
     40_flash_attention_infer_tla
     41_sparse_matmul_tla
     42_quant_optimized_matmul_tla
@@ -164,19 +163,14 @@ set(EXAMPLE_ASCEND950
     60_ascend950_grouped_matmul_slice_m
     61_ascend950_svd_quant_matmul
     62_ascend950_broadcast_matmul_perblock_quant
-    63_ascend950_dual_level_quant_mx_batch_matmul
     64_ascend950_matmul_evg
-    65_ascend950_fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant
     66_ascend950_streamk_matmul
     67_ascend950_batched_matmul
     68_ascend950_multi_core_splitk_matmul
     69_ascend950_tail_multi_core_splitk_matmul
     70_ascend950_flash_attention_chunk_prefill
-    71_ascend950_fp8_mx_grouped_matmul_finalize_routing
     73_ascend950_matmul_full_loadA
-    72_ascend950_fp8_mx_flash_attention_infer
-    74_ascend950_fp4_mx_matmul_pertoken_perchannel
-    75_ascend950_fp8_epilogue_quant_matmul
+    74_ascend950_weight_quant_a8w4_grouped_mx_matmul
 )
 
 if(CATLASS_ARCH STREQUAL "2201")

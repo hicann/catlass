@@ -2,7 +2,7 @@
 
 ## Code Organization
 
-```
+```text
 ├── 27_matmul_gelu
 │   ├── CMakeLists.txt # CMake build file
 │   ├── README.md
@@ -80,7 +80,7 @@ $$
 - After obtaining the code, compile the operator executable file. For details, see [Template Library Quick Start](../../docs/en/1_Practice/01_quick_start.md#build-and-execution).
 - Execute the operator.
 
-```
+```bash
 # Compiling a specified case
 bash scripts/build.sh 27_matmul_gelu
 cd output/bin
@@ -91,6 +91,6 @@ cd output/bin
 
 If the following result is displayed, precision verification is successful.
 
-```
+```text
 Compare success.
 ```

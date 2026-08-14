@@ -20,6 +20,7 @@ os.environ["WORKSPACE"] = WORKSPACE
 os.environ["ASCEND_GLOBAL_LOG_LEVEL"] = "3"
 os.environ["ASCEND_SLOG_PRINT_TO_STDOUT"] = "0"
 
+
 class OpParam:
     def __init__(self) -> None:
         self.m = 0
@@ -35,13 +36,17 @@ def pack_4bit_to_bytes(data):
     packed = (data[..., 1::2] << 4) | (data[..., ::2] & 0x0F)
     return packed
 
-def cpu_golden(x: np.ndarray, weight: np.ndarray, scale: np.ndarray, perTokenScale: np.ndarray):
+
+def cpu_golden(
+    x: np.ndarray, weight: np.ndarray, scale: np.ndarray, perTokenScale: np.ndarray
+):
     atomic = np.float16
     mm = np.matmul(x.astype(np.float32), weight.astype(np.float32)).astype(atomic)
     mm = mm.astype(np.float32) * scale
     mm = mm * perTokenScale
 
     return mm.astype(np.float32)
+
 
 def gen_testcase(path: str, param: OpParam) -> None:
     m, k, n = param.m, param.k, param.n
@@ -57,33 +62,33 @@ def gen_testcase(path: str, param: OpParam) -> None:
 
     # cpu计算golden
     scaleFloat32 = scale.reshape(1, n)
-    golden = cpu_golden(x, weight, scale, perTokenScale).reshape(-1, n) 
+    golden = cpu_golden(x, weight, scale, perTokenScale).reshape(-1, n)
 
     # 随路转换需要uint64类型的融合scale
     scaleFloat32.dtype = np.uint32
     scaleUint64 = np.zeros((1, 2 * n), dtype=np.uint32)
     scaleUint64[..., ::2] = scaleFloat32
-    scaleUint64.dtype = np.uint64 # Actually uint64
+    scaleUint64.dtype = np.uint64  # Actually uint64
 
     # 进行Pack压缩
     xInt4 = pack_4bit_to_bytes(x)
     xInt4.dtype = np.int8
 
-    if transB:       # trans: layoutB: nZ
+    if transB:  # trans: layoutB: nZ
         assert k % 64 == 0, "k must be divisible by 64"
         assert n % 16 == 0, "n must be divisible by 16"
         weightInt4 = pack_4bit_to_bytes(weight.transpose(1, 0))
         weightInt4.dtype = np.int8
         weightInt4 = weightInt4.reshape([n, -1])
-        weightInt4 = weightInt4.reshape(n//16, 16, k//64, 32).transpose(2, 0, 1, 3)
-    else:                  # no-trans: layoutB: zN
+        weightInt4 = weightInt4.reshape(n // 16, 16, k // 64, 32).transpose(2, 0, 1, 3)
+    else:  # no-trans: layoutB: zN
         assert k % 16 == 0, "k must be divisible by 16"
         assert n % 64 == 0, "n must be divisible by 64"
         weightInt4 = pack_4bit_to_bytes(weight)
         weightInt4.dtype = np.int8
         weightInt4 = weightInt4.reshape([k, -1])
-        weightInt4 = weightInt4.reshape(k//16, 16, n//64, 32).transpose(2, 0, 1, 3)
-    
+        weightInt4 = weightInt4.reshape(k // 16, 16, n // 64, 32).transpose(2, 0, 1, 3)
+
     weightInt4 = weightInt4.reshape(k, -1)
     scaleUint64 = scaleUint64.squeeze()
     perTokenScale = perTokenScale.squeeze()
@@ -94,6 +99,7 @@ def gen_testcase(path: str, param: OpParam) -> None:
     scaleUint64.tofile(os.path.join(path, "inputScale.dat"))
     perTokenScale.tofile(os.path.join(path, "inputPerTokenScale.dat"))
     golden.tofile(os.path.join(path, "expected.dat"))
+
 
 if __name__ == "__main__":
     current_dir = os.path.dirname(os.path.abspath(__file__))

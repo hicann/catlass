@@ -24,6 +24,7 @@ usage() {
     echo "Options:"
     echo "  --build-type <type>         Build type (Release|Debug), default: Release"
     echo "  --skip-wheel                Skip building wheel package (editable install)"
+    echo "  --disable-ascend950         Disable Ascend 950 support (ENABLE_ASCEND950=0)"
     echo "  --clean                     Clean all caches (JIT disk cache + wheel artifacts)"
     echo "  -h, --help                  Show this help message"
     echo ""
@@ -35,6 +36,7 @@ usage() {
 BUILD_TYPE="Release"
 SKIP_WHEEL=false
 CLEAN=false
+DISABLE_ASCEND950=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -48,6 +50,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --clean)
             CLEAN=true
+            shift
+            ;;
+        --disable-ascend950)
+            DISABLE_ASCEND950=true
             shift
             ;;
         -h|--help)
@@ -179,6 +185,11 @@ if [ -n "$TORCH_CMAKE_DIR" ] && [ -d "$TORCH_CMAKE_DIR" ]; then
 else
     echo "Warning: Could not detect Torch cmake dir from active Python."
     echo "Make sure torch is installed in the current environment."
+fi
+
+if [ "$DISABLE_ASCEND950" = true ]; then
+    CONFIG_SETTINGS+=(--config-settings="cmake.define.DISABLE_ASCEND950=ON")
+    echo "Ascend 950 support: DISABLED (ENABLE_ASCEND950=0)"
 fi
 
 if [ "$SKIP_WHEEL" = true ]; then

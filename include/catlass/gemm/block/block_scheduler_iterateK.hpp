@@ -4,8 +4,9 @@
  * This file is a part of the CANN Open Software.
  * Licensed under CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
- * See LICENSE in the root of the software repository for the full text of the License.
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+ * BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE. See LICENSE in the root of
+ * the software repository for the full text of the License.
  */
 
 #ifndef CATLASS_GEMM_BLOCK_BLOCK_SCHEDULER_ITERATEK_HPP
@@ -22,9 +23,9 @@ namespace Catlass::Gemm::Block {
 
 template <class ProblemShape_, class L1Shape_, class L0Shape_>
 struct BlockSchedulerIterateK {
-
     CATLASS_DEVICE
-    BlockSchedulerIterateK(){}
+    BlockSchedulerIterateK()
+    {}
 
     int64_t mTileNum_{0};
     int64_t nTileNum_{0};
@@ -52,8 +53,8 @@ struct BlockSchedulerIterateK {
     static constexpr int64_t l0N = tla::get<1>(L0Shape{});
     static constexpr int64_t l0K = tla::get<2>(L0Shape{});
 
-    CATLASS_DEVICE BlockSchedulerIterateK(ProblemShape shape, int64_t blockIdx, int64_t blockNum, int64_t aicCoreNum) :
-        blockIdx_(blockIdx), blockNum_(blockNum), aicCoreNum_(aicCoreNum)
+    CATLASS_DEVICE BlockSchedulerIterateK(ProblemShape shape, int64_t blockIdx, int64_t blockNum, int64_t aicCoreNum)
+        : blockIdx_(blockIdx), blockNum_(blockNum), aicCoreNum_(aicCoreNum)
     {
         m_ = shape.m;
         n_ = shape.n;
@@ -150,6 +151,6 @@ struct BlockSchedulerIterateK {
     }
 };
 
-}  // namespace Catlass::Gemm::Block
+} // namespace Catlass::Gemm::Block
 
-#endif  // CATLASS_GEMM_BLOCK_BLOCK_SCHEDULER_ITERATEK_HPP
+#endif // CATLASS_GEMM_BLOCK_BLOCK_SCHEDULER_ITERATEK_HPP

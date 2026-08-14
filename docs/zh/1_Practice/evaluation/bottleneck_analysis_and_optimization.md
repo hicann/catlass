@@ -10,7 +10,7 @@ CATLASS示例工程适配CANN提供的主流性能调测工具，工具的详细
 
 ### msProf — 单算子性能分析
 
-[msProf](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/devaids/optool/atlasopdev_16_0082.html)是单算子性能分析工具，对应指令为`msprof op`，支持上板和仿真两种运行模式。使用方式见[msProf&Profiling](./performance_tools.md#用msprof进行单算子性能分析)。
+[msProf](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/devaids/optool/atlasopdev_16_0082.html)是单算子性能分析工具，对应指令为`msprof op`，支持上板和仿真两种运行模式。使用方式见[msProf&Profiling](./performance_tools.md#msprof-single-operator-analysis)。
 
 **上板性能采集**
 
@@ -84,7 +84,7 @@ cd output/bin
 msprof ./00_basic_matmul 256 512 1024 0
 ```
 
-详细使用教程见[用Profiling进行整网性能分析](./performance_tools.md#用profiling进行整网性能分析)。性能数据各字段含义参见[msProf性能数据文件参考](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/devaids/Profiling/atlasprofiling_16_0057.html)。
+详细使用教程见[用Profiling进行整网性能分析](./performance_tools.md#profiling-network-analysis)。性能数据各字段含义参见[msProf性能数据文件参考](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/devaids/Profiling/atlasprofiling_16_0057.html)。
 
 ### msTuner_CATLASS — Tiling自动寻优
 
@@ -118,7 +118,7 @@ bash scripts/build.sh -DCATLASS_LIBRARY_KERNELS=00_basic_matmul mstuner_catlass
 搬运相关流水（MTE1/MTE2/MTE3）的理论耗时计算公式为"搬运数据量（Byte）除以理论带宽"。假设GM峰值带宽约1.8 TB/s，`float16`类型的4096×4096矩阵搬运理论耗时如下：
 
 ```text
-2 × 4096 × 4096 / 1.8TB/s ≈ 18.64 μs
+2Byte × 4096 × 4096 / 1.8TB/s ≈ 18.64 μs
 ```
 
 注意两点：多条搬运指令同时存在时共享带宽，例如MTE2与MTE3同时进行GM读写时，总耗时等于两者搬运量之和除以GM带宽；小数据量场景带宽利用率低，实测性能达不到理论带宽，应以实际有效带宽为准。
@@ -181,7 +181,7 @@ Cube和Vector/Scalar分开计算后再求和，因为三者可并行执行到一
 
 ### 上板Profiling查看头开销
 
-头开销包含核启动、核取址TLB MISS、同地址访问冲突、变量资源初始化等时延。对于延迟为微秒级的推理算子，头开销占比较高，是值得优化的对象。以Atlas A2训练/推理系列产品为例，满核头开销约20~21 μs。
+头开销包含核启动、核取址TLB MISS、同地址访问冲突、变量资源初始化等时延。对于延迟为微秒级的推理算子，头开销占比较高，是值得优化的对象。以Atlas A2训练/推理系列产品为例，满核头开销约20~21μs。
 
 操作方法：通过上板Profiling的空Kernel TaskDuration数据查看每个核的启动开销耗时，然后通过调整核数和算子Kernel Type找到最优配置。
 
@@ -217,8 +217,8 @@ Cube和Vector/Scalar分开计算后再求和，因为三者可并行执行到一
 
 | 工具                                | 用途                   | CATLASS文档                                                                                                                                                       |
 | ----------------------------------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| msProf（`msprof op`）               | 单算子上板性能采集     | [msProf&Profiling](./performance_tools.md#用msprof进行单算子性能分析)                                                                                             |
-| msProf仿真（`msprof op simulator`） | 单算子仿真流水图采集   | [性能流水仿真](./performance_tools.md#性能流水仿真)                                                                                                               |
-| Profiling（`msprof`）               | 整网性能数据采集与分析 | [用Profiling进行整网性能分析](./performance_tools.md#用profiling进行整网性能分析)                                                                                 |
+| msProf（`msprof op`）               | 单算子上板性能采集     | [msProf&Profiling](./performance_tools.md#msprof-single-operator-analysis)                                                                                             |
+| msProf仿真（`msprof op simulator`） | 单算子仿真流水图采集   | [性能流水仿真](./performance_tools.md#performance-pipeline-simulation)                                                                                                               |
+| Profiling（`msprof`）               | 整网性能数据采集与分析 | [用Profiling进行整网性能分析](./performance_tools.md#profiling-network-analysis)                                                                                 |
 | msTuner_CATLASS                     | Tiling参数自动寻优     | [msTuner_CATLASS README](../../../../tools/tuner/README.md)                                                                                                       |
 | MindStudio Insight                  | 性能数据可视化分析     | [MindStudio Insight用户指南](https://www.hiascend.com/document/detail/zh/mindstudio/80RC1/GUI_baseddevelopmenttool/msascendinsightug/Insight_userguide_0002.html) |

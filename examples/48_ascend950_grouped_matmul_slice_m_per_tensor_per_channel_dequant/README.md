@@ -2,7 +2,7 @@
 
 ## 代码组织
 
-```
+```text
 ├── 48_ascend950_grouped_matmul_slice_m_per_tensor_per_channel_dequant
 │   ├── CMakeLists.txt     # CMake编译文件
 │   ├── README.md
@@ -21,11 +21,11 @@ A/B矩阵为int8类型，scale为float，输出结果为half。
 
 - Matmul量化场景：Matmul计算时左矩阵A、右矩阵B为half数据类型，输出C矩阵为int8_t数据类型。该场景下，C矩阵的数据从CO1搬出到Global Memory时，会执行量化操作，将最终结果量化为int8_t类型，如下图所示。
 
-  ![alt text](../../docs/zh/figures/fixpipe_quant.png)
+  ![alt text](../../docs/assets/images/fixpipe_quant.png)
 
 - Matmul反量化场景：Matmul计算时左矩阵A、右矩阵B为int8_t数据类型，输出C矩阵为half数据类型。该场景下，C矩阵的数据从CO1搬出到Global Memory时，会执行反量化操作，将最终结果反量化为对应的half类型，如下图所示。
 
-  ![alt text](../../docs/zh/figures/fixpipe_dequant.png)
+  ![alt text](../../docs/assets/images/fixpipe_dequant.png)
 
 Fixpipe提供了两种不同粒度的随路量化/反量化模式，即per_tensor和per_channel。
 
@@ -37,7 +37,7 @@ Fixpipe提供了两种不同粒度的随路量化/反量化模式，即per_tenso
 - 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/zh/1_Practice/01_quick_start.md#编译执行)，本用例为Ascend 950算子，编译时需加-DCATLASS_ARCH=3510
 - 执行算子
 
-```
+```bash
 # 编译指定用例
 bash scripts/build.sh 48_ascend950_grouped_matmul_slice_m_per_tensor_per_channel_dequant -DCATLASS_ARCH=3510
 cd output/bin
@@ -50,7 +50,7 @@ cd output/bin
 
 执行结果如下，说明精度比对成功。
 
-```
+```text
 Compare success.
 ```
 

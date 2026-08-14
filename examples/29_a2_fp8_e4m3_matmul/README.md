@@ -2,7 +2,7 @@
 
 ## 代码组织
 
-```
+```text
 ├── 29_a2_fp8_e4m3_matmul
 │   ├── CMakeLists.txt   # CMake编译文件
 │   ├── README.md
@@ -31,14 +31,14 @@ example使用
 - 第一步，编译
 - 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/zh/1_Practice/01_quick_start.md#编译执行)
 
-```
+```bash
 # 编译指定用例
 bash scripts/build.sh 29_a2_fp8_e4m3_matmul
 ```
 
 - 第二步，执行`gen_data.py`生成测试数据，测试用例规格从命令行输入
 
-```
+```bash
 cd examples/29_a2_fp8_e4m3_matmul && python gen_data.py 256 512 1024 0 0 && cd ../..
 # 输入参数分别对应 m, n, k, trans_a, trans_b
 # trans_a表示A矩阵是否转置，0是不转置，1是转置
@@ -47,7 +47,7 @@ cd examples/29_a2_fp8_e4m3_matmul && python gen_data.py 256 512 1024 0 0 && cd .
 
 执行该命令后会在当前路径下生成input和output目录，包含算子的输入数据和用于精度验证的golden数据
 
-```
+```text
 ├── input
 │   ├── a_8.bin
 │   ├── b_8.bin
@@ -57,7 +57,7 @@ cd examples/29_a2_fp8_e4m3_matmul && python gen_data.py 256 512 1024 0 0 && cd .
 
 - 第三步，执行算子，注意提供给算子的输入shape和上面第二步生成数据的shape需一致
 
-```
+```text
 # 可执行文件名 |矩阵m轴|n轴|k轴|Device ID
 # Device ID可选，默认为0
 ./output/bin/29_a2_fp8_e4m3_matmul 256 512 1024 0
@@ -65,7 +65,7 @@ cd examples/29_a2_fp8_e4m3_matmul && python gen_data.py 256 512 1024 0 0 && cd .
 
 执行结果如下，说明精度比对成功。
 
-```
+```cpp
 Compare success.
 ```
 

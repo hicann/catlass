@@ -39,30 +39,26 @@ using namespace Catlass;
 using namespace tla;
 
 template <class LayoutTag>
-auto GetPaddingLayout(LayoutTag layout, uint32_t blockRows, uint32_t blockCols) {
+auto GetPaddingLayout(LayoutTag layout, uint32_t blockRows, uint32_t blockCols)
+{
     if constexpr (std::is_same_v<LayoutTag, layout::RowMajor>) {
         auto shape = MakeShape(
             MakeShape(blockRows, CeilDiv(layout.shape(0), blockRows)),
-            MakeShape(blockCols, CeilDiv(layout.shape(1), blockCols))
-        );
+            MakeShape(blockCols, CeilDiv(layout.shape(1), blockCols)));
         auto stride = MakeStride(
             MakeStride(
-                static_cast<int64_t>(blockCols), static_cast<int64_t>(blockRows) * RoundUp(layout.shape(1), blockCols)
-            ),
-            MakeStride(Int<1>{}, static_cast<int64_t>(blockRows) * blockCols)
-        );
+                static_cast<int64_t>(blockCols), static_cast<int64_t>(blockRows) * RoundUp(layout.shape(1), blockCols)),
+            MakeStride(Int<1>{}, static_cast<int64_t>(blockRows) * blockCols));
         return MakeLayout(shape, stride);
     } else {
         auto shape = MakeShape(
             MakeShape(blockRows, CeilDiv(layout.shape(0), blockRows)),
-            MakeShape(blockCols, CeilDiv(layout.shape(1), blockCols))
-        );
+            MakeShape(blockCols, CeilDiv(layout.shape(1), blockCols)));
         auto stride = MakeStride(
             MakeStride(Int<1>{}, static_cast<int64_t>(blockRows) * blockCols),
             MakeStride(
-                static_cast<int64_t>(blockRows), RoundUp(layout.shape(0), blockRows) * static_cast<int64_t>(blockCols)
-            )
-        );
+                static_cast<int64_t>(blockRows),
+                RoundUp(layout.shape(0), blockRows) * static_cast<int64_t>(blockCols)));
         return MakeLayout(shape, stride);
     }
 }
@@ -70,12 +66,14 @@ auto GetPaddingLayout(LayoutTag layout, uint32_t blockRows, uint32_t blockCols) 
 using Options = GemmOptions;
 
 template <class LayoutTag>
-size_t GetWorkspaceLen(LayoutTag layout, size_t blockRows, size_t blockCols) {
-    return RoundUp(static_cast<size_t>(layout.shape(0)), blockRows)
-           * RoundUp(static_cast<size_t>(layout.shape(1)), blockCols);
+size_t GetWorkspaceLen(LayoutTag layout, size_t blockRows, size_t blockCols)
+{
+    return RoundUp(static_cast<size_t>(layout.shape(0)), blockRows) *
+           RoundUp(static_cast<size_t>(layout.shape(1)), blockCols);
 }
 
-static void Run(const Options &options) {
+static void Run(const Options& options)
+{
     aclrtStream stream{nullptr};
 
     ACL_CHECK(aclInit(nullptr));
@@ -120,19 +118,19 @@ static void Run(const Options &options) {
     LayoutTagScale tagScale = LayoutTagScale::MakeLayout<ElementScale>(1, n);
     LayoutTagPerTokenScale tagPerTokenScale = LayoutTagPerTokenScale::MakeLayout<ElementPerTokenScale>(1, m);
     LayoutTagD tagD = LayoutTagD::MakeLayout<ElementD>(m, n);
-    
+
     auto layoutA = MakeLayoutFromTag(tagA);
     auto layoutB = MakeLayoutFromTag(tagB);
     auto layoutC = MakeLayoutFromTag(tagC);
     auto layoutScale = MakeLayoutFromTag(tagScale);
     auto layoutPerTokenScale = MakeLayoutFromTag(tagPerTokenScale);
     auto layoutD = MakeLayoutFromTag(tagC);
-    using TensorA =
-        Tensor<AscendC::GlobalTensor<ElementA>, decltype(layoutA), tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::GM>;
-    using TensorB =
-        Tensor<AscendC::GlobalTensor<ElementB>, decltype(layoutB), tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::GM>;
-    using TensorC =
-        Tensor<AscendC::GlobalTensor<ElementC>, decltype(layoutC), tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::GM>;
+    using TensorA = Tensor<
+        AscendC::GlobalTensor<ElementA>, decltype(layoutA), tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::GM>;
+    using TensorB = Tensor<
+        AscendC::GlobalTensor<ElementB>, decltype(layoutB), tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::GM>;
+    using TensorC = Tensor<
+        AscendC::GlobalTensor<ElementC>, decltype(layoutC), tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::GM>;
 
     bool isNeedPaddingA = IsNeedPadding(tagA, align);
     bool isNeedPaddingB = IsNeedPadding(tagB, align);
@@ -145,7 +143,7 @@ static void Run(const Options &options) {
     using L0TileShape = std::conditional_t<
         std::is_same_v<LayoutTagA, layout::ColumnMajor> && std::is_same_v<LayoutTagB, layout::ColumnMajor>,
         Shape<_256, _128, _128>, Shape<_128, _256, _128>>;
-    
+
     using BlockScheduler30 = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
     using BlockScheduler31 = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
 
@@ -161,43 +159,45 @@ static void Run(const Options &options) {
     std::vector<int8_t> hostB(lenB);
     std::vector<float> hostScale(lenScale);
     std::vector<float> hostPerTokenScale(lenPerTokenScale);
-    golden::FillRandomData(hostA, -5, 5);              // Fill with random data, ranging from -5 to 5.
-    golden::FillRandomData(hostB, -5, 5);              // Fill with random data, ranging from -5 to 5.
+    golden::FillRandomData(hostA, -5, 5);                // Fill with random data, ranging from -5 to 5.
+    golden::FillRandomData(hostB, -5, 5);                // Fill with random data, ranging from -5 to 5.
     golden::FillRandomData(hostScale, 0.0, 1.0);         // Fill with random data, ranging from 0.0 to 1.0
     golden::FillRandomData(hostPerTokenScale, 0.0, 1.0); // Fill with random data, ranging from 0.0 to 1.0
 
-    uint8_t *deviceA{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceA{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceA, sizeA, hostA.data(), sizeA, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *deviceB{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceB{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceB, sizeB, hostB.data(), sizeB, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *deviceScale{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceScale), sizeScale, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceScale{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceScale), sizeScale, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceScale, sizeScale, hostScale.data(), sizeScale, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *devicePerTokenScale{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&devicePerTokenScale), sizePerTokenScale, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* devicePerTokenScale{nullptr};
+    ACL_CHECK(
+        aclrtMalloc(reinterpret_cast<void**>(&devicePerTokenScale), sizePerTokenScale, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(
-        devicePerTokenScale, sizePerTokenScale, hostPerTokenScale.data(), sizePerTokenScale, ACL_MEMCPY_HOST_TO_DEVICE));
+        devicePerTokenScale, sizePerTokenScale, hostPerTokenScale.data(), sizePerTokenScale,
+        ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *deviceD{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceD), sizeD, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceD{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceD), sizeD, ACL_MEM_MALLOC_HUGE_FIRST));
 
-    uint8_t *deviceWA{nullptr};
+    uint8_t* deviceWA{nullptr};
     if (isNeedPaddingA) {
-        ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWA), sizeWA, ACL_MEM_MALLOC_HUGE_FIRST));
+        ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceWA), sizeWA, ACL_MEM_MALLOC_HUGE_FIRST));
     } else {
         // no need to padding A
         deviceWA = deviceA;
     }
 
-    uint8_t *deviceWB{nullptr};
+    uint8_t* deviceWB{nullptr};
     // If layoutWB has the same stride with layoutB, no need to padding B
     if (isNeedPaddingB) {
-        ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWB), sizeWB, ACL_MEM_MALLOC_HUGE_FIRST));
+        ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceWB), sizeWB, ACL_MEM_MALLOC_HUGE_FIRST));
     } else {
         // no need to padding B
         deviceWB = deviceB;
@@ -222,8 +222,7 @@ static void Run(const Options &options) {
     using EpilogueTileShape = MatrixShape<32, 256>;
 
     using TileRowBroadcastMul = Epilogue::Tile::TileRowBroadcastMulTla<ArchTag, ElementCompute, EpilogueTileShape>;
-    using TileBroadcastOneBlk =
-        Epilogue::Tile::TileBroadcastOneBlkTla<ArchTag, ElementCompute, EpilogueTileShape::ROW>;
+    using TileBroadcastOneBlk = Epilogue::Tile::TileBroadcastOneBlkTla<ArchTag, ElementCompute, EpilogueTileShape::ROW>;
     using TileOneBlkColumnBroadcastMul =
         Epilogue::Tile::TileOneBlkColumnBroadcastMulTla<ArchTag, ElementCompute, EpilogueTileShape>;
     using EpilogueTileCopy = Epilogue::Tile::TileCopyDequantTla<
@@ -232,8 +231,8 @@ static void Run(const Options &options) {
     using EpilogueTileScheduler = Epilogue::Tile::EpilogueHorizontalTileSwizzle;
 
     using BlockEpilogue = Epilogue::Block::BlockEpilogue<
-        EpilogueDispatchPolicy, ElementC, ElementScale, ElementPerTokenScale, ElementD, TileRowBroadcastMul, TileBroadcastOneBlk,
-        TileOneBlkColumnBroadcastMul, EpilogueTileCopy, EpilogueTileScheduler>;
+        EpilogueDispatchPolicy, ElementC, ElementScale, ElementPerTokenScale, ElementD, TileRowBroadcastMul,
+        TileBroadcastOneBlk, TileOneBlkColumnBroadcastMul, EpilogueTileCopy, EpilogueTileScheduler>;
 
     if (!isNeedPaddingA && !isNeedPaddingB) {
         // no need to padding A and B.
@@ -249,29 +248,29 @@ static void Run(const Options &options) {
             DispatchPolicy, L1TileShape, L0TileShape, TensorWA, TensorWB, TensorC, void, TileCopy>;
         if (options.problemShape.m() > options.problemShape.n()) {
             // kernel level
-            using MatmulKernel =
-                Gemm::Kernel::QuantOptimizedMatmulTla<BlockMmad, BlockEpilogue, BlockScheduler30, void, void, workspaceStages>;
+            using MatmulKernel = Gemm::Kernel::QuantOptimizedMatmulTla<
+                BlockMmad, BlockEpilogue, BlockScheduler30, void, void, workspaceStages>;
             using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
 
             MatmulKernel::Arguments arguments{
-                options.problemShape, aicCoreNum,
+                options.problemShape,
+                aicCoreNum,
                 {deviceA, layoutA, deviceB, layoutB, deviceWA, layoutWA, deviceWB, layoutWB},
-                {deviceScale, layoutScale, devicePerTokenScale, layoutPerTokenScale, deviceD, layoutD}
-            };
+                {deviceScale, layoutScale, devicePerTokenScale, layoutPerTokenScale, deviceD, layoutD}};
 
             MatmulAdapter matmulOp;
             RunAdapter(matmulOp, arguments, stream, aicCoreNum, hardwareSyncAddr);
         } else {
             // kernel level
-            using MatmulKernel =
-                Gemm::Kernel::QuantOptimizedMatmulTla<BlockMmad, BlockEpilogue, BlockScheduler31, void, void, workspaceStages>;
+            using MatmulKernel = Gemm::Kernel::QuantOptimizedMatmulTla<
+                BlockMmad, BlockEpilogue, BlockScheduler31, void, void, workspaceStages>;
             using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
 
             MatmulKernel::Arguments arguments{
-                options.problemShape, aicCoreNum,
+                options.problemShape,
+                aicCoreNum,
                 {deviceA, layoutA, deviceB, layoutB, deviceWA, layoutWA, deviceWB, layoutWB},
-                {deviceScale, layoutScale, devicePerTokenScale, layoutPerTokenScale, deviceD, layoutD}
-            };
+                {deviceScale, layoutScale, devicePerTokenScale, layoutPerTokenScale, deviceD, layoutD}};
 
             MatmulAdapter matmulOp;
             RunAdapter(matmulOp, arguments, stream, aicCoreNum, hardwareSyncAddr);
@@ -290,29 +289,29 @@ static void Run(const Options &options) {
             DispatchPolicy, L1TileShape, L0TileShape, TensorWA, TensorWB, TensorC, void, TileCopy>;
         if (options.problemShape.m() > options.problemShape.n()) {
             // kernel level
-            using MatmulKernel =
-                Gemm::Kernel::QuantOptimizedMatmulTla<BlockMmad, BlockEpilogue, BlockScheduler30, void, PaddingB, workspaceStages>;
+            using MatmulKernel = Gemm::Kernel::QuantOptimizedMatmulTla<
+                BlockMmad, BlockEpilogue, BlockScheduler30, void, PaddingB, workspaceStages>;
             using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
 
             MatmulKernel::Arguments arguments{
-                options.problemShape, aicCoreNum,
+                options.problemShape,
+                aicCoreNum,
                 {deviceA, layoutA, deviceB, layoutB, deviceWA, layoutWA, deviceWB, layoutWB},
-                {deviceScale, layoutScale, devicePerTokenScale, layoutPerTokenScale, deviceD, layoutD}
-            };
+                {deviceScale, layoutScale, devicePerTokenScale, layoutPerTokenScale, deviceD, layoutD}};
 
             MatmulAdapter matmulOp;
             RunAdapter(matmulOp, arguments, stream, aicCoreNum, hardwareSyncAddr);
         } else {
             // kernel level
-            using MatmulKernel =
-                Gemm::Kernel::QuantOptimizedMatmulTla<BlockMmad, BlockEpilogue, BlockScheduler31, void, PaddingB, workspaceStages>;
+            using MatmulKernel = Gemm::Kernel::QuantOptimizedMatmulTla<
+                BlockMmad, BlockEpilogue, BlockScheduler31, void, PaddingB, workspaceStages>;
             using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
 
             MatmulKernel::Arguments arguments{
-                options.problemShape, aicCoreNum,
+                options.problemShape,
+                aicCoreNum,
                 {deviceA, layoutA, deviceB, layoutB, deviceWA, layoutWA, deviceWB, layoutWB},
-                {deviceScale, layoutScale, devicePerTokenScale, layoutPerTokenScale, deviceD, layoutD}
-            };
+                {deviceScale, layoutScale, devicePerTokenScale, layoutPerTokenScale, deviceD, layoutD}};
 
             MatmulAdapter matmulOp;
             RunAdapter(matmulOp, arguments, stream, aicCoreNum, hardwareSyncAddr);
@@ -331,29 +330,29 @@ static void Run(const Options &options) {
             DispatchPolicy, L1TileShape, L0TileShape, TensorWA, TensorWB, TensorC, void, TileCopy>;
         if (options.problemShape.m() > options.problemShape.n()) {
             // kernel level
-            using MatmulKernel =
-                Gemm::Kernel::QuantOptimizedMatmulTla<BlockMmad, BlockEpilogue, BlockScheduler30, PaddingA, void, workspaceStages>;
+            using MatmulKernel = Gemm::Kernel::QuantOptimizedMatmulTla<
+                BlockMmad, BlockEpilogue, BlockScheduler30, PaddingA, void, workspaceStages>;
             using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
 
             MatmulKernel::Arguments arguments{
-                options.problemShape, aicCoreNum,
+                options.problemShape,
+                aicCoreNum,
                 {deviceA, layoutA, deviceB, layoutB, deviceWA, layoutWA, deviceWB, layoutWB},
-                {deviceScale, layoutScale, devicePerTokenScale, layoutPerTokenScale, deviceD, layoutD}
-            };
+                {deviceScale, layoutScale, devicePerTokenScale, layoutPerTokenScale, deviceD, layoutD}};
 
             MatmulAdapter matmulOp;
             RunAdapter(matmulOp, arguments, stream, aicCoreNum, hardwareSyncAddr);
         } else {
             // kernel level
-            using MatmulKernel =
-                Gemm::Kernel::QuantOptimizedMatmulTla<BlockMmad, BlockEpilogue, BlockScheduler31, PaddingA, void, workspaceStages>;
+            using MatmulKernel = Gemm::Kernel::QuantOptimizedMatmulTla<
+                BlockMmad, BlockEpilogue, BlockScheduler31, PaddingA, void, workspaceStages>;
             using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
 
             MatmulKernel::Arguments arguments{
-                options.problemShape, aicCoreNum,
+                options.problemShape,
+                aicCoreNum,
                 {deviceA, layoutA, deviceB, layoutB, deviceWA, layoutWA, deviceWB, layoutWB},
-                {deviceScale, layoutScale, devicePerTokenScale, layoutPerTokenScale, deviceD, layoutD}
-            };
+                {deviceScale, layoutScale, devicePerTokenScale, layoutPerTokenScale, deviceD, layoutD}};
 
             MatmulAdapter matmulOp;
             RunAdapter(matmulOp, arguments, stream, aicCoreNum, hardwareSyncAddr);
@@ -372,29 +371,29 @@ static void Run(const Options &options) {
             DispatchPolicy, L1TileShape, L0TileShape, TensorWA, TensorWB, TensorC, void, TileCopy>;
         if (options.problemShape.m() > options.problemShape.n()) {
             // kernel level
-            using MatmulKernel =
-                Gemm::Kernel::QuantOptimizedMatmulTla<BlockMmad, BlockEpilogue, BlockScheduler30, PaddingA, PaddingB, workspaceStages>;
+            using MatmulKernel = Gemm::Kernel::QuantOptimizedMatmulTla<
+                BlockMmad, BlockEpilogue, BlockScheduler30, PaddingA, PaddingB, workspaceStages>;
             using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
 
             MatmulKernel::Arguments arguments{
-                options.problemShape, aicCoreNum,
+                options.problemShape,
+                aicCoreNum,
                 {deviceA, layoutA, deviceB, layoutB, deviceWA, layoutWA, deviceWB, layoutWB},
-                {deviceScale, layoutScale, devicePerTokenScale, layoutPerTokenScale, deviceD, layoutD}
-            };
+                {deviceScale, layoutScale, devicePerTokenScale, layoutPerTokenScale, deviceD, layoutD}};
 
             MatmulAdapter matmulOp;
             RunAdapter(matmulOp, arguments, stream, aicCoreNum, hardwareSyncAddr);
         } else {
             // kernel level
-            using MatmulKernel =
-                Gemm::Kernel::QuantOptimizedMatmulTla<BlockMmad, BlockEpilogue, BlockScheduler31, PaddingA, PaddingB, workspaceStages>;
+            using MatmulKernel = Gemm::Kernel::QuantOptimizedMatmulTla<
+                BlockMmad, BlockEpilogue, BlockScheduler31, PaddingA, PaddingB, workspaceStages>;
             using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
 
             MatmulKernel::Arguments arguments{
-                options.problemShape, aicCoreNum,
+                options.problemShape,
+                aicCoreNum,
                 {deviceA, layoutA, deviceB, layoutB, deviceWA, layoutWA, deviceWB, layoutWB},
-                {deviceScale, layoutScale, devicePerTokenScale, layoutPerTokenScale, deviceD, layoutD}
-            };
+                {deviceScale, layoutScale, devicePerTokenScale, layoutPerTokenScale, deviceD, layoutD}};
 
             MatmulAdapter matmulOp;
             RunAdapter(matmulOp, arguments, stream, aicCoreNum, hardwareSyncAddr);
@@ -408,9 +407,8 @@ static void Run(const Options &options) {
 
     std::vector<float> hostGolden(lenD);
     golden::QuantMatmul(
-        options.problemShape, hostA, tagA, hostB, tagB, hostScale, tagScale,
-        hostPerTokenScale, tagPerTokenScale, hostGolden, tagD
-    );
+        options.problemShape, hostA, tagA, hostB, tagB, hostScale, tagScale, hostPerTokenScale, tagPerTokenScale,
+        hostGolden, tagD);
 
     std::vector<uint64_t> errorIndices = golden::CompareData(hostD, hostGolden, k);
     if (errorIndices.empty()) {
@@ -433,7 +431,8 @@ static void Run(const Options &options) {
     ACL_CHECK(aclFinalize());
 }
 
-int main(int argc, const char **argv) {
+int main(int argc, const char** argv)
+{
     Options options;
     if (options.Parse(argc, argv) != 0) {
         return -1;

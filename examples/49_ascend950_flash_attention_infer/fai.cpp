@@ -26,7 +26,8 @@ using namespace std;
 // This code section describes the parameters to execute the run function.
 struct Options {
     static constexpr auto HELPER =
-        "Usage: fai batch qSeqlen kvSeqlen numHeads kvHeads embeddingSize isVariedLen maskType cacheMode [--dtype DTYPE "
+        "Usage: fai batch qSeqlen kvSeqlen numHeads kvHeads embeddingSize isVariedLen maskType cacheMode [--dtype "
+        "DTYPE "
         "--datapath DATA_PATH --device DEVICE_ID]\n";
     static constexpr auto MIN_ARGS = 7;
 
@@ -48,7 +49,8 @@ struct Options {
     Options() = default;
 
     // Define function to parse the command-line arguments.
-    int Parse(int argc, const char **argv) {
+    int Parse(int argc, const char** argv)
+    {
         // The number of arguments must >= 7.
         if (argc < MIN_ARGS) {
             printf(HELPER);
@@ -83,19 +85,22 @@ struct Options {
     }
 };
 
-void AllocMem(uint8_t **host, uint8_t **device, size_t size) {
-    ACL_CHECK(aclrtMallocHost(reinterpret_cast<void **>(host), size));
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(device), size, ACL_MEM_MALLOC_HUGE_FIRST));
+void AllocMem(uint8_t** host, uint8_t** device, size_t size)
+{
+    ACL_CHECK(aclrtMallocHost(reinterpret_cast<void**>(host), size));
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(device), size, ACL_MEM_MALLOC_HUGE_FIRST));
 }
 
-void FreeMem(uint8_t *host, uint8_t *device) {
+void FreeMem(uint8_t* host, uint8_t* device)
+{
     ACL_CHECK(aclrtFreeHost(host));
     ACL_CHECK(aclrtFree(device));
 }
 
 // Allocate several matrices in NPU device memory and call a
 // CATLASS FAI kernel.
-void Run(const Options &options) {
+void Run(const Options& options)
+{
     aclrtStream stream{nullptr};
     ACL_CHECK(aclInit(nullptr));
     ACL_CHECK(aclrtSetDevice(options.deviceId));
@@ -129,36 +134,46 @@ void Run(const Options &options) {
         return;
     }
     if (embeddingSize > 128) {
-        cerr << "[ERROR] embeddingSize is only supported up to 128. The current template only implements BlockMmadPV output to UB. "
-                "If larger embeddingSize need to be supported, the BlockMmadPV output to GM must be added."<< endl;
+        cerr << "[ERROR] embeddingSize is only supported up to 128. The current template only implements BlockMmadPV "
+                "output to UB. "
+                "If larger embeddingSize need to be supported, the BlockMmadPV output to GM must be added."
+             << endl;
         return;
     }
 
-    void *qNtokens = nullptr;
-    uint8_t *qSeqHost{nullptr};
-    uint8_t *qSeqDevice{nullptr};
-    uint8_t *kvSeqHost{nullptr};
-    uint8_t *kvSeqDevice{nullptr};
-    uint8_t *qHost{nullptr};
-    uint8_t *qDevice{nullptr};
-    uint8_t *kHost{nullptr};
-    uint8_t *kDevice{nullptr};
-    uint8_t *vHost{nullptr};
-    uint8_t *vDevice{nullptr};
-    uint8_t *maskHost{nullptr};
-    uint8_t *maskDevice{nullptr};
-    uint8_t *blockTableHost{nullptr};
-    uint8_t *blockTableDevice{nullptr};
+    void* qNtokens = nullptr;
+    uint8_t* qSeqHost{nullptr};
+    uint8_t* qSeqDevice{nullptr};
+    uint8_t* kvSeqHost{nullptr};
+    uint8_t* kvSeqDevice{nullptr};
+    uint8_t* qHost{nullptr};
+    uint8_t* qDevice{nullptr};
+    uint8_t* kHost{nullptr};
+    uint8_t* kDevice{nullptr};
+    uint8_t* vHost{nullptr};
+    uint8_t* vDevice{nullptr};
+    uint8_t* maskHost{nullptr};
+    uint8_t* maskDevice{nullptr};
+    uint8_t* blockTableHost{nullptr};
+    uint8_t* blockTableDevice{nullptr};
 
     const auto cleanupAndFinalize = [&]() {
-        if (qNtokens) aclrtFreeHost(qNtokens);
-        if (qSeqDevice) FreeMem(qSeqHost, qSeqDevice);
-        if (kvSeqDevice) FreeMem(kvSeqHost, kvSeqDevice);
-        if (qDevice) FreeMem(qHost, qDevice);
-        if (kDevice) FreeMem(kHost, kDevice);
-        if (vDevice) FreeMem(vHost, vDevice);
-        if (maskDevice) FreeMem(maskHost, maskDevice);
-        if (blockTableDevice) FreeMem(blockTableHost, blockTableDevice);
+        if (qNtokens)
+            aclrtFreeHost(qNtokens);
+        if (qSeqDevice)
+            FreeMem(qSeqHost, qSeqDevice);
+        if (kvSeqDevice)
+            FreeMem(kvSeqHost, kvSeqDevice);
+        if (qDevice)
+            FreeMem(qHost, qDevice);
+        if (kDevice)
+            FreeMem(kHost, kDevice);
+        if (vDevice)
+            FreeMem(vHost, vDevice);
+        if (maskDevice)
+            FreeMem(maskHost, maskDevice);
+        if (blockTableDevice)
+            FreeMem(blockTableHost, blockTableDevice);
 
         ACL_CHECK(aclrtDestroyStream(stream));
         ACL_CHECK(aclrtResetDevice(options.deviceId));
@@ -171,16 +186,15 @@ void Run(const Options &options) {
         cleanupAndFinalize();
         return;
     }
-    int32_t numTokens = static_cast<int32_t *>(qNtokens)[0];
+    int32_t numTokens = static_cast<int32_t*>(qNtokens)[0];
 
     uint64_t seqArraySize = batch * sizeof(int64_t);
     uint64_t qoSize = (uint64_t)numTokens * (uint64_t)numHeads * (uint64_t)embeddingSize * sizeof(fp16_t);
-    uint64_t kvSize = (uint64_t)numBlocks * (uint64_t)blockSize * (uint64_t)kvHeads * (uint64_t)embeddingSize
-                      * sizeof(fp16_t);
+    uint64_t kvSize =
+        (uint64_t)numBlocks * (uint64_t)blockSize * (uint64_t)kvHeads * (uint64_t)embeddingSize * sizeof(fp16_t);
     uint64_t maskSize = batch * qSeqlen * kvSeqlen * sizeof(uint8_t);
-    uint64_t blockTableSize = static_cast<uint64_t>(
-        batch * ((maxKvSeqlen + blockSize - 1) / blockSize) * sizeof(int32_t)
-    );
+    uint64_t blockTableSize =
+        static_cast<uint64_t>(batch * ((maxKvSeqlen + blockSize - 1) / blockSize) * sizeof(int32_t));
     uint32_t tilingSize = sizeof(FATilingData);
 
     // Allocate matrices in host and device memory.
@@ -243,14 +257,14 @@ void Run(const Options &options) {
 
     // Allocate matrices in device memory for workspace.
     // One base workspace block contains 65536 elements.
-    uint8_t *oDevice{nullptr};
-    ACL_CHECK(aclrtMalloc((void **)(&oDevice), qoSize * 2, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* oDevice{nullptr};
+    ACL_CHECK(aclrtMalloc((void**)(&oDevice), qoSize * 2, ACL_MEM_MALLOC_HUGE_FIRST));
 
-    uint8_t *tilingDevice;
-    ACL_CHECK(aclrtMalloc((void **)(&tilingDevice), tilingSize, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* tilingDevice;
+    ACL_CHECK(aclrtMalloc((void**)(&tilingDevice), tilingSize, ACL_MEM_MALLOC_HUGE_FIRST));
 
     // get tiling
-    void *tilingHost = nullptr;
+    void* tilingHost = nullptr;
     ACL_CHECK(aclrtMallocHost(&tilingHost, tilingSize));
     uint32_t blockDim = aicCoreNum;
 
@@ -267,7 +281,7 @@ void Run(const Options &options) {
 
     FATilingData faTilingData;
     FAInferTiling::GetFATilingParam(faInfo, blockDim, faTilingData);
-    tilingHost = reinterpret_cast<void *>(&faTilingData);
+    tilingHost = reinterpret_cast<void*>(&faTilingData);
 
     ACL_CHECK(aclrtMemcpy(tilingDevice, tilingSize, tilingHost, tilingSize, ACL_MEMCPY_HOST_TO_DEVICE));
     for (int i = 0; i < 1; i++) {
@@ -275,45 +289,37 @@ void Run(const Options &options) {
             if (maskType > 0 && cacheMode == 0) {
                 FAInferTla<half, true, false><<<blockDim, nullptr, stream>>>(
                     qDevice, kDevice, vDevice, maskDevice, blockTableDevice, oDevice, qSeqDevice, kvSeqDevice,
-                    tilingDevice
-                );
+                    tilingDevice);
             } else if (maskType == 0 && cacheMode > 0) {
                 FAInferTla<half, false, true><<<blockDim, nullptr, stream>>>(
                     qDevice, kDevice, vDevice, maskDevice, blockTableDevice, oDevice, qSeqDevice, kvSeqDevice,
-                    tilingDevice
-                );
+                    tilingDevice);
             } else if (maskType > 0 && cacheMode > 0) {
                 FAInferTla<half, true, true><<<blockDim, nullptr, stream>>>(
                     qDevice, kDevice, vDevice, maskDevice, blockTableDevice, oDevice, qSeqDevice, kvSeqDevice,
-                    tilingDevice
-                );
+                    tilingDevice);
             } else {
                 FAInferTla<half, false, false><<<blockDim, nullptr, stream>>>(
                     qDevice, kDevice, vDevice, maskDevice, blockTableDevice, oDevice, qSeqDevice, kvSeqDevice,
-                    tilingDevice
-                );
+                    tilingDevice);
             }
         } else {
             if (maskType > 0 && cacheMode == 0) {
                 FAInferTla<bfloat16_t, true, false><<<blockDim, nullptr, stream>>>(
                     qDevice, kDevice, vDevice, maskDevice, blockTableDevice, oDevice, qSeqDevice, kvSeqDevice,
-                    tilingDevice
-                );
+                    tilingDevice);
             } else if (maskType == 0 && cacheMode > 0) {
                 FAInferTla<bfloat16_t, false, true><<<blockDim, nullptr, stream>>>(
                     qDevice, kDevice, vDevice, maskDevice, blockTableDevice, oDevice, qSeqDevice, kvSeqDevice,
-                    tilingDevice
-                );
+                    tilingDevice);
             } else if (maskType > 0 && cacheMode > 0) {
                 FAInferTla<bfloat16_t, true, true><<<blockDim, nullptr, stream>>>(
                     qDevice, kDevice, vDevice, maskDevice, blockTableDevice, oDevice, qSeqDevice, kvSeqDevice,
-                    tilingDevice
-                );
+                    tilingDevice);
             } else {
                 FAInferTla<bfloat16_t, false, false><<<blockDim, nullptr, stream>>>(
                     qDevice, kDevice, vDevice, maskDevice, blockTableDevice, oDevice, qSeqDevice, kvSeqDevice,
-                    tilingDevice
-                );
+                    tilingDevice);
             }
         }
         ACL_CHECK(aclrtSynchronizeStream(stream));
@@ -334,8 +340,8 @@ void Run(const Options &options) {
         }
 
         // Compare the result
-        vector<uint64_t> errorIndices = (dataType == "half") ? golden::CompareData(oHostHalf, goldenHost, kvSeqlen)
-                                                             : golden::CompareData(oHostBf16, goldenHost, kvSeqlen);
+        vector<uint64_t> errorIndices = (dataType == "half") ? golden::CompareData(oHostHalf, goldenHost, kvSeqlen) :
+                                                               golden::CompareData(oHostBf16, goldenHost, kvSeqlen);
         // vector<uint64_t> errorIndices = golden::CompareData(oHostHalf, goldenHost, kvSeqlen);
         if (errorIndices.empty()) {
             cout << "Compare success." << endl;
@@ -366,7 +372,8 @@ void Run(const Options &options) {
 
 /// Entry point to mla example.
 
-int main(int argc, const char **argv) {
+int main(int argc, const char** argv)
+{
     Options options;
     if (options.Parse(argc, argv) != 0) {
         return -1;

@@ -20,7 +20,7 @@ B 矩阵通过 `CopyGmToL1BIdx` 额外搬运 CSR/COO 格式的 index 数据（`i
 | `CopyGmToL1B`    | `TileCopySparseTla<ArchTag, TensorB, TensorL1B>`                              | B 矩阵 GM→L1（TLA）       |
 | `CopyGmToL1BIdx` | `TileCopySparseTla<ArchTag, TensorIdx, TensorL1BIdx>`                         | B index GM→L1（TLA）      |
 | `CopyL1ToL0A`    | `TileCopySparseTla<ArchTag, TensorL1A, TensorL0A>`                            | A 矩阵 L1→L0A（TLA）      |
-| `CopyL1ToL0B`    | `CopyL1ToL0BSparseTla<ArchTag, ElementA, TensorL1B, TensorL0B, TensorL1BIdx>` | B 矩阵 L1→L0B（稀疏 TLA） |
+| `CopyL1ToL0B`    | `CopyL1ToL0BSparseTla<ArchTag, ElementB, TensorL1B, TensorL0B, TensorL1BIdx>` | B 矩阵 L1→L0B（稀疏 TLA） |
 | `CopyL0CToGm`    | `CopyL0CToGmSparseTla<ArchTag, TensorL0C, TensorC>`                           | L0C→GM（稀疏 TLA）        |
 
 ## 模板原型

@@ -22,14 +22,10 @@
 
 namespace Catlass::Gemm::Kernel {
 
-template <
-    class BlockMmad_,
-    class BlockEpilogue_,
-    class BlockScheduler_
->
+template <class BlockMmad_, class BlockEpilogue_, class BlockScheduler_>
 class KernelMatmulMixFixpipeOpti {
 public:
-    CATLASS_DEVICE 
+    CATLASS_DEVICE
     KernelMatmulMixFixpipeOpti()
     {
         // Init UbTensor
@@ -66,7 +62,7 @@ public:
     using LayoutTagA = typename BlockMmad::TileCopy::LayoutTagA;
     using LayoutTagB = typename BlockMmad::TileCopy::LayoutTagB;
     using LayoutTagC = typename BlockMmad::TileCopy::LayoutTagC;
-    
+
     AscendC::GlobalTensor<ElementA> aGlobal_;
     AscendC::GlobalTensor<ElementB> bGlobal_;
     AscendC::GlobalTensor<ElementC> cGlobal_;
@@ -98,8 +94,8 @@ public:
         Params() = default;
     };
 
-    CATLASS_DEVICE 
-    void operator()(Params const &params)
+    CATLASS_DEVICE
+    void operator()(Params const& params)
     {
         int64_t curBlockIdx = AscendC::GetBlockIdx();
         int64_t blockNum = AscendC::GetBlockNum();
@@ -149,30 +145,18 @@ public:
 
             uint32_t blockM = blockShape.m();
             uint32_t blockN = blockShape.n();
-             
+
             uint32_t mCoord = blkElemCoord.m();
             uint32_t nCoord = blkElemCoord.n();
 
-            auto aTileTensor = GetTile(
-                aTlaTensor,
-                tla::MakeCoord(mCoord, 0),
-                tla::MakeShape(blockM, k_)
-            );
+            auto aTileTensor = GetTile(aTlaTensor, tla::MakeCoord(mCoord, 0), tla::MakeShape(blockM, k_));
 
-            auto bTileTensor = GetTile(
-                bTlaTensor,
-                tla::MakeCoord(0, nCoord),
-                tla::MakeShape(k_, blockN)
-            );
+            auto bTileTensor = GetTile(bTlaTensor, tla::MakeCoord(0, nCoord), tla::MakeShape(k_, blockN));
 
-            auto cTileTensor = GetTile(
-                cTlaTensor,
-                tla::MakeCoord(mCoord, nCoord),
-                tla::MakeShape(blockM, blockN)
-            );
-            
+            auto cTileTensor = GetTile(cTlaTensor, tla::MakeCoord(mCoord, nCoord), tla::MakeShape(blockM, blockN));
+
             uint32_t ubListId = (loopIdx / blockNum) & ubPingPongFlag;
-            
+
             int64_t alignN = RoundUp(blockN, static_cast<int64_t>(Catlass::BYTE_PER_BLK / sizeof(ElementC)));
             auto ubLayout = tla::MakeLayout<ElementC, LayoutTagC>(blockM, alignN);
             auto cLocalTensor = tla::MakeTensor(ubTensorList_[ubListId], ubLayout, Arch::PositionUB{});
@@ -205,20 +189,20 @@ public:
         AscendC::PipeBarrier<PIPE_ALL>();
     }
 
-    CATLASS_HOST_DEVICE 
-    static bool CanImplement(Arguments const &args)
-    { 
+    CATLASS_HOST_DEVICE
+    static bool CanImplement(Arguments const& args)
+    {
         return true;
     }
 
-    CATLASS_HOST_DEVICE 
-    static size_t GetWorkspaceSize(const Arguments &args)
+    CATLASS_HOST_DEVICE
+    static size_t GetWorkspaceSize(const Arguments& args)
     {
         return 0;
     }
 
-    CATLASS_HOST_DEVICE 
-    static Params ToUnderlyingArguments(Arguments const &args, GM_ADDR workspace)
+    CATLASS_HOST_DEVICE
+    static Params ToUnderlyingArguments(Arguments const& args, GM_ADDR workspace)
     {
         return {args.problemShape, args.aGmAddr, args.bGmAddr, args.cGmAddr};
     }
@@ -235,5 +219,5 @@ private:
     int64_t k_{1};
 };
 
-}  // namespace Catlass::Gemm::Kernel
-#endif //CATLASS_GEMM_KERNEL_MATMUL_MIX_FIXPIPE_OPTI_HPP
+} // namespace Catlass::Gemm::Kernel
+#endif // CATLASS_GEMM_KERNEL_MATMUL_MIX_FIXPIPE_OPTI_HPP

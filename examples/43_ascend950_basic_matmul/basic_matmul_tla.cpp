@@ -35,7 +35,7 @@ using namespace tla;
 
 using Options = GemmOptions;
 
-static void Run(const Options &options)
+static void Run(const Options& options)
 {
     aclrtStream stream{nullptr};
 
@@ -82,29 +82,29 @@ static void Run(const Options &options)
         golden::FillRandomData<ElementBiasType>(hostBias, -5.0f, 5.0f);
     }
 
-    uint8_t *deviceA{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceA{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceA, sizeA, hostA.data(), sizeA, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *deviceB{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceB{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceB, sizeB, hostB.data(), sizeB, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *deviceC{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceC{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
 
-    uint8_t *deviceBias{nullptr};
+    uint8_t* deviceBias{nullptr};
     if constexpr (!std::is_void_v<ElementBias>) {
-        ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceBias), sizeBias, ACL_MEM_MALLOC_HUGE_FIRST));
+        ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceBias), sizeBias, ACL_MEM_MALLOC_HUGE_FIRST));
         ACL_CHECK(aclrtMemcpy(deviceBias, sizeBias, hostBias.data(), sizeBias, ACL_MEMCPY_HOST_TO_DEVICE));
     }
 
-    uint8_t *deviceWorkspace{nullptr};
+    uint8_t* deviceWorkspace{nullptr};
 
     // Get the number of cube cores of the current hardware
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
 
-    //Ascend950
+    // Ascend950
     using ArchTag = Arch::Ascend950;
     constexpr bool enableUnitFlag = true;
     constexpr bool useHF32 = false;
@@ -120,10 +120,7 @@ static void Run(const Options &options)
     //     l1AStages, l1BStages, l0AStages, l0BStages
     // >;
     using DispatchPolicy = Gemm::MmadPingpong<
-        ArchTag,
-        enableUnitFlag, useHF32, l0CStages, enableL1Resident,
-        l1AStages, l1BStages, l0AStages, l0BStages
-    >;
+        ArchTag, enableUnitFlag, useHF32, l0CStages, enableL1Resident, l1AStages, l1BStages, l0AStages, l0BStages>;
 
     // Or Use DispatchPolicy MmadPreloadAsyncWithCallback:
     // constexpr uint32_t preloadStages = 1;
@@ -136,7 +133,7 @@ static void Run(const Options &options)
     // >;
     using L1TileShape = Shape<Int<256>, Int<256>, Int<128>>;
     using L0TileShape = Shape<Int<256>, Int<256>, Int<32>>;
-    
+
     auto layoutA = tla::MakeLayout<ElementA, LayoutTagA>(m, k);
     auto layoutB = tla::MakeLayout<ElementB, LayoutTagB>(k, n);
     auto layoutC = tla::MakeLayout<ElementC, LayoutTagC>(m, n);
@@ -161,16 +158,14 @@ static void Run(const Options &options)
         using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
 
         MatmulKernel::Arguments arguments{
-            options.problemShape, deviceA, layoutA, deviceB, layoutB, deviceC, layoutC, deviceBias
-        };
+            options.problemShape, deviceA, layoutA, deviceB, layoutB, deviceC, layoutC, deviceBias};
 
         MatmulAdapter matmulOp;
         matmulOp.CanImplement(arguments);
         sizeWorkspace = matmulOp.GetWorkspaceSize(arguments);
         if (sizeWorkspace > 0) {
             ACL_CHECK(
-                aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST)
-            );
+                aclrtMalloc(reinterpret_cast<void**>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
         }
         matmulOp.Initialize(arguments, deviceWorkspace);
         matmulOp(stream, aicCoreUsed);
@@ -184,16 +179,14 @@ static void Run(const Options &options)
         using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
 
         MatmulKernel::Arguments arguments{
-            options.problemShape, deviceA, layoutA, deviceB, layoutB, deviceC, layoutC, deviceBias
-        };
+            options.problemShape, deviceA, layoutA, deviceB, layoutB, deviceC, layoutC, deviceBias};
 
         MatmulAdapter matmulOp;
         matmulOp.CanImplement(arguments);
         sizeWorkspace = matmulOp.GetWorkspaceSize(arguments);
         if (sizeWorkspace > 0) {
             ACL_CHECK(
-                aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST)
-            );
+                aclrtMalloc(reinterpret_cast<void**>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
         }
         matmulOp.Initialize(arguments, deviceWorkspace);
         matmulOp(stream, aicCoreUsed);
@@ -248,7 +241,7 @@ static void Run(const Options &options)
     ACL_CHECK(aclFinalize());
 }
 
-int main(int argc, const char **argv)
+int main(int argc, const char** argv)
 {
     Options options;
     if (options.Parse(argc, argv) != 0) {

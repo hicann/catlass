@@ -30,7 +30,7 @@ void BalanceWorkload(uint32_t m, uint32_t n, uint32_t& m1, uint32_t& n1, uint32_
     }
 }
 
-void SetTile(TilingParams &tilingParams, uint32_t m1, uint32_t n1, uint32_t k1)
+void SetTile(TilingParams& tilingParams, uint32_t m1, uint32_t n1, uint32_t k1)
 {
     // To save space, tiling parameters (m1, n1, k1) are stored as uint16_t.
     tilingParams.m1 = static_cast<uint16_t>(m1);
@@ -60,7 +60,7 @@ uint32_t GetMaxK1(uint32_t m1, uint32_t n1, PlatformInfo& platformInfo)
 {
     std::vector<uint32_t> k1List = {1024, 512, 256, 128};
     uint32_t k1 = 512 / sizeof(DType);
-    for (const auto &k1t : k1List) {
+    for (const auto& k1t : k1List) {
         if (JudgeSpace<DType>(m1, n1, k1t, platformInfo)) {
             k1 = k1t;
             break;
@@ -69,7 +69,8 @@ uint32_t GetMaxK1(uint32_t m1, uint32_t n1, PlatformInfo& platformInfo)
     return k1;
 }
 
-bool IsAStrideEqualShape(TilingParams &tilingParams) {
+bool IsAStrideEqualShape(TilingParams& tilingParams)
+{
     if (static_cast<LayoutTag>(tilingParams.layoutTagA) == LayoutTag::TagColumnMajor) {
         return (tilingParams.m == tilingParams.strideA);
     } else {
@@ -77,7 +78,8 @@ bool IsAStrideEqualShape(TilingParams &tilingParams) {
     }
 }
 
-bool IsBStrideEqualShape(TilingParams &tilingParams) {
+bool IsBStrideEqualShape(TilingParams& tilingParams)
+{
     if (static_cast<LayoutTag>(tilingParams.layoutTagB) == LayoutTag::TagColumnMajor) {
         return (tilingParams.k == tilingParams.strideB);
     } else {
@@ -85,7 +87,8 @@ bool IsBStrideEqualShape(TilingParams &tilingParams) {
     }
 }
 
-bool IsCStrideEqualShape(TilingParams &tilingParams) {
+bool IsCStrideEqualShape(TilingParams& tilingParams)
+{
     if (static_cast<LayoutTag>(tilingParams.layoutTagC) == LayoutTag::TagColumnMajor) {
         return (tilingParams.m == tilingParams.strideC);
     } else {
@@ -93,5 +96,4 @@ bool IsCStrideEqualShape(TilingParams &tilingParams) {
     }
 }
 
-
-#endif  // UTILS_H
+#endif // UTILS_H

@@ -10,3 +10,12 @@
 
 set_source_files_properties(strided_batched_matmul_tla.cpp PROPERTIES LANGUAGE ASC)
 catlass_example_add_executable(45_strided_batched_matmul_tla cube strided_batched_matmul_tla.cpp)
+
+function(add_variant target_name)
+    catlass_example_add_executable(${target_name} cube strided_batched_matmul_tla.cpp)
+    target_compile_definitions(${target_name} PRIVATE L2_CACHE_HINT ${ARGN})
+endfunction()
+
+
+# The batched matrix A is transposed as the logical shape `(M, B, K)`
+add_variant(45_strided_transposed_batched_matmul_tla ENABLE_TRANS_A)

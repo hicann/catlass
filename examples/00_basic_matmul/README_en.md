@@ -49,7 +49,7 @@ The types of the left matrix, right matrix, and result matrix must meet the foll
 
 ## Code Organization
 
-```
+```text
 ├── 00_basic_matmul
 │   ├── CMakeLists.txt # CMake build file
 │   ├── README.md
@@ -60,27 +60,27 @@ The types of the left matrix, right matrix, and result matrix must meet the foll
 
 1. Compile the sample code and generate the corresponding operator executable file.
 
-```
-bash scripts/build.sh 00_basic_matmul
-```
+    ```bash
+    bash scripts/build.sh 00_basic_matmul
+    ```
 
-1. Go to the compilation directory `output/bin` of the executable file and run the operator sample program. The test sample data is randomly generated, and the size is specified by the command line input.
+2. Go to the compilation directory `output/bin` of the executable file and run the operator sample program. The test sample data is randomly generated, and the size is specified by the command line input.
 
-```
-cd output/bin
-./00_basic_matmul 256 512 1024 0
-```
+    ```bash
+    cd output/bin
+    ./00_basic_matmul 256 512 1024 0
+    ```
 
-• 256: matrix m-axis
+    • 256: matrix m-axis
 
-• 512: n-axis
+    • 512: n-axis
 
-• 1024: k-axis
+    • 1024: k-axis
 
-• 0: Device ID (optional). Defaults to 0.
+    • 0: Device ID (optional). Defaults to 0.
 
-If the following result is displayed, the sample is successfully executed.
+    If the following result is displayed, the sample is successfully executed.
 
-```
-Compare success.
-```
+    ```text
+    Compare success.
+    ```

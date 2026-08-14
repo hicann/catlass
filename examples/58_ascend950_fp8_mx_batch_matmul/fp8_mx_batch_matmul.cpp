@@ -43,7 +43,8 @@ using Options = GroupedGemmOptions;
 static const std::string kDataRoot = "./examples/58_ascend950_fp8_mx_batch_matmul/data";
 
 template <typename T>
-bool SaveResult(const std::string &filename, const std::vector<T> &data) {
+bool SaveResult(const std::string& filename, const std::vector<T>& data)
+{
     std::ofstream file(filename, std::ios::binary);
     if (!file) {
         return false;
@@ -67,7 +68,7 @@ bool SaveResult(const std::string &filename, const std::vector<T> &data) {
     return true;
 }
 
-static void Run(const Options &options)
+static void Run(const Options& options)
 {
     aclrtStream stream{nullptr};
 
@@ -113,20 +114,26 @@ static void Run(const Options &options)
     std::vector<int8_t> hostMxScaleB(lenMxScaleB);
 
     // Pre-declare device pointers for cleanup lambda
-    uint8_t *deviceA{nullptr};
-    uint8_t *deviceB{nullptr};
-    uint8_t *deviceMxScaleA{nullptr};
-    uint8_t *deviceMxScaleB{nullptr};
-    uint8_t *deviceC{nullptr};
-    uint8_t *deviceWorkspace{nullptr};
+    uint8_t* deviceA{nullptr};
+    uint8_t* deviceB{nullptr};
+    uint8_t* deviceMxScaleA{nullptr};
+    uint8_t* deviceMxScaleB{nullptr};
+    uint8_t* deviceC{nullptr};
+    uint8_t* deviceWorkspace{nullptr};
 
     const auto cleanupAndFinalize = [&]() {
-        if (deviceA) ACL_CHECK(aclrtFree(deviceA));
-        if (deviceB) ACL_CHECK(aclrtFree(deviceB));
-        if (deviceMxScaleA) ACL_CHECK(aclrtFree(deviceMxScaleA));
-        if (deviceMxScaleB) ACL_CHECK(aclrtFree(deviceMxScaleB));
-        if (deviceC) ACL_CHECK(aclrtFree(deviceC));
-        if (sizeWorkspace > 0 && deviceWorkspace) ACL_CHECK(aclrtFree(deviceWorkspace));
+        if (deviceA)
+            ACL_CHECK(aclrtFree(deviceA));
+        if (deviceB)
+            ACL_CHECK(aclrtFree(deviceB));
+        if (deviceMxScaleA)
+            ACL_CHECK(aclrtFree(deviceMxScaleA));
+        if (deviceMxScaleB)
+            ACL_CHECK(aclrtFree(deviceMxScaleB));
+        if (deviceC)
+            ACL_CHECK(aclrtFree(deviceC));
+        if (sizeWorkspace > 0 && deviceWorkspace)
+            ACL_CHECK(aclrtFree(deviceWorkspace));
         ACL_CHECK(aclrtDestroyStream(stream));
         ACL_CHECK(aclrtResetDevice(options.deviceId));
         ACL_CHECK(aclFinalize());
@@ -148,19 +155,19 @@ static void Run(const Options &options)
         return;
     }
 
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceA, sizeA, hostA.data(), sizeA, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceB, sizeB, hostB.data(), sizeB, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceMxScaleA), sizeMxScaleA, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceMxScaleA), sizeMxScaleA, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceMxScaleA, sizeMxScaleA, hostMxScaleA.data(), sizeMxScaleA, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceMxScaleB), sizeMxScaleB, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceMxScaleB), sizeMxScaleB, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceMxScaleB, sizeMxScaleB, hostMxScaleB.data(), sizeMxScaleB, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
 
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
 
@@ -191,15 +198,13 @@ static void Run(const Options &options)
     if (options.problemShape.m() > options.problemShape.n()) {
         using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
 
-        using MatmulKernel = Gemm::Kernel::MxBatchedMatmulTla<
-            BlockMmad, BlockEpilogue, BlockScheduler>;
+        using MatmulKernel = Gemm::Kernel::MxBatchedMatmulTla<BlockMmad, BlockEpilogue, BlockScheduler>;
 
         using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
 
         MatmulKernel::Arguments arguments{
-            batchCount, options.problemShape, deviceA, layoutA, deviceB, layoutB,
-            deviceMxScaleA, layoutMxScaleA, deviceMxScaleB, layoutMxScaleB, deviceC, layoutC
-        };
+            batchCount,     options.problemShape, deviceA,        layoutA,        deviceB, layoutB,
+            deviceMxScaleA, layoutMxScaleA,       deviceMxScaleB, layoutMxScaleB, deviceC, layoutC};
 
         MatmulAdapter matmulOp;
         if (matmulOp.CanImplement(arguments) != Status::kSuccess) {
@@ -209,22 +214,21 @@ static void Run(const Options &options)
         }
         sizeWorkspace = matmulOp.GetWorkspaceSize(arguments);
         if (sizeWorkspace > 0) {
-            ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
+            ACL_CHECK(
+                aclrtMalloc(reinterpret_cast<void**>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
         }
         matmulOp.Initialize(arguments, deviceWorkspace);
         matmulOp(stream, aicCoreUsed);
     } else {
         using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
 
-        using MatmulKernel = Gemm::Kernel::MxBatchedMatmulTla<
-            BlockMmad, BlockEpilogue, BlockScheduler>;
+        using MatmulKernel = Gemm::Kernel::MxBatchedMatmulTla<BlockMmad, BlockEpilogue, BlockScheduler>;
 
         using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
 
         MatmulKernel::Arguments arguments{
-            batchCount, options.problemShape, deviceA, layoutA, deviceB, layoutB,
-            deviceMxScaleA, layoutMxScaleA, deviceMxScaleB, layoutMxScaleB, deviceC, layoutC
-        };
+            batchCount,     options.problemShape, deviceA,        layoutA,        deviceB, layoutB,
+            deviceMxScaleA, layoutMxScaleA,       deviceMxScaleB, layoutMxScaleB, deviceC, layoutC};
 
         MatmulAdapter matmulOp;
         if (matmulOp.CanImplement(arguments) != Status::kSuccess) {
@@ -234,7 +238,8 @@ static void Run(const Options &options)
         }
         sizeWorkspace = matmulOp.GetWorkspaceSize(arguments);
         if (sizeWorkspace > 0) {
-            ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
+            ACL_CHECK(
+                aclrtMalloc(reinterpret_cast<void**>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
         }
         matmulOp.Initialize(arguments, deviceWorkspace);
         matmulOp(stream, aicCoreUsed);
@@ -282,7 +287,7 @@ static void Run(const Options &options)
     cleanupAndFinalize();
 }
 
-int main(int argc, const char **argv)
+int main(int argc, const char** argv)
 {
     Options options;
     if (options.Parse(argc, argv) != 0) {

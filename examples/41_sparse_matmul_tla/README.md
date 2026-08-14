@@ -2,7 +2,7 @@
 
 ## 代码组织
 
-```
+```text
 ├── 41_sparse_matmul_tla
 │   ├── CMakeLists.txt     # CMake编译文件
 │   ├── README.md
@@ -19,7 +19,7 @@
 
 以下是一个完整的shell脚本示例（在工程目录下执行）
 
-```
+```text
 m=160
 n=320
 k=64
@@ -50,6 +50,6 @@ run_kernel
 
 执行结果如下，说明精度比对成功。
 
-```
+```text
 Compare success.
 ```

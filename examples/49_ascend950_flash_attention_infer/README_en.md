@@ -2,7 +2,7 @@
 
 ## Code Organization
 
-```
+```text
 ├── 49_ascend950_flash_attention_infer
 │   ├── CMakeLists.txt           # CMake build file
 │   ├── gen_data.py              # Data generation script
@@ -23,7 +23,7 @@
 
 The following is a complete shell script example:
 
-```
+```text
 batch=1          # Batch size
 qSeqlen=177      # Query sequence length
 kvSeqlen=512     # Key/Value sequence length
@@ -60,6 +60,6 @@ run_kernel
 
 If the following information is displayed, the accuracy comparison is successful.
 
-```
+```text
 Compare success.
 ```

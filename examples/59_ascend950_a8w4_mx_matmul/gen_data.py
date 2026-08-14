@@ -134,7 +134,8 @@ def _get_fp8_lut_pos(format_name: str) -> torch.Tensor:
         diffs = pos[1:] - pos[:-1]
         if (diffs < 0).any():
             raise AssertionError(
-                f"{format_name} positive LUT half is not non-decreasing")
+                f"{format_name} positive LUT half is not non-decreasing"
+            )
         _FP8_LUT_POS_CACHE[format_name] = pos
     return _FP8_LUT_POS_CACHE[format_name]
 
@@ -157,7 +158,9 @@ def _build_fp4_lut(format_name: str) -> torch.Tensor:
             else:
                 value = (mantissa / float(1 << mantissa_bits)) * (2.0 ** (1.0 - bias))
         else:
-            value = (1.0 + mantissa / float(1 << mantissa_bits)) * (2.0 ** (float(exp) - bias))
+            value = (1.0 + mantissa / float(1 << mantissa_bits)) * (
+                2.0 ** (float(exp) - bias)
+            )
 
         if sign == 1:
             value = -value
@@ -172,8 +175,9 @@ _FP4_LUT = {
 }
 
 
-def _e8m0_exp(max_abs: torch.Tensor, emax: int,
-              epsilon: float = _EPSILON) -> torch.Tensor:
+def _e8m0_exp(
+    max_abs: torch.Tensor, emax: int, epsilon: float = _EPSILON
+) -> torch.Tensor:
     assert max_abs.dtype == torch.float32, max_abs.dtype
     zero_mask = max_abs < epsilon
     safe = torch.where(zero_mask, torch.ones_like(max_abs), max_abs)
@@ -184,8 +188,9 @@ def _e8m0_exp(max_abs: torch.Tensor, emax: int,
     return torch.where(zero_mask, torch.zeros_like(exp), exp)
 
 
-def _vectorized_lut_quantize_fp8(scaled: torch.Tensor, format_name: str,
-                                  fp8_dtype: torch.dtype) -> torch.Tensor:
+def _vectorized_lut_quantize_fp8(
+    scaled: torch.Tensor, format_name: str, fp8_dtype: torch.dtype
+) -> torch.Tensor:
     lut_pos = _get_fp8_lut_pos(format_name)
     last_idx = lut_pos.numel() - 1
 
@@ -204,13 +209,14 @@ def _vectorized_lut_quantize_fp8(scaled: torch.Tensor, format_name: str,
     snapped_fp32 = sign * chosen_mag
 
     zero_mask = chosen_mag == 0
-    snapped_fp32 = torch.where(
-        zero_mask, torch.zeros_like(snapped_fp32), snapped_fp32)
+    snapped_fp32 = torch.where(zero_mask, torch.zeros_like(snapped_fp32), snapped_fp32)
 
     return snapped_fp32.to(fp8_dtype)
 
 
-def _quantize_to_fp4_lut(values: torch.Tensor, format_name: str) -> Tuple[torch.Tensor, torch.Tensor]:
+def _quantize_to_fp4_lut(
+    values: torch.Tensor, format_name: str
+) -> Tuple[torch.Tensor, torch.Tensor]:
     lut = _FP4_LUT[format_name].to(values.device)
     min_value = _FP4_FORMATS[format_name]["min_value"]
     max_value = _FP4_FORMATS[format_name]["max_value"]
@@ -228,7 +234,10 @@ def _pack_fp4_nibbles(index_matrix: torch.Tensor) -> torch.Tensor:
     rows, cols = index_matrix.shape
     if cols % 2 != 0:
         index_matrix = torch.cat(
-            [index_matrix, torch.zeros((rows, 1), dtype=torch.uint8, device=index_matrix.device)],
+            [
+                index_matrix,
+                torch.zeros((rows, 1), dtype=torch.uint8, device=index_matrix.device),
+            ],
             dim=1,
         )
 
@@ -238,9 +247,9 @@ def _pack_fp4_nibbles(index_matrix: torch.Tensor) -> torch.Tensor:
     return packed.to(torch.uint8)
 
 
-def _quantize_fp8_axis_last(matrix: torch.Tensor, format_name: str,
-                             block_size: int = _BLOCK_SIZE
-                             ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+def _quantize_fp8_axis_last(
+    matrix: torch.Tensor, format_name: str, block_size: int = _BLOCK_SIZE
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     M, N = matrix.shape
     fmt = _FP8_FORMATS[format_name]
     fp8_dtype = fmt["torch_dtype"]
@@ -284,19 +293,18 @@ def _quantize_fp8_axis_last(matrix: torch.Tensor, format_name: str,
     return quant_fp8, scale, dequant
 
 
-def _quantize_fp8_axis_first(matrix: torch.Tensor, format_name: str,
-                              block_size: int = _BLOCK_SIZE
-                              ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+def _quantize_fp8_axis_first(
+    matrix: torch.Tensor, format_name: str, block_size: int = _BLOCK_SIZE
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     qt, st, dt = _quantize_fp8_axis_last(
-        matrix.t().contiguous(), format_name, block_size)
-    return (qt.t().contiguous(),
-            st.t().contiguous(),
-            dt.t().contiguous())
+        matrix.t().contiguous(), format_name, block_size
+    )
+    return (qt.t().contiguous(), st.t().contiguous(), dt.t().contiguous())
 
 
-def _quantize_fp8(matrix: torch.Tensor, format_name: str, axis: int,
-                   block_size: int = _BLOCK_SIZE
-                   ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+def _quantize_fp8(
+    matrix: torch.Tensor, format_name: str, axis: int, block_size: int = _BLOCK_SIZE
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     if axis == 0:
         return _quantize_fp8_axis_first(matrix, format_name, block_size)
     if axis == 1:
@@ -304,9 +312,9 @@ def _quantize_fp8(matrix: torch.Tensor, format_name: str, axis: int,
     raise ValueError(f"axis must be 0 or 1, got {axis}")
 
 
-def _quantize_fp4_axis_last(matrix: torch.Tensor, format_name: str,
-                             block_size: int = _BLOCK_SIZE
-                             ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+def _quantize_fp4_axis_last(
+    matrix: torch.Tensor, format_name: str, block_size: int = _BLOCK_SIZE
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     m, n = matrix.shape
     padded_n = ((n + block_size - 1) // block_size) * block_size
     num_blocks = padded_n // block_size
@@ -320,7 +328,10 @@ def _quantize_fp4_axis_last(matrix: torch.Tensor, format_name: str,
     blocks = padded.view(m, num_blocks, block_size)
     max_abs = blocks.abs().amax(dim=-1)
 
-    exp = torch.floor(torch.log2(torch.clamp(max_abs, min=_EPSILON))) - _FP4_FORMATS[format_name]["emax"]
+    exp = (
+        torch.floor(torch.log2(torch.clamp(max_abs, min=_EPSILON)))
+        - _FP4_FORMATS[format_name]["emax"]
+    )
     exp = torch.where(max_abs < _EPSILON, torch.zeros_like(exp), exp)
     exp = exp.clamp(_MIN_SCALE_EXP, _MAX_SCALE_EXP)
     scale = torch.pow(torch.tensor(2.0, dtype=torch.float32, device=matrix.device), exp)
@@ -337,24 +348,31 @@ def _quantize_fp4_axis_last(matrix: torch.Tensor, format_name: str,
 
     padded_blocks = ((num_blocks + 1) // 2) * 2
     if padded_blocks != num_blocks:
-        scale_padded = torch.ones((m, padded_blocks), dtype=torch.float32, device=matrix.device)
+        scale_padded = torch.ones(
+            (m, padded_blocks), dtype=torch.float32, device=matrix.device
+        )
         scale_padded[:, :num_blocks] = scale
         scale = scale_padded
 
     return quantized, scale, dequantized
 
 
-def _quantize_fp4_axis_first(matrix: torch.Tensor, format_name: str,
-                              block_size: int = _BLOCK_SIZE
-                              ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+def _quantize_fp4_axis_first(
+    matrix: torch.Tensor, format_name: str, block_size: int = _BLOCK_SIZE
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     quantized_t, scale_t, dequantized_t = _quantize_fp4_axis_last(
-        matrix.t().contiguous(), format_name, block_size)
-    return quantized_t.t().contiguous(), scale_t.t().contiguous(), dequantized_t.t().contiguous()
+        matrix.t().contiguous(), format_name, block_size
+    )
+    return (
+        quantized_t.t().contiguous(),
+        scale_t.t().contiguous(),
+        dequantized_t.t().contiguous(),
+    )
 
 
-def _quantize_fp4(matrix: torch.Tensor, format_name: str, axis: int,
-                   block_size: int = _BLOCK_SIZE
-                   ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+def _quantize_fp4(
+    matrix: torch.Tensor, format_name: str, axis: int, block_size: int = _BLOCK_SIZE
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     if axis == 0:
         return _quantize_fp4_axis_first(matrix, format_name, block_size)
     if axis == 1:
@@ -365,22 +383,28 @@ def _quantize_fp4(matrix: torch.Tensor, format_name: str, axis: int,
 def gen_data_fp8_e4m3(row, col, axis):
     matrix = torch.randn((row, col), dtype=torch.float32) * 10
     quant_fp8, scale_fp32, dequant_fp32 = _quantize_fp8(matrix, "E4M3", axis)
-    return (quant_fp8.to(torch.float8_e4m3fn),
-            scale_fp32.to(torch.float8_e8m0fnu),
-            dequant_fp32)
+    return (
+        quant_fp8.to(torch.float8_e4m3fn),
+        scale_fp32.to(torch.float8_e8m0fnu),
+        dequant_fp32,
+    )
 
 
 def gen_data_fp8_e5m2(row, col, axis):
     matrix = torch.randn((row, col), dtype=torch.float32)
     quant_fp8, scale_fp32, dequant_fp32 = _quantize_fp8(matrix, "E5M2", axis)
-    return (quant_fp8.to(torch.float8_e5m2),
-            scale_fp32.to(torch.float8_e8m0fnu),
-            dequant_fp32)
+    return (
+        quant_fp8.to(torch.float8_e5m2),
+        scale_fp32.to(torch.float8_e8m0fnu),
+        dequant_fp32,
+    )
 
 
 def gen_data_fp4_e2m1(row, col, axis, trans):
     matrix = torch.randn((row, col), dtype=torch.float32)
-    quantized_matrix, scale_matrix, dequantized_matrix = _quantize_fp4(matrix, "E2M1", axis)
+    quantized_matrix, scale_matrix, dequantized_matrix = _quantize_fp4(
+        matrix, "E2M1", axis
+    )
 
     if trans == 1:
         quantized_matrix = quantized_matrix.t().contiguous()
@@ -388,7 +412,11 @@ def gen_data_fp4_e2m1(row, col, axis, trans):
     _, fp4_indices = _quantize_to_fp4_lut(quantized_matrix, "E2M1")
     quantized_matrix_uint8 = _pack_fp4_nibbles(fp4_indices)
 
-    return quantized_matrix_uint8, scale_matrix.to(torch.float8_e8m0fnu), dequantized_matrix
+    return (
+        quantized_matrix_uint8,
+        scale_matrix.to(torch.float8_e8m0fnu),
+        dequantized_matrix,
+    )
 
 
 def gen_data(m, n, k, trans_a, trans_b) -> None:
@@ -417,8 +445,12 @@ def gen_data(m, n, k, trans_a, trans_b) -> None:
     a_np.tofile(os.path.join(input_dir, "a_8.bin"))
     b_np.tofile(os.path.join(input_dir, "b_4.bin"))
 
-    a_scale_np = torch.tensor(a_scale.flatten().untyped_storage(), dtype=torch.int8).numpy()
-    b_scale_np = torch.tensor(b_scale.flatten().untyped_storage(), dtype=torch.int8).numpy()
+    a_scale_np = torch.tensor(
+        a_scale.flatten().untyped_storage(), dtype=torch.int8
+    ).numpy()
+    b_scale_np = torch.tensor(
+        b_scale.flatten().untyped_storage(), dtype=torch.int8
+    ).numpy()
     a_scale_np.tofile(os.path.join(input_dir, "a_scale.bin"))
     b_scale_np.tofile(os.path.join(input_dir, "b_scale.bin"))
 

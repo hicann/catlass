@@ -27,46 +27,20 @@ namespace Catlass::Gemm::Block {
 #if (defined(CATLASS_ARCH) && CATLASS_ARCH == 3510)
 
 template <
-    class ArchTag_,
-    bool ENABLE_UNIT_FLAG_,
-    uint32_t L1_SCALE_FACTOR_K_,
-    uint32_t L0C_STAGES_,
-    bool ENABLE_L1_RESIDENT_,
-    uint32_t L1A_STAGES_,
-    uint32_t L1B_STAGES_,
-    uint32_t L0A_STAGES_,
-    uint32_t L0B_STAGES_,
-    class L1TileShape_,
-    class L0TileShape_,
-    class ElementA_,
-    class ElementB_,
-    class ElementC_,
-    class ElementBias_,
-    class TileCopy_,
+    class ArchTag_, bool ENABLE_UNIT_FLAG_, uint32_t L1_SCALE_FACTOR_K_, uint32_t L0C_STAGES_, bool ENABLE_L1_RESIDENT_,
+    uint32_t L1A_STAGES_, uint32_t L1B_STAGES_, uint32_t L0A_STAGES_, uint32_t L0B_STAGES_, class L1TileShape_,
+    class L0TileShape_, class ElementA_, class ElementB_, class ElementC_, class ElementBias_, class TileCopy_,
     class TileMmad_>
 struct BlockMmadTla<
-    MmadMx<ArchTag_, ENABLE_UNIT_FLAG_, L1_SCALE_FACTOR_K_, L0C_STAGES_, ENABLE_L1_RESIDENT_,
-        L1A_STAGES_, L1B_STAGES_, L0A_STAGES_, L0B_STAGES_>,
-    L1TileShape_,
-    L0TileShape_,
-    ElementA_,
-    ElementB_,
-    ElementC_,
-    ElementBias_,
-    TileCopy_,
-    TileMmad_> {
+    MmadMx<
+        ArchTag_, ENABLE_UNIT_FLAG_, L1_SCALE_FACTOR_K_, L0C_STAGES_, ENABLE_L1_RESIDENT_, L1A_STAGES_, L1B_STAGES_,
+        L0A_STAGES_, L0B_STAGES_>,
+    L1TileShape_, L0TileShape_, ElementA_, ElementB_, ElementC_, ElementBias_, TileCopy_, TileMmad_> {
 public:
     // Type Aliases
     using DispatchPolicy = MmadMx<
-        ArchTag_,
-        ENABLE_UNIT_FLAG_,
-        L1_SCALE_FACTOR_K_,
-        L0C_STAGES_,
-        ENABLE_L1_RESIDENT_,
-        L1A_STAGES_,
-        L1B_STAGES_,
-        L0A_STAGES_,
-        L0B_STAGES_>;
+        ArchTag_, ENABLE_UNIT_FLAG_, L1_SCALE_FACTOR_K_, L0C_STAGES_, ENABLE_L1_RESIDENT_, L1A_STAGES_, L1B_STAGES_,
+        L0A_STAGES_, L0B_STAGES_>;
     using ArchTag = typename DispatchPolicy::ArchTag;
     using TileCopy = TileCopy_;
     using L1TileShape = L1TileShape_;
@@ -100,17 +74,15 @@ public:
     using LayoutTagL0A = typename TileCopy::LayoutTagL0A;
     using LayoutTagL0B = typename TileCopy::LayoutTagL0B;
 
-    static constexpr bool NEED_PADZERO = std::is_same_v<LayoutTagL1A, layout::nZ> &&
-                                         std::is_same_v<LayoutTagL1B, layout::zN>;
+    static constexpr bool NEED_PADZERO =
+        std::is_same_v<LayoutTagL1A, layout::nZ> && std::is_same_v<LayoutTagL1B, layout::zN>;
 
     static_assert(
         tla::is_tuple<L1TileShape>::value && tla::is_static<L1TileShape>::value,
-        "L1TileShape must be tla::tuple and static!"
-    );
+        "L1TileShape must be tla::tuple and static!");
     static_assert(
         tla::is_tuple<L0TileShape>::value && tla::is_static<L0TileShape>::value,
-        "L0TileShape must be tla::tuple and static!"
-    );
+        "L0TileShape must be tla::tuple and static!");
 
     static constexpr bool ENABLE_UNIT_FLAG = DispatchPolicy::ENABLE_UNIT_FLAG;
     static constexpr bool ENABLE_L1_RESIDENT = DispatchPolicy::ENABLE_L1_RESIDENT;
@@ -131,10 +103,10 @@ public:
     // L1 tile size
     static constexpr uint32_t L1A_TILE_SIZE = L1_TILE_M * L1_TILE_K * SizeOfBits<ElementA>::value / 8;
     static constexpr uint32_t L1B_TILE_SIZE = L1_TILE_N * L1_TILE_K * SizeOfBits<ElementB>::value / 8;
-    static constexpr uint32_t L1SCALEA_TILE_SIZE = L1_TILE_M * L1_TILE_K / MX_SCALE_GROUP_NUM * sizeof(ElementMxScaleA) *
-        L1_SCALE_FACTOR_K;
-    static constexpr uint32_t L1SCALEB_TILE_SIZE = L1_TILE_N * L1_TILE_K / MX_SCALE_GROUP_NUM * sizeof(ElementMxScaleB) *
-        L1_SCALE_FACTOR_K;
+    static constexpr uint32_t L1SCALEA_TILE_SIZE =
+        L1_TILE_M * L1_TILE_K / MX_SCALE_GROUP_NUM * sizeof(ElementMxScaleA) * L1_SCALE_FACTOR_K;
+    static constexpr uint32_t L1SCALEB_TILE_SIZE =
+        L1_TILE_N * L1_TILE_K / MX_SCALE_GROUP_NUM * sizeof(ElementMxScaleB) * L1_SCALE_FACTOR_K;
     static constexpr uint32_t L1_USED_SIZE = L1A_TILE_SIZE * L1A_STAGES + L1B_TILE_SIZE * L1B_STAGES +
                                              L1SCALEA_TILE_SIZE * L1A_STAGES + L1SCALEB_TILE_SIZE * L1B_STAGES;
     // L0 tile size
@@ -151,14 +123,12 @@ public:
             ((std::is_same_v<ElementC, half> || std::is_same_v<ElementC, bfloat16_t> ||
               std::is_same_v<ElementC, float>) &&
              tla::detail::iszN<ElementC, LayoutC>::value),
-        "LayoutC only supports zN in half or bfloat16 or float, RowMajor in all dtype yet!"
-    );
+        "LayoutC only supports zN in half or bfloat16 or float, RowMajor in all dtype yet!");
 
     // Check L1TileShape::K and L0TileShape::K
     static_assert(
         L1_TILE_K % MX_BASEK_FACTOR == 0 && L0_TILE_K % MX_BASEK_FACTOR == 0,
-        "L1TileShape::K and L0TileShape::K must be multiples of 64!"
-    );
+        "L1TileShape::K and L0TileShape::K must be multiples of 64!");
 
     // Check L1TileShape
     static_assert(L1_USED_SIZE <= ArchTag::L1_SIZE, "L1TileShape exceeding the L1 space!");
@@ -170,33 +140,26 @@ public:
 
     static_assert(
         L1_TILE_M == L0_TILE_M && L1_TILE_N == L0_TILE_N,
-        "The situation where the basic blocks of L1 and L0 differ on the m and n axes is not supported yet"
-    );
+        "The situation where the basic blocks of L1 and L0 differ on the m and n axes is not supported yet");
     static_assert(L0_TILE_K <= L1_TILE_K, "L0TileShape::K cannot exceed L1TileShape::K");
     static_assert(L1_SCALE_FACTOR_K >= 1, "L1_SCALE_FACTOR_K must be >= 1");
 
     static_assert(
         (!HAS_BIAS && (L1A_STAGES + L1B_STAGES) <= 8) || (HAS_BIAS && (L1A_STAGES + L1B_STAGES) <= 7),
-        "L1 Buffer overflow: Exceeds the supported range of EVENT(0~7)"
-    );
+        "L1 Buffer overflow: Exceeds the supported range of EVENT(0~7)");
 
     static_assert(
         (!HAS_BIAS && (L0A_STAGES + L0B_STAGES) <= 8) || (HAS_BIAS && (L0A_STAGES + L0B_STAGES) <= 7),
-        "L0 Buffer overflow: Exceeds the supported range of EVENT_ID(0~7)"
-    );
+        "L0 Buffer overflow: Exceeds the supported range of EVENT_ID(0~7)");
 
     static constexpr auto L1A_LAYOUT =
         tla::MakeLayout<ElementA, LayoutTagL1A>(tla::Int<L1_TILE_M>{}, tla::Int<L1_TILE_K>{});
     static constexpr auto L1B_LAYOUT =
         tla::MakeLayout<ElementB, LayoutTagL1B>(tla::Int<L1_TILE_K>{}, tla::Int<L1_TILE_N>{});
     static constexpr auto L1SCALEA_LAYOUT = tla::MakeMxScaleLayout<ElementMxScaleA, LayoutTagL1MxScaleA, false>(
-        tla::Int<L1_TILE_M>{},
-        tla::Int<L1_TILE_K / MX_SCALE_GROUP_NUM * L1_SCALE_FACTOR_K>{}
-    );
+        tla::Int<L1_TILE_M>{}, tla::Int<L1_TILE_K / MX_SCALE_GROUP_NUM * L1_SCALE_FACTOR_K>{});
     static constexpr auto L1SCALEB_LAYOUT = tla::MakeMxScaleLayout<ElementMxScaleB, LayoutTagL1MxScaleB, true>(
-        tla::Int<L1_TILE_K / MX_SCALE_GROUP_NUM * L1_SCALE_FACTOR_K>{},
-        tla::Int<L1_TILE_N>{}
-    );
+        tla::Int<L1_TILE_K / MX_SCALE_GROUP_NUM * L1_SCALE_FACTOR_K>{}, tla::Int<L1_TILE_N>{});
     static constexpr auto L1BIAS_LAYOUT = tla::MakeLayout(tla::Int<L1_TILE_N>{});
     static constexpr auto L0BIAS_LAYOUT = tla::MakeLayout(tla::Int<L0_TILE_N>{});
 
@@ -220,7 +183,7 @@ public:
 
     /// Construct
     CATLASS_DEVICE
-    BlockMmadTla(Arch::Resource<ArchTag> &resource, uint32_t l1BufAddrStart = 0)
+    BlockMmadTla(Arch::Resource<ArchTag>& resource, uint32_t l1BufAddrStart = 0)
     {
         if constexpr (ENABLE_UNIT_FLAG && tla::detail::isRowMajor<LayoutC>::value) {
             AscendC::SetMMLayoutTransform(true);
@@ -323,27 +286,19 @@ public:
 
     /// Perform a block-scoped matrix multiply-accumulate
     template <
-        class TensorA,
-        class TensorB,
-        class TensorC,
-        class TensorMxScaleA = EmptyClass,
-        class TensorMxScaleB = EmptyClass,
-        class TensorBias = EmptyClass>
+        class TensorA, class TensorB, class TensorC, class TensorMxScaleA = EmptyClass,
+        class TensorMxScaleB = EmptyClass, class TensorBias = EmptyClass>
     CATLASS_DEVICE void operator()(
-        TensorA &tensorA,
-        TensorB &tensorB,
-        TensorC &tensorC,
-        GemmCoord const &actualShape,
-        TensorMxScaleA const &tensorMxScaleA = {},
-        TensorMxScaleB const &tensorMxScaleB = {},
-        TensorBias const &tensorBias = {}
-    )
+        TensorA& tensorA, TensorB& tensorB, TensorC& tensorC, GemmCoord const& actualShape,
+        TensorMxScaleA const& tensorMxScaleA = {}, TensorMxScaleB const& tensorMxScaleB = {},
+        TensorBias const& tensorBias = {})
     {
         // Check L1TileShape
         if constexpr (HAS_BIAS) {
             static constexpr uint32_t BIAS_BUF_SIZE = L0_TILE_N * sizeof(ElementAccumulator);
             static constexpr uint32_t L1BIAS_SIZE = L1_TILE_N * sizeof(ElementBias);
-            static_assert(BIAS_BUF_SIZE <= ArchTag::BIAS_SIZE, "BIAS_BUF_SIZE exceeding the BT space! Reduce L0_TILE_N");
+            static_assert(
+                BIAS_BUF_SIZE <= ArchTag::BIAS_SIZE, "BIAS_BUF_SIZE exceeding the BT space! Reduce L0_TILE_N");
             static_assert(L1_USED_SIZE + L1BIAS_SIZE <= ArchTag::L1_SIZE, "L1TileShape exceeding the L1 space!");
         }
 
@@ -391,9 +346,8 @@ public:
                 lastCoordA[l1AListId] = MatrixCoord{
                     static_cast<MatrixCoord::Index>(tla::get<0>(tensorTileA.coord())),
                     static_cast<MatrixCoord::Index>(tla::get<1>(tensorTileA.coord()))};
-                lastAddrA[l1AListId] = const_cast<__gm__ typename AscendC::GlobalTensor<ElementA>::PrimType *>(
-                    tensorTileA.data().GetPhyAddr()
-                );
+                lastAddrA[l1AListId] = const_cast<__gm__ typename AscendC::GlobalTensor<ElementA>::PrimType*>(
+                    tensorTileA.data().GetPhyAddr());
             }
         } else {
             copyGmToL1A(tensorL1A, tensorTileA);
@@ -403,10 +357,11 @@ public:
         InitZeroInL1A(tensorL1A, tla::MakeShape(mL1Actual, kL1Actual));
 
         // load mxScaleA tile from GM to L1 (up to L1_SCALE_FACTOR_K L1 K strips per GM fetch)
-        auto tensorL1MxScaleA = tla::MakeTensor(l1MxScaleATensorList[l1MxScaleAListId], L1SCALEA_LAYOUT, Arch::PositionL1{});
+        auto tensorL1MxScaleA =
+            tla::MakeTensor(l1MxScaleATensorList[l1MxScaleAListId], L1SCALEA_LAYOUT, Arch::PositionL1{});
         auto tensorTileMxScaleA = GetTile(
-            tensorMxScaleA, tla::MakeCoord(0, 0), tla::MakeShape(mBlockActual, CeilDiv<MX_SCALE_GROUP_NUM>(kL1ScaleActual))
-        );
+            tensorMxScaleA, tla::MakeCoord(0, 0),
+            tla::MakeShape(mBlockActual, CeilDiv<MX_SCALE_GROUP_NUM>(kL1ScaleActual)));
         copyGmToL1MxScaleA(tensorL1MxScaleA, tensorTileMxScaleA);
 
         AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1AListId]);
@@ -423,9 +378,8 @@ public:
                 lastCoordB[l1BListId] = MatrixCoord{
                     static_cast<MatrixCoord::Index>(tla::get<0>(tensorTileB.coord())),
                     static_cast<MatrixCoord::Index>(tla::get<1>(tensorTileB.coord()))};
-                lastAddrB[l1BListId] = const_cast<__gm__ typename AscendC::GlobalTensor<ElementB>::PrimType *>(
-                    tensorTileB.data().GetPhyAddr()
-                );
+                lastAddrB[l1BListId] = const_cast<__gm__ typename AscendC::GlobalTensor<ElementB>::PrimType*>(
+                    tensorTileB.data().GetPhyAddr());
             }
         } else {
             copyGmToL1B(tensorL1B, tensorTileB);
@@ -435,10 +389,11 @@ public:
         InitZeroInL1B(tensorL1B, tla::MakeShape(kL1Actual, nL1Actual));
 
         // load mxScaleB tile from GM to L1
-        auto tensorL1MxScaleB = tla::MakeTensor(l1MxScaleBTensorList[l1MxScaleBListId], L1SCALEB_LAYOUT, Arch::PositionL1{});
+        auto tensorL1MxScaleB =
+            tla::MakeTensor(l1MxScaleBTensorList[l1MxScaleBListId], L1SCALEB_LAYOUT, Arch::PositionL1{});
         auto tensorTileMxScaleB = GetTile(
-            tensorMxScaleB, tla::MakeCoord(0, 0), tla::MakeShape(CeilDiv<MX_SCALE_GROUP_NUM>(kL1ScaleActual), nBlockActual)
-        );
+            tensorMxScaleB, tla::MakeCoord(0, 0),
+            tla::MakeShape(CeilDiv<MX_SCALE_GROUP_NUM>(kL1ScaleActual), nBlockActual));
         copyGmToL1MxScaleB(tensorL1MxScaleB, tensorTileMxScaleB);
 
         AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1BListId]);
@@ -464,10 +419,8 @@ public:
         for (uint32_t kL1Idx = 0; kL1Idx < kL1Loop; kL1Idx++) {
             uint32_t l1AListIdNext = (l1AListId + 1 < L1A_STAGES) ? (l1AListId + 1) : 0;
             uint32_t l1BListIdNext = (l1BListId + 1 < L1B_STAGES) ? (l1BListId + 1) : 0;
-            uint32_t l1MxScaleAListIdNext =
-                (l1MxScaleAListId + 1 < L1A_STAGES) ? (l1MxScaleAListId + 1) : 0;
-            uint32_t l1MxScaleBListIdNext =
-                (l1MxScaleBListId + 1 < L1B_STAGES) ? (l1MxScaleBListId + 1) : 0;
+            uint32_t l1MxScaleAListIdNext = (l1MxScaleAListId + 1 < L1A_STAGES) ? (l1MxScaleAListId + 1) : 0;
+            uint32_t l1MxScaleBListIdNext = (l1MxScaleBListId + 1 < L1B_STAGES) ? (l1MxScaleBListId + 1) : 0;
             uint32_t kL1ActualNext{0};
             // preload next tile from GM to L1
             if (kL1Idx < kL1Loop - 1) {
@@ -481,11 +434,9 @@ public:
                 auto tensorL1B = tla::MakeTensor(l1BTensor, L1B_LAYOUT, Arch::PositionL1{});
                 // Get GM tile for next stage
                 auto tensorTileA = GetTile(
-                    tensorA, tla::MakeCoord(0, kL1IdxNext * L1_TILE_K), tla::MakeShape(mBlockActual, kL1ActualNext)
-                );
+                    tensorA, tla::MakeCoord(0, kL1IdxNext * L1_TILE_K), tla::MakeShape(mBlockActual, kL1ActualNext));
                 auto tensorTileB = GetTile(
-                    tensorB, tla::MakeCoord(kL1IdxNext * L1_TILE_K, 0), tla::MakeShape(kL1ActualNext, nBlockActual)
-                );
+                    tensorB, tla::MakeCoord(kL1IdxNext * L1_TILE_K, 0), tla::MakeShape(kL1ActualNext, nBlockActual));
 
                 // load next matrix A tile from GM to L1
                 AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1AListIdNext]);
@@ -498,9 +449,8 @@ public:
                             static_cast<MatrixCoord::Index>(tla::get<0>(tensorTileA.coord())),
                             static_cast<MatrixCoord::Index>(tla::get<1>(tensorTileA.coord()))};
                         lastAddrA[l1AListIdNext] =
-                            const_cast<__gm__ typename AscendC::GlobalTensor<ElementA>::PrimType *>(
-                                tensorTileA.data().GetPhyAddr()
-                            );
+                            const_cast<__gm__ typename AscendC::GlobalTensor<ElementA>::PrimType*>(
+                                tensorTileA.data().GetPhyAddr());
                     }
                 } else {
                     copyGmToL1A(tensorL1A, tensorTileA);
@@ -511,16 +461,14 @@ public:
 
                 if (kL1IdxNext % L1_SCALE_FACTOR_K == 0) {
                     uint32_t kL1ScaleIdxNext = kL1IdxNext / L1_SCALE_FACTOR_K;
-                    uint32_t kL1MxScaleActualNext = (kL1ScaleIdxNext < kL1ScaleLoop - 1)
-                        ? l1ScaleTileK
-                        : (kBlockActual - kL1ScaleIdxNext * l1ScaleTileK);
-                    auto tensorL1MxScaleA_pre =
-                        tla::MakeTensor(l1MxScaleATensorList[l1MxScaleAListIdNext], L1SCALEA_LAYOUT, Arch::PositionL1{});
+                    uint32_t kL1MxScaleActualNext = (kL1ScaleIdxNext < kL1ScaleLoop - 1) ?
+                                                        l1ScaleTileK :
+                                                        (kBlockActual - kL1ScaleIdxNext * l1ScaleTileK);
+                    auto tensorL1MxScaleA_pre = tla::MakeTensor(
+                        l1MxScaleATensorList[l1MxScaleAListIdNext], L1SCALEA_LAYOUT, Arch::PositionL1{});
                     auto tensorTileMxScaleA = GetTile(
-                        tensorMxScaleA,
-                        tla::MakeCoord(0, kL1ScaleIdxNext * l1ScaleTileK / MX_SCALE_GROUP_NUM),
-                        tla::MakeShape(mBlockActual, CeilDiv<MX_SCALE_GROUP_NUM>(kL1MxScaleActualNext))
-                    );
+                        tensorMxScaleA, tla::MakeCoord(0, kL1ScaleIdxNext * l1ScaleTileK / MX_SCALE_GROUP_NUM),
+                        tla::MakeShape(mBlockActual, CeilDiv<MX_SCALE_GROUP_NUM>(kL1MxScaleActualNext)));
                     copyGmToL1MxScaleA(tensorL1MxScaleA_pre, tensorTileMxScaleA);
                 }
 
@@ -537,9 +485,8 @@ public:
                             static_cast<MatrixCoord::Index>(tla::get<0>(tensorTileB.coord())),
                             static_cast<MatrixCoord::Index>(tla::get<1>(tensorTileB.coord()))};
                         lastAddrB[l1BListIdNext] =
-                            const_cast<__gm__ typename AscendC::GlobalTensor<ElementB>::PrimType *>(
-                                tensorTileB.data().GetPhyAddr()
-                            );
+                            const_cast<__gm__ typename AscendC::GlobalTensor<ElementB>::PrimType*>(
+                                tensorTileB.data().GetPhyAddr());
                     }
                 } else {
                     copyGmToL1B(tensorL1B, tensorTileB);
@@ -550,16 +497,14 @@ public:
 
                 if (kL1IdxNext % L1_SCALE_FACTOR_K == 0) {
                     uint32_t kL1ScaleIdxNext = kL1IdxNext / L1_SCALE_FACTOR_K;
-                    uint32_t kL1MxScaleActualNext = (kL1ScaleIdxNext < kL1ScaleLoop - 1)
-                        ? l1ScaleTileK
-                        : (kBlockActual - kL1ScaleIdxNext * l1ScaleTileK);
-                    auto tensorL1MxScaleB_pre =
-                        tla::MakeTensor(l1MxScaleBTensorList[l1MxScaleBListIdNext], L1SCALEB_LAYOUT, Arch::PositionL1{});
+                    uint32_t kL1MxScaleActualNext = (kL1ScaleIdxNext < kL1ScaleLoop - 1) ?
+                                                        l1ScaleTileK :
+                                                        (kBlockActual - kL1ScaleIdxNext * l1ScaleTileK);
+                    auto tensorL1MxScaleB_pre = tla::MakeTensor(
+                        l1MxScaleBTensorList[l1MxScaleBListIdNext], L1SCALEB_LAYOUT, Arch::PositionL1{});
                     auto tensorTileMxScaleB = GetTile(
-                        tensorMxScaleB,
-                        tla::MakeCoord(kL1ScaleIdxNext * l1ScaleTileK / MX_SCALE_GROUP_NUM, 0),
-                        tla::MakeShape(CeilDiv<MX_SCALE_GROUP_NUM>(kL1MxScaleActualNext), nBlockActual)
-                    );
+                        tensorMxScaleB, tla::MakeCoord(kL1ScaleIdxNext * l1ScaleTileK / MX_SCALE_GROUP_NUM, 0),
+                        tla::MakeShape(CeilDiv<MX_SCALE_GROUP_NUM>(kL1MxScaleActualNext), nBlockActual));
                     copyGmToL1MxScaleB(tensorL1MxScaleB_pre, tensorTileMxScaleB);
                 }
 
@@ -591,10 +536,8 @@ public:
                     GetTile(tensorL1A, tla::MakeCoord(0, kL0Idx * L0_TILE_K), tla::MakeShape(mL1Actual, kL0Actual));
                 // Locate the current tile of matrix mxScaleA on L1
                 auto tensorTileL1MxScaleA = GetTile(
-                    tensorL1MxScaleA,
-                    tla::MakeCoord(0, (l0kOffset + kL0Idx * L0_TILE_K) / MX_SCALE_GROUP_NUM),
-                    tla::MakeShape(mL1Actual, CeilDiv<MX_SCALE_GROUP_NUM>(kL0Actual))
-                );
+                    tensorL1MxScaleA, tla::MakeCoord(0, (l0kOffset + kL0Idx * L0_TILE_K) / MX_SCALE_GROUP_NUM),
+                    tla::MakeShape(mL1Actual, CeilDiv<MX_SCALE_GROUP_NUM>(kL0Actual)));
 
                 AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[l0AListId]);
                 if (kL0Idx == 0) {
@@ -616,10 +559,8 @@ public:
                     GetTile(tensorL1B, tla::MakeCoord(kL0Idx * L0_TILE_K, 0), tla::MakeShape(kL0Actual, nL1Actual));
                 // Locate the current tile of matrix mxScaleB on L1
                 auto tensorTileL1MxScaleB = GetTile(
-                    tensorL1MxScaleB,
-                    tla::MakeCoord((l0kOffset + kL0Idx * L0_TILE_K) / MX_SCALE_GROUP_NUM, 0),
-                    tla::MakeShape(CeilDiv<MX_SCALE_GROUP_NUM>(kL0Actual), nL1Actual)
-                );
+                    tensorL1MxScaleB, tla::MakeCoord((l0kOffset + kL0Idx * L0_TILE_K) / MX_SCALE_GROUP_NUM, 0),
+                    tla::MakeShape(CeilDiv<MX_SCALE_GROUP_NUM>(kL0Actual), nL1Actual));
 
                 // Wait for mmad finished
                 AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[l0BListId]);
@@ -668,8 +609,7 @@ public:
                     if (initC) {
                         tileMmad(
                             tensorL0C, tensorL0A, tensorL0B, tensorL0Bias, mL1Actual, nL1Actual, kL0Actual, initC,
-                            unitFlag
-                        );
+                            unitFlag);
                         AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(L0A_STAGES + L0B_STAGES);
                     } else {
                         tileMmad(tensorL0C, tensorL0A, tensorL0B, mL1Actual, nL1Actual, kL0Actual, initC, unitFlag);
@@ -708,7 +648,7 @@ public:
 
 protected:
     template <class TensorL1, class Shape>
-    CATLASS_DEVICE void InitZeroInL1A(TensorL1 &tensorL1, Shape actualShape)
+    CATLASS_DEVICE void InitZeroInL1A(TensorL1& tensorL1, Shape actualShape)
     {
         constexpr uint32_t ELE_NUM_PER_C0 = BytesToBits(BYTE_PER_C0) / SizeOfBits<typename TensorL1::Element>::value;
         const uint32_t mL1Actual = tla::get<0>(actualShape);
@@ -742,7 +682,7 @@ protected:
     }
 
     template <class TensorL1, class Shape>
-    CATLASS_DEVICE void InitZeroInL1B(TensorL1 &tensorL1, Shape actualShape)
+    CATLASS_DEVICE void InitZeroInL1B(TensorL1& tensorL1, Shape actualShape)
     {
         constexpr uint32_t ELE_NUM_PER_C0 = BytesToBits(BYTE_PER_C0) / SizeOfBits<typename TensorL1::Element>::value;
         const uint32_t kL1Actual = tla::get<0>(actualShape);
@@ -793,8 +733,8 @@ protected:
     int32_t l0BEventList[L0B_STAGES];
     int32_t l0CEventList[L0C_STAGES];
 
-    __gm__ typename AscendC::GlobalTensor<ElementA>::PrimType *lastAddrA[L1A_STAGES];
-    __gm__ typename AscendC::GlobalTensor<ElementB>::PrimType *lastAddrB[L1B_STAGES];
+    __gm__ typename AscendC::GlobalTensor<ElementA>::PrimType* lastAddrA[L1A_STAGES];
+    __gm__ typename AscendC::GlobalTensor<ElementB>::PrimType* lastAddrB[L1B_STAGES];
     MatrixCoord lastCoordA[L1A_STAGES];
     MatrixCoord lastCoordB[L1B_STAGES];
 

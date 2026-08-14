@@ -14,8 +14,8 @@ import ctypes
 import os
 import sysconfig
 
-import torch
-import torch_npu
+import torch  # noqa: F401
+import torch_npu  # noqa: F401
 
 __all__ = []
 
@@ -39,4 +39,4 @@ def _load_depend_libs():
 
 _load_depend_libs()
 
-from torch_catlass._C import *
+from torch_catlass._C import *  # noqa: E402, F403

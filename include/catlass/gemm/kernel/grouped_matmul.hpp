@@ -22,22 +22,17 @@ namespace Catlass::Gemm::Kernel {
 namespace detail {
 
 template <class T>
-CATLASS_DEVICE
-void UnpackListParam(T *const dst, GM_ADDR src, uint32_t len)
+CATLASS_DEVICE void UnpackListParam(T* const dst, GM_ADDR src, uint32_t len)
 {
     for (uint32_t i = 0; i * sizeof(uint64_t) < len * sizeof(T); ++i) {
-        reinterpret_cast<uint64_t *>(dst)[i] = reinterpret_cast<__gm__ uint64_t *>(src)[i];
+        reinterpret_cast<uint64_t*>(dst)[i] = reinterpret_cast<__gm__ uint64_t*>(src)[i];
     }
 }
 
-}  // namespace detail
+} // namespace detail
 
 // Template for grouped matmul kernel. Compute grouped C = A * B
-template <
-    class BlockMmad_,
-    class BlockEpilogue_,
-    class BlockScheduler_
->
+template <class BlockMmad_, class BlockEpilogue_, class BlockScheduler_>
 class GroupedMatmul {
 public:
     using BlockMmad = BlockMmad_;
@@ -68,68 +63,66 @@ public:
 
         // Methods
         CATLASS_HOST_DEVICE
-        Params() {}
+        Params()
+        {}
 
         CATLASS_HOST_DEVICE
         Params(
-            uint32_t problemCount_, GM_ADDR ptrProblemShape_,
-            GM_ADDR ptrA_, GM_ADDR ptrLayoutA_,
-            GM_ADDR ptrB_, GM_ADDR ptrLayoutB_,
-            GM_ADDR ptrC_, GM_ADDR ptrLayoutC_
-        ) : problemCount(problemCount_), ptrProblemShape(ptrProblemShape_),
-            ptrA(ptrA_), ptrLayoutA(ptrLayoutA_),
-            ptrB(ptrB_), ptrLayoutB(ptrLayoutB_),
-            ptrC(ptrC_), ptrLayoutC(ptrLayoutC_)
-        {
-        }
+            uint32_t problemCount_, GM_ADDR ptrProblemShape_, GM_ADDR ptrA_, GM_ADDR ptrLayoutA_, GM_ADDR ptrB_,
+            GM_ADDR ptrLayoutB_, GM_ADDR ptrC_, GM_ADDR ptrLayoutC_)
+            : problemCount(problemCount_),
+              ptrProblemShape(ptrProblemShape_),
+              ptrA(ptrA_),
+              ptrLayoutA(ptrLayoutA_),
+              ptrB(ptrB_),
+              ptrLayoutB(ptrLayoutB_),
+              ptrC(ptrC_),
+              ptrLayoutC(ptrLayoutC_)
+        {}
     };
 
-    struct Arguments{
+    struct Arguments {
         uint32_t problemCount;
-        uint8_t *ptrProblemShape;
-        uint8_t *ptrA;
-        uint8_t *ptrLayoutA;
-        uint8_t *ptrB;
-        uint8_t *ptrLayoutB;
-        uint8_t *ptrC;
-        uint8_t *ptrLayoutC;
+        uint8_t* ptrProblemShape;
+        uint8_t* ptrA;
+        uint8_t* ptrLayoutA;
+        uint8_t* ptrB;
+        uint8_t* ptrLayoutB;
+        uint8_t* ptrC;
+        uint8_t* ptrLayoutC;
     };
-    static bool CanImplement(const Arguments &args)
+    static bool CanImplement(const Arguments& args)
     {
         if (args.problemCount > MAX_TENSOR_COUNT) {
             return false;
         }
         return true;
     }
-    static size_t GetWorkspaceSize(const Arguments &args)
+    static size_t GetWorkspaceSize(const Arguments& args)
     {
         return 0;
     }
-    static Params ToUnderlyingArguments(const Arguments &args, void* workspace)
+    static Params ToUnderlyingArguments(const Arguments& args, void* workspace)
     {
-        Params params{
-            args.problemCount,
-            args.ptrProblemShape,
-            args.ptrA, args.ptrLayoutA,
-            args.ptrB, args.ptrLayoutB,
-            args.ptrC, args.ptrLayoutC};
+        Params params{args.problemCount, args.ptrProblemShape, args.ptrA, args.ptrLayoutA,
+                      args.ptrB,         args.ptrLayoutB,      args.ptrC, args.ptrLayoutC};
         return params;
     }
 
     // Methods
     CATLASS_HOST_DEVICE
-    GroupedMatmul() {}
+    GroupedMatmul()
+    {}
     CATLASS_HOST_DEVICE
-    ~GroupedMatmul() {}
+    ~GroupedMatmul()
+    {}
 
     template <int32_t CORE_TYPE = g_coreType>
-    CATLASS_DEVICE
-    void operator()(Params const &params);
+    CATLASS_DEVICE void operator()(Params const& params);
 
     /// Executes matmul
     template <>
-    CATLASS_DEVICE
-    void operator()<AscendC::AIC>(Params const &params)
+    CATLASS_DEVICE void operator()<AscendC::AIC>(Params const& params)
     {
         GemmCoord problemShapeList[MAX_TENSOR_COUNT];
         LayoutA layoutAList[MAX_TENSOR_COUNT];
@@ -148,11 +141,11 @@ public:
 
         // Represent the full gm
         AscendC::GlobalTensor<ElementA> gmA;
-        gmA.SetGlobalBuffer((__gm__ ElementA *)params.ptrA);
+        gmA.SetGlobalBuffer((__gm__ ElementA*)params.ptrA);
         AscendC::GlobalTensor<ElementB> gmB;
-        gmB.SetGlobalBuffer((__gm__ ElementB *)params.ptrB);
+        gmB.SetGlobalBuffer((__gm__ ElementB*)params.ptrB);
         AscendC::GlobalTensor<ElementC> gmC;
-        gmC.SetGlobalBuffer((__gm__ ElementC *)params.ptrC);
+        gmC.SetGlobalBuffer((__gm__ ElementC*)params.ptrC);
 
         uint32_t coreIdx = AscendC::GetBlockIdx();
         uint32_t coreNum = AscendC::GetBlockNum();
@@ -193,10 +186,8 @@ public:
 
                 // Compute block-scoped matrix multiply-add
                 blockMmad(
-                    gmA[inGroupOffsetA + gmOffsetA], layoutA,
-                    gmB[inGroupOffsetB + gmOffsetB], layoutB,
-                    gmC[inGroupOffsetC + gmOffsetC], layoutC,
-                    actualBlockShape);
+                    gmA[inGroupOffsetA + gmOffsetA], layoutA, gmB[inGroupOffsetB + gmOffsetB], layoutB,
+                    gmC[inGroupOffsetC + gmOffsetC], layoutC, actualBlockShape);
             }
 
             inGroupOffsetA += static_cast<int64_t>(problemShape.m()) * problemShape.k();
@@ -214,8 +205,8 @@ public:
     }
 
     template <>
-    CATLASS_DEVICE
-    void operator()<AscendC::AIV>(Params const &params) {}
+    CATLASS_DEVICE void operator()<AscendC::AIV>(Params const& params)
+    {}
 };
 
 } // namespace Catlass::Gemm::Kernel

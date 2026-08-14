@@ -77,6 +77,8 @@ else()
     separate_arguments(CATLASS_ARCH_LIST UNIX_COMMAND "${_CATLASS_ARCH_STR}")
 endif()
 
+option(DISABLE_ASCEND950 "Disable Ascend 950 support (ENABLE_ASCEND950=0)" OFF)
+
 # ===================================================================
 # Version 由 Python 侧 torch_catlass/_version.py 自动从 git 推导，
 # 通过环境变量 TORCH_CATLASS_VERSION 注入到 JIT 编译器。

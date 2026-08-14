@@ -48,7 +48,7 @@ $$
 在本样例的实现中，Quant(R) 采用标准的量化实现，scale的计算
 
 $$
-scaleR = 2 ** (log_{2} (abs(R))) - emax
+scaleR = 2 ** (log_{2} (abs(R)) - emax)
 $$
 
 在本算子的实现中, Quant(X')的scale用如下公式计算
@@ -57,18 +57,19 @@ $$
 scaleX = 2 ** (log_{2} (abs(X') / qmax))
 $$
 
-其中qamx是外部传入的参数，后续不用像标准实现一样减去emax。
+其中qmax是外部传入的参数，后续不用像标准实现一样减去emax。
 
 SvdQuant更多细节参考[SvdQuant论文](https://arxiv.org/abs/2411.05007)
 
-## 输入输出tensor
+## 输入输出
 
-- 样例中的shape参数分别为 `m, n, k, r`，shape参数的约束如下：
+- 样例中的shape参数分别为 `m, n, k, r`，量化参数`qmax`，约束如下：
 
 | shape | 约束                                                                    |
 | ----- | ----------------------------------------------------------------------- |
 | m,n,k | 无限制                                                                  |
 | r     | 典型值16/32/64，算子实现要求 r<=BlockMmad1::L1_TILE_N, 现有配置即r<=128 |
+| qmax  | 取值范围[6.0, 12.0], 典型值 8.0                                         |
 
 涉及的算子输入如下：
 
@@ -105,18 +106,19 @@ SvdQuant更多细节参考[SvdQuant论文](https://arxiv.org/abs/2411.05007)
 
 ## 代码组织
 
-```
-examples
-├── 61_ascend950_svd_quant_matmul
-│   ├── CMakeLists.txt     # CMake编译文件
-│   ├── README.md
-│   ├── svd_quant_matmul.cpp    # 调用样例
-│   └── gen_data.py             # 数据生成脚本
+```text
+experimental
+├── matmul
+│   ├── 61_ascend950_svd_quant_matmul
+│   │   ├── CMakeLists.txt     # CMake编译文件
+│   │   ├── README.md
+│   │   ├── svd_quant_matmul.cpp    # 调用样例
+│   │   └── gen_data.py             # 数据生成脚本
 ```
 
 ## 编译及运行
 
-- 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/zh/1_Practice/01_quick_start.md#编译执行)，本用例为 Ascend950（3510）算子，编译时需加 `-DCATLASS_ARCH=3510`。
+- 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../../docs/zh/1_Practice/01_quick_start.md#编译执行)，本用例为 Ascend950（3510）算子，编译时需加 `-DCATLASS_ARCH=3510`。
 
 ```shell
 # 编译指定用例
@@ -133,7 +135,7 @@ python examples/61_ascend950_svd_quant_matmul/gen_data.py 256 256 512 32
 
 执行结果如下，说明精度比对成功。
 
-```
+```bash
 Compare success.
 ```
 
@@ -165,7 +167,7 @@ options:
 
 3个DispatchPolicy参数顺序与默认值如下：
 
-1. `Gemm::MmadSvd1`
+1、`Gemm::MmadSvd1`
 
 | 模板参数             | 默认值  | 参数说明                                                                     |
 | -------------------- | ------- | ---------------------------------------------------------------------------- |
@@ -178,7 +180,7 @@ options:
 | `L0A_STAGES`         | `2`     | L0 上加载矩阵 A 的 buffer 数量                                               |
 | `L0B_STAGES`         | `2`     | L0 上加载矩阵 B 的 buffer 数量                                               |
 
-2. `Gemm::MmadSvd2`
+2、`Gemm::MmadSvd2`
 
 | 模板参数           | 默认值  | 参数说明                                                                     |
 | ------------------ | ------- | ---------------------------------------------------------------------------- |
@@ -190,7 +192,7 @@ options:
 | `L0A_STAGES`       | `2`     | L0 上加载矩阵 A 的 buffer 数量                                               |
 | `L0B_STAGES`       | `2`     | L0 上加载矩阵 B 的 buffer 数量                                               |
 
-3. `Gemm::MmadSvd3`
+3、`Gemm::MmadSvd3`
 
 | 模板参数            | 默认值  | 参数说明                                                                                                            |
 | ------------------- | ------- | ------------------------------------------------------------------------------------------------------------------- |
@@ -258,7 +260,7 @@ struct TilingTag2Config<SvdQuantTilingTag::Small> {
 
 ### Mmad2+Mmad3 部分的负载均衡优化
 
-Mmad2的problemShape为`{m, n, r}`，输入类型为`fp16/bf161`，Mmad3的problemShape为`{m, n, k}`， 输入类型为mxfp4，输出的shape是一样的，可以共用BlockSwizzle进行任务划分。
+Mmad2的problemShape为`{m, n, r}`，输入类型为`fp16/bf16`，Mmad3的problemShape为`{m, n, k}`， 输入类型为mxfp4，输出的shape是一样的，可以共用BlockSwizzle进行任务划分。
 kernel层伪代码如下
 
 ```cpp

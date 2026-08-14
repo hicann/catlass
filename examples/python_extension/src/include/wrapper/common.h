@@ -19,19 +19,20 @@
 #include <torch_npu/csrc/core/npu/NPUStream.h>
 
 namespace CatlassKernelWrapper {
-torch::Tensor GetOutputTensor(const std::vector<int64_t> &shape, const torch::Dtype dtype);
-torch::Dtype TypeStrToTorchDtype(const std::string &typeStr);
-aclDataType TypeStrToAclDtype(const std::string &typeStr);
+torch::Tensor GetOutputTensor(const std::vector<int64_t>& shape, const torch::Dtype dtype);
+torch::Dtype TypeStrToTorchDtype(const std::string& typeStr);
+aclDataType TypeStrToAclDtype(const std::string& typeStr);
 torch::Dtype AclDtypeToTorchDtype(const aclDataType aclDtype);
 aclDataType TorchDtypeToAclDtype(const torch::Dtype torchDtype);
 
-enum class TransposeStatus : uint32_t {
+enum class TransposeStatus : uint32_t
+{
     NO_TRANSPOSE = 0,
     TRANSPOSE = 1,
     NON_CONTINUOUS = 2
 };
 
-TransposeStatus GetTransposeStatus(const at::Tensor &mat);
+TransposeStatus GetTransposeStatus(const at::Tensor& mat);
 } // namespace CatlassKernelWrapper
 
 #endif

@@ -360,6 +360,29 @@ class CatlassExampleTest(unittest.TestCase):
             self._ret_check(ret)
 
     @only_on_3510
+    def test_55_ascend950_mx_grouped_matmul_slice_m_aswt_fp4_odd_n_transb(self):
+        case_py = [str(i) for i in [2, 588, 989, 1030, 1]] + [
+            "float4_e2m1fn_x2",
+            "0",
+            "--bin",
+            "55_ascend950_mx_grouped_matmul_slice_m_aswt",
+        ]
+        ret = subprocess.run(
+            [
+                "python",
+                os.path.join(
+                    CMAKE_EXAMPLES_PATH,
+                    "55_ascend950_mx_grouped_matmul_slice_m",
+                    "gen_data_compare.py",
+                ),
+            ] + case_py,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        self._ret_check(ret)
+        self.assertIn("Compare success", ret.stdout.decode())
+
+    @only_on_3510
     def test_57_ascend950_matmul_full_dequant(self):
         case_py = ["--shape"] + ["513 513 513"] + ["--x1_quant_mode"] + ["per_token"] + ["--x2_quant_mode"] + ["per_channel"]
         subprocess.run(
@@ -409,15 +432,6 @@ class CatlassExampleTest(unittest.TestCase):
             stderr=subprocess.PIPE,
             )
         self._ret_check(ret)
-    
-    @only_on_3510
-    def test_72_ascend950_fp8_mx_flash_attention_infer(self):
-        case_py = [str(i) for i in [1, 138, 128, 4, 2, 128, 0, 0, 0]] + ["half", "1"]
-        ret = subprocess.run(["python", os.path.join(
-            CMAKE_EXAMPLES_PATH, "72_ascend950_fp8_mx_flash_attention_infer", "gen_data.py")] + case_py)
-        case_cpp = [str(i) for i in [1, 138, 128, 4, 2, 128, 0, 0, 0, 1]] + ["--dtype", "half", "--device", "1",
-            "--datapath", os.path.join(CMAKE_EXAMPLES_PATH, "72_ascend950_fp8_mx_flash_attention_infer", "data")]
-        self.run_case("72_ascend950_fp8_mx_flash_attention_infer", case_cpp)
 
     @only_on_3510
     def test_70_ascend950_flash_attention_chunk_prefill(self):
@@ -427,6 +441,37 @@ class CatlassExampleTest(unittest.TestCase):
         case_cpp = [str(i) for i in [1, 100, 138, 8, 1, 128, 128, 0, 2, 128]] + ["--dtype", "half", "--cache_layout", "nd","--device", "1",
         "--datapath", os.path.join(CMAKE_EXAMPLES_PATH, "70_ascend950_flash_attention_chunk_prefill", "data")]
         self.run_case("70_ascend950_flash_attention_chunk_prefill", case_cpp)
+
+    @only_on_3510
+    def test_74_ascend950_weight_quant_a8w4_grouped_mx_matmul(self):
+        case_py = [
+            "expect_m_per_group",
+            "48",
+            "64",
+            "3072",
+            "2048",
+            "4096",
+            "1",
+        ]
+        ret = subprocess.run(
+            [
+                "python3",
+                os.path.join(
+                    CMAKE_EXAMPLES_PATH,
+                    "74_ascend950_weight_quant_a8w4_grouped_mx_matmul",
+                    "gen_data.py",
+                ),
+            ]
+            + case_py,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        self._ret_check(ret)
+
+        case_cpp = ["48", "3072", "2048", "4096", "0"]
+        self.run_case(
+            "74_ascend950_weight_quant_a8w4_grouped_mx_matmul", case_cpp
+        )
 
 normal_cases_2201 = [
     "00_basic_matmul 256 512 1024 0",
@@ -485,7 +530,7 @@ normal_cases_3510 = [
     "64_ascend950_matmul_evg_bias 256 512 1024 0",
     "64_ascend950_matmul_evg_add_ub 256 512 1024 0",
     "68_ascend950_multi_core_splitk_matmul 256 512 1024 0",
-    "69_ascend950_tail_multi_core_splitk_matmul 256 512 1024 0",
+    "69_ascend950_tail_multi_core_splitk_matmul 256 512 1024 0"
 ]
 
 

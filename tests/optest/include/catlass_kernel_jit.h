@@ -116,6 +116,26 @@ struct GemmParams : public MatmulParams {
 };
 
 /**
+ * @brief Runtime parameters for example 76_trmm.
+ */
+struct TrmmParams : public MatmulParams {
+    uint32_t side = 0;  ///< 0: left triangular input, 1: right triangular input.
+    uint32_t uplo = 0;  ///< 0: lower triangular, 1: upper triangular.
+    uint32_t trans = 0; ///< 0: no transpose, 1: transpose triangular input.
+    uint32_t diag = 0;  ///< 0: non-unit diagonal. Unit diagonal is not supported by the kernel.
+    float alpha = 1.0f; ///< Output scaling factor.
+};
+
+/**
+ * @brief Runtime parameters for example 75_symm.
+ */
+struct SymmParams : public MatmulParams {
+    uint32_t side = 0;  ///< 0: left symmetric input, 1: right symmetric input.
+    uint32_t uplo = 0;  ///< 0: lower triangle is stored, 1: upper triangle is stored.
+    float alpha = 1.0f; ///< Reserved for API parity. The current kernel supports only alpha=1.
+};
+
+/**
  * @brief Runtime parameters for example 61_ascend950_svd_quant_matmul.
  */
 struct SvdQuantMatmulParams : public MatmulParams {
@@ -308,11 +328,6 @@ void W4A4MatmulPerTokenPerChannelDequant(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
- * @brief Reserved JIT interface for example 39_big_matmul_tla.
- */
-void BigMatmulTLA(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
-
-/**
  * @brief Reserved JIT interface for example 41_sparse_matmul_tla.
  */
 void SparseMatmulTLA(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
@@ -449,14 +464,14 @@ void Ascend950GroupedMatmulSliceM(
  * Selects the JIT template via ``params.evgType`` (e.g. add, add_ub, bias, leaky_relu, ...).
  */
 void MatmulEvg(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulEvgParams& params);
- 
+
 /**
  * @brief JIT interface for example 67_ascend950_batched_matmul.
  */
 void Ascend950BatchedMatmul(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
-/** 
+/**
  * @brief Reserved JIT interface for example 65_ascend950_fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant.
  */
 void Ascend950Fp8MxGroupedMatmulSliceMSwigluMxQuant(
@@ -483,26 +498,33 @@ struct GroupedMxFinalizeRoutingParams : public MatmulParams {
  * @brief Reserved JIT interface for example 71_ascend950_fp8_mx_grouped_matmul_finalize_routing.
  */
 void Ascend950Fp8MxGroupedMatmulFinalizeRouting(
-    const uint32_t blockNum, aclrtStream stream, const TParams& tParams,
-    const GroupedMxFinalizeRoutingParams& params);
+    const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const GroupedMxFinalizeRoutingParams& params);
+
+/**
+ * @brief Reserved JIT interface for example 71_ascend950_fp8_mx_grouped_matmul_finalize_routing (no_deter variant).
+ */
+void Ascend950Fp8MxGroupedMatmulFinalizeRoutingNoDeter(
+    const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const GroupedMxFinalizeRoutingParams& params);
 
 /**
  * @brief JIT interface for example 73_ascend950_matmul_full_loadA.
  */
 void Ascend950MatmulFullLoadA(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
+/**
+ * @brief JIT interface for example 75_symm.
+ */
+void Symm(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const SymmParams& params);
 
 /**
- * @brief JIT interface for example 74_ascend950_fp4_mx_matmul_pertoken_perchannel.
+ * @brief Reserved JIT interface for example 74_ascend950_weight_quant_a8w4_grouped_mx_matmul.
+ *
+ * Grouped MX A8W4 matmul: C = (MxScaleA * A_fp8) @ (MxScaleB * B_fp4) per group.
+ * B is the packed FP4 prologue (int8 bytes, Weight4BitnZ layout). Output is FP32.
+ * ``params.batch`` carries the group (expert) count; ``inputAddr[2]`` is the group list.
  */
-void Ascend950Fp4MxMatmulPerTokenPerChannel(
-    const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
-
-/**
- * @brief JIT interface for example 75_ascend950_fp8_epilogue_quant_matmul.
- */
-void Ascend950Fp8EpilogueQuantMatmul(
-    const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
+void Ascend950A8W4GroupedMxMatmul(
+    const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const GroupedMatmulParams& params);
 
 /**
  * @brief Reserved JIT interface for example 102_dynamic_optimized_matmul.
@@ -527,6 +549,23 @@ void Ascend950MultiCoreSplitkMatmul(
  */
 void Ascend950TailMultiCoreSplitkMatmul(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
+
+/**
+ * @brief JIT interface for example 76_trmm.
+ */
+void Trmm(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const TrmmParams& params);
+
+/**
+ * @brief JIT interface for example 77_planar_complex_matmul.
+ */
+void PlanarComplexMatmul(
+    const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
+
+/**
+ * @brief JIT interface for example 80_grouped_matmul_slice_m_gelu.
+ */
+void GroupedMatmulSliceMGelu(
+    const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const GroupedMatmulParams& params);
 
 } // extern "C"
 

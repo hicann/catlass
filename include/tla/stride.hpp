@@ -21,10 +21,10 @@
 
 namespace tla {
 
-template <class Shape, class Current = Int<1>>
+template <class Shape, class Current = _1LL>
 CATLASS_HOST_DEVICE constexpr auto compact_col_major(Shape const& shape, Current const& current = {});
 
-template <class Shape, class Current = Int<1>>
+template <class Shape, class Current = _1LL>
 CATLASS_HOST_DEVICE constexpr auto compact_row_major(Shape const& shape, Current const& current = {});
 
 namespace detail {
@@ -95,7 +95,7 @@ template <class FlatShape, class FlatOrder, class Order, int... Is>
 CATLASS_HOST_DEVICE constexpr auto order_stride_start(
     FlatShape const& flat_shape, FlatOrder const& flat_order, Order const& order, seq<Is...>)
 {
-    return (Int<1>{} * ... * conditional_return(get<Is>(flat_order) < order, get<Is>(flat_shape), Int<1>{}));
+    return (_1LL{} * ... * conditional_return(get<Is>(flat_order) < order, get<Is>(flat_shape), _1LL{}));
 }
 
 template <class Shape, class Order, class FlatShape, class FlatOrder>
@@ -134,23 +134,24 @@ CATLASS_HOST_DEVICE constexpr auto crd2idx(Coord const& coord, Shape const& shap
         TLA_ASSERT_SAME_TUPLE_SIZE(Coord, Shape, Stride);
         return transform_apply(
             [](auto const& c, auto const& s, auto const& d) { return crd2idx(c, s, d); },
-            [](auto const&... xs) { return (... + xs); }, coord, shape, stride);
+            [](auto const&... xs) { return (_0LL{} + ... + xs); }, coord, shape, stride);
     } else if constexpr (is_integral_v<Coord> && is_tuple_v<Shape> && is_tuple_v<Stride>) {
         TLA_ASSERT_SAME_TUPLE_SIZE(Shape, Stride);
         if constexpr (is_constant<0, Coord>::value) {
-            return _0{};
+            return _0LL{};
+        } else {
+            auto zipped = transform([](auto const& s, auto const& d) { return make_tuple(s, d); }, shape, stride);
+            constexpr int N = tuple_size<Shape>::value;
+            const auto [remaining, result] = fold(
+                [](auto const& acc, auto const& sd) {
+                    auto prod = product(get<0>(sd));
+                    return make_tuple(
+                        get<0>(acc) / prod, get<1>(acc) + crd2idx(get<0>(acc) % prod, get<0>(sd), get<1>(sd)));
+                },
+                make_tuple(coord, _0LL{}), take<0, N - 1>(zipped));
+            const auto [s, d] = get<N - 1>(zipped);
+            return result + crd2idx(remaining, s, d);
         }
-        auto zipped = transform([](auto const& s, auto const& d) { return make_tuple(s, d); }, shape, stride);
-        constexpr int N = tuple_size<Shape>::value;
-        const auto [remaining, result] =
-            fold([](auto const& acc, auto const& sd) {
-                const auto [rem, res] = acc;
-                const auto [s, d] = sd;
-                auto prod = product(s);
-                return make_tuple(rem / prod, res + crd2idx(rem % prod, s, d));
-            }, make_tuple(coord, _0{}), take<0, N - 1>(zipped));
-        const auto [s, d] = get<N - 1>(zipped);
-        return result + crd2idx(remaining, s, d);
     } else if constexpr (is_integral_v<Coord> && is_integral_v<Shape> && is_integral_v<Stride>) {
         return coord * stride;
     } else {
@@ -174,7 +175,7 @@ CATLASS_HOST_DEVICE constexpr auto crd2idx(Coord const& coord, Shape const& shap
         auto flat_shape = flatten_to_tuple(product_like(shape, coord));
         auto zipped = transform([](auto const& c, auto const& s) { return make_tuple(c, s); }, flat_coord, flat_shape);
         return fold_reverse(
-            [](auto const& acc, auto const& cs) { return get<0>(cs) + get<1>(cs) * acc; }, _0{}, zipped);
+            [](auto const& acc, auto const& cs) { return get<0>(cs) + get<1>(cs) * acc; }, _0LL{}, zipped);
     } else if constexpr (is_integral_v<Coord> && (is_tuple_v<Shape> || is_integral_v<Shape>)) {
         return coord;
     } else {
@@ -199,9 +200,10 @@ CATLASS_HOST_DEVICE constexpr auto idx2crd(Index const& idx, Shape const& shape,
         return transform([&](auto const& s, auto const& d) { return idx2crd(idx, s, d); }, shape, stride);
     } else if constexpr (is_integral_v<Index> && is_integral_v<Shape> && is_integral_v<Stride>) {
         if constexpr (is_constant<1, Shape>::value) {
-            return _0{};
+            return _0LL{};
+        } else {
+            return (idx / stride) % shape;
         }
-        return (idx / stride) % shape;
     } else {
         static_assert(dependent_false<Index>, "Invalid parameters");
     }

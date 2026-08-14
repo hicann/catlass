@@ -7,13 +7,29 @@ Developers need to pay special attention to the following points when preparing 
 1. When submitting a PR, fill in the business background, purpose, and solution of the PR carefully based on the PR template.
 2. If your modification is not a simple bug fix, but involves adding new features, new interfaces, new configuration parameters or modifying code processes, please be sure to first discuss the solution through an [Issue](https://gitcode.com/cann/community#%E6%8F%90%E4%BA%A4issue%E5%A4%84%E7%90%86issue%E4%BB%BB%E5%8A%A1) to avoid your code being rejected for merging. If you are not sure whether the modification can be classified as a simple bug fix, you can submit an issue for discussion.
 
+Run local code checks before submitting to avoid PRs being blocked by formatting or static-analysis issues.
+
+Install and register the git hook on first use:
+
+```bash
+pip install pre-commit
+pre-commit install
+```
+
+After that, every `git commit` triggers the checks automatically. You can also run them manually:
+
+```bash
+pre-commit run --all-files   # check all files
+pre-commit run               # check staged files only
+```
+
 Developer contribution scenarios include:
 
 - Fixing Bugs
 
   If you find some bugs in this project and want to fix them, you are welcome to create an issue for feedback and tracking.
 
-  You can create a `Bug-Report` issue to describe the bug according to the [Submitting an Issue/Handling an Issue Task](https://gitcode.com/cann/community#Submitting-an-Issue/Handling-an-Issue-Task]) guide, and then enter "/assign" or "/assign @yourself" in the comment box to assign the Issue to yourself for handling.
+  You can create a `Bug-Report` issue to describe the bug according to the [Submitting an Issue/Handling an Issue Task](https://gitcode.com/cann/community#Submitting-an-Issue/Handling-an-Issue-Task) guide, and then enter "/assign" or "/assign @yourself" in the comment box to assign the Issue to yourself for handling.
 
 - Contributing New Operator Examples
 
@@ -39,7 +55,7 @@ Developer contribution scenarios include:
 
   If you have new feature implementations for a certain part of the template library code, you are welcome to propose new ideas and designs in an Issue.
 
-  You can create a `Requirement|Suggestion` Issue to describe the new feature design by following the instructions in [Submitting an Issue/Handling an Issue Task](https://gitcode.com/cann/community#Submitting-an-Issue/Handling-an-Issue-Task) an Issue/Handling an Issue Task. Project members will communicate with you to confirm the design and provide a suitable location under `include/catlass/` for you to contribute your feature code.
+  You can create a `Requirement|Suggestion` Issue to describe the new feature design by following the instructions in [Submitting an Issue/Handling an Issue Task](https://gitcode.com/cann/community#Submitting-an-Issue/Handling-an-Issue-Task). Project members will communicate with you to confirm the design and provide a suitable location under `include/catlass/` for you to contribute your feature code.
 
   In addition, you need to comment /assign or /assign @yourself in the submitted Issue to claim the Issue and complete the code upload in the future.
 

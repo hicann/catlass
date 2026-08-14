@@ -23,7 +23,7 @@ None.
 
 The sample code is organized as follows:
 
-```
+```text
 ├── 34_single_splitk_matmul
 │   ├── CMakeLists.txt           # CMake build file
 │   ├── single_core_splitk.cpp   # Main file
@@ -32,14 +32,14 @@ The sample code is organized as follows:
 
 ## Example
 
-1. Compile the sample code to generate the corresponding operator executable:
+Compile the sample code to generate the corresponding operator executable:
 
 ```bash
 # Compile a specified test case.
 bash scripts/build.sh 34_single_core_splitk_matmul
 ```
 
-2. Go to the compilation directory `output/bin` of the executable file and run the operator sample program. Similar to the [00_basic_matmul](../00_basic_matmul/README.md) implementation, verification workloads are randomly initialized based on the dimensions provided in the command line:
+Go to the compilation directory `output/bin` of the executable file and run the operator sample program. Similar to the [00_basic_matmul](../00_basic_matmul/README.md) implementation, verification workloads are randomly initialized based on the dimensions provided in the command line:
 
 ```bash
 cd output/bin
@@ -58,6 +58,6 @@ cd output/bin
 
 If the following result is displayed, precision verification is successful.
 
-```
+```text
 Compare success.
 ```

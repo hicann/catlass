@@ -10,7 +10,7 @@
 
 ## 构建入口
 
-```
+```bash
 bash build.sh                    # 推荐的用户构建脚本
 uv build                         # PEP 517 构建
 python -m pip wheel .            # 直接 wheel 构建
@@ -18,7 +18,7 @@ python -m pip wheel .            # 直接 wheel 构建
 
 ## 构建流程 (build.sh)
 
-```
+```text
 build.sh
   │
   ├── 1. 版本检测
@@ -49,7 +49,7 @@ build.sh
 
 ## 输出布局
 
-```
+```text
 site-packages/torch_catlass/
 ├── __init__.py
 ├── _version.py
@@ -110,7 +110,7 @@ add_kernel(
 
 构建期对每个 JIT 模板进行试编译：
 
-```
+```text
 jit_verify_template(NAME basic_matmul TEMPLATE basic_matmul_impl.cpp NPU_ARCH_LIST 2201 3510 ...)
   → 对每个架构：OBJECT 库通过 bisheng ASC 编译
 ```
@@ -126,7 +126,7 @@ jit_verify_template(NAME basic_matmul TEMPLATE basic_matmul_impl.cpp NPU_ARCH_LI
 
 版本从 catlass git 仓库在构建时推导：
 
-```
+```bash
 git describe --tags --always --dirty
   → v1.5.0-41-g10fb189       # PEP 440: 1.5.0.dev41+g10fb189
   → v1.5.0                   # PEP 440: 1.5.0

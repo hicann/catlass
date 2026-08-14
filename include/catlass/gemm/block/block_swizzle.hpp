@@ -32,22 +32,23 @@ struct GemmIdentityBlockSwizzle {
     /// Methods
 
     CATLASS_DEVICE
-    GemmIdentityBlockSwizzle() {}
+    GemmIdentityBlockSwizzle()
+    {}
 
     CATLASS_DEVICE
-    GemmIdentityBlockSwizzle(GemmCoord const &problemShape_, MatrixCoord const &tileMN_)
+    GemmIdentityBlockSwizzle(GemmCoord const& problemShape_, MatrixCoord const& tileMN_)
         : problemShape(problemShape_), tileMN(tileMN_)
     {
         loopsMN = CeilDiv(MatrixCoord(problemShape.GetCoordMN()), tileMN);
     }
 
     CATLASS_DEVICE
-    GemmIdentityBlockSwizzle(GemmCoord const &problemShape_, MatrixCoord const &tileMN_,
-        MatrixCoord const &loopsMN_)
-        : problemShape(problemShape_), tileMN(tileMN_), loopsMN(loopsMN_) {}
+    GemmIdentityBlockSwizzle(GemmCoord const& problemShape_, MatrixCoord const& tileMN_, MatrixCoord const& loopsMN_)
+        : problemShape(problemShape_), tileMN(tileMN_), loopsMN(loopsMN_)
+    {}
 
     CATLASS_DEVICE
-    void Update(GemmCoord const &problemShape_, MatrixCoord const &tileMN_)
+    void Update(GemmCoord const& problemShape_, MatrixCoord const& tileMN_)
     {
         problemShape = problemShape_;
         tileMN = tileMN_;
@@ -56,7 +57,7 @@ struct GemmIdentityBlockSwizzle {
     }
 
     CATLASS_DEVICE
-    void Update(GemmCoord const &problemShape_, MatrixCoord const &tileMN_, MatrixCoord const &loopsMN_)
+    void Update(GemmCoord const& problemShape_, MatrixCoord const& tileMN_, MatrixCoord const& loopsMN_)
     {
         problemShape = problemShape_;
         tileMN = tileMN_;
@@ -115,33 +116,36 @@ struct GemmIdentityBlockSwizzle {
     CATLASS_DEVICE
     GemmCoord GetActualBlockShape(GemmCoord blockCoord)
     {
-        uint32_t mActual = (blockCoord.m() == (loopsMN.row() - 1)) ?
-            (problemShape.m() - blockCoord.m() * tileMN.row()) : tileMN.row();
+        uint32_t mActual =
+            (blockCoord.m() == (loopsMN.row() - 1)) ? (problemShape.m() - blockCoord.m() * tileMN.row()) : tileMN.row();
         uint32_t nActual = (blockCoord.n() == (loopsMN.column() - 1)) ?
-            (problemShape.n() - blockCoord.n() * tileMN.column()) : tileMN.column();
+                               (problemShape.n() - blockCoord.n() * tileMN.column()) :
+                               tileMN.column();
         uint32_t kActual = problemShape.k();
         return GemmCoord{mActual, nActual, kActual};
     }
 };
 
 struct DynamicGemmIdentityBlockSwizzle : public GemmIdentityBlockSwizzle<> {
-
     uint32_t swizzleOffset{1};
     uint32_t swizzleDirection{0};
 
     CATLASS_DEVICE
-    DynamicGemmIdentityBlockSwizzle(GemmCoord const &problemShape_, MatrixCoord const &tileMN_, 
-        uint32_t swizzleOffset_, uint32_t swizzleDirection_) : 
-        swizzleOffset(swizzleOffset_), swizzleDirection(swizzleDirection_), 
-        GemmIdentityBlockSwizzle<>(problemShape_, tileMN_) {}
+    DynamicGemmIdentityBlockSwizzle(
+        GemmCoord const& problemShape_, MatrixCoord const& tileMN_, uint32_t swizzleOffset_, uint32_t swizzleDirection_)
+        : swizzleOffset(swizzleOffset_),
+          swizzleDirection(swizzleDirection_),
+          GemmIdentityBlockSwizzle<>(problemShape_, tileMN_)
+    {}
 
     CATLASS_DEVICE
-    DynamicGemmIdentityBlockSwizzle(GemmCoord const &problemShape_, MatrixCoord const &tileMN_) : 
-        GemmIdentityBlockSwizzle<>(problemShape_, tileMN_) {}
+    DynamicGemmIdentityBlockSwizzle(GemmCoord const& problemShape_, MatrixCoord const& tileMN_)
+        : GemmIdentityBlockSwizzle<>(problemShape_, tileMN_)
+    {}
 
     CATLASS_DEVICE
-    DynamicGemmIdentityBlockSwizzle() {}
-
+    DynamicGemmIdentityBlockSwizzle()
+    {}
 
     CATLASS_DEVICE
     void SetSwizzleParams(uint32_t swizzleOffset_, uint32_t swizzleDirection_)
@@ -196,17 +200,18 @@ struct SplitkGemmIdentityBlockSwizzle {
     GemmCoord problemShape;
     GemmCoord tileShape;
     GemmCoord loopsMNK;
-    uint32_t splitkFactor = 1;  // splite k dim into virtual cores
+    uint32_t splitkFactor = 1; // splite k dim into virtual cores
 
     /// Methods
 
     CATLASS_DEVICE
-    SplitkGemmIdentityBlockSwizzle() {}
+    SplitkGemmIdentityBlockSwizzle()
+    {}
 
     CATLASS_DEVICE
     SplitkGemmIdentityBlockSwizzle(
-        GemmCoord const &problemShape_, GemmCoord const &tileShape_, uint32_t splitkFactor_ = 1
-    ) : problemShape(problemShape_), tileShape(tileShape_), splitkFactor(splitkFactor_)
+        GemmCoord const& problemShape_, GemmCoord const& tileShape_, uint32_t splitkFactor_ = 1)
+        : problemShape(problemShape_), tileShape(tileShape_), splitkFactor(splitkFactor_)
     {
         loopsMNK = CeilDiv(problemShape, tileShape);
     }
@@ -290,15 +295,17 @@ struct SplitkGemmIdentityBlockSwizzle {
             splitkSliceLen = (loopsMNK.k() / splitkFactor) * tileShape.k();
         }
         uint32_t mActual = (blockCoord.m() == (loopsMNK.m() - 1)) ?
-            (problemShape.m() - blockCoord.m() * tileShape.m()) : tileShape.m();
+                               (problemShape.m() - blockCoord.m() * tileShape.m()) :
+                               tileShape.m();
         uint32_t nActual = (blockCoord.n() == (loopsMNK.n() - 1)) ?
-            (problemShape.n() - blockCoord.n() * tileShape.n()) : tileShape.n();
+                               (problemShape.n() - blockCoord.n() * tileShape.n()) :
+                               tileShape.n();
         uint32_t kActual = (splitkSliceIdx == (splitkFactor - 1)) ?
-            (problemShape.k() - blockCoord.k() * tileShape.k()) : splitkSliceLen;
+                               (problemShape.k() - blockCoord.k() * tileShape.k()) :
+                               splitkSliceLen;
         return GemmCoord{mActual, nActual, kActual};
     }
 };
-
 
 /// Block swizzleing function for single core splitk matmul
 template <uint32_t SwizzleOffset = 1, uint32_t SwizzleDirection = 0>
@@ -314,11 +321,12 @@ struct SingleCoreSplitkGemmIdentityBlockSwizzle {
 
     /// Methods
     CATLASS_DEVICE
-    SingleCoreSplitkGemmIdentityBlockSwizzle() {}
+    SingleCoreSplitkGemmIdentityBlockSwizzle()
+    {}
 
     /// Methods
     CATLASS_DEVICE
-    SingleCoreSplitkGemmIdentityBlockSwizzle(GemmCoord const &problemShape_, GemmCoord const &l1TileShape)
+    SingleCoreSplitkGemmIdentityBlockSwizzle(GemmCoord const& problemShape_, GemmCoord const& l1TileShape)
         : problemShape(problemShape_), tileMNK(l1TileShape)
     {
         loopsMNK = CeilDiv(problemShape, tileMNK);
@@ -341,8 +349,8 @@ struct SingleCoreSplitkGemmIdentityBlockSwizzle {
         // total mnLoops = bPerCore * tmpNum + (bPerCore - 1) * (coreNum - tmpNum)
         uint32_t tmpNum = mnLoops - coreNum * (bPerCore - 1);
 
-        mnLoopRangeStart = (coreIdx < tmpNum) ? (coreIdx * bPerCore)
-            : (tmpNum * bPerCore + (coreIdx - tmpNum) * (bPerCore - 1));
+        mnLoopRangeStart =
+            (coreIdx < tmpNum) ? (coreIdx * bPerCore) : (tmpNum * bPerCore + (coreIdx - tmpNum) * (bPerCore - 1));
         mnLoopRangeLen = (coreIdx < tmpNum) ? bPerCore : (bPerCore - 1);
     }
 
@@ -415,28 +423,31 @@ struct SingleCoreSplitkGemmIdentityBlockSwizzle {
     }
 
     CATLASS_DEVICE
-    GemmCoord GetActualBlockShape(GemmCoord &blockCoord)
+    GemmCoord GetActualBlockShape(GemmCoord& blockCoord)
     {
-        uint32_t mActual = (blockCoord.m() == (loopsMNK.m() - 1)) ?
-            (problemShape.m() - blockCoord.m() * tileMNK.m()) : tileMNK.m();
-        uint32_t nActual = (blockCoord.n() == (loopsMNK.n() - 1)) ?
-            (problemShape.n() - blockCoord.n() * tileMNK.n()) : tileMNK.n();
+        uint32_t mActual =
+            (blockCoord.m() == (loopsMNK.m() - 1)) ? (problemShape.m() - blockCoord.m() * tileMNK.m()) : tileMNK.m();
+        uint32_t nActual =
+            (blockCoord.n() == (loopsMNK.n() - 1)) ? (problemShape.n() - blockCoord.n() * tileMNK.n()) : tileMNK.n();
         uint32_t kActual = (blockCoord.k() == (loopsMNK.k() - 1)) ?
-            (problemShape.k() - (loopsMNK.k() - 1) * tileMNK.k()) : tileMNK.k();
+                               (problemShape.k() - (loopsMNK.k() - 1) * tileMNK.k()) :
+                               tileMNK.k();
         return GemmCoord{mActual, nActual, kActual};
     }
-
 };
 
-struct DynamicSingleCoreSplitkGemmIdentityBlockSwizzle: public SingleCoreSplitkGemmIdentityBlockSwizzle<> {
+struct DynamicSingleCoreSplitkGemmIdentityBlockSwizzle : public SingleCoreSplitkGemmIdentityBlockSwizzle<> {
     uint32_t swizzleOffset;
     uint32_t swizzleDirection;
 
     CATLASS_DEVICE
-    DynamicSingleCoreSplitkGemmIdentityBlockSwizzle(GemmCoord const &problemShape_, GemmCoord const &l1TileShape,
-        uint32_t swizzleOffset_, uint32_t swizzleDirection_)
-        : swizzleOffset(swizzleOffset_), swizzleDirection(swizzleDirection_),
-        SingleCoreSplitkGemmIdentityBlockSwizzle<>(problemShape_, l1TileShape) {}
+    DynamicSingleCoreSplitkGemmIdentityBlockSwizzle(
+        GemmCoord const& problemShape_, GemmCoord const& l1TileShape, uint32_t swizzleOffset_,
+        uint32_t swizzleDirection_)
+        : swizzleOffset(swizzleOffset_),
+          swizzleDirection(swizzleDirection_),
+          SingleCoreSplitkGemmIdentityBlockSwizzle<>(problemShape_, l1TileShape)
+    {}
 
     CATLASS_DEVICE
     GemmCoord GetBlockCoord(uint32_t loopIdx)
@@ -516,10 +527,11 @@ struct GemmIdentityBlockSwizzleL1FullLoad {
     /// Methods
 
     CATLASS_DEVICE
-    GemmIdentityBlockSwizzleL1FullLoad() {}
+    GemmIdentityBlockSwizzleL1FullLoad()
+    {}
 
     CATLASS_DEVICE
-    GemmIdentityBlockSwizzleL1FullLoad(GemmCoord const &problemShape_, MatrixCoord const &tileMN_)
+    GemmIdentityBlockSwizzleL1FullLoad(GemmCoord const& problemShape_, MatrixCoord const& tileMN_)
         : problemShape(problemShape_), tileMN(tileMN_)
     {
         loopsMN = CeilDiv(MatrixCoord(problemShape.GetCoordMN()), tileMN);
@@ -530,8 +542,8 @@ struct GemmIdentityBlockSwizzleL1FullLoad {
     }
 
     CATLASS_DEVICE
-    GemmIdentityBlockSwizzleL1FullLoad(GemmCoord const &problemShape_, MatrixCoord const &tileMN_,
-        MatrixCoord const &loopsMN_)
+    GemmIdentityBlockSwizzleL1FullLoad(
+        GemmCoord const& problemShape_, MatrixCoord const& tileMN_, MatrixCoord const& loopsMN_)
         : problemShape(problemShape_), tileMN(tileMN_), loopsMN(loopsMN_)
     {
         uint32_t loopsTotalNum = GetCoreLoops();
@@ -541,7 +553,7 @@ struct GemmIdentityBlockSwizzleL1FullLoad {
     }
 
     CATLASS_DEVICE
-    void Update(GemmCoord const &problemShape_, MatrixCoord const &tileMN_)
+    void Update(GemmCoord const& problemShape_, MatrixCoord const& tileMN_)
     {
         problemShape = problemShape_;
         tileMN = tileMN_;
@@ -554,7 +566,7 @@ struct GemmIdentityBlockSwizzleL1FullLoad {
     }
 
     CATLASS_DEVICE
-    void Update(GemmCoord const &problemShape_, MatrixCoord const &tileMN_, MatrixCoord const &loopsMN_)
+    void Update(GemmCoord const& problemShape_, MatrixCoord const& tileMN_, MatrixCoord const& loopsMN_)
     {
         problemShape = problemShape_;
         tileMN = tileMN_;
@@ -623,33 +635,38 @@ struct GemmIdentityBlockSwizzleL1FullLoad {
     CATLASS_DEVICE
     GemmCoord GetActualBlockShape(GemmCoord blockCoord)
     {
-        uint32_t mActual = (blockCoord.m() == (loopsMN.row() - 1)) ?
-            (problemShape.m() - blockCoord.m() * tileMN.row()) : tileMN.row();
+        uint32_t mActual =
+            (blockCoord.m() == (loopsMN.row() - 1)) ? (problemShape.m() - blockCoord.m() * tileMN.row()) : tileMN.row();
         uint32_t nActual = (blockCoord.n() == (loopsMN.column() - 1)) ?
-            (problemShape.n() - blockCoord.n() * tileMN.column()) : tileMN.column();
+                               (problemShape.n() - blockCoord.n() * tileMN.column()) :
+                               tileMN.column();
         uint32_t kActual = problemShape.k();
         return GemmCoord{mActual, nActual, kActual};
     }
 };
 
 struct DynamicSplitkGemmIdentityBlockSwizzle : public SplitkGemmIdentityBlockSwizzle<> {
-
     uint32_t swizzleOffset{1};
     uint32_t swizzleDirection{0};
 
     CATLASS_DEVICE
-    DynamicSplitkGemmIdentityBlockSwizzle(GemmCoord const &problemShape_, GemmCoord const &tileMNK_, 
-        uint32_t splitkFactor_, uint32_t swizzleOffset_, uint32_t swizzleDirection_) : 
-        swizzleOffset(swizzleOffset_), swizzleDirection(swizzleDirection_), 
-        SplitkGemmIdentityBlockSwizzle<>(problemShape_, tileMNK_, splitkFactor_) {}
+    DynamicSplitkGemmIdentityBlockSwizzle(
+        GemmCoord const& problemShape_, GemmCoord const& tileMNK_, uint32_t splitkFactor_, uint32_t swizzleOffset_,
+        uint32_t swizzleDirection_)
+        : swizzleOffset(swizzleOffset_),
+          swizzleDirection(swizzleDirection_),
+          SplitkGemmIdentityBlockSwizzle<>(problemShape_, tileMNK_, splitkFactor_)
+    {}
 
     CATLASS_DEVICE
-    DynamicSplitkGemmIdentityBlockSwizzle(GemmCoord const &problemShape_, GemmCoord const &tileMNK_, 
-        uint32_t splitkFactor_) : SplitkGemmIdentityBlockSwizzle<>(problemShape_, tileMNK_, splitkFactor_) {}
+    DynamicSplitkGemmIdentityBlockSwizzle(
+        GemmCoord const& problemShape_, GemmCoord const& tileMNK_, uint32_t splitkFactor_)
+        : SplitkGemmIdentityBlockSwizzle<>(problemShape_, tileMNK_, splitkFactor_)
+    {}
 
     CATLASS_DEVICE
-    DynamicSplitkGemmIdentityBlockSwizzle() {}
-
+    DynamicSplitkGemmIdentityBlockSwizzle()
+    {}
 
     CATLASS_DEVICE
     void SetSwizzleParams(uint32_t swizzleOffset_, uint32_t swizzleDirection_)
@@ -697,7 +714,6 @@ struct DynamicSplitkGemmIdentityBlockSwizzle : public SplitkGemmIdentityBlockSwi
             return GemmCoord{mIdx, nIdx, kIdx};
         }
     }
-
 };
 
 /// Block swizzling function for TailSplitk Gemms
@@ -711,17 +727,17 @@ struct TailSplitkGemmIdentityBlockSwizzle {
     uint32_t coreNum{1};
     uint32_t normalBlockNum{1};
     uint32_t tailBlockNum{0};
-    uint32_t splitkFactor{1};  // splite k dim into virtual cores
+    uint32_t splitkFactor{1}; // splite k dim into virtual cores
     uint32_t splitkSliceLen{0};
 
     /// Methods
 
     CATLASS_DEVICE
-    TailSplitkGemmIdentityBlockSwizzle() {}
+    TailSplitkGemmIdentityBlockSwizzle()
+    {}
 
     CATLASS_DEVICE
-    TailSplitkGemmIdentityBlockSwizzle(
-        GemmCoord const &problemShape_, GemmCoord const &tileShape_, uint32_t coreNum_)
+    TailSplitkGemmIdentityBlockSwizzle(GemmCoord const& problemShape_, GemmCoord const& tileShape_, uint32_t coreNum_)
         : problemShape(problemShape_), tileShape(tileShape_), coreNum(coreNum_)
     {
         loopsMNK = CeilDiv(problemShape, tileShape);
@@ -824,19 +840,23 @@ struct TailSplitkGemmIdentityBlockSwizzle {
     GemmCoord GetActualBlockShape(GemmCoord blockCoord, uint32_t taskIdx)
     {
         uint32_t mActual = (blockCoord.m() == (loopsMNK.m() - 1)) ?
-            (problemShape.m() - blockCoord.m() * tileShape.m()) : tileShape.m();
+                               (problemShape.m() - blockCoord.m() * tileShape.m()) :
+                               tileShape.m();
         uint32_t nActual = (blockCoord.n() == (loopsMNK.n() - 1)) ?
-            (problemShape.n() - blockCoord.n() * tileShape.n()) : tileShape.n();
+                               (problemShape.n() - blockCoord.n() * tileShape.n()) :
+                               tileShape.n();
 
         uint32_t innerIdx = taskIdx % GetCoreLoops();
         uint32_t kActual{0};
         if (innerIdx >= normalBlockNum) {
             if ((innerIdx - normalBlockNum) % splitkFactor < loopsMNK.k() % splitkFactor) {
                 kActual = (blockCoord.k() + splitkSliceLen >= loopsMNK.k()) ?
-                    (problemShape.k() - blockCoord.k() * tileShape.k()) : (splitkSliceLen + 1) * tileShape.k();
+                              (problemShape.k() - blockCoord.k() * tileShape.k()) :
+                              (splitkSliceLen + 1) * tileShape.k();
             } else {
                 kActual = (blockCoord.k() + splitkSliceLen >= loopsMNK.k()) ?
-                    (problemShape.k() - blockCoord.k() * tileShape.k()) : splitkSliceLen * tileShape.k();
+                              (problemShape.k() - blockCoord.k() * tileShape.k()) :
+                              splitkSliceLen * tileShape.k();
             }
         } else {
             kActual = problemShape.k();
@@ -878,16 +898,15 @@ struct StreamkGemmIdentityBlockSwizzle {
         GemmCoord streamkActualBlockShape;
     };
 
-
     /// Methods
 
     CATLASS_DEVICE
-    StreamkGemmIdentityBlockSwizzle() {}
+    StreamkGemmIdentityBlockSwizzle()
+    {}
 
     CATLASS_DEVICE
-    StreamkGemmIdentityBlockSwizzle(
-        GemmCoord const &problemShape_, GemmCoord const &tileMNK_, uint32_t blockDim_
-    ) : problemShape(problemShape_), tileMNK(tileMNK_), blockDim(blockDim_)
+    StreamkGemmIdentityBlockSwizzle(GemmCoord const& problemShape_, GemmCoord const& tileMNK_, uint32_t blockDim_)
+        : problemShape(problemShape_), tileMNK(tileMNK_), blockDim(blockDim_)
     {
         loopsMNK = CeilDiv(problemShape, tileMNK);
         streamkBlocks = loopsMNK.m() * loopsMNK.n() % blockDim;
@@ -944,22 +963,28 @@ struct StreamkGemmIdentityBlockSwizzle {
     CATLASS_DEVICE
     GemmCoord GetActualBlockShape(GemmCoord blockCoord)
     {
-        uint32_t mActual = 
+        uint32_t mActual =
             (blockCoord.m() == (loopsMNK.m() - 1)) ? (problemShape.m() - blockCoord.m() * tileMNK.m()) : tileMNK.m();
-        uint32_t nActual = 
+        uint32_t nActual =
             (blockCoord.n() == (loopsMNK.n() - 1)) ? (problemShape.n() - blockCoord.n() * tileMNK.n()) : tileMNK.n();
         uint32_t kActual = problemShape.k();
         return GemmCoord{mActual, nActual, kActual};
     }
 
     CATLASS_DEVICE
-    uint32_t GetStreamkBlockNum() { return streamkBlocks; }
+    uint32_t GetStreamkBlockNum()
+    {
+        return streamkBlocks;
+    }
 
     CATLASS_DEVICE
-    uint32_t GetNormalBlockNum() { return normalBlocks; }
+    uint32_t GetNormalBlockNum()
+    {
+        return normalBlocks;
+    }
 
     CATLASS_DEVICE
-    void GetStreamkBlockDec(uint32_t loopIdx, StreamkBlockDec &streamkBlockDec)
+    void GetStreamkBlockDec(uint32_t loopIdx, StreamkBlockDec& streamkBlockDec)
     {
         if (loopIdx < normalBlocks) {
             streamkBlockDec.isStreamkBlock = false;
@@ -982,18 +1007,20 @@ struct StreamkGemmIdentityBlockSwizzle {
             streamkBlockDec.isCrossBlock = false;
             GemmCoord actualBlockShapeTmp = GetActualBlockShape(streamkBlockDec.blockCoord);
             if ((kTileIdx % loopsMNK.k() + curKTileNum) * tileMNK.k() > problemShape.k()) {
-                streamkBlockDec.actualBlockShape = GemmCoord{actualBlockShapeTmp.m(), actualBlockShapeTmp.n(),
+                streamkBlockDec.actualBlockShape = GemmCoord{
+                    actualBlockShapeTmp.m(), actualBlockShapeTmp.n(),
                     problemShape.k() - (kTileIdx % loopsMNK.k()) * tileMNK.k()};
             } else {
-                streamkBlockDec.actualBlockShape = 
+                streamkBlockDec.actualBlockShape =
                     GemmCoord{actualBlockShapeTmp.m(), actualBlockShapeTmp.n(), curKTileNum * tileMNK.k()};
             }
             if (kTileIdx % loopsMNK.k() + curKTileNum > loopsMNK.k()) {
                 streamkBlockDec.isCrossBlock = true;
                 streamkBlockDec.streamkBlockCoord = GetBlockCoord(normalBlocks + nextStreamkBlockIdx);
                 GemmCoord streamkActualBlockShapeTmp = GetActualBlockShape(streamkBlockDec.streamkBlockCoord);
-                streamkBlockDec.streamkActualBlockShape = GemmCoord{streamkActualBlockShapeTmp.m(),
-                    streamkActualBlockShapeTmp.n(), ((kTileIdx + curKTileNum) % loopsMNK.k()) * tileMNK.k()};
+                streamkBlockDec.streamkActualBlockShape = GemmCoord{
+                    streamkActualBlockShapeTmp.m(), streamkActualBlockShapeTmp.n(),
+                    ((kTileIdx + curKTileNum) % loopsMNK.k()) * tileMNK.k()};
             }
         }
     }
@@ -1003,7 +1030,7 @@ struct StreamkGemmIdentityBlockSwizzle {
     {
         if (streamkBlockIdx * loopsMNK.k() > kTileRemain * (kTileNumPerCore + 1)) {
             return kTileRemain +
-                (streamkBlockIdx * loopsMNK.k() - kTileRemain * (kTileNumPerCore + 1)) / kTileNumPerCore;
+                   (streamkBlockIdx * loopsMNK.k() - kTileRemain * (kTileNumPerCore + 1)) / kTileNumPerCore;
         } else {
             return streamkBlockIdx * loopsMNK.k() / (kTileNumPerCore + 1);
         }
@@ -1031,24 +1058,27 @@ struct StreamkGemmIdentityBlockSwizzle {
 };
 
 struct DynamicStreamkGemmIdentityBlockSwizzle : public StreamkGemmIdentityBlockSwizzle<> {
-
     uint32_t swizzleOffset{1};
     uint32_t swizzleDirection{0};
 
     CATLASS_DEVICE
-    DynamicStreamkGemmIdentityBlockSwizzle(GemmCoord const &problemShape_, GemmCoord const &tileShape_, 
-        uint32_t coreNum_, uint32_t swizzleOffset_, uint32_t swizzleDirection_) : 
-        swizzleOffset(swizzleOffset_), swizzleDirection(swizzleDirection_), 
-        StreamkGemmIdentityBlockSwizzle<>(problemShape_, tileShape_, coreNum_) {}
+    DynamicStreamkGemmIdentityBlockSwizzle(
+        GemmCoord const& problemShape_, GemmCoord const& tileShape_, uint32_t coreNum_, uint32_t swizzleOffset_,
+        uint32_t swizzleDirection_)
+        : swizzleOffset(swizzleOffset_),
+          swizzleDirection(swizzleDirection_),
+          StreamkGemmIdentityBlockSwizzle<>(problemShape_, tileShape_, coreNum_)
+    {}
 
     CATLASS_DEVICE
-    DynamicStreamkGemmIdentityBlockSwizzle(GemmCoord const &problemShape_, GemmCoord const &tileShape_, 
-        uint32_t coreNum_) 
-        : StreamkGemmIdentityBlockSwizzle<>(problemShape_, tileShape_, coreNum_) {}
+    DynamicStreamkGemmIdentityBlockSwizzle(
+        GemmCoord const& problemShape_, GemmCoord const& tileShape_, uint32_t coreNum_)
+        : StreamkGemmIdentityBlockSwizzle<>(problemShape_, tileShape_, coreNum_)
+    {}
 
     CATLASS_DEVICE
-    DynamicStreamkGemmIdentityBlockSwizzle() {}
-
+    DynamicStreamkGemmIdentityBlockSwizzle()
+    {}
 
     CATLASS_DEVICE
     void SetSwizzleParams(uint32_t swizzleOffset_, uint32_t swizzleDirection_)
@@ -1058,7 +1088,7 @@ struct DynamicStreamkGemmIdentityBlockSwizzle : public StreamkGemmIdentityBlockS
     }
 
     CATLASS_DEVICE
-    void GetStreamkBlockDec(uint32_t loopIdx, StreamkBlockDec &streamkBlockDec)
+    void GetStreamkBlockDec(uint32_t loopIdx, StreamkBlockDec& streamkBlockDec)
     {
         if (loopIdx < normalBlocks) {
             streamkBlockDec.isStreamkBlock = false;
@@ -1081,18 +1111,20 @@ struct DynamicStreamkGemmIdentityBlockSwizzle : public StreamkGemmIdentityBlockS
             streamkBlockDec.isCrossBlock = false;
             GemmCoord actualBlockShapeTmp = GetActualBlockShape(streamkBlockDec.blockCoord);
             if ((kTileIdx % loopsMNK.k() + curKTileNum) * tileMNK.k() > problemShape.k()) {
-                streamkBlockDec.actualBlockShape = GemmCoord{actualBlockShapeTmp.m(), actualBlockShapeTmp.n(),
+                streamkBlockDec.actualBlockShape = GemmCoord{
+                    actualBlockShapeTmp.m(), actualBlockShapeTmp.n(),
                     problemShape.k() - (kTileIdx % loopsMNK.k()) * tileMNK.k()};
             } else {
-                streamkBlockDec.actualBlockShape = 
+                streamkBlockDec.actualBlockShape =
                     GemmCoord{actualBlockShapeTmp.m(), actualBlockShapeTmp.n(), curKTileNum * tileMNK.k()};
             }
             if (kTileIdx % loopsMNK.k() + curKTileNum > loopsMNK.k()) {
                 streamkBlockDec.isCrossBlock = true;
                 streamkBlockDec.streamkBlockCoord = GetBlockCoord(normalBlocks + nextStreamkBlockIdx);
                 GemmCoord streamkActualBlockShapeTmp = GetActualBlockShape(streamkBlockDec.streamkBlockCoord);
-                streamkBlockDec.streamkActualBlockShape = GemmCoord{streamkActualBlockShapeTmp.m(),
-                    streamkActualBlockShapeTmp.n(), ((kTileIdx + curKTileNum) % loopsMNK.k()) * tileMNK.k()};
+                streamkBlockDec.streamkActualBlockShape = GemmCoord{
+                    streamkActualBlockShapeTmp.m(), streamkActualBlockShapeTmp.n(),
+                    ((kTileIdx + curKTileNum) % loopsMNK.k()) * tileMNK.k()};
             }
         }
     }
@@ -1149,10 +1181,11 @@ struct ColumnBlockSwizzle : public GemmIdentityBlockSwizzle<> {
     uint32_t tailTaskStartIdx;
 
     CATLASS_DEVICE
-    ColumnBlockSwizzle() {}
+    ColumnBlockSwizzle()
+    {}
 
     CATLASS_DEVICE
-    ColumnBlockSwizzle(GemmCoord const &problemShape_, MatrixCoord const &tileMN_)
+    ColumnBlockSwizzle(GemmCoord const& problemShape_, MatrixCoord const& tileMN_)
         : GemmIdentityBlockSwizzle<>(problemShape_, tileMN_)
     {
         coreNum = AscendC::GetBlockNum();
@@ -1165,7 +1198,7 @@ struct ColumnBlockSwizzle : public GemmIdentityBlockSwizzle<> {
     }
 
     CATLASS_DEVICE
-    void Update(GemmCoord const &problemShape_, MatrixCoord const &tileMN_)
+    void Update(GemmCoord const& problemShape_, MatrixCoord const& tileMN_)
     {
         problemShape = problemShape_;
         tileMN = tileMN_;
@@ -1240,10 +1273,10 @@ struct ColumnBlockSwizzle : public GemmIdentityBlockSwizzle<> {
             return GemmCoord{0, 0, problemShape.k()};
         }
 
-        uint32_t mActual = (blockCoord.m() == (loopsMN.row() - 1)) ?
-            (problemShape.m() - blockCoord.m() * tileMN.row()) : tileMN.row();
+        uint32_t mActual =
+            (blockCoord.m() == (loopsMN.row() - 1)) ? (problemShape.m() - blockCoord.m() * tileMN.row()) : tileMN.row();
         uint32_t kActual = problemShape.k();
-        
+
         uint32_t nActual;
         if (blockCoord.n() < blocksPerCore * coreNum) {
             nActual = tileMN.column();
@@ -1257,6 +1290,6 @@ struct ColumnBlockSwizzle : public GemmIdentityBlockSwizzle<> {
     }
 };
 
-}  // namespace Catlass::Gemm::Block
+} // namespace Catlass::Gemm::Block
 
-#endif  // CATLASS_GEMM_BLOCK_BLOCK_SWIZZLE_HPP
+#endif // CATLASS_GEMM_BLOCK_BLOCK_SWIZZLE_HPP

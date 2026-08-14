@@ -10,7 +10,7 @@ JIT 编译模板和预编译内核共享的头文件，位于 `kernels/common/`�
 
 ## 文件布局
 
-```
+```text
 kernels/common/
 ├── common.h                    # IsNeedPadding() 重载
 ├── kernel_runner.h             # RunKernel<Kernel>() 宿主编译启动器
@@ -36,7 +36,7 @@ kernels/common/
 
 `RunKernel<Kernel>(arguments, stream, coreNum)` 是自包含的宿主编译启动器：
 
-```
+```cpp
 RunKernel<Kernel>(args, stream, coreNum):
   1. Kernel::CanImplement(args)  ──→ 不支持则提前返回
   2. Kernel::GetWorkspaceSize(args) ──→ workspace 字节数
@@ -85,7 +85,7 @@ ApplyOptMacros(macros, m, n, k, isNzA, isTransA, isNzB, isTransB, align=256);
 
 Padding 逻辑委托给 `common.h::IsNeedPadding`：
 
-```
+```text
 RowMajor:  RowMajor(rows, cols)  → stride(0) = cols
 ColumnMajor: ColumnMajor(rows, cols) → stride(1) = rows
 ```

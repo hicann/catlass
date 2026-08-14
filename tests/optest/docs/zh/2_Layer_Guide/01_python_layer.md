@@ -2,7 +2,7 @@
 
 ## 包结构
 
-```
+```text
 torch_catlass/
 ├── __init__.py          # 入口：库加载、版本、架构检测
 ├── _version.py          # 构建时自动生成的版本字符串 (由 build.sh)
@@ -14,7 +14,7 @@ torch_catlass/
 
 ## 初始化序列
 
-```
+```text
 import torch_catlass
   │
   ├── _version.py ──→ os.environ["TORCH_CATLASS_VERSION"]
@@ -38,7 +38,7 @@ import torch_catlass
 
 ### `get_npu_arch()`
 
-将 torch NPU 设备名映射到 CATLASS 架构 ID：
+将 TorchNPU 设备名映射到 CATLASS 架构 ID：
 
 | 设备名      | 架构 ID |
 | ----------- | ------- |

@@ -159,7 +159,7 @@ inline constexpr bool is_layout_v = is_layout<T>::value;
 // Layout construction
 template <
     class Shape, class Stride, class OriginShape,
-    TLA_REQUIRES(is_int_tuple_v<Shape>&& is_int_tuple_v<Stride>&& is_int_tuple_v<OriginShape>)>
+    TLA_REQUIRES((is_int_tuple_v<Shape>) && (is_int_tuple_v<Stride>) && (is_int_tuple_v<OriginShape>))>
 CATLASS_HOST_DEVICE constexpr auto make_layout(Shape const& shape, Stride const& stride, OriginShape const& originShape)
 {
     return Layout<Shape, Stride, OriginShape>(shape, stride, originShape);
@@ -172,7 +172,7 @@ CATLASS_HOST_DEVICE constexpr auto MakeLayout(Shape const& shape, Stride const& 
     return make_layout(shape, stride, originShape);
 }
 
-template <class Shape, class Stride, TLA_REQUIRES(is_int_tuple_v<Shape>&& is_int_tuple_v<Stride>)>
+template <class Shape, class Stride, TLA_REQUIRES((is_int_tuple_v<Shape>) && (is_int_tuple_v<Stride>))>
 CATLASS_HOST_DEVICE constexpr auto make_layout(Shape const& shape, Stride const& stride)
 {
     const auto originShape = detail::make_origin_shape(shape);
@@ -193,7 +193,7 @@ CATLASS_HOST_DEVICE constexpr auto make_layout(Shape const& shape)
     return make_layout(shape, stride);
 }
 
-template <class Layout0, class... Layouts, TLA_REQUIRES(is_layout_v<Layout0> && (is_layout_v<Layouts> && ...))>
+template <class Layout0, class... Layouts, TLA_REQUIRES((is_layout_v<Layout0>) && (is_layout_v<Layouts> && ...))>
 CATLASS_HOST_DEVICE constexpr auto make_layout(Layout0 const& layout0, Layouts const&... layouts)
 {
     return make_layout(
@@ -261,6 +261,30 @@ template <int... Is, class Shape, class Stride, class OriginShape>
 CATLASS_HOST_DEVICE constexpr auto depth(Layout<Shape, Stride, OriginShape> const& layout)
 {
     return depth(shape<Is...>(layout));
+}
+
+// Layout manipulation (like a tuple of pairs)
+
+// get<Is...>(layout): extract sublayout at recursive indices Is...
+// For Is... = <I0,I1,...,IN>, equivalent to get<IN>(...get<I1>(get<I0>(layout)))
+template <size_t... Is, class Shape, class Stride, class OriginShape>
+CATLASS_HOST_DEVICE constexpr auto get(Layout<Shape, Stride, OriginShape> const& layout)
+{
+    return make_layout(get<Is...>(shape(layout)), get<Is...>(stride(layout)), get<Is...>(originShape(layout)));
+}
+
+// take<B, E>(layout): extract sublayout with modes in range [B, E)
+template <int B, int E, class Shape, class Stride, class OriginShape>
+CATLASS_HOST_DEVICE constexpr auto take(Layout<Shape, Stride, OriginShape> const& layout)
+{
+    return make_layout(take<B, E>(shape(layout)), take<B, E>(stride(layout)), take<B, E>(originShape(layout)));
+}
+
+// select<Is...>(layout): extract sublayout with modes at indices Is...
+template <size_t... Is, class Shape, class Stride, class OriginShape>
+CATLASS_HOST_DEVICE constexpr auto select(Layout<Shape, Stride, OriginShape> const& layout)
+{
+    return make_layout(select<Is...>(shape(layout)), select<Is...>(stride(layout)), select<Is...>(originShape(layout)));
 }
 
 // Codomain operations
@@ -437,10 +461,10 @@ CATLASS_HOST_DEVICE constexpr auto MakeLayout(T const& rows, U const& cols)
         is_same_v<LayoutTag, Catlass::layout::RowMajor> || is_same_v<LayoutTag, Catlass::layout::ColumnMajor> ||
             is_same_v<LayoutTag, Catlass::layout::VectorLayout> || is_same_v<LayoutTag, Catlass::layout::zN> ||
             is_same_v<LayoutTag, Catlass::layout::nZ> || is_same_v<LayoutTag, Catlass::layout::zZ> ||
-            is_same_v<LayoutTag, Catlass::layout::L0C>,
+            is_same_v<LayoutTag, Catlass::layout::L0C> || is_same_v<LayoutTag, Catlass::layout::Weight4BitnZ>,
         "Unsupported LayoutTag for MakeLayoutFromTag, only support Catlass::layout::RowMajor or"
         "Catlass::layout::ColumnMajor or Catlass::layout::zN or Catlass::layout::nZ or Catlass::layout::zZ or "
-        "Catlass::layout::L0C");
+        "Catlass::layout::L0C or Catlass::layout::Weight4BitnZ");
 
     constexpr uint32_t ELE_NUM_PER_C0 = Catlass::BytesToElements<Element>(Catlass::BYTE_PER_C0);
     constexpr uint32_t ELE_NUM_PER_FRACTAL =
@@ -494,6 +518,17 @@ CATLASS_HOST_DEVICE constexpr auto MakeLayout(T const& rows, U const& cols)
                 MakeStride(
                     Int<1>{},
                     RoundUp((int64_t)rows, Int<Catlass::C0_NUM_PER_FRACTAL>{}) * Catlass::C0_NUM_PER_FRACTAL)),
+            MakeShape(rows, cols));
+    } else if constexpr (is_same_v<LayoutTag, Catlass::layout::Weight4BitnZ>) {
+        constexpr uint32_t ELE_NUM_PER_C0 = 32;
+        constexpr uint32_t ELE_NUM_PER_FRACTAL = 512;
+        return MakeLayout(
+            MakeShape(
+                MakeShape(Int<ELE_NUM_PER_C0>{}, CeilDiv(rows, Int<ELE_NUM_PER_C0>{})),
+                MakeShape(Int<Catlass::C0_NUM_PER_FRACTAL>{}, CeilDiv(cols, Int<Catlass::C0_NUM_PER_FRACTAL>{}))),
+            MakeStride(
+                MakeStride(Int<1>{}, RoundUp((int64_t)cols, Int<Catlass::C0_NUM_PER_FRACTAL>{}) * ELE_NUM_PER_C0),
+                MakeStride(Int<ELE_NUM_PER_C0>{}, Int<ELE_NUM_PER_FRACTAL>{})),
             MakeShape(rows, cols));
     } else {
         return MakeLayout(

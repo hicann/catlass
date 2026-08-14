@@ -26,24 +26,10 @@ namespace Catlass::Gemm::Block {
 ////////////////////////////////////////////////////////////////////
 
 template <
-    class L1TileShape_,
-    class L0TileShape_,
-    class AType_,
-    class BType_,
-    class CType_,
-    class BiasType_,
-    class TileCopy_,
+    class L1TileShape_, class L0TileShape_, class AType_, class BType_, class CType_, class BiasType_, class TileCopy_,
     class TileMmad_>
 struct BlockMmad<
-    MmadAtlasA2MLAQKTp1Spec,
-    L1TileShape_,
-    L0TileShape_,
-    AType_,
-    BType_,
-    CType_,
-    BiasType_,
-    TileCopy_,
-    TileMmad_> {
+    MmadAtlasA2MLAQKTp1Spec, L1TileShape_, L0TileShape_, AType_, BType_, CType_, BiasType_, TileCopy_, TileMmad_> {
 public:
     // Type Aliases
     using DispatchPolicy = MmadAtlasA2MLAQKTp1Spec;
@@ -93,14 +79,14 @@ public:
 
     /// Construct
     CATLASS_DEVICE
-    BlockMmad(Arch::Resource<ArchTag> &resource, uint32_t l1BufAddrStart = 0)
+    BlockMmad(Arch::Resource<ArchTag>& resource, uint32_t l1BufAddrStart = 0)
     {
         // Allocate L1 memory space
         l1ATensor = resource.l1Buf.template GetBufferByByte<ElementA>(l1BufAddrStart);
         for (uint32_t i = 0; i < STAGES; i++) {
             l1BTensor[i] = resource.l1Buf.template GetBufferByByte<ElementB>(l1BufAddrStart + L1A_SIZE + L1B_SIZE * i);
-            l1BRopeTensor[i] = resource.l1Buf.template GetBufferByByte<ElementB>(l1BufAddrStart + L1A_SIZE +
-                                                                                 L1B_SIZE * STAGES + L1BROPE_SIZE * i);
+            l1BRopeTensor[i] = resource.l1Buf.template GetBufferByByte<ElementB>(
+                l1BufAddrStart + L1A_SIZE + L1B_SIZE * STAGES + L1BROPE_SIZE * i);
             l0ATensor[i] = resource.l0ABuf.template GetBufferByByte<ElementA>(L0A_PINGPONG_BUF_SIZE * i);
             l0BTensor[i] = resource.l0BBuf.template GetBufferByByte<ElementB>(L0B_PINGPONG_BUF_SIZE * i);
             l0CTensor[i] = resource.l0CBuf.template GetBufferByByte<ElementAccumulator>(L0C_PINGPONG_BUF_SIZE * i);
@@ -109,15 +95,17 @@ public:
 
     /// Destructor
     CATLASS_DEVICE
-    ~BlockMmad() {}
+    ~BlockMmad()
+    {}
 
     /// Perform a block-scoped matrix multiply-accumulate
     CATLASS_DEVICE
-    void operator()(AscendC::GlobalTensor<ElementA> gA, AscendC::GlobalTensor<ElementA> gARope,
-                    AscendC::GlobalTensor<ElementB> gB, AscendC::GlobalTensor<ElementB> gBRope,
-                    AscendC::GlobalTensor<int32_t> gblockTable, AscendC::GlobalTensor<ElementC> gC, LayoutA layoutA,
-                    LayoutA layoutARope, LayoutB layoutB, LayoutB layoutBRope, LayoutC layoutC, GemmCoord actualShape,
-                    uint32_t &nIdx, uint32_t &nLoop, uint32_t &blockSize, uint32_t kvSeqlen, uint32_t &qkInLoopPingpongIdx, uint32_t &qkLoopPingpongIdx)
+    void operator()(
+        AscendC::GlobalTensor<ElementA> gA, AscendC::GlobalTensor<ElementA> gARope, AscendC::GlobalTensor<ElementB> gB,
+        AscendC::GlobalTensor<ElementB> gBRope, AscendC::GlobalTensor<int32_t> gblockTable,
+        AscendC::GlobalTensor<ElementC> gC, LayoutA layoutA, LayoutA layoutARope, LayoutB layoutB, LayoutB layoutBRope,
+        LayoutC layoutC, GemmCoord actualShape, uint32_t& nIdx, uint32_t& nLoop, uint32_t& blockSize, uint32_t kvSeqlen,
+        uint32_t& qkInLoopPingpongIdx, uint32_t& qkLoopPingpongIdx)
     {
         uint32_t rowNum = actualShape.m();
         uint32_t stackSeqTile = actualShape.n();
@@ -168,10 +156,10 @@ public:
                 AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(L0ABPingPongFlag);
                 LayoutAInL1 layoutACatSplitKInL1 = LayoutAInL1::template MakeLayout<ElementA>(rowNum, embedSplitSize);
                 LayoutAInL0 layoutACatSplitKInL0 = LayoutAInL0::template MakeLayout<ElementA>(rowNum, embedSplitSize);
-                copyL1ToL0A(l0ATensor[L0ABPingPongFlag], l1ATensor[embedSplitIdx * rowNumRound * EMBED_SPLIT_SIZE],
-                            layoutACatSplitKInL0, layoutACatSplitKInL1);
+                copyL1ToL0A(
+                    l0ATensor[L0ABPingPongFlag], l1ATensor[embedSplitIdx * rowNumRound * EMBED_SPLIT_SIZE],
+                    layoutACatSplitKInL0, layoutACatSplitKInL1);
                 AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(L0ABPingPongFlag);
-
 
                 if (embedSplitIdx == 0 || embedSplitIdx == 2) {
                     // copy K to l1b
@@ -179,8 +167,9 @@ public:
                     auto layoutUnitBSplitK = layoutB.GetTileLayout(MakeCoord(embedSplitGm2L1, seqTile));
                     LayoutBInL1 layoutUnitBSplitKInL1 =
                         LayoutBInL1::template MakeLayout<ElementB>(embedSplitGm2L1, seqTile);
-                    copyGmToL1B(l1BTensor[L1BPingPongFlag], gB[kvOffset + embedSplitIdx * embedSplitSize],
-                                layoutUnitBSplitKInL1, layoutUnitBSplitK);
+                    copyGmToL1B(
+                        l1BTensor[L1BPingPongFlag], gB[kvOffset + embedSplitIdx * embedSplitSize],
+                        layoutUnitBSplitKInL1, layoutUnitBSplitK);
                     AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(L1BPingPongFlag);
                     AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(L1BPingPongFlag);
 
@@ -190,25 +179,25 @@ public:
                     AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(L1BRopePingPongFlag + 2);
                     auto layoutUnitBRope = layoutBRope.GetTileLayout(MakeCoord(embedRope, seqTile));
                     LayoutBInL1 layoutBRopeInL1 = LayoutBInL1::template MakeLayout<ElementB>(embedRope, seqTile);
-                    copyGmToL1B(l1BRopeTensor[L1BRopePingPongFlag], gBRope[kvOffsetRope], layoutBRopeInL1,
-                                layoutUnitBRope);
+                    copyGmToL1B(
+                        l1BRopeTensor[L1BRopePingPongFlag], gBRope[kvOffsetRope], layoutBRopeInL1, layoutUnitBRope);
                     AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(L1BRopePingPongFlag);
                     AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(L1BRopePingPongFlag);
-
                 }
                 // copy K to l0b
                 AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(L0ABPingPongFlag + 2);
                 LayoutBInL1 layoutBCatSplitKInL1 = LayoutBInL1::template MakeLayout<ElementB>(embedSplitSize, seqTile);
                 LayoutBInL0 layoutBCatSplitKInL0 = LayoutBInL0::template MakeLayout<ElementB>(embedSplitSize, seqTile);
                 if (embedSplitIdx != 4) {
-                    copyL1ToL0B(l0BTensor[L0ABPingPongFlag],
-                                l1BTensor[L1BPingPongFlag][innerSplitIdxL12L0 * EMBED_SPLIT_SIZE * seqTileRound],
-                                layoutBCatSplitKInL0, layoutBCatSplitKInL1);
+                    copyL1ToL0B(
+                        l0BTensor[L0ABPingPongFlag],
+                        l1BTensor[L1BPingPongFlag][innerSplitIdxL12L0 * EMBED_SPLIT_SIZE * seqTileRound],
+                        layoutBCatSplitKInL0, layoutBCatSplitKInL1);
                 } else {
-                    copyL1ToL0B(l0BTensor[L0ABPingPongFlag], l1BRopeTensor[L1BRopePingPongFlag], layoutBCatSplitKInL0,
-                                layoutBCatSplitKInL1);
+                    copyL1ToL0B(
+                        l0BTensor[L0ABPingPongFlag], l1BRopeTensor[L1BRopePingPongFlag], layoutBCatSplitKInL0,
+                        layoutBCatSplitKInL1);
                 }
-
 
                 if (embedSplitIdx == 1 || embedSplitIdx == 3) {
                     AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(L1BPingPongFlag);
@@ -225,12 +214,12 @@ public:
                 }
 
                 // mmad
-                tileMmad(l0CTensor[L0CPingPongFlag], l0ATensor[L0ABPingPongFlag], l0BTensor[L0ABPingPongFlag],
-                         rowNumRound, seqTile, embedSplitSize, embedSplitIdx == 0);
+                tileMmad(
+                    l0CTensor[L0CPingPongFlag], l0ATensor[L0ABPingPongFlag], l0BTensor[L0ABPingPongFlag], rowNumRound,
+                    seqTile, embedSplitSize, embedSplitIdx == 0);
                 AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(L0ABPingPongFlag);
                 AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(L0ABPingPongFlag + 2);
                 qkInLoopPingpongIdx++;
-
             }
             // copy S to gm
             AscendC::SetFlag<AscendC::HardEvent::M_FIX>(L0CPingPongFlag);

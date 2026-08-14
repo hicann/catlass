@@ -93,8 +93,10 @@ struct GroupedGemmOptionsWithMxType : public GroupedGemmOptions {
 
     GroupedGemmOptionsWithMxType() = default;
 
-    int Parse(int argc, const char **argv) {
-        enum class ArgsIndex {
+    int Parse(int argc, const char** argv)
+    {
+        enum class ArgsIndex
+        {
             GROUP_COUNT = 1,
             M_INDEX,
             N_INDEX,
@@ -105,8 +107,8 @@ struct GroupedGemmOptionsWithMxType : public GroupedGemmOptions {
             ARGS_MAX
         };
 
-        if (argc > static_cast<uint32_t>(ArgsIndex::ARGS_MAX)
-            || argc < static_cast<uint32_t>(ArgsIndex::QUANT_TYPE_INDEX)) {
+        if (argc > static_cast<uint32_t>(ArgsIndex::ARGS_MAX) ||
+            argc < static_cast<uint32_t>(ArgsIndex::QUANT_TYPE_INDEX)) {
             std::cerr << TOSTRING(CATLASS_EXAMPLE_NAME) << " " << HELPER << std::endl;
             return -1;
         }
@@ -134,13 +136,14 @@ struct GroupedGemmOptionsWithMxType : public GroupedGemmOptions {
 using Options = GroupedGemmOptionsWithMxType;
 
 // malloc @npu device and prepare copying data
-#define MALLOC_AND_COPY_TO_NPU_DEVICE(descr, hostData, size) \
-    uint8_t *device##descr{nullptr}; \
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&device##descr), size, ACL_MEM_MALLOC_HUGE_FIRST)); \
+#define MALLOC_AND_COPY_TO_NPU_DEVICE(descr, hostData, size)                                           \
+    uint8_t* device##descr{nullptr};                                                                   \
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&device##descr), size, ACL_MEM_MALLOC_HUGE_FIRST)); \
     ACL_CHECK(aclrtMemcpy(device##descr, size, (hostData).data(), size, ACL_MEMCPY_HOST_TO_DEVICE))
 
 template <typename T>
-bool SaveResult(const std::string &filename, const std::vector<T> &data, const size_t dataSize) {
+bool SaveResult(const std::string& filename, const std::vector<T>& data, const size_t dataSize)
+{
     std::ofstream file(filename, std::ios::binary);
     if (!file) {
         return false;
@@ -159,49 +162,32 @@ bool SaveResult(const std::string &filename, const std::vector<T> &data, const s
     return true;
 }
 
-template <class MatmulKernel, class LayoutA_, class LayoutB_, class LayoutMxScaleA_, class LayoutMxScaleB_,
-    class LayoutC_>
+template <
+    class MatmulKernel, class LayoutA_, class LayoutB_, class LayoutMxScaleA_, class LayoutMxScaleB_, class LayoutC_>
 void LaunchMxGroupedMatmul(
-    Options const &options,
-    uint8_t *deviceGroupList,
-    uint8_t *deviceA,
-    LayoutA_ const &layoutA,
-    uint8_t *deviceB,
-    LayoutB_ const &layoutB,
-    uint8_t *deviceMxScaleA,
-    LayoutMxScaleA_ const &layoutMxScaleA,
-    uint8_t *deviceMxScaleB,
-    LayoutMxScaleB_ const &layoutMxScaleB,
-    uint8_t *deviceC,
-    LayoutC_ const &layoutC,
-    uint8_t *&deviceWorkspace,
-    size_t &sizeWorkspace,
-    aclrtStream stream,
-    uint32_t aicCoreNum)
+    Options const& options, uint8_t* deviceGroupList, uint8_t* deviceA, LayoutA_ const& layoutA, uint8_t* deviceB,
+    LayoutB_ const& layoutB, uint8_t* deviceMxScaleA, LayoutMxScaleA_ const& layoutMxScaleA, uint8_t* deviceMxScaleB,
+    LayoutMxScaleB_ const& layoutMxScaleB, uint8_t* deviceC, LayoutC_ const& layoutC, uint8_t*& deviceWorkspace,
+    size_t& sizeWorkspace, aclrtStream stream, uint32_t aicCoreNum)
 {
     using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
-    typename MatmulKernel::Arguments arguments{options.problemShape, options.problemCount,
-        deviceGroupList, deviceA, layoutA, deviceB, layoutB,
-        deviceMxScaleA, layoutMxScaleA, deviceMxScaleB, layoutMxScaleB,
-        deviceC, layoutC};
+    typename MatmulKernel::Arguments arguments{
+        options.problemShape, options.problemCount, deviceGroupList, deviceA,        layoutA, deviceB, layoutB,
+        deviceMxScaleA,       layoutMxScaleA,       deviceMxScaleB,  layoutMxScaleB, deviceC, layoutC};
 
     MatmulAdapter matmul_op;
     matmul_op.CanImplement(arguments);
     sizeWorkspace = matmul_op.GetWorkspaceSize(arguments);
     if (sizeWorkspace > 0) {
-        ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace),
-            sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
+        ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
     }
     matmul_op.Initialize(arguments, deviceWorkspace);
     matmul_op(stream, aicCoreNum);
 }
 
-template <class ElementA, class ElementB,
-    class ElementC,
-    class L1TileShape, class L0TileShape,
-    bool transB = false
->
-void MxGroupedMatmulSliceM(Options const &options) {
+template <class ElementA, class ElementB, class ElementC, class L1TileShape, class L0TileShape, bool transB = false>
+void MxGroupedMatmulSliceM(Options const& options)
+{
     aclrtStream stream{nullptr};
     ACL_CHECK(aclInit(nullptr));
     ACL_CHECK(aclrtSetDevice(options.deviceId));
@@ -217,11 +203,14 @@ void MxGroupedMatmulSliceM(Options const &options) {
 
     using ElementMxScale = float8_e8m0_t;
     using ElementGroupList = int64_t;
-    static_assert((std::is_same_v<ElementA, float8_e5m2_t> ||
-        std::is_same_v<ElementA, float8_e4m3_t> || std::is_same_v<ElementA, float4_e2m1x2_t>) &&
-        (std::is_same_v<ElementB, float8_e5m2_t> || std::is_same_v<ElementB, float8_e4m3_t> ||
-            std::is_same_v<ElementB, float4_e2m1x2_t> ) && std::is_same_v<ElementMxScale, float8_e8m0_t>,
-        "ElementA and ElementB must be float8_e5m2_t, float8_e4m3_t, or float4_e2m1x2_t, ElementMxScale must be float8_e8m0_t");
+    static_assert(
+        (std::is_same_v<ElementA, float8_e5m2_t> || std::is_same_v<ElementA, float8_e4m3_t> ||
+         std::is_same_v<ElementA, float4_e2m1x2_t>) &&
+            (std::is_same_v<ElementB, float8_e5m2_t> || std::is_same_v<ElementB, float8_e4m3_t> ||
+             std::is_same_v<ElementB, float4_e2m1x2_t>) &&
+            std::is_same_v<ElementMxScale, float8_e8m0_t>,
+        "ElementA and ElementB must be float8_e5m2_t, float8_e4m3_t, or float4_e2m1x2_t, ElementMxScale must be "
+        "float8_e8m0_t");
 
     using LayoutTagA = layout::RowMajor;
     using LayoutTagB = std::conditional_t<transB, layout::ColumnMajor, layout::RowMajor>;
@@ -282,10 +271,10 @@ void MxGroupedMatmulSliceM(Options const &options) {
     MALLOC_AND_COPY_TO_NPU_DEVICE(MxScaleA, hostMxScaleA, sizeMxScaleA);
     MALLOC_AND_COPY_TO_NPU_DEVICE(MxScaleB, hostMxScaleB, sizeMxScaleB);
 
-    uint8_t *deviceC{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceC{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
 
-    uint8_t *deviceWorkspace{nullptr};
+    uint8_t* deviceWorkspace{nullptr};
 
     // Get the number of cube cores of the current hardware
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
@@ -305,15 +294,14 @@ void MxGroupedMatmulSliceM(Options const &options) {
     //                          lastAddr 在地址变化时自然触发重载，安全。
     // ------------------------------------------------------------------
     constexpr uint32_t l1ScaleFactorK = 16;
-    constexpr uint32_t l0cStages = 1;  // 与 enableUnitFlag=true 配套，只能为 1
+    constexpr uint32_t l0cStages = 1; // 与 enableUnitFlag=true 配套，只能为 1
     // P4 实验开关，默认 ON；用 -DMX_GMM_L1_RESIDENT=0 关闭以对比 scalar 开销（见文件顶部说明）
     constexpr bool enableL1Resident = (MX_GMM_L1_RESIDENT != 0);
 #if MX_GMM_ENABLE_PRELOAD
     using DispatchPolicy = Gemm::MmadMxPreload<
         ArchTag, MX_GMM_PRELOAD_STAGES, enableUnitFlag, l1ScaleFactorK, l0cStages, enableL1Resident>;
 #else
-    using DispatchPolicy = Gemm::MmadMx<
-        ArchTag, enableUnitFlag, l1ScaleFactorK, l0cStages, enableL1Resident>;
+    using DispatchPolicy = Gemm::MmadMx<ArchTag, enableUnitFlag, l1ScaleFactorK, l0cStages, enableL1Resident>;
 #endif
 
     auto layoutA = tla::MakeLayout<ElementA, LayoutTagA>(m, k);
@@ -336,11 +324,11 @@ void MxGroupedMatmulSliceM(Options const &options) {
 
 #if MX_GMM_ENABLE_ASWT
     using BlockScheduler = typename Gemm::Block::GemmGroupedAswtTailSplitSwizzle<4, false, transB>;
-    using MatmulKernel = Gemm::Kernel::GroupedMxMatmulSliceMAswtTla<BlockMmad,
-        BlockEpilogue, BlockScheduler, ElementGroupList, (MX_GMM_ENABLE_BASE_M != 0)>;
-    LaunchMxGroupedMatmul<MatmulKernel>(options, deviceGroupList, deviceA, layoutA, deviceB, layoutB,
-        deviceMxScaleA, layoutMxScaleA, deviceMxScaleB, layoutMxScaleB, deviceC, layoutC,
-        deviceWorkspace, sizeWorkspace, stream, aicCoreNum);
+    using MatmulKernel = Gemm::Kernel::GroupedMxMatmulSliceMAswtTla<
+        BlockMmad, BlockEpilogue, BlockScheduler, ElementGroupList, (MX_GMM_ENABLE_BASE_M != 0)>;
+    LaunchMxGroupedMatmul<MatmulKernel>(
+        options, deviceGroupList, deviceA, layoutA, deviceB, layoutB, deviceMxScaleA, layoutMxScaleA, deviceMxScaleB,
+        layoutMxScaleB, deviceC, layoutC, deviceWorkspace, sizeWorkspace, stream, aicCoreNum);
 #else
 
     // ------------------------------------------------------------------
@@ -355,18 +343,18 @@ void MxGroupedMatmulSliceM(Options const &options) {
 
     if (useMPriority) {
         using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
-        using MatmulKernel = Gemm::Kernel::GroupedMxMatmulSliceMTla<BlockMmad,
-                BlockEpilogue, BlockScheduler, ElementGroupList>;
-        LaunchMxGroupedMatmul<MatmulKernel>(options, deviceGroupList, deviceA, layoutA, deviceB, layoutB,
-            deviceMxScaleA, layoutMxScaleA, deviceMxScaleB, layoutMxScaleB, deviceC, layoutC,
-            deviceWorkspace, sizeWorkspace, stream, aicCoreNum);
+        using MatmulKernel =
+            Gemm::Kernel::GroupedMxMatmulSliceMTla<BlockMmad, BlockEpilogue, BlockScheduler, ElementGroupList>;
+        LaunchMxGroupedMatmul<MatmulKernel>(
+            options, deviceGroupList, deviceA, layoutA, deviceB, layoutB, deviceMxScaleA, layoutMxScaleA,
+            deviceMxScaleB, layoutMxScaleB, deviceC, layoutC, deviceWorkspace, sizeWorkspace, stream, aicCoreNum);
     } else {
         using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
-        using MatmulKernel = Gemm::Kernel::GroupedMxMatmulSliceMTla<BlockMmad,
-                BlockEpilogue, BlockScheduler, ElementGroupList>;
-        LaunchMxGroupedMatmul<MatmulKernel>(options, deviceGroupList, deviceA, layoutA, deviceB, layoutB,
-            deviceMxScaleA, layoutMxScaleA, deviceMxScaleB, layoutMxScaleB, deviceC, layoutC,
-            deviceWorkspace, sizeWorkspace, stream, aicCoreNum);
+        using MatmulKernel =
+            Gemm::Kernel::GroupedMxMatmulSliceMTla<BlockMmad, BlockEpilogue, BlockScheduler, ElementGroupList>;
+        LaunchMxGroupedMatmul<MatmulKernel>(
+            options, deviceGroupList, deviceA, layoutA, deviceB, layoutB, deviceMxScaleA, layoutMxScaleA,
+            deviceMxScaleB, layoutMxScaleB, deviceC, layoutC, deviceWorkspace, sizeWorkspace, stream, aicCoreNum);
     }
 
 #endif
@@ -383,7 +371,7 @@ void MxGroupedMatmulSliceM(Options const &options) {
     for (uint32_t i = 0; i < lenC; ++i) {
         hostCFp32[i] = static_cast<float>(hostC[i]);
     }
- 
+
     std::string outputFileName = "./data/result.bin";
     SaveResult<float>(outputFileName, hostCFp32, lenC * sizeof(float));
 
@@ -403,23 +391,27 @@ void MxGroupedMatmulSliceM(Options const &options) {
 }
 
 template <bool TB>
-void Run(Options const &options) {
+void Run(Options const& options)
+{
     using ElementC = bfloat16_t;
     if (options.quantDataType == "float8_e4m3fn") {
-        MxGroupedMatmulSliceM<float8_e4m3_t, float8_e4m3_t, ElementC,
-            Shape<Int<256>,Int<256>,Int<256>>, Shape<Int<256>,Int<256>,Int<128>>, TB>(options);
+        MxGroupedMatmulSliceM<
+            float8_e4m3_t, float8_e4m3_t, ElementC, Shape<Int<256>, Int<256>, Int<256>>,
+            Shape<Int<256>, Int<256>, Int<128>>, TB>(options);
     } else if (options.quantDataType == "float8_e5m2") {
-        MxGroupedMatmulSliceM<float8_e5m2_t, float8_e5m2_t, ElementC,
-            Shape<Int<256>,Int<256>,Int<256>>, Shape<Int<256>,Int<256>,Int<128>>, TB>(options);
+        MxGroupedMatmulSliceM<
+            float8_e5m2_t, float8_e5m2_t, ElementC, Shape<Int<256>, Int<256>, Int<256>>,
+            Shape<Int<256>, Int<256>, Int<128>>, TB>(options);
     } else if (options.quantDataType == "float4_e2m1fn_x2") {
-        MxGroupedMatmulSliceM<float4_e2m1x2_t, float4_e2m1x2_t, ElementC,
-            Shape<Int<256>,Int<256>,Int<512>>, Shape<Int<256>,Int<256>,Int<256>>, TB>(options);
+        MxGroupedMatmulSliceM<
+            float4_e2m1x2_t, float4_e2m1x2_t, ElementC, Shape<Int<256>, Int<256>, Int<512>>,
+            Shape<Int<256>, Int<256>, Int<256>>, TB>(options);
     } else {
         std::cerr << "Unexpected quant data-type mismatch." << std::endl;
     }
 }
 
-int main(int argc, const char **argv)
+int main(int argc, const char** argv)
 {
     Options options;
     if (options.Parse(argc, argv) != 0) {

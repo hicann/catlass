@@ -28,7 +28,7 @@
 
 - You are advised to write an operator calling script based on the operating environment resources. If the operator calling script does not match the resource status, for example, the space used for generating input data and benchmark computing results exceeds the memory capacity limit, or the data stored locally in the script exceeds the disk space, an error may occur and the process may exit unexpectedly.
 - If an operator exits abnormally during runtime, it will terminate the process and print error information. It is recommended to locate the specific cause of the error based on the error prompts, including enabling the operator synchronous execution function and checking CANN log files.
-- When operators are called using PyTorch, [PyTorch](https://gitcode.com/Ascend/pytorch) is used. This may result in runtime errors due to version mismatch. For details, see [PyTorch Security Statement](https://gitcode.com/Ascend/pytorch#%E5%AE%89%E5%85%A8%E5%A3%B0%E6%98%8E).
+- When operators are called using TorchNPU, [TorchNPU](https://gitcode.com/Ascend/pytorch) is used. This may result in runtime errors due to version mismatch. For details, see [TorchNPU Security Statement](https://gitcode.com/Ascend/pytorch#%E5%AE%89%E5%85%A8%E5%A3%B0%E6%98%8E).
 
 ## Sample Security Statement
 

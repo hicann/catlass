@@ -31,8 +31,9 @@ using namespace Catlass;
 /*
 This example demonstrates how to compute mla.
 */
-template <class BlockMmadQK, class BlockMmadPV, class EpilogueMLASoftmax, class EpilogueMLARescaleO,
-          class EpilogueMLAFDRescaleO>
+template <
+    class BlockMmadQK, class BlockMmadPV, class EpilogueMLASoftmax, class EpilogueMLARescaleO,
+    class EpilogueMLAFDRescaleO>
 class MLAKernelTp1Spec {
 public:
     using ArchTag = typename BlockMmadQK::ArchTag;
@@ -83,22 +84,35 @@ public:
 
         // Methods
         CATLASS_DEVICE
-        Params() {}
+        Params()
+        {}
 
         CATLASS_DEVICE
-        Params(GM_ADDR q_, GM_ADDR qRope_, GM_ADDR k_, GM_ADDR kRope_, GM_ADDR blockTables_, GM_ADDR o_, GM_ADDR s_,
-               GM_ADDR p_, GM_ADDR oTmp_, GM_ADDR oUpdate_, GM_ADDR oCoreTmp_, GM_ADDR l_, GM_ADDR tiling_)
-            : q(q_), qRope(qRope_), k(k_), kRope(kRope_), blockTables(blockTables_), o(o_), s(s_), p(p_), oTmp(oTmp_),
-              oUpdate(oUpdate_), oCoreTmp(oCoreTmp_), l(l_), tiling(tiling_)
-        {
-        }
+        Params(
+            GM_ADDR q_, GM_ADDR qRope_, GM_ADDR k_, GM_ADDR kRope_, GM_ADDR blockTables_, GM_ADDR o_, GM_ADDR s_,
+            GM_ADDR p_, GM_ADDR oTmp_, GM_ADDR oUpdate_, GM_ADDR oCoreTmp_, GM_ADDR l_, GM_ADDR tiling_)
+            : q(q_),
+              qRope(qRope_),
+              k(k_),
+              kRope(kRope_),
+              blockTables(blockTables_),
+              o(o_),
+              s(s_),
+              p(p_),
+              oTmp(oTmp_),
+              oUpdate(oUpdate_),
+              oCoreTmp(oCoreTmp_),
+              l(l_),
+              tiling(tiling_)
+        {}
     };
 
     // Methods
     CATLASS_DEVICE
-    MLAKernelTp1Spec() {}
+    MLAKernelTp1Spec()
+    {}
 
-    CATLASS_DEVICE void operator()(Params const &params)
+    CATLASS_DEVICE void operator()(Params const& params)
     {
 #if defined(__DAV_CUBE__)
         AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(EVENT_ID0);
@@ -139,35 +153,35 @@ public:
         // Get the memory offset address of the input on Global Memory
 #if defined(__DAV_CUBE__)
         AscendC::GlobalTensor<ElementQ> gQ;
-        gQ.SetGlobalBuffer((__gm__ ElementQ *)params.q);
+        gQ.SetGlobalBuffer((__gm__ ElementQ*)params.q);
         AscendC::GlobalTensor<ElementQ> gQRope;
-        gQRope.SetGlobalBuffer((__gm__ ElementQ *)params.qRope);
+        gQRope.SetGlobalBuffer((__gm__ ElementQ*)params.qRope);
         AscendC::GlobalTensor<ElementK> gK;
-        gK.SetGlobalBuffer((__gm__ ElementK *)params.k);
+        gK.SetGlobalBuffer((__gm__ ElementK*)params.k);
         AscendC::GlobalTensor<ElementK> gKRope;
-        gKRope.SetGlobalBuffer((__gm__ ElementK *)params.kRope);
+        gKRope.SetGlobalBuffer((__gm__ ElementK*)params.kRope);
         AscendC::GlobalTensor<int32_t> gblockTable;
-        gblockTable.SetGlobalBuffer((__gm__ int32_t *)(params.blockTables));
+        gblockTable.SetGlobalBuffer((__gm__ int32_t*)(params.blockTables));
 #elif defined(__DAV_VEC__)
         AscendC::GlobalTensor<ElementO> gO;
-        gO.SetGlobalBuffer((__gm__ ElementO *)params.o);
+        gO.SetGlobalBuffer((__gm__ ElementO*)params.o);
         AscendC::GlobalTensor<ElementOTmp> gOUpdate;
-        gOUpdate.SetGlobalBuffer((__gm__ ElementOTmp *)params.oUpdate);
+        gOUpdate.SetGlobalBuffer((__gm__ ElementOTmp*)params.oUpdate);
         AscendC::GlobalTensor<ElementOTmp> gOCoreTmp;
-        gOCoreTmp.SetGlobalBuffer((__gm__ ElementOTmp *)params.oCoreTmp);
+        gOCoreTmp.SetGlobalBuffer((__gm__ ElementOTmp*)params.oCoreTmp);
         AscendC::GlobalTensor<ElementOTmp> gl;
-        gl.SetGlobalBuffer((__gm__ ElementOTmp *)params.l);
+        gl.SetGlobalBuffer((__gm__ ElementOTmp*)params.l);
         AscendC::GlobalTensor<float> gTilingFp64;
-        gTilingFp64.SetGlobalBuffer((__gm__ float *)params.tiling);
+        gTilingFp64.SetGlobalBuffer((__gm__ float*)params.tiling);
 #endif
         AscendC::GlobalTensor<ElementS> gS;
-        gS.SetGlobalBuffer((__gm__ ElementS *)params.s);
+        gS.SetGlobalBuffer((__gm__ ElementS*)params.s);
         AscendC::GlobalTensor<ElementP> gP;
-        gP.SetGlobalBuffer((__gm__ ElementP *)params.p);
+        gP.SetGlobalBuffer((__gm__ ElementP*)params.p);
         AscendC::GlobalTensor<ElementOTmp> gOTmp;
-        gOTmp.SetGlobalBuffer((__gm__ ElementOTmp *)params.oTmp);
+        gOTmp.SetGlobalBuffer((__gm__ ElementOTmp*)params.oTmp);
         AscendC::GlobalTensor<uint32_t> gTiling;
-        gTiling.SetGlobalBuffer((__gm__ uint32_t *)params.tiling);
+        gTiling.SetGlobalBuffer((__gm__ uint32_t*)params.tiling);
 
 #if defined(__DAV_CUBE__)
         uint32_t coreIdx = AscendC::GetBlockIdx();
@@ -197,7 +211,7 @@ public:
         uint32_t kvHeads = NUM1;
         uint32_t strideQO = qHeads * embed;
         uint32_t strideQORope = qHeads * embedRope;
-        uint32_t glFlag[2] = {1,1};
+        uint32_t glFlag[2] = {1, 1};
 #if defined(__DAV_CUBE__)
         BlockMmadQK blockMmadQK(resource);
         BlockMmadPV blockMmadPV(resource);
@@ -286,10 +300,11 @@ public:
                     uint64_t gmOffseS =
                         (uint64_t)coreIdx * TMP_SIZE_DECODER * 4 + (uint64_t)gSPingPongFlag * TMP_SIZE_DECODER * 2;
 
-                    blockMmadQK(gQ[gmOffsetQ], gQRope[gmOffsetQRope], gK, gKRope,
-                                gblockTable[gmOffsetBlockTable + startKV / blockSize],
-                                gS[gmOffseS], layoutQ, layoutQRope, layoutK, layoutKRope, layoutS, actualBlockShapeQK,
-                                nIdx, nLoop, blockSize, curKVSeqlen, qkInLoopPingpongIdx, qkLoopPingpongIdx);
+                    blockMmadQK(
+                        gQ[gmOffsetQ], gQRope[gmOffsetQRope], gK, gKRope,
+                        gblockTable[gmOffsetBlockTable + startKV / blockSize], gS[gmOffseS], layoutQ, layoutQRope,
+                        layoutK, layoutKRope, layoutS, actualBlockShapeQK, nIdx, nLoop, blockSize, curKVSeqlen,
+                        qkInLoopPingpongIdx, qkLoopPingpongIdx);
 
                     Arch::CrossCoreSetFlag<0x2, PIPE_FIX>(qkReady);
 #elif defined(__DAV_VEC__)
@@ -304,8 +319,9 @@ public:
                                          (uint64_t)gSPingPongFlag * TMP_SIZE_DECODER * 2;
 
                     // Softmax one-stage calculation
-                    epilogueMLATP1Softmax(gP[gmOffsetP], gS[gmOffsetS], layoutP,
-                                          layoutS, actualBlockShapeQK, nIdx, glFlag, taskPingPongFlag, gSPingPongFlag);
+                    epilogueMLATP1Softmax(
+                        gP[gmOffsetP], gS[gmOffsetS], layoutP, layoutS, actualBlockShapeQK, nIdx, glFlag,
+                        taskPingPongFlag, gSPingPongFlag);
 
                     Arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(softmaxReady);
 #endif
@@ -315,7 +331,8 @@ public:
             }
 
             // Split k seqlen
-            for (nIdx = nIdx + UNIT_BLOCK_STACK_NUM; nIdx < nLoop + UNIT_BLOCK_STACK_NUM; nIdx += UNIT_BLOCK_STACK_NUM, pingpongIdx += UNIT_BLOCK_STACK_NUM) {
+            for (nIdx = nIdx + UNIT_BLOCK_STACK_NUM; nIdx < nLoop + UNIT_BLOCK_STACK_NUM;
+                 nIdx += UNIT_BLOCK_STACK_NUM, pingpongIdx += UNIT_BLOCK_STACK_NUM) {
                 if (nIdx < nLoop) {
                     if (nIdx + UNIT_BLOCK_STACK_NUM > nLoop - 1) {
                         // Calculate the size of the tail block
@@ -335,10 +352,11 @@ public:
                     GemmCoord actualBlockShapeQK{rowNum, stackSeqTile, embed + embedRope};
                     uint64_t gmOffseS =
                         (uint64_t)coreIdx * TMP_SIZE_DECODER * 4 + (uint64_t)gSPingPongFlag * TMP_SIZE_DECODER * 2;
-                    blockMmadQK(gQ[gmOffsetQ], gQRope[gmOffsetQRope], gK, gKRope,
-                                gblockTable[gmOffsetBlockTable + startKV / blockSize],
-                                gS[gmOffseS], layoutQ, layoutQRope, layoutK, layoutKRope, layoutS, actualBlockShapeQK,
-                                nIdx, nLoop, blockSize, curKVSeqlen,qkInLoopPingpongIdx, qkLoopPingpongIdx);
+                    blockMmadQK(
+                        gQ[gmOffsetQ], gQRope[gmOffsetQRope], gK, gKRope,
+                        gblockTable[gmOffsetBlockTable + startKV / blockSize], gS[gmOffseS], layoutQ, layoutQRope,
+                        layoutK, layoutKRope, layoutS, actualBlockShapeQK, nIdx, nLoop, blockSize, curKVSeqlen,
+                        qkInLoopPingpongIdx, qkLoopPingpongIdx);
                     Arch::CrossCoreSetFlag<0x2, PIPE_FIX>(qkReady);
 #elif defined(__DAV_VEC__)
                     LayoutP layoutP(rowNum, stackSeqTile, stackSeqTileRound);
@@ -351,8 +369,9 @@ public:
                                          (int64_t)subBlockIdx * rowNum / 2 * stackSeqTileRound +
                                          (uint64_t)gSPingPongFlag * TMP_SIZE_DECODER * 2;
                     // Softmax one-stage calculation
-                    epilogueMLATP1Softmax(gP[gmOffsetP], gS[gmOffsetS], layoutP,
-                                          layoutS, actualBlockShapeQK, nIdx, glFlag, taskPingPongFlag, gSPingPongFlag);
+                    epilogueMLATP1Softmax(
+                        gP[gmOffsetP], gS[gmOffsetS], layoutP, layoutS, actualBlockShapeQK, nIdx, glFlag,
+                        taskPingPongFlag, gSPingPongFlag);
                     Arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(softmaxReady);
 #endif
                 }
@@ -360,8 +379,10 @@ public:
                 if (nIdx + UNIT_BLOCK_STACK_NUM > nLoop + UNIT_BLOCK_STACK_NUM - 1) {
                     bool nextKerFlag = kerFlag;
                     uint32_t nextTailtaskIdx = tailtaskIdx;
-                    for (uint32_t nextProcess = uint32_t(coreNum) + process; nextProcess < tailProcessNum; nextProcess += uint32_t(coreNum)) {
-                        while (nextTailtaskIdx < tailTaskNum && nextProcess >= gTiling.GetValue(CUTASK_START_OFFSET + nextTailtaskIdx + 1)) {
+                    for (uint32_t nextProcess = uint32_t(coreNum) + process; nextProcess < tailProcessNum;
+                         nextProcess += uint32_t(coreNum)) {
+                        while (nextTailtaskIdx < tailTaskNum &&
+                               nextProcess >= gTiling.GetValue(CUTASK_START_OFFSET + nextTailtaskIdx + 1)) {
                             nextTailtaskIdx++;
                         }
 
@@ -407,13 +428,15 @@ public:
                             LayoutK nextLayoutKRope(embedRope, stackSeqTile);
                             LayoutS nextLayoutS(rowNumRound, stackSeqTileRound);
                             GemmCoord nextActualBlockShapeQK{rowNum, stackSeqTile, embed + embedRope};
-                            uint64_t nextGmOffseS =
-                                (uint64_t)coreIdx * TMP_SIZE_DECODER * 4 + (uint64_t)gSPingPongFlag * TMP_SIZE_DECODER * 2;
+                            uint64_t nextGmOffseS = (uint64_t)coreIdx * TMP_SIZE_DECODER * 4 +
+                                                    (uint64_t)gSPingPongFlag * TMP_SIZE_DECODER * 2;
                             // Calculate Q * K^T
-                            blockMmadQK(gQ[nextGmOffsetQ], gQRope[nextGmOffsetQRope], gK, gKRope,
-                                        gblockTable[nextGmOffsetBlockTable + nextStartKV / blockSize],
-                                        gS[nextGmOffseS], nextLayoutQ, nextLayoutQRope, nextLayoutK, nextLayoutKRope, nextLayoutS, nextActualBlockShapeQK,
-                                        nextNIdx, nextNLoop, blockSize, nextCurKVSeqlen, qkInLoopPingpongIdx, qkLoopPingpongIdx);
+                            blockMmadQK(
+                                gQ[nextGmOffsetQ], gQRope[nextGmOffsetQRope], gK, gKRope,
+                                gblockTable[nextGmOffsetBlockTable + nextStartKV / blockSize], gS[nextGmOffseS],
+                                nextLayoutQ, nextLayoutQRope, nextLayoutK, nextLayoutKRope, nextLayoutS,
+                                nextActualBlockShapeQK, nextNIdx, nextNLoop, blockSize, nextCurKVSeqlen,
+                                qkInLoopPingpongIdx, qkLoopPingpongIdx);
 
                             Arch::CrossCoreSetFlag<0x2, PIPE_FIX>(qkReady);
 #elif defined(__DAV_VEC__)
@@ -421,26 +444,26 @@ public:
                             LayoutS nextLayoutS(rowNum, stackSeqTile, stackSeqTileRound);
                             GemmCoord nextActualBlockShapeQK{rowNum, stackSeqTile, embed};
                             uint32_t nextGmOffsetP = (uint64_t)coreIdx * TMP_SIZE * 2 +
-                                                        (uint64_t)subBlockIdx * rowNum / 2 * stackSeqTileRound +
-                                                        (uint64_t)gSPingPongFlag * TMP_SIZE;
+                                                     (uint64_t)subBlockIdx * rowNum / 2 * stackSeqTileRound +
+                                                     (uint64_t)gSPingPongFlag * TMP_SIZE;
                             uint32_t nextGmOffsetS = (int64_t)coreIdx * TMP_SIZE_DECODER * 4 +
-                                                        (int64_t)subBlockIdx * rowNum / 2 * stackSeqTileRound +
-                                                        (uint64_t)gSPingPongFlag * TMP_SIZE_DECODER * 2;
+                                                     (int64_t)subBlockIdx * rowNum / 2 * stackSeqTileRound +
+                                                     (uint64_t)gSPingPongFlag * TMP_SIZE_DECODER * 2;
                             uint32_t nextTaskpingpongFlag = 1 - taskPingPongFlag;
 
-                            uint64_t gmOffsetS =
-                                (uint64_t)coreIdx * TMP_SIZE_DECODER * 4 + (uint64_t)gSPingPongFlag * TMP_SIZE_DECODER * 2;
+                            uint64_t gmOffsetS = (uint64_t)coreIdx * TMP_SIZE_DECODER * 4 +
+                                                 (uint64_t)gSPingPongFlag * TMP_SIZE_DECODER * 2;
 
                             // Softmax one-stage calculation
-                            epilogueMLATP1Softmax(gP[nextGmOffsetP], gS[nextGmOffsetS], nextLayoutP,
-                                                    nextLayoutS, nextActualBlockShapeQK, nextNIdx, glFlag, nextTaskpingpongFlag, gSPingPongFlag);
+                            epilogueMLATP1Softmax(
+                                gP[nextGmOffsetP], gS[nextGmOffsetS], nextLayoutP, nextLayoutS, nextActualBlockShapeQK,
+                                nextNIdx, glFlag, nextTaskpingpongFlag, gSPingPongFlag);
                             Arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(softmaxReady);
 #endif
                             break;
                         }
                     }
                 }
-
 
                 // Wait for the four Q * K^T calculations to complete before calculating P * V
                 if (nIdx >= UNIT_BLOCK_STACK_NUM) {
@@ -460,9 +483,10 @@ public:
                     uint64_t gmOffseP = (uint64_t)coreIdx * TMP_SIZE * 2 + (uint64_t)gPPingPongFlag * TMP_SIZE;
                     uint64_t gmOffseOtmp = gmOffseP;
                     // Calculate P * V
-                    blockMmadPV(gP[gmOffseP], gK, gblockTable[gmOffsetBlockTable + startKV / blockSize],
-                                gOTmp[gmOffseOtmp], layoutP, layoutV,
-                                layoutOTmp, actualBlockShapePV, nIdx, gPPingPongFlag, nLoop, blockSize, curKVSeqlen, softmaxReady, pvLoopPingpongIdx);
+                    blockMmadPV(
+                        gP[gmOffseP], gK, gblockTable[gmOffsetBlockTable + startKV / blockSize], gOTmp[gmOffseOtmp],
+                        layoutP, layoutV, layoutOTmp, actualBlockShapePV, nIdx, gPPingPongFlag, nLoop, blockSize,
+                        curKVSeqlen, softmaxReady, pvLoopPingpongIdx);
                     Arch::CrossCoreSetFlag<0x2, PIPE_FIX>(pvReady);
 #elif defined(__DAV_VEC__)
                     // Wait for P * V calculation to complete
@@ -476,10 +500,10 @@ public:
                     uint64_t gmOffsetOTmp = (uint64_t)(coreIdx * TMP_SIZE * 2 + rescaleOPingPongFlag * TMP_SIZE);
                     uint64_t gmOffsetUpdate = (uint64_t)(coreIdx * TMP_SIZE);
                     // Softmax two-stage update
-                    epilogueMLATP1RescaleO(gOTmp[gmOffsetOTmp], gOUpdate[gmOffsetUpdate], gO[gmOffsetO],
-                                           gOCoreTmp[oFdOffset], gl[lOffset], layoutOTmp,
-                                           layoutUpdate, layoutO, actualBlockShapePV, nIdx, isLastNTile,
-                                           rescaleOPingPongFlag, glFlag, taskPingPongFlag);
+                    epilogueMLATP1RescaleO(
+                        gOTmp[gmOffsetOTmp], gOUpdate[gmOffsetUpdate], gO[gmOffsetO], gOCoreTmp[oFdOffset], gl[lOffset],
+                        layoutOTmp, layoutUpdate, layoutO, actualBlockShapePV, nIdx, isLastNTile, rescaleOPingPongFlag,
+                        glFlag, taskPingPongFlag);
 #endif
                 }
             }
@@ -540,30 +564,33 @@ public:
                 uint64_t gmOffseS =
                     (uint64_t)coreIdx * TMP_SIZE_DECODER * 4 + (uint64_t)gSPingPongFlag * TMP_SIZE_DECODER * 2;
                 // Calculate Q * K^T
-                blockMmadQK(gQ[gmOffsetQ], gQRope[gmOffsetQRope], gK, gKRope, gblockTable[gmOffsetBlockTable],
-                            gS[gmOffseS], layoutQ, layoutQRope, layoutK, layoutKRope, layoutS, actualBlockShapeQK,
-                            nIdx, nLoop, blockSize, kvSeqlen, qkInLoopPingpongIdx, qkLoopPingpongIdx);
+                blockMmadQK(
+                    gQ[gmOffsetQ], gQRope[gmOffsetQRope], gK, gKRope, gblockTable[gmOffsetBlockTable], gS[gmOffseS],
+                    layoutQ, layoutQRope, layoutK, layoutKRope, layoutS, actualBlockShapeQK, nIdx, nLoop, blockSize,
+                    kvSeqlen, qkInLoopPingpongIdx, qkLoopPingpongIdx);
                 Arch::CrossCoreSetFlag<0x2, PIPE_FIX>(qkReady);
 #elif defined(__DAV_VEC__)
                 LayoutP layoutP(rowNum, stackSeqTile, stackSeqTileRound);
                 LayoutS layoutS(rowNum, stackSeqTile, stackSeqTileRound);
                 GemmCoord actualBlockShapeQK{rowNum, stackSeqTile, embed};
                 uint32_t gmOffsetP = (uint64_t)coreIdx * TMP_SIZE * 2 +
-                                        (uint64_t)subBlockIdx * rowNum / 2 * stackSeqTileRound +
-                                        (uint64_t)((pingpongIdx / UNIT_BLOCK_STACK_NUM) % 2) * TMP_SIZE;
+                                     (uint64_t)subBlockIdx * rowNum / 2 * stackSeqTileRound +
+                                     (uint64_t)((pingpongIdx / UNIT_BLOCK_STACK_NUM) % 2) * TMP_SIZE;
                 uint32_t gmOffsetS = (int64_t)coreIdx * TMP_SIZE_DECODER * 4 +
-                                        (int64_t)subBlockIdx * rowNum / 2 * stackSeqTileRound +
-                                        (uint64_t)((pingpongIdx / UNIT_BLOCK_STACK_NUM) % 2) * TMP_SIZE_DECODER * 2;
+                                     (int64_t)subBlockIdx * rowNum / 2 * stackSeqTileRound +
+                                     (uint64_t)((pingpongIdx / UNIT_BLOCK_STACK_NUM) % 2) * TMP_SIZE_DECODER * 2;
                 // Softmax one-stage calculation
-                epilogueMLATP1Softmax(gP[gmOffsetP], gS[gmOffsetS], layoutP,
-                                        layoutS, actualBlockShapeQK, nIdx, glFlag, taskPingPongFlag, gSPingPongFlag);
+                epilogueMLATP1Softmax(
+                    gP[gmOffsetP], gS[gmOffsetS], layoutP, layoutS, actualBlockShapeQK, nIdx, glFlag, taskPingPongFlag,
+                    gSPingPongFlag);
                 Arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(softmaxReady);
 #endif
                 pingpongIdx += UNIT_BLOCK_STACK_NUM;
             }
 
             // Split k seqlen
-            for (uint32_t nIdx = UNIT_BLOCK_STACK_NUM; nIdx < nLoop + UNIT_BLOCK_STACK_NUM; nIdx += UNIT_BLOCK_STACK_NUM, pingpongIdx += UNIT_BLOCK_STACK_NUM) {
+            for (uint32_t nIdx = UNIT_BLOCK_STACK_NUM; nIdx < nLoop + UNIT_BLOCK_STACK_NUM;
+                 nIdx += UNIT_BLOCK_STACK_NUM, pingpongIdx += UNIT_BLOCK_STACK_NUM) {
                 if (nIdx < nLoop) {
                     if (nIdx + UNIT_BLOCK_STACK_NUM > nLoop - 1) {
                         // Calculate the size of the tail block
@@ -583,9 +610,10 @@ public:
                     GemmCoord actualBlockShapeQK{rowNum, stackSeqTile, embed + embedRope};
                     uint64_t gmOffseS =
                         (uint64_t)coreIdx * TMP_SIZE_DECODER * 4 + (uint64_t)gSPingPongFlag * TMP_SIZE_DECODER * 2;
-                    blockMmadQK(gQ[gmOffsetQ], gQRope[gmOffsetQRope], gK, gKRope, gblockTable[gmOffsetBlockTable],
-                                gS[gmOffseS], layoutQ, layoutQRope, layoutK, layoutKRope, layoutS, actualBlockShapeQK,
-                                nIdx, nLoop, blockSize, kvSeqlen, qkInLoopPingpongIdx, qkLoopPingpongIdx);
+                    blockMmadQK(
+                        gQ[gmOffsetQ], gQRope[gmOffsetQRope], gK, gKRope, gblockTable[gmOffsetBlockTable], gS[gmOffseS],
+                        layoutQ, layoutQRope, layoutK, layoutKRope, layoutS, actualBlockShapeQK, nIdx, nLoop, blockSize,
+                        kvSeqlen, qkInLoopPingpongIdx, qkLoopPingpongIdx);
                     Arch::CrossCoreSetFlag<0x2, PIPE_FIX>(qkReady);
 #elif defined(__DAV_VEC__)
                     LayoutP layoutP(rowNum, stackSeqTile, stackSeqTileRound);
@@ -598,17 +626,19 @@ public:
                                          (int64_t)subBlockIdx * rowNum / 2 * stackSeqTileRound +
                                          gSPingPongFlag * TMP_SIZE_DECODER * 2;
                     // Softmax one-stage calculation
-                    epilogueMLATP1Softmax(gP[gmOffsetP], gS[gmOffsetS], layoutP,
-                                          layoutS, actualBlockShapeQK, nIdx, glFlag, taskPingPongFlag, gSPingPongFlag);
+                    epilogueMLATP1Softmax(
+                        gP[gmOffsetP], gS[gmOffsetS], layoutP, layoutS, actualBlockShapeQK, nIdx, glFlag,
+                        taskPingPongFlag, gSPingPongFlag);
                     Arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(softmaxReady);
 #endif
                 }
                 uint32_t nextProcess = process + uint32_t(coreNum);
-                if(nIdx + UNIT_BLOCK_STACK_NUM > nLoop + UNIT_BLOCK_STACK_NUM - 1 && nextProcess < formerTaskNum) {
+                if (nIdx + UNIT_BLOCK_STACK_NUM > nLoop + UNIT_BLOCK_STACK_NUM - 1 && nextProcess < formerTaskNum) {
                     bool nextIsForward = isForward;
                     uint32_t nextBigProcess = nextProcess - (nextProcess % coreNum) + (coreNum - 1);
                     nextBigProcess = (nextBigProcess > formerTaskNum - 1) ? (formerTaskNum - 1) : nextBigProcess;
-                    uint32_t nextRealProcess = nextIsForward ? nextProcess : (nextBigProcess - nextProcess % uint32_t(coreNum));
+                    uint32_t nextRealProcess =
+                        nextIsForward ? nextProcess : (nextBigProcess - nextProcess % uint32_t(coreNum));
 
                     // Get the offset of each core on the GM
                     uint32_t nextOffsetTiling = tilingHeadSize + tilingParaSize * nextRealProcess;
@@ -639,9 +669,10 @@ public:
                     uint64_t nextGMOffseS =
                         (uint64_t)coreIdx * TMP_SIZE_DECODER * 4 + (uint64_t)gSPingPongFlag * TMP_SIZE_DECODER * 2;
                     // Calculate Q * K^T
-                    blockMmadQK(gQ[nextGMOffsetQ], gQRope[nextGMOffsetQRope], gK, gKRope, gblockTable[nextGMOffsetBlockTable],
-                                gS[nextGMOffseS], layoutQ, layoutQRope, layoutK, layoutKRope, layoutS, nextActualBlockShapeQK,
-                                nextNIdx, nextNLoop, blockSize, nextKvSeqlen, qkInLoopPingpongIdx, qkLoopPingpongIdx);
+                    blockMmadQK(
+                        gQ[nextGMOffsetQ], gQRope[nextGMOffsetQRope], gK, gKRope, gblockTable[nextGMOffsetBlockTable],
+                        gS[nextGMOffseS], layoutQ, layoutQRope, layoutK, layoutKRope, layoutS, nextActualBlockShapeQK,
+                        nextNIdx, nextNLoop, blockSize, nextKvSeqlen, qkInLoopPingpongIdx, qkLoopPingpongIdx);
 
                     Arch::CrossCoreSetFlag<0x2, PIPE_FIX>(qkReady);
 #elif defined(__DAV_VEC__)
@@ -650,14 +681,15 @@ public:
                     GemmCoord nextActualBlockShapeQK{rowNum, stackSeqTile, embed};
                     uint32_t nextTaskPingPongFlag = 1 - taskPingPongFlag;
                     uint32_t nextGMOffsetP = (uint64_t)coreIdx * TMP_SIZE * 2 +
-                                        (uint64_t)subBlockIdx * rowNum / 2 * stackSeqTileRound +
-                                        gSPingPongFlag * TMP_SIZE;
+                                             (uint64_t)subBlockIdx * rowNum / 2 * stackSeqTileRound +
+                                             gSPingPongFlag * TMP_SIZE;
                     uint32_t nextGMOffsetS = (int64_t)coreIdx * TMP_SIZE_DECODER * 4 +
-                                        (int64_t)subBlockIdx * rowNum / 2 * stackSeqTileRound +
-                                        gSPingPongFlag * TMP_SIZE_DECODER * 2;
+                                             (int64_t)subBlockIdx * rowNum / 2 * stackSeqTileRound +
+                                             gSPingPongFlag * TMP_SIZE_DECODER * 2;
                     // Softmax one-stage calculation
-                    epilogueMLATP1Softmax(gP[nextGMOffsetP], gS[nextGMOffsetS], nextLayoutP,
-                                        nextLayoutS, nextActualBlockShapeQK, nextNIdx, glFlag, nextTaskPingPongFlag, gSPingPongFlag);
+                    epilogueMLATP1Softmax(
+                        gP[nextGMOffsetP], gS[nextGMOffsetS], nextLayoutP, nextLayoutS, nextActualBlockShapeQK,
+                        nextNIdx, glFlag, nextTaskPingPongFlag, gSPingPongFlag);
                     Arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(softmaxReady);
 #endif
                 }
@@ -679,8 +711,10 @@ public:
                     uint64_t gmOffseP = (uint64_t)coreIdx * TMP_SIZE * 2 + (uint64_t)gPPingPongFlag * TMP_SIZE;
                     uint64_t gmOffseOtmp = gmOffseP;
                     // Calculate P * V
-                    blockMmadPV(gP[gmOffseP], gK, gblockTable[gmOffsetBlockTable], gOTmp[gmOffseOtmp], layoutP, layoutV,
-                                layoutOTmp, actualBlockShapePV, nIdx, gPPingPongFlag, nLoop, blockSize, kvSeqlen, softmaxReady, pvLoopPingpongIdx);
+                    blockMmadPV(
+                        gP[gmOffseP], gK, gblockTable[gmOffsetBlockTable], gOTmp[gmOffseOtmp], layoutP, layoutV,
+                        layoutOTmp, actualBlockShapePV, nIdx, gPPingPongFlag, nLoop, blockSize, kvSeqlen, softmaxReady,
+                        pvLoopPingpongIdx);
                     Arch::CrossCoreSetFlag<0x2, PIPE_FIX>(pvReady);
 #elif defined(__DAV_VEC__)
                     // Wait for P * V calculation to complete
@@ -694,10 +728,10 @@ public:
                     uint64_t gmOffsetOTmp = (uint64_t)(coreIdx * TMP_SIZE * 2 + rescaleOPingPongFlag * TMP_SIZE);
                     uint64_t gmOffsetUpdate = (uint64_t)(coreIdx * TMP_SIZE);
                     // Softmax two-stage update
-                    epilogueMLATP1RescaleO(gOTmp[gmOffsetOTmp], gOUpdate[gmOffsetUpdate], gO[gmOffsetO],
-                                           gOCoreTmp[0], gl[0], layoutOTmp,
-                                           layoutUpdate, layoutO, actualBlockShapePV, nIdx, isLastNTile,
-                                           rescaleOPingPongFlag, glFlag, taskPingPongFlag);
+                    epilogueMLATP1RescaleO(
+                        gOTmp[gmOffsetOTmp], gOUpdate[gmOffsetUpdate], gO[gmOffsetO], gOCoreTmp[0], gl[0], layoutOTmp,
+                        layoutUpdate, layoutO, actualBlockShapePV, nIdx, isLastNTile, rescaleOPingPongFlag, glFlag,
+                        taskPingPongFlag);
 #endif
                 }
             }
@@ -755,9 +789,7 @@ public:
             uint32_t aivId = AscendC::GetBlockIdx();
 
             uint32_t headsProcess =
-                (COMPUTE_ELE_NUM / embed) > HEADS_PROCESS_MAX
-                    ? HEADS_PROCESS_MAX
-                    : (COMPUTE_ELE_NUM / embed);
+                (COMPUTE_ELE_NUM / embed) > HEADS_PROCESS_MAX ? HEADS_PROCESS_MAX : (COMPUTE_ELE_NUM / embed);
             uint32_t loopsPerBatch = (qHeads + headsProcess - 1) / headsProcess;
             uint32_t loopsTotal = tailTaskNum * loopsPerBatch;
 
@@ -789,10 +821,10 @@ public:
 
                 epilogueMLAFDRescaleO(
                     gO[oAddr + loopIdxInBatch * headsProcess * embed],
-                    gOCoreTmp[oFdOffset * maxKvSplitCoreNum +
-                              loopIdxInBatch * headsProcess * maxKvSplitCoreNum * embed],
-                    gl[lOffset + loopIdxInBatch * headsProcess * maxKvSplitCoreNum],
-                    actualHeads, headsProcess, embed, kvSplitCoreNum);
+                    gOCoreTmp
+                        [oFdOffset * maxKvSplitCoreNum + loopIdxInBatch * headsProcess * maxKvSplitCoreNum * embed],
+                    gl[lOffset + loopIdxInBatch * headsProcess * maxKvSplitCoreNum], actualHeads, headsProcess, embed,
+                    kvSplitCoreNum);
             }
         }
 #endif
@@ -806,20 +838,9 @@ private:
 };
 
 template <class Dtype>
-CATLASS_GLOBAL void MLATp1Spec(uint64_t hardwareSyncAddr,
-                                GM_ADDR q,
-                                GM_ADDR qRope,
-                                GM_ADDR k,
-                                GM_ADDR kRope,
-                                GM_ADDR blockTables,
-                                GM_ADDR o,
-                                GM_ADDR s,
-                                GM_ADDR p,
-                                GM_ADDR oTmp,
-                                GM_ADDR oUpdate,
-                                GM_ADDR oCoreTmp,
-                                GM_ADDR l,
-                                GM_ADDR tiling)
+CATLASS_GLOBAL void MLATp1Spec(
+    uint64_t hardwareSyncAddr, GM_ADDR q, GM_ADDR qRope, GM_ADDR k, GM_ADDR kRope, GM_ADDR blockTables, GM_ADDR o,
+    GM_ADDR s, GM_ADDR p, GM_ADDR oTmp, GM_ADDR oUpdate, GM_ADDR oCoreTmp, GM_ADDR l, GM_ADDR tiling)
 {
     // Set hardware sync address
     AscendC::SetSyncBaseAddr(hardwareSyncAddr);
@@ -881,8 +902,8 @@ CATLASS_GLOBAL void MLATp1Spec(uint64_t hardwareSyncAddr,
         Epilogue::Block::BlockEpilogue<Epilogue::EpilogueAtlasA2MLAFDRescaleO<ComputeEleNum>, OType, lType>;
 
     // Kernel level
-    using MLAKernel = MLAKernelTp1Spec<BlockMmadQK, BlockMmadPV, EpilogueMLASoftmax,
-                                       EpilogueMLARescaleO, EpilogueMLAFDRescaleO>;
+    using MLAKernel =
+        MLAKernelTp1Spec<BlockMmadQK, BlockMmadPV, EpilogueMLASoftmax, EpilogueMLARescaleO, EpilogueMLAFDRescaleO>;
     typename MLAKernel::Params params{q, qRope, k, kRope, blockTables, o, s, p, oTmp, oUpdate, oCoreTmp, l, tiling};
 
     // call kernel

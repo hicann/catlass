@@ -56,7 +56,7 @@
   - [msdebug document](https://gitcode.com/cann/catlass/blob/v1.4.0/docs/tools/msdebug.md) added driver support check.
 - Bug Fixes & Optimizations
   - Optimized the [grouped\_matmul\_slice\_m](https://gitcode.com/cann/catlass/blob/v1.4.0/examples/02_grouped_matmul_slice_m/README.md) example to support segmented `groupList` input.
-  - Added 32B alignment constraint for `TileShape` in BlockMmad.
+  - Added 32Byte alignment constraint for `TileShape` in BlockMmad.
   - Fixed the data length issue in the [w4a8 matmul](https://gitcode.com/cann/catlass/blob/v1.4.0/examples/32_w4a8_matmul/w4a8.cpp) example.
   - [Matmul generalization project](https://gitcode.com/cann/catlass/tree/v1.4.0/examples/102_dynamic_optimized_matmul/README.md) now supports scenarios where stride is greater than shape.
   - [msTuner\_CATLASS](https://gitcode.com/cann/catlass/tree/v1.4.0/tools/tuner/README.md) now supports tiling tuning for `quant Matmul`.
@@ -88,7 +88,7 @@
     - `GroupedMatmulSliceM operator`
     - `OptimizedMatmul operator`
 - Documentation
-  - Added [ detailed design document for the INT8 type dequantization GroupedMatmul operator](https://gitcode.com/cann/catlass/tree/v1.3.0/docs/contents/example_design/10_grouped_matmul_slice_m_per_token_dequant.md), introducing the design concept and code breakdown for groupMatmul + epilogue type operators.
+  - Added [detailed design document for the INT8 type dequantization GroupedMatmul operator](https://gitcode.com/cann/catlass/tree/v1.3.0/docs/contents/example_design/10_grouped_matmul_slice_m_per_token_dequant.md), introducing the design concept and code breakdown for groupMatmul + epilogue type operators.
   - Added [matrix multiplication template summary document](https://gitcode.com/cann/catlass/tree/v1.3.0/docs/contents/advanced/matmul_template_summary.md),summarizing existing Matmul template designs in the template library.
   - Added [CommonMatmul description document](https://gitcode.com/cann/catlass/tree/v1.3.0/examples/102_dynamic_optimized_matmul/doc/CommonMatmul.md), introducing the basic templates in the generalized Matmul project.
 - Bug Fixes & Optimizations
@@ -135,7 +135,7 @@
     - Adjusted the project organization structure.
     - Added support for transposed cases.
   - Added [`msTuner_CATLASS`](https://gitcode.com/cann/catlass/tree/v1.2.0/tools/tuner/README.md) tool for automatic tiling tuning, which runs exhaustively within the search space to collect performance data.
-  - Added support for enabling the [`msSanitizer`](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/devaids/optool/atlasopdev_16_0039.html) address sanitizer tool (add --enable_mssanitizer to compile options).
+  - Added support for enabling the [`msSanitizer`](https://www.hiascend.com/document/detail/en/canncommercial/850/devaids/optool/atlasopdev_16_0039.html) address sanitizer tool (add --enable_mssanitizer to compile options).
 
 - Documentation
   - Added [`catlass_optimize_guidance.md`](https://gitcode.com/cann/catlass/tree/v1.2.0/docs/contents/advanced/catlass_optimize_guidance.md) document, introducing common optimization methods for `Gemm` operators empowered by CATLASS.

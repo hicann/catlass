@@ -337,15 +337,17 @@ CATLASS_HOST_DEVICE constexpr auto depth(T const& t)
 {
     if constexpr (sizeof...(Is) == 0) {
         if constexpr (is_tuple<T>::value) {
-            return Int<1>{} + tla::apply([](auto const&... v) {
-                       if constexpr (sizeof...(v) == 0) {
-                           return Int<0>{};
-                       } else if constexpr (sizeof...(v) == 1) {
-                           return depth(v...);
-                       } else {
-                           return max(depth(v)...);
-                       }
-                   }, t);
+            return Int<1>{} + tla::apply(
+                                  [](auto const&... v) {
+                                      if constexpr (sizeof...(v) == 0) {
+                                          return Int<0>{};
+                                      } else if constexpr (sizeof...(v) == 1) {
+                                          return depth(v...);
+                                      } else {
+                                          return max(depth(v)...);
+                                      }
+                                  },
+                                  t);
         } else {
             return Int<0>{};
         }
@@ -389,10 +391,12 @@ template <class FlatTuple, class TargetProfile>
 CATLASS_HOST_DEVICE constexpr auto unflatten_impl(FlatTuple const& flat_tuple, TargetProfile const& target_profile)
 {
     if constexpr (is_tuple<TargetProfile>::value) {
-        return fold([](auto const& v, auto const& t) {
-            auto sub = unflatten_impl(get<1>(v), t);
-            return make_tuple(append(get<0>(v), get<0>(sub)), get<1>(sub));
-        }, make_tuple(make_tuple(), flat_tuple), target_profile);
+        return fold(
+            [](auto const& v, auto const& t) {
+                auto sub = unflatten_impl(get<1>(v), t);
+                return make_tuple(append(get<0>(v), get<0>(sub)), get<1>(sub));
+            },
+            make_tuple(make_tuple(), flat_tuple), target_profile);
     } else {
         return make_tuple(get<0>(flat_tuple), take<1, rank_v<FlatTuple>>(flat_tuple));
     }

@@ -26,21 +26,25 @@ public:
     using Arguments = typename GemmKernel::Arguments;
     /// Argument structure: Kernel API
     using Params = typename GemmKernel::Params;
+
 private:
     /// kernel API parameters object
     Params params_;
+
 public:
-    DeviceGemm() {}
-    ~DeviceGemm() {}
+    DeviceGemm()
+    {}
+    ~DeviceGemm()
+    {}
 
     /// Access the Params structure
-    Params const &params() const
+    Params const& params() const
     {
         return params_;
     }
 
     /// Determines whether the GEMM can execute the given problem.
-    static Status CanImplement(Arguments const &args)
+    static Status CanImplement(Arguments const& args)
     {
         if (GemmKernel::CanImplement(args)) {
             return Status::kSuccess;
@@ -50,7 +54,7 @@ public:
     }
 
     /// Gets the workspace size
-    static size_t GetWorkspaceSize(Arguments const &args)
+    static size_t GetWorkspaceSize(Arguments const& args)
     {
         size_t workspace_bytes = 0;
         workspace_bytes += GemmKernel::GetWorkspaceSize(args);
@@ -58,7 +62,7 @@ public:
     }
 
     /// Initializes GEMM state from arguments
-    Status Initialize(Arguments const &args, uint8_t *workspace = nullptr, aclrtStream stream = nullptr)
+    Status Initialize(Arguments const& args, uint8_t* workspace = nullptr, aclrtStream stream = nullptr)
     {
         // Initialize the Params structure
         params_ = GemmKernel::ToUnderlyingArguments(args, workspace);
@@ -69,13 +73,13 @@ public:
     /// Supplied params struct must be construct by calling matmul Kernel::to_underlying arguments
     inline Status Run(aclrtStream stream, uint32_t blockDim, uint64_t hardwareSyncAddr)
     {
-#if (defined (CATLASS_ARCH) && CATLASS_ARCH == 2201)
+#if (defined(CATLASS_ARCH) && CATLASS_ARCH == 2201)
         if (hardwareSyncAddr == 0) {
             Catlass::KernelAdapter<GemmKernel><<<blockDim, nullptr, stream>>>(params_);
         } else {
             Catlass::KernelAdapter<GemmKernel><<<blockDim, nullptr, stream>>>(params_, hardwareSyncAddr);
         }
-#elif (defined (CATLASS_ARCH) && CATLASS_ARCH == 3510)
+#elif (defined(CATLASS_ARCH) && CATLASS_ARCH == 3510)
         Catlass::KernelAdapter<GemmKernel><<<blockDim, nullptr, stream>>>(params_);
 #endif
         return Status::kSuccess;

@@ -2,13 +2,13 @@
 
 ## Environment Setup
 
-> **Note**: Ensure that [basic dependencies](../../../README.md#required-software-and-hardware), [NPU driver](https://www.hiascend.com/hardware/firmware-drivers/community), and firmware have been installed before you start.
+> **Note**: Ensure that [basic dependencies](../../../README_en.md#-software-and-hardware-requirements), [NPU driver](https://www.hiascend.com/hardware/firmware-drivers/community), and firmware have been installed before you start.
 
-1. **Installing the Community Edition CANN Toolkit**
+### 1. **Installing the Community Edition CANN Toolkit**
 
-Download the CANN development kit `Ascend-cann-toolkit_{version}_linux-{arch}.run` based on the type of your [Ascend product](https://www.hiascend.com/document/detail/en/AscendFAQ/ProduTech/productform/hardwaredesc_0001.html). For details about the download link, see [CANN toolkit](https://www.hiascend.com/en/developer/download/community/result?module=cann). (For details about the CATLASS version support, see [Required Software and Hardware](../../../README.md#required-software-and-hardware).)
+Download the CANN development kit `Ascend-cann-toolkit_{version}_linux-{arch}.run` based on the type of your [Ascend product](https://www.hiascend.com/document/detail/en/AscendFAQ/ProduTech/productform/hardwaredesc_0001.html). For details about the download link, see [CANN toolkit](https://www.hiascend.com/en/developer/download/community/result?module=cann). (For details about the CATLASS version support, see [Required Software and Hardware](../../../README_en.md#-software-and-hardware-requirements).)
 
-Then, install the CANN development kit. (For details, see [CANN Installation Guide](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/softwareinst/instg/instg_0008.html?Mode=PmIns&InstallType=local&OS=openEuler&Software=cannToolKit).)
+Then, install the CANN development kit. (For details, see [CANN Installation Guide](https://www.hiascend.com/document/detail/en/canncommercial/850/softwareinst/instg/instg_0008.html?Mode=PmIns&InstallType=local&OS=openEuler&Software=cannToolKit).)
 
 ```bash
 # Ensure that the installation package is executable.
@@ -23,7 +23,7 @@ chmod +x Ascend-cann-toolkit_{version}_linux-{arch}.run
 
 For details about other online installation methods, see [CANN Quick Installation](https://www.hiascend.com/cann/download).
 
-1. **Enabling the CANN Environment**
+### 2. **Enabling the CANN Environment**
 
 After installation, execute the following command to enable the CANN environment.
 
@@ -34,7 +34,7 @@ source /usr/local/Ascend/ascend-toolkit/set_env.sh
 # source ${install_path}/set_env.sh
 ```
 
-1. **Downloading the Source Code**
+### 3. **Downloading the Source Code**
 
 Download the CATLASS code repository to the local PC.
 
@@ -47,7 +47,7 @@ git clone https://gitcode.com/cann/catlass.git
 
 > The template library provides a set of reusable templates and basic components to empower matrix multiplication operator development. Operator samples can be found [here](../../../examples).
 
-1. **Building the Sample**
+### 1. **Building the Sample**
 
 Go to the root directory of the project and run the following build command:
 
@@ -58,7 +58,7 @@ bash scripts/build.sh [options] <target>
 - `options`: Optional build options. Currently supported options include:
   - `--clean`: Clears the previous build and output directories (the default paths are `/build` and `/output`, respectively).
   - `--debug`: Compiles in debug mode.
-  - `--msdebug`: Enables [msDebug](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/devaids/optool/atlasopdev_16_0062.html). For details, see [Using msDebug in a CATLASS Sample Project](./evaluation/msdebug.md).
+  - `--msdebug`: Enables [msDebug](https://www.hiascend.com/document/detail/en/canncommercial/850/devaids/optool/atlasopdev_16_0062.html). For details, see [Using msDebug in a CATLASS Sample Project](./evaluation/msdebug.md).
   - `--simulator`: Enables the simulator mode. After this option is enabled, the code will not run on an actual NPU. For details, see [CATLASS Sample Simulation](./evaluation/performance_tools.md#example-with-msprof-op-simulator).
   - `--enable_profiling`: Enables the profiling tool. For details, see [Tuning Performance in a CATLASS Sample Project](./evaluation/performance_tools.md#profiling-overview).
   - `--enable_print`: Enables the compiler's print functionality. For details, see [Device-Side Printing Based on `cce::printf`](./evaluation/print.md).
@@ -85,7 +85,7 @@ If the following prompt appears, the build succeeded.
 "[INFO] Target "{target}" built successfully."
 ```
 
-1. **Executing Operators**
+### 2. **Executing Operators**
 
 The operator build output is located in the `output/bin` directory. Switch to this directory to run the operator sample program.
 Take the [basic_matmul] sample as an example. You can run the operator by executing the following commands:

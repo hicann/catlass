@@ -39,15 +39,27 @@ function(get_cann_version_and_soc_name)
     endif()
 
     string(REGEX MATCH "^[^ ]+" CANN_VERSION_TMP "${RUN_OUTPUT}")
-    set(CANN_VERSION ${CANN_VERSION_TMP} PARENT_SCOPE)
-    message("Detected CANN_VERSION: ${CANN_VERSION_TMP}")
+
+    # 只在调用方未预先设定 CANN_VERSION 时才覆盖
+    if(NOT DEFINED CANN_VERSION OR CANN_VERSION STREQUAL "")
+        set(CANN_VERSION ${CANN_VERSION_TMP} PARENT_SCOPE)
+        message("Detected CANN_VERSION: ${CANN_VERSION_TMP}")
+    else()
+        message("Using preset CANN_VERSION: ${CANN_VERSION}")
+    endif()
 
     string(LENGTH "${RUN_OUTPUT}" OUTPUT_LEN)
     string(FIND "${RUN_OUTPUT}" " " SPACE_POS)
     if(SPACE_POS GREATER_EQUAL 0)
         math(EXPR SOC_NAME_START "${SPACE_POS} + 1")
         string(SUBSTRING "${RUN_OUTPUT}" ${SOC_NAME_START} -1 NPU_MODEL_TMP)
-        set(NPU_MODEL ${NPU_MODEL_TMP} PARENT_SCOPE)
-        message("Detected NPU_MODEL: ${NPU_MODEL_TMP}")
+
+        # 只在调用方未预先设定 NPU_MODEL 时才覆盖
+        if(NOT DEFINED NPU_MODEL OR NPU_MODEL STREQUAL "")
+            set(NPU_MODEL ${NPU_MODEL_TMP} PARENT_SCOPE)
+            message("Detected NPU_MODEL: ${NPU_MODEL_TMP}")
+        else()
+            message("Using preset NPU_MODEL: ${NPU_MODEL}")
+        endif()
     endif()
 endfunction()

@@ -229,7 +229,7 @@ struct VisitorSomeNode : VisitorImpl<> {
 
 #### 2. 节点职责保持单一
 
-当前实现更适合让一个节点只承担一类职责，例如读、算、写、广播。  
+当前实现更适合让一个节点只承担一类职责，例如读、算、写、广播。
 “读 GM + 算 + 写 GM”这类复合行为拆成多个节点后，更贴合现有图组织方式。
 
 #### 3. layout 一律按完整张量理解
@@ -266,7 +266,7 @@ typename EVG::Arguments args{
 
 #### 7. 先复用现有节点，再决定是否新增
 
-如果诉求只是多一个逐元素算子，通常继续走 `ComputeFn + VisitorCompute`。  
+如果诉求只是多一个逐元素算子，通常继续走 `ComputeFn + VisitorCompute`。
 只有当现有节点无法表达所需的数据访问、layout 或资源行为时，再新增节点。
 
 ### `visit` 签名

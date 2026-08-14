@@ -13,8 +13,9 @@
 #include "catlass/layout/layout.hpp"
 #include "dynamic_optimized_matmul.h"
 
-static void Run(aclrtStream &stream, uint32_t m, uint32_t n, uint32_t k, LayoutTag layoutTagA, LayoutTag layoutTagB,
-    PlatformInfo &platformInfo)
+static void Run(
+    aclrtStream& stream, uint32_t m, uint32_t n, uint32_t k, LayoutTag layoutTagA, LayoutTag layoutTagB,
+    PlatformInfo& platformInfo)
 {
     LayoutTag layoutTagC = LayoutTag::TagRowMajor;
     TilingParams tilingParams{m, n, k, layoutTagA, layoutTagB, layoutTagC};
@@ -38,17 +39,17 @@ static void Run(aclrtStream &stream, uint32_t m, uint32_t n, uint32_t k, LayoutT
 
     uint8_t *dA, *dB, *dC, *dW, *dTilingParams;
 
-    ACL_CHECK(aclrtMalloc((void **)&dA, sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
-    ACL_CHECK(aclrtMalloc((void **)&dB, sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
-    ACL_CHECK(aclrtMalloc((void **)&dC, sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
-    ACL_CHECK(aclrtMalloc((void **)&dTilingParams, sizeof(TilingParams), ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMalloc((void**)&dA, sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMalloc((void**)&dB, sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMalloc((void**)&dC, sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMalloc((void**)&dTilingParams, sizeof(TilingParams), ACL_MEM_MALLOC_HUGE_FIRST));
 
     ACL_CHECK(aclrtMemcpy(dA, sizeA, hostA.data(), sizeA, ACL_MEMCPY_HOST_TO_DEVICE));
     ACL_CHECK(aclrtMemcpy(dB, sizeB, hostB.data(), sizeB, ACL_MEMCPY_HOST_TO_DEVICE));
 
     size_t workspaceSize = DynamicOptimizedMatmulGetWorkspace(tilingParams);
     if (workspaceSize > 0) {
-        ACL_CHECK(aclrtMalloc((void **)&dW, workspaceSize, ACL_MEM_MALLOC_HUGE_FIRST));
+        ACL_CHECK(aclrtMalloc((void**)&dW, workspaceSize, ACL_MEM_MALLOC_HUGE_FIRST));
     }
 
     uint64_t hardwareSyncAddr{0};
@@ -101,7 +102,7 @@ static void Run(aclrtStream &stream, uint32_t m, uint32_t n, uint32_t k, LayoutT
     }
 }
 
-int main(int argc, const char **argv)
+int main(int argc, const char** argv)
 {
     const uint32_t deviceId = std::atoi(argv[argc - 1]);
     ACL_CHECK(aclrtSetDevice(deviceId));

@@ -28,11 +28,7 @@ namespace Catlass::Gemm::Kernel {
 using namespace AscendC::MicroAPI;
 #endif
 
-template <
-    class BlockMmad_,
-    class BlockEpilogue_,
-    class BlockScheduler_
->
+template <class BlockMmad_, class BlockEpilogue_, class BlockScheduler_>
 class BroadcastMatmulPerblockQuantTla {
 public:
     using BlockMmad = BlockMmad_;
@@ -53,16 +49,18 @@ public:
 
     using BlockScheduler = BlockScheduler_;
 
-    static_assert(std::is_same_v<LayoutA, detail::TagToLayout_t<ElementA, layout::RowMajor>>,
-        "LayoutA must be RowMajor");
-    static_assert(std::is_same_v<LayoutB, detail::TagToLayout_t<ElementB, layout::RowMajor>>,
-        "LayoutB must be RowMajor");
-    static_assert(std::is_same_v<LayoutC, detail::TagToLayout_t<ElementC, layout::RowMajor>>,
-        "LayoutC must be RowMajor");
-    static_assert(std::is_same_v<LayoutDst, detail::TagToLayout_t<ElementDst, layout::RowMajor>>,
-        "LayoutDst must be RowMajor");
-    static_assert(std::is_same_v<ElementA, bfloat16_t> && std::is_same_v<ElementB, bfloat16_t> &&
-        std::is_same_v<ElementC, bfloat16_t>, "ElementA, ElementB, ElementC must be bfloat16_t");
+    static_assert(
+        std::is_same_v<LayoutA, detail::TagToLayout_t<ElementA, layout::RowMajor>>, "LayoutA must be RowMajor");
+    static_assert(
+        std::is_same_v<LayoutB, detail::TagToLayout_t<ElementB, layout::RowMajor>>, "LayoutB must be RowMajor");
+    static_assert(
+        std::is_same_v<LayoutC, detail::TagToLayout_t<ElementC, layout::RowMajor>>, "LayoutC must be RowMajor");
+    static_assert(
+        std::is_same_v<LayoutDst, detail::TagToLayout_t<ElementDst, layout::RowMajor>>, "LayoutDst must be RowMajor");
+    static_assert(
+        std::is_same_v<ElementA, bfloat16_t> && std::is_same_v<ElementB, bfloat16_t> &&
+            std::is_same_v<ElementC, bfloat16_t>,
+        "ElementA, ElementB, ElementC must be bfloat16_t");
 
     static constexpr uint32_t L1_TILE_M = tla::get<0>(L1TileShape{});
     static constexpr uint32_t L1_TILE_N = tla::get<1>(L1TileShape{});
@@ -91,29 +89,40 @@ public:
         {}
 
         CATLASS_HOST_DEVICE
-        Params(uint32_t batchCount_, GemmCoord const &problemShape_,
-               GM_ADDR ptrA_, LayoutA layoutA_, int64_t strideA_,
-               GM_ADDR ptrB_, LayoutB layoutB_, int64_t strideB_,
-               LayoutC layoutC_, int64_t strideC_, GM_ADDR ptrDst_, LayoutDst layoutDst_,
-               GM_ADDR ptrScale_, LayoutScale layoutScale_)
-            : batchCount(batchCount_), problemShape(problemShape_),
-              ptrA(ptrA_), layoutA(layoutA_), strideA(strideA_),
-              ptrB(ptrB_), layoutB(layoutB_), strideB(strideB_),
-              layoutC(layoutC_), strideC(strideC_), ptrDst(ptrDst_), layoutDst(layoutDst_),
-              ptrScale(ptrScale_), layoutScale(layoutScale_) {}
+        Params(
+            uint32_t batchCount_, GemmCoord const& problemShape_, GM_ADDR ptrA_, LayoutA layoutA_, int64_t strideA_,
+            GM_ADDR ptrB_, LayoutB layoutB_, int64_t strideB_, LayoutC layoutC_, int64_t strideC_, GM_ADDR ptrDst_,
+            LayoutDst layoutDst_, GM_ADDR ptrScale_, LayoutScale layoutScale_)
+            : batchCount(batchCount_),
+              problemShape(problemShape_),
+              ptrA(ptrA_),
+              layoutA(layoutA_),
+              strideA(strideA_),
+              ptrB(ptrB_),
+              layoutB(layoutB_),
+              strideB(strideB_),
+              layoutC(layoutC_),
+              strideC(strideC_),
+              ptrDst(ptrDst_),
+              layoutDst(layoutDst_),
+              ptrScale(ptrScale_),
+              layoutScale(layoutScale_)
+        {}
     };
 
     struct Arguments {
         uint32_t batchCount;
         GemmCoord problemShape;
-        GM_ADDR ptrA; LayoutA layoutA;
-        GM_ADDR ptrB; LayoutB layoutB;
+        GM_ADDR ptrA;
+        LayoutA layoutA;
+        GM_ADDR ptrB;
+        LayoutB layoutB;
         LayoutC layoutC;
         GM_ADDR ptrDst;
         GM_ADDR ptrScale;
     };
 
-    static bool CanImplement(const Arguments &args)
+    static bool CanImplement(const Arguments& args)
     {
         if (args.batchCount <= 0 || args.batchCount > 65536) {
             return false;
@@ -127,12 +136,12 @@ public:
         return true;
     }
 
-    static size_t GetWorkspaceSize(const Arguments &args)
+    static size_t GetWorkspaceSize(const Arguments& args)
     {
         return 0;
     }
 
-    static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace)
+    static Params ToUnderlyingArguments(const Arguments& args, uint8_t* workspace)
     {
         GemmCoord problemShape = args.problemShape;
         uint32_t m = problemShape.m();
@@ -143,32 +152,22 @@ public:
         int64_t strideC = m * n;
         LayoutDst layoutDst = tla::MakeLayout<uint8_t, layout::RowMajor>(m, n);
         LayoutScale layoutScale = tla::MakeLayout(args.batchCount * FLOAT_ELE_NUM_PER_BLK);
-        Params params{args.batchCount,
-            problemShape,
-            args.ptrA,
-            args.layoutA,
-            strideA,
-            args.ptrB,
-            args.layoutB,
-            strideB,
-            args.layoutC,
-            strideC,
-            args.ptrDst,
-            layoutDst,
-            args.ptrScale,
-            layoutScale};
+        Params params{args.batchCount, problemShape, args.ptrA, args.layoutA, strideA,   args.ptrB,     args.layoutB,
+                      strideB,         args.layoutC, strideC,   args.ptrDst,  layoutDst, args.ptrScale, layoutScale};
         return params;
     }
 
     CATLASS_DEVICE
-    BroadcastMatmulPerblockQuantTla() {
+    BroadcastMatmulPerblockQuantTla()
+    {
 #ifdef __DAV_VEC__
         AscendC::CrossCoreSetFlag<AIC_SYNC_AIV_MODE_4, PIPE_MTE3>(AIV_SYNC_AIC_FLAG);
 #endif
     }
 
     CATLASS_DEVICE
-    ~BroadcastMatmulPerblockQuantTla() {
+    ~BroadcastMatmulPerblockQuantTla()
+    {
 #ifdef __DAV_CUBE__
         AscendC::CrossCoreWaitFlag<AIC_SYNC_AIV_MODE_4, PIPE_FIX>(AIV_SYNC_AIC_FLAG);
         AscendC::CrossCoreWaitFlag<AIC_SYNC_AIV_MODE_4, PIPE_FIX>(AIV_SYNC_AIC_FLAG + FLAG_ID_MAX);
@@ -176,13 +175,11 @@ public:
     }
 
     template <int32_t CORE_TYPE = g_coreType>
-    CATLASS_DEVICE
-    void operator()(Params const &params);
+    CATLASS_DEVICE void operator()(Params const& params);
 
     /// Executes one BatchedMatmulPerblockQuant
     template <>
-    CATLASS_DEVICE
-    void operator()<AscendC::AIC>(Params const &params)
+    CATLASS_DEVICE void operator()<AscendC::AIC>(Params const& params)
     {
         BlockScheduler matmulBlockScheduler(params.problemShape, MakeCoord(L1_TILE_M, L1_TILE_N));
         uint32_t coreLoops = matmulBlockScheduler.GetCoreLoops();
@@ -191,13 +188,14 @@ public:
         BlockMmad blockMmad(resource);
 
         AscendC::GlobalTensor<ElementA> gmA;
-        gmA.SetGlobalBuffer((__gm__ ElementA *)params.ptrA);
+        gmA.SetGlobalBuffer((__gm__ ElementA*)params.ptrA);
         AscendC::GlobalTensor<ElementB> gmB;
-        gmB.SetGlobalBuffer((__gm__ ElementB *)params.ptrB);
+        gmB.SetGlobalBuffer((__gm__ ElementB*)params.ptrB);
         AscendC::LocalTensor<ElementC> ubC;
         ubC = resource.ubBuf.template GetBufferByByte<ElementC>(0);
 
-        for (uint32_t batchIdx = AscendC::GetBlockIdx(); batchIdx < params.batchCount; batchIdx += AscendC::GetBlockNum()) {
+        for (uint32_t batchIdx = AscendC::GetBlockIdx(); batchIdx < params.batchCount;
+             batchIdx += AscendC::GetBlockNum()) {
             AscendC::CrossCoreWaitFlag<AIC_SYNC_AIV_MODE_4, PIPE_FIX>(AIV_SYNC_AIC_FLAG);
             AscendC::CrossCoreWaitFlag<AIC_SYNC_AIV_MODE_4, PIPE_FIX>(AIV_SYNC_AIC_FLAG + FLAG_ID_MAX);
             for (uint32_t loopIdx = 0; loopIdx < coreLoops; loopIdx += 1) {
@@ -212,16 +210,13 @@ public:
 
                 auto tensorBlockA = GetTile(
                     tensorA, tla::MakeCoord(blockCoord.m() * L1_TILE_M, blockCoord.k() * L1_TILE_K),
-                    tla::MakeShape(actualBlockShape.m(), actualBlockShape.k())
-                );
+                    tla::MakeShape(actualBlockShape.m(), actualBlockShape.k()));
                 auto tensorBlockB = GetTile(
                     tensorB, tla::MakeCoord(blockCoord.k() * L1_TILE_K, blockCoord.n() * L1_TILE_N),
-                    tla::MakeShape(actualBlockShape.k(), actualBlockShape.n())
-                );
+                    tla::MakeShape(actualBlockShape.k(), actualBlockShape.n()));
                 auto tensorBlockC = GetTile(
                     tensorUbC, tla::MakeCoord(blockCoord.m() * L1_TILE_M, blockCoord.n() * L1_TILE_N),
-                    tla::MakeShape(actualBlockShape.m(), actualBlockShape.n())
-                );
+                    tla::MakeShape(actualBlockShape.m(), actualBlockShape.n()));
 
                 blockMmad(tensorBlockA, tensorBlockB, tensorBlockC, actualBlockShape);
             }
@@ -231,20 +226,16 @@ public:
     }
 
     template <>
-    CATLASS_DEVICE
-    void operator()<AscendC::AIV>(Params const &params) {
+    CATLASS_DEVICE void operator()<AscendC::AIV>(Params const& params)
+    {
         Arch::Resource<ArchTag> resource;
 
         typename BlockEpilogue::Params epilogueParams(
-            params.layoutC,
-            params.layoutDst,
-            params.layoutScale,
-            params.strideC
-        );
+            params.layoutC, params.layoutDst, params.layoutScale, params.strideC);
         BlockEpilogue blockEpilogue(resource, epilogueParams);
 
         AscendC::GlobalTensor<ElementDst> gmDst;
-        gmDst.SetGlobalBuffer((__gm__ ElementDst *)params.ptrDst);
+        gmDst.SetGlobalBuffer((__gm__ ElementDst*)params.ptrDst);
         AscendC::LocalTensor<ElementC> ubC;
         AscendC::LocalTensor<ElementDst> ubDst;
         AscendC::LocalTensor<ElementScale> ubScale;
@@ -277,8 +268,9 @@ public:
             if (blockCount > 0) {
                 AscendC::PipeBarrier<PIPE_MTE3>();
                 AscendC::GlobalTensor<float> gmScale;
-                gmScale.SetGlobalBuffer(reinterpret_cast<__gm__ float *>(params.ptrScale));
-                AscendC::DataCopyExtParams dataCopyExtParams(blockCount, sizeof(float), 0, (aiCoreNum - 1) * sizeof(float), 0);
+                gmScale.SetGlobalBuffer(reinterpret_cast<__gm__ float*>(params.ptrScale));
+                AscendC::DataCopyExtParams dataCopyExtParams(
+                    blockCount, sizeof(float), 0, (aiCoreNum - 1) * sizeof(float), 0);
                 AscendC::DataCopyPad(gmScale[aiCoreIdx], ubScale, dataCopyExtParams);
                 AscendC::PipeBarrier<PIPE_ALL>();
             }

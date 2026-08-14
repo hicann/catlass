@@ -2,7 +2,7 @@
 
 ## Code Organization
 
-```
+```text
 ├── 37_streamk_matmul
 │   ├── CMakeLists.txt # CMake build file
 │   ├── README.md
@@ -25,7 +25,7 @@ cd output/bin
 
 If the following result is displayed, precision verification is successful.
 
-```
+```text
 Compare success.
 ```
 

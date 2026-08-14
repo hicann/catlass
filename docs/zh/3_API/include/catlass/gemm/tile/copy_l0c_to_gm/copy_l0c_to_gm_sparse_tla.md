@@ -6,7 +6,7 @@
 
 ## 功能说明
 
-`CopyL0CToGmSparseTla` 是 TLA 风格的 Sparse GEMM L0C→GM 数据搬运模板。负责将 Sparse GEMM 的矩阵乘累加结果从 L0C（`CO1`）搬运到 GM，支持类型转换（F322F16 等）。
+`CopyL0CToGmSparseTla` 是 TLA 风格的 Sparse GEMM L0C→GM 数据搬运模板。负责将 Sparse GEMM 的矩阵乘累加结果从 L0C（`CO1`）搬运到 GM，支持类型转换（`QuantMode_t::F322F16` 等）。
 
 与普通 [CopyL0CToGmTla](./tile_copy_tla.md) 不同，`CopyL0CToGmSparseTla` 通过 `FixpipeParamsV220` 参数结构体（而非 `FixpipeParams`）控制搬运尺寸，适用于 Sparse GEMM 场景中与 dense 输出混合的场景。
 

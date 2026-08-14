@@ -21,7 +21,7 @@ kernel_name<<<blockDim, l2ctrl, stream>>>(argument_list);
 | `l2ctrl`   | `void*`       | 保留参数，固定设为`nullptr`  |
 | `stream`   | `aclrtStream` | 管理异步操作执行顺序的流对象 |
 
-其中`blockDim`表示需要多少个硬件AI Core来执行算子，一般通过`platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic()`。算子内可通过`GetBlockIdx()`获取当前核索引，通过`GetBlockNum()`获取总核数。
+其中`blockDim`表示需要多少个硬件AI Core来执行算子，一般通过`platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic()`接口来获取。算子内可通过`GetBlockIdx()`获取当前核索引，通过`GetBlockNum()`获取总核数。
 
 > **说明**：算子的调用是异步的，`<<<>>>`调用结束后控制权立刻返回给Host端。如需等待执行完成，需调用`aclrtSynchronizeStream(stream)`。
 
@@ -40,8 +40,8 @@ kernel_name<<<blockDim, l2ctrl, stream>>>(argument_list);
    ```
 
 5. 结果拷回：通过`aclrtMemcpy`将Device上的运算结果拷贝回Host。
-6. 同步等待：`aclrtSynchronizeStream`。
-7. 资源释放：`aclrtDestroyStream`、`aclrtResetDevice`、`aclFinalize`。
+6. 同步等待：`aclrtSynchronizeStream(stream)`。
+7. 资源释放：`aclrtDestroyStream(stream)`、`aclrtResetDevice(deviceId)`、`aclFinalize()`。
 
 ## <<<>>> 直调与DeviceGemm的对比
 

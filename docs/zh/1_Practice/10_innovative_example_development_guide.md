@@ -1,6 +1,6 @@
 # 创新样例开发流程指南
 
-该文档面向需要在CATLASS模板库中开发创新算子样例的开发者，以样例44 `quant_matmul_full_loadA_tla`（量化矩阵乘A矩阵全载）为案例，说明从需求分析、方案设计到组件开发、测试合入的完整流程，帮助开发者快速掌握创新样例的开发方法。
+该文档面向需要在 CATLASS模板库中开发创新算子样例的开发者，以样例44 `quant_matmul_full_loadA_tla`（量化矩阵乘A矩阵全载）为案例，说明从需求分析、方案设计到组件开发、测试合入的完整流程，帮助开发者快速掌握创新样例的开发方法。
 
 ## 1. 什么是创新样例
 
@@ -17,12 +17,12 @@ CATLASS模板库中的每个样例都是在已有样例基础上的创新和扩�
 - **算子功能**：明确算子的数学定义和计算流程。样例44实现的是量化矩阵乘法 `D = (A_int8 × B_int8) * scale * perTokenScale`，输出bf16类型。
 - **已有组件调研**：遍历已有样例和`include/catlass/`下的模板组件，识别可复用资源。样例44的调研结论如下：
 
-| 特性                         | 参考来源                               | 复用方式               |
-| ---------------------------- | -------------------------------------- | ---------------------- |
-| 量化矩阵乘 + per-token反量化 | 样例42 `42_quant_optimized_matmul_tla` | BlockEpilogue直接复用  |
-| A矩阵全载到L1                | 样例25 `25_matmul_full_loadA`          | 流水设计思路参考       |
-| 全载BlockMmad（非TLA）       | `block_mmad_pingpong_full_loadA.hpp`   | TLA改写基础            |
-| 全载场景多核调度             | 样例25 `25_matmul_full_loadA`          | BlockScheduler直接复用 |
+    | 特性                         | 参考来源                               | 复用方式               |
+    | ---------------------------- | -------------------------------------- | ---------------------- |
+    | 量化矩阵乘 + per-token反量化 | 样例42 `42_quant_optimized_matmul_tla` | BlockEpilogue直接复用  |
+    | A矩阵全载到L1                | 样例25 `25_matmul_full_loadA`          | 流水设计思路参考       |
+    | 全载BlockMmad（非TLA）       | `block_mmad_pingpong_full_loadA.hpp`   | TLA改写基础            |
+    | 全载场景多核调度             | 样例25 `25_matmul_full_loadA`          | BlockScheduler直接复用 |
 
 - **创新特性**：在调研基础上，明确真正需要创新的点。样例44的核心创新在于将量化矩阵乘与A矩阵全载两种特性结合，通过复用样例25的BlockScheduler使每个核处理的基本块在N方向连续分布，最大化A矩阵的L1复用率。
 - **适用场景**：明确新特性的收益场景和限制条件。A矩阵全载在N轴较大时收益显著（A矩阵可被多次复用），但要求L1空间足够容纳`L1TileShape::M × K`的数据量，否则无法使用。
@@ -63,7 +63,7 @@ CATLASS模板库中的每个样例都是在已有样例基础上的创新和扩�
 - 之后进入主循环，pingpong搬运B矩阵的K维分块到L1，同时执行L1→L0的数据搬运和Cube计算
 - A矩阵常驻L1，无需重复搬运，从而减少MTE2带宽压力
 
-![A矩阵全载流水图](https://raw.gitcode.com/user-images/assets/7631999/1de46727-7c46-411e-936c-7a437d951a3a/3e9c799e1de0405d89f07a6bfd7d7c54.png_tplv-a9rns2rl98-image-qvalue.png)
+<img src="https://raw.gitcode.com/user-images/assets/7631999/1de46727-7c46-411e-936c-7a437d951a3a/3e9c799e1de0405d89f07a6bfd7d7c54.png_tplv-a9rns2rl98-image-qvalue.png" width="60%">
 
 ### 2.3 文档设计
 

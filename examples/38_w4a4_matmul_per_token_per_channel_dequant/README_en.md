@@ -51,7 +51,7 @@ The key template parameters involved in this example are as follows:
 
 ## Code Organization
 
-```
+```text
 ├── 38_w4a4_matmul_per_token_per_channel_dequant
 │   ├── CMakeLists.txt # CMake build file
 │   ├── gen_data.py
@@ -73,7 +73,7 @@ The key template parameters involved in this example are as follows:
 
 The following is a complete shell script example:
 
-```
+```bash
 # Compile the operator.
 bash scripts/build.sh 38_w4a4_matmul_per_token_per_channel_dequant
 
@@ -85,12 +85,13 @@ cd ../..
 
 # Run execution verification.
 cd output/bin/
+# Executable file name | Matrix M-axis | N-axis | K-axis | Device ID
 ./38_w4a4_matmul_per_token_per_channel_dequant 256 512 1024 0
 ```
 
 If the following result is displayed, precision verification is successful.
 
-```
+```cpp
 Compare success.
 ```
 
@@ -105,7 +106,7 @@ In the current example, the right-hand matrix uses the NZ layout format (that is
 
 In addition, set the `transB` parameter to `1` (the default value is `0`) when generating the test case. The complete test pipeline is as follows:
 
-```
+```bash
 # Compile the operator.
 bash scripts/build.sh 38_w4a4_matmul_per_token_per_channel_dequant --clean
 
@@ -118,5 +119,6 @@ cd ../..
 
 # Run execution verification.
 cd output/bin/
+# Executable file name | Matrix M-axis | N-axis | K-axis | Device ID
 ./38_w4a4_matmul_per_token_per_channel_dequant 256 512 1024 0
 ```

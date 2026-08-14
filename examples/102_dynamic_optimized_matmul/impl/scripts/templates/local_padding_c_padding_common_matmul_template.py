@@ -15,8 +15,8 @@ import itertools
 
 from utils.config import Config
 
-class LocalPaddingCPaddingCommonMatmulTemplate:
 
+class LocalPaddingCPaddingCommonMatmulTemplate:
     TEMPLATE = """
 #include "kernel/local_padding_c_padding_common_matmul_kernel.h"
 void {launch_kernel_func_name}(aclrtStream& stream, uint64_t hardwareSyncAddr,
@@ -57,16 +57,20 @@ size_t {get_workspace_func_name}(TilingParams& tilingParams)
 
     @staticmethod
     def gen_code(dtype, kernel_info):
-
-        kernel_serial = Config.KERNEL_SERIAL_MAP[LocalPaddingCPaddingCommonMatmulTemplate.KERNEL_NAME]
+        kernel_serial = Config.KERNEL_SERIAL_MAP[
+            LocalPaddingCPaddingCommonMatmulTemplate.KERNEL_NAME
+        ]
 
         PADDING_TAG_SET_A = [0, 3]
         PADDING_TAG_SET_B = [0, 3]
         PADDING_TAG_SET_C = [0, 1]
         combinations = list(
             itertools.product(
-                Config.LAYOUT_TAG_SET, Config.LAYOUT_TAG_SET,
-                PADDING_TAG_SET_A, PADDING_TAG_SET_B, PADDING_TAG_SET_C
+                Config.LAYOUT_TAG_SET,
+                Config.LAYOUT_TAG_SET,
+                PADDING_TAG_SET_A,
+                PADDING_TAG_SET_B,
+                PADDING_TAG_SET_C,
             )
         )
         for l_tag_a, l_tag_b, p_tag_a, p_tag_b, p_tag_c in combinations:
@@ -84,7 +88,9 @@ size_t {get_workspace_func_name}(TilingParams& tilingParams)
             )
             # store tilingKey and kernel name
             kernel_info[
-                Config.get_tiling_key(kernel_serial, dtype, l_tag_a, l_tag_b, 0, p_tag_a, p_tag_b, p_tag_c)
+                Config.get_tiling_key(
+                    kernel_serial, dtype, l_tag_a, l_tag_b, 0, p_tag_a, p_tag_b, p_tag_c
+                )
             ] = kernel_func_name
             # launch_kernel_fun_name can be LaunchLocalPaddingCPaddingCommonMatmulHalfLayout00
             launch_kernel_func_name = "Launch" + kernel_func_name
@@ -114,7 +120,7 @@ size_t {get_workspace_func_name}(TilingParams& tilingParams)
                 layout_c=layout_c,
                 padding_tag_a=padding_tag_a,
                 padding_tag_b=padding_tag_b,
-                padding_tag_c=padding_tag_c
+                padding_tag_c=padding_tag_c,
             )
 
             with open(os.path.join(Config.WRAPPER_CODE_PATH, file_name), "w") as f:

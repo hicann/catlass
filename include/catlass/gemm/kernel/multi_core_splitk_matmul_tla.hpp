@@ -24,11 +24,7 @@
 namespace Catlass::Gemm::Kernel {
 
 // Template for Matmul kernel. Compute C = A * B
-template <
-    class BlockMmad_,
-    class BlockEpilogue_,
-    class BlockScheduler_
->
+template <class BlockMmad_, class BlockEpilogue_, class BlockScheduler_>
 class MultiCoreSplitkMatmulTla {
 public:
     using BlockMmad = BlockMmad_;
@@ -44,7 +40,7 @@ public:
     using ElementBias = typename BlockMmad::ElementBias;
 
     using BlockScheduler = BlockScheduler_;
-    
+
     static_assert(BlockMmad::TileCopy::ReluEnable == false, "Splitk template can not use the Relu with FixPipe !!!");
 
     static constexpr uint32_t computeLength = 192 * 1024 / sizeof(ElementAccumulator);
@@ -70,15 +66,24 @@ public:
 
         // Methods
         CATLASS_HOST_DEVICE
-        Params() {}
+        Params()
+        {}
 
         CATLASS_HOST_DEVICE
-        Params(GemmCoord const &problemShape_, GM_ADDR ptrA_, LayoutA layoutA_, GM_ADDR ptrB_,
-               LayoutB layoutB_, GM_ADDR ptrC_, LayoutC layoutC_, GM_ADDR ptrWorkspace_,
-               uint32_t splitkFactor_, GM_ADDR ptrBias_ = nullptr)
-            : problemShape(problemShape_), ptrA(ptrA_), layoutA(layoutA_), ptrB(ptrB_), layoutB(layoutB_),
-              ptrC(ptrC_), layoutC(layoutC_), ptrWorkspace(ptrWorkspace_), splitkFactor(splitkFactor_),
-              ptrBias(ptrBias_) {}
+        Params(
+            GemmCoord const& problemShape_, GM_ADDR ptrA_, LayoutA layoutA_, GM_ADDR ptrB_, LayoutB layoutB_,
+            GM_ADDR ptrC_, LayoutC layoutC_, GM_ADDR ptrWorkspace_, uint32_t splitkFactor_, GM_ADDR ptrBias_ = nullptr)
+            : problemShape(problemShape_),
+              ptrA(ptrA_),
+              layoutA(layoutA_),
+              ptrB(ptrB_),
+              layoutB(layoutB_),
+              ptrC(ptrC_),
+              layoutC(layoutC_),
+              ptrWorkspace(ptrWorkspace_),
+              splitkFactor(splitkFactor_),
+              ptrBias(ptrBias_)
+        {}
     };
 
     struct Arguments {
@@ -103,16 +108,16 @@ public:
             splitkFactor = aicCoreNum / blockNum;
         }
         // splitkFactor = std::min(splitkFactor, kTileNum);
-        splitkFactor = splitkFactor < kTileNum ? splitkFactor:kTileNum;
+        splitkFactor = splitkFactor < kTileNum ? splitkFactor : kTileNum;
         return splitkFactor;
     }
 
-    static bool CanImplement(const Arguments &args)
+    static bool CanImplement(const Arguments& args)
     {
         return true;
     }
 
-    static size_t GetWorkspaceSize(const Arguments &args)
+    static size_t GetWorkspaceSize(const Arguments& args)
     {
         uint32_t m = args.problemShape.m();
         uint32_t n = args.problemShape.n();
@@ -123,57 +128,45 @@ public:
         return minSpaceSize > workspaceSize ? minSpaceSize : workspaceSize;
     }
 
-    static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace)
+    static Params ToUnderlyingArguments(const Arguments& args, uint8_t* workspace)
     {
-        uint32_t splitkFactor = GetSplitkFactor(
-            args.problemShape.m(), args.problemShape.n(), args.problemShape.k(), args.aicCoreNum);
-        Params params{
-            args.problemShape,
-            args.ptrA,
-            args.layoutA,
-            args.ptrB,
-            args.layoutB,
-            args.ptrC,
-            args.layoutC,
-            workspace,
-            splitkFactor,
-            args.ptrBias
-        };
+        uint32_t splitkFactor =
+            GetSplitkFactor(args.problemShape.m(), args.problemShape.n(), args.problemShape.k(), args.aicCoreNum);
+        Params params{args.problemShape, args.ptrA,    args.layoutA, args.ptrB,    args.layoutB,
+                      args.ptrC,         args.layoutC, workspace,    splitkFactor, args.ptrBias};
         return params;
     }
 
     // Methods
     CATLASS_DEVICE
-    MultiCoreSplitkMatmulTla() {}
+    MultiCoreSplitkMatmulTla()
+    {}
 
     template <int32_t CORE_TYPE = g_coreType>
-    CATLASS_DEVICE
-    void operator()(Params const &params);
+    CATLASS_DEVICE void operator()(Params const& params);
 
     /// Executes one Matmul
     template <>
-    CATLASS_DEVICE
-    void operator()<AscendC::AIC>(Params const &params)
+    CATLASS_DEVICE void operator()<AscendC::AIC>(Params const& params)
     {
         BlockScheduler matmulBlockScheduler(
-            params.problemShape, GemmCoord(L1_TILE_M, L1_TILE_N, L1_TILE_K), params.splitkFactor
-        );
+            params.problemShape, GemmCoord(L1_TILE_M, L1_TILE_N, L1_TILE_K), params.splitkFactor);
         uint32_t coreLoops = matmulBlockScheduler.GetCoreLoops();
 
         BlockMmad blockMmad(resource);
 
         // Represent the full gm
         AscendC::GlobalTensor<ElementA> gmA;
-        gmA.SetGlobalBuffer((__gm__ ElementA *)params.ptrA);
+        gmA.SetGlobalBuffer((__gm__ ElementA*)params.ptrA);
         AscendC::GlobalTensor<ElementB> gmB;
-        gmB.SetGlobalBuffer((__gm__ ElementB *)params.ptrB);
+        gmB.SetGlobalBuffer((__gm__ ElementB*)params.ptrB);
         AscendC::GlobalTensor<ElementAccumulator> gmW;
-        gmW.SetGlobalBuffer((__gm__ ElementAccumulator *)params.ptrWorkspace);
+        gmW.SetGlobalBuffer((__gm__ ElementAccumulator*)params.ptrWorkspace);
 
         using GlobalTensorBiasType = std::conditional_t<std::is_void_v<ElementBias>, uint8_t, ElementBias>;
         AscendC::GlobalTensor<GlobalTensorBiasType> gmBias;
         if constexpr (!std::is_void_v<ElementBias>) {
-            gmBias.SetGlobalBuffer((__gm__ ElementBias *)params.ptrBias);
+            gmBias.SetGlobalBuffer((__gm__ ElementBias*)params.ptrBias);
         }
 
         // Matrix A or Matrix B does not have duplicate data reads. Setting L2 Cache to Disable,
@@ -205,20 +198,16 @@ public:
             // Make tiled views
             auto tensorBlockA = GetTile(
                 tensorA, tla::MakeCoord(blockCoord.m() * L1_TILE_M, blockCoord.k() * L1_TILE_K),
-                tla::MakeShape(actualBlockShape.m(), actualBlockShape.k())
-            );
+                tla::MakeShape(actualBlockShape.m(), actualBlockShape.k()));
             auto tensorBlockB = GetTile(
                 tensorB, tla::MakeCoord(blockCoord.k() * L1_TILE_K, blockCoord.n() * L1_TILE_N),
-                tla::MakeShape(actualBlockShape.k(), actualBlockShape.n())
-            );
+                tla::MakeShape(actualBlockShape.k(), actualBlockShape.n()));
 
             auto tensorC = tla::MakeTensor(
-                gmW[lenC * matmulBlockScheduler.GetSplitkSliceIdx(loopIdx)], layoutC, Arch::PositionGM{}
-            );
+                gmW[lenC * matmulBlockScheduler.GetSplitkSliceIdx(loopIdx)], layoutC, Arch::PositionGM{});
             auto tensorBlockC = GetTile(
                 tensorC, tla::MakeCoord(blockCoord.m() * L1_TILE_M, blockCoord.n() * L1_TILE_N),
-                tla::MakeShape(actualBlockShape.m(), actualBlockShape.n())
-            );
+                tla::MakeShape(actualBlockShape.m(), actualBlockShape.n()));
 
             // Compute block-scoped matrix multiply-add
             if constexpr (std::is_void_v<ElementBias>) {
@@ -226,8 +215,7 @@ public:
             } else {
                 if (blockCoord.k() == 0) {
                     auto tensorBlockBias = GetTile(
-                        tensorBias, tla::MakeCoord(blockCoord.n() * L1_TILE_N), tla::MakeShape(actualBlockShape.n())
-                    );
+                        tensorBias, tla::MakeCoord(blockCoord.n() * L1_TILE_N), tla::MakeShape(actualBlockShape.n()));
                     blockMmad(tensorBlockA, tensorBlockB, tensorBlockC, actualBlockShape, tensorBlockBias);
                 } else {
                     blockMmad(tensorBlockA, tensorBlockB, tensorBlockC, actualBlockShape);
@@ -241,22 +229,20 @@ public:
     }
 
     template <>
-    CATLASS_DEVICE
-    void operator()<AscendC::AIV>(Params const &params)
+    CATLASS_DEVICE void operator()<AscendC::AIV>(Params const& params)
     {
         Catlass::Arch::CrossCoreWaitFlag<0x2, PIPE_MTE2>(flagAicFinish);
         Catlass::Arch::CrossCoreBarrier<0x0, PIPE_MTE2>();
 
         AscendC::GlobalTensor<ElementC> gmC;
         AscendC::GlobalTensor<ElementAccumulator> gmWorkspace;
-        gmC.SetGlobalBuffer(reinterpret_cast<__gm__ ElementC *>(params.ptrC));
-        gmWorkspace.SetGlobalBuffer(reinterpret_cast<__gm__ ElementAccumulator *>(params.ptrWorkspace));
+        gmC.SetGlobalBuffer(reinterpret_cast<__gm__ ElementC*>(params.ptrC));
+        gmWorkspace.SetGlobalBuffer(reinterpret_cast<__gm__ ElementAccumulator*>(params.ptrWorkspace));
         ReduceAdd reduceAdd(resource);
         reduceAdd(
             gmC, gmWorkspace,
             static_cast<uint64_t>(params.problemShape.m()) * static_cast<uint64_t>(params.problemShape.n()),
-            params.splitkFactor
-        );
+            params.splitkFactor);
 
         AscendC::PipeBarrier<PIPE_ALL>();
     }

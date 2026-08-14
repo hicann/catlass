@@ -2,7 +2,7 @@
 
 ## Code Organization
 
-```
+```text
 ├── 51_ascend950_quant_matmul_per_group_per_block_tla
 │   ├── CMakeLists.txt # CMake build file
 │   ├── README.md
@@ -20,7 +20,7 @@
 - After obtaining the code, compile the corresponding operator executable file. For details, see [Template Library Quick Start](../../docs/en/1_Practice/01_quick_start.md#build-and-execution). This test case is an Ascend 950 operator. During compilation, you need to add -DCATLASS_ARCH=3510.
 - Execute the operator.
 
-```
+```bash
 # Compiling a specified case
 bash scripts/build.sh 51_ascend950_quant_matmul_per_group_per_block_tla -DCATLASS_ARCH=3510
 cd output/bin
@@ -31,6 +31,6 @@ cd output/bin
 
 If the following result is displayed, precision verification is successful.
 
-```
+```text
 Compare success.
 ```

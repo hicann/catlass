@@ -31,8 +31,7 @@ namespace CatlassKernel {
 using namespace Catlass;
 
 template <class Adapter>
-void RunAdapter(
-    Adapter matmulOp, typename Adapter::Arguments args, aclrtStream stream, uint32_t aicCoreNum)
+void RunAdapter(Adapter matmulOp, typename Adapter::Arguments args, aclrtStream stream, uint32_t aicCoreNum)
 {
     size_t sizeWorkspace = matmulOp.GetWorkspaceSize(args);
     uint8_t* deviceWorkspace = nullptr;

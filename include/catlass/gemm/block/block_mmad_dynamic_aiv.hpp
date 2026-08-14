@@ -22,24 +22,10 @@
 
 namespace Catlass::Gemm::Block {
 template <
-    uint32_t SCALAR_BUFFER_ELE_NUM_,
-    uint32_t STAGES_,
-    class AType_,
-    class BType_,
-    class CType_,
-    class BiasType_,
-    class TileCopy_,
-    class TileVmuls_
->
-struct BlockMmadAiv <
-    MmadAtlasA2DynamicAiv<SCALAR_BUFFER_ELE_NUM_, STAGES_>,
-    AType_,
-    BType_,
-    CType_,
-    BiasType_,
-    TileCopy_,
-    TileVmuls_
-> {
+    uint32_t SCALAR_BUFFER_ELE_NUM_, uint32_t STAGES_, class AType_, class BType_, class CType_, class BiasType_,
+    class TileCopy_, class TileVmuls_>
+struct BlockMmadAiv<
+    MmadAtlasA2DynamicAiv<SCALAR_BUFFER_ELE_NUM_, STAGES_>, AType_, BType_, CType_, BiasType_, TileCopy_, TileVmuls_> {
 public:
     // Type Aliases
     using DispatchPolicy = MmadAtlasA2DynamicAiv<SCALAR_BUFFER_ELE_NUM_, STAGES_>;
@@ -60,13 +46,13 @@ public:
     static constexpr uint32_t UBB_ALIGN = BYTE_PER_BLK / sizeof(ElementB);
     static constexpr uint32_t STAGES = DispatchPolicy::STAGES;
     static constexpr uint32_t SCALAR_BUFFER_ELE_NUM = DispatchPolicy::SCALAR_BUFFER_ELE_NUM;
-    
+
     // Check LayoutC
     static_assert(std::is_same_v<LayoutC, layout::RowMajor>, "LayoutC only support RowMajor yet!");
 
     /// Construct
     CATLASS_DEVICE
-    BlockMmadAiv(Arch::Resource<ArchTag> &resource, MatrixCoord taskShape, uint32_t ubBufAddrStart = 0)
+    BlockMmadAiv(Arch::Resource<ArchTag>& resource, MatrixCoord taskShape, uint32_t ubBufAddrStart = 0)
     {
         uint32_t ubASize = SCALAR_BUFFER_ELE_NUM * sizeof(ElementA);
         uint32_t ubBSize = taskShape.column() * sizeof(ElementB);
@@ -83,7 +69,7 @@ public:
             ubATensorList[i] = resource.ubBuf.template GetBufferByByte<ElementA>(ubAOffset + ubASize * i);
             ubBTensorList[i] = resource.ubBuf.template GetBufferByByte<ElementB>(ubBOffset + ubBSize * i);
             ubCTensorList[i] = resource.ubBuf.template GetBufferByByte<ElementC>(ubCOffset + ubCSize * i);
-            
+
             inEventIds[i] = i;
             outEventIds[i] = i;
             AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(inEventIds[i]);
@@ -104,10 +90,9 @@ public:
     /// Perform a block-scoped matrix multiply-accumulate
     CATLASS_DEVICE
     void operator()(
-        AscendC::GlobalTensor<ElementA> const &gmBlockA, LayoutA const &layoutA,
-        AscendC::GlobalTensor<ElementB> const &gmBlockB, LayoutB const &layoutB,
-        AscendC::GlobalTensor<ElementC> const &gmBlockC, LayoutC const &layoutC,
-        GemmCoord const &actualShape)
+        AscendC::GlobalTensor<ElementA> const& gmBlockA, LayoutA const& layoutA,
+        AscendC::GlobalTensor<ElementB> const& gmBlockB, LayoutB const& layoutB,
+        AscendC::GlobalTensor<ElementC> const& gmBlockC, LayoutC const& layoutC, GemmCoord const& actualShape)
     {
         AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>((event_t)(inEventIds[UbInStageId]));
 
@@ -141,8 +126,9 @@ public:
             auto actualTileM = (i == mTiles - 1) ? lastTileM : ubTileNum;
             AscendC::WaitFlag<AscendC::HardEvent::MTE3_V>((event_t)(outEventIds[UbOutStageId]));
             for (uint32_t j = 0; j < actualTileM; j++) {
-                tileVmuls(ubCTensorList[UbOutStageId][j * ubTileSize], ubBTensorList[UbInStageId],
-                    scalarA[i * ubTileNum + j], actualShape.n());
+                tileVmuls(
+                    ubCTensorList[UbOutStageId][j * ubTileSize], ubBTensorList[UbInStageId], scalarA[i * ubTileNum + j],
+                    actualShape.n());
             }
             AscendC::PipeBarrier<PIPE_V>();
             AscendC::SetFlag<AscendC::HardEvent::V_MTE3>((event_t)(outEventIds[UbOutStageId]));
@@ -158,6 +144,7 @@ public:
         AscendC::SetFlag<AscendC::HardEvent::V_MTE2>((event_t)(inEventIds[UbInStageId]));
         UbInStageId = (UbInStageId + 1 < STAGES) ? (UbInStageId + 1) : 0;
     }
+
 protected:
     /// Data members
     AscendC::LocalTensor<ElementA> ubATensorList[STAGES];
@@ -180,24 +167,11 @@ protected:
 };
 
 template <
-    uint32_t SCALAR_BUFFER_ELE_NUM_,
-    bool IS_TILE_M_,
-    class AType_,
-    class BType_,
-    class CType_,
-    class BiasType_,
-    class TileCopy_,
-    class TileVmuls_
->
-struct BlockMmadAiv <
-    MmadAtlasA2DynamicAivSimple<SCALAR_BUFFER_ELE_NUM_, IS_TILE_M_>,
-    AType_,
-    BType_,
-    CType_,
-    BiasType_,
-    TileCopy_,
-    TileVmuls_
-> {
+    uint32_t SCALAR_BUFFER_ELE_NUM_, bool IS_TILE_M_, class AType_, class BType_, class CType_, class BiasType_,
+    class TileCopy_, class TileVmuls_>
+struct BlockMmadAiv<
+    MmadAtlasA2DynamicAivSimple<SCALAR_BUFFER_ELE_NUM_, IS_TILE_M_>, AType_, BType_, CType_, BiasType_, TileCopy_,
+    TileVmuls_> {
 public:
     // Type Aliases
     using DispatchPolicy = MmadAtlasA2DynamicAivSimple<SCALAR_BUFFER_ELE_NUM_, IS_TILE_M_>;
@@ -219,13 +193,13 @@ public:
     static constexpr uint32_t UBB_ALIGN = BYTE_PER_BLK / sizeof(ElementB);
     static constexpr uint32_t SCALAR_BUFFER_ELE_NUM = DispatchPolicy::SCALAR_BUFFER_ELE_NUM;
     static constexpr bool IS_TILE_M = DispatchPolicy::IS_TILE_M;
-    
+
     // Check LayoutC
     static_assert(std::is_same_v<LayoutC, layout::RowMajor>, "LayoutC only support RowMajor yet!");
 
     /// Construct
     CATLASS_DEVICE
-    BlockMmadAiv(Arch::Resource<ArchTag> &resource, MatrixCoord taskShape, uint32_t ubBufAddrStart = 0)
+    BlockMmadAiv(Arch::Resource<ArchTag>& resource, MatrixCoord taskShape, uint32_t ubBufAddrStart = 0)
     {
         uint32_t ubASize = SCALAR_BUFFER_ELE_NUM * sizeof(ElementA);
         uint32_t ubBSize = taskShape.column() * sizeof(ElementB);
@@ -241,7 +215,7 @@ public:
         ubATensor = resource.ubBuf.template GetBufferByByte<ElementA>(ubAOffset);
         ubBTensor = resource.ubBuf.template GetBufferByByte<ElementB>(ubBOffset);
         ubCTensor = resource.ubBuf.template GetBufferByByte<ElementC>(ubCOffset);
-        
+
         AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID0);
         AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID1);
         AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID0);
@@ -259,10 +233,9 @@ public:
     /// Perform a block-scoped matrix multiply-accumulate
     CATLASS_DEVICE
     void operator()(
-        AscendC::GlobalTensor<ElementA> const &gmBlockA, LayoutA const &layoutA,
-        AscendC::GlobalTensor<ElementB> const &gmBlockB, LayoutB const &layoutB,
-        AscendC::GlobalTensor<ElementC> const &gmBlockC, LayoutC const &layoutC,
-        GemmCoord const &actualShape)
+        AscendC::GlobalTensor<ElementA> const& gmBlockA, LayoutA const& layoutA,
+        AscendC::GlobalTensor<ElementB> const& gmBlockB, LayoutB const& layoutB,
+        AscendC::GlobalTensor<ElementC> const& gmBlockC, LayoutC const& layoutC, GemmCoord const& actualShape)
     {
         uint32_t mRound = RoundUp<UBA_ALIGN>(actualShape.m());
 
@@ -315,6 +288,7 @@ public:
         copyUbToGmC(gmBlockC[0], ubCTensor, layoutCBlock, lastLayoutCInUb);
         AscendC::SetFlag<AscendC::HardEvent::MTE3_V>((event_t)(EVENT_ID0));
     }
+
 protected:
     /// Data members
     AscendC::LocalTensor<ElementA> ubATensor;
@@ -330,25 +304,11 @@ protected:
     uint32_t ubTileSize{0};
 };
 
-
 template <
-    uint32_t SCALAR_BUFFER_ELE_NUM_,
-    class AType_,
-    class BType_,
-    class CType_,
-    class BiasType_,
-    class TileCopy_,
-    class TileVmuls_
->
-struct BlockMmadAiv <
-    MmadAtlasA2DynamicAivTrans<SCALAR_BUFFER_ELE_NUM_>,
-    AType_,
-    BType_,
-    CType_,
-    BiasType_,
-    TileCopy_,
-    TileVmuls_
-> {
+    uint32_t SCALAR_BUFFER_ELE_NUM_, class AType_, class BType_, class CType_, class BiasType_, class TileCopy_,
+    class TileVmuls_>
+struct BlockMmadAiv<
+    MmadAtlasA2DynamicAivTrans<SCALAR_BUFFER_ELE_NUM_>, AType_, BType_, CType_, BiasType_, TileCopy_, TileVmuls_> {
 public:
     // Type Aliases
     using DispatchPolicy = MmadAtlasA2DynamicAivTrans<SCALAR_BUFFER_ELE_NUM_>;
@@ -372,13 +332,13 @@ public:
     static constexpr uint16_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementC);
     static constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(ElementC);
     static constexpr uint32_t VNCHW_SIZE = 16;
-    
+
     // Check LayoutC
     static_assert(std::is_same_v<LayoutC, layout::RowMajor>, "LayoutC only support RowMajor yet!");
 
     /// Construct
     CATLASS_DEVICE
-    BlockMmadAiv(Arch::Resource<ArchTag> &resource, MatrixCoord taskShape, uint32_t ubBufAddrStart = 0)
+    BlockMmadAiv(Arch::Resource<ArchTag>& resource, MatrixCoord taskShape, uint32_t ubBufAddrStart = 0)
     {
         ubTileSize = RoundUp<ELE_NUM_PER_C0>(taskShape.row());
         ubTileNum = RoundUp<C0_NUM_PER_FRACTAL>(taskShape.column());
@@ -396,7 +356,7 @@ public:
         ubATensor = resource.ubBuf.template GetBufferByByte<ElementA>(ubAOffset);
         ubTransposeCTensor = resource.ubBuf.template GetBufferByByte<ElementC>(ubTransposeCOffset);
         ubCTensor = resource.ubBuf.template GetBufferByByte<ElementC>(ubCOffset);
-        
+
         AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID0);
         AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID1);
         AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID2);
@@ -414,10 +374,9 @@ public:
     /// Perform a block-scoped matrix multiply-accumulate
     CATLASS_DEVICE
     void operator()(
-        AscendC::GlobalTensor<ElementA> const &gmBlockA, LayoutA const &layoutA,
-        AscendC::GlobalTensor<ElementB> const &gmBlockB, LayoutB const &layoutB,
-        AscendC::GlobalTensor<ElementC> const &gmBlockC, LayoutC const &layoutC,
-        GemmCoord const &actualShape)
+        AscendC::GlobalTensor<ElementA> const& gmBlockA, LayoutA const& layoutA,
+        AscendC::GlobalTensor<ElementB> const& gmBlockB, LayoutB const& layoutB,
+        AscendC::GlobalTensor<ElementC> const& gmBlockC, LayoutC const& layoutC, GemmCoord const& actualShape)
     {
         AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>((event_t)(EVENT_ID0));
         AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>((event_t)(EVENT_ID1));
@@ -465,15 +424,15 @@ public:
         uint64_t srcLocalList[VNCHW_SIZE];
         for (uint32_t i = 0; i < mTiles; ++i) {
             for (uint32_t j = 0; j < VNCHW_SIZE; ++j) {
-                srcLocalList[j] = ubCTensor.GetPhyAddr() + i * C0_NUM_PER_FRACTAL * ubTileSize * sizeof(ElementC)
-                    + j * ubTileSize * sizeof(ElementC);
+                srcLocalList[j] = ubCTensor.GetPhyAddr() + i * C0_NUM_PER_FRACTAL * ubTileSize * sizeof(ElementC) +
+                                  j * ubTileSize * sizeof(ElementC);
                 if constexpr (std::is_same_v<ElementC, half>) {
-                    dstLocalList[j] = ubTransposeCTensor.GetPhyAddr() + i * C0_NUM_PER_FRACTAL * sizeof(ElementC)
-                        + j * ubTileNum * sizeof(ElementC);
+                    dstLocalList[j] = ubTransposeCTensor.GetPhyAddr() + i * C0_NUM_PER_FRACTAL * sizeof(ElementC) +
+                                      j * ubTileNum * sizeof(ElementC);
                 }
                 if constexpr (std::is_same_v<ElementC, float>) {
-                    dstLocalList[j] = ubTransposeCTensor.GetPhyAddr() + i * C0_NUM_PER_FRACTAL * sizeof(ElementC)
-                        + j / 2 * ubTileNum * sizeof(ElementC) + j % 2 * BYTE_PER_C0;
+                    dstLocalList[j] = ubTransposeCTensor.GetPhyAddr() + i * C0_NUM_PER_FRACTAL * sizeof(ElementC) +
+                                      j / 2 * ubTileNum * sizeof(ElementC) + j % 2 * BYTE_PER_C0;
                 }
             }
             if (usedBufferNum > 1) {
@@ -483,15 +442,15 @@ public:
                 AscendC::TransDataTo5HDParams paramsRepeatOne{false, false, 1, 0, 0};
                 AscendC::TransDataTo5HD<ElementC>(dstLocalList, srcLocalList, paramsRepeatOne);
             }
-
         }
-        
+
         AscendC::SetFlag<AscendC::HardEvent::V_MTE3>((event_t)(EVENT_ID0));
         AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>((event_t)(EVENT_ID0));
         // write to gmC
         copyUbToGmC(gmBlockC[0], ubTransposeCTensor, actualLayoutC, actualTransLayoutC);
         AscendC::SetFlag<AscendC::HardEvent::MTE3_V>((event_t)(EVENT_ID2));
     }
+
 protected:
     /// Data members
     AscendC::LocalTensor<ElementA> ubATensor;
@@ -509,5 +468,5 @@ protected:
     uint32_t ubTileSize{0};
 };
 
-}
+} // namespace Catlass::Gemm::Block
 #endif // CATLASS_GEMM_BLOCK_MMAD_DYNAMIC_AIV_HPP

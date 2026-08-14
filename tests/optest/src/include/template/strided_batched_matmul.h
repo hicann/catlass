@@ -32,6 +32,7 @@ struct StridedBatchedMatmulLike {
         const at::Tensor& mat1, const at::Tensor& mat2,
         const c10::ScalarType& outDType, bool transA, bool transB,
         bool formatA, bool formatB,
+        bool batchTransA, bool batchTransB,
         CatlassKernel::TParams& tParams,
         CatlassKernel::StridedBatchedMatmulParams& params)
     {
@@ -49,31 +50,56 @@ struct StridedBatchedMatmulLike {
         params.inputAddr[0] = static_cast<uint8_t*>(const_cast<void*>(mat1.storage().data()));
         params.inputAddr[1] = static_cast<uint8_t*>(const_cast<void*>(mat2.storage().data()));
 
-        int64_t batch = mat1.dim() >= 3 ? mat1.size(0) : 1;
-        int64_t m, k1, k2, n;
-        if (transA) {
-            m = mat1.size(mat1.dim() - 1);  k1 = mat1.size(mat1.dim() - 2);
+        int64_t btransA = batchTransA ? 1 : 0;
+        int64_t btransB = batchTransB ? 1 : 0;
+
+        // Shape extraction matches example: logical shape is always (batch, M, K) for A,
+        // (batch, K, N) for B, regardless of RowMajor/ColumnMajor layout.
+        // When ColumnMajor, the physical storage has M/K (or K/N) swapped, so we swap
+        // the dimension extraction accordingly.
+        int64_t batch = mat1.dim() >= 3 ? mat1.size(btransA) : 1;
+        int64_t m, k;
+        if (!transA) {
+            m = mat1.size(mat1.dim() - 2 - btransA);
+            k = mat1.size(mat1.dim() - 1);
         } else {
-            m = mat1.size(mat1.dim() - 2);  k1 = mat1.size(mat1.dim() - 1);
+            k = mat1.size(mat1.dim() - 2 - btransA);
+            m = mat1.size(mat1.dim() - 1);
         }
-        if (transB) {
-            k2 = mat2.size(mat2.dim() - 1); n = mat2.size(mat2.dim() - 2);
+        int64_t k2, n;
+        if (!transB) {
+            k2 = mat2.size(mat2.dim() - 2 - btransB);
+            n = mat2.size(mat2.dim() - 1);
         } else {
-            k2 = mat2.size(mat2.dim() - 2); n = mat2.size(mat2.dim() - 1);
+            n = mat2.size(mat2.dim() - 2 - btransB);
+            k2 = mat2.size(mat2.dim() - 1);
         }
-        TORCH_CHECK(k1 == k2, "mat1 and mat2 shapes cannot be multiplied (",
-                    m, "x", k1, " and ", k2, "x", n, ")");
+        TORCH_CHECK(k == k2, "mat1 and mat2 shapes cannot be multiplied (",
+                    m, "x", k, " and ", k2, "x", n, ")");
         params.m = static_cast<uint32_t>(m);
-        params.k = static_cast<uint32_t>(k1);
+        params.k = static_cast<uint32_t>(k);
         params.n = static_cast<uint32_t>(n);
         params.batch = static_cast<uint32_t>(batch);
 
-        params.lda = transA ? static_cast<int64_t>(m) : static_cast<int64_t>(k1);
-        params.ldb = transB ? static_cast<int64_t>(k1) : static_cast<int64_t>(n);
-        params.ldc = static_cast<int64_t>(n);
+        // leading dimension: stride for the non-batch dimension
+        // strideA: stride for the batch dimension
+        if (!transA) {  // RowMajor
+            params.lda = batchTransA ? static_cast<int64_t>(batch) * k : static_cast<int64_t>(k);
+            params.strideA = batchTransA ? static_cast<int64_t>(k) : static_cast<int64_t>(m) * params.lda;
+        } else {  // ColumnMajor
+            params.lda = batchTransA ? static_cast<int64_t>(batch) * m : static_cast<int64_t>(m);
+            params.strideA = batchTransA ? static_cast<int64_t>(m) : static_cast<int64_t>(k) * params.lda;
+        }
 
-        params.strideA = static_cast<int64_t>(m) * params.lda;
-        params.strideB = static_cast<int64_t>(k1) * params.ldb;
+        if (!transB) {  // RowMajor
+            params.ldb = batchTransB ? static_cast<int64_t>(batch) * n : static_cast<int64_t>(n);
+            params.strideB = batchTransB ? static_cast<int64_t>(n) : static_cast<int64_t>(k) * params.ldb;
+        } else {  // ColumnMajor
+            params.ldb = batchTransB ? static_cast<int64_t>(batch) * k : static_cast<int64_t>(k);
+            params.strideB = batchTransB ? static_cast<int64_t>(k) : static_cast<int64_t>(n) * params.ldb;
+        }
+
+        params.ldc = static_cast<int64_t>(n);
         params.strideC = static_cast<int64_t>(m) * params.ldc;
     }
 
@@ -90,11 +116,13 @@ struct StridedBatchedMatmulLike {
     static OutputType Run(
         const at::Tensor& mat1, const at::Tensor& mat2,
         const c10::ScalarType& outDType, bool transA, bool transB,
-        bool formatA, bool formatB)
+        bool formatA, bool formatB,
+        bool batchTransA, bool batchTransB)
     {
         CatlassKernel::TParams tParams;
         CatlassKernel::StridedBatchedMatmulParams params;
-        GetKernelInfo(mat1, mat2, outDType, transA, transB, formatA, formatB, tParams, params);
+        GetKernelInfo(mat1, mat2, outDType, transA, transB, formatA, formatB,
+                      batchTransA, batchTransB, tParams, params);
         OutputType output = AllocOutput(tParams, params);
         aclrtStream stream = c10_npu::getCurrentNPUStream().stream(false);
         uint32_t aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();

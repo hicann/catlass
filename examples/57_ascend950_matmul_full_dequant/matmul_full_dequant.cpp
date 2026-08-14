@@ -39,13 +39,13 @@ using namespace tla;
 using Options = GemmOptions;
 using QuantMode = Epilogue::Block::QuantMode;
 
-struct MatmulShape{
+struct MatmulShape {
     uint32_t m;
     uint32_t n;
     uint32_t k;
 };
 
-static void Run(const Options &options, QuantMode x1QuantMode, QuantMode x2QuantMode, bool hasQuantBias)
+static void Run(const Options& options, QuantMode x1QuantMode, QuantMode x2QuantMode, bool hasQuantBias)
 {
     aclrtStream stream{nullptr};
 
@@ -63,7 +63,7 @@ static void Run(const Options &options, QuantMode x1QuantMode, QuantMode x2Quant
     using ElementD = half;
     using ElementX1 = float;
     using ElementX2 = float;
-    using ElementBias = float; 
+    using ElementBias = float;
 
     using LayoutTagA = layout::RowMajor;
     using LayoutTagB = layout::RowMajor;
@@ -84,48 +84,55 @@ static void Run(const Options &options, QuantMode x1QuantMode, QuantMode x2Quant
     size_t goldenSize = lenC * sizeof(float);
     size_t sizeWorkspace;
 
-    uint8_t *deviceA{nullptr};
-    uint8_t *deviceB{nullptr};
-    uint8_t *deviceC{nullptr};
-    uint8_t *deviceWorkspace{nullptr};
-    uint8_t *x1ScaleDevice{nullptr};
-    uint8_t *x2ScaleDevice{nullptr};
-    uint8_t *quantBiasDevice{nullptr};
+    uint8_t* deviceA{nullptr};
+    uint8_t* deviceB{nullptr};
+    uint8_t* deviceC{nullptr};
+    uint8_t* deviceWorkspace{nullptr};
+    uint8_t* x1ScaleDevice{nullptr};
+    uint8_t* x2ScaleDevice{nullptr};
+    uint8_t* quantBiasDevice{nullptr};
 
     const auto cleanupAndFinalize = [&]() {
-        if (deviceA) ACL_CHECK(aclrtFree(deviceA));
-        if (deviceB) ACL_CHECK(aclrtFree(deviceB));
-        if (x1ScaleDevice) ACL_CHECK(aclrtFree(x1ScaleDevice));
-        if (x2ScaleDevice) ACL_CHECK(aclrtFree(x2ScaleDevice));
-        if (quantBiasDevice) ACL_CHECK(aclrtFree(quantBiasDevice));
-        if (deviceC) ACL_CHECK(aclrtFree(deviceC));
-        if (sizeWorkspace > 0 && deviceWorkspace) ACL_CHECK(aclrtFree(deviceWorkspace));
+        if (deviceA)
+            ACL_CHECK(aclrtFree(deviceA));
+        if (deviceB)
+            ACL_CHECK(aclrtFree(deviceB));
+        if (x1ScaleDevice)
+            ACL_CHECK(aclrtFree(x1ScaleDevice));
+        if (x2ScaleDevice)
+            ACL_CHECK(aclrtFree(x2ScaleDevice));
+        if (quantBiasDevice)
+            ACL_CHECK(aclrtFree(quantBiasDevice));
+        if (deviceC)
+            ACL_CHECK(aclrtFree(deviceC));
+        if (sizeWorkspace > 0 && deviceWorkspace)
+            ACL_CHECK(aclrtFree(deviceWorkspace));
         ACL_CHECK(aclrtDestroyStream(stream));
         ACL_CHECK(aclrtResetDevice(options.deviceId));
         ACL_CHECK(aclFinalize());
     };
 
-    uint8_t *hostA;
-    ACL_CHECK(aclrtMallocHost((void **)(&hostA), sizeA));
+    uint8_t* hostA;
+    ACL_CHECK(aclrtMallocHost((void**)(&hostA), sizeA));
     if (!ReadFile("./input/x1.bin", hostA, sizeA)) {
         cleanupAndFinalize();
         return;
     }
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceA, sizeA, hostA, sizeA, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *hostB;
-    ACL_CHECK(aclrtMallocHost((void **)(&hostB), sizeB));
+    uint8_t* hostB;
+    ACL_CHECK(aclrtMallocHost((void**)(&hostB), sizeB));
     if (!ReadFile("./input/x2.bin", hostB, sizeB)) {
         cleanupAndFinalize();
         return;
     }
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceB, sizeB, hostB, sizeB, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
 
-    uint8_t *x1ScaleHost = nullptr;
+    uint8_t* x1ScaleHost = nullptr;
     size_t x1ScaleFileSize = 0;
     if (x1QuantMode == QuantMode::PERTENSOR_MODE) {
         x1ScaleFileSize = sizeof(float);
@@ -133,8 +140,8 @@ static void Run(const Options &options, QuantMode x1QuantMode, QuantMode x2Quant
         x1ScaleFileSize = m * sizeof(float);
     }
     if (x1QuantMode != QuantMode::DEFAULT) {
-        ACL_CHECK(aclrtMallocHost((void **)(&x1ScaleHost), x1ScaleFileSize));
-        ACL_CHECK(aclrtMalloc((void **)&x1ScaleDevice, x1ScaleFileSize, ACL_MEM_MALLOC_HUGE_FIRST));
+        ACL_CHECK(aclrtMallocHost((void**)(&x1ScaleHost), x1ScaleFileSize));
+        ACL_CHECK(aclrtMalloc((void**)&x1ScaleDevice, x1ScaleFileSize, ACL_MEM_MALLOC_HUGE_FIRST));
         if (!ReadFile("./input/x1_scale.bin", x1ScaleHost, x1ScaleFileSize)) {
             cleanupAndFinalize();
             return;
@@ -142,7 +149,7 @@ static void Run(const Options &options, QuantMode x1QuantMode, QuantMode x2Quant
         ACL_CHECK(aclrtMemcpy(x1ScaleDevice, x1ScaleFileSize, x1ScaleHost, x1ScaleFileSize, ACL_MEMCPY_HOST_TO_DEVICE));
     }
 
-    uint8_t *x2ScaleHost = nullptr;
+    uint8_t* x2ScaleHost = nullptr;
     size_t x2ScaleFileSize = 0;
     if (x2QuantMode == QuantMode::PERTENSOR_MODE) {
         x2ScaleFileSize = sizeof(float);
@@ -150,8 +157,8 @@ static void Run(const Options &options, QuantMode x1QuantMode, QuantMode x2Quant
         x2ScaleFileSize = n * sizeof(float);
     }
     if (x2QuantMode != QuantMode::DEFAULT) {
-        ACL_CHECK(aclrtMallocHost((void **)(&x2ScaleHost), x2ScaleFileSize));
-        ACL_CHECK(aclrtMalloc((void **)&x2ScaleDevice, x2ScaleFileSize, ACL_MEM_MALLOC_HUGE_FIRST));
+        ACL_CHECK(aclrtMallocHost((void**)(&x2ScaleHost), x2ScaleFileSize));
+        ACL_CHECK(aclrtMalloc((void**)&x2ScaleDevice, x2ScaleFileSize, ACL_MEM_MALLOC_HUGE_FIRST));
         if (!ReadFile("./input/x2_scale.bin", x2ScaleHost, x2ScaleFileSize)) {
             cleanupAndFinalize();
             return;
@@ -159,16 +166,17 @@ static void Run(const Options &options, QuantMode x1QuantMode, QuantMode x2Quant
         ACL_CHECK(aclrtMemcpy(x2ScaleDevice, x2ScaleFileSize, x2ScaleHost, x2ScaleFileSize, ACL_MEMCPY_HOST_TO_DEVICE));
     }
 
-    uint8_t *quantBiasHost = nullptr;
+    uint8_t* quantBiasHost = nullptr;
     if (hasQuantBias) {
         size_t quantBiasFileSize = n * sizeof(float);
-        ACL_CHECK(aclrtMallocHost((void **)(&quantBiasHost), quantBiasFileSize));
-        ACL_CHECK(aclrtMalloc((void **)&quantBiasDevice, quantBiasFileSize, ACL_MEM_MALLOC_HUGE_FIRST));
+        ACL_CHECK(aclrtMallocHost((void**)(&quantBiasHost), quantBiasFileSize));
+        ACL_CHECK(aclrtMalloc((void**)&quantBiasDevice, quantBiasFileSize, ACL_MEM_MALLOC_HUGE_FIRST));
         if (!ReadFile("./input/bias.bin", quantBiasHost, quantBiasFileSize)) {
             cleanupAndFinalize();
             return;
         }
-        ACL_CHECK(aclrtMemcpy(quantBiasDevice, quantBiasFileSize, quantBiasHost, quantBiasFileSize, ACL_MEMCPY_HOST_TO_DEVICE));
+        ACL_CHECK(aclrtMemcpy(
+            quantBiasDevice, quantBiasFileSize, quantBiasHost, quantBiasFileSize, ACL_MEMCPY_HOST_TO_DEVICE));
     }
 
     // Get the number of cube cores of the current hardware
@@ -186,7 +194,7 @@ static void Run(const Options &options, QuantMode x1QuantMode, QuantMode x2Quant
     auto layoutC = tla::MakeLayout<ElementC, LayoutTagC>(m, n);
 
     using ProblemShape = MatmulShape;
-    
+
     MatmulShape shape = {m, n, k};
 
     using TileCopy = Gemm::Tile::PackedTileCopyTlaToUB<
@@ -195,7 +203,8 @@ static void Run(const Options &options, QuantMode x1QuantMode, QuantMode x2Quant
     using BlockMmad = Gemm::Block::BlockMmadTla<
         DispatchPolicy, L1TileShape, L0TileShape, ElementA, ElementB, ElementC, ElementBias, TileCopy>;
     using EpilogueDispatchPolicy = Epilogue::BlockEpilogueDequant;
-    using BlockEpilogue = Epilogue::Block::BlockEpilogue<EpilogueDispatchPolicy, L0TileShape, ElementD, ElementC, ElementX1, ElementX2, ElementBias>;
+    using BlockEpilogue = Epilogue::Block::BlockEpilogue<
+        EpilogueDispatchPolicy, L0TileShape, ElementD, ElementC, ElementX1, ElementX2, ElementBias>;
 
     uint32_t taskNum = CeilDiv(options.problemShape.m(), tla::get<0>(L1TileShape{})) *
                        CeilDiv(options.problemShape.n(), tla::get<1>(L1TileShape{}));
@@ -210,28 +219,20 @@ static void Run(const Options &options, QuantMode x1QuantMode, QuantMode x2Quant
 
     using Arguments = typename MatmulKernel::Arguments;
     Arguments arguments = {
-        shape,                                          
-        {deviceA, deviceB, deviceC},                   
-        {
-            deviceC, x2ScaleDevice, x1ScaleDevice, quantBiasDevice,
-            {
-                tla::get<0>(L1TileShape{}),
-                tla::get<1>(L1TileShape{}),
-                x1QuantMode,
-                x2QuantMode,
-                AscendC::DT_FLOAT,
-                quantBiasDevice != nullptr
-            }
-        }
-    };
+        shape,
+        {deviceA, deviceB, deviceC},
+        {deviceC,
+         x2ScaleDevice,
+         x1ScaleDevice,
+         quantBiasDevice,
+         {tla::get<0>(L1TileShape{}), tla::get<1>(L1TileShape{}), x1QuantMode, x2QuantMode, AscendC::DT_FLOAT,
+          quantBiasDevice != nullptr}}};
 
     MatmulAdapter matmulOp;
     matmulOp.CanImplement(arguments);
     sizeWorkspace = matmulOp.GetWorkspaceSize(arguments);
     if (sizeWorkspace > 0) {
-        ACL_CHECK(
-            aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST)
-        );
+        ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
     }
     matmulOp.Initialize(arguments, deviceWorkspace);
     matmulOp(stream, aicCoreUsed);
@@ -282,29 +283,24 @@ struct ArgsParams {
     bool enableBias = false;
 };
 
-bool IsValidQuantMode(
-    QuantMode x1QuantMode,
-    QuantMode x2QuantMode,
-    bool enableBias
-)
+bool IsValidQuantMode(QuantMode x1QuantMode, QuantMode x2QuantMode, bool enableBias)
 {
     using TupleType = std::tuple<QuantMode, QuantMode, bool>;
     static const std::vector<TupleType> validPairs = {
-        { QuantMode::PERTOKEN_MODE,     QuantMode::PERTENSOR_MODE,  false },
-        { QuantMode::PERTOKEN_MODE,     QuantMode::PERCHANNEL_MODE, false },
-        { QuantMode::PERTENSOR_MODE,    QuantMode::PERCHANNEL_MODE, false },
-        { QuantMode::DEFAULT,           QuantMode::PERCHANNEL_MODE, false },
-        { QuantMode::PERTOKEN_MODE,     QuantMode::PERTENSOR_MODE,  true },
-        { QuantMode::PERTOKEN_MODE,     QuantMode::PERCHANNEL_MODE, true },
-        { QuantMode::DEFAULT,           QuantMode::PERTENSOR_MODE,  true },
-        { QuantMode::DEFAULT,           QuantMode::PERCHANNEL_MODE, true }
-    };
+        {QuantMode::PERTOKEN_MODE, QuantMode::PERTENSOR_MODE, false},
+        {QuantMode::PERTOKEN_MODE, QuantMode::PERCHANNEL_MODE, false},
+        {QuantMode::PERTENSOR_MODE, QuantMode::PERCHANNEL_MODE, false},
+        {QuantMode::DEFAULT, QuantMode::PERCHANNEL_MODE, false},
+        {QuantMode::PERTOKEN_MODE, QuantMode::PERTENSOR_MODE, true},
+        {QuantMode::PERTOKEN_MODE, QuantMode::PERCHANNEL_MODE, true},
+        {QuantMode::DEFAULT, QuantMode::PERTENSOR_MODE, true},
+        {QuantMode::DEFAULT, QuantMode::PERCHANNEL_MODE, true}};
 
     const auto target = std::make_tuple(x1QuantMode, x2QuantMode, enableBias);
     return std::find(validPairs.begin(), validPairs.end(), target) != validPairs.end();
 }
 
-ArgsParams ParseArguments(int32_t argc, const char* argv[]) 
+ArgsParams ParseArguments(int32_t argc, const char* argv[])
 {
     ArgsParams params;
     constexpr static int32_t minArgs = 5;
@@ -333,21 +329,20 @@ ArgsParams ParseArguments(int32_t argc, const char* argv[])
     return params;
 }
 
-int main(int argc, const char **argv)
+int main(int argc, const char** argv)
 {
-    for (int32_t i = 0;i < argc;i++) {
+    for (int32_t i = 0; i < argc; i++) {
         std::cout << "arg[" << i << "]: " << argv[i] << std::endl;
     }
 
     ArgsParams params = ParseArguments(argc, argv);
-    std::cout \
-        << "m: " << params.m << std::endl
-        << "n: " << params.n << std::endl
-        << "k: " << params.k << std::endl
-        << "x1QuantMode: " << static_cast<int>(params.x1QuantMode) << std::endl
-        << "x2QuantMode: " << static_cast<int>(params.x2QuantMode) << std::endl
-        << "enableBias: " << (params.enableBias ? "true" : "false") << std::endl;
-    
+    std::cout << "m: " << params.m << std::endl
+              << "n: " << params.n << std::endl
+              << "k: " << params.k << std::endl
+              << "x1QuantMode: " << static_cast<int>(params.x1QuantMode) << std::endl
+              << "x2QuantMode: " << static_cast<int>(params.x2QuantMode) << std::endl
+              << "enableBias: " << (params.enableBias ? "true" : "false") << std::endl;
+
     if (!IsValidQuantMode(params.x1QuantMode, params.x2QuantMode, params.enableBias)) {
         std::cerr << "Invalid combination of quantization modes and bias flag." << std::endl;
         return -1;
@@ -355,9 +350,6 @@ int main(int argc, const char **argv)
     Options options;
     options.problemShape = {params.m, params.n, params.k};
     options.deviceId = 0;
-    Run(options,
-        params.x1QuantMode,
-        params.x2QuantMode,
-        params.enableBias);
+    Run(options, params.x1QuantMode, params.x2QuantMode, params.enableBias);
     return 0;
 }

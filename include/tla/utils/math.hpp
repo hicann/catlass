@@ -16,31 +16,31 @@
 
 namespace tla {
 
-template <class T, class U, TLA_REQUIRES(is_arithmetic<T>::value && is_arithmetic<U>::value)>
+template <class T, class U, TLA_REQUIRES((is_arithmetic<T>::value) && (is_arithmetic<U>::value))>
 CATLASS_HOST_DEVICE constexpr auto max(T const& t, U const& u)
 {
     return t < u ? u : t;
 }
 
-template <class T, class U, TLA_REQUIRES(is_arithmetic<T>::value && is_arithmetic<U>::value)>
+template <class T, class U, TLA_REQUIRES((is_arithmetic<T>::value) && (is_arithmetic<U>::value))>
 CATLASS_HOST_DEVICE constexpr auto min(T const& t, U const& u)
 {
     return t < u ? t : u;
 }
 
-template <class T, class U, TLA_REQUIRES(is_std_integral<T>::value && is_std_integral<U>::value)>
+template <class T, class U, TLA_REQUIRES((is_std_integral<T>::value) && (is_std_integral<U>::value))>
 CATLASS_HOST_DEVICE constexpr auto clip_sub(T const& t, U const& u)
 {
     return (t > u) ? (t - u) : T(0);
 }
 
-template <class T, class U, TLA_REQUIRES(is_std_integral<T>::value && is_std_integral<U>::value)>
+template <class T, class U, TLA_REQUIRES((is_std_integral<T>::value) && (is_std_integral<U>::value))>
 CATLASS_HOST_DEVICE constexpr auto ceil_div(T const& a, U const& b)
 {
     return (a + b - T(1)) / b;
 }
 
-template <class T, class U, TLA_REQUIRES(is_std_integral<T>::value && is_std_integral<U>::value)>
+template <class T, class U, TLA_REQUIRES((is_std_integral<T>::value) && (is_std_integral<U>::value))>
 CATLASS_HOST_DEVICE constexpr auto round_up(T const& t, U const& u)
 {
     return ceil_div(t, u) * u;

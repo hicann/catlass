@@ -110,8 +110,7 @@ extern "C" void run(uint32_t blockNum, aclrtStream stream, const CatlassKernel::
         Catlass::Gemm::Tile::ScaleGranularity::PER_TENSOR>;
 
     using BlockMmad = Catlass::Gemm::Block::BlockMmadA8W4Mx<
-        DispatchPolicyMmad, L1TileShape, L0TileShape, ElementA, ElementB, ElementC, ElementPrologueB, ElementBias,
-        TileCopy>;
+        DispatchPolicyMmad, L1TileShape, L0TileShape, ElementA, ElementB, ElementC, ElementBias, TileCopy>;
 
     using BlockPrologue = Catlass::Gemm::Block::BlockPrologue<
         DispatchPolicyPrologue, PrologueSrcType, PrologueDstType, L1TileShape, TileCopy>;

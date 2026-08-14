@@ -49,10 +49,8 @@ public:
 
     // Check data infos
     static_assert(
-        std::is_same_v<ElementC, int32_t> &&
-            (std::is_same_v<ElementD, half> ||
-             std::is_same_v<ElementD, bfloat16_t>)&&std::is_same_v<ElementScale, ElementD> &&
-            std::is_same_v<ElementPerTokenScale, ElementD>,
+        std::is_same_v<ElementC, int32_t> && (std::is_same_v<ElementD, half> || std::is_same_v<ElementD, bfloat16_t>) &&
+            std::is_same_v<ElementScale, ElementD> && std::is_same_v<ElementPerTokenScale, ElementD>,
         "The element type template parameters of BlockEpilogue are wrong");
     static_assert(
         tla::detail::isRowMajor<LayoutC>::value && tla::detail::isRowMajor<LayoutD>::value,

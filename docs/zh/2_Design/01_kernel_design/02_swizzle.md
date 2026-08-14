@@ -8,32 +8,32 @@ Swizzle策略决定了AI Core计算基本块的顺序。调整Swizzle策略有�
 
 默认的Swizzle策略为SwizzleOffset=1、SwizzleDirection=0，即：
 
-```c++
+```cpp
  using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<>;
 ```
 
-<img src="../../figures/swizzle10.png" width="60%">
+<img src="../../../assets/images/swizzle10.png" width="60%">
 
 ## 示例2
 
 SwizzleOffset=3、SwizzleDirection=0
 
-```c++
+```cpp
  using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
 ```
 
-<img src="../../figures/swizzle30.png" width="60%">
+<img src="../../../assets/images/swizzle30.png" width="60%">
 
 ## 示例3
 
 SwizzleOffset=3、SwizzleDirection=1
 
-```c++
+```cpp
  using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
 ```
 
-<img src="../../figures/swizzle31.png" width="60%">
+<img src="../../../assets/images/swizzle31.png" width="60%">
 
 ## Swizzle策略选择
 
-如果C矩阵的大小为M x N，那么当M >= N时，采用SwizzleOffset=3、SwizzleDirection=0，通常情况下能够达到较好的性能；当M < N时，采用SwizzleOffset=3、SwizzleDirection=1，通常情况下可以达到较好的性能。开发者也可以探索其他参数设置以达到更高的缓存命中率，从而进一步提高矩阵计算性能。
+如果C矩阵的大小为M \* N，那么当M >= N时，采用SwizzleOffset=3、SwizzleDirection=0，通常情况下能够达到较好的性能；当M < N时，采用SwizzleOffset=3、SwizzleDirection=1，通常情况下可以达到较好的性能。开发者也可以探索其他参数设置以达到更高的缓存命中率，从而进一步提高矩阵计算性能。

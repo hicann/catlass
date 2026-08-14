@@ -19,7 +19,8 @@
 namespace CatlassKernel {
 using ElementGroupList = int64_t;
 struct KernelInfo {
-    enum class GMMSplit : uint32_t {
+    enum class GMMSplit : uint32_t
+    {
         SPLIT_M = 0,
         SPLIT_K = 1,
         SPLIT_N = 2
@@ -37,8 +38,8 @@ struct KernelInfo {
     bool transB = false;
     std::vector<ElementGroupList> groupList;
     GMMSplit split = GMMSplit::SPLIT_M;
-    std::vector<uint8_t *> inputAddr;
-    std::vector<uint8_t *> outputAddr;
+    std::vector<uint8_t*> inputAddr;
+    std::vector<uint8_t*> outputAddr;
 };
 
 struct ConvKernelInfo {
@@ -48,18 +49,18 @@ struct ConvKernelInfo {
 
     std::vector<uint32_t> fmapRelated;
     std::vector<uint32_t> filterRelated;
-    
+
     std::vector<uint32_t> strideList;
     std::vector<uint32_t> padList;
     std::vector<uint32_t> dilationList;
 
-    std::vector<uint8_t *> inputAddr;
-    std::vector<uint8_t *> outputAddr;
+    std::vector<uint8_t*> inputAddr;
+    std::vector<uint8_t*> outputAddr;
 };
 
-void BasicMatmul(const uint32_t blockNum, aclrtStream stream, const KernelInfo &kernelInfo);
-void GroupedMatmul(const uint32_t blockNum, aclrtStream stream, const KernelInfo &kernelInfo);
-void OptimizedMatmul(const uint32_t blockNum, aclrtStream stream, const KernelInfo &kernelInfo);
+void BasicMatmul(const uint32_t blockNum, aclrtStream stream, const KernelInfo& kernelInfo);
+void GroupedMatmul(const uint32_t blockNum, aclrtStream stream, const KernelInfo& kernelInfo);
+void OptimizedMatmul(const uint32_t blockNum, aclrtStream stream, const KernelInfo& kernelInfo);
 void ConvBias(const uint32_t blockNum, aclrtStream stream, ConvKernelInfo kernelInfo);
 } // namespace CatlassKernel
 

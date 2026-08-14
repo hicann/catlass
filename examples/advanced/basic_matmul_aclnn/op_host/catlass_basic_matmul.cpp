@@ -15,9 +15,8 @@
 #include "catlass_basic_matmul_tiling.h"
 
 namespace optiling {
-static ge::graphStatus TilingFunc(gert::TilingContext *context)
+static ge::graphStatus TilingFunc(gert::TilingContext* context)
 {
-
     CatlassBasicMatmulTilingData tiling;
     const ge::DataType selfDataType = context->GetInputDesc(0)->GetDataType();
     const ge::DataType mat2DataType = context->GetInputDesc(1)->GetDataType();
@@ -25,9 +24,9 @@ static ge::graphStatus TilingFunc(gert::TilingContext *context)
         std::cerr << "input datatype is different, cannot be multiplied" << std::endl;
         return ge::GRAPH_PARAM_INVALID;
     }
-    const gert::StorageShape *self_shape = context->GetInputShape(0);
-    const gert::StorageShape *mat2_shape = context->GetInputShape(1);
-    const gert::StorageShape *out_shape = context->GetOutputShape(0);
+    const gert::StorageShape* self_shape = context->GetInputShape(0);
+    const gert::StorageShape* mat2_shape = context->GetInputShape(1);
+    const gert::StorageShape* out_shape = context->GetOutputShape(0);
 
     // check dim_num
     size_t self_dim_num = self_shape->GetOriginShape().GetDimNum();
@@ -76,10 +75,10 @@ static ge::graphStatus TilingFunc(gert::TilingContext *context)
 } // namespace optiling
 
 namespace ge {
-static ge::graphStatus InferShape(gert::InferShapeContext *context)
+static ge::graphStatus InferShape(gert::InferShapeContext* context)
 {
-    const gert::Shape *self_shape = context->GetInputShape(0);
-    const gert::Shape *mat2_shape = context->GetInputShape(1);
+    const gert::Shape* self_shape = context->GetInputShape(0);
+    const gert::Shape* mat2_shape = context->GetInputShape(1);
     size_t self_dim_num = self_shape->GetDimNum();
     if (self_dim_num != 2) {
         std::cerr << "self dim num is not 2" << std::endl;
@@ -98,12 +97,12 @@ static ge::graphStatus InferShape(gert::InferShapeContext *context)
         std::cerr << "k is unequal" << std::endl;
         return ge::GRAPH_PARAM_INVALID;
     }
-    gert::Shape *out_shape = context->GetOutputShape(0);
+    gert::Shape* out_shape = context->GetOutputShape(0);
     out_shape->SetDim(0, self_m);
     out_shape->SetDim(1, mat2_n);
     return GRAPH_SUCCESS;
 }
-static ge::graphStatus InferDataType(gert::InferDataTypeContext *context)
+static ge::graphStatus InferDataType(gert::InferDataTypeContext* context)
 {
     const ge::DataType selfDataType = context->GetInputDataType(0);
     const ge::DataType mat2DataType = context->GetInputDataType(1);
@@ -119,8 +118,7 @@ static ge::graphStatus InferDataType(gert::InferDataTypeContext *context)
 namespace ops {
 class CatlassBasicMatmul : public OpDef {
 public:
-    explicit CatlassBasicMatmul(const char *name)
-        : OpDef(name)
+    explicit CatlassBasicMatmul(const char* name) : OpDef(name)
     {
         this->Input("self")
             .ParamType(REQUIRED)

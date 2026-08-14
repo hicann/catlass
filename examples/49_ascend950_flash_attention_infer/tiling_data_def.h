@@ -9,7 +9,6 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-
 #ifndef FLASH_ATTENTION_TILING_DATA_DEF_H
 #define FLASH_ATTENTION_TILING_DATA_DEF_H
 
@@ -25,7 +24,7 @@ public:
     int64_t kvSeqlen;
     int64_t embed;
     float scaleValue;
-    uint8_t attenMaskCompressMode;  // SPARSE_MODE_NO_MASK: 0, SPARSE_MODE_LEFT_UP: 1, SPARSE_MODE_RIGHT_DOWN : 2
+    uint8_t attenMaskCompressMode; // SPARSE_MODE_NO_MASK: 0, SPARSE_MODE_LEFT_UP: 1, SPARSE_MODE_RIGHT_DOWN : 2
 
     // PFA
     uint8_t isActualSeqLengthsNull;

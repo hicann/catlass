@@ -65,8 +65,10 @@ EVG 本身只描述图。真正把它接到 GEMM 后面的，是 `BlockEpilogue`
 ```cpp
 using ArchTag = Arch::Ascend950;
 
-constexpr uint32_t computeLength =
-    (216 * 1024 / 3 / 2 / sizeof(ElementC)) / BYTE_PER_C0 * BYTE_PER_C0;
+constexpr uint32_t evgUbNodes = 3;    // AccLoad + AuxLoad + Compute
+constexpr uint32_t evgUbStages = 2;
+constexpr uint32_t computeLength = RoundDown(
+    ArchTag::UB_SIZE / evgUbNodes / evgUbStages / sizeof(ElementC), BYTE_PER_C0);
 
 using BlockEpilogue = Epilogue::Block::BlockEpilogue<
     Epilogue::EpilogueVisitor<false>,

@@ -27,22 +27,16 @@ struct TileMuls {
 
     CATLASS_DEVICE
     TileMuls()
-    {
-    }
+    {}
 
     CATLASS_DEVICE
     void operator()(
-        AscendC::LocalTensor<Element> dstTensor,
-        AscendC::LocalTensor<Element> srcTensor,
-        Element scalar,
-        uint32_t len
-    )
+        AscendC::LocalTensor<Element> dstTensor, AscendC::LocalTensor<Element> srcTensor, Element scalar, uint32_t len)
     {
         AscendC::SetMaskCount();
         AscendC::SetVectorMask<Element, AscendC::MaskMode::COUNTER>(len);
         AscendC::Muls<Element, false>(
-            dstTensor, srcTensor, scalar, AscendC::MASK_PLACEHOLDER, 1, AscendC::UnaryRepeatParams{}
-        );
+            dstTensor, srcTensor, scalar, AscendC::MASK_PLACEHOLDER, 1, AscendC::UnaryRepeatParams{});
         AscendC::SetMaskNorm();
         AscendC::ResetMask();
     }

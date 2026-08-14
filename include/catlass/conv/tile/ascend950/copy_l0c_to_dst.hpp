@@ -14,7 +14,8 @@
 
 namespace Catlass::Conv::Tile {
 
-enum class ScaleGranularity {
+enum class ScaleGranularity
+{
     UNDEFINED = -1,
     NO_QUANT = 0,
     PER_TENSOR,
@@ -23,9 +24,7 @@ enum class ScaleGranularity {
 };
 
 template <
-    class ArchTag,
-    class ElementSrc,
-    class ElementDst,
+    class ArchTag, class ElementSrc, class ElementDst,
     ScaleGranularity DEQUANT_GRANULARITY = ScaleGranularity::NO_QUANT>
 struct CopyL0CToDstQuantMode {
     static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported copy l0c to gm, can not find the specialization.");
@@ -33,31 +32,19 @@ struct CopyL0CToDstQuantMode {
 
 // CopyL0CToDst fp32 to fp32
 template <>
-struct CopyL0CToDstQuantMode<
-    Arch::Ascend950,
-    float, float,
-    ScaleGranularity::NO_QUANT    
-> {
+struct CopyL0CToDstQuantMode<Arch::Ascend950, float, float, ScaleGranularity::NO_QUANT> {
     static constexpr auto VALUE = QuantMode_t::NoQuant;
 };
 
 // CopyL0CToDst fp32 to fp16
 template <>
-struct CopyL0CToDstQuantMode<
-    Arch::Ascend950,
-    float, half,
-    ScaleGranularity::NO_QUANT    
-> {
+struct CopyL0CToDstQuantMode<Arch::Ascend950, float, half, ScaleGranularity::NO_QUANT> {
     static constexpr auto VALUE = QuantMode_t::F322F16;
 };
 
 // CopyL0CToDst fp32 to bf16
 template <>
-struct CopyL0CToDstQuantMode<
-    Arch::Ascend950,
-    float, bfloat16_t,
-    ScaleGranularity::NO_QUANT    
-> {
+struct CopyL0CToDstQuantMode<Arch::Ascend950, float, bfloat16_t, ScaleGranularity::NO_QUANT> {
     static constexpr auto VALUE = QuantMode_t::F322BF16;
 };
 

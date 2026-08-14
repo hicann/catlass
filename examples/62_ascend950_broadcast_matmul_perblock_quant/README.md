@@ -2,7 +2,7 @@
 
 ## 代码组织
 
-```
+```text
 ├── 62_ascend950_broadcast_matmul_perblock_quant
 │   ├── CMakeLists.txt              # CMake编译文件
 │   ├── README.md
@@ -52,7 +52,7 @@ python3 gen_data_compare.py 1024 128 128 128 0
 
 执行结果如下，说明dst和scale精度比对成功。
 
-```
+```text
 ------ 生成测试数据 ------
 batch_count=1024, m=128, n=128, k=128
 ------ 运行NPU算子 ------

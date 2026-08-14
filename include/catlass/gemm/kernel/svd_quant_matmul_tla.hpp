@@ -102,7 +102,7 @@ struct SmoothQuant {
         uint32_t kBlockActual = tla::get<1>(gmTensorX.shape());
         uint32_t kL1Actual = min(kBlockActual, L1_TILE_K);
         uint32_t kAligned = RoundUp<UB_MX_SCALE_GROUP_NUM>(kL1Actual);
-        bool isPad = (kL1Actual != kAligned);
+        bool isPad = (kL1Actual % MX_SCALE_GROUP_NUM != 0); // 每组64对齐搬入，但是32对齐的时候就不填充0
 
         uint32_t mRowsPerCore = CeilDiv(mBlockActual, aivNum);
         uint32_t mL1Actual = (aivIdx < aivNum - 1) ? mRowsPerCore : (mBlockActual - (aivNum - 1) * mRowsPerCore);
@@ -151,7 +151,7 @@ struct SmoothQuant {
         for (uint32_t kL1Idx = 0; kL1Idx < kL1Loop; kL1Idx++) {
             uint32_t kL1Actual = (kL1Idx < kL1Loop - 1) ? L1_TILE_K : (kBlockActual - kL1Idx * L1_TILE_K);
             uint32_t kAligned = RoundUp<UB_MX_SCALE_GROUP_NUM>(kL1Actual);
-            bool isPad = (kL1Actual != kAligned);
+            bool isPad = (kL1Actual % MX_SCALE_GROUP_NUM != 0);
 
             uint32_t xListIdNext = (xListId + 1 < STAGES) ? (xListId + 1) : 0;
             if (kL1Idx < kL1Loop - 1) {
@@ -159,7 +159,7 @@ struct SmoothQuant {
                 uint32_t kL1ActualNext =
                     (kL1IdxNext < kL1Loop - 1) ? L1_TILE_K : (kBlockActual - kL1IdxNext * L1_TILE_K);
                 uint32_t kAlignedNext = RoundUp<UB_MX_SCALE_GROUP_NUM>(kL1ActualNext);
-                bool isPadNext = (kL1ActualNext != kAlignedNext);
+                bool isPadNext = (kL1ActualNext % MX_SCALE_GROUP_NUM != 0);
 
                 // X
                 auto gmTensorTileXNext = GetTile(
@@ -384,7 +384,7 @@ struct SmoothQuant {
         AscendC::DataCopyPad(dstTensor.data()[dstOffset], srcTensor.data()[srcOffset], dataCopyParams);
     }
 
-    __simd_vf__ inline void ComputeSmoothX(
+    __simd_vf__ static inline void ComputeSmoothX(
         __ubuf__ T* srcAddr, __ubuf__ T* srcSmoothAddr, __ubuf__ T* smoothXAddr, uint16_t dim0, uint16_t dim1)
     {
         using namespace AscendC::MicroAPI;
@@ -408,7 +408,7 @@ struct SmoothQuant {
         }
     }
 
-    __simd_vf__ inline void ComputeMaxExp(
+    __simd_vf__ static inline void ComputeMaxExp(
         __ubuf__ T* srcAddr, __ubuf__ uint16_t* maxExpAddr, uint32_t totalCountInUB, uint16_t loopNum, T qmaxInv)
     {
         using namespace AscendC::MicroAPI;
@@ -505,7 +505,7 @@ struct SmoothQuant {
         DataCopyUnAlignPost(maxExpAddr, u1, 0);
     }
 
-    __simd_vf__ inline void ComputeScale(
+    __simd_vf__ static inline void ComputeScale(
         __ubuf__ uint16_t* maxExpAddr, __ubuf__ uint16_t* mxScaleLocalAddr, __ubuf__ uint16_t* halfScaleLocalAddr,
         uint32_t totalScaleInUB, uint16_t loopNumScale)
     {
@@ -567,7 +567,7 @@ struct SmoothQuant {
     }
 
     template <AscendC::RoundMode toBf16RoundMode, AscendC::RoundMode roundMode>
-    __simd_vf__ inline void ComputeFp4x2(
+    __simd_vf__ static inline void ComputeFp4x2(
         __ubuf__ T* srcAddr, __ubuf__ uint16_t* halfScaleLocalAddr, __ubuf__ int8_t* outLocalAddr,
         uint32_t totalCountInUB, uint16_t loopNum)
     {
@@ -625,7 +625,7 @@ struct SmoothQuant {
     }
 
     template <class HalfReg, class MaskReg>
-    __simd_callee__ inline void FP16Convert(HalfReg& output, HalfReg& input, MaskReg& mask)
+    __simd_callee__ static inline void FP16Convert(HalfReg& output, HalfReg& input, MaskReg& mask)
     {
         using namespace AscendC::MicroAPI;
         RegTensor<uint16_t> specialValueTensor;
@@ -841,8 +841,7 @@ public:
 
         auto layoutC1 = tla::MakeLayout<typename BlockMmad1::ElementC, typename BlockMmad1::TileCopy::LayoutTagC>(m, r);
         auto layoutQuantXC = tla::MakeLayout<int8_t, typename BlockMmad3::TileCopy::LayoutTagA>(m, k);
-        auto layoutQuantXV =
-            tla::MakeLayout<typename SmoothQuant::U, typename BlockMmad3::TileCopy::LayoutTagA>(m, CeilDiv<2>(k));
+        auto layoutQuantXV = tla::MakeLayout<uint8_t, typename BlockMmad3::TileCopy::LayoutTagA>(m, CeilDiv<2>(k));
         auto layoutMxScaleX =
             tla::MakeMxScaleLayout<float8_e8m0_t, typename BlockMmad3::TileCopy::LayoutTagA, false>(m, mxScaleK);
 
@@ -1379,14 +1378,15 @@ public:
 
         // tensorX is tensorA1
         auto tensorSmooth = tla::MakeTensor(gmQuant.gmSmooth, params.layoutSmoothScale, Arch::PositionGM{});
-        auto tensorQuantX = tla::MakeTensor(gmQuant.gmQuantX, params.layoutQuantXV, Arch::PositionGM{});
         auto tensorMxScale = tla::MakeTensor(gmQuant.gmMxScaleX, params.layoutMxScaleX, Arch::PositionGM{});
 
 #ifdef __DAV_CUBE__
+        auto tensorQuantX = tla::MakeTensor(gmQuant.gmQuantX, params.layoutQuantXC, Arch::PositionGM{});
         uint32_t aiCoreIdx = AscendC::GetBlockIdx();
         uint32_t aiCoreNum = AscendC::GetBlockNum();
         BlockMmad1 blockMmad1(resource);
 #elif defined __DAV_VEC__
+        auto tensorQuantX = tla::MakeTensor(gmQuant.gmQuantX, params.layoutQuantXV, Arch::PositionGM{});
         uint32_t aiCoreIdx = AscendC::GetBlockIdx() / AscendC::GetSubBlockNum();
         uint32_t aiCoreNum = AscendC::GetBlockNum();
         SmoothQuant smoothQuant(resource);
@@ -1495,7 +1495,7 @@ public:
             if (loopIdx < normalBlockNum23) {
                 blockCoord = matmulBlockScheduler23.GetBlockCoord(loopIdx);
                 coord = GemmCoord{blockCoord.m() * L1_TILE_M, blockCoord.n() * L1_TILE_N, 0};
-                actualBlockShape3 = matmulBlockScheduler23.GetActualBlockShape(blockCoord);   // m1 n1 k
+                actualBlockShape3 = matmulBlockScheduler23.GetActualBlockShape(blockCoord); // m1 n1 k
                 actualBlockShape2 =
                     GemmCoord{actualBlockShape3.m(), actualBlockShape3.n(), params.problemRank}; // m1 n1 r
             } else {

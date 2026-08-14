@@ -125,7 +125,7 @@ Python loader 通过 `torch_npu.npu.get_device_name()` 识别设备并映射为 
 | `Ascend910_93`                | `2201` |
 | `Ascend950PR` / `Ascend950DT` | `3510` |
 
-当 `torch_npu.npu.device_count()` 为 0 时，loader 抛出明确错误。测试代码在无 NPU 环境下通过 pytest skip 处理，避免在 collection 阶段触发 torch-npu 内部错误。
+当 `torch_npu.npu.device_count()` 为 0 时，loader 抛出明确错误。测试代码在无 NPU 环境下通过 pytest skip 处理，避免在 collection 阶段触发 TorchNPU 内部错误。
 
 ### 3.3 Python op wrapper
 
@@ -163,15 +163,15 @@ REGISTER_TORCH_FUNC(basic_matmul);
 2. 通过 PyTorch schema inference 从 C++ 函数签名生成 schema。
 3. 将实现注册到 `c10::DispatchKey::PrivateUse1`。
 
-`PrivateUse1` 是 torch-npu 使用的 NPU dispatch key。Python 调用 `torch.ops.catlass.basic_matmul` 时，PyTorch 根据输入 Tensor device 走到该 backend 实现。
+`PrivateUse1` 是 TorchNPU 使用的 NPU dispatch key。Python 调用 `torch.ops.catlass.basic_matmul` 时，PyTorch 根据输入 Tensor device 走到该 backend 实现。
 
 ### 4.2 kernel launch 包装
 
-`RUN_NPU_FUNC` 位于 `src/include/common/run_npu_func.h`。它通过 torch-npu 的 `OpCommand::RunOpApiV2` 执行 kernel launch：
+`RUN_NPU_FUNC` 位于 `src/include/common/run_npu_func.h`。它通过 TorchNPU 的 `OpCommand::RunOpApiV2` 执行 kernel launch：
 
 - launch 前检查函数指针是否为空。
 - 将 C++ 异常转为 ACL error code。
-- 将 kernel 调用交给 torch-npu runtime 管理。
+- 将 kernel 调用交给 TorchNPU runtime 管理。
 
 ## 5. Matmul Adapter 模块
 
@@ -272,7 +272,7 @@ void BasicMatmul(
 
 映射表按 index 对齐，`TypeCast<S, T>()` 通过查表完成不同表示之间的转换。
 
-部分 dtype 在 torch-npu 随包 ACL 头中没有枚举名，但 ABI 数值与 CANN 定义一致。此类 dtype 使用 `static_cast<aclDataType>(value)` 表达，避免混用系统 CANN ACL 头和 torch-npu 随包 ACL 头导致重复定义。
+部分 dtype 在 TorchNPU 随包 ACL 头中没有枚举名，但 ABI 数值与 CANN 定义一致。此类 dtype 使用 `static_cast<aclDataType>(value)` 表达，避免混用系统 CANN ACL 头和 TorchNPU 随包 ACL 头导致重复定义。
 
 ### 7.2 Tensor 工具
 
@@ -529,4 +529,4 @@ src/include/template/<op_family>.h
 - JIT template 中的默认宏和类型别名
 - pytest 参数覆盖
 
-dtype 映射应优先使用当前编译环境可见的 enum；当 torch-npu 随包 ACL 头未暴露 enum 名但 ABI 数值稳定时，可使用 `static_cast<aclDataType>(value)` 保持兼容。
+dtype 映射应优先使用当前编译环境可见的 enum；当 TorchNPU 随包 ACL 头未暴露 enum 名但 ABI 数值稳定时，可使用 `static_cast<aclDataType>(value)` 保持兼容。

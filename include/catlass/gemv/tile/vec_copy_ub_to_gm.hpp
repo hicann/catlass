@@ -18,19 +18,13 @@
 
 namespace Catlass::Gemv::Tile {
 
-template <
-    class ArchTag,
-    class GmType,
-    bool is_atoadd = false
->
-struct VecCopyUBToGm
-{
+template <class ArchTag, class GmType, bool is_atoadd = false>
+struct VecCopyUBToGm {
     static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported copy UB to gm, can not find the specialization.");
 };
 
 template <class Element>
-struct VecCopyUBToGm<Arch::AtlasA2, Gemm::GemmType<Element, layout::VectorLayout>>
-{
+struct VecCopyUBToGm<Arch::AtlasA2, Gemm::GemmType<Element, layout::VectorLayout>> {
     using LayoutSrc = layout::VectorLayout;
     using LayoutDst = layout::VectorLayout;
     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
@@ -42,11 +36,8 @@ struct VecCopyUBToGm<Arch::AtlasA2, Gemm::GemmType<Element, layout::VectorLayout
 
     CATLASS_DEVICE
     void operator()(
-        AscendC::GlobalTensor<Element> dstTensor,
-        AscendC::LocalTensor<Element> srcTensor,
-        layout::VectorLayout const &layoutDst,
-        layout::VectorLayout const &layoutSrc
-    )
+        AscendC::GlobalTensor<Element> dstTensor, AscendC::LocalTensor<Element> srcTensor,
+        layout::VectorLayout const& layoutDst, layout::VectorLayout const& layoutSrc)
     {
         AscendC::DataCopyExtParams params;
         params.blockCount = 1;
@@ -54,17 +45,12 @@ struct VecCopyUBToGm<Arch::AtlasA2, Gemm::GemmType<Element, layout::VectorLayout
         params.srcStride = 0;
         params.dstStride = 0;
         params.rsv = 0;
-        AscendC::DataCopyPad(
-            dstTensor,
-            srcTensor,
-            params
-        );
+        AscendC::DataCopyPad(dstTensor, srcTensor, params);
     }
 };
 
 template <class Element>
-struct VecCopyUBToGm<Arch::AtlasA2, Gemm::GemmType<Element, layout::VectorLayout>,true>
-{
+struct VecCopyUBToGm<Arch::AtlasA2, Gemm::GemmType<Element, layout::VectorLayout>, true> {
     using LayoutSrc = layout::VectorLayout;
     using LayoutDst = layout::VectorLayout;
     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
@@ -76,11 +62,8 @@ struct VecCopyUBToGm<Arch::AtlasA2, Gemm::GemmType<Element, layout::VectorLayout
 
     CATLASS_DEVICE
     void operator()(
-        AscendC::GlobalTensor<Element> dstTensor,
-        AscendC::LocalTensor<Element> srcTensor,
-        layout::VectorLayout const &layoutDst,
-        layout::VectorLayout const &layoutSrc
-    )
+        AscendC::GlobalTensor<Element> dstTensor, AscendC::LocalTensor<Element> srcTensor,
+        layout::VectorLayout const& layoutDst, layout::VectorLayout const& layoutSrc)
     {
         AscendC::SetAtomicAdd<Element>();
         AscendC::DataCopyExtParams params;
@@ -89,11 +72,7 @@ struct VecCopyUBToGm<Arch::AtlasA2, Gemm::GemmType<Element, layout::VectorLayout
         params.srcStride = 0;
         params.dstStride = 0;
         params.rsv = 0;
-        AscendC::DataCopyPad(
-            dstTensor,
-            srcTensor,
-            params
-        );
+        AscendC::DataCopyPad(dstTensor, srcTensor, params);
         AscendC::SetAtomicNone();
     }
 };

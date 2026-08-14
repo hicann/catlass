@@ -20,16 +20,13 @@
 namespace Catlass::golden {
 
 // simple conv2d
-template <class ElementFmap, class LayoutFmap, class ElementFilter, class LayoutFilter, class ElementGolden, class LayoutGolden>
+template <
+    class ElementFmap, class LayoutFmap, class ElementFilter, class LayoutFilter, class ElementGolden,
+    class LayoutGolden>
 void ComputeConv2d(
-    const Conv2dParams &params,
-    const std::vector<ElementFmap> &dataFmap,
-    const LayoutFmap &layoutFmap,
-    const std::vector<ElementFilter> &dataFilter,
-    const LayoutFilter &layoutFilter,
-    std::vector<ElementGolden> &dataGolden,
-    const LayoutGolden &layoutGolden
-)
+    const Conv2dParams& params, const std::vector<ElementFmap>& dataFmap, const LayoutFmap& layoutFmap,
+    const std::vector<ElementFilter>& dataFilter, const LayoutFilter& layoutFilter,
+    std::vector<ElementGolden>& dataGolden, const LayoutGolden& layoutGolden)
 {
     for (uint32_t batch = 0; batch < params.batch(); batch++) {
         for (uint32_t ho = 0; ho < params.ho(); ho++) {
@@ -44,18 +41,17 @@ void ComputeConv2d(
                                 continue;
                             for (uint32_t cin1 = 0; cin1 < params.cin1(); cin1++) {
                                 for (uint32_t c0 = 0; c0 < params.C0; c0++) {
-                                    accumulator += static_cast<ElementGolden>(
-                                                       dataFmap
-                                                           [batch * params.cin1() * params.hi() * params.wi() * params.C0
-                                                            + cin1 * params.hi() * params.wi() * params.C0
-                                                            + hi * params.wi() * params.C0 + wi * params.C0 + c0]
-                                                   )
-                                                   * static_cast<ElementGolden>(
-                                                       dataFilter
-                                                           [cin1 * params.kh() * params.kw() * params.cout() * params.C0
-                                                            + kh * params.kw() * params.cout() * params.C0
-                                                            + kw * params.cout() * params.C0 + cout * params.C0 + c0]
-                                                   );
+                                    accumulator +=
+                                        static_cast<ElementGolden>(
+                                            dataFmap
+                                                [batch * params.cin1() * params.hi() * params.wi() * params.C0 +
+                                                 cin1 * params.hi() * params.wi() * params.C0 +
+                                                 hi * params.wi() * params.C0 + wi * params.C0 + c0]) *
+                                        static_cast<ElementGolden>(
+                                            dataFilter
+                                                [cin1 * params.kh() * params.kw() * params.cout() * params.C0 +
+                                                 kh * params.kw() * params.cout() * params.C0 +
+                                                 kw * params.cout() * params.C0 + cout * params.C0 + c0]);
                                 }
                             }
                         }
@@ -63,9 +59,9 @@ void ComputeConv2d(
                     uint32_t cout1 = cout / params.C0;
                     uint32_t c0 = cout - cout1 * params.C0;
                     dataGolden
-                        [batch * params.cout1() * params.ho() * params.wo() * params.C0
-                         + cout1 * params.ho() * params.wo() * params.C0 + ho * params.wo() * params.C0 + wo * params.C0
-                         + c0] = static_cast<ElementGolden>(accumulator);
+                        [batch * params.cout1() * params.ho() * params.wo() * params.C0 +
+                         cout1 * params.ho() * params.wo() * params.C0 + ho * params.wo() * params.C0 + wo * params.C0 +
+                         c0] = static_cast<ElementGolden>(accumulator);
                 }
             }
         }
@@ -81,7 +77,7 @@ void ClearInvalidOutput(std::vector<Element>& output, const Conv2dParams& params
     }
     for (uint32_t batch = 0; batch < params.batch(); batch++) {
         uint32_t baseOffset = batch * params.cout1() * params.ho() * params.wo() * params.C0 +
-            (params.cout1() - 1) * params.ho() * params.wo() * params.C0;
+                              (params.cout1() - 1) * params.ho() * params.wo() * params.C0;
         for (uint32_t ho = 0; ho < params.ho(); ho++) {
             for (uint32_t wo = 0; wo < params.wo(); wo++) {
                 for (uint32_t c0 = c0InvalidStart; c0 < params.C0; c0++) {

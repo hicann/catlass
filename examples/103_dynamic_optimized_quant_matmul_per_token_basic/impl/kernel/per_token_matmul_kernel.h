@@ -33,42 +33,44 @@
 #include "catlass/gemm/gemm_type.hpp"
 
 template <class ArchTag, class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC>
-[[bisheng::core_ratio(1, 2)]] CATLASS_GLOBAL void PerTokenMatmulKernel(uint64_t hardwareSyncAddr, __gm__ uint8_t *__restrict__ gmA,
-    __gm__ uint8_t *__restrict__ gmB, __gm__ uint8_t *__restrict__ gmC, __gm__ uint8_t *__restrict__ gmWQuant, __gm__ uint8_t *__restrict__ gmScale, __gm__ uint8_t *__restrict__ gmPerTokenScale, __gm__ uint8_t *__restrict__ tilingData)
+[[bisheng::core_ratio(1, 2)]] CATLASS_GLOBAL void PerTokenMatmulKernel(
+    uint64_t hardwareSyncAddr, __gm__ uint8_t* __restrict__ gmA, __gm__ uint8_t* __restrict__ gmB,
+    __gm__ uint8_t* __restrict__ gmC, __gm__ uint8_t* __restrict__ gmWQuant, __gm__ uint8_t* __restrict__ gmScale,
+    __gm__ uint8_t* __restrict__ gmPerTokenScale, __gm__ uint8_t* __restrict__ tilingData)
 {
     AscendC::SetSyncBaseAddr(hardwareSyncAddr);
     Catlass::Arch::Resource<ArchTag> resource;
 
     /*
-    * Load tiling parameters from global memory (tilingData) to local array tilingParams
-    * 
-    * tilingData memory layout corresponds to tilingParams as follows:
-    * --------------------------------------------------------------------------------
-    * | Offset | Size | Variable         | Type      | Description                   |
-    * |--------|------|------------------|-----------|-------------------------------|
-    * | 0-7    | 8    | strideA          | uint64_t  | matrix A stride               |
-    * | 8-15   | 8    | strideB          | uint64_t  | matrix B stride               |
-    * | 16-23  | 8    | strideC          | uint64_t  | matrix C stride               |
-    * | 24-27  | 4    | m                | uint32_t  | matrix M dimension            |
-    * | 28-31  | 4    | n                | uint32_t  | matrix N dimension            |
-    * | 32-35  | 4    | k                | uint32_t  | matrix K dimension            |
-    * | 36-37  | 2    | m1               | uint16_t  | l1 mTile(16-bit to save space)|
-    * | 38-39  | 2    | n1               | uint16_t  | l1 nTile(16-bit to save space)|
-    * | 40-41  | 2    | k1               | uint16_t  | l1 kTile(16-bit to save space)|
-    * | 42-42  | 1    | swizzleOffset    | uint8_t   | swizzle offset                |
-    * | 43-43  | 1    | swizzleDirection | uint8_t   | swizzle direction             |
-    * | 44-45  | 2    | m0               | uint16_t  | l0 mTile(16-bit to save space)|
-    * | 46-47  | 2    | n0               | uint16_t  | l0 nTile(16-bit to save space)|
-    * | 48-49  | 2    | k0               | uint16_t  | l0 kTile(16-bit to save space)|
-    * | 50-55  | 6    | (reserved)       | -         | unused                        |
-    * --------------------------------------------------------------------------------
-    */
+     * Load tiling parameters from global memory (tilingData) to local array tilingParams
+     *
+     * tilingData memory layout corresponds to tilingParams as follows:
+     * --------------------------------------------------------------------------------
+     * | Offset | Size | Variable         | Type      | Description                   |
+     * |--------|------|------------------|-----------|-------------------------------|
+     * | 0-7    | 8    | strideA          | uint64_t  | matrix A stride               |
+     * | 8-15   | 8    | strideB          | uint64_t  | matrix B stride               |
+     * | 16-23  | 8    | strideC          | uint64_t  | matrix C stride               |
+     * | 24-27  | 4    | m                | uint32_t  | matrix M dimension            |
+     * | 28-31  | 4    | n                | uint32_t  | matrix N dimension            |
+     * | 32-35  | 4    | k                | uint32_t  | matrix K dimension            |
+     * | 36-37  | 2    | m1               | uint16_t  | l1 mTile(16-bit to save space)|
+     * | 38-39  | 2    | n1               | uint16_t  | l1 nTile(16-bit to save space)|
+     * | 40-41  | 2    | k1               | uint16_t  | l1 kTile(16-bit to save space)|
+     * | 42-42  | 1    | swizzleOffset    | uint8_t   | swizzle offset                |
+     * | 43-43  | 1    | swizzleDirection | uint8_t   | swizzle direction             |
+     * | 44-45  | 2    | m0               | uint16_t  | l0 mTile(16-bit to save space)|
+     * | 46-47  | 2    | n0               | uint16_t  | l0 nTile(16-bit to save space)|
+     * | 48-49  | 2    | k0               | uint16_t  | l0 kTile(16-bit to save space)|
+     * | 50-55  | 6    | (reserved)       | -         | unused                        |
+     * --------------------------------------------------------------------------------
+     */
 
     // This kernel only needs to read TILING_PARAMS_BYTES bytes of data.
     constexpr uint32_t TILING_PARAMS_BYTES = 56;
     uint8_t tilingParams[TILING_PARAMS_BYTES];
     ReadTilingParams(tilingParams, tilingData, TILING_PARAMS_BYTES);
-    // The byte size of the TilingParams structure may exceed TILING_PARAMS_BYTES. 
+    // The byte size of the TilingParams structure may exceed TILING_PARAMS_BYTES.
     // Please avoid using pointers to access data beyond TILING_PARAMS_BYTES !!!
     TilingParams* tiling = (TilingParams*)(tilingParams);
 
@@ -115,7 +117,8 @@ template <class ArchTag, class ElementA, class LayoutA, class ElementB, class La
     using BroadcastOneBlkType = Catlass::Gemm::GemmType<float, Catlass::layout::RowMajor>;
     using OneBlkColumnBroadcastMulType = Catlass::Gemm::GemmType<float, Catlass::layout::RowMajor>;
     using EpilogueTileShape = Catlass::MatrixShape<32, 256>;
-    using TileRowBroadcastMul = Catlass::Epilogue::Tile::TileRowBroadcastMul<ArchTag, RowBroadcastMulType, EpilogueTileShape>;
+    using TileRowBroadcastMul =
+        Catlass::Epilogue::Tile::TileRowBroadcastMul<ArchTag, RowBroadcastMulType, EpilogueTileShape>;
     using TileBroadcastOneBlk =
         Catlass::Epilogue::Tile::TileBroadcastOneBlk<ArchTag, BroadcastOneBlkType, EpilogueTileShape::ROW>;
     using TileOneBlkColumnBroadcastMul =
@@ -124,14 +127,14 @@ template <class ArchTag, class ElementA, class LayoutA, class ElementB, class La
     using TileScheduler = Catlass::Epilogue::Tile::EpilogueHorizontalTileSwizzle;
 
     using BlockEpilogue = Catlass::Epilogue::Block::BlockEpilogue<
-        EpilogueDispatchPolicy, MatMulType, ScaleType, PerTokenScaleType, CType, TileRowBroadcastMul, TileBroadcastOneBlk,
-        TileOneBlkColumnBroadcastMul, TileCopy, TileScheduler>;
-    
+        EpilogueDispatchPolicy, MatMulType, ScaleType, PerTokenScaleType, CType, TileRowBroadcastMul,
+        TileBroadcastOneBlk, TileOneBlkColumnBroadcastMul, TileCopy, TileScheduler>;
+
     // --------- Epilogue
-    
+
     // --------- BlockMmad
     using BlockScheduler = typename Catlass::Gemm::Block::DynamicGemmIdentityBlockSwizzle;
-    
+
     constexpr uint32_t workspaceStages = 2;
     constexpr uint32_t preloadStages = 1;
     constexpr uint32_t l1Stages = 2;
@@ -142,7 +145,7 @@ template <class ArchTag, class ElementA, class LayoutA, class ElementB, class La
     constexpr bool enableShuffleK = true;
     using DispatchPolicy = Catlass::Gemm::MmadAtlasA2DynamicPreloadAsyncWithCallback<
         preloadStages, l1Stages, l0AStages, l0BStages, l0CStages, enableUnitFlag, enableShuffleK>;
-    
+
     using BlockMmad = Catlass::Gemm::Block::BlockMmad<DispatchPolicy, void, void, AType, BType, MatMulType>;
     // --------- BlockMmad
 
@@ -152,19 +155,12 @@ template <class ArchTag, class ElementA, class LayoutA, class ElementB, class La
 
     LayoutScale layoutScale{n};
     LayoutPerTokenScale layoutPerTokenScale{m};
-    
+
     using MatmulKernel = Catlass::Gemm::Kernel::DynamicW8A8MatmulPerTokenPerChannelDequant<
         BlockMmad, BlockEpilogue, BlockScheduler, workspaceStages, ElementScale, LayoutScale>;
     typename MatmulKernel::Params params{
-        problemShape, 
-        l1TileShape,
-        l0TileShape,
-        gmA, layoutA, 
-        gmB, layoutB,  
-        gmScale, layoutScale, 
-        gmPerTokenScale, layoutPerTokenScale, 
-        gmC, layoutC, 
-        gmWQuant};
+        problemShape, l1TileShape,     l0TileShape,         gmA, layoutA, gmB,     layoutB, gmScale,
+        layoutScale,  gmPerTokenScale, layoutPerTokenScale, gmC, layoutC, gmWQuant};
     // call a kernel
     MatmulKernel matmul;
     // --------- Kernel
@@ -172,8 +168,9 @@ template <class ArchTag, class ElementA, class LayoutA, class ElementB, class La
 }
 
 template <class ArchTag, class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC>
-void LaunchPerTokenMatmulKernel(aclrtStream &stream, uint64_t hardwareSyncAddr, uint8_t *dA, uint8_t *dB, uint8_t *dC,
-    uint8_t *dW, uint8_t *dScale, uint8_t *dPerTokenScale, uint8_t *dTilingParams, TilingParams &tilingParams)
+void LaunchPerTokenMatmulKernel(
+    aclrtStream& stream, uint64_t hardwareSyncAddr, uint8_t* dA, uint8_t* dB, uint8_t* dC, uint8_t* dW, uint8_t* dScale,
+    uint8_t* dPerTokenScale, uint8_t* dTilingParams, TilingParams& tilingParams)
 {
     uint32_t m = tilingParams.m;
     uint32_t n = tilingParams.n;
@@ -184,8 +181,8 @@ void LaunchPerTokenMatmulKernel(aclrtStream &stream, uint64_t hardwareSyncAddr, 
     uint32_t m0 = static_cast<uint32_t>(tilingParams.m0);
     uint32_t n0 = static_cast<uint32_t>(tilingParams.n0);
     uint32_t k0 = static_cast<uint32_t>(tilingParams.k0);
-    uint8_t *dwQuant = nullptr;
-    
+    uint8_t* dwQuant = nullptr;
+
     size_t sizeWQuant = 0;
 
     constexpr uint32_t workspaceStages = 2;
@@ -194,13 +191,14 @@ void LaunchPerTokenMatmulKernel(aclrtStream &stream, uint64_t hardwareSyncAddr, 
     dwQuant = dW;
     // LiTileShape::M * LiTileShape::N * coreNum * workspaceStages * sizeof(int32_t)
     sizeWQuant = m1 * n1 * CORENUM * workspaceStages * sizeof(int32_t);
-    
+
     PerTokenMatmulKernel<ArchTag, ElementA, LayoutA, ElementB, LayoutB, ElementC, LayoutC>
-        <<<tilingParams.blockDim, nullptr, stream>>>(hardwareSyncAddr, dA, dB, dC, dwQuant, dScale, dPerTokenScale, dTilingParams);
+        <<<tilingParams.blockDim, nullptr, stream>>>(
+            hardwareSyncAddr, dA, dB, dC, dwQuant, dScale, dPerTokenScale, dTilingParams);
 }
 
 template <class ArchTag, class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC>
-size_t PerTokenMatmulKernelGetWorkspaceSize(TilingParams &tilingParams)
+size_t PerTokenMatmulKernelGetWorkspaceSize(TilingParams& tilingParams)
 {
     uint32_t m = tilingParams.m;
     uint32_t n = tilingParams.n;
@@ -222,4 +220,4 @@ size_t PerTokenMatmulKernelGetWorkspaceSize(TilingParams &tilingParams)
     return sizeWQuant;
 }
 
-#endif  // PER_TOKEN_MATMUL_KERNEL_H
+#endif // PER_TOKEN_MATMUL_KERNEL_H

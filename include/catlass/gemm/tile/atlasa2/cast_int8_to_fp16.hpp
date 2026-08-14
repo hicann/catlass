@@ -21,20 +21,17 @@
 namespace Catlass::Gemm::Tile {
 
 template <
-    class ArchTag,
-    class SrcType_,
-    class DstType_,
+    class ArchTag, class SrcType_, class DstType_,
     // Length of the compute elements
-    uint32_t COMPUTE_LEN_,
-    uint32_t STAGES = 2
->
+    uint32_t COMPUTE_LEN_, uint32_t STAGES = 2>
 struct TileCastInt8ToFp16Dequant {
     using ElementSrc = typename SrcType_::Element;
     using ElementDst = typename DstType_::Element;
     using LayoutSrc = typename SrcType_::Layout;
     using LayoutDst = typename DstType_::Layout;
 
-    static_assert(std::is_same_v<LayoutSrc, layout::RowMajor> || std::is_same_v<LayoutSrc, layout::ColumnMajor>,
+    static_assert(
+        std::is_same_v<LayoutSrc, layout::RowMajor> || std::is_same_v<LayoutSrc, layout::ColumnMajor>,
         "Unsupported layout, only can be RowMajor and ColumnMajor");
     static_assert(std::is_same_v<LayoutDst, LayoutSrc>, "layoutDst and layoutSrc must be the same");
 
@@ -62,7 +59,7 @@ struct TileCastInt8ToFp16Dequant {
 
     /// Construct
     CATLASS_DEVICE
-    TileCastInt8ToFp16Dequant(Arch::Resource<ArchTag> const &resource, Params const &params_) : params(params_)
+    TileCastInt8ToFp16Dequant(Arch::Resource<ArchTag> const& resource, Params const& params_) : params(params_)
     {
         if constexpr (g_coreType == AscendC::AIV) {
             uint32_t ubOffset = 0;
@@ -84,7 +81,8 @@ struct TileCastInt8ToFp16Dequant {
 
     /// Destructor
     CATLASS_DEVICE
-    ~TileCastInt8ToFp16Dequant() {
+    ~TileCastInt8ToFp16Dequant()
+    {
         if constexpr (g_coreType == AscendC::AIV) {
             for (uint32_t i = 0; i < STAGES; i++) {
                 AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(ubEventList[i]);
@@ -95,9 +93,8 @@ struct TileCastInt8ToFp16Dequant {
 
     CATLASS_DEVICE
     void operator()(
-        AscendC::GlobalTensor<ElementDst> const &gmDst, LayoutDst const &layoutDst,
-        AscendC::GlobalTensor<ElementSrc> const &gmSrc, LayoutSrc const &layoutSrc
-    )
+        AscendC::GlobalTensor<ElementDst> const& gmDst, LayoutDst const& layoutDst,
+        AscendC::GlobalTensor<ElementSrc> const& gmSrc, LayoutSrc const& layoutSrc)
     {
         uint32_t tilesNum = layoutSrc.shape(0);
         uint32_t tileLen = layoutSrc.shape(1);
@@ -131,32 +128,32 @@ struct TileCastInt8ToFp16Dequant {
             }
             uint64_t tileOffsetSrc = loopIdx * tilesPerLoop * tileStrideSrc;
             AscendC::DataCopyExtParams dataCopyParamsIn(
-                actualTiles, tileLen * sizeof(ElementSrc),
-                (tileStrideSrc - tileLen) * sizeof(ElementSrc),
-                (tileLenRoundInt8 - tileLen) / ELE_NUM_PER_BLK_INT8, 0
-            );
+                actualTiles, tileLen * sizeof(ElementSrc), (tileStrideSrc - tileLen) * sizeof(ElementSrc),
+                (tileLenRoundInt8 - tileLen) / ELE_NUM_PER_BLK_INT8, 0);
             AscendC::DataCopyPadExtParams<ElementSrc> padParams(false, 0, 0, 0);
 
             AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(ubEventList[pingpong]);
-            AscendC::DataCopyPad(ubInTensorList[pingpong],
-                gmSrc[taskOffsetSrc + tileOffsetSrc], dataCopyParamsIn, padParams);
+            AscendC::DataCopyPad(
+                ubInTensorList[pingpong], gmSrc[taskOffsetSrc + tileOffsetSrc], dataCopyParamsIn, padParams);
 
             AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(ubEventList[pingpong]);
             AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(ubEventList[pingpong]);
 
             AscendC::WaitFlag<AscendC::HardEvent::MTE3_V>(ubEventList[pingpong]);
 
-            AscendC::Cast(ubOutTensorList[pingpong], ubInTensorList[pingpong],
-                AscendC::RoundMode::CAST_NONE, actualTiles * tileLenRoundInt8);
+            AscendC::Cast(
+                ubOutTensorList[pingpong], ubInTensorList[pingpong], AscendC::RoundMode::CAST_NONE,
+                actualTiles * tileLenRoundInt8);
             AscendC::PipeBarrier<PIPE_V>();
             AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(ubEventList[pingpong]);
 
-            AscendC::Adds(ubOutTensorList[pingpong], ubOutTensorList[pingpong],
-                params.deqZeroPoint, actualTiles * tileLenRoundInt8);
+            AscendC::Adds(
+                ubOutTensorList[pingpong], ubOutTensorList[pingpong], params.deqZeroPoint,
+                actualTiles * tileLenRoundInt8);
             AscendC::PipeBarrier<PIPE_V>();
 
-            AscendC::Muls(ubOutTensorList[pingpong], ubOutTensorList[pingpong],
-                params.deqScalar, actualTiles * tileLenRoundInt8);
+            AscendC::Muls(
+                ubOutTensorList[pingpong], ubOutTensorList[pingpong], params.deqScalar, actualTiles * tileLenRoundInt8);
             AscendC::PipeBarrier<PIPE_V>();
 
             AscendC::SetFlag<AscendC::HardEvent::V_MTE3>(ubEventList[pingpong]);
@@ -164,12 +161,9 @@ struct TileCastInt8ToFp16Dequant {
 
             uint64_t tileOffsetDst = loopIdx * tilesPerLoop * tileStrideDst;
             AscendC::DataCopyExtParams dataCopyParamsOut(
-                actualTiles, tileLen * sizeof(ElementDst),
-                (tileLenRoundInt8 - tileLen) / ELE_NUM_PER_BLK_HALF,
-                (tileStrideDst - tileLen) * sizeof(ElementDst), 0
-            );
-            AscendC::DataCopyPad(gmDst[taskOffsetDst + tileOffsetDst],
-                ubOutTensorList[pingpong], dataCopyParamsOut);
+                actualTiles, tileLen * sizeof(ElementDst), (tileLenRoundInt8 - tileLen) / ELE_NUM_PER_BLK_HALF,
+                (tileStrideDst - tileLen) * sizeof(ElementDst), 0);
+            AscendC::DataCopyPad(gmDst[taskOffsetDst + tileOffsetDst], ubOutTensorList[pingpong], dataCopyParamsOut);
             AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(ubEventList[pingpong]);
 
             pingpong = (pingpong + 1) % STAGES;

@@ -4,13 +4,13 @@ ASWT(Adaptive Sliding Window Tiling)策略决定了基本块的分核情况和�
 
 下方展示了ASWT策略。图中每一个方块表示C矩阵的一个基本块，方块中的序号代表AI Core的编号（该示例中假设AI Core数量为20）。按照S形滑窗顺序将基本块依次分配给AI Core进行处理，最后还剩9个基本块，无法均分给20个AI Core。为使每一个AI Core尽可能负载均衡，提升数据并行效率，对剩余的9个基本块进行切分，使得切分后的块数（18块）至少能够分配给一半以上的AI Core。
 
-<img src="../../figures/aswt.png" width="50%">
+<img src="../../../assets/images/aswt.png" width="50%">
 
 ## 适用场景
 
 假设左矩阵shape为(m, k)，右矩阵shape为(k, n)，C矩阵上的基本块大小为(baseM, baseN)，则基本块的总个数tileNum：
 
-$$\mathrm{tileNum = Ceil(\mathrm{m, baseM}) * Ceil(n, baseN)}$$
+$$\mathrm{tileNum = CeilDiv(\mathrm{m, baseM}) * CeilDiv(n, baseN)}$$
 
 当基本块个数无法均分给所有AI Core，且剩余基本块个数不足AI Core总数的一半，即：
 

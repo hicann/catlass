@@ -19,7 +19,6 @@
 #include "catlass/gemm_coord.hpp"
 #include "catlass/matrix_coord.hpp"
 
-
 namespace Catlass::Gemm::Kernel {
 
 template <class PrologueA_, class PrologueB_, class BlockMmad_, class BlockEpilogue_, class BlockScheduler_>
@@ -51,30 +50,21 @@ public:
         // Methods
         CATLASS_HOST_DEVICE
         Params()
-        {
-        }
+        {}
 
         CATLASS_HOST_DEVICE
         Params(
-            GemmCoord const &problemShape_,
-            MatrixCoord const &taskTileShape_,
-            GM_ADDR ptrA_,
-            LayoutA layoutA_,
-            GM_ADDR ptrB_,
-            LayoutB layoutB_,
-            GM_ADDR ptrC_,
-            LayoutC layoutC_
-        )
-            : problemShape(problemShape_)
-            , taskTileShape(taskTileShape_)
-            , ptrA(ptrA_)
-            , layoutA(layoutA_)
-            , ptrB(ptrB_)
-            , layoutB(layoutB_)
-            , ptrC(ptrC_)
-            , layoutC(layoutC_)
-        {
-        }
+            GemmCoord const& problemShape_, MatrixCoord const& taskTileShape_, GM_ADDR ptrA_, LayoutA layoutA_,
+            GM_ADDR ptrB_, LayoutB layoutB_, GM_ADDR ptrC_, LayoutC layoutC_)
+            : problemShape(problemShape_),
+              taskTileShape(taskTileShape_),
+              ptrA(ptrA_),
+              layoutA(layoutA_),
+              ptrB(ptrB_),
+              layoutB(layoutB_),
+              ptrC(ptrC_),
+              layoutC(layoutC_)
+        {}
     };
 
     struct Arguments {
@@ -85,17 +75,17 @@ public:
         GM_ADDR ptrC;
     };
 
-    static bool CanImplement(const Arguments &args)
+    static bool CanImplement(const Arguments& args)
     {
         return args.problemShape.k() == 1;
     }
 
-    static size_t GetWorkspaceSize(const Arguments &args)
+    static size_t GetWorkspaceSize(const Arguments& args)
     {
         return 0;
     }
 
-    static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace)
+    static Params ToUnderlyingArguments(const Arguments& args, uint8_t* workspace)
     {
         LayoutA layoutA{args.problemShape.m()};
         LayoutB layoutB{args.problemShape.n()};
@@ -108,30 +98,28 @@ public:
     // Methods
     CATLASS_DEVICE
     AivMatmul()
-    {
-    }
+    {}
 
     template <int32_t CORE_TYPE = g_coreType>
-    CATLASS_DEVICE void operator()(Params const &params, Arch::Resource<ArchTag> &resource);
+    CATLASS_DEVICE void operator()(Params const& params, Arch::Resource<ArchTag>& resource);
 
     template <>
-    CATLASS_DEVICE void operator()<AscendC::AIC>(Params const &params, Arch::Resource<ArchTag> &resource)
-    {
-    }
+    CATLASS_DEVICE void operator()<AscendC::AIC>(Params const& params, Arch::Resource<ArchTag>& resource)
+    {}
 
     template <>
-    CATLASS_DEVICE void operator()<AscendC::AIV>(Params const &params, Arch::Resource<ArchTag> &resource)
+    CATLASS_DEVICE void operator()<AscendC::AIV>(Params const& params, Arch::Resource<ArchTag>& resource)
     {
         BlockScheduler matmulBlockScheduler(params.problemShape, params.taskTileShape);
         uint32_t coreLoops = matmulBlockScheduler.GetCoreLoops();
 
         // Represent the full gm
         AscendC::GlobalTensor<ElementA> gmA;
-        gmA.SetGlobalBuffer((__gm__ ElementA *)params.ptrA);
+        gmA.SetGlobalBuffer((__gm__ ElementA*)params.ptrA);
         AscendC::GlobalTensor<ElementB> gmB;
-        gmB.SetGlobalBuffer((__gm__ ElementB *)params.ptrB);
+        gmB.SetGlobalBuffer((__gm__ ElementB*)params.ptrB);
         AscendC::GlobalTensor<ElementC> gmC;
-        gmC.SetGlobalBuffer((__gm__ ElementC *)params.ptrC);
+        gmC.SetGlobalBuffer((__gm__ ElementC*)params.ptrC);
 
         BlockMmad blockMmad(resource, params.taskTileShape);
 
@@ -143,16 +131,14 @@ public:
             TensorCoord coordA{blockCoord.m() * params.taskTileShape.row()};
             TensorCoord coordB{blockCoord.n() * params.taskTileShape.column()};
             MatrixCoord coordC{
-                blockCoord.m() * params.taskTileShape.row(), blockCoord.n() * params.taskTileShape.column()
-            };
+                blockCoord.m() * params.taskTileShape.row(), blockCoord.n() * params.taskTileShape.column()};
             int64_t gmOffsetA = params.layoutA.GetOffset(coordA);
             int64_t gmOffsetB = params.layoutB.GetOffset(coordB);
             int64_t gmOffsetC = params.layoutC.GetOffset(coordC);
             // Compute block-scoped matrix multiply-add
             blockMmad(
                 gmA[gmOffsetA], params.layoutA, gmB[gmOffsetB], params.layoutB, gmC[gmOffsetC], params.layoutC,
-                actualBlockShape
-            );
+                actualBlockShape);
         }
     }
 };

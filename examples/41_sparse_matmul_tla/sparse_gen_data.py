@@ -14,7 +14,6 @@ import os
 import sys
 import logging
 
-import torch
 import numpy as np
 
 IS_TRANS_A = False
@@ -25,7 +24,7 @@ DATA_TYPE_STR = "int8_int32"
 IS_OUTPUT_TXT = False
 
 
-class SparseMatmulGenData():
+class SparseMatmulGenData:
     def __init__(self, m, n, k, b):
         self.m = m
         self.n = n
@@ -35,7 +34,6 @@ class SparseMatmulGenData():
         self.is_trans_b = IS_TRANS_B
         self.is_bias = IS_BIAS
         self.data_type_str = DATA_TYPE_STR
-
 
     @staticmethod
     def generate_sparse_matrix_b(shape, dtype=np.int8):
@@ -53,7 +51,7 @@ class SparseMatmulGenData():
                 block[non_zero_positions[1]] = np.random.randint(1, 10, dtype=dtype)
 
                 # 放置到矩阵B的当前行
-                b[row, i:i + 4] = block
+                b[row, i : i + 4] = block
         return b
 
     @staticmethod
@@ -70,7 +68,7 @@ class SparseMatmulGenData():
             index_mask_row = []
 
             for i in range(0, k, 4):
-                block = b[row, i:i + 4]
+                block = b[row, i : i + 4]
                 nonzero_positions = [j for j in range(4) if block[j] != 0]
                 # 记录第1和第2个非零元素的索引
                 if len(nonzero_positions) == 0:
@@ -84,7 +82,9 @@ class SparseMatmulGenData():
                 else:
                     index_1 = nonzero_positions[0]
                     index_2 = nonzero_positions[1] - 1
-                    index_mask_row.extend([nonzero_positions[0] + i, nonzero_positions[1] + i])
+                    index_mask_row.extend(
+                        [nonzero_positions[0] + i, nonzero_positions[1] + i]
+                    )
 
                 # 记录稠密化后的块
                 dense_block = [block[pos] for pos in nonzero_positions[:2]]
@@ -98,8 +98,10 @@ class SparseMatmulGenData():
             # 将索引逆序排列并打包为 int8
             index_bytes = []
             for j in range(0, len(index_row), 4):
-                indices = index_row[j:j + 4]
-                int8_value = sum((index << (2 * bit_pos)) for bit_pos, index in enumerate(indices))
+                indices = index_row[j : j + 4]
+                int8_value = sum(
+                    (index << (2 * bit_pos)) for bit_pos, index in enumerate(indices)
+                )
                 index_bytes.append(int8_value)
 
             dense_b[row, :] = dense_row
@@ -121,7 +123,9 @@ class SparseMatmulGenData():
             a_selected = a[:, selected_columns]  # 提取对应列
 
             # 当前 b 第 r 行与提取后的 a_selected 计算矩阵乘法
-            c[:, r] = np.dot(a_selected.astype(result_type), dense_b[r].astype(result_type)).astype(result_type)
+            c[:, r] = np.dot(
+                a_selected.astype(result_type), dense_b[r].astype(result_type)
+            ).astype(result_type)
         return c
 
     @staticmethod
@@ -162,7 +166,9 @@ class SparseMatmulGenData():
 
         # B
         b_sparse = self.generate_sparse_matrix_b((self.n, self.k)).astype(np.int8)
-        b_gm, index_matrix, index_mask_matrix = self.densify_and_generate_index(b_sparse)
+        b_gm, index_matrix, index_mask_matrix = self.densify_and_generate_index(
+            b_sparse
+        )
 
         # index
         index_gm = self.index_nd_to_nz(index_matrix)
@@ -189,38 +195,49 @@ class SparseMatmulGenData():
 
         # save to txt
         if IS_OUTPUT_TXT:
-            np.savetxt(work_dir + "/input/x1_gm.txt", a_gm, fmt='%d', newline='\n')
-            np.savetxt(work_dir + "/input/x2_gm.txt", b_gm, fmt='%d', newline='\n')
-            np.savetxt(work_dir + "/input/index_gm.txt", index_gm.flatten(), fmt='%d', newline='\n')
-            np.savetxt(work_dir + "/output/golden.txt", c_gm, fmt='%d', newline='\n')
+            np.savetxt(work_dir + "/input/x1_gm.txt", a_gm, fmt="%d", newline="\n")
+            np.savetxt(work_dir + "/input/x2_gm.txt", b_gm, fmt="%d", newline="\n")
+            np.savetxt(
+                work_dir + "/input/index_gm.txt",
+                index_gm.flatten(),
+                fmt="%d",
+                newline="\n",
+            )
+            np.savetxt(work_dir + "/output/golden.txt", c_gm, fmt="%d", newline="\n")
             if self.is_bias:
-                np.savetxt(work_dir + "/input/bias_gm.txt", bias_gm.flatten(), fmt='%d', newline='\n')
+                np.savetxt(
+                    work_dir + "/input/bias_gm.txt",
+                    bias_gm.flatten(),
+                    fmt="%d",
+                    newline="\n",
+                )
         return 0
 
     def gen_fake_golden_data(self, work_dir):
         if self.check_params() != 0:
             return -1
 
-        data_type_bytes_ab = 1 # int8
+        data_type_bytes_ab = 1  # int8
         data_type_bytes_c = 4  # int32
 
         file_byte = self.m * self.k * data_type_bytes_ab
-        with open(work_dir + "/input/x1_gm.bin", 'wb') as file:
+        with open(work_dir + "/input/x1_gm.bin", "wb") as file:
             file.truncate(file_byte)
 
         file_byte = self.k * self.n * data_type_bytes_ab // 2
-        with open(work_dir + "/input/x2_gm.bin", 'wb') as file:
+        with open(work_dir + "/input/x2_gm.bin", "wb") as file:
             file.truncate(file_byte)
 
         file_byte = self.k * self.n * data_type_bytes_ab // 8
-        with open(work_dir + "/input/index_gm.bin", 'wb') as file:
+        with open(work_dir + "/input/index_gm.bin", "wb") as file:
             file.truncate(file_byte)
 
         if self.is_bias:
             file_byte = 1 * self.n * data_type_bytes_c
-            with open(work_dir + "/input/bias_gm.bin", 'wb') as file:
+            with open(work_dir + "/input/bias_gm.bin", "wb") as file:
                 file.truncate(file_byte)
         return 0
+
 
 if __name__ == "__main__":
     current_dir = os.path.dirname(os.path.abspath(__file__))

@@ -37,8 +37,8 @@ Conv2D涉及三种数据布局，均为5维Tensor：
 
 Catlass中对应的Layout类型定义在`include/catlass/layout/tensor.hpp`：
 
--`layout::NC1HWC0`— Fmap和Output使用，strides为`[Cin1*Hi*Wi*C0, Hi*Wi*C0, Wi*C0, C0, 1]`
-\-`layout::CI1KHKWCOCI0`— Filter使用，strides为`[Kh*Kw*Cout*C0, Kw*Cout*C0, Cout*C0, C0, 1]`
+- `layout::NC1HWC0`— Fmap和Output使用，strides为`[Cin1*Hi*Wi*C0, Hi*Wi*C0, Wi*C0, C0, 1]`
+- `layout::CI1KHKWCOCI0`— Filter使用，strides为`[Kh*Kw*Cout*C0, Kw*Cout*C0, Cout*C0, C0, 1]`
 
 ## 完整代码解析
 

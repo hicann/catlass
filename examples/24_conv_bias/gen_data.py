@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # -----------------------------------------------------------------------------------------------------------
 # Copyright (c) 2025 Huawei Technologies Co., Ltd.
-# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
 # CANN Open Software License Agreement Version 2.0 (the "License").
 # Please refer to the License for details. You may not use this file except in compliance with the License.
 # THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
@@ -16,6 +16,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from ml_dtypes import bfloat16
+
 
 def main():
     # Example parameters
@@ -37,10 +38,10 @@ def main():
     pD = int(sys.argv[16])
     pH = int(sys.argv[17])
     pW = int(sys.argv[18])
-    dtype_str = sys.argv[19]   # Dtype: bfloat16 or float16
+    dtype_str = sys.argv[19]  # Dtype: bfloat16 or float16
 
     # Parameter analysis
-    c0 , n0 = 16, 16
+    c0, n0 = 16, 16
     if dtype_str == "float16":
         np_dtype = np.float16
         torch_dtype = torch.float16
@@ -52,7 +53,7 @@ def main():
 
     c1 = (Cin + c0 - 1) // c0
     cout1 = (Cout + c0 - 1) // c0
-    n1 = (Cout +  n0 - 1) // n0
+    n1 = (Cout + n0 - 1) // n0
     tensorDtype = torch.float32
 
     # Calculate the output size
@@ -76,7 +77,7 @@ def main():
         bias_tensor,
         stride=(sD, sH, sW),
         padding=(pD, pH, pW),
-        dilation=(dD, dH, dW)
+        dilation=(dD, dH, dW),
     )
 
     golden_np = golden.numpy().astype(np_dtype)
@@ -93,18 +94,28 @@ def main():
     num_padding_in_n = n1 * n0 - Cout
     zero_padding_n_array = np.zeros((num_padding_in_n, Cin, kd, kh, kw), dtype=np_dtype)
     weight_data = np.concatenate((weight, zero_padding_n_array), axis=0)
-    zero_padding_cin_array = np.zeros((n1 * n0, num_2_padding_in_cin, kd, kh, kw), dtype=np_dtype)
+    zero_padding_cin_array = np.zeros(
+        (n1 * n0, num_2_padding_in_cin, kd, kh, kw), dtype=np_dtype
+    )
     weight_data = np.concatenate((weight_data, zero_padding_cin_array), axis=1)
     weight_data = weight_data.reshape(n1, n0, c1, c0, kd, kh, kw)
     weight_data = weight_data.transpose(4, 2, 5, 6, 0, 1, 3)
-    weight_data = weight_data.reshape(kd*c1*kh*kw, n1, n0, c0) # (kdC1KhKw) * n1 * n0 * c0
+    weight_data = weight_data.reshape(
+        kd * c1 * kh * kw, n1, n0, c0
+    )  # (kdC1KhKw) * n1 * n0 * c0
     print(f"weight_reshaped dtype:{weight_data.dtype}")
 
     # golden: (NCoutDHW)  --> (N,n1,n0,d,h,w) ---> N * d_out * n1 * h_out * w_out * n0
     num_2_padding_in_cin = cout1 * c0 - Cout
-    zero_padding_array = np.zeros((N, num_2_padding_in_cin, d_out, h_out, w_out), dtype=np_dtype)
+    zero_padding_array = np.zeros(
+        (N, num_2_padding_in_cin, d_out, h_out, w_out), dtype=np_dtype
+    )
     golden_np_data = np.concatenate((golden_np, zero_padding_array), axis=1)
-    golden_np_data = golden_np_data.reshape((N, cout1, c0, d_out, h_out, w_out)).transpose(0, 3, 1, 4, 5, 2).astype(np.float32)
+    golden_np_data = (
+        golden_np_data.reshape((N, cout1, c0, d_out, h_out, w_out))
+        .transpose(0, 3, 1, 4, 5, 2)
+        .astype(np.float32)
+    )
     print(f"golden_reshaped dtype:{golden_np_data.dtype}")
 
     print(f"fmap_reshaped shape:{fmap_data.shape}")
@@ -118,13 +129,18 @@ def main():
     weight_data.tofile("data/weight.bin")
     bias.tofile("data/bias.bin")
     golden_np_data.tofile("data/golden.bin")
-   
-    print(f"Data generated successfully! Output saved in 'data' directory.")
+
+    print("Data generated successfully! Output saved in 'data' directory.")
+
 
 if __name__ == "__main__":
     if len(sys.argv) != 20:
-        print("Usage: python gen_data.py n Cin d h w Cout kd kh kw sD sH sW dD dH dW pD pH pW dtype")
-        print("Example: python gen_data.py 2 16 32 32 4 16 3 3 3 4 16 1 1 1 1 1 1 1 1 1 float16")
+        print(
+            "Usage: python gen_data.py n Cin d h w Cout kd kh kw sD sH sW dD dH dW pD pH pW dtype"
+        )
+        print(
+            "Example: python gen_data.py 2 16 32 32 4 16 3 3 3 4 16 1 1 1 1 1 1 1 1 1 float16"
+        )
         sys.exit(1)
 
     main()

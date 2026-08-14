@@ -14,7 +14,7 @@ build-backend = "scikit_build_core.build"
 [project]
 name = "torch-catlass"
 dynamic = ["version"]
-description = "Catlass-based PyTorch NPU operators with multi-architecture support"
+description = "Catlass-based TorchNPU operators with multi-architecture support"
 readme = "README.md"
 requires-python = ">=3.8"
 dependencies = [

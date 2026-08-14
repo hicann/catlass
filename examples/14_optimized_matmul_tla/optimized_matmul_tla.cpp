@@ -34,30 +34,26 @@ using namespace Catlass;
 using namespace tla;
 
 template <class Layout>
-auto GetPaddingLayout(Layout layout, uint32_t blockRows, uint32_t blockCols) {
+auto GetPaddingLayout(Layout layout, uint32_t blockRows, uint32_t blockCols)
+{
     if constexpr (std::is_same_v<Layout, layout::RowMajor>) {
         auto shape = MakeShape(
             MakeShape(blockRows, CeilDiv(layout.shape(0), blockRows)),
-            MakeShape(blockCols, CeilDiv(layout.shape(1), blockCols))
-        );
+            MakeShape(blockCols, CeilDiv(layout.shape(1), blockCols)));
         auto stride = MakeStride(
             MakeStride(
-                static_cast<int64_t>(blockCols), static_cast<int64_t>(blockRows) * RoundUp(layout.shape(1), blockCols)
-            ),
-            MakeStride(Int<1>{}, static_cast<int64_t>(blockRows) * blockCols)
-        );
+                static_cast<int64_t>(blockCols), static_cast<int64_t>(blockRows) * RoundUp(layout.shape(1), blockCols)),
+            MakeStride(Int<1>{}, static_cast<int64_t>(blockRows) * blockCols));
         return MakeLayout(shape, stride);
     } else {
         auto shape = MakeShape(
             MakeShape(blockRows, CeilDiv(layout.shape(0), blockRows)),
-            MakeShape(blockCols, CeilDiv(layout.shape(1), blockCols))
-        );
+            MakeShape(blockCols, CeilDiv(layout.shape(1), blockCols)));
         auto stride = MakeStride(
             MakeStride(Int<1>{}, static_cast<int64_t>(blockRows) * blockCols),
             MakeStride(
-                static_cast<int64_t>(blockRows), RoundUp(layout.shape(0), blockRows) * static_cast<int64_t>(blockCols)
-            )
-        );
+                static_cast<int64_t>(blockRows),
+                RoundUp(layout.shape(0), blockRows) * static_cast<int64_t>(blockCols)));
         return MakeLayout(shape, stride);
     }
 }
@@ -65,12 +61,14 @@ auto GetPaddingLayout(Layout layout, uint32_t blockRows, uint32_t blockCols) {
 using Options = GemmOptions;
 
 template <class Layout>
-size_t GetWorkspaceLen(Layout layout, size_t blockRows, size_t blockCols) {
-    return RoundUp(static_cast<size_t>(layout.shape(0)), blockRows)
-           * RoundUp(static_cast<size_t>(layout.shape(1)), blockCols);
+size_t GetWorkspaceLen(Layout layout, size_t blockRows, size_t blockCols)
+{
+    return RoundUp(static_cast<size_t>(layout.shape(0)), blockRows) *
+           RoundUp(static_cast<size_t>(layout.shape(1)), blockCols);
 }
 
-static void Run(const Options &options) {
+static void Run(const Options& options)
+{
     aclrtStream stream{nullptr};
 
     ACL_CHECK(aclInit(nullptr));
@@ -113,34 +111,34 @@ static void Run(const Options &options) {
     golden::FillRandomData<fp16_t>(hostA, -5.0f, 5.0f);
     golden::FillRandomData<fp16_t>(hostB, -5.0f, 5.0f);
 
-    uint8_t *deviceA{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceA{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceA, sizeA, hostA.data(), sizeA, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *deviceB{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceB{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceB, sizeB, hostB.data(), sizeB, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *deviceC{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceC{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
 
-    uint8_t *deviceWA{nullptr};
+    uint8_t* deviceWA{nullptr};
     if (isNeedPaddingA) {
-        ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWA), sizeWA, ACL_MEM_MALLOC_HUGE_FIRST));
+        ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceWA), sizeWA, ACL_MEM_MALLOC_HUGE_FIRST));
     } else {
         // no need to padding A
         deviceWA = deviceA;
     }
 
-    uint8_t *deviceWB{nullptr};
+    uint8_t* deviceWB{nullptr};
     // If layoutWB has the same stride with layoutB, no need to padding B
     if (isNeedPaddingB) {
-        ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWB), sizeWB, ACL_MEM_MALLOC_HUGE_FIRST));
+        ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceWB), sizeWB, ACL_MEM_MALLOC_HUGE_FIRST));
     } else {
         // no need to padding B
         deviceWB = deviceB;
     }
-    uint8_t *deviceWorkspace{nullptr};
+    uint8_t* deviceWorkspace{nullptr};
     // Prepare hardware sync address
     uint64_t hardwareSyncAddr{0};
     ACL_CHECK(aclrtGetHardwareSyncAddr(reinterpret_cast<void**>(&hardwareSyncAddr)));
@@ -160,12 +158,12 @@ static void Run(const Options &options) {
     auto layoutA = MakeLayoutFromTag(tagA);
     auto layoutB = MakeLayoutFromTag(tagB);
     auto layoutC = MakeLayoutFromTag(tagC);
-    using TensorA =
-        Tensor<AscendC::GlobalTensor<ElementA>, decltype(layoutA), tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::GM>;
-    using TensorB =
-        Tensor<AscendC::GlobalTensor<ElementB>, decltype(layoutB), tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::GM>;
-    using TensorC =
-        Tensor<AscendC::GlobalTensor<ElementC>, decltype(layoutC), tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::GM>;
+    using TensorA = Tensor<
+        AscendC::GlobalTensor<ElementA>, decltype(layoutA), tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::GM>;
+    using TensorB = Tensor<
+        AscendC::GlobalTensor<ElementB>, decltype(layoutB), tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::GM>;
+    using TensorC = Tensor<
+        AscendC::GlobalTensor<ElementC>, decltype(layoutC), tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::GM>;
 
     // if LayoutA and LayoutB is both ColumnMajor,
     // L1TileShape using GemmShape<256, 128, 256> can achieve better performance.
@@ -214,8 +212,7 @@ static void Run(const Options &options) {
             sizeWorkspace = matmulOp.GetWorkspaceSize(arguments);
             if (sizeWorkspace > 0) {
                 ACL_CHECK(
-                    aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST)
-                );
+                    aclrtMalloc(reinterpret_cast<void**>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
             }
             matmulOp.Initialize(arguments, deviceWorkspace);
             matmulOp(stream, aicCoreNum, hardwareSyncAddr);
@@ -244,8 +241,7 @@ static void Run(const Options &options) {
             sizeWorkspace = matmulOp.GetWorkspaceSize(arguments);
             if (sizeWorkspace > 0) {
                 ACL_CHECK(
-                    aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST)
-                );
+                    aclrtMalloc(reinterpret_cast<void**>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
             }
             matmulOp.Initialize(arguments, deviceWorkspace);
             matmulOp(stream, aicCoreNum, hardwareSyncAddr);
@@ -290,8 +286,7 @@ static void Run(const Options &options) {
             sizeWorkspace = matmulOp.GetWorkspaceSize(arguments);
             if (sizeWorkspace > 0) {
                 ACL_CHECK(
-                    aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST)
-                );
+                    aclrtMalloc(reinterpret_cast<void**>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
             }
             matmulOp.Initialize(arguments, deviceWorkspace);
             matmulOp(stream, aicCoreNum, hardwareSyncAddr);
@@ -320,8 +315,7 @@ static void Run(const Options &options) {
             sizeWorkspace = matmulOp.GetWorkspaceSize(arguments);
             if (sizeWorkspace > 0) {
                 ACL_CHECK(
-                    aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST)
-                );
+                    aclrtMalloc(reinterpret_cast<void**>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
             }
             matmulOp.Initialize(arguments, deviceWorkspace);
             matmulOp(stream, aicCoreNum, hardwareSyncAddr);
@@ -366,8 +360,7 @@ static void Run(const Options &options) {
             sizeWorkspace = matmulOp.GetWorkspaceSize(arguments);
             if (sizeWorkspace > 0) {
                 ACL_CHECK(
-                    aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST)
-                );
+                    aclrtMalloc(reinterpret_cast<void**>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
             }
             matmulOp.Initialize(arguments, deviceWorkspace);
             matmulOp(stream, aicCoreNum, hardwareSyncAddr);
@@ -396,8 +389,7 @@ static void Run(const Options &options) {
             sizeWorkspace = matmulOp.GetWorkspaceSize(arguments);
             if (sizeWorkspace > 0) {
                 ACL_CHECK(
-                    aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST)
-                );
+                    aclrtMalloc(reinterpret_cast<void**>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
             }
             matmulOp.Initialize(arguments, deviceWorkspace);
             matmulOp(stream, aicCoreNum, hardwareSyncAddr);
@@ -443,8 +435,7 @@ static void Run(const Options &options) {
             sizeWorkspace = matmulOp.GetWorkspaceSize(arguments);
             if (sizeWorkspace > 0) {
                 ACL_CHECK(
-                    aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST)
-                );
+                    aclrtMalloc(reinterpret_cast<void**>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
             }
             matmulOp.Initialize(arguments, deviceWorkspace);
             matmulOp(stream, aicCoreNum, hardwareSyncAddr);
@@ -473,8 +464,7 @@ static void Run(const Options &options) {
             sizeWorkspace = matmulOp.GetWorkspaceSize(arguments);
             if (sizeWorkspace > 0) {
                 ACL_CHECK(
-                    aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST)
-                );
+                    aclrtMalloc(reinterpret_cast<void**>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
             }
             matmulOp.Initialize(arguments, deviceWorkspace);
             matmulOp(stream, aicCoreNum, hardwareSyncAddr);
@@ -509,7 +499,8 @@ static void Run(const Options &options) {
     ACL_CHECK(aclFinalize());
 }
 
-int main(int argc, const char **argv) {
+int main(int argc, const char** argv)
+{
     Options options;
     if (options.Parse(argc, argv) != 0) {
         return -1;

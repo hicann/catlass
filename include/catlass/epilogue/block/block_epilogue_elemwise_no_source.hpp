@@ -20,19 +20,8 @@
 #include "catlass/epilogue/tile/tile_cast.hpp"
 
 namespace Catlass::Epilogue::Block {
-template <
-    class CType_,
-    class DType_,
-    class TileElemWiseEpilogue_,
-    class TileCopy_
->
-class BlockEpilogue <
-    EpilogueAtlasA2ElemWiseNoSource,
-    CType_,
-    DType_,
-    TileElemWiseEpilogue_,
-    TileCopy_
-> {
+template <class CType_, class DType_, class TileElemWiseEpilogue_, class TileCopy_>
+class BlockEpilogue<EpilogueAtlasA2ElemWiseNoSource, CType_, DType_, TileElemWiseEpilogue_, TileCopy_> {
 public:
     // Type aliases
     using DispatchPolicy = EpilogueAtlasA2ElemWiseNoSource;
@@ -54,18 +43,17 @@ public:
     using LayoutComputeInUb = layout::RowMajor;
 
     // Check the element type of C and D
-    static_assert(std::is_same_v<ElementC, float>,
-        "Element type of C must be float");
+    static_assert(std::is_same_v<ElementC, float>, "Element type of C must be float");
     // Check the layout type of C and D
-    static_assert(std::is_same_v<LayoutC, layout::RowMajor> && std::is_same_v<LayoutD, layout::RowMajor>,
+    static_assert(
+        std::is_same_v<LayoutC, layout::RowMajor> && std::is_same_v<LayoutD, layout::RowMajor>,
         "Layout type of C, D must be RowMajor");
 
     // Check if ArchTag is matched
-    static_assert(std::is_same_v<typename TileElemWiseEpilogue::ArchTag, ArchTag>,
-        "Tile epilogue's ArchTag mismatch");
+    static_assert(std::is_same_v<typename TileElemWiseEpilogue::ArchTag, ArchTag>, "Tile epilogue's ArchTag mismatch");
     // Check if compute length is valid
-    static_assert(COMPUTE_LENGTH * (OPERANDS_NUM * sizeof(ElementC) + sizeof(ElementD)) <= ArchTag::UB_SIZE,
-        "UB out of bounds");
+    static_assert(
+        COMPUTE_LENGTH * (OPERANDS_NUM * sizeof(ElementC) + sizeof(ElementD)) <= ArchTag::UB_SIZE, "UB out of bounds");
 
     // Epilogue params definition
     struct Params {
@@ -75,22 +63,23 @@ public:
         LayoutD layoutD;
 
         CATLASS_HOST_DEVICE
-        Params() {}
+        Params()
+        {}
 
         CATLASS_HOST_DEVICE
-        Params(GM_ADDR ptrC_, LayoutD const &layoutC_, GM_ADDR ptrD_, LayoutD const &layoutD_)
-            : ptrC(ptrC_), layoutC(layoutC_), ptrD(ptrD_), layoutD(layoutD_) {}
+        Params(GM_ADDR ptrC_, LayoutD const& layoutC_, GM_ADDR ptrD_, LayoutD const& layoutD_)
+            : ptrC(ptrC_), layoutC(layoutC_), ptrD(ptrD_), layoutD(layoutD_)
+        {}
     };
 
     CATLASS_DEVICE
-    BlockEpilogue(Arch::Resource<ArchTag> &resource, Params const &params) : params(params)
+    BlockEpilogue(Arch::Resource<ArchTag>& resource, Params const& params) : params(params)
     {
         ubC = resource.ubBuf.template GetBufferByByte<ElementC>(0);
         ubD = resource.ubBuf.template GetBufferByByte<ElementD>(COMPUTE_LENGTH * sizeof(ElementC));
-        if constexpr (!std::is_same_v<ElementCompute, ElementD>){
-            ubCompute = resource.ubBuf.template GetBufferByByte<ElementCompute>( 
-                COMPUTE_LENGTH * (sizeof(ElementC) + sizeof(ElementD))
-            );
+        if constexpr (!std::is_same_v<ElementCompute, ElementD>) {
+            ubCompute = resource.ubBuf.template GetBufferByByte<ElementCompute>(
+                COMPUTE_LENGTH * (sizeof(ElementC) + sizeof(ElementD)));
         } else {
             // When ElementCompute is same as ElementD, it is not necessary to do Cast from ubCompute to ubD.
             // Use the same buffer.
@@ -108,13 +97,9 @@ public:
     }
 
     CATLASS_DEVICE
-    void operator() (
-        GemmCoord const &blockShapeMNK,
-        GemmCoord const &blockCoordMNK,
-        GemmCoord const &actualBlockShapeMNK,
-        AscendC::GlobalTensor<ElementCompute> const &gmBlockC,
-        LayoutD const &layoutBlockC
-    )
+    void operator()(
+        GemmCoord const& blockShapeMNK, GemmCoord const& blockCoordMNK, GemmCoord const& actualBlockShapeMNK,
+        AscendC::GlobalTensor<ElementCompute> const& gmBlockC, LayoutD const& layoutBlockC)
     {
         // Calculate the offset of the current block
         MatrixCoord blockShape = blockShapeMNK.GetCoordMN();
@@ -125,12 +110,11 @@ public:
         // Calculate the offset and the shape of the current subblock
         MatrixCoord subblockShape{
             CeilDiv(actualBlockShape.row(), static_cast<uint32_t>(AscendC::GetSubBlockNum())),
-            actualBlockShape.column()
-        };
+            actualBlockShape.column()};
 
-        MatrixCoord subblockCoord{ AscendC::GetSubBlockIdx(), 0 };
-        MatrixCoord actualSubblockShape = MatrixCoord::Min(
-            subblockShape, actualBlockShape - subblockCoord * subblockShape);
+        MatrixCoord subblockCoord{AscendC::GetSubBlockIdx(), 0};
+        MatrixCoord actualSubblockShape =
+            MatrixCoord::Min(subblockShape, actualBlockShape - subblockCoord * subblockShape);
         MatrixCoord subblockOffset = subblockCoord * subblockShape;
 
         // Get the data and layout of C
@@ -139,7 +123,7 @@ public:
 
         // Get the data and layout of D
         AscendC::GlobalTensor<ElementD> gmD;
-        gmD.SetGlobalBuffer(reinterpret_cast<__gm__ ElementD *>(params.ptrD));
+        gmD.SetGlobalBuffer(reinterpret_cast<__gm__ ElementD*>(params.ptrD));
         auto gmSubblockD = gmD[params.layoutD.GetOffset(blockOffset + subblockOffset)];
         auto layoutSubblockD = params.layoutD.GetTileLayout(actualSubblockShape);
 
@@ -156,7 +140,7 @@ public:
         AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
         AscendC::WaitFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID0);
         tileEpilogue(ubCompute, ubC);
-        if constexpr (!std::is_same_v<ElementCompute, ElementD>){
+        if constexpr (!std::is_same_v<ElementCompute, ElementD>) {
             AscendC::Cast(ubD, ubCompute, AscendC::RoundMode::CAST_NONE, COMPUTE_LENGTH);
         }
         AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID0);
@@ -180,6 +164,6 @@ private:
     CopyUbToGmD copyUbToGmD;
 };
 
-}  // namespace Catlass::Epilogue::Block
+} // namespace Catlass::Epilogue::Block
 
-#endif  // CATLASS_EPILOGUE_BLOCK_EPILOGUE_ELEMWISE_NO_SOURCE_HPP
+#endif // CATLASS_EPILOGUE_BLOCK_EPILOGUE_ELEMWISE_NO_SOURCE_HPP

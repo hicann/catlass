@@ -31,7 +31,7 @@ The CATLASS [44_quant_matmul_full_loadA_tla example](./README.md) operator is an
 
 - The following figure shows the pipeline changes of the full-load template of matrix A compared with the common template. With the full-load solution, at the beginning of the calculation, the data blocks of matrix A are completely moved to L1 through MTE2, and then ping-pong data movement is performed with matrix B for calculation.
 
-! [Full-load pipeline of matrix A](https://raw.gitcode.com/user-images/assets/7631999/1de46727-7c46-411e-936c-7a437d951a3a/3e9c799e1de0405d89f07a6bfd7d7c54.png_tplv-a9rns2rl98-image-qvalue.png "3e9c799e1de0405d89f07a6bfd7d7c54.png~tplv-a9rns2rl98-image-qvalue.png")
+![Full-load pipeline of matrix A](https://raw.gitcode.com/user-images/assets/7631999/1de46727-7c46-411e-936c-7a437d951a3a/3e9c799e1de0405d89f07a6bfd7d7c54.png_tplv-a9rns2rl98-image-qvalue.png "3e9c799e1de0405d89f07a6bfd7d7c54.png~tplv-a9rns2rl98-image-qvalue.png")
 
 - When the full-load template of matrix A is used, half of the L1 space is required to store the `L1TileShape::M * problemShape.K` data. If the L1 space is insufficient for the full-load template of matrix A, an error is reported.
 - When matrix A is fully loaded, a larger N-axis indicates that a single core can reuse matrix A in L1 multiple times without transferring matrix A from GM or L2 cache. In this case, the performance gain is greater.
@@ -40,21 +40,21 @@ The CATLASS [44_quant_matmul_full_loadA_tla example](./README.md) operator is an
 - If `problemShape.M <= L1TileShape::M`, the `GemmIdentityBlockSwizzle` policy can be used. For details about how to select common policy parameters, see [swizzle_explanation](../../docs/en/2_Design/01_kernel_design/02_swizzle.md).
 - Taking 20 cube cores as an example, the core division sequence of basic blocks for the `GemmIdentityBlockSwizzle` policy is `0-1-2-...-18-19-0-1-2...-18-19-0-1-2...`, and the basic blocks to be processed by each core are distributed in a jump mode. The core division sequence of basic blocks for the `GemmIdentityBlockSwizzleL1FullLoad` policy is `0-0...-0-1-1...-1-2-2...-19`, and the basic blocks to be processed by each core are continuously distributed.
 
-## Performancem Benefits
+## Performance Benefits
 
 When the same tileShape and swizzle parameters are used, the performance of the benchmark sample with the full-load feature of matrix A is improved by 5% to 15% on average compared with that of the benchmark sample 12_quant_matmul. This is because the full-load implementation reduces the transfer of matrix A during computing and improves the data reuse rate of the fully loaded matrix. For details, see the following table.
 
 | [M,N,K]            | 12_quant_matmul | 44_quant_matmul_full_loadA_tla |
 | ------------------ | --------------- | ------------------------------ |
-| [512, 4096, 1024]  | 33.26 us        | 31.73 us                       |
-| [128,16384, 1024]  | 38.68 us        | 37.05 us                       |
-| [1024, 4096, 1024] | 42.66 us        | 41.96 us                       |
-| [512,8192,1024]    | 52.36 us        | 44.05 us                       |
-| [128,16384,2048]   | 53.77 us        | 52.75 us                       |
+| [512, 4096, 1024]  | 33.26us         | 31.73us                        |
+| [128,16384, 1024]  | 38.68us         | 37.05us                        |
+| [1024, 4096, 1024] | 42.66us         | 41.96us                        |
+| [512,8192,1024]    | 52.36us         | 44.05us                        |
+| [128,16384,2048]   | 53.77us         | 52.75us                        |
 
 Note:
 
 - The benchmark is the [QuantMatmul](../12_quant_matmul/README.md) operator.
-- The total time consumed by the kernel function is obtained using the [msprof](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/devaids/optool/atlasopdev_16_0082.html) tool.
+- The total time consumed by the kernel function is obtained using the [msprof](https://www.hiascend.com/document/detail/en/canncommercial/850/devaids/optool/atlasopdev_16_0082.html) tool.
 - In the preceding test case, matrices A, B, and the output matrix are in `layout::RowMajor` format.
 - Test environment description: The NPU model is 910B1, and the CANN package version is 9.0.0.

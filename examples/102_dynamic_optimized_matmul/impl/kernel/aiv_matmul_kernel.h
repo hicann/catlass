@@ -23,8 +23,8 @@
 #include "kernel_utils.h"
 #include "tiling_params.h"
 
-
-enum class DispatchPolicyTag {
+enum class DispatchPolicyTag
+{
     DEFAULT = 0,
     MATMUL_AIV_SIMPLE = 1,
     MATMUL_AIV_TRANS = 2
@@ -38,25 +38,11 @@ struct TileCopyAiv {
 };
 
 template <
-    class ArchTag,
-    class ElementA,
-    class LayoutA,
-    class ElementB,
-    class LayoutB,
-    class ElementC,
-    class LayoutC,
+    class ArchTag, class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC,
     class DispatchPolicy>
 CATLASS_DEVICE void AivMatmul(
-    Catlass::GemmCoord &problemShape,
-    Catlass::MatrixCoord &taskTileShape,
-    GM_ADDR gmA,
-    LayoutA &layoutA,
-    GM_ADDR gmB,
-    LayoutB &layoutB,
-    GM_ADDR gmC,
-    LayoutC &layoutC,
-    Catlass::Arch::Resource<ArchTag> &resource
-)
+    Catlass::GemmCoord& problemShape, Catlass::MatrixCoord& taskTileShape, GM_ADDR gmA, LayoutA& layoutA, GM_ADDR gmB,
+    LayoutB& layoutB, GM_ADDR gmC, LayoutC& layoutC, Catlass::Arch::Resource<ArchTag>& resource)
 {
     using AType = Catlass::Gemm::GemmType<ElementA, LayoutA>;
     using BType = Catlass::Gemm::GemmType<ElementB, LayoutB>;
@@ -79,20 +65,11 @@ CATLASS_DEVICE void AivMatmul(
 }
 
 template <
-    class ArchTag,
-    class ElementA,
-    class LayoutA,
-    class ElementB,
-    class LayoutB,
-    class ElementC,
-    class LayoutC,
+    class ArchTag, class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC,
     DispatchPolicyTag dispatchPolicyTag>
 CATLASS_GLOBAL __attribute__((aiv)) void AivMatmulKernel(
-    __gm__ uint8_t *__restrict__ gmA,
-    __gm__ uint8_t *__restrict__ gmB,
-    __gm__ uint8_t *__restrict__ gmC,
-    __gm__ uint8_t *__restrict__ tilingData
-)
+    __gm__ uint8_t* __restrict__ gmA, __gm__ uint8_t* __restrict__ gmB, __gm__ uint8_t* __restrict__ gmC,
+    __gm__ uint8_t* __restrict__ tilingData)
 {
     Catlass::Arch::Resource<ArchTag> resource;
 
@@ -123,7 +100,7 @@ CATLASS_GLOBAL __attribute__((aiv)) void AivMatmulKernel(
 
     // The byte size of the TilingParams structure may exceed TILING_PARAMS_BYTES.
     // Please avoid using pointers to access data beyond TILING_PARAMS_BYTES !!!
-    TilingParams *tiling = (TilingParams *)(tilingParams);
+    TilingParams* tiling = (TilingParams*)(tilingParams);
 
     int64_t strideC = static_cast<int64_t>(tiling->strideC);
     uint32_t m = tiling->m;
@@ -146,55 +123,34 @@ CATLASS_GLOBAL __attribute__((aiv)) void AivMatmulKernel(
         constexpr uint32_t STAGES = 2;
         using DispatchPolicy = Catlass::Gemm::MmadAtlasA2DynamicAiv<SCALAR_BUFFER_ELE_NUM, STAGES>;
         AivMatmul<ArchTag, ElementA, LayoutA, ElementB, LayoutB, ElementC, LayoutC, DispatchPolicy>(
-            problemShape, taskTileShape, gmA, layoutA, gmB, layoutB, gmC, layoutC, resource
-        );
+            problemShape, taskTileShape, gmA, layoutA, gmB, layoutB, gmC, layoutC, resource);
     } else if constexpr (dispatchPolicyTag == DispatchPolicyTag::MATMUL_AIV_SIMPLE) {
         constexpr bool IS_TILE_M = true;
         using DispatchPolicy = Catlass::Gemm::MmadAtlasA2DynamicAivSimple<SCALAR_BUFFER_ELE_NUM, IS_TILE_M>;
         AivMatmul<ArchTag, ElementA, LayoutA, ElementB, LayoutB, ElementC, LayoutC, DispatchPolicy>(
-            problemShape, taskTileShape, gmA, layoutA, gmB, layoutB, gmC, layoutC, resource
-        );
+            problemShape, taskTileShape, gmA, layoutA, gmB, layoutB, gmC, layoutC, resource);
     } else if constexpr (dispatchPolicyTag == DispatchPolicyTag::MATMUL_AIV_TRANS) {
         using DispatchPolicy = Catlass::Gemm::MmadAtlasA2DynamicAivTrans<SCALAR_BUFFER_ELE_NUM>;
         AivMatmul<ArchTag, ElementA, LayoutA, ElementB, LayoutB, ElementC, LayoutC, DispatchPolicy>(
-            problemShape, taskTileShape, gmA, layoutA, gmB, layoutB, gmC, layoutC, resource
-        );
+            problemShape, taskTileShape, gmA, layoutA, gmB, layoutB, gmC, layoutC, resource);
     }
 }
 
 template <
-    class ArchTag,
-    class ElementA,
-    class LayoutA,
-    class ElementB,
-    class LayoutB,
-    class ElementC,
-    class LayoutC,
+    class ArchTag, class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC,
     DispatchPolicyTag dispatchPolicyTag>
 void LaunchAivMatmulKernel(
-    aclrtStream &stream,
-    uint64_t hardwareSyncAddr,
-    uint8_t *dA,
-    uint8_t *dB,
-    uint8_t *dC,
-    uint8_t *dTilingParams,
-    TilingParams &tilingParams
-)
+    aclrtStream& stream, uint64_t hardwareSyncAddr, uint8_t* dA, uint8_t* dB, uint8_t* dC, uint8_t* dTilingParams,
+    TilingParams& tilingParams)
 {
     AivMatmulKernel<ArchTag, ElementA, LayoutA, ElementB, LayoutB, ElementC, LayoutC, dispatchPolicyTag>
         <<<tilingParams.blockDim, nullptr, stream>>>(dA, dB, dC, dTilingParams);
 }
 
 template <
-    class ArchTag,
-    class ElementA,
-    class LayoutA,
-    class ElementB,
-    class LayoutB,
-    class ElementC,
-    class LayoutC,
+    class ArchTag, class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC,
     DispatchPolicyTag dispatchPolicyTag>
-size_t AivMatmulKernelGetWorkspaceSize(TilingParams &tilingParams)
+size_t AivMatmulKernelGetWorkspaceSize(TilingParams& tilingParams)
 {
     return 0;
 }

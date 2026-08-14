@@ -7,7 +7,7 @@
  * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
  * See LICENSE in the root of the software repository for the full text of the License.
  */
- 
+
 #ifndef CATLASS_GEMV_BLOCK_BLOCK_GEMV_AIV_HPP
 #define CATLASS_GEMV_BLOCK_BLOCK_GEMV_AIV_HPP
 
@@ -24,26 +24,9 @@
 namespace Catlass::Gemv::Block {
 
 template <
-    class UBTileShape_,
-    class AType_,
-    class XType_,
-    class YType_,
-    class BiasType_,
-    class TileCopy_,
-    class TileVmad_,
-    class TileVmuls_
->
-struct BlockGemv <
-    Gemm::GemvAtlasA2,
-    UBTileShape_,
-    AType_,
-    XType_,
-    YType_,
-    BiasType_,
-    TileCopy_,
-    TileVmad_,
-    TileVmuls_
-> {
+    class UBTileShape_, class AType_, class XType_, class YType_, class BiasType_, class TileCopy_, class TileVmad_,
+    class TileVmuls_>
+struct BlockGemv<Gemm::GemvAtlasA2, UBTileShape_, AType_, XType_, YType_, BiasType_, TileCopy_, TileVmad_, TileVmuls_> {
 public:
     // Type Aliases
     using DispatchPolicy = Gemm::GemvAtlasA2;
@@ -72,11 +55,12 @@ public:
     static constexpr uint32_t workspace_SIZE_ = 32 * 1024;
 
     CATLASS_DEVICE
-    BlockGemv() {}
+    BlockGemv()
+    {}
 
     /// Construct
     CATLASS_DEVICE
-    BlockGemv(Arch::Resource<ArchTag> &resource, uint32_t UBufAddrStart = 0)
+    BlockGemv(Arch::Resource<ArchTag>& resource, uint32_t UBufAddrStart = 0)
     {
         uint32_t UbAOffset = UBufAddrStart;
         uint32_t UbXOffset = UBufAddrStart + Abuf_SIZE_;
@@ -116,13 +100,9 @@ public:
 
     CATLASS_DEVICE
     void operator()(
-        AscendC::GlobalTensor<ElementA> const &gmA, LayoutA const &layoutA,
-        AscendC::GlobalTensor<ElementX> const &gmX, LayoutX const &layoutX,
-        AscendC::GlobalTensor<ElementY> const &gmY, LayoutY const &layoutY,
-        AscendC::GlobalTensor<ElementY> const &gmZ,
-        GemvCoord const &actualShape,
-        float alpha,
-        float beta)
+        AscendC::GlobalTensor<ElementA> const& gmA, LayoutA const& layoutA, AscendC::GlobalTensor<ElementX> const& gmX,
+        LayoutX const& layoutX, AscendC::GlobalTensor<ElementY> const& gmY, LayoutY const& layoutY,
+        AscendC::GlobalTensor<ElementY> const& gmZ, GemvCoord const& actualShape, float alpha, float beta)
     {
         AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>((event_t)(UbOutEventList[UbOutListId]));
         vecCopyGmToUb(UbYTensorList[UbOutListId], gmY, actualShape.m());
@@ -182,12 +162,9 @@ public:
             AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((event_t)(UbInAEventList[UbInListId]));
             auto layoutComputeInUb = layoutA.GetTileLayout(MakeCoord(TileMRound, TileNRound));
             auto layoutTileCompute = layoutA.GetTileLayout(MakeCoord(m_actual, n_actual));
-            tileVmad(UbYTensorList[UbOutListId],
-                UbXTensorList[UbInListId],
-                UbATensorList[UbInListId],
-                UbWTensorList[UbInListId],
-                layoutComputeInUb,
-                layoutTileCompute);
+            tileVmad(
+                UbYTensorList[UbOutListId], UbXTensorList[UbInListId], UbATensorList[UbInListId],
+                UbWTensorList[UbInListId], layoutComputeInUb, layoutTileCompute);
             AscendC::SetFlag<AscendC::HardEvent::V_MTE2>((event_t)(UbInAEventList[UbInListId]));
             AscendC::SetFlag<AscendC::HardEvent::V_MTE2>((event_t)(UbInXEventList[UbInListId]));
             UbInListId = UbInListIdNext;

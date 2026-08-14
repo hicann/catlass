@@ -40,6 +40,7 @@
 __pycache__/
 *.egg-info
 dist/
+site/
 # data bin
 *.bin
 *.dat

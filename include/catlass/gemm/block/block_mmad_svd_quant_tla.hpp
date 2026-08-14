@@ -756,9 +756,6 @@ public:
                 if constexpr (HAS_BIAS && !std::is_same_v<TensorBias, EmptyClass>) {
                     if (initC) {
                         tileMmad(
-                            tensorTileL0C, tensorL0A, tensorL0B, mL0Actual, nL0Actual, kL0Actual, initC,
-                            unitFlag); // normal no bias
-                        tileMmad(
                             tensorTileL0C, tensorL0A, tensorL0B, tensorL0Bias, mL0Actual, nL0Actual, kL0Actual, initC,
                             unitFlag);
                         AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(l0BiasEvent);

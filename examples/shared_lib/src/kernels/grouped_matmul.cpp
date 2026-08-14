@@ -26,20 +26,17 @@
 #include "common.hpp"
 namespace CatlassKernel {
 using namespace Catlass;
-template <class LayoutA,
-          class LayoutB,
-          class LayoutC,
-          class InDType,
-          class OutDType,
-          KernelInfo::GMMSplit GMM_SPLIT,
-          bool K_GT_N>
-void GroupedMatmulImpl(const uint32_t blockNum, aclrtStream stream, const KernelInfo &kernelInfo) {
+template <
+    class LayoutA, class LayoutB, class LayoutC, class InDType, class OutDType, KernelInfo::GMMSplit GMM_SPLIT,
+    bool K_GT_N>
+void GroupedMatmulImpl(const uint32_t blockNum, aclrtStream stream, const KernelInfo& kernelInfo)
+{
     GemmCoord problemShape{kernelInfo.m, kernelInfo.n, kernelInfo.k};
     uint32_t problemCount = kernelInfo.g;
-    uint8_t *deviceA = kernelInfo.inputAddr.at(0);
-    uint8_t *deviceB = kernelInfo.inputAddr.at(1);
-    uint8_t *deviceGroupList = kernelInfo.inputAddr.at(2);
-    uint8_t *deviceC = kernelInfo.outputAddr.at(0);
+    uint8_t* deviceA = kernelInfo.inputAddr.at(0);
+    uint8_t* deviceB = kernelInfo.inputAddr.at(1);
+    uint8_t* deviceGroupList = kernelInfo.inputAddr.at(2);
+    uint8_t* deviceC = kernelInfo.outputAddr.at(0);
 
     constexpr bool SPLITK_OR_SPLITM_K_GT_N = GMM_SPLIT == KernelInfo::GMMSplit::SPLIT_K || !K_GT_N;
 
@@ -52,8 +49,8 @@ void GroupedMatmulImpl(const uint32_t blockNum, aclrtStream stream, const Kernel
     constexpr bool enableShuffleK = true;
 
     using ArchTag = Arch::AtlasA2;
-    using DispatchPolicy = Gemm::MmadAtlasA2PreloadAsync<preloadStages, l1Stages, l0AStages, l0BStages, l0CStages,
-                                                         enableUnitFlag, enableShuffleK>;
+    using DispatchPolicy = Gemm::MmadAtlasA2PreloadAsync<
+        preloadStages, l1Stages, l0AStages, l0BStages, l0CStages, enableUnitFlag, enableShuffleK>;
     using L1TileShape = std::conditional_t<SPLITK_OR_SPLITM_K_GT_N, GemmShape<128, 256, 256>, GemmShape<256, 128, 256>>;
     using L0TileShape = std::conditional_t<SPLITK_OR_SPLITM_K_GT_N, GemmShape<128, 256, 64>, GemmShape<256, 128, 64>>;
 
@@ -63,9 +60,9 @@ void GroupedMatmulImpl(const uint32_t blockNum, aclrtStream stream, const Kernel
 
     using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
     using BlockEpilogue = void;
-    using BlockScheduler =
-        std::conditional_t<SPLITK_OR_SPLITM_K_GT_N, typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>,
-                           typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>>;
+    using BlockScheduler = std::conditional_t<
+        SPLITK_OR_SPLITM_K_GT_N, typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>,
+        typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>>;
 
     // kernel level
     using MatmulKernel = std::conditional_t<
@@ -78,36 +75,42 @@ void GroupedMatmulImpl(const uint32_t blockNum, aclrtStream stream, const Kernel
     RunAdapter<MatmulAdapter>(matmulOp, arguments, stream, blockNum);
 }
 
-void GroupedMatmul(const uint32_t blockNum, aclrtStream stream, const KernelInfo &kernelInfo) {
+void GroupedMatmul(const uint32_t blockNum, aclrtStream stream, const KernelInfo& kernelInfo)
+{
     if (kernelInfo.split == KernelInfo::GMMSplit::SPLIT_K && kernelInfo.transA && !kernelInfo.transB) {
         if (kernelInfo.inputDataType == ACL_FLOAT16 && kernelInfo.outputDataType == ACL_FLOAT16) {
-            GroupedMatmulImpl<layout::ColumnMajor, layout::RowMajor, layout::RowMajor, half, half,
-                              KernelInfo::GMMSplit::SPLIT_K, false>(blockNum, stream, kernelInfo);
+            GroupedMatmulImpl<
+                layout::ColumnMajor, layout::RowMajor, layout::RowMajor, half, half, KernelInfo::GMMSplit::SPLIT_K,
+                false>(blockNum, stream, kernelInfo);
         }
     } else if (kernelInfo.split == KernelInfo::GMMSplit::SPLIT_M) {
         if (!kernelInfo.transA && !kernelInfo.transB) {
             if (kernelInfo.k > kernelInfo.n) {
                 if (kernelInfo.inputDataType == ACL_FLOAT16 && kernelInfo.outputDataType == ACL_FLOAT16) {
-                    GroupedMatmulImpl<layout::RowMajor, layout::RowMajor, layout::RowMajor, half, half,
-                                      KernelInfo::GMMSplit::SPLIT_M, true>(blockNum, stream, kernelInfo);
+                    GroupedMatmulImpl<
+                        layout::RowMajor, layout::RowMajor, layout::RowMajor, half, half, KernelInfo::GMMSplit::SPLIT_M,
+                        true>(blockNum, stream, kernelInfo);
                 }
             } else {
                 if (kernelInfo.inputDataType == ACL_FLOAT16 && kernelInfo.outputDataType == ACL_FLOAT16) {
-                    GroupedMatmulImpl<layout::RowMajor, layout::RowMajor, layout::RowMajor, half, half,
-                                      KernelInfo::GMMSplit::SPLIT_M, false>(blockNum, stream, kernelInfo);
+                    GroupedMatmulImpl<
+                        layout::RowMajor, layout::RowMajor, layout::RowMajor, half, half, KernelInfo::GMMSplit::SPLIT_M,
+                        false>(blockNum, stream, kernelInfo);
                 }
             }
         }
         if (!kernelInfo.transA && kernelInfo.transB) {
             if (kernelInfo.k > kernelInfo.n) {
                 if (kernelInfo.inputDataType == ACL_FLOAT16 && kernelInfo.outputDataType == ACL_FLOAT16) {
-                    GroupedMatmulImpl<layout::RowMajor, layout::ColumnMajor, layout::RowMajor, half, half,
-                                      KernelInfo::GMMSplit::SPLIT_M, true>(blockNum, stream, kernelInfo);
+                    GroupedMatmulImpl<
+                        layout::RowMajor, layout::ColumnMajor, layout::RowMajor, half, half,
+                        KernelInfo::GMMSplit::SPLIT_M, true>(blockNum, stream, kernelInfo);
                 }
             } else {
                 if (kernelInfo.inputDataType == ACL_FLOAT16 && kernelInfo.outputDataType == ACL_FLOAT16) {
-                    GroupedMatmulImpl<layout::RowMajor, layout::ColumnMajor, layout::RowMajor, half, half,
-                                      KernelInfo::GMMSplit::SPLIT_M, false>(blockNum, stream, kernelInfo);
+                    GroupedMatmulImpl<
+                        layout::RowMajor, layout::ColumnMajor, layout::RowMajor, half, half,
+                        KernelInfo::GMMSplit::SPLIT_M, false>(blockNum, stream, kernelInfo);
                 }
             }
         }

@@ -12,7 +12,6 @@
 
 import logging
 import os
-import shutil
 import subprocess
 import sys
 import time
@@ -67,7 +66,6 @@ class CMakeBuild(build_ext):
             cwd=self.build_temp,
         )
 
-
     def generate_pyi(self, ext):
         extdir = os.path.abspath(os.path.dirname(self.get_ext_fullpath(ext.name)))
         module_name = ext.name.split(".")[-1]
@@ -75,9 +73,9 @@ class CMakeBuild(build_ext):
         stubgen_bin = os.path.join(os.path.dirname(sys.executable), "pybind11-stubgen")
         try:
             subprocess.check_call([stubgen_bin] + stubgen_args, cwd=extdir)
-        except FileNotFoundError as e:
+        except FileNotFoundError:
             logging.warning("No pybind11-stubgen found")
-        except subprocess.CalledProcessError as e:
+        except subprocess.CalledProcessError:
             logging.warning("pybind11-stubgen exited abnormally")
 
 

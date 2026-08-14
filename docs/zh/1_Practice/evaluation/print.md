@@ -1,6 +1,6 @@
 # 在CATLASS样例工程进行设备侧打印
 
-编译器提供设备侧打印函数`cce::printf`进行调试，用法与C标准库的`printf`一致。
+编译器提供设备侧打印函数`cce::printf`进行调试，用法与 C 标准库的 `printf` 一致。
 
 - 支持`cube/vector/mix`算子
 - 支持格式化字符串
@@ -45,21 +45,21 @@
 
 ### 编译运行
 
-1. 基于[快速上手](../01_quick_start.md)，打开工具的编译开关`--enable_print`， 使能设备侧打印特性编译算子样例。
+1. 基于[快速上手](../01_quick_start.md)，打开工具的编译开关`--enable_print`，使能设备侧打印特性编译算子样例。
 
-```bash
-bash scripts/build.sh --enable_print 09_splitk_matmul
-```
+    ```bash
+    bash scripts/build.sh --enable_print 09_splitk_matmul
+    ```
 
-1. 切换到可执行文件的编译目录`output/bin`下，直接执行算子样例程序。
+2. 切换到可执行文件的编译目录`output/bin`下，直接执行算子样例程序。
 
-```bash
-cd output/bin
-# 可执行文件名 |矩阵m轴|n轴|k轴|Device ID（可选）
-./09_splitk_matmul 256 512 1024 0
-```
+    ```bash
+    cd output/bin
+    # 可执行文件名 |矩阵m轴|n轴|k轴|Device ID（可选）
+    ./09_splitk_matmul 256 512 1024 0
+    ```
 
-- ⚠ 注意事项
+- ⚠️ **注意**
   - 目前`设备侧打印`仅支持打印`GM`、`UB`和`SB(Scalar Buffer)`上的数值。
 
 ### 输出示例

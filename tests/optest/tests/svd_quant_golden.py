@@ -16,9 +16,44 @@ from typing import Tuple
 
 import torch
 
-from mx_golden import _pack_fp4_nibbles, _quantize_to_fp4_lut
+from mx_golden import _pack_fp4_nibbles
 
 _BLOCK_SIZE = 32
+
+# ─────────────────────────────────────────────────────────────
+#  NPU-strict _quantize_to_fp4_lut  (ties-to-even + signbit)
+# ─────────────────────────────────────────────────────────────
+
+_FP4_LUT = {
+    "E2M1": torch.tensor(
+        [0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 0.0, -0.5, -1.0, -1.5, -2.0, -3.0, -4.0, -6.0],
+        dtype=torch.float32,
+    ),
+}
+
+
+def _quantize_to_fp4_lut(values: torch.Tensor, format_name: str) -> Tuple[torch.Tensor, torch.Tensor]:
+    lut = _FP4_LUT[format_name].to(values.device)
+    clamped = values.clamp(-6.0, 6.0)
+    distances = (clamped.unsqueeze(-1) - lut).abs()
+    indices = torch.argmin(distances, dim=-1)
+    min_dist = distances.gather(-1, indices.unsqueeze(-1)).squeeze(-1)
+
+    # NPU CAST_RINT 行为: 符号零 + ties-to-even mantissa。
+    # 1) ±0.0: 两者都是 even-mantissa，按原始值的 signbit 选择符号零
+    signbit = torch.signbit(values)
+    tie_0_8 = (distances[..., 0] == distances[..., 8]) & (distances[..., 0] == min_dist)
+    indices = torch.where(tie_0_8 & signbit, torch.full_like(indices, 8), indices)
+
+    # 2) 其他中点: odd-mantissa (idx%2==1) 若与相邻 even-mantissa 等距，切换到后者
+    is_odd = (indices & 1) == 1
+    next_idx = indices + 1
+    next_dist = distances.gather(-1, next_idx.clamp(max=15).unsqueeze(-1)).squeeze(-1)
+    tie_next = is_odd & (indices < 15) & (next_dist == min_dist)
+    indices = torch.where(tie_next, indices + 1, indices)
+
+    quantized = lut[indices]
+    return quantized, indices.to(torch.uint8)
 _EPSILON = 1e-12
 _MIN_SCALE_EXP = -128
 _MAX_SCALE_EXP = 127
@@ -66,7 +101,8 @@ def _quantize_fp4_with_qmax(
     if is_normal_matrix:
         exp = torch.floor(torch.log2(max_abs.clamp(min=_EPSILON))) - 2.0
     else:
-        exp = torch.ceil(torch.log2(max_abs.clamp(min=_EPSILON) / qmax))
+        qmaxInv = torch.tensor(1.0 / qmax, dtype=matrix.dtype, device=matrix.device)
+        exp = torch.ceil(torch.log2(torch.clamp(max_abs, min=_EPSILON) * qmaxInv))
     exp = torch.where(max_abs < _EPSILON, torch.zeros_like(exp), exp).clamp(_MIN_SCALE_EXP, _MAX_SCALE_EXP)
     scale = torch.pow(torch.tensor(2.0, dtype=torch.float32, device=matrix.device), exp)
     scaled = blocks / scale.unsqueeze(-1)

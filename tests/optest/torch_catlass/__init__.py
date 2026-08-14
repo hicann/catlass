@@ -2,10 +2,12 @@
 # Copyright (c) 2026 Huawei Technologies Co., Ltd.
 # This file is a part of the CANN Open Software.
 # Licensed under CANN Open Software License Agreement Version 2.0 (the "License").
-# Please refer to the License for details. You may not use this file except in compliance with the License.
-# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
-# BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE. See LICENSE in the root of
-# the software repository for the full text of the License.
+# Please refer to the License for details. You may not use this file except in compliance
+# with the License.
+# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS
+# OR IMPLIED, INCLUDING
+# BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+# See LICENSE in the root of the software repository for the full text of the License.
 
 import ctypes
 import os
@@ -50,7 +52,6 @@ __all__ = [
     "small_matmul",
     "single_core_splitk_matmul",
     "streamk_matmul",
-    "big_matmul_tla",
     "sparse_matmul_tla",
     "quant_optimized_matmul_tla",
     "ascend950_basic_matmul",
@@ -70,6 +71,7 @@ __all__ = [
     "ascend950_batched_matmul",
     "ascend950_streamk_matmul",
     "flash_attention_infer",
+    "conv_bias",
     "flash_attention_infer_tla",
     "ascend950_flash_attention_infer",
     "ascend950_fp8_mx_flash_attention_infer",
@@ -80,9 +82,8 @@ __all__ = [
     "ascend950_multi_core_splitk_matmul",
     "ascend950_tail_multi_core_splitk_matmul",
     "ascend950_flash_attention_chunk_prefill",
-    "ascend950_fp4_mx_matmul_pertoken_perchannel",
-    "ascend950_fp8_epilogue_quant_matmul",
     "clear_jit_cache",
+    "symm",
     "__version__",
     "__catlass_version__",
 ]
@@ -97,8 +98,8 @@ def enable_mssanitizer():
 
 def clear_jit_cache():
     """Remove all JIT-compiled kernel cache files on disk."""
-    import shutil
     import glob as _glob
+    import shutil
 
     cache_dir = os.environ.get("CATLASS_JIT_CACHE_DIR", "")
     if cache_dir and os.path.isdir(cache_dir):
@@ -114,7 +115,7 @@ def clear_jit_cache():
 
 
 def get_npu_arch():
-    """Return the CATLASS architecture id for the active torch-npu device."""
+    """Return the CATLASS architecture id for the active TorchNPU device."""
     device_count = torch_npu.npu.device_count()
     if device_count <= 0:
         raise RuntimeError("No Ascend NPU device is available for torch-catlass")

@@ -1,10 +1,10 @@
-# 在CATLASS样例工程使用AscendC算子调测API
+# 在CATLASS样例工程中使用AscendC算子调测API
 
 AscendC算子调测API是AscendC提供的调试能力，可进行kernel内部的打印([`printf`](https://www.hiascend.com/document/redirect/CannCommunityascendcapiprintf))、Tensor内容的查看([`DumpTensor`](https://www.hiascend.com/document/redirect/CannCommunityascendcapidumptensor))。
 
 ## 使用示例
 
-下面以`00_basic_matmul`为例，演示基于[AscendC算子调测API](https://www.hiascend.com/document/redirect/CannCommunityascendcapidumptensor)的测试过程。
+下面以`00_basic_matmul`为例，演示基于[AscendC算子调测API——DumpTensor](https://www.hiascend.com/document/redirect/CannCommunityascendcapidumptensor)的测试过程。
 
 ### 插入调试代码
 
@@ -55,17 +55,17 @@ void operator()<AscendC::AIC>(Params const &params) {
 
 1. 参考[快速上手](../01_quick_start.md)，编译算子样例。当前版本无需传入额外编译选项，若代码中调用调试接口，编译器将自动使能。
 
-```bash
-bash scripts/build.sh 00_basic_matmul
-```
+    ```bash
+    bash scripts/build.sh 00_basic_matmul
+    ```
 
-1. 切换到可执行文件的编译目录`output/bin`下，直接执行算子样例程序。
+2. 切换到可执行文件的编译目录`output/bin`下，直接执行算子样例程序。
 
-```bash
-cd output/bin
-# 可执行文件名 |矩阵m轴|n轴|k轴|Device ID（可选）
-./00_basic_matmul 256 512 1024 0
-```
+    ```bash
+    cd output/bin
+    # 可执行文件名 |矩阵m轴|n轴|k轴|Device ID（可选）
+    ./00_basic_matmul 256 512 1024 0
+    ```
 
 - ⚠ 注意事项
   - 目前[`DumpTensor`](https://www.hiascend.com/document/redirect/CannCommunityascendcapidumptensor)**不**支持打印`L0A`、`L0B`、`FixPipe`上的数值。特别地，在`Ascend 950PR/Ascend 950DT`上，额外**不**支持打印`L1`上的数值。

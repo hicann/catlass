@@ -29,7 +29,7 @@ CV融合算子性能调优时不能只看单个阶段的算力利用率，它的
 | 每核任务量或每核耗时        | 判断核间负载是否均衡                   |
 | workspace大小和对齐信息     | 判断CV阶段间中间结果是否引入额外GM瓶颈 |
 
-如果需要观察更细的流水并行关系，可以结合[性能流水仿真](../evaluation/performance_tools.md#性能流水仿真)，重点看AIC和AIV之间是否存在长时间互等。
+如果需要观察更细的流水并行关系，可以结合[性能流水仿真](../evaluation/performance_tools.md#performance-pipeline-simulation)，重点看AIC和AIV之间是否存在长时间互等。
 
 ### 建立融合收益模型
 
@@ -200,7 +200,7 @@ Stream-K尾轮切分后，如果等所有普通块完成后再让AIV归约，Vec
 Stream-K适用于尾轮负载不均衡的shape，经验判断如下：
 
 ```text
-B = CeilDiv(M, m1) * CeilDiv(N, n1)
+B = CeilDiv(M, m1) * CeilDiv(N, n1) # m1/n1为切分任务块的L1TileShape::M/N取值
 当 B / C > 1 且 B % C <= C * 0.8 时，可能收益较好
 ```
 

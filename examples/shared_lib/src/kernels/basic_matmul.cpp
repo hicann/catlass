@@ -7,7 +7,7 @@
  * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
  * See LICENSE in the root of the software repository for the full text of the License.
  */
- 
+
 #include "catlass/gemm/kernel/basic_matmul.hpp"
 
 #include <acl/acl.h>
@@ -29,11 +29,12 @@ namespace CatlassKernel {
 using namespace Catlass;
 
 template <class LayoutA, class LayoutB, class LayoutC, class InDType, class OutDType>
-void BasicMatmulImpl(const uint32_t blockNum, aclrtStream stream, const KernelInfo &kernelInfo) {
+void BasicMatmulImpl(const uint32_t blockNum, aclrtStream stream, const KernelInfo& kernelInfo)
+{
     GemmCoord problemShape{kernelInfo.m, kernelInfo.n, kernelInfo.k};
-    uint8_t *deviceA = kernelInfo.inputAddr.at(0);
-    uint8_t *deviceB = kernelInfo.inputAddr.at(1);
-    uint8_t *deviceC = kernelInfo.outputAddr.at(0);
+    uint8_t* deviceA = kernelInfo.inputAddr.at(0);
+    uint8_t* deviceB = kernelInfo.inputAddr.at(1);
+    uint8_t* deviceC = kernelInfo.outputAddr.at(0);
 
     using ArchTag = Arch::AtlasA2;
     using DispatchPolicy = Gemm::MmadAtlasA2Pingpong<true>;
@@ -60,9 +61,10 @@ void BasicMatmulImpl(const uint32_t blockNum, aclrtStream stream, const KernelIn
     RunAdapter<MatmulAdapter>(matmulOp, arguments, stream, blockNum);
 }
 
-void BasicMatmul(const uint32_t blockNum, aclrtStream stream, const KernelInfo &kernelInfo) {
-    if (kernelInfo.inputDataType == ACL_FLOAT16 && kernelInfo.outputDataType == ACL_FLOAT16 && !kernelInfo.transA
-        && !kernelInfo.transB) {
+void BasicMatmul(const uint32_t blockNum, aclrtStream stream, const KernelInfo& kernelInfo)
+{
+    if (kernelInfo.inputDataType == ACL_FLOAT16 && kernelInfo.outputDataType == ACL_FLOAT16 && !kernelInfo.transA &&
+        !kernelInfo.transB) {
         BasicMatmulImpl<layout::RowMajor, layout::RowMajor, layout::RowMajor, half, half>(blockNum, stream, kernelInfo);
     }
     // If more conditions are needed, add branches manually.

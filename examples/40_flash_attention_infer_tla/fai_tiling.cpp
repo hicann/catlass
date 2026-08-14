@@ -48,7 +48,8 @@ const int32_t NUM256 = 256;
 const int32_t NUM512 = 512;
 const int32_t WORKSPACE_BLOCK_SIZE_DB = 131072;
 
-enum class MaskType {
+enum class MaskType
+{
     NO_MASK = 0,
     MASK_SPEC = 1,
     MASK_CAUSUAL = 2
@@ -62,13 +63,14 @@ struct FAInfo {
     int32_t blockSize = 0;
     int32_t kvHeads = 0;
     int32_t batch = 0;
-    int64_t *qSeqlenList{nullptr};
-    int64_t *kvSeqlenList{nullptr};
-    int64_t *qSeqlen{nullptr};
+    int64_t* qSeqlenList{nullptr};
+    int64_t* kvSeqlenList{nullptr};
+    int64_t* qSeqlen{nullptr};
     MaskType maskType = MaskType::MASK_SPEC;
 };
 
-void FillBasicTilingData(const FAInfo &faInfo, FATilingData &faTilingData, int64_t maxKvSeqlen) {
+void FillBasicTilingData(const FAInfo& faInfo, FATilingData& faTilingData, int64_t maxKvSeqlen)
+{
     uint32_t maxNumBlocksPerBatch = (maxKvSeqlen + faInfo.blockSize - 1) / faInfo.blockSize;
     float scaleValue = static_cast<float>(1.0 / std::sqrt(1.0 * faInfo.embeddingSize));
     faTilingData.batch = static_cast<uint32_t>(faInfo.batch);
@@ -83,7 +85,8 @@ void FillBasicTilingData(const FAInfo &faInfo, FATilingData &faTilingData, int64
     faTilingData.scaleValue = scaleValue;
 }
 
-uint32_t GetQNBlockTile(int64_t qSeqlen, uint32_t groupSize) {
+uint32_t GetQNBlockTile(int64_t qSeqlen, uint32_t groupSize)
+{
     uint32_t qRowNumCeil = 128;
     // A trick is used to ensure the qN tile is a even number,
     // thus most tasks have balanced workload between two vec cores,
@@ -95,12 +98,14 @@ uint32_t GetQNBlockTile(int64_t qSeqlen, uint32_t groupSize) {
     return qNBlockTile;
 }
 
-uint32_t GetQSBlockTile(int64_t kvSeqlen) {
+uint32_t GetQSBlockTile(int64_t kvSeqlen)
+{
     uint32_t qSBlockTile = 128;
     return qSBlockTile;
 }
 
-void FillSplitCoreTilingData(const FAInfo &faInfo, FATilingData &faTilingData) {
+void FillSplitCoreTilingData(const FAInfo& faInfo, FATilingData& faTilingData)
+{
     uint32_t totalTaskNum = 0;
     uint32_t groupSize = faInfo.numHeads / faInfo.kvHeads;
     for (int32_t batchIdx = 0; batchIdx < faInfo.batch; batchIdx++) {
@@ -120,7 +125,8 @@ void FillSplitCoreTilingData(const FAInfo &faInfo, FATilingData &faTilingData) {
     faTilingData.totalTaskNum = totalTaskNum;
 }
 
-void FillWorkSpaceTilingData(uint32_t blockDim, FATilingData &faTilingData) {
+void FillWorkSpaceTilingData(uint32_t blockDim, FATilingData& faTilingData)
+{
     uint64_t mm1OutSize = blockDim * WORKSPACE_BLOCK_SIZE_DB * NUM4 * NUM3;
     uint64_t smOnlineOutSize = blockDim * WORKSPACE_BLOCK_SIZE_DB * NUM2 * NUM3;
     uint64_t mm2OutSize = blockDim * WORKSPACE_BLOCK_SIZE_DB * NUM4 * NUM3;
@@ -133,7 +139,8 @@ void FillWorkSpaceTilingData(uint32_t blockDim, FATilingData &faTilingData) {
     faTilingData.workSpaceSize = workSpaceSize;
 }
 
-int32_t GetFATilingParam(const FAInfo &faInfo, uint32_t blockDim, FATilingData &faTilingData) {
+int32_t GetFATilingParam(const FAInfo& faInfo, uint32_t blockDim, FATilingData& faTilingData)
+{
     if (faInfo.qSeqlenList == nullptr || faInfo.kvSeqlenList == nullptr) {
         cerr << "[ERROR] pointer tilingData or seq is nullptr." << endl;
         return -1;

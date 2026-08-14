@@ -28,10 +28,10 @@ struct CopyL1ToL0BTla {
     // Methods
 
     CATLASS_DEVICE
-    CopyL1ToL0BTla(){};
+    CopyL1ToL0BTla() {};
 
     template <class TensorDst, class TensorSrc>
-    CATLASS_DEVICE void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor)
+    CATLASS_DEVICE void operator()(TensorDst const& dstTensor, TensorSrc const& srcTensor)
     {
         uint32_t cin1 = tla::get<0>(srcTensor.shape());
         uint32_t kh = tla::get<1>(srcTensor.shape());
@@ -40,14 +40,14 @@ struct CopyL1ToL0BTla {
         uint32_t coutOrg = tla::get<2>(srcTensor.stride()) / ELE_NUM_PER_C0;
 
         AscendC::LoadData2DParamsV2 loadDataParams;
-        
+
         loadDataParams.mStartPosition = 0;
         loadDataParams.kStartPosition = 0;
         loadDataParams.mStep = CeilDiv<C0_NUM_PER_FRACTAL>(cout);
         loadDataParams.kStep = cin1 * kh * kw;
         loadDataParams.srcStride = CeilDiv<C0_NUM_PER_FRACTAL>(coutOrg);
         loadDataParams.dstStride = tla::get<1, 1>(dstTensor.shape());
-        loadDataParams.ifTranspose = false; 
+        loadDataParams.ifTranspose = false;
 
         auto dstOffset = dstTensor.layout()(dstTensor.coord());
         auto srcOffset = srcTensor.layout()(srcTensor.coord());

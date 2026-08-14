@@ -89,7 +89,7 @@ static_assert(std::is_same_v<ArchTag, Arch::AtlasA2> || std::is_same_v<ArchTag, 
     "ArchTag can only be AtlasA2 or Ascend950!");
 ```
 
-需要注意的是，在后续Block层实现中如果利用到与Dispatch组件有关的一些特定内容，也可通过SFINAE实现相应的组件。例如[`00_basic_matmul`](../../../../examples/00_basic_matmul/README.md)中所使用的Block组件需要利用Dispatch中声明的STAGES信息，而在公共组件[`MmadPingpong`](../../../../include/catlass/gemm/dispatch_policy.hpp#L292)中，其细化了不同区域上的粒度——包括`L1A_STAGES`, `L1B_STAGES`等，这里使用了最小保守策略进行提取（如下），详见[这里](https://gitcode.com/cann/catlass/blob/8b98e2f4f0822d77cc545a3167d7e150800da596/include/catlass/gemm/block/block_mmad_pingpong.hpp#L58)。
+需要注意的是，在后续Block层实现中如果利用到与Dispatch组件有关的一些特定内容，也可通过SFINAE实现相应的组件。例如[`00_basic_matmul`](../../../../examples/00_basic_matmul/README.md)中所使用的Block组件需要利用Dispatch中声明的STAGES信息，而在公共组件[`MmadPingpong`](../../../../include/catlass/gemm/dispatch_policy.hpp#L292)中，其细化了不同区域上的粒度——包括`L1A_STAGES`, `L1B_STAGES`等，这里使用了最小保守策略进行提取（如下），[详见](https://gitcode.com/cann/catlass/blob/8b98e2f4f0822d77cc545a3167d7e150800da596/include/catlass/gemm/block/block_mmad_pingpong.hpp#L58)。
 
 ```cpp
 // ...
@@ -133,7 +133,7 @@ using L0TileShape = GemmShape<128, 256, 64>;
 ```diff
 -    // Prepare hardware sync address
 -    uint64_t hardwareSyncAddr{0};
---    ACL_CHECK(aclrtGetHardwareSyncAddr(reinterpret_cast<void**>(&hardwareSyncAddr)));
+-    ACL_CHECK(aclrtGetHardwareSyncAddr(reinterpret_cast<void**>(&hardwareSyncAddr)));
 
 -    RunAdapter(gemm_op, arguments, stream, aicCoreNum, hardwareSyncAddr);
 +    RunAdapter(gemm_op, arguments, stream, aicCoreNum);
@@ -152,7 +152,7 @@ using L0TileShape = GemmShape<128, 256, 64>;
 - [ ] **Epilogue Block 特化**：为新的公共 Epilogue Dispatch 增加 BlockEpilogue 特化
 - [ ] **Tile 类型选择器**：检查 `L1AndL0TypeSelector` 是否需 arch-aware 版本，Ascend950 L0 类型可能不同
 - [ ] **Arch Guard**：检查是否使用 `__NPU_ARCH__`(Device侧) 或 `CATLASS_ARCH`(Host侧) 守卫，根据需要补充
-- [ ] **hardwareSyncAddr 移除**：删除 `aclrtGetHardwareSyncAddr` 调用，`RunAdapter` 去掉第三个参数
+- [ ] **hardwareSyncAddr 移除**：删除 `aclrtGetHardwareSyncAddr` 调用，`RunAdapter` 去掉第五个参数
 - [ ] **编译验证**：编译选项加 `-DCATLASS_ARCH=3510`
 
 ---

@@ -87,7 +87,7 @@ CATLASS_HOST_DEVICE constexpr auto product_each(T const& t)
 // ---------------------------------------------------------------------------
 
 #define TLA_TUPLE_BINARY_OP(OP)                                                               \
-    template <class T0, class T1, TLA_REQUIRES(is_tuple_v<T0> || is_tuple_v<T1>)>             \
+    template <class T0, class T1, TLA_REQUIRES((is_tuple_v<T0>) || (is_tuple_v<T1>))>         \
     CATLASS_HOST_DEVICE constexpr auto operator OP(T0 const& a, T1 const& b)                  \
     {                                                                                         \
         if constexpr (is_tuple_v<T0> && is_tuple_v<T1>) {                                     \
@@ -146,7 +146,7 @@ CATLASS_HOST_DEVICE constexpr auto maximum(T0 const& t0, T1 const& t1)
 }
 
 // clip_sub: element-wise clamping subtraction (recursive, supports broadcasting)
-template <class T0, class T1, TLA_REQUIRES(is_tuple_v<T0> || is_tuple_v<T1>)>
+template <class T0, class T1, TLA_REQUIRES((is_tuple_v<T0>) || (is_tuple_v<T1>))>
 CATLASS_HOST_DEVICE constexpr auto clip_sub(T0 const& t0, T1 const& t1)
 {
     if constexpr (is_tuple_v<T0> && is_tuple_v<T1>) {
@@ -165,7 +165,7 @@ CATLASS_HOST_DEVICE constexpr auto clip_sub(T0 const& t0, T1 const& t1)
 // - both tuples: pad shorter with 1, element-wise
 // - tuple / scalar: cascading (divisor consumed across elements)
 // - scalar / tuple: product then divide
-template <class T0, class T1, TLA_REQUIRES(is_tuple_v<T0> || is_tuple_v<T1>)>
+template <class T0, class T1, TLA_REQUIRES((is_tuple_v<T0>) || (is_tuple_v<T1>))>
 CATLASS_HOST_DEVICE constexpr auto ceil_div(T0 const& a, T1 const& b)
 {
     if constexpr (is_tuple_v<T0> && is_tuple_v<T1>) {
@@ -187,7 +187,7 @@ CATLASS_HOST_DEVICE constexpr auto ceil_div(T0 const& a, T1 const& b)
 }
 
 // round_up: element-wise round up to multiple (recursive, supports broadcasting)
-template <class T0, class T1, TLA_REQUIRES(is_tuple_v<T0> || is_tuple_v<T1>)>
+template <class T0, class T1, TLA_REQUIRES((is_tuple_v<T0>) || (is_tuple_v<T1>))>
 CATLASS_HOST_DEVICE constexpr auto round_up(T0 const& t0, T1 const& t1)
 {
     if constexpr (is_tuple_v<T0> && is_tuple_v<T1>) {

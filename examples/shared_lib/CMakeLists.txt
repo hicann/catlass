@@ -31,7 +31,7 @@ add_dependencies(shared_lib catlass_kernel_static)
 if(DEFINED CATLASS_BUILD_USAGE AND CATLASS_BUILD_USAGE)
     add_executable(basic_matmul_shared_lib basic_matmul_shared_lib.cpp)
     target_compile_definitions(basic_matmul_shared_lib PRIVATE CATLASS_EXAMPLE_NAME=basic_matmul_shared_lib)
-    target_include_directories(basic_matmul_shared_lib PRIVATE 
+    target_include_directories(basic_matmul_shared_lib PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${ASCEND_HOME_PATH}/include
         ${ASCEND_HOME_PATH}/include/aclnn)

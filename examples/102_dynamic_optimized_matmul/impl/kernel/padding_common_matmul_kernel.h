@@ -40,42 +40,44 @@ struct TileCopyDynamicOptimized : public Catlass::Gemm::Tile::TileCopy<ArchTag, 
     using CopyGmToL1B = typename Catlass::Gemm::Tile::CopyGmToL1DynamicOptimized<ArchTag, BType>;
 };
 
-template <class ArchTag, class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC,
-    PaddingTag paddingTagA, PaddingTag paddingTagB,  PaddingTag paddingTagC>
-[[bisheng::core_ratio(1, 2)]] CATLASS_GLOBAL void PaddingCommonMatmulKernel(uint64_t hardwareSyncAddr, __gm__ uint8_t *__restrict__ gmA,
-    __gm__ uint8_t *__restrict__ gmB, __gm__ uint8_t *__restrict__ gmC, __gm__ uint8_t *__restrict__ gmWA,
-    __gm__ uint8_t *__restrict__ gmWB, __gm__ uint8_t *__restrict__ gmWC, __gm__ uint8_t *__restrict__ tilingData)
+template <
+    class ArchTag, class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC,
+    PaddingTag paddingTagA, PaddingTag paddingTagB, PaddingTag paddingTagC>
+[[bisheng::core_ratio(1, 2)]] CATLASS_GLOBAL void PaddingCommonMatmulKernel(
+    uint64_t hardwareSyncAddr, __gm__ uint8_t* __restrict__ gmA, __gm__ uint8_t* __restrict__ gmB,
+    __gm__ uint8_t* __restrict__ gmC, __gm__ uint8_t* __restrict__ gmWA, __gm__ uint8_t* __restrict__ gmWB,
+    __gm__ uint8_t* __restrict__ gmWC, __gm__ uint8_t* __restrict__ tilingData)
 {
     AscendC::SetSyncBaseAddr(hardwareSyncAddr);
     Catlass::Arch::Resource<ArchTag> resource;
 
     /*
-    * Load tiling parameters from global memory (tilingData) to local array tilingParams
-    * 
-    * tilingData memory layout corresponds to tilingParams as follows:
-    * --------------------------------------------------------------------------------
-    * | Offset | Size | Variable         | Type      | Description                   |
-    * |--------|------|------------------|-----------|-------------------------------|
-    * | 0-7    | 8    | strideA          | uint64_t  | matrix A stride               |
-    * | 8-15   | 8    | strideB          | uint64_t  | matrix B stride               |
-    * | 16-23  | 8    | strideC          | uint64_t  | matrix C stride               |
-    * | 24-27  | 4    | m                | uint32_t  | matrix M dimension            |
-    * | 28-31  | 4    | n                | uint32_t  | matrix N dimension            |
-    * | 32-35  | 4    | k                | uint32_t  | matrix K dimension            |
-    * | 36-37  | 2    | m1               | uint16_t  | l1 mTile(16-bit to save space)|
-    * | 38-39  | 2    | n1               | uint16_t  | l1 nTile(16-bit to save space)|
-    * | 40-41  | 2    | k1               | uint16_t  | l1 kTile(16-bit to save space)|
-    * | 42-42  | 1    | swizzleOffset    | uint8_t   | swizzle offset                |
-    * | 43-43  | 1    | swizzleDirection | uint8_t   | swizzle direction             |
-    * | 44-47  | 4    | (reserved)       | -         | unused                        |
-    * --------------------------------------------------------------------------------
-    */
+     * Load tiling parameters from global memory (tilingData) to local array tilingParams
+     *
+     * tilingData memory layout corresponds to tilingParams as follows:
+     * --------------------------------------------------------------------------------
+     * | Offset | Size | Variable         | Type      | Description                   |
+     * |--------|------|------------------|-----------|-------------------------------|
+     * | 0-7    | 8    | strideA          | uint64_t  | matrix A stride               |
+     * | 8-15   | 8    | strideB          | uint64_t  | matrix B stride               |
+     * | 16-23  | 8    | strideC          | uint64_t  | matrix C stride               |
+     * | 24-27  | 4    | m                | uint32_t  | matrix M dimension            |
+     * | 28-31  | 4    | n                | uint32_t  | matrix N dimension            |
+     * | 32-35  | 4    | k                | uint32_t  | matrix K dimension            |
+     * | 36-37  | 2    | m1               | uint16_t  | l1 mTile(16-bit to save space)|
+     * | 38-39  | 2    | n1               | uint16_t  | l1 nTile(16-bit to save space)|
+     * | 40-41  | 2    | k1               | uint16_t  | l1 kTile(16-bit to save space)|
+     * | 42-42  | 1    | swizzleOffset    | uint8_t   | swizzle offset                |
+     * | 43-43  | 1    | swizzleDirection | uint8_t   | swizzle direction             |
+     * | 44-47  | 4    | (reserved)       | -         | unused                        |
+     * --------------------------------------------------------------------------------
+     */
 
     // This kernel only needs to read TILING_PARAMS_BYTES bytes of data.
     constexpr uint32_t TILING_PARAMS_BYTES = 48;
     uint8_t tilingParams[TILING_PARAMS_BYTES];
     ReadTilingParams(tilingParams, tilingData, TILING_PARAMS_BYTES);
-    // The byte size of the TilingParams structure may exceed TILING_PARAMS_BYTES. 
+    // The byte size of the TilingParams structure may exceed TILING_PARAMS_BYTES.
     // Please avoid using pointers to access data beyond TILING_PARAMS_BYTES !!!
     TilingParams* tiling = (TilingParams*)(tilingParams);
 
@@ -122,17 +124,19 @@ template <class ArchTag, class ElementA, class LayoutA, class ElementB, class La
     // kernel level
     using MatmulKernel = Catlass::Gemm::Kernel::DynamicPaddingCommonMatmul<
         PaddingA, PaddingB, BlockMmad, BlockEpilogue, BlockScheduler, RemovePaddingC>;
-    typename MatmulKernel::Params params{problemShape, l1TileShape, gmA, layoutA, gmB, layoutB, gmC, layoutC, 
-        gmWA, gmWB, gmWC, swizzleOffset, swizzleDirection};
+    typename MatmulKernel::Params params{problemShape, l1TileShape, gmA,  layoutA, gmB,           layoutB,         gmC,
+                                         layoutC,      gmWA,        gmWB, gmWC,    swizzleOffset, swizzleDirection};
     // call a kernel
     MatmulKernel matmul;
     matmul(params, resource);
 }
 
-template <class ArchTag, class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC,
-    PaddingTag paddingTagA, PaddingTag paddingTagB,  PaddingTag paddingTagC>
-void LaunchPaddingCommonMatmulKernel(aclrtStream &stream, uint64_t hardwareSyncAddr, uint8_t *dA, uint8_t *dB, uint8_t *dC,
-    uint8_t *dW, uint8_t *dTilingParams, TilingParams &tilingParams)
+template <
+    class ArchTag, class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC,
+    PaddingTag paddingTagA, PaddingTag paddingTagB, PaddingTag paddingTagC>
+void LaunchPaddingCommonMatmulKernel(
+    aclrtStream& stream, uint64_t hardwareSyncAddr, uint8_t* dA, uint8_t* dB, uint8_t* dC, uint8_t* dW,
+    uint8_t* dTilingParams, TilingParams& tilingParams)
 {
     using PaddingBuilderA = Catlass::Gemm::Kernel::PaddingBuilder<paddingTagA, ArchTag, ElementA, LayoutA>;
     using PaddingBuilderB = Catlass::Gemm::Kernel::PaddingBuilder<paddingTagB, ArchTag, ElementB, LayoutB>;
@@ -143,9 +147,9 @@ void LaunchPaddingCommonMatmulKernel(aclrtStream &stream, uint64_t hardwareSyncA
     uint32_t m1 = static_cast<uint32_t>(tilingParams.m1);
     uint32_t n1 = static_cast<uint32_t>(tilingParams.n1);
     uint32_t k1 = static_cast<uint32_t>(tilingParams.k1);
-    uint8_t *dWA = nullptr;
-    uint8_t *dWB = nullptr;
-    uint8_t *dWC = nullptr;
+    uint8_t* dWA = nullptr;
+    uint8_t* dWB = nullptr;
+    uint8_t* dWC = nullptr;
     size_t sizeWA = 0, sizeWB = 0;
 
     dWA = dW;
@@ -172,13 +176,15 @@ void LaunchPaddingCommonMatmulKernel(aclrtStream &stream, uint64_t hardwareSyncA
         dWC = dW + sizeWA + sizeWB;
     }
 
-    PaddingCommonMatmulKernel<ArchTag, ElementA, LayoutA, ElementB, LayoutB, ElementC, LayoutC, paddingTagA, paddingTagB, paddingTagC>
+    PaddingCommonMatmulKernel<
+        ArchTag, ElementA, LayoutA, ElementB, LayoutB, ElementC, LayoutC, paddingTagA, paddingTagB, paddingTagC>
         <<<tilingParams.blockDim, nullptr, stream>>>(hardwareSyncAddr, dA, dB, dC, dWA, dWB, dWC, dTilingParams);
 }
 
-template <class ArchTag, class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC,
-    PaddingTag paddingTagA, PaddingTag paddingTagB,  PaddingTag paddingTagC>
-size_t PaddingCommonMatmulKernelGetWorkspaceSize(TilingParams &tilingParams)
+template <
+    class ArchTag, class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC,
+    PaddingTag paddingTagA, PaddingTag paddingTagB, PaddingTag paddingTagC>
+size_t PaddingCommonMatmulKernelGetWorkspaceSize(TilingParams& tilingParams)
 {
     using PaddingBuilderA = Catlass::Gemm::Kernel::PaddingBuilder<paddingTagA, ArchTag, ElementA, LayoutA>;
     using PaddingBuilderB = Catlass::Gemm::Kernel::PaddingBuilder<paddingTagB, ArchTag, ElementB, LayoutB>;
@@ -214,4 +220,4 @@ size_t PaddingCommonMatmulKernelGetWorkspaceSize(TilingParams &tilingParams)
     return sizeWA + sizeWB + sizeWC;
 }
 
-#endif  // PADDING_COMMON_MATMUL_KERNEL_H
+#endif // PADDING_COMMON_MATMUL_KERNEL_H

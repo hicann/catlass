@@ -32,7 +32,7 @@ struct integral_constant {
     }
 };
 
-// Simplified aliases: C (auto deduction), Bool (bool), Int (int)
+// Simplified aliases: C (auto deduction), Bool (bool), Int (int), Int64 (long long)
 template <auto v>
 using C = integral_constant<decltype(v), v>;
 
@@ -42,12 +42,17 @@ using Bool = C<b>;
 template <int v>
 using Int = C<v>;
 
+template <long long v>
+using Int64 = C<v>;
+
 // Bool type aliases
 using true_type = Bool<true>;
 using false_type = Bool<false>;
 
 // Int type aliases
-#define TLA_INT_ALIAS(N) using _##N = Int<N>
+#define TLA_INT_ALIAS(N) \
+    using _##N = Int<N>; \
+    using _##N##LL = Int64<N##LL>
 
 TLA_INT_ALIAS(0);
 TLA_INT_ALIAS(1);
@@ -105,8 +110,6 @@ struct is_constant : is_constant_base<n, remove_cvref_t<T>> {};
 template <auto n, class T>
 inline constexpr bool is_constant_v = is_constant<n, T>::value;
 
-#define TLA_STATIC_CHECK(...) static_assert(!is_constant_v<false, decltype(__VA_ARGS__)>, "static check failed.")
-
 // Underscore placeholder: empty tag for "take the whole dimension" in Coord/tensor indexing
 struct Underscore {
     using type = Underscore;
@@ -123,5 +126,7 @@ template <class T>
 inline constexpr bool is_underscore_v = is_underscore<T>::value;
 
 } // namespace tla
+
+#define TLA_STATIC_CHECK(...) static_assert(!::tla::is_constant_v<false, decltype(__VA_ARGS__)>, "static check failed.")
 
 #endif // TLA_INTEGRAL_INTEGRAL_CONSTANT_HPP

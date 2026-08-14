@@ -43,11 +43,11 @@
 
 | 现象                                                       | 判断              | 下一步                                                             |
 | ---------------------------------------------------------- | ----------------- | ------------------------------------------------------------------ |
-| 错误数接近总元素数，或输出全0/NaN/Inf                      | 完全算错          | 进入[前置检查](#2-前置检查) → [流水线同步排查](#51-流水线同步缺失) |
-| 错误数占总元素数比例较小（如 < 10%），且错误值在合理范围内 | 精度误差          | 进入[诊断模式](#4-诊断模式)                                        |
-| 错误集中在特定位置（如矩阵边缘、特定分组）                 | 边界/分组处理问题 | 进入[模块化二分定位](#3-模块化二分定位)                            |
+| 错误数接近总元素数，或输出全0/NaN/Inf                      | 完全算错          | 进入[前置检查](#pre-check) → [流水线同步排查](#pipeline-sync-missing) |
+| 错误数占总元素数比例较小（如 < 10%），且错误值在合理范围内 | 精度误差          | 进入[诊断模式](#diagnostic-mode)                                        |
+| 错误集中在特定位置（如矩阵边缘、特定分组）                 | 边界/分组处理问题 | 进入[模块化二分定位](#modular-bisection)                            |
 
-## 2. 前置检查
+## 2. 前置检查 { #pre-check }
 
 在深入排查之前，先完成以下前置检查项。这些检查成本低但能排除大量常见问题。
 
@@ -61,14 +61,14 @@
 
 2. **标杆计算的数据类型是否正确**：浮点标杆必须使用升精度计算。确认`ElementGolden`模板参数为`float`而非`half`：
 
-   ```cpp
-   // ✅ 正确：标杆使用 float 升精度
-   std::vector<float> hostGolden(lenC);
-   golden::ComputeMatmul(problemShape, hostA, layoutA, hostB, layoutB, hostGolden, layoutC);
+```cpp
+// ✅ 正确：标杆使用 float 升精度
+std::vector<float> hostGolden(lenC);
+golden::ComputeMatmul(problemShape, hostA, layoutA, hostB, layoutB, hostGolden, layoutC);
 
-   // ❌ 错误：标杆使用 half，CPU侧也会引入精度损失
-   std::vector<fp16_t> hostGolden(lenC);
-   golden::ComputeMatmul(problemShape, hostA, layoutA, hostB, layoutB, hostGolden, layoutC);
+// ❌ 错误：标杆使用 half，CPU侧也会引入精度损失
+std::vector<fp16_t> hostGolden(lenC);
+golden::ComputeMatmul(problemShape, hostA, layoutA, hostB, layoutB, hostGolden, layoutC);
 ```
 
 3. **Layout参数是否正确**：确认`layoutA`、`layoutB`、`layoutC`与样例实际使用的内存排布一致。行优先（RowMajor）和列优先（ColumnMajor）搞反是最常见的标杆错误。
@@ -104,7 +104,7 @@ rm -rf output/
 
 在代码中插入明显的输出（如`std::cout << "check" << std::endl;`），确认修改后的二进制确实被执行。
 
-## 3. 模块化二分定位
+## 3. 模块化二分定位 { #modular-bisection }
 
 ### 3.1 CATLASS样例分类：有无Tiling
 
@@ -282,7 +282,7 @@ BlockEpilogue
 
 > **重要原则**：不要盲目试错。每次修改前先明确假设（"我认为问题在XXX模块"），修改后验证假设是否成立。如果连续多次修改无效，说明排查方向有误，应回到决策树重新判断。
 
-## 4. 诊断模式
+## 4. 诊断模式 { #diagnostic-mode }
 
 以下诊断模式覆盖了CATLASS开发中最常见的精度问题场景。每种模式提供了从症状到根因的排查路径。
 
@@ -368,7 +368,7 @@ FP32通过，FP16/BF16失败
 
 以下是CATLASS开发中反复出现的精度陷阱，按出现频率排序。
 
-### 5.1 流水线同步缺失
+### 5.1 流水线同步缺失 { #pipeline-sync-missing }
 
 **症状**：输出全0或部分区域为0，或数据呈现"新旧混合"的状态。
 
@@ -386,7 +386,7 @@ FP32通过，FP16/BF16失败
 
 **症状**：小Shape（M、N、K小于TileShape）时精度失败，大Shape正常。
 
-**原因**：DataCopy有最小搬运粒度要求（通常为16B或32B对齐）。当数据量不满足对齐要求时，DataCopy可能搬运了多余的数据（读到越界数据）或遗漏了部分数据。
+**原因**：DataCopy有最小搬运粒度要求（通常为16Byte或32Byte对齐）。当数据量不满足对齐要求时，DataCopy可能搬运了多余的数据（读到越界数据）或遗漏了部分数据。
 
 **排查方法**：
 
@@ -449,9 +449,13 @@ FP32通过，FP16/BF16失败
 
 **原因**：ATC编译器会缓存已编译的Kernel。如果缓存未清理，即使修改了源代码，实际运行的仍是旧版本。
 
-**排查方法**：bash
+**排查方法**：
+
+```bash
 rm -rf build/
 rm -rf $HOME/atc_data/kernel_cache/
+```
+
 或在编译时添加`--clean`选项。
 
 ## 6. 调试策略层级
@@ -584,7 +588,7 @@ CATLASS的`CompareData`函数会根据`computeNum`（通常为K维大小）动�
 
 **常见陷阱排查**：
 
-- [ ] 已排查流水线同步问题（DataCopy后是否EnQue/DeQue）
+- [ ] 已排查流水线同步问题（DataCopy后是否使用SetFlag/WaitFlag进行同步）
 - [ ] 已排查DataCopy对齐问题（小Shape是否使用DataCopyPad）
 - [ ] 已排查GlobalTensor.SetValue问题
 - [ ] 已排查数值溢出（FP16 max ≈ 65504）

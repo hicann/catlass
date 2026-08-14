@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # -----------------------------------------------------------------------------------------------------------
 # Copyright (c) 2026 Huawei Technologies Co., Ltd.
-# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
 # CANN Open Software License Agreement Version 2.0 (the "License").
 # Please refer to the License for details. You may not use this file except in compliance with the License.
 # THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
@@ -10,7 +10,6 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 
-import os
 
 class Config:
     WRAPPER_CODE_PATH = "../wrapper"
@@ -20,15 +19,13 @@ class Config:
     LAYOUT_TAG_SET = list(LAYOUT_TAG_MAP.keys())
 
     KERNEL_SERIAL_MAP = {
-        "PerTokenMatmulKernel": 11, 
+        "PerTokenMatmulKernel": 11,
     }
 
     DTYPE_MAP = {"half": 0, "float": 1, "int8_t": 2}
 
     @staticmethod
-    def get_tiling_key(
-        kernel_serial, dtype, l_tag_a, l_tag_b, l_tag_c
-    ):
+    def get_tiling_key(kernel_serial, dtype, l_tag_a, l_tag_b, l_tag_c):
         part1 = kernel_serial  # 56-63
         part2 = Config.DTYPE_MAP[dtype] << 4  # 48-51|52-55
         part3 = 0  # 40-47
@@ -45,6 +42,6 @@ class Config:
         result = []
         for i, c in enumerate(name):
             if c.isupper() and i > 0:
-                result.append('_')
+                result.append("_")
             result.append(c.lower())
         return "".join(result)

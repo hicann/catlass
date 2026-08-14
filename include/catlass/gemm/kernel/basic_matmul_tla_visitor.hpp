@@ -23,11 +23,7 @@
 
 namespace Catlass::Gemm::Kernel {
 
-template <
-    class BlockMmad_,
-    class BlockEpilogue_,
-    class BlockScheduler_
->
+template <class BlockMmad_, class BlockEpilogue_, class BlockScheduler_>
 class BasicMatmulTlaVisitor {
 public:
     using BlockMmad = BlockMmad_;
@@ -43,7 +39,8 @@ public:
 
     using BlockEpilogue = BlockEpilogue_;
     using EpilogueParams = typename BlockEpilogue::Params;
-    static_assert(BlockEpilogue::USE_UB_WORKSPACE == false, "BlockEpilogue's DispatchPolicy must be EpilogueVisitor<false>");
+    static_assert(
+        BlockEpilogue::USE_UB_WORKSPACE == false, "BlockEpilogue's DispatchPolicy must be EpilogueVisitor<false>");
 
     using BlockScheduler = BlockScheduler_;
 
@@ -61,23 +58,31 @@ public:
         GM_ADDR ptrWorkspace;
         EpilogueParams epilogueParams;
 
-        Params() {}
+        Params()
+        {}
 
         Params(
-            GemmCoord const& problemShape_,
-            GM_ADDR ptrA_, LayoutA const& layoutA_,
-            GM_ADDR ptrB_, LayoutB const& layoutB_,
-            GM_ADDR ptrBias_,
-            GM_ADDR ptrWorkspace_, EpilogueParams const& epilogueParams_
-        ) : problemShape(problemShape_), ptrA(ptrA_), layoutA(layoutA_), ptrB(ptrB_), layoutB(layoutB_),
-            ptrBias(ptrBias_), ptrWorkspace(ptrWorkspace_), epilogueParams(epilogueParams_) {}
+            GemmCoord const& problemShape_, GM_ADDR ptrA_, LayoutA const& layoutA_, GM_ADDR ptrB_,
+            LayoutB const& layoutB_, GM_ADDR ptrBias_, GM_ADDR ptrWorkspace_, EpilogueParams const& epilogueParams_)
+            : problemShape(problemShape_),
+              ptrA(ptrA_),
+              layoutA(layoutA_),
+              ptrB(ptrB_),
+              layoutB(layoutB_),
+              ptrBias(ptrBias_),
+              ptrWorkspace(ptrWorkspace_),
+              epilogueParams(epilogueParams_)
+        {}
     };
 
     struct Arguments {
         GemmCoord problemShape;
-        GM_ADDR ptrA; LayoutA layoutA;
-        GM_ADDR ptrB; LayoutB layoutB;
-        GM_ADDR ptrC; LayoutC layoutC;
+        GM_ADDR ptrA;
+        LayoutA layoutA;
+        GM_ADDR ptrB;
+        LayoutB layoutB;
+        GM_ADDR ptrC;
+        LayoutC layoutC;
         GM_ADDR ptrBias{nullptr};
         typename BlockEpilogue::EVG::Arguments evg_args;
     };
@@ -103,19 +108,20 @@ public:
         BlockEpilogue::EVG::initialize_workspace(problemShape, args.evg_args, evg_workspace);
 
         // 转换 EVG Arguments 到 Params
-        typename BlockEpilogue::EVG::Params fusion_params = 
-            BlockEpilogue::EVG::to_underlying_arguments(
-                problemShape, args.evg_args, 
-                evg_workspace  // EVG workspace 在 GEMM workspace 之后
-            );
-        
+        typename BlockEpilogue::EVG::Params fusion_params = BlockEpilogue::EVG::to_underlying_arguments(
+            problemShape, args.evg_args,
+            evg_workspace // EVG workspace 在 GEMM workspace 之后
+        );
+
         EpilogueParams epilogueParams{fusion_params};
-        Params params{problemShape, args.ptrA, args.layoutA, args.ptrB, args.layoutB, args.ptrBias, workspace, epilogueParams};
+        Params params{problemShape, args.ptrA,    args.layoutA, args.ptrB,
+                      args.layoutB, args.ptrBias, workspace,    epilogueParams};
         return params;
     }
 
     CATLASS_DEVICE
-    BasicMatmulTlaVisitor() {}
+    BasicMatmulTlaVisitor()
+    {}
 
     CATLASS_DEVICE
     void operator()(Params const& params)
@@ -162,35 +168,34 @@ public:
             aicoreIndex /= AscendC::GetSubBlockNum();
         }
         uint32_t loopStep = AscendC::GetBlockNum();
-        
+
         GemmCoord blockShape(L1_TILE_M, L1_TILE_N, L1_TILE_K);
         // 统一循环
         for (uint32_t loopIdx = aicoreIndex; loopIdx < coreLoops; loopIdx += loopStep) {
             GemmCoord blockCoord = matmulBlockScheduler.GetBlockCoord(loopIdx);
             GemmCoord actualBlockShape = matmulBlockScheduler.GetActualBlockShape(blockCoord);
 
-            auto tensorBlockC = GetTile(tensorC,
-                tla::MakeCoord(blockCoord.m() * L1_TILE_M, blockCoord.n() * L1_TILE_N),
+            auto tensorBlockC = GetTile(
+                tensorC, tla::MakeCoord(blockCoord.m() * L1_TILE_M, blockCoord.n() * L1_TILE_N),
                 tla::MakeShape(actualBlockShape.m(), actualBlockShape.n()));
-            
+
             if ASCEND_IS_AIC {
-                auto tensorBlockA = GetTile(tensorA,
-                                            tla::MakeCoord(blockCoord.m() * L1_TILE_M, blockCoord.k() * L1_TILE_K),
-                                            tla::MakeShape(actualBlockShape.m(), actualBlockShape.k()));
-                auto tensorBlockB = GetTile(tensorB,
-                                            tla::MakeCoord(blockCoord.k() * L1_TILE_K, blockCoord.n() * L1_TILE_N),
-                                            tla::MakeShape(actualBlockShape.k(), actualBlockShape.n()));
+                auto tensorBlockA = GetTile(
+                    tensorA, tla::MakeCoord(blockCoord.m() * L1_TILE_M, blockCoord.k() * L1_TILE_K),
+                    tla::MakeShape(actualBlockShape.m(), actualBlockShape.k()));
+                auto tensorBlockB = GetTile(
+                    tensorB, tla::MakeCoord(blockCoord.k() * L1_TILE_K, blockCoord.n() * L1_TILE_N),
+                    tla::MakeShape(actualBlockShape.k(), actualBlockShape.n()));
 
                 // Compute block-scoped matrix multiply-add
                 if constexpr (std::is_void_v<ElementBias>) {
                     blockMmad(tensorBlockA, tensorBlockB, tensorBlockC, actualBlockShape);
                 } else {
                     auto tensorBlockBias = GetTile(
-                        tensorBias, tla::MakeCoord(blockCoord.n() * L1_TILE_N), tla::MakeShape(actualBlockShape.n())
-                    );
+                        tensorBias, tla::MakeCoord(blockCoord.n() * L1_TILE_N), tla::MakeShape(actualBlockShape.n()));
                     blockMmad(tensorBlockA, tensorBlockB, tensorBlockC, actualBlockShape, tensorBlockBias);
                 }
-                
+
                 Arch::CrossCoreSetFlagWithReverse<0x2, PIPE_FIX>(flagAicFinishStore);
             } else if ASCEND_IS_AIV {
                 Arch::CrossCoreWaitFlagWithReverse<0x2, PIPE_MTE2>(flagAicFinishStore);
@@ -211,4 +216,3 @@ private:
 } // namespace Catlass::Gemm::Kernel
 
 #endif // CATLASS_GEMM_KERNEL_BASIC_MATMUL_TLA_VISITOR_HPP
-

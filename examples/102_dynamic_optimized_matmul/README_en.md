@@ -8,7 +8,7 @@ In the field of high-performance computing and deep learning, matrix multiplicat
 
 ### 2.1 Project Description
 
-For details about the generalized Matmul project structure, see [Project Structure Description](./docs/en/Project Structure_en.md).
+For details about the generalized Matmul project structure, see [Project Structure Description](<./docs/en/Project Structure_en.md>).
 
 By default, the project is compiled into a static library. To compile the project into a dynamic library, change `STATIC` in `CMakeLists.txt` to `SHARED` and manually export the dynamic library path.
 Before compilation, the build system invokes a Python script to generate code, which includes the boilerplate wrapper code for each template and `launch_map.h` (which defines the mapping between the tilingKey and specific kernels).
@@ -36,7 +36,7 @@ DynamicOptimizedMatmul dynamically determines the tiling parameters based on the
 - After obtaining the code, compile the operator executable file. For details, see [Template Library Quick Start](../../docs/en/1_Practice/01_quick_start.md#build-and-execution).
 - Execute the operator.
 
-```
+```bash
 # Compiling a specified case
 bash scripts/build.sh 102_dynamic_optimized_matmul
 # For dynamic library compilation, you need to manually add the dynamic library path to LD_LIBRARY_PATH.
@@ -49,7 +49,7 @@ cd output/bin
 
 If the following result is displayed, precision verification is successful.
 
-```
+```bash
 Compare success.
 ```
 

@@ -1,10 +1,10 @@
 # Using Ascend C Operator Debugging APIs in a CATLASS Sample Project
 
-Ascend C operator debugging APIs are the debugging capabilities of Ascend C. They can be used to print internal kernel information ([printf](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/API/ascendcopapi/atlasascendc_api_07_0193.html)) and view tensor content ([DumpTensor](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/API/ascendcopapi/atlasascendc_api_07_0192.html)).
+Ascend C operator debugging APIs are the debugging capabilities of Ascend C. They can be used to print internal kernel information ([printf](https://www.hiascend.com/document/detail/en/canncommercial/850/API/ascendcopapi/atlasascendc_api_07_0193.html)) and view tensor content ([DumpTensor](https://www.hiascend.com/document/detail/en/canncommercial/850/API/ascendcopapi/atlasascendc_api_07_0192.html)).
 
 ## Examples
 
-The following uses `00_basic_matmul` as an example to demonstrate the test process based on [Ascend C operator debugging APIs](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/API/ascendcopapi/atlasascendc_api_07_0192.html).
+The following uses `00_basic_matmul` as an example to demonstrate the test process based on [Ascend C operator debugging APIs](https://www.hiascend.com/document/detail/en/canncommercial/850/API/ascendcopapi/atlasascendc_api_07_0192.html).
 
 ### Inserting Debugging Code
 
@@ -55,20 +55,20 @@ void operator()<AscendC::AIC>(Params const &params) {
 
 1. Build the operator sample by referring to [Quick Start](../01_quick_start.md). In the current version, no additional build option is required. If the debugging API is called in the code, the compiler is automatically enabled.
 
-```bash
-bash scripts/build.sh 00_basic_matmul
-```
+    ```bash
+    bash scripts/build.sh 00_basic_matmul
+    ```
 
-1. Switch to the `output/bin` directory where the executable file is compiled and run the operator sample program.
+2. Switch to the `output/bin` directory where the executable file is compiled and run the operator sample program.
 
-```bash
-cd output/bin
-# Executable file name | Matrix M-axis | N-axis | K-axis | Device ID (optional)
-./00_basic_matmul 256 512 1024 0
-```
+    ```bash
+    cd output/bin
+    # Executable file name | Matrix M-axis | N-axis | K-axis | Device ID (optional)
+    ./00_basic_matmul 256 512 1024 0
+    ```
 
 - ⚠ Precautions
-  - [`DumpTensor`](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/API/ascendcopapi/atlasascendc_api_07_0192.html) **does not support printing values on `L0A`, `L0B`, and `FixPipe`. In particular, on `Ascend 950PR/Ascend 950DT`**, values on `L1` cannot be printed.
+  - [`DumpTensor`](https://www.hiascend.com/document/detail/en/canncommercial/850/API/ascendcopapi/atlasascendc_api_07_0192.html) **does not support printing values on `L0A`, `L0B`, and `FixPipe`. In particular, on `Ascend 950PR/Ascend 950DT`**, values on `L1` cannot be printed.
 
 ### Output Example (For Reference Only. The Actual Output May Vary Depending on the Hardware and Operator Implementation.)
 

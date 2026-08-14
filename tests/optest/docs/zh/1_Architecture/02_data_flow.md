@@ -4,7 +4,7 @@
 
 ## 调用链路
 
-```
+```bash
 用户 Python 代码
   │
   │  result = torch_catlass.basic_matmul(A, B, outDType="float16")
@@ -67,7 +67,7 @@
 │                                                                  │
 │  1. MatmulKernel::CanImplement(args) → 检查支持                  │
 │  2. MatmulKernel::GetWorkspaceSize(args) → 计算 workspace 大小  │
-│  3. 分配 workspace: g_catlassWorkspaceAlloc(n)  [torch NPU]     │
+│  3. 分配 workspace: g_catlassWorkspaceAlloc(n)  [TorchNPU]     │
 │  4. MatmulKernel::ToUnderlyingArguments(args, ws) → Params      │
 │  5. <<<coreNum, nullptr, stream>>>(params)  ← NPU 内核启动      │
 └──────────────────────────────────────────────────────────────────┘
@@ -75,7 +75,7 @@
 
 ## 数据变换过程
 
-```
+```text
 Python:  torch.Tensor (NPU 存储)
    │
    ├── .storage().data()  ──→ 设备指针 (void*)
@@ -101,7 +101,7 @@ TParams:                          MatmulParams:
 
 ## ABI 约定
 
-```
+```cpp
 JitEntryFn = void(*)(uint32_t blockNum, aclrtStream stream, const void* params)
 
 模板侧：
@@ -116,7 +116,7 @@ JitEntryFn = void(*)(uint32_t blockNum, aclrtStream stream, const void* params)
 
 ## 缓存生命周期
 
-```
+```text
 进程启动
   │
   ├── JitCompiler::instance() (惰性单例)

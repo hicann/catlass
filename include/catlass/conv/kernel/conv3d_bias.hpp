@@ -20,11 +20,7 @@
 namespace Catlass::Conv::Kernel {
 
 // Template for conv3d with bias kernel.
-template <
-    class BlockConv_,
-    class BlockEpilogue_,
-    class BlockScheduler_
->
+template <class BlockConv_, class BlockEpilogue_, class BlockScheduler_>
 class ConvBias {
 public:
     using BlockConv = BlockConv_;
@@ -44,7 +40,7 @@ public:
     using BlockScheduler = BlockScheduler_;
 
     struct Params {
-        //Data members
+        // Data members
         Conv3dParams problemShape;
         GM_ADDR ptrFmap;
         LayoutFmap layoutFmap;
@@ -54,19 +50,24 @@ public:
         LayoutOut layoutOut;
         GM_ADDR ptrBias;
 
-        //Methods
+        // Methods
         CATLASS_HOST_DEVICE
-        Params() {}
+        Params()
+        {}
 
         CATLASS_HOST_DEVICE
         Params(
-            Conv3dParams const &problemShape_,
-            GM_ADDR ptrFmap_, LayoutFmap const &layoutFmap_,
-            GM_ADDR ptrFilter_, LayoutFilter const &layoutFilter_,
-            GM_ADDR ptrOut_, LayoutOut const &layoutOut_,
-            GM_ADDR ptrBias_
-        ) : problemShape(problemShape_), ptrFmap(ptrFmap_), layoutFmap(layoutFmap_), ptrFilter(ptrFilter_), layoutFilter(layoutFilter_),
-            ptrOut(ptrOut_), layoutOut(layoutOut_), ptrBias(ptrBias_) {}
+            Conv3dParams const& problemShape_, GM_ADDR ptrFmap_, LayoutFmap const& layoutFmap_, GM_ADDR ptrFilter_,
+            LayoutFilter const& layoutFilter_, GM_ADDR ptrOut_, LayoutOut const& layoutOut_, GM_ADDR ptrBias_)
+            : problemShape(problemShape_),
+              ptrFmap(ptrFmap_),
+              layoutFmap(layoutFmap_),
+              ptrFilter(ptrFilter_),
+              layoutFilter(layoutFilter_),
+              ptrOut(ptrOut_),
+              layoutOut(layoutOut_),
+              ptrBias(ptrBias_)
+        {}
     };
 
     struct Arguments {
@@ -77,53 +78,51 @@ public:
         GM_ADDR ptrBias;
     };
 
-    static bool CanImplement(const Arguments &args)
+    static bool CanImplement(const Arguments& args)
     {
         return true;
     }
 
-    static size_t GetWorkspaceSize(const Arguments &args)
+    static size_t GetWorkspaceSize(const Arguments& args)
     {
         return 0;
     }
 
-    static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace)
+    static Params ToUnderlyingArguments(const Arguments& args, uint8_t* workspace)
     {
-        LayoutFmap layoutFmap = LayoutFmap::MakeLayout(args.problemShape.batch(), args.problemShape.di(), args.problemShape.cin1(), args.problemShape.hi(), args.problemShape.wi(), args.problemShape.cin0());
-        LayoutFilter layoutFilter = LayoutFilter::MakeLayout(args.problemShape.kdc1khkw(), args.problemShape.n1(), args.problemShape.n0(), args.problemShape.cin0());
-        LayoutOut layoutOut = LayoutOut::MakeLayout(args.problemShape.batch(), args.problemShape.dout(), args.problemShape.cout1(), args.problemShape.ho(), args.problemShape.wo(), args.problemShape.cout0());
-        Params params{
-            args.problemShape,
-            args.ptrFmap,
-            layoutFmap,
-            args.ptrFilter,
-            layoutFilter,
-            args.ptrOut,
-            layoutOut,
-            args.ptrBias};
+        LayoutFmap layoutFmap = LayoutFmap::MakeLayout(
+            args.problemShape.batch(), args.problemShape.di(), args.problemShape.cin1(), args.problemShape.hi(),
+            args.problemShape.wi(), args.problemShape.cin0());
+        LayoutFilter layoutFilter = LayoutFilter::MakeLayout(
+            args.problemShape.kdc1khkw(), args.problemShape.n1(), args.problemShape.n0(), args.problemShape.cin0());
+        LayoutOut layoutOut = LayoutOut::MakeLayout(
+            args.problemShape.batch(), args.problemShape.dout(), args.problemShape.cout1(), args.problemShape.ho(),
+            args.problemShape.wo(), args.problemShape.cout0());
+        Params params{args.problemShape, args.ptrFmap, layoutFmap, args.ptrFilter,
+                      layoutFilter,      args.ptrOut,  layoutOut,  args.ptrBias};
         return params;
     }
 
     // Methods
     CATLASS_DEVICE
-    ConvBias() {}
+    ConvBias()
+    {}
 
     template <int32_t CORE_TYPE = g_coreType>
-    CATLASS_DEVICE
-    ConvBias() {}
+    CATLASS_DEVICE ConvBias()
+    {}
 
     template <int32_t CORE_TYPE = g_coreType>
-    CATLASS_DEVICE
-    void operator()(Params const &params);
+    CATLASS_DEVICE void operator()(Params const& params);
 
     template <>
-    CATLASS_DEVICE
-    void operator()<AscendC::AIC>(Params const &params)
+    CATLASS_DEVICE void operator()<AscendC::AIC>(Params const& params)
     {
-        BlockScheduler convBlockScheduler(Conv3d6HdCoord{params.problemShape.batch(), params.problemShape.dout(),
-                                          params.problemShape.cout1(), params.problemShape.howo()},
-                                          Conv3d6HdCoord{CoreTileShape::noCnt, CoreTileShape::doCnt,
-                                                         CoreTileShape::co1Cnt, CoreTileShape::howoCnt});
+        BlockScheduler convBlockScheduler(
+            Conv3d6HdCoord{
+                params.problemShape.batch(), params.problemShape.dout(), params.problemShape.cout1(),
+                params.problemShape.howo()},
+            Conv3d6HdCoord{CoreTileShape::noCnt, CoreTileShape::doCnt, CoreTileShape::co1Cnt, CoreTileShape::howoCnt});
         uint32_t coreLoops = convBlockScheduler.GetCoreLoops();
 
         Arch::Resource<ArchTag> resource;
@@ -131,13 +130,13 @@ public:
 
         // represent the full gm
         AscendC::GlobalTensor<ElementFmap> fmapGm;
-        fmapGm.SetGlobalBuffer((__gm__ ElementFmap *)params.ptrFmap);
+        fmapGm.SetGlobalBuffer((__gm__ ElementFmap*)params.ptrFmap);
         AscendC::GlobalTensor<ElementFilter> filterGm;
-        filterGm.SetGlobalBuffer((__gm__ ElementFilter *)params.ptrFilter);
+        filterGm.SetGlobalBuffer((__gm__ ElementFilter*)params.ptrFilter);
         AscendC::GlobalTensor<ElementOut> outGm;
-        outGm.SetGlobalBuffer((__gm__ ElementOut *)params.ptrOut);
+        outGm.SetGlobalBuffer((__gm__ ElementOut*)params.ptrOut);
         AscendC::GlobalTensor<ElementBias> biasGm;
-        biasGm.SetGlobalBuffer((__gm__ ElementBias *)params.ptrBias);
+        biasGm.SetGlobalBuffer((__gm__ ElementBias*)params.ptrBias);
 
         for (uint32_t loopIdx = AscendC::GetBlockIdx(); loopIdx < coreLoops; loopIdx += AscendC::GetBlockNum()) {
             Conv3d6HdCoord blockCoord = convBlockScheduler.GetBlockCoord(loopIdx);
@@ -146,8 +145,9 @@ public:
 
             uint32_t diIdxStart = Max(dimStartCoord.d() * params.problemShape.sD(), params.problemShape.padhead(), 0);
             uint32_t hiwiIdxStart = Max((dimStartCoord.hw() / params.problemShape.wo()) * params.problemShape.sH(),
-                                         params.problemShape.padtop(), 0) * params.problemShape.wi();
-            
+                                        params.problemShape.padtop(), 0) *
+                                    params.problemShape.wi();
+
             // Compute initial location in logical coordinates
             Conv3d6HdCoord offsetFmap{dimStartCoord.n(), diIdxStart, 0, hiwiIdxStart};
             Conv3dFracZ3dCoord offsetFilter{0, dimStartCoord.c1() * params.problemShape.cout0()};
@@ -160,18 +160,14 @@ public:
             int64_t gmOffsetBias = dimStartCoord.c1() * params.problemShape.cout0();
 
             blockConv(
-                fmapGm[gmOffsetFmap], params.layoutFmap,
-                filterGm[gmOffsetFilter], params.layoutFilter,
-                outGm[gmOffsetOut], params.layoutOut,
-                biasGm[gmOffsetBias],
-                actualBlockShape,
-                actualIdxStartFmap);
+                fmapGm[gmOffsetFmap], params.layoutFmap, filterGm[gmOffsetFilter], params.layoutFilter,
+                outGm[gmOffsetOut], params.layoutOut, biasGm[gmOffsetBias], actualBlockShape, actualIdxStartFmap);
         }
     }
 
     template <>
-    CATLASS_DEVICE
-    void operator()<AscendC::AIV>(Params const &params) {}
+    CATLASS_DEVICE void operator()<AscendC::AIV>(Params const& params)
+    {}
 
     __aicore__ inline uint32_t Max(uint32_t a, uint32_t b, uint32_t c)
     {
@@ -183,5 +179,5 @@ public:
     }
 };
 
-}  // namespace Catlass::Conv::Kernel
+} // namespace Catlass::Conv::Kernel
 #endif // CATLASS_CONV_KERNEL_CONV3D_BIAS_HPP

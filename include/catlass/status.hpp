@@ -11,9 +11,13 @@
 #ifndef CATLASS_STATUS_HPP
 #define CATLASS_STATUS_HPP
 
-namespace Catlass{
+namespace Catlass {
 
-enum class Status{ kSuccess, kInvalid };
+enum class Status
+{
+    kSuccess,
+    kInvalid
+};
 
 } // namespace Catlass
 

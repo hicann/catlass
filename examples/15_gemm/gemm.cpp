@@ -42,44 +42,51 @@ using ScalarType = float;
 
 using Options = GemmOptions;
 
-inline layout::RowMajor GetWorkspaceLayout(layout::RowMajor layout, uint32_t align) {
+inline layout::RowMajor GetWorkspaceLayout(layout::RowMajor layout, uint32_t align)
+{
     if (align == 0) {
         return layout;
     }
     return layout::RowMajor(layout.shape(0), layout.shape(1), RoundUp(layout.shape(1), align));
 }
 
-inline layout::ColumnMajor GetWorkspaceLayout(layout::ColumnMajor layout, uint32_t align) {
+inline layout::ColumnMajor GetWorkspaceLayout(layout::ColumnMajor layout, uint32_t align)
+{
     if (align == 0) {
         return layout;
     }
     return layout::ColumnMajor(layout.shape(0), layout.shape(1), RoundUp(layout.shape(0), align));
 }
 
-inline size_t GetWorkspaceLen(layout::RowMajor layout) {
+inline size_t GetWorkspaceLen(layout::RowMajor layout)
+{
     return layout.shape(0) * layout.stride(0);
 }
 
-inline size_t GetWorkspaceLen(layout::ColumnMajor layout) {
+inline size_t GetWorkspaceLen(layout::ColumnMajor layout)
+{
     return layout.shape(1) * layout.stride(1);
 }
 
-inline bool IsSameStride(layout::RowMajor layout1, layout::RowMajor layout2) {
+inline bool IsSameStride(layout::RowMajor layout1, layout::RowMajor layout2)
+{
     return layout1.stride(0) == layout2.stride(0);
 }
 
-inline bool IsSameStride(layout::ColumnMajor layout1, layout::ColumnMajor layout2) {
+inline bool IsSameStride(layout::ColumnMajor layout1, layout::ColumnMajor layout2)
+{
     return layout1.stride(1) == layout2.stride(1);
 }
 
 template <class ElementRandom>
-void FillRandomScalarData(ElementRandom &scalarData, ElementRandom low, ElementRandom high) {
+void FillRandomScalarData(ElementRandom& scalarData, ElementRandom low, ElementRandom high)
+{
     scalarData = static_cast<ElementRandom>(
-        low + (static_cast<ElementRandom>(rand()) / static_cast<ElementRandom>(RAND_MAX)) * (high - low)
-    );
+        low + (static_cast<ElementRandom>(rand()) / static_cast<ElementRandom>(RAND_MAX)) * (high - low));
 }
 
-static void Run(Options options) {
+static void Run(Options options)
+{
     aclrtStream stream{nullptr};
     ACL_CHECK(aclInit(nullptr));
     ACL_CHECK(aclrtSetDevice(options.deviceId));
@@ -121,30 +128,30 @@ static void Run(Options options) {
     golden::FillRandomData(hostA, -1.0f, 1.0f);
     golden::FillRandomData(hostB, -1.0f, 1.0f);
     golden::FillRandomData(hostX, -1.0f, 1.0f);
-    uint8_t *deviceA{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceA{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceA, sizeA, hostA.data(), sizeA, ACL_MEMCPY_HOST_TO_DEVICE));
-    uint8_t *deviceWA{nullptr};
+    uint8_t* deviceWA{nullptr};
     if (IsSameStride(layoutWA, layoutA)) {
         deviceWA = deviceA;
     } else {
-        ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWA), sizeWA, ACL_MEM_MALLOC_HUGE_FIRST));
+        ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceWA), sizeWA, ACL_MEM_MALLOC_HUGE_FIRST));
     }
-    uint8_t *deviceB{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceB{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceB, sizeB, hostB.data(), sizeB, ACL_MEMCPY_HOST_TO_DEVICE));
-    uint8_t *deviceWB{nullptr};
+    uint8_t* deviceWB{nullptr};
     if (IsSameStride(layoutWB, layoutB)) {
         deviceWB = deviceB;
     } else {
-        ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWB), sizeWB, ACL_MEM_MALLOC_HUGE_FIRST));
+        ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceWB), sizeWB, ACL_MEM_MALLOC_HUGE_FIRST));
     }
-    uint8_t *deviceX{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceX), sizeX, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceX{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceX), sizeX, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceX, sizeX, hostX.data(), sizeX, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *gmWorkspace{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&gmWorkspace), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* gmWorkspace{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&gmWorkspace), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
 
     // Prepare hardware sync address
     uint64_t hardwareSyncAddr{0};
@@ -189,8 +196,7 @@ static void Run(Options options) {
     ACL_CHECK(aclrtMemcpy(hostRes.data(), sizeX, deviceX, sizeX, ACL_MEMCPY_DEVICE_TO_HOST));
     std::vector<float> hostGolden(lenX);
     golden::ComputeGemm(
-        options.problemShape, alpha, beta, hostA, layoutA, hostB, layoutB, hostX, layoutX, hostGolden, layoutX
-    );
+        options.problemShape, alpha, beta, hostA, layoutA, hostB, layoutB, hostX, layoutX, hostGolden, layoutX);
 
     std::vector<uint64_t> errorIndices = golden::CompareData(hostRes, hostGolden, m * n);
     if (errorIndices.empty()) {
@@ -215,7 +221,8 @@ static void Run(Options options) {
     ACL_CHECK(aclFinalize());
 }
 
-int main(int argc, const char **argv) {
+int main(int argc, const char** argv)
+{
     Options options;
     if (options.Parse(argc, argv) != 0) {
         return -1;

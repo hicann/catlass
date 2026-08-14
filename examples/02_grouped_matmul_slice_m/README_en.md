@@ -2,7 +2,7 @@
 
 ## Code Organization
 
-```
+```text
 ├── 02_grouped_matmul_slice_m
 │   ├── CMakeLists.txt     # CMake build file
 │   ├── README.md
@@ -24,7 +24,7 @@ Using the example
 - After obtaining the code, compile the operator executable file. For details, see [Template Library Quick Start](../../docs/en/1_Practice/01_quick_start.md#build-and-execution).
 - Execute the operator.
 
-```
+```bash
 # Compile a specified test case.
 bash scripts/build.sh 02_grouped_matmul_slice_m
 cd output/bin
@@ -35,6 +35,6 @@ cd output/bin
 
 If the following result is displayed, precision verification is successful.
 
-```
+```text
 Compare success.
 ```

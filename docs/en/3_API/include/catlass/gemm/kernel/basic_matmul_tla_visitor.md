@@ -1,5 +1,5 @@
 # Basic Matmul TLA Visitor
-
+>
 > Code path: `include/catlass/gemm/kernel/basic_matmul_tla_visitor.hpp`
 
 ## Description
@@ -61,5 +61,5 @@ The first term allocates space to store the MMAD results, while the second term 
 
 ## Usage Conditions
 
-- `BlockEpilogue::USE_UB_WORKSPACE` must evaluate to `false`.
+- `BlockEpilogue_::USE_UB_WORKSPACE` must evaluate to `false`.
 - This is applicable to scenarios where MMAD results are written out to the GM before epilogue is executed.

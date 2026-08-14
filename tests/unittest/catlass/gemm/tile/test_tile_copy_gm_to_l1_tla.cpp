@@ -281,7 +281,6 @@ protected:
         const AscendC::DataCopyParams* repeatParams = logTileCopy.GetArgsAt(2).Value<AscendC::DataCopyParams>();       \
         ASSERT_EQ(repeatParams->blockCount, _cols_by_fractal);                                                         \
         ASSERT_EQ(repeatParams->blockLen, _row);                                                                       \
-        std::cout << "blklen" << repeatParams->blockLen << std::endl;                                                  \
         ASSERT_EQ(repeatParams->srcGap, static_cast<uint16_t>(_row_round - _row));                                     \
         ASSERT_EQ(repeatParams->dstGap, static_cast<uint16_t>(_dst_row_round - _row));                                 \
     }                                                                                                                  \

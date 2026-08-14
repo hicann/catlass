@@ -4,7 +4,7 @@ The Adaptive Sliding Window Tiling (ASWT) policy determines the core allocation 
 
 The following shows the ASWT policy. Each block represents a basic block of matrix C, and the number in each block indicates the ID of an AI Core (in this example, it is assumed that there are 20 AI Cores). The basic blocks are assigned to AI Cores for processing in the order of the S-shaped sliding window. Finally, there are nine basic blocks left, which cannot be evenly distributed to the 20 AI Cores. To balance the load of each AI Core and improve data parallelism efficiency, the remaining nine basic blocks are tiled so that the number of tiled blocks (18 blocks) is at least more than half of the total number of AI Cores.
 
-<img src="../../figures/aswt.png" width="50%">
+<img src="../../../assets/images/aswt.png" width="50%">
 
 ## Applications
 

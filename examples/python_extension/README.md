@@ -56,7 +56,7 @@ output/python_extension
   - `pybind11`
   - `gcc` _版本为9.0+_
   - `torch`_建议使用2.1+_
-  - `torch-npu`_配套`torch`和`CANN`的最新版本，可在[Ascend/pytorch](https://gitcode.com/ascend/pytorch)查询_
+  - `TorchNPU`_配套`torch`和`CANN`的最新版本，可在[Ascend/pytorch](https://gitcode.com/ascend/pytorch)查询_
 - 可选：
   - `pybind11-stubgen`
 

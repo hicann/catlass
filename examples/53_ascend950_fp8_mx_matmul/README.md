@@ -8,7 +8,7 @@
 
 ## 代码组织
 
-```
+```text
 ├── 53_ascend950_fp8_mx_matmul
 │   ├── CMakeLists.txt      # CMake 编译配置
 │   ├── README.md
@@ -22,7 +22,7 @@
 - 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/zh/1_Practice/01_quick_start.md#编译执行)，本用例为 Ascend950（3510）算子，编译时需加 `-DCATLASS_ARCH=3510`
 - 执行算子
 
-```
+```bash
 # 编译指定用例
 bash scripts/build.sh 53_ascend950_fp8_mx_matmul -DCATLASS_ARCH=3510
 # 生成测试样例（在 examples/53_ascend950_fp8_mx_matmul/data 下生成 input/ 与 golden/）
@@ -42,7 +42,7 @@ bash scripts/build.sh 53_ascend950_fp8_mx_matmul_aswt -DCATLASS_ARCH=3510
 
 执行结果如下，说明精度比对成功。
 
-```
+```cpp
 Compare success.
 ```
 
@@ -87,6 +87,6 @@ MxScaleA、MxScaleB支持数据类型为float8_e8m0
 
 设矩阵Shape为`M N K`, L1上的分块大小为`m1 n1 k1`，M方向的分块数量`mTiles = CeilDiv(M, m1)`，N方向的分块数量`nTiles = CeilDiv(N, n1)`，总任务数为`taskBlocks = mTiles * nTiles`，在以下两种情况下可以选择开启enableL1Resident：
 
-1.`mTies = 1`，且`nTiles > CoreNum`，且`K < 2 * k1`。此时还可以设置`l0CStages=2`(需要关闭enableUnitFlag)，如果空间不足无法设置`l0CStages=2`，则将`n1`设置为原来的一半。
+1.`mTiles = 1`，且`nTiles > CoreNum`，且`K < 2 * k1`。此时还可以设置`l0CStages=2`(需要关闭enableUnitFlag)，如果空间不足无法设置`l0CStages=2`，则将`n1`设置为原来的一半。
 
-2.`nTies = 1`，且`mTiles > CoreNum`, 且`K < 2 * k1`。此时还可以设置`l0CStages=2`(需要关闭enableUnitFlag)，如果空间不足无法设置`l0CStages=2`，则将`m1`设置为原来的一半。
+2.`nTiles = 1`，且`mTiles > CoreNum`, 且`K < 2 * k1`。此时还可以设置`l0CStages=2`(需要关闭enableUnitFlag)，如果空间不足无法设置`l0CStages=2`，则将`m1`设置为原来的一半。

@@ -61,7 +61,9 @@ def _build_fp4_lut(format_name: str) -> torch.Tensor:
             else:
                 value = (mantissa / float(1 << mantissa_bits)) * (2.0 ** (1.0 - bias))
         else:
-            value = (1.0 + mantissa / float(1 << mantissa_bits)) * (2.0 ** (float(exp) - bias))
+            value = (1.0 + mantissa / float(1 << mantissa_bits)) * (
+                2.0 ** (float(exp) - bias)
+            )
 
         if sign == 1:
             value = -value
@@ -76,7 +78,9 @@ _FP4_LUT = {
 }
 
 
-def _quantize_to_fp4_lut(values: torch.Tensor, format_name: str) -> Tuple[torch.Tensor, torch.Tensor]:
+def _quantize_to_fp4_lut(
+    values: torch.Tensor, format_name: str
+) -> Tuple[torch.Tensor, torch.Tensor]:
     lut = _FP4_LUT[format_name].to(values.device)
     min_value = _FP4_FORMATS[format_name]["min_value"]
     max_value = _FP4_FORMATS[format_name]["max_value"]
@@ -95,7 +99,10 @@ def _pack_fp4_nibbles(index_matrix: torch.Tensor) -> torch.Tensor:
     rows, cols = index_matrix.shape
     if cols % 2 != 0:
         index_matrix = torch.cat(
-            [index_matrix, torch.zeros((rows, 1), dtype=torch.uint8, device=index_matrix.device)],
+            [
+                index_matrix,
+                torch.zeros((rows, 1), dtype=torch.uint8, device=index_matrix.device),
+            ],
             dim=1,
         )
 
@@ -105,7 +112,9 @@ def _pack_fp4_nibbles(index_matrix: torch.Tensor) -> torch.Tensor:
     return packed.to(torch.uint8)
 
 
-def _quantize_axis_last(matrix: torch.Tensor, format_name: str, block_size: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+def _quantize_axis_last(
+    matrix: torch.Tensor, format_name: str, block_size: int
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     m, n = matrix.shape
     padded_n = ((n + block_size - 1) // block_size) * block_size
     num_blocks = padded_n // block_size
@@ -119,7 +128,10 @@ def _quantize_axis_last(matrix: torch.Tensor, format_name: str, block_size: int)
     blocks = padded.view(m, num_blocks, block_size)
     max_abs = blocks.abs().amax(dim=-1)
 
-    exp = torch.floor(torch.log2(torch.clamp(max_abs, min=_EPSILON))) - _FP4_FORMATS[format_name]["emax"]
+    exp = (
+        torch.floor(torch.log2(torch.clamp(max_abs, min=_EPSILON)))
+        - _FP4_FORMATS[format_name]["emax"]
+    )
     exp = torch.where(max_abs < _EPSILON, torch.zeros_like(exp), exp)
     exp = exp.clamp(_MIN_SCALE_EXP, _MAX_SCALE_EXP)
     scale = torch.pow(torch.tensor(2.0, dtype=torch.float32, device=matrix.device), exp)
@@ -136,19 +148,31 @@ def _quantize_axis_last(matrix: torch.Tensor, format_name: str, block_size: int)
 
     padded_blocks = ((num_blocks + 1) // 2) * 2
     if padded_blocks != num_blocks:
-        scale_padded = torch.ones((m, padded_blocks), dtype=torch.float32, device=matrix.device)
+        scale_padded = torch.ones(
+            (m, padded_blocks), dtype=torch.float32, device=matrix.device
+        )
         scale_padded[:, :num_blocks] = scale
         scale = scale_padded
 
     return quantized, scale, dequantized
 
 
-def _quantize_axis_first(matrix: torch.Tensor, format_name: str, block_size: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    quantized_t, scale_t, dequantized_t = _quantize_axis_last(matrix.t().contiguous(), format_name, block_size)
-    return quantized_t.t().contiguous(), scale_t.t().contiguous(), dequantized_t.t().contiguous()
+def _quantize_axis_first(
+    matrix: torch.Tensor, format_name: str, block_size: int
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    quantized_t, scale_t, dequantized_t = _quantize_axis_last(
+        matrix.t().contiguous(), format_name, block_size
+    )
+    return (
+        quantized_t.t().contiguous(),
+        scale_t.t().contiguous(),
+        dequantized_t.t().contiguous(),
+    )
 
 
-def _quantize(matrix: torch.Tensor, format_name: str, axis: int, block_size: int = _BLOCK_SIZE) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+def _quantize(
+    matrix: torch.Tensor, format_name: str, axis: int, block_size: int = _BLOCK_SIZE
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     if axis == 0:
         return _quantize_axis_first(matrix, format_name, block_size)
     if axis == 1:
@@ -166,7 +190,11 @@ def gen_data_fp4_e2m1(row, col, axis, trans):
     _, fp4_indices = _quantize_to_fp4_lut(quantized_matrix, "E2M1")
     quantized_matrix_uint8 = _pack_fp4_nibbles(fp4_indices)
 
-    return quantized_matrix_uint8, scale_matrix.to(torch.float8_e8m0fnu), dequantized_matrix
+    return (
+        quantized_matrix_uint8,
+        scale_matrix.to(torch.float8_e8m0fnu),
+        dequantized_matrix,
+    )
 
 
 def gen_data_fp4_e1m2(row, col, axis, trans):
@@ -179,7 +207,11 @@ def gen_data_fp4_e1m2(row, col, axis, trans):
     _, fp4_indices = _quantize_to_fp4_lut(quantized_matrix, "E1M2")
     quantized_matrix_uint8 = _pack_fp4_nibbles(fp4_indices)
 
-    return quantized_matrix_uint8, scale_matrix.to(torch.float8_e8m0fnu), dequantized_matrix
+    return (
+        quantized_matrix_uint8,
+        scale_matrix.to(torch.float8_e8m0fnu),
+        dequantized_matrix,
+    )
 
 
 def _resolve_workspace(data_root_cli: Optional[str]) -> str:
@@ -217,8 +249,12 @@ def gen_data(m, n, k, trans_a, trans_b, workspace: str) -> None:
     a_np.tofile(os.path.join(input_dir, "a_8.bin"))
     b_np.tofile(os.path.join(input_dir, "b_8.bin"))
 
-    a_scale_np = torch.tensor(a_scale.flatten().untyped_storage(), dtype=torch.int8).numpy()
-    b_scale_np = torch.tensor(b_scale.flatten().untyped_storage(), dtype=torch.int8).numpy()
+    a_scale_np = torch.tensor(
+        a_scale.flatten().untyped_storage(), dtype=torch.int8
+    ).numpy()
+    b_scale_np = torch.tensor(
+        b_scale.flatten().untyped_storage(), dtype=torch.int8
+    ).numpy()
     a_scale_np.tofile(os.path.join(input_dir, "a_scale.bin"))
     b_scale_np.tofile(os.path.join(input_dir, "b_scale.bin"))
 
@@ -229,15 +265,14 @@ def gen_data(m, n, k, trans_a, trans_b, workspace: str) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Generate MX-FP4 inputs and FP32 golden under "
-                     "<data-root>/data/.",
+        description="Generate MX-FP4 inputs and FP32 golden under <data-root>/data/.",
     )
     parser.add_argument(
         "--data-root",
         default=None,
         metavar="DIR",
         help="Directory under which data/input and data/golden are created. "
-             "Default: this script's directory.",
+        "Default: this script's directory.",
     )
     parser.add_argument("m", type=int)
     parser.add_argument("n", type=int)

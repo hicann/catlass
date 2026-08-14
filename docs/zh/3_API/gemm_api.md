@@ -1,7 +1,7 @@
 # CATLASS Gemm API
 
 CATLASS针对NPU上不同层级上执行的矩阵乘累加（MMAD）操作，提供了一个统一的编程模型。CATLASS的Gemm API对应于以下分层，由高到低分别是：
-![image](../figures/api_level.png)
+![image](../../assets/images/api_level.png)
 
 # CATLASS Gemm模型
 

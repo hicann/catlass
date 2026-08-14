@@ -68,73 +68,73 @@ TLA_BINARY_OP(>=);
 //
 
 // 0 * x = 0
-template <auto t, class U, TLA_REQUIRES(is_std_integral<U>::value && t == 0)>
+template <auto t, class U, TLA_REQUIRES((is_std_integral<U>::value) && (t == 0))>
 CATLASS_HOST_DEVICE constexpr C<0> operator*(C<t>, U)
 {
     return {};
 }
 
-template <class U, auto t, TLA_REQUIRES(is_std_integral<U>::value && t == 0)>
+template <class U, auto t, TLA_REQUIRES((is_std_integral<U>::value) && (t == 0))>
 CATLASS_HOST_DEVICE constexpr C<0> operator*(U, C<t>)
 {
     return {};
 }
 
 // 0 / x = 0
-template <auto t, class U, TLA_REQUIRES(is_std_integral<U>::value && t == 0)>
+template <auto t, class U, TLA_REQUIRES((is_std_integral<U>::value) && (t == 0))>
 CATLASS_HOST_DEVICE constexpr C<0> operator/(C<t>, U)
 {
     return {};
 }
 
 // x % (1 or -1) = 0
-template <class U, auto t, TLA_REQUIRES(is_std_integral<U>::value && (t == 1 || t == -1))>
+template <class U, auto t, TLA_REQUIRES((is_std_integral<U>::value) && (t == 1 || t == -1))>
 CATLASS_HOST_DEVICE constexpr C<0> operator%(U, C<t>)
 {
     return {};
 }
 
 // 0 % x = 0
-template <auto t, class U, TLA_REQUIRES(is_std_integral<U>::value && t == 0)>
+template <auto t, class U, TLA_REQUIRES((is_std_integral<U>::value) && (t == 0))>
 CATLASS_HOST_DEVICE constexpr C<0> operator%(C<t>, U)
 {
     return {};
 }
 
 // 0 & x = 0
-template <auto t, class U, TLA_REQUIRES(is_std_integral<U>::value && t == 0)>
+template <auto t, class U, TLA_REQUIRES((is_std_integral<U>::value) && (t == 0))>
 CATLASS_HOST_DEVICE constexpr C<0> operator&(C<t>, U)
 {
     return {};
 }
 
-template <class U, auto t, TLA_REQUIRES(is_std_integral<U>::value && t == 0)>
+template <class U, auto t, TLA_REQUIRES((is_std_integral<U>::value) && (t == 0))>
 CATLASS_HOST_DEVICE constexpr C<0> operator&(U, C<t>)
 {
     return {};
 }
 
 // false && x = false
-template <auto t, class U, TLA_REQUIRES(is_std_integral<U>::value && !bool(t))>
+template <auto t, class U, TLA_REQUIRES((is_std_integral<U>::value) && (!bool(t)))>
 CATLASS_HOST_DEVICE constexpr C<false> operator&&(C<t>, U)
 {
     return {};
 }
 
-template <class U, auto t, TLA_REQUIRES(is_std_integral<U>::value && !bool(t))>
+template <class U, auto t, TLA_REQUIRES((is_std_integral<U>::value) && (!bool(t)))>
 CATLASS_HOST_DEVICE constexpr C<false> operator&&(U, C<t>)
 {
     return {};
 }
 
 // true || x = true
-template <class U, auto t, TLA_REQUIRES(is_std_integral<U>::value && bool(t))>
+template <class U, auto t, TLA_REQUIRES((is_std_integral<U>::value) && (bool(t)))>
 CATLASS_HOST_DEVICE constexpr C<true> operator||(C<t>, U)
 {
     return {};
 }
 
-template <class U, auto t, TLA_REQUIRES(is_std_integral<U>::value && bool(t))>
+template <class U, auto t, TLA_REQUIRES((is_std_integral<U>::value) && (bool(t)))>
 CATLASS_HOST_DEVICE constexpr C<true> operator||(U, C<t>)
 {
     return {};

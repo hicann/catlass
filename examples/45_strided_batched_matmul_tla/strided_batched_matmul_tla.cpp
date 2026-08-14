@@ -31,15 +31,24 @@
 #include "golden.hpp"
 #include "helper.hpp"
 
-
 using namespace Catlass;
 using namespace tla;
+
+#ifdef ENABLE_TRANS_A
+// The input matrix A is transposed, which means
+// the batch axis lies on the middle dimension in a storage view shape.
+constexpr bool transA = true;
+constexpr bool transB = false;
+#else
+constexpr bool transA = false;
+constexpr bool transB = false;
+#endif
 
 struct BatchedMatmulTlaOptions {
     const std::string HELPER =
         "problem_count m n k [device_id] [lda ldb ldc] [strideA strideB strideC] [layoutA layoutB]\n"
         "  layoutA/layoutB: row | col (case-insensitive)\n"
-        "  Note: C is row in this example (ldc>=n, strideC based on row).";
+        "  Note: C is row-major in this example (ldc>=n, strideC based on row).";
 
     Catlass::GemmCoord problemShape{128, 128, 128};
     uint32_t problemCount{1};
@@ -61,33 +70,42 @@ struct BatchedMatmulTlaOptions {
     // - A: [M,K] (RowMajor or ColumnMajor)
     // - B: [K,N] (RowMajor or ColumnMajor)
     // - C: [M,N] (RowMajor only in this example)
-    enum class MatrixLayout { RowMajor, ColumnMajor };
+    enum class MatrixLayout
+    {
+        RowMajor,
+        ColumnMajor
+    };
     MatrixLayout layoutA{MatrixLayout::RowMajor};
     MatrixLayout layoutB{MatrixLayout::RowMajor};
 
     BatchedMatmulTlaOptions() = default;
 
-    static bool IsLayoutToken(const std::string &s) {
+    static bool IsLayoutToken(const std::string& s)
+    {
         if (s.empty()) {
             return false;
         }
         std::string t;
         t.resize(s.size());
-        std::transform(s.begin(), s.end(), t.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        std::transform(
+            s.begin(), s.end(), t.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
         return (t == "row" || t == "col");
     }
 
-    static MatrixLayout ParseLayoutToken(const std::string &s) {
+    static MatrixLayout ParseLayoutToken(const std::string& s)
+    {
         std::string t;
         t.resize(s.size());
-        std::transform(s.begin(), s.end(), t.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        std::transform(
+            s.begin(), s.end(), t.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
         if (t == "row") {
             return MatrixLayout::RowMajor;
         }
         return MatrixLayout::ColumnMajor;
     }
 
-    int Parse(int argc, const char **argv) {
+    int Parse(int argc, const char** argv)
+    {
         // Supported forms:
         // 1) name problem_count m n k
         // 2) name problem_count m n k device_id
@@ -110,11 +128,14 @@ struct BatchedMatmulTlaOptions {
             return -1;
         }
 
-
         problemCount = std::atoi(argv[1]);
         problemShape.m() = std::atoi(argv[2]);
         problemShape.n() = std::atoi(argv[3]);
         problemShape.k() = std::atoi(argv[4]);
+        if (problemCount == 0 || problemShape.m() == 0 || problemShape.n() == 0 || problemShape.k() == 0) {
+            std::cerr << "problem_count, m, n and k must be greater than 0." << std::endl;
+            return -1;
+        }
 
         if (argcEffective >= 6) {
             deviceId = std::atoi(argv[5]);
@@ -124,14 +145,22 @@ struct BatchedMatmulTlaOptions {
         uint32_t n = problemShape.n();
         uint32_t k = problemShape.k();
 
-        // Default: contiguous per-matrix and contiguous between batches.
-        // Interpret lda/ldb as the leading dimension in the chosen layout.
-        lda = (layoutA == MatrixLayout::RowMajor) ? static_cast<int64_t>(k) : static_cast<int64_t>(m);
-        ldb = (layoutB == MatrixLayout::RowMajor) ? static_cast<int64_t>(n) : static_cast<int64_t>(k);
+        // Default: contiguous storage for the selected physical batch-axis placement.
+        if (layoutA == MatrixLayout::RowMajor) {
+            lda = transA ? static_cast<int64_t>(problemCount) * k : static_cast<int64_t>(k);
+            strideA = transA ? static_cast<int64_t>(k) : static_cast<int64_t>(m) * lda;
+        } else {
+            lda = transA ? static_cast<int64_t>(problemCount) * m : static_cast<int64_t>(m);
+            strideA = transA ? static_cast<int64_t>(m) : static_cast<int64_t>(k) * lda;
+        }
+        if (layoutB == MatrixLayout::RowMajor) {
+            ldb = transB ? static_cast<int64_t>(problemCount) * n : static_cast<int64_t>(n);
+            strideB = transB ? static_cast<int64_t>(n) : static_cast<int64_t>(k) * ldb;
+        } else {
+            ldb = transB ? static_cast<int64_t>(problemCount) * k : static_cast<int64_t>(k);
+            strideB = transB ? static_cast<int64_t>(k) : static_cast<int64_t>(n) * ldb;
+        }
         ldc = static_cast<int64_t>(n); // C is RowMajor in this example
-
-        strideA = (layoutA == MatrixLayout::RowMajor) ? static_cast<int64_t>(m) * lda : static_cast<int64_t>(k) * lda;
-        strideB = (layoutB == MatrixLayout::RowMajor) ? static_cast<int64_t>(k) * ldb : static_cast<int64_t>(n) * ldb;
         strideC = static_cast<int64_t>(m) * ldc;
 
         if (argcEffective >= 9) {
@@ -139,8 +168,18 @@ struct BatchedMatmulTlaOptions {
             ldb = std::atoll(argv[7]);
             ldc = std::atoll(argv[8]);
 
-            strideA = (layoutA == MatrixLayout::RowMajor) ? static_cast<int64_t>(m) * lda : static_cast<int64_t>(k) * lda;
-            strideB = (layoutB == MatrixLayout::RowMajor) ? static_cast<int64_t>(k) * ldb : static_cast<int64_t>(n) * ldb;
+            if (transA) {
+                strideA = (layoutA == MatrixLayout::RowMajor) ? static_cast<int64_t>(k) : static_cast<int64_t>(m);
+            } else {
+                strideA =
+                    (layoutA == MatrixLayout::RowMajor) ? static_cast<int64_t>(m) * lda : static_cast<int64_t>(k) * lda;
+            }
+            if (transB) {
+                strideB = (layoutB == MatrixLayout::RowMajor) ? static_cast<int64_t>(n) : static_cast<int64_t>(k);
+            } else {
+                strideB =
+                    (layoutB == MatrixLayout::RowMajor) ? static_cast<int64_t>(k) * ldb : static_cast<int64_t>(n) * ldb;
+            }
             strideC = static_cast<int64_t>(m) * ldc;
         }
         if (argcEffective == 12) {
@@ -148,26 +187,36 @@ struct BatchedMatmulTlaOptions {
             strideB = std::atoll(argv[10]);
             strideC = std::atoll(argv[11]);
         }
-
-        // Basic validation for ND layouts.
-        int64_t minLda = (layoutA == MatrixLayout::RowMajor) ? static_cast<int64_t>(k) : static_cast<int64_t>(m);
-        int64_t minLdb = (layoutB == MatrixLayout::RowMajor) ? static_cast<int64_t>(n) : static_cast<int64_t>(k);
-        if (lda < minLda || ldb < minLdb || ldc < static_cast<int64_t>(n)) {
-            std::cerr << "Invalid leading dimensions: require lda>=" << minLda
-                      << ", ldb>=" << minLdb
-                      << ", ldc>=" << n << "." << std::endl;
+        if (lda <= 0 || ldb <= 0 || ldc <= 0 || strideA <= 0 || strideB <= 0 || strideC <= 0) {
+            std::cerr << "Leading dimensions and strides must be greater than 0." << std::endl;
             return -1;
         }
 
-        int64_t minMatA = (layoutA == MatrixLayout::RowMajor)
-            ? (static_cast<int64_t>(m - 1) * lda + static_cast<int64_t>(k))
-            : (static_cast<int64_t>(k - 1) * lda + static_cast<int64_t>(m));
-        int64_t minMatB = (layoutB == MatrixLayout::RowMajor)
-            ? (static_cast<int64_t>(k - 1) * ldb + static_cast<int64_t>(n))
-            : (static_cast<int64_t>(n - 1) * ldb + static_cast<int64_t>(k));
+        // Basic validation for ND layouts. In the transposed-batch case the
+        // leading dimension must span all batch slices of the inner matrix axis.
+        int64_t minLda = (layoutA == MatrixLayout::RowMajor) ? static_cast<int64_t>(k) : static_cast<int64_t>(m);
+        int64_t minLdb = (layoutB == MatrixLayout::RowMajor) ? static_cast<int64_t>(n) : static_cast<int64_t>(k);
+        if (transA) {
+            minLda += static_cast<int64_t>(problemCount - 1) * strideA;
+        }
+        if (transB) {
+            minLdb += static_cast<int64_t>(problemCount - 1) * strideB;
+        }
+        if (lda < minLda || ldb < minLdb || ldc < static_cast<int64_t>(n)) {
+            std::cerr << "Invalid leading dimensions: require lda>=" << minLda << ", ldb>=" << minLdb << ", ldc>=" << n
+                      << "." << std::endl;
+            return -1;
+        }
+
         int64_t minMatC = static_cast<int64_t>(m - 1) * ldc + static_cast<int64_t>(n);
 
-        if (strideA < minMatA || strideB < minMatB || strideC < minMatC) {
+        int64_t minMatA = (layoutA == MatrixLayout::RowMajor) ?
+                              (static_cast<int64_t>(m - 1) * lda + static_cast<int64_t>(k)) :
+                              (static_cast<int64_t>(k - 1) * lda + static_cast<int64_t>(m));
+        int64_t minMatB = (layoutB == MatrixLayout::RowMajor) ?
+                              (static_cast<int64_t>(k - 1) * ldb + static_cast<int64_t>(n)) :
+                              (static_cast<int64_t>(n - 1) * ldb + static_cast<int64_t>(k));
+        if ((!transA && strideA < minMatA) || (!transB && strideB < minMatB) || strideC < minMatC) {
             std::cerr << "Invalid batch strides: require strideA/strideB/strideC large enough for one matrix."
                       << std::endl;
             return -1;
@@ -180,37 +229,50 @@ struct BatchedMatmulTlaOptions {
 using Options = BatchedMatmulTlaOptions;
 
 template <typename LayoutTagA>
-static auto MakeTlaLayoutA(uint32_t batchCount, uint32_t m, uint32_t k, int64_t strideA, int64_t lda) {
+static auto MakeTlaLayoutA(uint32_t batchCount, uint32_t m, uint32_t k, int64_t strideA, int64_t lda)
+{
     if constexpr (std::is_same_v<LayoutTagA, layout::RowMajor>) {
-        return tla::MakeLayout(
-            tla::MakeShape(batchCount, m, k),
-            tla::MakeStride(strideA, lda, tla::Int<1>{})
-        );
+        return tla::MakeLayout(tla::MakeShape(batchCount, m, k), tla::MakeStride(strideA, lda, tla::Int<1>{}));
     } else {
-        return tla::MakeLayout(
-            tla::MakeShape(batchCount, m, k),
-            tla::MakeStride(strideA, tla::Int<1>{}, lda)
-        );
+        return tla::MakeLayout(tla::MakeShape(batchCount, m, k), tla::MakeStride(strideA, tla::Int<1>{}, lda));
     }
 }
 
 template <typename LayoutTagB>
-static auto MakeTlaLayoutB(uint32_t batchCount, uint32_t k, uint32_t n, int64_t strideB, int64_t ldb) {
+static auto MakeTlaLayoutB(uint32_t batchCount, uint32_t k, uint32_t n, int64_t strideB, int64_t ldb)
+{
     if constexpr (std::is_same_v<LayoutTagB, layout::RowMajor>) {
-        return tla::MakeLayout(
-            tla::MakeShape(batchCount, k, n),
-            tla::MakeStride(strideB, ldb, tla::Int<1>{})
-        );
+        return tla::MakeLayout(tla::MakeShape(batchCount, k, n), tla::MakeStride(strideB, ldb, tla::Int<1>{}));
     } else {
-        return tla::MakeLayout(
-            tla::MakeShape(batchCount, k, n),
-            tla::MakeStride(strideB, tla::Int<1>{}, ldb)
-        );
+        return tla::MakeLayout(tla::MakeShape(batchCount, k, n), tla::MakeStride(strideB, tla::Int<1>{}, ldb));
+    }
+}
+
+template <class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementGolden, class LayoutGolden>
+static void ComputeTlaBatchedMatmul(
+    uint32_t batchCount, const GemmCoord& problemShape, const std::vector<ElementA>& dataA, const LayoutA& layoutA,
+    const std::vector<ElementB>& dataB, const LayoutB& layoutB, std::vector<ElementGolden>& dataGolden,
+    const LayoutGolden& layoutGolden)
+{
+    for (uint32_t b = 0; b < batchCount; ++b) {
+        for (uint32_t i = 0; i < problemShape.m(); ++i) {
+            for (uint32_t j = 0; j < problemShape.n(); ++j) {
+                ElementGolden accumulator = 0;
+                for (uint32_t innerK = 0; innerK < problemShape.k(); ++innerK) {
+                    auto offsetA = layoutA(tla::MakeCoord(b, i, innerK));
+                    auto offsetB = layoutB(tla::MakeCoord(b, innerK, j));
+                    accumulator +=
+                        static_cast<ElementGolden>(dataA[offsetA]) * static_cast<ElementGolden>(dataB[offsetB]);
+                }
+                dataGolden[layoutGolden(tla::MakeCoord(b, i, j))] = accumulator;
+            }
+        }
     }
 }
 
 template <typename LayoutTagA, typename LayoutTagB>
-static void RunWithLayouts(const Options &options) {
+static void RunWithLayouts(const Options& options)
+{
     aclrtStream stream{nullptr};
 
     ACL_CHECK(aclInit(nullptr));
@@ -230,17 +292,17 @@ static void RunWithLayouts(const Options &options) {
     using HostElementC = fp16_t;
 
     using LayoutTagC = layout::RowMajor; // must be RowMajor
-    LayoutTagA tagA{m, k, options.lda};
-    LayoutTagB tagB{k, n, options.ldb};
     LayoutTagC tagC{m, n, options.ldc};
 
+    auto layoutA = MakeTlaLayoutA<LayoutTagA>(batchCount, m, k, options.strideA, options.lda);
+    auto layoutB = MakeTlaLayoutB<LayoutTagB>(batchCount, k, n, options.strideB, options.ldb);
+    auto layoutC =
+        tla::MakeLayout(tla::MakeShape(batchCount, m, n), tla::MakeStride(options.strideC, options.ldc, tla::Int<1>{}));
+
     // Capacity in elements (last element offset + 1)
-    int64_t capA = (static_cast<int64_t>(batchCount) - 1) * options.strideA +
-                   static_cast<int64_t>(tagA.GetOffset(MakeCoord(m - 1, k - 1))) + 1;
-    int64_t capB = (static_cast<int64_t>(batchCount) - 1) * options.strideB +
-                   static_cast<int64_t>(tagB.GetOffset(MakeCoord(k - 1, n - 1))) + 1;
-    int64_t capC = (static_cast<int64_t>(batchCount) - 1) * options.strideC +
-                   static_cast<int64_t>(tagC.GetOffset(MakeCoord(m - 1, n - 1))) + 1;
+    int64_t capA = static_cast<int64_t>(layoutA(tla::MakeCoord(batchCount - 1, m - 1, k - 1))) + 1;
+    int64_t capB = static_cast<int64_t>(layoutB(tla::MakeCoord(batchCount - 1, k - 1, n - 1))) + 1;
+    int64_t capC = static_cast<int64_t>(layoutC(tla::MakeCoord(batchCount - 1, m - 1, n - 1))) + 1;
 
     size_t lenA = static_cast<size_t>(capA);
     size_t lenB = static_cast<size_t>(capB);
@@ -250,24 +312,24 @@ static void RunWithLayouts(const Options &options) {
     size_t sizeB = lenB * sizeof(ElementB);
     size_t sizeC = lenC * sizeof(ElementC);
 
-    // allocate memory of A and copy to device side
+    // allocate memory for A and copy to device side
     std::vector<HostElementA> hostA(lenA, 1.0f);
     golden::FillRandomData<HostElementA>(hostA, -5.0f, 5.0f);
-    uint8_t *deviceA{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceA{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceA, sizeA, hostA.data(), sizeA, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    // allocate memory of B and copy to device side
+    // allocate memory for B and copy to device side
     std::vector<HostElementB> hostB(lenB, 1.0f);
     golden::FillRandomData<HostElementB>(hostB, -5.0f, 5.0f);
-    uint8_t *deviceB{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceB{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceB, sizeB, hostB.data(), sizeB, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    // allocate memory of C
+    // allocate memory for C
     std::vector<HostElementC> hostC(lenC);
-    uint8_t *deviceC{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceC{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
 
     // Get the number of cube cores of the current hardware
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
@@ -283,13 +345,6 @@ static void RunWithLayouts(const Options &options) {
         DispatchPolicy, L1TileShape, L0TileShape, ElementA, ElementB, ElementC, void, TileCopy>;
     using BlockEpilogue = void;
 
-    auto layoutA = MakeTlaLayoutA<LayoutTagA>(batchCount, m, k, options.strideA, options.lda);
-    auto layoutB = MakeTlaLayoutB<LayoutTagB>(batchCount, k, n, options.strideB, options.ldb);
-    auto layoutC = tla::MakeLayout(
-        tla::MakeShape(batchCount, m, n),
-        tla::MakeStride(options.strideC, options.ldc, tla::Int<1>{})
-    );
-
     if (options.problemShape.m() > options.problemShape.n()) {
         // Swizzle offset is 3 and direction is 0.
         using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
@@ -299,14 +354,10 @@ static void RunWithLayouts(const Options &options) {
 
         using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
         typename MatmulKernel::Arguments arguments{
-            batchCount, options.problemShape,
-            deviceA, layoutA,
-            deviceB, layoutB,
-            deviceC, layoutC
-        };
+            batchCount, options.problemShape, deviceA, layoutA, deviceB, layoutB, deviceC, layoutC};
         MatmulAdapter matmulOp;
 
-        uint8_t *deviceWorkspace{nullptr};
+        uint8_t* deviceWorkspace{nullptr};
         matmulOp.CanImplement(arguments);
         matmulOp.Initialize(arguments, deviceWorkspace);
         matmulOp(stream, aicCoreNum);
@@ -321,14 +372,10 @@ static void RunWithLayouts(const Options &options) {
 
         using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
         typename MatmulKernel::Arguments arguments{
-            batchCount, options.problemShape,
-            deviceA, layoutA,
-            deviceB, layoutB,
-            deviceC, layoutC
-        };
+            batchCount, options.problemShape, deviceA, layoutA, deviceB, layoutB, deviceC, layoutC};
         MatmulAdapter matmulOp;
 
-        uint8_t *deviceWorkspace{nullptr};
+        uint8_t* deviceWorkspace{nullptr};
         matmulOp.CanImplement(arguments);
         matmulOp.Initialize(arguments, deviceWorkspace);
         matmulOp(stream, aicCoreNum);
@@ -341,28 +388,14 @@ static void RunWithLayouts(const Options &options) {
     size_t packedLenC = static_cast<size_t>(batchCount) * m * n;
     std::vector<HostElementC> packedC(packedLenC);
     std::vector<float> packedGolden(packedLenC);
-
-    for (uint32_t b = 0; b < batchCount; ++b) {
-        size_t basePacked = static_cast<size_t>(b) * m * n;
-        size_t baseA = static_cast<size_t>(b) * static_cast<size_t>(options.strideA);
-        size_t baseB = static_cast<size_t>(b) * static_cast<size_t>(options.strideB);
-        size_t baseC = static_cast<size_t>(b) * static_cast<size_t>(options.strideC);
-        for (uint32_t i = 0; i < m; ++i) {
-            for (uint32_t j = 0; j < n; ++j) {
-                size_t idxPacked = basePacked + static_cast<size_t>(i) * n + j;
-                size_t offC = baseC + static_cast<size_t>(tagC.GetOffset(MakeCoord(i, j)));
-                packedC[idxPacked] = hostC[offC];
-
-                float acc = 0.0f;
-                for (uint32_t kk = 0; kk < k; ++kk) {
-                    size_t offA = baseA + static_cast<size_t>(tagA.GetOffset(MakeCoord(i, kk)));
-                    size_t offB = baseB + static_cast<size_t>(tagB.GetOffset(MakeCoord(kk, j)));
-                    acc += static_cast<float>(hostA[offA]) * static_cast<float>(hostB[offB]);
-                }
-                packedGolden[idxPacked] = acc;
-            }
-        }
-    }
+    LayoutTagC packedTagC{m, n};
+    int64_t packedStrideC = static_cast<int64_t>(m) * n;
+    golden::fillContigunousBatchedData(
+        batchCount, options.problemShape, packedC, packedTagC, hostC, tagC, packedStrideC, options.strideC);
+    auto packedLayoutC =
+        tla::MakeLayout(tla::MakeShape(batchCount, m, n), tla::MakeStride(packedStrideC, n, tla::Int<1>{}));
+    ComputeTlaBatchedMatmul(
+        batchCount, options.problemShape, hostA, layoutA, hostB, layoutB, packedGolden, packedLayoutC);
 
     std::vector<uint64_t> errorIndices = golden::CompareData(packedC, packedGolden, k);
     if (errorIndices.empty()) {
@@ -379,7 +412,8 @@ static void RunWithLayouts(const Options &options) {
     ACL_CHECK(aclFinalize());
 }
 
-static void Run(const Options &options) {
+static void Run(const Options& options)
+{
     using ML = Options::MatrixLayout;
     if (options.layoutA == ML::RowMajor && options.layoutB == ML::RowMajor) {
         RunWithLayouts<layout::RowMajor, layout::RowMajor>(options);
@@ -392,7 +426,8 @@ static void Run(const Options &options) {
     }
 }
 
-int main(int argc, const char **argv) {
+int main(int argc, const char** argv)
+{
     Options options;
     if (options.Parse(argc, argv) != 0) {
         return -1;

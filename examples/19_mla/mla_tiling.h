@@ -82,7 +82,8 @@ const int32_t KV_SEQLEN_SLICE = 128;
 
 constexpr std::array<int32_t, NUM6> QN_TILE_LIST = {128, 64, 32, 16, 8, 1};
 
-enum class MaskType {
+enum class MaskType
+{
     NO_MASK = 0,
     MASK_SPEC = 1
 };
@@ -97,11 +98,11 @@ struct MLAInfo {
     int32_t maxKvSeqlen = 0;
     int32_t kvHeads = 0;
     int32_t batch = 0;
-    int32_t *kvSeqLen{nullptr};
-    int32_t *qSeqLen{nullptr};
+    int32_t* kvSeqLen{nullptr};
+    int32_t* qSeqLen{nullptr};
     MaskType maskType = MaskType::NO_MASK;
 };
 
-int32_t GetMLATilingParam(const MLAInfo &mlaInfo, uint32_t &blockDim, uint32_t *tilingHost);
+int32_t GetMLATilingParam(const MLAInfo& mlaInfo, uint32_t& blockDim, uint32_t* tilingHost);
 } // namespace MLATiling
 #endif

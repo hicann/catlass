@@ -7,22 +7,25 @@
  * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
  * See LICENSE in the root of the software repository for the full text of the License.
  */
- 
+
 #ifndef EXAMPLES_COMMON_GOLDEN_FILL_DATA_HPP
 #define EXAMPLES_COMMON_GOLDEN_FILL_DATA_HPP
 
-#include <stack>
-#include <vector>
+#include <cstdint>
 #include <cstdlib>
 #include <ctime>
+#include <stack>
+#include <vector>
+
+#include "catlass/gemm_coord.hpp"
 
 namespace Catlass::golden {
 
 template <class Element, class ElementRandom>
 void GenRandomData(Element& data, ElementRandom low, ElementRandom high)
 {
-    ElementRandom randomValue = low +
-        (static_cast<ElementRandom>(rand()) / static_cast<ElementRandom>(RAND_MAX)) * (high - low);
+    ElementRandom randomValue =
+        low + (static_cast<ElementRandom>(rand()) / static_cast<ElementRandom>(RAND_MAX)) * (high - low);
     data = static_cast<Element>(randomValue);
 }
 
@@ -30,8 +33,8 @@ template <class Element, class ElementRandom>
 void FillRandomData(std::vector<Element>& data, ElementRandom low, ElementRandom high)
 {
     for (uint64_t i = 0; i < data.size(); ++i) {
-        ElementRandom randomValue = low +
-            (static_cast<ElementRandom>(rand()) / static_cast<ElementRandom>(RAND_MAX)) * (high - low);
+        ElementRandom randomValue =
+            low + (static_cast<ElementRandom>(rand()) / static_cast<ElementRandom>(RAND_MAX)) * (high - low);
         data[i] = static_cast<Element>(randomValue);
     }
 }
@@ -45,24 +48,63 @@ void FillRandomData<int8_t, int>(std::vector<int8_t>& data, int low, int high)
     }
 }
 
+template <class Element, class ElementRandom>
+void FillTriangularData(
+    std::vector<Element>& data, uint32_t rows, uint32_t columns, uint32_t uplo, uint32_t diag, ElementRandom low,
+    ElementRandom high, Element alpha = static_cast<Element>(1))
+{
+    data.resize(static_cast<std::size_t>(rows) * columns);
+    FillRandomData(data, low, high);
+
+    for (uint32_t i = 0; i < rows; ++i) {
+        for (uint32_t j = 0; j < columns; ++j) {
+            bool keep = (uplo == 0) ? (j <= i) : (j >= i);
+            auto index = static_cast<std::size_t>(i) * columns + j;
+            if (!keep) {
+                data[index] = static_cast<Element>(0);
+                continue;
+            }
+            data[index] = static_cast<Element>(data[index] * alpha);
+            if (diag != 0 && i == j) {
+                data[index] = alpha;
+            }
+        }
+    }
+}
+
+template <class Element, class ElementRandom>
+void FillSymmRandomData(
+    std::vector<Element>& data, uint32_t dim, bool upperStorage, ElementRandom low, ElementRandom high)
+{
+    FillRandomData(data, low, high);
+    for (uint32_t r = 0; r < dim; ++r) {
+        for (uint32_t c = 0; c < r; ++c) {
+            if (upperStorage) {
+                data[r * dim + c] = data[c * dim + r];
+            } else {
+                data[c * dim + r] = data[r * dim + c];
+            }
+        }
+    }
+}
 
 template <typename T>
 void QuickSort(std::vector<T>& arr, int left, int right)
 {
     std::stack<std::pair<int, int>> stk;
     stk.push({left, right});
-    
+
     while (!stk.empty()) {
         auto [l, r] = stk.top();
         stk.pop();
-        
+
         if (l >= r) {
             continue;
         }
-        
+
         T pivot = arr[(l + r) / 2];
         int i = l;
-        int j = r;  
+        int j = r;
         while (i <= j) {
             while (arr[i] < pivot) {
                 i++;
@@ -117,12 +159,35 @@ std::vector<T> GenerateAverageGroupList(uint32_t m, uint32_t problemCount)
     for (int i = 0; i < problemCount; ++i) {
         if constexpr (isCumsum) {
             groupList[i] = groupSize * (i + 1);
-        }else {
+        } else {
             groupList[i] = groupSize;
         }
     }
 
     return groupList;
+}
+
+template <class ElementC, class ElementGolden, class LayoutTagDst, class LayoutTagSrc>
+void fillContigunousBatchedData(
+    uint32_t batchCount, const GemmCoord& problemShape, std::vector<ElementGolden>& dstData, const LayoutTagDst& tagDst,
+    const std::vector<ElementC>& srcData, const LayoutTagSrc& tagSrc, int64_t strideDst, int64_t strideSrc)
+{
+    if (strideDst == -1) { /* default to m*n if dst set to -1 */
+        strideDst = static_cast<int64_t>(problemShape.m()) * problemShape.n();
+    }
+    size_t offsetBatchDst = 0;
+    size_t offsetBatchSrc = 0;
+    for (uint32_t b = 0; b < batchCount; ++b) {
+        for (uint32_t i = 0; i < problemShape.m(); ++i) {
+            for (uint32_t j = 0; j < problemShape.n(); ++j) {
+                size_t srcOffset = offsetBatchSrc + tagSrc.GetOffset(MakeCoord(i, j));
+                size_t dstOffset = offsetBatchDst + tagDst.GetOffset(MakeCoord(i, j));
+                dstData[dstOffset] = static_cast<ElementGolden>(srcData[srcOffset]);
+            }
+        }
+        offsetBatchDst += strideDst;
+        offsetBatchSrc += strideSrc;
+    }
 }
 
 } // namespace Catlass::golden

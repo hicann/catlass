@@ -24,11 +24,7 @@ namespace Catlass::Gemm::Kernel {
 
 #if (defined(CATLASS_ARCH) && CATLASS_ARCH == 3510)
 
-template <
-    class BlockMmad_,
-    class BlockEpilogue_,
-    class BlockScheduler_
->
+template <class BlockMmad_, class BlockEpilogue_, class BlockScheduler_>
 class MxBatchedMatmulTla {
 public:
     using BlockMmad = BlockMmad_;
@@ -62,7 +58,7 @@ public:
         LayoutB layoutB;
         int64_t strideB;
         GM_ADDR ptrMxScaleA;
-        LayoutMxScaleA layoutMxScaleA; 
+        LayoutMxScaleA layoutMxScaleA;
         int64_t strideMxScaleA;
         GM_ADDR ptrMxScaleB;
         LayoutMxScaleB layoutMxScaleB;
@@ -72,28 +68,15 @@ public:
         int64_t strideC;
 
         CATLASS_HOST_DEVICE
-        Params() {}
+        Params()
+        {}
 
         CATLASS_HOST_DEVICE
         Params(
-            uint32_t batchCount_,
-            GemmCoord const &problemShape_,
-            GM_ADDR ptrA_,
-            LayoutA layoutA_,
-            int64_t strideA_,
-            GM_ADDR ptrB_,
-            LayoutB layoutB_,
-            int64_t strideB_,
-            GM_ADDR ptrMxScaleA_,
-            LayoutMxScaleA layoutMxScaleA_,
-            int64_t strideMxScaleA_,
-            GM_ADDR ptrMxScaleB_,
-            LayoutMxScaleB layoutMxScaleB_,
-            int64_t strideMxScaleB_,
-            GM_ADDR ptrC_,
-            LayoutC layoutC_,
-            int64_t strideC_
-        )
+            uint32_t batchCount_, GemmCoord const& problemShape_, GM_ADDR ptrA_, LayoutA layoutA_, int64_t strideA_,
+            GM_ADDR ptrB_, LayoutB layoutB_, int64_t strideB_, GM_ADDR ptrMxScaleA_, LayoutMxScaleA layoutMxScaleA_,
+            int64_t strideMxScaleA_, GM_ADDR ptrMxScaleB_, LayoutMxScaleB layoutMxScaleB_, int64_t strideMxScaleB_,
+            GM_ADDR ptrC_, LayoutC layoutC_, int64_t strideC_)
             : batchCount(batchCount_),
               problemShape(problemShape_),
               ptrA(ptrA_),
@@ -117,29 +100,29 @@ public:
     struct Arguments {
         uint32_t batchCount;
         GemmCoord problemShape;
-        uint8_t *ptrA;
+        uint8_t* ptrA;
         LayoutA layoutA;
-        uint8_t *ptrB;
+        uint8_t* ptrB;
         LayoutB layoutB;
-        uint8_t *ptrMxScaleA;
-        LayoutMxScaleA layoutMxScaleA; 
-        uint8_t *ptrMxScaleB;
+        uint8_t* ptrMxScaleA;
+        LayoutMxScaleA layoutMxScaleA;
+        uint8_t* ptrMxScaleB;
         LayoutMxScaleB layoutMxScaleB;
-        uint8_t *ptrC;
+        uint8_t* ptrC;
         LayoutC layoutC;
     };
 
-    static bool CanImplement(const Arguments &args)
+    static bool CanImplement(const Arguments& args)
     {
         return true;
     }
 
-    static size_t GetWorkspaceSize(const Arguments &args)
+    static size_t GetWorkspaceSize(const Arguments& args)
     {
         return 0;
     }
 
-    static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace)
+    static Params ToUnderlyingArguments(const Arguments& args, uint8_t* workspace)
     {
         GemmCoord problemShape = args.problemShape;
         uint32_t m = problemShape.m();
@@ -148,40 +131,39 @@ public:
         int64_t strideA = static_cast<int64_t>(m) * static_cast<int64_t>(k);
         int64_t strideB = static_cast<int64_t>(k) * static_cast<int64_t>(n);
         int64_t strideC = static_cast<int64_t>(m) * static_cast<int64_t>(n);
-        int64_t strideMxScaleA = static_cast<int64_t>(m) * static_cast<int64_t>(CeilDiv<MX_BASEK_FACTOR>(k) * MX_SCALE_COPY_GROUP_NUM);
-        int64_t strideMxScaleB = static_cast<int64_t>(CeilDiv<MX_BASEK_FACTOR>(k) * MX_SCALE_COPY_GROUP_NUM) * static_cast<int64_t>(n);
-        Params params{
-            args.batchCount,
-            args.problemShape,
-            args.ptrA,
-            args.layoutA,
-            strideA,
-            args.ptrB,  
-            args.layoutB,
-            strideB,
-            args.ptrMxScaleA,
-            args.layoutMxScaleA,
-            strideMxScaleA,
-            args.ptrMxScaleB,
-            args.layoutMxScaleB,
-            strideMxScaleB,
-            args.ptrC,
-            args.layoutC,
-            strideC
-        };
+        int64_t strideMxScaleA =
+            static_cast<int64_t>(m) * static_cast<int64_t>(CeilDiv<MX_BASEK_FACTOR>(k) * MX_SCALE_COPY_GROUP_NUM);
+        int64_t strideMxScaleB =
+            static_cast<int64_t>(CeilDiv<MX_BASEK_FACTOR>(k) * MX_SCALE_COPY_GROUP_NUM) * static_cast<int64_t>(n);
+        Params params{args.batchCount,
+                      args.problemShape,
+                      args.ptrA,
+                      args.layoutA,
+                      strideA,
+                      args.ptrB,
+                      args.layoutB,
+                      strideB,
+                      args.ptrMxScaleA,
+                      args.layoutMxScaleA,
+                      strideMxScaleA,
+                      args.ptrMxScaleB,
+                      args.layoutMxScaleB,
+                      strideMxScaleB,
+                      args.ptrC,
+                      args.layoutC,
+                      strideC};
         return params;
     }
 
     CATLASS_DEVICE
-    MxBatchedMatmulTla() {}
+    MxBatchedMatmulTla()
+    {}
 
     template <int32_t CORE_TYPE = g_coreType>
-    CATLASS_DEVICE
-    void operator()(Params const &params);
+    CATLASS_DEVICE void operator()(Params const& params);
 
     template <>
-    CATLASS_DEVICE
-    void operator()<AscendC::AIC>(Params const &params)
+    CATLASS_DEVICE void operator()<AscendC::AIC>(Params const& params)
     {
         BlockScheduler matmulBlockScheduler(params.problemShape, MakeCoord(L1_TILE_M, L1_TILE_N));
         uint32_t coreLoops = params.batchCount * matmulBlockScheduler.GetCoreLoops();
@@ -190,15 +172,15 @@ public:
         BlockMmad blockMmad(resource);
 
         AscendC::GlobalTensor<ElementA> gmA;
-        gmA.SetGlobalBuffer((__gm__ ElementA *)params.ptrA);
+        gmA.SetGlobalBuffer((__gm__ ElementA*)params.ptrA);
         AscendC::GlobalTensor<ElementB> gmB;
-        gmB.SetGlobalBuffer((__gm__ ElementB *)params.ptrB);
+        gmB.SetGlobalBuffer((__gm__ ElementB*)params.ptrB);
         AscendC::GlobalTensor<ElementMxScaleA> gmMxScaleA;
-        gmMxScaleA.SetGlobalBuffer((__gm__ ElementMxScaleA *)params.ptrMxScaleA);
+        gmMxScaleA.SetGlobalBuffer((__gm__ ElementMxScaleA*)params.ptrMxScaleA);
         AscendC::GlobalTensor<ElementMxScaleB> gmMxScaleB;
-        gmMxScaleB.SetGlobalBuffer((__gm__ ElementMxScaleB *)params.ptrMxScaleB);
+        gmMxScaleB.SetGlobalBuffer((__gm__ ElementMxScaleB*)params.ptrMxScaleB);
         AscendC::GlobalTensor<ElementC> gmC;
-        gmC.SetGlobalBuffer((__gm__ ElementC *)params.ptrC);
+        gmC.SetGlobalBuffer((__gm__ ElementC*)params.ptrC);
 
         if (CeilDiv(params.problemShape.m(), L1_TILE_M) == 1) {
             gmB.SetL2CacheHint(AscendC::CacheMode::CACHE_MODE_DISABLE);
@@ -222,44 +204,40 @@ public:
             // Represent the full tensors
             auto tensorA = tla::MakeTensor(gmA[batchOffsetA], params.layoutA, Arch::PositionGM{});
             auto tensorB = tla::MakeTensor(gmB[batchOffsetB], params.layoutB, Arch::PositionGM{});
-            auto tensorMxScaleA = tla::MakeTensor(gmMxScaleA[batchOffsetMxScaleA], params.layoutMxScaleA, Arch::PositionGM{});
-            auto tensorMxScaleB = tla::MakeTensor(gmMxScaleB[batchOffsetMxScaleB], params.layoutMxScaleB, Arch::PositionGM{});
+            auto tensorMxScaleA =
+                tla::MakeTensor(gmMxScaleA[batchOffsetMxScaleA], params.layoutMxScaleA, Arch::PositionGM{});
+            auto tensorMxScaleB =
+                tla::MakeTensor(gmMxScaleB[batchOffsetMxScaleB], params.layoutMxScaleB, Arch::PositionGM{});
             auto tensorC = tla::MakeTensor(gmC[batchOffsetC], params.layoutC, Arch::PositionGM{});
 
             auto tensorBlockA = GetTile(
                 tensorA, tla::MakeCoord(blockCoord.m() * L1_TILE_M, blockCoord.k() * L1_TILE_K),
-                tla::MakeShape(actualBlockShape.m(), actualBlockShape.k())
-            );
+                tla::MakeShape(actualBlockShape.m(), actualBlockShape.k()));
             auto tensorBlockB = GetTile(
                 tensorB, tla::MakeCoord(blockCoord.k() * L1_TILE_K, blockCoord.n() * L1_TILE_N),
-                tla::MakeShape(actualBlockShape.k(), actualBlockShape.n())
-            );
+                tla::MakeShape(actualBlockShape.k(), actualBlockShape.n()));
             auto tensorBlockMxScaleA = GetTile(
                 tensorMxScaleA,
                 tla::MakeCoord(blockCoord.m() * L1_TILE_M, blockCoord.k() * L1_TILE_K / MX_SCALE_GROUP_NUM),
-                tla::MakeShape(actualBlockShape.m(), CeilDiv<MX_SCALE_GROUP_NUM>(actualBlockShape.k()))
-            );
+                tla::MakeShape(actualBlockShape.m(), CeilDiv<MX_SCALE_GROUP_NUM>(actualBlockShape.k())));
             auto tensorBlockMxScaleB = GetTile(
                 tensorMxScaleB,
                 tla::MakeCoord(blockCoord.k() * L1_TILE_K / MX_SCALE_GROUP_NUM, blockCoord.n() * L1_TILE_N),
-                tla::MakeShape(CeilDiv<MX_SCALE_GROUP_NUM>(actualBlockShape.k()), actualBlockShape.n())
-            );
+                tla::MakeShape(CeilDiv<MX_SCALE_GROUP_NUM>(actualBlockShape.k()), actualBlockShape.n()));
             auto tensorBlockC = GetTile(
                 tensorC, tla::MakeCoord(blockCoord.m() * L1_TILE_M, blockCoord.n() * L1_TILE_N),
-                tla::MakeShape(actualBlockShape.m(), actualBlockShape.n())
-            );
+                tla::MakeShape(actualBlockShape.m(), actualBlockShape.n()));
 
             blockMmad(
-                tensorBlockA, tensorBlockB, tensorBlockC, actualBlockShape, tensorBlockMxScaleA, tensorBlockMxScaleB
-            );
+                tensorBlockA, tensorBlockB, tensorBlockC, actualBlockShape, tensorBlockMxScaleA, tensorBlockMxScaleB);
         }
 
         AscendC::PipeBarrier<PIPE_ALL>();
     }
 
     template <>
-    CATLASS_DEVICE
-    void operator()<AscendC::AIV>(Params const &params) {}
+    CATLASS_DEVICE void operator()<AscendC::AIV>(Params const& params)
+    {}
 };
 
 #endif // (defined(CATLASS_ARCH) && CATLASS_ARCH == 3510)

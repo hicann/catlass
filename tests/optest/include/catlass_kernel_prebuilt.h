@@ -66,11 +66,11 @@ struct FlashAttentionParams : public PrebuiltParams {
  * @brief Runtime parameters for MLA examples.
  */
 struct MlaParams : public FlashAttentionParams {
-    uint32_t qRopeHeadDim = 0;  ///< Q rope head dimension.
-    uint32_t kvRopeHeadDim = 0; ///< KV rope head dimension.
-    uint32_t numBlocks = 0;     ///< Total paged KV cache blocks.
-    std::vector<int32_t> qSeqHost;  ///< Host-side Q sequence lengths for tiling.
-    std::vector<int32_t> kvSeqHost; ///< Host-side KV sequence lengths for tiling.
+    uint32_t qRopeHeadDim = 0;               ///< Q rope head dimension.
+    uint32_t kvRopeHeadDim = 0;              ///< KV rope head dimension.
+    uint32_t numBlocks = 0;                  ///< Total paged KV cache blocks.
+    std::vector<int32_t> qSeqHost;           ///< Host-side Q sequence lengths for tiling.
+    std::vector<int32_t> kvSeqHost;          ///< Host-side KV sequence lengths for tiling.
     mutable std::vector<uint8_t> outputHost; ///< Host-side output staging buffer.
 };
 
@@ -78,18 +78,18 @@ struct MlaParams : public FlashAttentionParams {
  * @brief Runtime parameters for flash-attention style examples.
  */
 struct FlashAttentionChunkPrefillParams : public PrebuiltParams {
-    uint32_t qNtokens = 0;              ///< Total Q tokens for variable-length input.
-    uint32_t batch = 0;                 ///< Batch size.
-    uint32_t qSeqlen = 0;               ///< Q sequence length.
-    uint32_t kvSeqlen = 0;              ///< KV sequence length.
-    uint32_t numHeads = 0;              ///< Number of Q heads.
-    uint32_t kvHeads = 0;               ///< Number of KV heads.
-    uint32_t qkembeddingSize = 0;         ///< Per-head embedding dimension.
-    uint32_t vembeddingSize = 0;         ///< Per-head embedding dimension.
-    uint32_t isVariedLen = 0;           ///< Whether variable-length input is used.
-    uint32_t maskType = 0;              ///< Mask mode.
-    uint32_t blockSize = 128;           ///< Tile block size.
-    uint32_t numBlocks = 2048;           ///< Tile block num.
+    uint32_t qNtokens = 0;        ///< Total Q tokens for variable-length input.
+    uint32_t batch = 0;           ///< Batch size.
+    uint32_t qSeqlen = 0;         ///< Q sequence length.
+    uint32_t kvSeqlen = 0;        ///< KV sequence length.
+    uint32_t numHeads = 0;        ///< Number of Q heads.
+    uint32_t kvHeads = 0;         ///< Number of KV heads.
+    uint32_t qkembeddingSize = 0; ///< Per-head embedding dimension.
+    uint32_t vembeddingSize = 0;  ///< Per-head embedding dimension.
+    uint32_t isVariedLen = 0;     ///< Whether variable-length input is used.
+    uint32_t maskType = 0;        ///< Mask mode.
+    uint32_t blockSize = 128;     ///< Tile block size.
+    uint32_t numBlocks = 2048;    ///< Tile block num.
     std::string cacheLayout = "nd";
     aclDataType dataType = ACL_FLOAT16; ///< Input/output element type.
 };
@@ -102,7 +102,8 @@ __attribute__((weak)) void Mla(const uint32_t blockNum, aclrtStream stream, cons
 /**
  * @brief Reserved prebuilt interface for example 23_flash_attention_infer.
  */
-__attribute__((weak)) void FlashAttentionInfer(const uint32_t blockNum, aclrtStream stream, const FlashAttentionParams& params);
+__attribute__((weak)) void FlashAttentionInfer(
+    const uint32_t blockNum, aclrtStream stream, const FlashAttentionParams& params);
 
 /**
  * @brief Reserved prebuilt interface for example 24_conv_bias.
@@ -117,40 +118,45 @@ __attribute__((weak)) void BasicConv2d(const uint32_t blockNum, aclrtStream stre
 /**
  * @brief Reserved prebuilt interface for example 40_flash_attention_infer_tla.
  */
-__attribute__((weak)) void FlashAttentionInferTLA(const uint32_t blockNum, aclrtStream stream, const FlashAttentionParams& params);
+__attribute__((weak)) void FlashAttentionInferTLA(
+    const uint32_t blockNum, aclrtStream stream, const FlashAttentionParams& params);
 
 /**
  * @brief Reserved prebuilt interface for example 49_ascend950_flash_attention_infer.
  */
-__attribute__((weak)) void Ascend950FlashAttentionInfer(const uint32_t blockNum, aclrtStream stream, const FlashAttentionParams& params);
+__attribute__((weak)) void Ascend950FlashAttentionInfer(
+    const uint32_t blockNum, aclrtStream stream, const FlashAttentionParams& params);
 
 /**
  * @brief Reserved prebuilt interface for example 56_ascend950_basic_conv2d_tla.
  */
-__attribute__((weak)) void Ascend950BasicConv2dTLA(const uint32_t blockNum, aclrtStream stream, const ConvParams& params);
+__attribute__((weak)) void Ascend950BasicConv2dTLA(
+    const uint32_t blockNum, aclrtStream stream, const ConvParams& params);
 
 /**
  * @brief Runtime parameters for Ascend950 MXFP8 flash attention examples.
  */
 struct Ascend950MxFp8FlashAttentionParams : public FlashAttentionParams {
-    uint32_t usePscale = 0;             ///< Whether to use P matrix quantization scale.
+    uint32_t usePscale = 0; ///< Whether to use P matrix quantization scale.
 };
 
 /**
  * @brief Prebuilt interface for example 72_ascend950_fp8_mx_flash_attention_infer.
  */
-__attribute__((weak)) void Ascend950MxFp8FlashAttentionInfer(const uint32_t blockNum, aclrtStream stream,
-                                       const Ascend950MxFp8FlashAttentionParams& params);
+__attribute__((weak)) void Ascend950MxFp8FlashAttentionInfer(
+    const uint32_t blockNum, aclrtStream stream, const Ascend950MxFp8FlashAttentionParams& params);
 
 /**
  * @brief Prebuilt interface for example 29_a2_fp8_e4m3_matmul.
  */
-extern "C" __attribute__((weak)) void A2Fp8E4M3Matmul(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
+extern "C" __attribute__((weak)) void A2Fp8E4M3Matmul(
+    const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
  * @brief Reserved prebuilt interface for example 70_ascend950_flash_attention_chunk_prefill.
  */
-__attribute__((weak)) void FlashAttentionChunkPrefill(const uint32_t blockNum, aclrtStream stream, const FlashAttentionChunkPrefillParams& params);
+__attribute__((weak)) void FlashAttentionChunkPrefill(
+    const uint32_t blockNum, aclrtStream stream, const FlashAttentionChunkPrefillParams& params);
 
 /**
  * @brief Broadcast MatMul with Per-Block Quantization（Ascend 950 TLA）。
@@ -158,8 +164,28 @@ __attribute__((weak)) void FlashAttentionChunkPrefill(const uint32_t blockNum, a
  * @param stream    ACL 计算流。
  * @param params    运行期参数（M/N/K/batch、地址）。
  */
-__attribute__((weak))
-void BroadcastMatmulPerblockQuant(const uint32_t blockNum, aclrtStream stream, const MatmulParams& params);
+__attribute__((weak)) void BroadcastMatmulPerblockQuant(
+    const uint32_t blockNum, aclrtStream stream, const MatmulParams& params);
+
+/**
+ * @brief Runtime parameters for matrix inverse example 78_matrix_inverse.
+ *
+ * Computes the inverse of a square matrix A (N×N) in-place using LU decomposition
+ * with partial pivoting. The input matrix A is overwritten with its inverse A^{-1}.
+ * The pivot array is allocated internally as workspace.
+ *
+ * inputAddr[0]: pointer to input matrix A (N×N, row-major)
+ */
+struct MatrixInverseParams : public PrebuiltParams {
+    uint32_t N = 0;                   ///< Matrix dimension (N for N×N matrix).
+    aclDataType dataType = ACL_FLOAT; ///< Element type of matrix A.
+};
+
+/**
+ * @brief Reserved prebuilt interface for example 78_matrix_inverse.
+ */
+__attribute__((weak)) void MatrixInverse(
+    const uint32_t blockNum, aclrtStream stream, const MatrixInverseParams& params);
 
 } // namespace CatlassKernel
 

@@ -2,7 +2,7 @@
 
 当前库上`examples`内包含多种矩阵乘的`样例模板`，其来源是不同的matmul`理论模板`与工程实践中发现的`工程优化`点的组合。在充分理解了各个`理论模板`和`工程优化`后，开发者可以基于问题场景选择适合的`样例模板`、甚至进一步自行组合出库上没有的新的`样例模板`，来达成矩阵乘的高性能优化。
 
-注意，本文档仅总结矩阵乘方案相关的样例，其他涉及量化、groupMatmul、后处理等的矩阵乘不在此处总结。
+注意，本文档仅总结矩阵乘方案相关的样例，其他涉及量化、groupMatmul、后处理等的矩阵乘不在此处总结（新增StreamK等Matmul样例待更新）。
 
 ## 样例模板清单
 
@@ -286,7 +286,7 @@ $2Byte * MNK / k_1$
 
 各PIPE的指令流水图示例如下：
 
-<img src="https://raw.gitcode.com/user-images/assets/7801479/1dca48b1-2b5d-450c-9f66-18dbc1f7e2d1/8pingpong1.png" width="100%">
+<img src="https://raw.gitcode.com/user-images/assets/7801479/59f2458f-719d-4711-8ed9-5e51732de2d0/SingleBuffer.png" width="100%">
 
 如果在AIC的L1/L0A/L0B/L0C上，每次载入数据tile块时都尽量填满所有空间，会导致各PIPE的流水串行，整体效率低下
 
@@ -298,7 +298,7 @@ $2Byte * MNK / k_1$
 
 各PIPE的指令流水图示例如下，MTE1上指令的0、1表示pingpong流水：
 
-<img src="https://raw.gitcode.com/user-images/assets/7801479/5917e1ca-dea0-4e00-8322-ef5ba2f32f46/8pingpong3.png" width="100%">
+<img src="https://raw.gitcode.com/user-images/assets/7801479/e5cc2db5-873e-47f0-a425-464957168132/DoubleBuffer.png" width="100%">
 
 ⚠️ 需要注意的是，与`L1常驻`优化结合时，常驻的A/B矩阵的tile块，不启用多buffer。
 
@@ -327,7 +327,7 @@ for ... {
     copyGM2L1A
     copyGM2L1B
     preload_count++
-    for (preload_count == PRELOAD_STAGES) {
+    if (preload_count == PRELOAD_STAGES) {
         // 计算前PRELOAD_STAGES轮次的数据
         copyL12L0A
         copyL12L0B
@@ -346,7 +346,7 @@ for ... {
 
 各PIPE的指令流水图示例如下，最终达成了A3、B3块的GmToL1搬运提前，减缓了MTE2上的搬运空泡：
 
-<img src="https://raw.gitcode.com/user-images/assets/7801479/1edf8fb8-c8e2-4b84-b742-0e6c507efb64/9preload1.png" width="100%">
+<img src="https://raw.gitcode.com/user-images/assets/7801479/c4302c87-542e-42e1-811d-7bfe6b1ba22f/preload.png" width="100%">
 
 ### 特性承载代码
 
@@ -363,8 +363,8 @@ for ... {
 
 当数据读取为主流水时，优化读取带宽能带来性能收益，以fp16的A矩阵为例，目前有以下几种低带宽场景：
 
-- **Stride非512B对齐导致的低带宽**。搬运参数srcDValue（详见[昇腾文档：DataCopy-随路转换ND2NZ搬运](https://www.hiascend.com/document/detail/zh/canncommercial/83RC1/API/ascendcopapi/atlasascendc_api_07_00127.html)）非512B对齐时，带宽会有明显下降。
-- **搬运指令限制导致的低带宽**。ND2NZ的搬运指令，参数srcDValue是uint16类型，最大值65535。当K>65535时，只能通过取ndNum= 1，在m方向循环调用搬运指令，降低了读取带宽。
+- **Stride非512Byte对齐导致的低带宽**。搬运参数srcDValue（详见[昇腾文档：DataCopy-随路转换ND2NZ搬运](https://www.hiascend.com/document/detail/zh/canncommercial/83RC1/API/ascendcopapi/atlasascendc_api_07_00127.html)）非512Byte对齐时，带宽会有明显下降。
+- **搬运指令限制导致的低带宽**。ND2NZ的搬运指令，参数srcDValue是uint16类型，最大值65535。当K>65535时，只能通过取ndNum = 1，在m方向循环调用搬运指令，降低了读取带宽。
 - 相比ND2ND不转换排布，**ND2NZ随路转换有带宽损失**。
 
 ### 优化方案
@@ -375,13 +375,13 @@ for ... {
 
 <img src="https://raw.gitcode.com/user-images/assets/7801479/80501346-2ea2-42ba-8cc0-b6f614630606/4paddingND.png" width="100%">
 
-将Stride方向按照512B对齐，实现复杂度最低，可以处理Stride非对齐导致的带宽下降。
+将Stride方向按照512Byte对齐，实现复杂度最低，可以处理Stride非对齐导致的带宽下降。
 
 #### PaddingMatrixBlockND
 
 <img src="https://raw.gitcode.com/user-images/assets/7801479/9e5e0d37-ef6a-41e0-b54a-1f6d079e1179/4paddingBlockND.png" width="100%">
 
-按$m_1*k_1$作为“block”粒度重排，block内行优先、block间行优先，且$k_1$为512B对齐，实现复杂度适中，可以处理Stride非对齐和Stride超过65535导致的带宽下降。
+按$m_1*k_1$作为“block”粒度重排，block内行优先、block间行优先，且$k_1$为512Byte对齐，实现复杂度适中，可以处理Stride非对齐和Stride超过65535导致的带宽下降。
 
 #### PaddingMatrixNZ
 
@@ -528,7 +528,7 @@ struct TileCopyOpt : public Catlass::Gemm::Tile::TileCopy<ArchTag, AType, BType,
 
 当数据写出为主流水时，优化写出带宽能够带来性能收益。
 
-- 当写出时`dstStride`未进行512B对齐，带宽有明显下降
+- 当写出时`dstStride`未进行512Byte对齐，带宽有明显下降
 - 写出时用NZ2ND随路格式转换，产生带宽损失
 
 ### 优化方案
@@ -536,19 +536,19 @@ struct TileCopyOpt : public Catlass::Gemm::Tile::TileCopy<ArchTag, AType, BType,
 针对上述情况，可使用AIV对数据格式进行重排，在重排开销低于带宽损失时，会有性能收益。以下提供四种重排方式。
 <img src="https://raw.gitcode.com/user-images/assets/7801479/89afcf74-a193-431b-aea3-a8de2abcb4f9/7rmPadding1.png" width="80%">
 
-（↑）**方式一**：使用局部workSpace，ND写出到GM时512B对齐，随后按block块粒度在UB上重排，再写出到GM上。
+（↑）**方式一**：使用局部workSpace，ND写出到GM时512Byte对齐，随后按block块粒度在UB上重排，再写出到GM上。
 
 <img src="https://raw.gitcode.com/user-images/assets/7801479/12665171-d86f-4208-8c11-3bef2359cfa1/7rmPadding2.png" width="80%">
 
-（↑）**方式二**：使用全量workSpace，ND写出到GM时512B对齐，等全量结果写完后，再启动UB上数据重排，写入到GM上。
+（↑）**方式二**：使用全量workSpace，ND写出到GM时512Byte对齐，等全量结果写完后，再启动UB上数据重排，写入到GM上。
 
 <img src="https://raw.gitcode.com/user-images/assets/7801479/13bd80b2-d6ab-4520-839c-cf5e700db0d5/7rmPadding3.png" width="80%">
 
-（↑）**方式三**：使用局部workSpace，NZ写出到GM时512B对齐，再按block块粒度在UB上重排，ND写出到GM上。
+（↑）**方式三**：使用局部workSpace，NZ写出到GM时512Byte对齐，再按block块粒度在UB上重排，ND写出到GM上。
 
 <img src="https://raw.gitcode.com/user-images/assets/7801479/204d24e9-5dc8-4318-bfe1-7f958598c514/7rmPadding4.png" width="80%">
 
-（↑）**方式四**：使用全量workSpace，NZ写出到GM时512B对齐，等全量结果写完后，再启动UB上数据重排，ND写出到GM上。
+（↑）**方式四**：使用全量workSpace，NZ写出到GM时512Byte对齐，等全量结果写完后，再启动UB上数据重排，ND写出到GM上。
 
 ### 特性承载代码
 
@@ -575,7 +575,7 @@ struct TileCopyOpt : public Catlass::Gemm::Tile::TileCopy<ArchTag, AType, BType,
     taskBlocks = CeilDiv(M, m1) * CeilDiv(N, n1);
     ```
 
-  - 基本任务块小于AIC数： $taskBlocks < aicCoreNum$
+  - 基本任务块小于AIC数：$taskBlocks < aicCoreNum$
   - $K$轴较小，$K <= k_1$
 - [09_splitk_matmul](../../../../examples/09_splitk_matmul/splitk_matmul.cpp)或[22_padding_splitk_matmul](../../../../examples/22_padding_splitk_matmul/padding_splitk_matmul.cpp)（带Padding前处理）
   - 选择$m_1$、$n_1$、$k_1$
@@ -603,7 +603,7 @@ struct TileCopyOpt : public Catlass::Gemm::Tile::TileCopy<ArchTag, AType, BType,
 <details>
 <summary><strong><font size="4">Padding选择</font></strong></summary>
 
-当Stride非512B对齐时可以考虑使用Padding前处理，但需要考虑Padding带来的开销以及MIX算子编译启动的开销（小shape[31_small_matmul](../../../../examples/31_small_matmul/small_matmul.cpp)方法不推荐额外适配Padding）
+当Stride非512Byte对齐时可以考虑使用Padding前处理，但需要考虑Padding带来的开销以及MIX算子编译启动的开销（小shape[31_small_matmul](../../../../examples/31_small_matmul/small_matmul.cpp)方法不推荐额外适配Padding）
 
 `PaddingMatrixND`、`PaddingMatrixBlockND`和`PaddingMatrixNZ`各自的适用场景待完善，泛化上`PaddingMatrixNZ`更具有优势。
 

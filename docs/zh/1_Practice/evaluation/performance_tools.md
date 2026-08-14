@@ -12,7 +12,7 @@ CANN对算子开发的两个场景——单算子与整网开发，分别提供�
 
 当前支持基于不同运行模式（上板或仿真）和不同文件形式（可执行文件或算子二进制`.o`文件）进行性能数据的采集和自动解析。
 
-### Profiling简介
+### Profiling简介 { #profiling-introduction }
 
 [Profiling](https://www.hiascend.com/document/redirect/CannCommunitymsopprofuserguide)是整网性能分析工具，对应的指令为`msprof`。
 
@@ -20,7 +20,7 @@ CANN对算子开发的两个场景——单算子与整网开发，分别提供�
 
 其中，`msprof`采集通用命令是性能数据采集的基础，用于提供性能数据采集时的基本信息，包括参数说明、AI任务文件、数据存放路径、自定义环境变量等。
 
-## 用`msProf`进行单算子性能分析
+## 用`msProf`进行单算子性能分析 { #msprof-single-operator-analysis }
 
 以`00_basic_matmul`为例，演示基于[msProf](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/devaids/optool/atlasopdev_16_0082.html)的性能分析过程。
 
@@ -41,8 +41,8 @@ msprof op --application="./00_basic_matmul 256 512 1024 0"
 
 | 参数             | 是否必选       | 说明                                         | 取值                          | 配套参数/注意事项            |
 | ---------------- | -------------- | -------------------------------------------- | ----------------------------- | ---------------------------- |
-| `--application`  | 必选（二选一） | 指定可执行文件/执行指令                      | 有效路径或命令                | 与 `--config` 互斥           |
-| `--config`       | 必选（二选一） | 指定二进制文件 `.o`                          | 有效路径                      | 与 `--application` 互斥      |
+| `--application`  | 可选（二选一） | 指定可执行文件/执行指令                      | 有效路径或命令                | 与 `--config` 互斥           |
+| `--config`       | 可选（二选一） | 指定二进制文件 `.o`                          | 有效路径                      | 与 `--application` 互斥      |
 | `--kernel-name`  | 可选           | 指定采集的算子名称（支持模糊匹配和多个采集） | 例：`"conv*"` 或 `"add\|mul"` | 需配合 `--launch-count` 使用 |
 | `--launch-count` | 可选           | 设置最大采集算子数量                         | 1~100 整数（默认 1）          | 需配合 `--kernel-name` 使用  |
 | `--warm-up`      | 可选           | 预热次数（解决芯片未提频问题）               | 整数（默认 5）                | 小 shape 场景建议提高到 30   |
@@ -73,38 +73,38 @@ msprof op ./00_basic_matmul 256 512 1024 0
 ├──MemoryUB.csv               # Vector和Scalar到UB的读写带宽速率，单位GB/s
 ├──OpBasicInfo.csv            # 算子基础信息
 ├──PipeUtilization.csv        # pipe类指令耗时和占比，建议优化数据搬运逻辑，提高带宽利用率
-└──ResourceConflictRatio.csv  # UB上的 bank group、bank conflict和资源冲突率在所有指令中的占比， 建议减少/避免对于同一个bank读写冲突或bank group的读读冲突
+└──ResourceConflictRatio.csv  # UB上的 bank group、bank conflict和资源冲突率在所有指令中的占比，建议减少/避免对于同一个bank读写冲突或bank group的读读冲突
 ```
 
-### 性能流水仿真
+### 性能流水仿真 { #performance-pipeline-simulation }
 
 通过仿真，可以获得**流水图**、**指令与代码行映射**、**代码热点图**、**内存热点图**等可视化数据，以便进一步分析优化算子计算瓶颈。
 
-#### msprof op simulator使用示例
+#### msprof op simulator使用示例 { #msprof-op-simulator-example }
 
 1. 编译脚本增加选项`--simulator`， 以`simulator`模式编译算子。
 
-```bash
-bash scripts/build.sh --simulator 00_basic_matmul
-```
+    ```bash
+    bash scripts/build.sh --simulator 00_basic_matmul
+    ```
 
-- 这个选项实际不会改变编译的二进制程序，区别为是否输出第2步的仿真器路径提示。
+    - 这个选项实际不会改变编译的二进制程序，区别为是否输出第2步的仿真器路径提示。
 
-1. 编译完成后，根据提示，加载仿真器二进制路径。
+2. 编译完成后，根据提示，加载仿真器二进制路径。
 
-```bash
-# 根据第1步的实际输出执行
-export LD_LIBRARY_PATH=/usr/local/Ascend/ascend-toolkit/latest/tools/simulator/Ascendxxxyy/lib:$LD_LIBRARY_PATH
-export LD_PRELOAD=/usr/local/Ascend/ascend-toolkit/latest/tools/simulator/Ascendxxxyy/lib/libruntime_camodel.so:/usr/local/Ascend/ascend-toolkit/latest/tools/simulator/Ascendxxxyy/lib/libnpu_drv_camodel.so
-```
+    ```bash
+    # 根据第1步的实际输出执行
+    export LD_LIBRARY_PATH=/usr/local/Ascend/ascend-toolkit/latest/tools/simulator/Ascendxxxyy/lib:$LD_LIBRARY_PATH
+    export LD_PRELOAD=/usr/local/Ascend/ascend-toolkit/latest/tools/simulator/Ascendxxxyy/lib/libruntime_camodel.so:/usr/local/Ascend/ascend-toolkit/latest/tools/simulator/Ascendxxxyy/lib/libnpu_drv_camodel.so
+    ```
 
-1. 切换到可执行文件的编译目录 `output/bin` 下， 使用`msprof op simulator`执行算子样例程序。
+3. 切换到可执行文件的编译目录 `output/bin` 下， 使用`msprof op simulator`执行算子样例程序。
 
-```bash
-cd output/bin
-# 可执行文件名 |矩阵m轴|n轴|k轴|Device ID（可选）
-msprof op simulator ./00_basic_matmul 256 512 1024 0
-```
+    ```bash
+    cd output/bin
+    # 可执行文件名 |矩阵m轴|n轴|k轴|Device ID（可选）
+    msprof op simulator ./00_basic_matmul 256 512 1024 0
+    ```
 
 - ⚠ 注意事项
   - 若需要查看**代码热点图**，需要在`examples/CMakeLists.txt`中增加`add_compile_options("SHELL:$<$<COMPILE_LANGUAGE:ASCEND>:-Xaicore-start -g -Xaicore-end")`。
@@ -160,26 +160,26 @@ msProf工具采集到的数据，可导入可视化工具[MindStudio Insight](ht
 
 ![MindStudio Insight Cache](https://www.hiascend.com/doc_center/source/zh/mindstudio/80RC1/GUI_baseddevelopmenttool/msascendinsightug/figure/zh-cn_image_0000002274870637.png)
 
-## 用Profiling进行整网性能分析
+## 用Profiling进行整网性能分析 { #profiling-network-analysis }
 
 虽然CATLASS只提供单算子的调用示例，但单算子调用示例也可使用[Profiling](https://www.hiascend.com/document/redirect/CannCommunitymsopprofuserguide)工具进行性能分析。
 
 下面以`00_basic_matmul`为例进行演示分析。
 
-### `msProf`使用示例
+### `Profiling`使用示例
 
 1. 基于[快速上手](../01_quick_start.md)，打开工具的编译开关`--enable_profiling`， 使能`Profiling API`编译算子样例。
 
-```bash
-bash scripts/build.sh --enable_profiling 00_basic_matmul
-```
+    ```bash
+    bash scripts/build.sh --enable_profiling 00_basic_matmul
+    ```
 
-1. 切换到可执行文件的编译目录`output/bin`下，用`msProf`执行算子样例程序。
+2. 切换到可执行文件的编译目录`output/bin`下，用`msProf`执行算子样例程序。
 
-```bash
-cd output/bin
-# 可执行文件名 |矩阵m轴|n轴|k轴|Device ID（可选）
-msprof ./00_basic_matmul 256 512 1024 0
-```
+    ```bash
+    cd output/bin
+    # 可执行文件名 |矩阵m轴|n轴|k轴|Device ID（可选）
+    msprof ./00_basic_matmul 256 512 1024 0
+    ```
 
 可参考[msProf性能数据文件参考](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/devaids/Profiling/atlasprofiling_16_0057.html)了解性能数据各文件的功能。

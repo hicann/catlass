@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # ----------------------------------------------------------------------------
 # Copyright (c) 2025 Huawei Technologies Co., Ltd.
-# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
 # CANN Open Software License Agreement Version 2.0 (the "License").
 # Please refer to the License for details. You may not use this file except in compliance with the License.
 # THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
@@ -15,8 +15,8 @@ import itertools
 
 from utils.config import Config
 
-class SingleCoreSplitkForSmallKMatmulTemplate:
 
+class SingleCoreSplitkForSmallKMatmulTemplate:
     TEMPLATE = """
 #include "kernel/single_core_splitk_for_small_k_matmul_kernel.h"
 void {launch_kernel_func_name}(aclrtStream& stream, uint64_t hardwareSyncAddr,
@@ -51,7 +51,9 @@ size_t {get_workspace_func_name}(TilingParams& tilingParams)
 
     @staticmethod
     def gen_code(dtype, kernel_info):
-        kernel_serial = Config.KERNEL_SERIAL_MAP[SingleCoreSplitkForSmallKMatmulTemplate.KERNEL_NAME]
+        kernel_serial = Config.KERNEL_SERIAL_MAP[
+            SingleCoreSplitkForSmallKMatmulTemplate.KERNEL_NAME
+        ]
 
         combinations = list(
             itertools.product(Config.LAYOUT_TAG_SET, Config.LAYOUT_TAG_SET)
@@ -67,7 +69,9 @@ size_t {get_workspace_func_name}(TilingParams& tilingParams)
             )
             # store tilingKey and kernel name
             kernel_info[
-                Config.get_tiling_key(kernel_serial, dtype, l_tag_a, l_tag_b, 0, 0, 0, 0)
+                Config.get_tiling_key(
+                    kernel_serial, dtype, l_tag_a, l_tag_b, 0, 0, 0, 0
+                )
             ] = kernel_func_name
             # launch_kernel_fun_name can be LaunchSingleCoreSplitkForSmallKMatmulKernelHalfLayout00
             launch_kernel_func_name = "Launch" + kernel_func_name

@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # -----------------------------------------------------------------------------------------------------------
 # Copyright (c) 2025 Huawei Technologies Co., Ltd.
-# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
 # CANN Open Software License Agreement Version 2.0 (the "License").
 # Please refer to the License for details. You may not use this file except in compliance with the License.
 # THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
@@ -37,6 +37,7 @@ class CubeFormat(Enum):
     def __repr__(self) -> str:
         return self.__name__
 
+
 class OpParam:
     def __init__(self) -> None:
         self.b = 0
@@ -53,18 +54,24 @@ class OpParam:
         self.layoutC = CubeFormat.ND
 
     def __str__(self) -> str:
-        return f"Shape: ({self.b}, {self.m}, {self.k}, {self.n}) \n" + \
-               f"Transpose: A {self.transA}, B {self.transB} \n" + \
-               f"(De)Quant: Bias {self.enBias}, Scale {self.enScale}, Residual {self.enResidual} \n" + \
-               f"Layout: layoutA {self.layoutA}, layoutB {self.layoutB}, layoutC {self.layoutC}"
+        return (
+            f"Shape: ({self.b}, {self.m}, {self.k}, {self.n}) \n"
+            + f"Transpose: A {self.transA}, B {self.transB} \n"
+            + f"(De)Quant: Bias {self.enBias}, Scale {self.enScale}, Residual {self.enResidual} \n"
+            + f"Layout: layoutA {self.layoutA}, layoutB {self.layoutB}, layoutC {self.layoutC}"
+        )
+
+
 # 生成一个mXn的矩阵，其中的值介于low和high之间
 def gen_rand(msize, nsize, low, high):
-    return low + (high - low) * torch.rand((msize, nsize),dtype=torch.float32)
+    return low + (high - low) * torch.rand((msize, nsize), dtype=torch.float32)
+
 
 # 生成一个row x col的二维数组，数值介于-8到7之间
 def gen_data_int8(row, col):
     data = np.random.randint(-8, 8, size=(row, col), dtype=np.int8)
     return data
+
 
 # 生成数据并做数据压缩
 def gen_data_int4(row, col, trans):
@@ -79,7 +86,7 @@ def gen_data_int4(row, col, trans):
             data_int8 = np.hstack((data_int8_origin, zero_row))
 
         quantized = data_int8.reshape(-1, 2)
-        high_quantized = (quantized[:, 0] & 0x0F)
+        high_quantized = quantized[:, 0] & 0x0F
         low_quantized = (quantized[:, 1] & 0x0F) << 4
         data_int4 = low_quantized | high_quantized
 
@@ -93,12 +100,13 @@ def gen_data_int4(row, col, trans):
             data_int8 = np.hstack((data_int8_origin, zero_column))
 
         quantized = data_int8.reshape(-1, 2)
-        high_quantized = (quantized[:, 0] & 0x0F)
+        high_quantized = quantized[:, 0] & 0x0F
         low_quantized = (quantized[:, 1] & 0x0F) << 4
         data_int4 = low_quantized | high_quantized
 
         data_int4_array = np.array(data_int4, dtype=np.int8)
         return data_int8_origin, data_int4_array
+
 
 def gen_testcase(path: str, param: OpParam) -> None:
     bsize, msize, ksize, nsize = param.b, param.m, param.k, param.n
@@ -121,6 +129,7 @@ def gen_testcase(path: str, param: OpParam) -> None:
     c_half = c_int32.astype(np.float16)
     c_half.tofile(os.path.join(path, "inputC.dat"))
     c_float.tofile(os.path.join(path, "expected.dat"))
+
 
 if __name__ == "__main__":
     current_dir = os.path.dirname(os.path.abspath(__file__))

@@ -25,21 +25,25 @@ public:
     using Arguments = typename GemvKernel::Arguments;
     /// Argument structure: Kernel API
     using Params = typename GemvKernel::Params;
+
 private:
     /// kernel API parameters object
     Params params_;
-public:
-    DeviceGemv() {}
-    ~DeviceGemv() {}
 
-    ///Access the Params structure
-    Params const &params() const
+public:
+    DeviceGemv()
+    {}
+    ~DeviceGemv()
+    {}
+
+    /// Access the Params structure
+    Params const& params() const
     {
         return params_;
     }
 
     /// Determines whether the GEMM can execute the given problem.
-    static Status CanImplement(Arguments const &args)
+    static Status CanImplement(Arguments const& args)
     {
         if (GemvKernel::CanImplement(args)) {
             return Status::kSuccess;
@@ -49,7 +53,7 @@ public:
     }
 
     /// Gets the workspace size
-    static size_t GetWorkspaceSize(Arguments const &args)
+    static size_t GetWorkspaceSize(Arguments const& args)
     {
         size_t workspace_bytes = 0;
         workspace_bytes += GemvKernel::GetWorkspaceSize(args);
@@ -57,7 +61,7 @@ public:
     }
 
     /// Initializes GEMV state from arguments
-    Status Initialize(Arguments const &args, uint8_t *workspace = nullptr, aclrtStream stream = nullptr)
+    Status Initialize(Arguments const& args, uint8_t* workspace = nullptr, aclrtStream stream = nullptr)
     {
         // Initialize the Params structure
         params_ = GemvKernel::ToUnderlyingArguments(args, workspace);

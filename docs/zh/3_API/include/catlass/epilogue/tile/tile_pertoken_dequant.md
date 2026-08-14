@@ -55,7 +55,7 @@ void operator()(
 | `ubScale`    | per-channel scale，类型 `ElementScale`，布局 `VectorLayout`（status=0），长度 = n  |
 | `ubPerToken` | per-token scale，类型 `ElementPerToken`，布局 `VectorLayout`（status=0），长度 = m |
 
-静态断言确保所有 Tensor 的 position 为 `VECCALC`，且布局匹配。
+静态断言确保所有 Tensor 的 position 为 `UB`，且布局匹配。
 
 ## 调用示例
 
