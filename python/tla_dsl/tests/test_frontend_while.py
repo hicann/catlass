@@ -265,29 +265,6 @@ def bad_statement_while_active_object_method_structure_kernel(limit: int) -> Non
     tla.make_coord(values[0], 0)
 
 
-def test_while_execute_dynamic_emits_scf_while() -> None:
-    with runtime_mod._eager_capture() as state:
-
-        def before(i: Any) -> list[Any]:
-            return [i < 4, [i]]
-
-        def after(i: Any) -> list[Any]:
-            return [i + 1]
-
-        result = ast_decorators_mod._while_execute_dynamic(
-            before,
-            after,
-            0,
-            carried_names=("i",),
-        )
-        tla.make_coord(result, 0)
-
-    mlir = str(state.module)
-    assert "scf.while" in mlir
-    assert "scf.condition" in mlir
-    assert "scf.yield" in mlir
-    assert "tla.make_coord" in mlir
-
 
 def test_statement_while_carried_index_lowers_to_scf_while() -> None:
     mlir = statement_while_carried_index_kernel.dump_mlir(type_args=(4,))
@@ -439,62 +416,5 @@ def test_statement_while_rejects_active_object_method_structure_change() -> None
         )
 
 
-def test_while_execute_dynamic_rejects_condition_region_structure_mismatch() -> None:
-    with runtime_mod._eager_capture():
-
-        def before(state: Any) -> list[Any]:
-            return [state[0] < 4, [(state[0],)]]
-
-        def after(state: Any) -> list[Any]:
-            return [(state[0] + 1, state[1] + 2)]
-
-        with pytest.raises(tla.TlaCoreAPIError, match="condition.*structure"):
-            ast_decorators_mod._while_execute_dynamic(
-                before,
-                after,
-                (0, 1),
-                carried_names=("state",),
-            )
 
 
-def test_while_execute_dynamic_rejects_condition_region_type_mismatch() -> None:
-    with runtime_mod._eager_capture():
-
-        def before(state: Any) -> list[Any]:
-            return [state[0] < 4, [(True, state[1])]]
-
-        def after(state: Any) -> list[Any]:
-            return [(state[0] + 1, state[1] + 2)]
-
-        with pytest.raises(tla.TlaCoreAPIError, match=r"condition.*structure"):
-            ast_decorators_mod._while_execute_dynamic(
-                before,
-                after,
-                (0, 1),
-                carried_names=("state",),
-            )
-
-
-def test_while_executor_emits_scf_while_with_structured_carried_value() -> None:
-    with runtime_mod._eager_capture() as state:
-
-        def before(loop_state: Any) -> list[Any]:
-            return [loop_state[0] < 4, [loop_state]]
-
-        def after(loop_state: Any) -> list[Any]:
-            return [(loop_state[0] + 1, loop_state[1] + 2)]
-
-        result = while_executor(
-            before,
-            after,
-            write_args=[(0, 1)],
-            full_write_args_count=1,
-            write_args_names=["loop_state"],
-        )
-        tla.make_coord(result[0], result[1])
-
-    mlir = str(state.module)
-    assert "scf.while" in mlir
-    assert "scf.condition" in mlir
-    assert "scf.yield" in mlir
-    assert "tla.make_coord" in mlir

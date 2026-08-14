@@ -27,6 +27,17 @@ from ..types import (
 from .typing import Tensor as TensorABC
 
 
+def _as_host_index_tree(value: Any, *, what: str) -> Any:
+    """Normalize a Host index tree: bare ``int`` → ``(int,)``; otherwise require ``tuple``."""
+    if isinstance(value, int):
+        return (value,)
+    if isinstance(value, tuple):
+        return value
+    raise TypeError(
+        f"{what} must be an int or nested int tuple, got {type(value).__name__}"
+    )
+
+
 class DlpackBridgeError(RuntimeError):
     """Raised when DLPack export or parsing fails."""
 
@@ -52,15 +63,10 @@ def export_dlpack_capsule(tensor: Any, *, stream: int | None = -1) -> Any:
 
 
 class _Tensor(TensorABC):
-    """TLA runtime tensor with compile metadata and optional DLPack binding.
+    """TLA runtime host tensor with compile metadata and optional DLPack binding.
 
-    Construct via ``tla.Tensor(...)`` or :func:`make_fake_tensor` inside
-    :func:`~catlass.runtime._eager_capture` for metadata-only tensors, or via
-    :func:`from_dlpack` to bind an Ascend/NPU buffer zero-copy.
-
-    Non-symbolic tensors must use :func:`catlass.core_api.make_shape` for ``shape`` and
-    ``origin_shape`` (required), :func:`catlass.core_api.make_coord` for ``coord``, and
-    :func:`catlass.core_api.make_stride` for ``stride``.
+    Not a Host public constructor. Use :func:`make_fake_tensor` (unbound sample) or
+    :func:`from_dlpack` (NPU buffer). ``tla.Tensor`` is the shared ABC / annotation.
     """
 
     @staticmethod
@@ -142,33 +148,20 @@ class _Tensor(TensorABC):
         stride: Any | None,
         layout_tag: Any | None,
     ) -> None:
-        from ..core_api import _Coord, _Shape, _Stride, _resolve_arch_layout_tag
+        from ..core_api import _resolve_arch_layout_tag
 
         self._dtype = _coerce_host_tensor_dtype(dtype)
         self.addrspace = _coerce_host_tensor_addrspace(addrspace)
         self.layout_tag = _resolve_arch_layout_tag(layout_tag, for_op="Tensor")
 
-        if not isinstance(shape, _Shape):
-            raise TypeError(
-                "Tensor(shape=...): shape must be the result of tla.make_shape(...)"
-            )
-
-        comp = shape._components
+        comp = _as_host_index_tree(shape, what="shape")
         flat = tuple(_flatten_int_leaves_tree(comp))
         self._shape_tuple = flat
         self._shape_components = comp
 
         if origin_shape is None:
-            raise TypeError(
-                "Tensor(shape=tla.make_shape(...)): origin_shape is required; "
-                "pass tla.make_shape(...) for logical bounds"
-            )
-        if isinstance(origin_shape, _Shape):
-            self.origin_shape = origin_shape._components
-        else:
-            raise TypeError(
-                "Tensor origin_shape=... must be the result of tla.make_shape(...)"
-            )
+            raise TypeError("Tensor origin_shape is required")
+        self.origin_shape = _as_host_index_tree(origin_shape, what="origin_shape")
 
         rs_stride, rs_coord = _try_remap_stride_coord_trees(
             comp, self.origin_shape, self._dtype, self.layout_tag
@@ -179,34 +172,26 @@ class _Tensor(TensorABC):
                 raise ValueError(
                     "Tensor(coord=None): cannot derive coord from layout remap; "
                     "use a flat logical origin_shape (M,N) without nested parentheses, "
-                    "or pass tla.make_coord(...)"
+                    "or pass an explicit coord tree"
                 )
             self.coord = rs_coord
-        elif isinstance(coord, _Coord):
-            self.coord = coord._components
         else:
-            raise TypeError(
-                "Tensor coord=... must be None or the result of tla.make_coord(...)"
-            )
+            self.coord = _as_host_index_tree(coord, what="coord")
 
         if stride is None:
             if rs_stride is None:
                 raise ValueError(
                     "Tensor(stride=None): cannot derive stride from layout remap "
-                    "(remap stride tree must match shape tree); pass tla.make_stride(...)"
+                    "(remap stride tree must match shape tree); pass an explicit stride tree"
                 )
             self._stride_components = rs_stride
-        elif isinstance(stride, _Stride):
-            sc = stride._components
+        else:
+            sc = _as_host_index_tree(stride, what="stride")
             if _tree_structure_mask(sc) != _tree_structure_mask(comp):
                 raise ValueError(
                     "Tensor stride component tree must match shape tree structure"
                 )
             self._stride_components = sc
-        else:
-            raise TypeError(
-                "Tensor stride=... must be None or the result of tla.make_stride(...)"
-            )
 
     @property
     def dtype(self) -> Any:
@@ -588,14 +573,9 @@ def from_dlpack(
         UInt64,
     )
     from ..core_api import (
-        _Shape,
         _remap_tensor_like_prefix_fields_for_layout_trees,
         _resolve_arch_layout_tag,
-        make_coord,
-        make_shape,
-        make_stride,
     )
-    from ..runtime import _eager_capture
 
     try:
         dlpack_data = export_dlpack_capsule(tensor_dlpack, stream=stream)
@@ -687,11 +667,15 @@ def from_dlpack(
             else phys_shape
         )
     else:
-        if not isinstance(origin_shape, _Shape):
+        if isinstance(origin_shape, tuple):
+            logical_origin = origin_shape
+        elif isinstance(origin_shape, int):
+            logical_origin = (origin_shape,)
+        else:
             raise TypeError(
-                "from_dlpack origin_shape=... must be the result of tla.make_shape(...)"
+                "from_dlpack origin_shape=... must be an int tree / tuple "
+                "(Kernel tla.make_shape is not a Host API)"
             )
-        logical_origin = origin_shape._components
     trees = _remap_tensor_like_prefix_fields_for_layout_trees(
         logical_origin, dtype_token, layout_token
     )
@@ -702,28 +686,66 @@ def from_dlpack(
         )
     shape_tree, stride_tree, coord_tree, origin_tree = trees
 
-    with _eager_capture():
-        tensor = _Tensor(
-            make_shape(*shape_tree),
-            dtype,
-            origin_shape=make_shape(*origin_tree),
-            coord=make_coord(*coord_tree),
-            stride=make_stride(*stride_tree),
-            layout_tag=resolved_layout,
-            data_ptr=data_ptr,
-        )
+    tensor = _Tensor(
+        shape_tree,
+        dtype,
+        origin_shape=origin_tree,
+        coord=coord_tree,
+        stride=stride_tree,
+        layout_tag=resolved_layout,
+        data_ptr=data_ptr,
+    )
     if assumed_align is not None:
         tensor._assumed_align = int(assumed_align)
     tensor._external_binding = True
     return tensor
 
 
-def make_fake_tensor(*args: Any, **kwargs: Any) -> _Tensor:
-    """Create a metadata-only host tensor inside an eager-capture session."""
+def make_fake_tensor(
+    dtype: Any,
+    shape: Any,
+    stride: Any,
+    *,
+    layout_tag: Any | None = None,
+    addrspace: Any = AddressSpace.gm,
+    origin_shape: Iterable[Any] | None = None,
+    coord: Iterable[Any] | None = None,
+    assumed_align: int | None = None,
+) -> _Tensor:
+    """Create a metadata-only Host fake tensor (no device buffer).
+
+    Always unbound: ``data_ptr`` is forced to ``0`` and the tensor is not
+    externally bound. Use :func:`from_dlpack` for real NPU buffers.
+
+    Positional arguments are ``(dtype, shape, stride)``. ``layout_tag`` defaults
+    to ``tla.arch.RowMajor``. Explicit ``shape`` / ``stride`` are kept as given
+    (no layout remap). ``origin_shape`` defaults to ``shape`` when omitted.
+
+    Opens an internal capture session so callers only use this helper.
+    Host args are int / nested-int trees (not Kernel ``make_shape`` /
+    ``make_coord`` / ``make_stride``).
+    """
     from ..runtime import _eager_capture
 
+    if origin_shape is None:
+        origin_shape = shape
+
     with _eager_capture():
-        return _Tensor(*args, **kwargs)
+        tensor = _Tensor(
+            shape,
+            dtype,
+            addrspace=addrspace,
+            data_ptr=0,
+            origin_shape=origin_shape,
+            coord=coord,
+            stride=stride,
+            layout_tag=layout_tag,
+        )
+    if assumed_align is not None:
+        tensor._assumed_align = int(assumed_align)
+    tensor.data_ptr = 0
+    tensor._external_binding = False
+    return tensor
 
 
 __all__ = [
@@ -731,5 +753,4 @@ __all__ = [
     "export_dlpack_capsule",
     "from_dlpack",
     "make_fake_tensor",
-    "_Tensor",
 ]

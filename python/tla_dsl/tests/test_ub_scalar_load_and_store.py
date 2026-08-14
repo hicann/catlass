@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from catlass.tla.runtime import make_fake_tensor
+
+
 import re
 
 import pytest
@@ -16,27 +19,25 @@ def _tensor(
 ) -> tla.Tensor:
     if not shape:
         shape = (1,)
-    with runtime_mod._eager_capture():
-        tla_shape = tla.make_shape(*shape)
-        coord = None
-        stride = None
-        if len(shape) > 2:
-            contiguous_strides = []
-            running_stride = 1
-            for dim in reversed(shape):
-                contiguous_strides.append(running_stride)
-                running_stride *= dim
-            coord = tla.make_coord(*(0 for _ in shape))
-            stride = tla.make_stride(*reversed(contiguous_strides))
-        return tla.Tensor(
-            tla_shape,
-            dtype,
-            addrspace=addrspace,
-            origin_shape=tla_shape,
-            coord=coord,
-            stride=stride,
-            layout_tag=tla.arch.RowMajor,
-        )
+    coord = None
+    stride = None
+    if len(shape) > 2:
+        contiguous_strides = []
+        running_stride = 1
+        for dim in reversed(shape):
+            contiguous_strides.append(running_stride)
+            running_stride *= dim
+        coord = tuple(0 for _ in shape)
+        stride = tuple(reversed(contiguous_strides))
+    return make_fake_tensor(
+               dtype,
+               shape,
+               stride,
+               addrspace=addrspace,
+               origin_shape=shape,
+               coord=coord,
+               layout_tag=tla.arch.RowMajor,
+           )
 
 
 def _assert_dynamic_index_from_arg(mlir: str, op_line: str) -> None:

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from catlass.tla.runtime import make_fake_tensor
+
+
 from typing import Any, Callable
 
 import pytest
@@ -14,44 +17,45 @@ def _ub_tensor(
     dtype: type[tla.Numeric] = tla.Int32,
     extent: int = 64,
 ) -> tla.Tensor:
-    with runtime_mod._eager_capture():
-        shape = tla.make_shape(extent)
-        return tla.Tensor(
-            shape,
-            dtype,
-            addrspace=tla.AddressSpace.ub,
-            origin_shape=shape,
-            layout_tag=tla.arch.RowMajor,
-        )
+    return make_fake_tensor(
+        dtype,
+        (extent,),
+        (1,),
+        addrspace=tla.AddressSpace.ub,
+        origin_shape=(extent,),
+        layout_tag=tla.arch.RowMajor,
+    )
 
 def _gm_tensor(
     dtype: type[tla.Numeric] = tla.Int32,
     shape: tuple[int, ...] = (64,),
 ) -> tla.Tensor:
-    with runtime_mod._eager_capture():
-        shape = tla.make_shape(*shape)
-        return tla.Tensor(
-            shape,
-            dtype,
-            addrspace=tla.AddressSpace.gm,
-            origin_shape=shape,
-            layout_tag=tla.arch.RowMajor,
-        )
+    if len(shape) == 1:
+        stride: tuple[int, ...] = (1,)
+    elif len(shape) == 2:
+        stride = (shape[1], 1)
+    else:
+        raise ValueError(f"unsupported rank for test helper: {shape!r}")
+    return make_fake_tensor(
+        dtype,
+        shape,
+        stride,
+        origin_shape=shape,
+        layout_tag=tla.arch.RowMajor,
+    )
 
 def _l0c_tensor(
     dtype: type[tla.Numeric] = tla.Float32,
     m: int = 32,
     n: int = 64
 ) -> tla.Tensor:
-    with runtime_mod._eager_capture():
-        shape = tla.make_shape(m, n)
-        return tla.Tensor(
-            shape,
-            dtype,
-            addrspace=tla.AddressSpace.l0c,
-            origin_shape=shape,
-            layout_tag=tla.arch.RowMajor,
-        )
+    return make_fake_tensor(
+        dtype,
+        (m, n),
+        (n, 1),
+        origin_shape=(m, n),
+        layout_tag=tla.arch.RowMajor,
+    )
 
 @tla.kernel
 def atomic_add_l0c2gm_fake_atomic_mode(l0c_tensor: tla.Tensor, gm_tensor: tla.Tensor) -> None:

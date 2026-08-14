@@ -169,15 +169,12 @@ def runtime_kwargs(args: argparse.Namespace) -> dict[str, Any]:
 def make_tla_tensor(
     dev_buf: Any, tla_dtype: type[Any], kernel_shape: tuple[int, ...]
 ) -> Any:
-    import catlass.runtime as runtime_mod
     from catlass.tla.runtime import from_dlpack
 
-    with runtime_mod._eager_capture():
-        origin = tla.make_shape(*kernel_shape)
     return from_dlpack(
         dev_buf.contiguous(),
         layout_tag=tla.arch.RowMajor,
-        origin_shape=origin,
+        origin_shape=kernel_shape,
     )
 
 

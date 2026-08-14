@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from catlass.tla.runtime import make_fake_tensor
+
+
 import pytest
 from mlir import ir as mlir_ir
 
@@ -12,14 +15,14 @@ def _vector_tensor(
     dtype: type[tla.Numeric] = tla.Float32,
     size: int = 64,
 ) -> tla.Tensor:
-    with runtime_mod._eager_capture():
-        return tla.Tensor(
-            tla.make_shape(size),
-            dtype,
-            addrspace=tla.AddressSpace.ub,
-            origin_shape=tla.make_shape(size),
-            layout_tag=tla.arch.RowMajor,
-        )
+    return make_fake_tensor(
+        dtype,
+        (size,),
+        (1,),
+        addrspace=tla.AddressSpace.ub,
+        origin_shape=(size,),
+        layout_tag=tla.arch.RowMajor,
+    )
 
 
 @tla.kernel

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from catlass.tla.runtime import make_fake_tensor
+
+
 import ast
 import pathlib
 import subprocess
@@ -9,6 +12,7 @@ import tempfile
 
 import pytest
 
+from mlir import ir as mlir_ir
 import catlass.tla as tla
 import catlass.runtime as runtime_mod
 from catlass.base_dsl.ast_preprocessor import (
@@ -198,29 +202,23 @@ def _kernel_bad_chained_tensor_store(out: tla.Tensor, selector: int) -> None:
 
 
 def _gm_tensor_1d(length: int, *, dtype: type = tla.Int32) -> tla.Tensor:
-    with runtime_mod._eager_capture():
-        return tla.Tensor(
-            tla.make_shape(length),
-            dtype,
-            addrspace=tla.AddressSpace.gm,
-            origin_shape=tla.make_shape(length),
-            coord=tla.make_coord(0),
-            stride=tla.make_stride(1),
-            layout_tag=tla.arch.RowMajor,
-        )
+    return make_fake_tensor(
+               dtype,
+               (length,),
+               (1,),
+               origin_shape=(length,),
+               layout_tag=tla.arch.RowMajor,
+           )
 
 
 def _gm_tensor_2d(rows: int, cols: int, *, dtype: type = tla.Float32) -> tla.Tensor:
-    with runtime_mod._eager_capture():
-        return tla.Tensor(
-            tla.make_shape(rows, cols),
-            dtype,
-            addrspace=tla.AddressSpace.gm,
-            origin_shape=tla.make_shape(rows, cols),
-            coord=tla.make_coord(0, 0),
-            stride=tla.make_stride(cols, 1),
-            layout_tag=tla.arch.RowMajor,
-        )
+    return make_fake_tensor(
+               dtype,
+               (rows, cols),
+               (cols, 1),
+               origin_shape=(rows, cols),
+               layout_tag=tla.arch.RowMajor,
+           )
 
 
 def test_tensor_scalar_load_emits_tla_scalar_load_1d() -> None:
@@ -257,7 +255,6 @@ def test_tensor_arg_attribute_lowers_in_lazy_boolean_rhs() -> None:
 
 
 def test_scalar_load_returns_typed_numeric() -> None:
-    from mlir import ir as mlir_ir
 
     ctx = mlir_ir.Context()
     ctx.allow_unregistered_dialects = True
@@ -553,14 +550,14 @@ def test_tensor_indexing_allows_vector_region_frontend() -> None:
 
 
 def test_scalar_load_accepts_ub_tensor_with_canonical_op() -> None:
-    with runtime_mod._eager_capture():
-        ub = tla.Tensor(
-            tla.make_shape(8),
-            tla.Int32,
-            addrspace=tla.AddressSpace.ub,
-            origin_shape=tla.make_shape(8),
-            layout_tag=tla.arch.RowMajor,
-        )
+    ub = make_fake_tensor(
+             tla.Int32,
+             (8,),
+             (1,),
+             addrspace=tla.AddressSpace.ub,
+             origin_shape=(8,),
+             layout_tag=tla.arch.RowMajor,
+         )
 
     @tla.kernel
     def k(x: tla.Tensor) -> None:

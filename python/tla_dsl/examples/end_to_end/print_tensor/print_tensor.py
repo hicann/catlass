@@ -419,22 +419,13 @@ def _make_external_unsigned_input(
         .to(device="npu", dtype=torch.uint8)
         .contiguous()
     )
-
-    import catlass.runtime as runtime_mod
-    from catlass.tla.runtime import make_fake_tensor
-
-    with runtime_mod._eager_capture():
-        shape_value = tla.make_shape(*shape)
-        value = make_fake_tensor(
-            shape_value,
-            getattr(tla, spec.tla_dtype),
-            origin_shape=shape_value,
-            coord=tla.make_coord(0, 0),
-            stride=tla.make_stride(shape[1], 1),
-            layout_tag=tla.arch.RowMajor,
-            data_ptr=int(owner.data_ptr()),
-        )
-    value._external_binding = True
+    # Unsigned element types without a native torch dtype: bind the byte buffer
+    # via from_dlpack and rely on kernel/print paths that accept the storage view.
+    value = tla.from_dlpack(
+        owner,
+        layout_tag=tla.arch.RowMajor,
+        origin_shape=shape,
+    )
     return _RuntimeInput(value, owner)
 
 

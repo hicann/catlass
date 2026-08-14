@@ -4,8 +4,13 @@
 
 from __future__ import annotations
 
+from catlass.tla.runtime import make_fake_tensor
+
+
 import pytest
 
+from mlir import ir as mlir_ir
+from catlass import _tla_type_bridge
 import catlass.tla as tla
 import catlass.runtime as runtime_mod
 from catlass.execution_lowering import TlaLoweringError
@@ -285,16 +290,13 @@ def _kernel_make_tensor_like_supported_layout_tags(mem: tla.Tensor) -> None:
 
 def test_interface_make_tensor_like_supported_layout_tags(compiler_tlair) -> None:
     """``make_tensor_like`` layoutTag spellings in MLIR and recomputed type fragments."""
-    with runtime_mod._eager_capture():
-        root = tla.Tensor(
-            tla.make_shape(128, 128),
-            tla.Float16,
-            addrspace=tla.AddressSpace.gm,
-            origin_shape=tla.make_shape(128, 128),
-            coord=tla.make_coord(0, 0),
-            stride=tla.make_stride(128, 1),
-            layout_tag=tla.arch.RowMajor,
-        )
+    root = make_fake_tensor(
+               tla.Float16,
+               (128, 128),
+               (128, 1),
+               origin_shape=(128, 128),
+               layout_tag=tla.arch.RowMajor,
+           )
     mlir = compiler_tlair(
         _kernel_make_tensor_like_supported_layout_tags, type_args=(root,)
     )
@@ -343,16 +345,13 @@ def _kernel_make_tensor_like_ptr_dtype(mem: tla.Tensor) -> None:
 
 
 def _make_f16_tensor() -> tla.Tensor:
-    with runtime_mod._eager_capture():
-        return tla.Tensor(
-            tla.make_shape(16, 16),
-            tla.Float16,
-            addrspace=tla.AddressSpace.gm,
-            origin_shape=tla.make_shape(16, 16),
-            coord=tla.make_coord(0, 0),
-            stride=tla.make_stride(16, 1),
-            layout_tag=tla.arch.RowMajor,
-        )
+    return make_fake_tensor(
+               tla.Float16,
+               (16, 16),
+               (16, 1),
+               origin_shape=(16, 16),
+               layout_tag=tla.arch.RowMajor,
+           )
 
 
 def test_make_tensor_like_uses_ptr_dtype_instead_of_like_dtype() -> None:
@@ -370,16 +369,22 @@ def test_make_tensor_like_uses_ptr_dtype_instead_of_like_dtype() -> None:
 
 
 def _zn_l0a_tensor(*, origin_m: int = 32, origin_n: int = 32) -> tla.Tensor:
-    with runtime_mod._eager_capture():
-        return tla.Tensor(
-            tla.make_shape((16, 2), (16, 2)),
-            tla.Float16,
-            addrspace=tla.AddressSpace.l0a,
-            origin_shape=tla.make_shape(origin_m, origin_n),
-            coord=tla.make_coord(0, 0),
-            stride=tla.make_stride((1, 1), (1, 1)),
-            layout_tag=tla.arch.zN,
-        )
+    from catlass.core_api import _remap_tensor_like_prefix_fields_for_layout_trees
+
+    trees = _remap_tensor_like_prefix_fields_for_layout_trees(
+        (origin_m, origin_n), "f16", "zN"
+    )
+    assert trees is not None
+    shape, stride, coord, origin = trees
+    return make_fake_tensor(
+        tla.Float16,
+        shape,
+        stride,
+        addrspace=tla.AddressSpace.l0a,
+        origin_shape=origin,
+        coord=coord,
+        layout_tag=tla.arch.zN,
+    )
 
 
 @tla.kernel
@@ -410,7 +415,7 @@ def test_interface_tile_view_zn_remapped_result_shape() -> None:
     assert "tla.tile_view" in mlir
     # Custom assembly prints the result as layout, coord, ptr (no outer ``!tla.tensor<...>``).
     assert (
-        "!tla.layout<!tla.shape<(16,1),(16,1)>, !tla.stride<(1,1),(1,1)>, !tla.shape<16,16>, zN>, !tla.coord<0,0>, !tla.ptr<f16, l0a, 2>>"
+        "!tla.layout<!tla.shape<(16,1),(16,1)>, !tla.stride<(16,256),(1,512)>, !tla.shape<16,16>, zN>, !tla.coord<0,0>, !tla.ptr<f16, l0a, 2>>"
         in mlir
     )
 
@@ -465,16 +470,14 @@ def _kernel_tile_view_comprehensive(mem: tla.Tensor, tile_row: tla.types.TlaInde
 def test_interface_tile_view_comprehensive_explicit_root_metadata(
     compiler_tlair,
 ) -> None:
-    with runtime_mod._eager_capture():
-        root = tla.Tensor(
-            tla.make_shape(80, 80),
-            tla.Float16,
-            addrspace=tla.AddressSpace.gm,
-            origin_shape=tla.make_shape(50, 50),
-            coord=tla.make_coord(10, 10),
-            stride=tla.make_stride(80, 1),
-            layout_tag=tla.arch.RowMajor,
-        )
+    root = make_fake_tensor(
+               tla.Float16,
+               (80, 80),
+               (80, 1),
+               origin_shape=(50, 50),
+               coord=(10, 10),
+               layout_tag=tla.arch.RowMajor,
+           )
     assert root.__tla_type__() == (
         "!tla.tensor<!tla.layout<!tla.shape<80,80>, !tla.stride<80,1>, !tla.shape<50,50>, row_major>, !tla.coord<10,10>, !tla.ptr<f16, gm, 2>>"
     )
@@ -521,28 +524,41 @@ def test_interface_mmad_nested_shape_contract_lowers_at_frontend(
     compiler_tlair,
 ) -> None:
     """``mmad`` expects acc ``L0Clayout``, lhs ``zN``, and rhs ``nZ``."""
-    with runtime_mod._eager_capture():
-        lhs = tla.Tensor(
-            tla.make_shape((16, 1), (16, 1)),
-            tla.Float16,
-            addrspace=tla.AddressSpace.l0a,
-            origin_shape=tla.make_shape(16, 16),
-            layout_tag=tla.arch.zN,
-        )
-        rhs = tla.Tensor(
-            tla.make_shape((16, 1), (16, 1)),
-            tla.Float16,
-            addrspace=tla.AddressSpace.l0b,
-            origin_shape=tla.make_shape(16, 16),
-            layout_tag=tla.arch.nZ,
-        )
-        acc = tla.Tensor(
-            tla.make_shape((16, 1), (16, 1)),
-            tla.Float32,
-            addrspace=tla.AddressSpace.l0c,
-            origin_shape=tla.make_shape(16, 16),
-            layout_tag=tla.arch.L0Clayout,
-        )
+    with mlir_ir.Context() as ctx:
+        _tla_type_bridge.load_tla_dialect(ctx)
+        try:
+            mlir_ir.Attribute.parse("#tla.compute_order<M_FIRST>", context=ctx)
+        except mlir_ir.MLIRError as exc:
+            if "compute_order" in str(exc) and "expected valid keyword" in str(exc):
+                pytest.skip("linked BiShengIR lacks tla.compute_order enum used by mmad")
+            raise
+    lhs = make_fake_tensor(
+              tla.Float16,
+              ((16, 1), (16, 1)),
+              ((16, 256), (1, 256)),
+              addrspace=tla.AddressSpace.l0a,
+              layout_tag=tla.arch.zN,
+              origin_shape=(16, 16),
+              coord=(0, 0),
+          )
+    rhs = make_fake_tensor(
+              tla.Float16,
+              ((16, 1), (16, 1)),
+              ((1, 256), (16, 256)),
+              addrspace=tla.AddressSpace.l0b,
+              layout_tag=tla.arch.nZ,
+              origin_shape=(16, 16),
+              coord=(0, 0),
+          )
+    acc = make_fake_tensor(
+              tla.Float32,
+              ((16, 1), (16, 1)),
+              ((16, 256), (1, 256)),
+              addrspace=tla.AddressSpace.l0c,
+              layout_tag=tla.arch.L0Clayout,
+              origin_shape=(16, 16),
+              coord=(0, 0),
+          )
     mlir = compiler_tlair(_kernel_mmad_interface_example, type_args=(lhs, rhs, acc))
     assert "tla.mmad" in mlir
     assert '"arith.constant"() <{value = true}> : () -> i1' in mlir
@@ -580,26 +596,21 @@ def test_interface_copy_gm_to_l1_zn_two_copies_dsl_mlir() -> None:
     且 **origin 不含 128**；``stride`` 按各自 layout ``shape`` 构造合法的行主布局，
     以确保相邻行不重叠，同时保留 ``shape`` 与 ``origin_shape`` 不同的覆盖。
     两路 f32 ``tile_view``、两次 ``tla.copy``、单次 4096B typed alloc + like；第二参数仅用于入口类型差异。"""
-    with runtime_mod._eager_capture():
-        # Layout shape 大于 origin；row-major stride 按 layout shape 的列数构造。
-        mem = tla.Tensor(
-            tla.make_shape(200, 260),
-            tla.Float32,
-            addrspace=tla.AddressSpace.gm,
-            origin_shape=tla.make_shape(72, 88),
-            coord=tla.make_coord(0, 0),
-            stride=tla.make_stride(260, 1),
-            layout_tag=tla.arch.RowMajor,
-        )
-        mem_i8 = tla.Tensor(
-            tla.make_shape(100, 140),
-            tla.Int8,
-            addrspace=tla.AddressSpace.gm,
-            origin_shape=tla.make_shape(56, 92),
-            coord=tla.make_coord(0, 0),
-            stride=tla.make_stride(140, 1),
-            layout_tag=tla.arch.RowMajor,
-        )
+    # Layout shape 大于 origin；row-major stride 按 layout shape 的列数构造。
+    mem = make_fake_tensor(
+              tla.Float32,
+              (200, 260),
+              (260, 1),
+              origin_shape=(72, 88),
+              layout_tag=tla.arch.RowMajor,
+          )
+    mem_i8 = make_fake_tensor(
+                 tla.Int8,
+                 (100, 140),
+                 (140, 1),
+                 origin_shape=(56, 92),
+                 layout_tag=tla.arch.RowMajor,
+             )
     mlir = _kernel_copy_gm_row_major_to_l1_zn.dump_mlir(type_args=(mem, mem_i8))
     assert "tla.tile_view" in mlir
     assert "tla.copy" in mlir

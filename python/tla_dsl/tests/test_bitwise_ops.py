@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from catlass.tla.runtime import make_fake_tensor
+
+
 import inspect
 from pathlib import Path
 
@@ -63,16 +66,16 @@ def _vector_ssa_bitwise_binary_kernel(src0: tla.Tensor, src1: tla.Tensor, dst: t
 
 
 def _tensor_args(dtype: type[tla.Numeric] = tla.Float32, count: int = 2) -> tuple[tla.Tensor, ...]:
-    with runtime_mod._eager_capture():
-        return tuple(
-            tla.Tensor(
-                tla.make_shape(64),
-                dtype,
-                addrspace=tla.AddressSpace.ub,
-                origin_shape=tla.make_shape(64),
-            )
-            for _ in range(count)
-        )
+    return tuple(
+        make_fake_tensor(
+            dtype,
+            (64,),
+        (1,),
+            addrspace=tla.AddressSpace.ub,
+            origin_shape=(64,),
+            layout_tag=tla.arch.RowMajor)
+        for _ in range(count)
+    )
 
 
 @pytest.mark.parametrize(

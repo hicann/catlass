@@ -99,7 +99,6 @@ def basic_mmad_ptr(
 
 
 def run(args: argparse.Namespace) -> int:
-    from catlass.runtime import _eager_capture
     from catlass.tla.runtime import from_dlpack
 
     torch.npu.set_device(args.device)
@@ -114,18 +113,14 @@ def run(args: argparse.Namespace) -> int:
     a = a.contiguous().npu()
     b = b.contiguous().npu()
     c = c.contiguous().npu()
-    with _eager_capture():
-        a_origin = tla.make_shape(M_DIM, K_DIM)
-        b_origin = tla.make_shape(K_DIM, N_DIM)
-        c_origin = tla.make_shape(L1_M_DIM, L1_N_DIM)
     a_tensor = from_dlpack(
-        a, layout_tag=tla.arch.RowMajor, origin_shape=a_origin
+        a, layout_tag=tla.arch.RowMajor, origin_shape=(M_DIM, K_DIM)
     )
     b_tensor = from_dlpack(
-        b, layout_tag=tla.arch.RowMajor, origin_shape=b_origin
+        b, layout_tag=tla.arch.RowMajor, origin_shape=(K_DIM, N_DIM)
     )
     c_tensor = from_dlpack(
-        c, layout_tag=tla.arch.RowMajor, origin_shape=c_origin
+        c, layout_tag=tla.arch.RowMajor, origin_shape=(L1_M_DIM, L1_N_DIM)
     )
 
     artifact = tla.compile(

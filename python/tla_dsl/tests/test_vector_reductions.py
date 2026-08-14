@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from catlass.tla.runtime import make_fake_tensor
+
+
 from typing import Any
 
 import pytest
@@ -10,14 +13,14 @@ import catlass.runtime as runtime_mod
 
 
 def _vector_tensor(dtype: type[tla.Numeric] = tla.Float32, shape: int = 64) -> tla.Tensor:
-    with runtime_mod._eager_capture():
-        return tla.Tensor(
-            tla.make_shape(shape),
-            dtype,
-            addrspace=tla.AddressSpace.ub,
-            origin_shape=tla.make_shape(shape),
-            layout_tag=tla.arch.RowMajor,
-        )
+    return make_fake_tensor(
+        dtype,
+        (shape,),
+        (1,),
+        addrspace=tla.AddressSpace.ub,
+        origin_shape=(shape,),
+        layout_tag=tla.arch.RowMajor,
+    )
 
 
 @tla.kernel

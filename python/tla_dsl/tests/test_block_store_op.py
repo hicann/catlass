@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from catlass.tla.runtime import make_fake_tensor
+
+
 from typing import Any
 
 import catlass.tla as tla
@@ -14,15 +17,14 @@ def _ub_tensor(
     *,
     extent: int = 64,
 ) -> tla.Tensor:
-    with runtime_mod._eager_capture():
-        shape = tla.make_shape(extent)
-        return tla.Tensor(
-            shape,
-            dtype,
-            addrspace=tla.AddressSpace.ub,
-            origin_shape=shape,
-            layout_tag=tla.arch.RowMajor,
-        )
+    return make_fake_tensor(
+        dtype,
+        (extent,),
+        (1,),
+        addrspace=tla.AddressSpace.ub,
+        origin_shape=(extent,),
+        layout_tag=tla.arch.RowMajor,
+    )
 
 
 @tla.kernel
@@ -88,11 +90,10 @@ def test_block_store_kernel_parameter_stride(compiler_tlair: Any) -> None:
                 x_v = src_tile.load()
                 dst_tile.store(x_v, params=BlockStoreParams(block_stride=stride_val))
 
-    with runtime_mod._eager_capture():
-        n = tla.Int32(32)
-        mlir = compiler_tlair(
-            block_store_param_kernel,
-            type_args=(_ub_tensor(), _ub_tensor(), n),
-        )
+    n = tla.Int32(32)
+    mlir = compiler_tlair(
+        block_store_param_kernel,
+        type_args=(_ub_tensor(), _ub_tensor(), n),
+    )
     assert "tla.store" in mlir
     assert "stride" in mlir

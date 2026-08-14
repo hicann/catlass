@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from catlass.tla.runtime import make_fake_tensor
+
+
 from typing import Any
 
 import pytest
@@ -9,14 +12,14 @@ import catlass.runtime as runtime_mod
 
 
 def _ub_tensor(dtype: type[tla.Numeric] = tla.Float32) -> tla.Tensor:
-    with runtime_mod._eager_capture():
-        return tla.Tensor(
-            tla.make_shape(64),
-            dtype,
-            addrspace=tla.AddressSpace.ub,
-            origin_shape=tla.make_shape(64),
-            layout_tag=tla.arch.RowMajor,
-        )
+    return make_fake_tensor(
+        dtype,
+        (64,),
+        (1,),
+        addrspace=tla.AddressSpace.ub,
+        origin_shape=(64,),
+        layout_tag=tla.arch.RowMajor,
+    )
 
 
 @tla.kernel
@@ -60,16 +63,15 @@ def test_gather_rejects_non_ub_src() -> None:
                 indices = idx_tile.load()
                 dst_tile.store(tla.gather(src_tile, indices))
 
-    with runtime_mod._eager_capture():
-        l0c_mem = tla.Tensor(
-            tla.make_shape(64),
-            tla.Float32,
-            addrspace=tla.AddressSpace.l0c,
-            origin_shape=tla.make_shape(64),
-            layout_tag=tla.arch.RowMajor,
-        )
-        idx_mem = _ub_tensor(tla.Int32)
-        dst = _ub_tensor()
+    l0c_mem = make_fake_tensor(
+                  tla.Float32,
+                  (64,),
+                  (1,),
+                  origin_shape=(64,),
+                  layout_tag=tla.arch.RowMajor,
+              )
+    idx_mem = _ub_tensor(tla.Int32)
+    dst = _ub_tensor()
 
     with pytest.raises(
         tla.TlaCoreAPIError, match="invalid argument 'x'.*expected addrspace ub"

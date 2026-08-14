@@ -2,25 +2,26 @@
 
 from __future__ import annotations
 
+from catlass.tla.runtime import make_fake_tensor
+
+
 import operator
 
 import pytest
 
+from mlir import ir as mlir_ir
 import catlass.tla as tla
 import catlass.runtime as runtime_mod
 
 
 def _gm_tensor_1d(length: int, *, dtype: type = tla.Int32) -> tla.Tensor:
-    with runtime_mod._eager_capture():
-        return tla.Tensor(
-            tla.make_shape(length),
-            dtype,
-            addrspace=tla.AddressSpace.gm,
-            origin_shape=tla.make_shape(length),
-            coord=tla.make_coord(0),
-            stride=tla.make_stride(1),
-            layout_tag=tla.arch.RowMajor,
-        )
+    return make_fake_tensor(
+               dtype,
+               (length,),
+               (1,),
+               origin_shape=(length,),
+               layout_tag=tla.arch.RowMajor,
+           )
 
 
 @tla.kernel
@@ -237,7 +238,6 @@ def test_numeric_float_pow_mlir() -> None:
 
 def test_cast_host_and_ssa_sitofp() -> None:
     """``cast`` / ``.to`` construct the target type; SSA cross-type emits arith ops."""
-    from mlir import ir as mlir_ir
 
     # Host: no MLIR context required
     assert isinstance(tla.cast(5, tla.Float32), tla.Float32)
@@ -267,7 +267,6 @@ def test_cast_host_and_ssa_sitofp() -> None:
 
 def test_numeric_add_captures_user_loc() -> None:
     """Numeric arithmetic attaches caller source location (via _capture_user_loc)."""
-    from mlir import ir as mlir_ir
 
     ctx = mlir_ir.Context()
     ctx.allow_unregistered_dialects = True
@@ -300,7 +299,6 @@ def test_bool_host_to_signed_and_unsigned() -> None:
 
 def test_bool_ssa_to_signed_and_unsigned_zero_extends() -> None:
     """SSA ``Bool`` widens with ``arith.extui``: True == 1 for any wider int."""
-    from mlir import ir as mlir_ir
 
     ctx = mlir_ir.Context()
     ctx.allow_unregistered_dialects = True
@@ -324,7 +322,6 @@ def test_bool_ssa_to_signed_and_unsigned_zero_extends() -> None:
 
 
 def test_bool_ssa_to_float_uitofp() -> None:
-    from mlir import ir as mlir_ir
 
     ctx = mlir_ir.Context()
     ctx.allow_unregistered_dialects = True

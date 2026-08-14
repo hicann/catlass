@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from catlass.tla.runtime import make_fake_tensor
+
+
 from typing import Any
 
 import pytest
@@ -20,15 +23,14 @@ def _ub_tensor(
     dtype: type[tla.Numeric],
     extent: int = 64,
 ) -> tla.Tensor:
-    with runtime_mod._eager_capture():
-        shape = tla.make_shape(extent)
-        return tla.Tensor(
-            shape,
-            dtype,
-            addrspace=tla.AddressSpace.ub,
-            origin_shape=shape,
-            layout_tag=tla.arch.RowMajor,
-        )
+    return make_fake_tensor(
+        dtype,
+        (extent,),
+        (1,),
+        addrspace=tla.AddressSpace.ub,
+        origin_shape=(extent,),
+        layout_tag=tla.arch.RowMajor,
+    )
 
 @tla.kernel
 def store_dist(src: tla.Tensor, dst: tla.Tensor, dist: tla.Constexpr[str]) -> None:

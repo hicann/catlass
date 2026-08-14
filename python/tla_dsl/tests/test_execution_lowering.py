@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from catlass.tla.runtime import make_fake_tensor
+
+
 import pytest
 
 import catlass.tla as tla
@@ -34,10 +37,13 @@ def test_execution_only_mode_lowers_tla_range_loop() -> None:
         for _i in tla.range(0, 16, 1):
             tla.make_coord(0, 0)
 
-    with runtime_mod._eager_capture():
-        mem_a = tla.Tensor(
-            tla.make_shape(1, 2), tla.Float16, origin_shape=tla.make_shape(1, 2)
-        )
+    mem_a = make_fake_tensor(
+                tla.Float16,
+                (1, 2),
+                (2, 1),
+                origin_shape=(1, 2),
+                layout_tag=tla.arch.RowMajor,
+            )
     mlir = BaseDSL()._func(
         lowered,
         kind="kernel",
@@ -55,10 +61,13 @@ def test_execution_only_mode_handles_python_range_loop() -> None:
         for _i in range(4):
             tla.make_coord(0, 0)
 
-    with runtime_mod._eager_capture():
-        mem_a = tla.Tensor(
-            tla.make_shape(1, 2), tla.Float16, origin_shape=tla.make_shape(1, 2)
-        )
+    mem_a = make_fake_tensor(
+                tla.Float16,
+                (1, 2),
+                (2, 1),
+                origin_shape=(1, 2),
+                layout_tag=tla.arch.RowMajor,
+            )
     mlir = BaseDSL()._func(
         supported,
         kind="kernel",

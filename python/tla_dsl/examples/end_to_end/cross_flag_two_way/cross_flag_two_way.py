@@ -89,18 +89,16 @@ def cross_flag_two_way(
 
 
 def _tensor_type() -> Any:
-    import catlass.runtime as runtime_mod
+    # Compile type sample: metadata-only Host tensor (no NPU buffer required).
     from catlass.tla.runtime import make_fake_tensor
 
-    with runtime_mod._eager_capture():
-        return make_fake_tensor(
-            tla.make_shape(ROWS, COLS),
-            tla.Float32,
-            origin_shape=tla.make_shape(ROWS, COLS),
-            coord=tla.make_coord(0, 0),
-            stride=tla.make_stride(COLS, 1),
-            layout_tag=tla.arch.RowMajor,
-        )
+    return make_fake_tensor(
+        tla.Float32,
+        (ROWS, COLS),
+        (COLS, 1),
+        origin_shape=(ROWS, COLS),
+        layout_tag=tla.arch.RowMajor,
+    )
 
 
 def _compile_only_type_args() -> tuple[Any, Any, Any]:

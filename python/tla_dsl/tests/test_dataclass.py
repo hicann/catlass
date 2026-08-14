@@ -127,18 +127,15 @@ def test_execution_args_unpacks_dataclass_tensor_field() -> None:
 
 
 def _gm_tensor_1d(length: int, *, dtype: type = tla.Int32) -> tla.Tensor:
-    from catlass.runtime import _eager_capture
+    from catlass.tla.runtime import make_fake_tensor
 
-    with _eager_capture():
-        return tla.Tensor(
-            tla.make_shape(length),
-            dtype,
-            addrspace=tla.AddressSpace.gm,
-            origin_shape=tla.make_shape(length),
-            coord=tla.make_coord(0),
-            stride=tla.make_stride(1),
-            layout_tag=tla.arch.RowMajor,
-        )
+    return make_fake_tensor(
+               dtype,
+               (length,),
+               (1,),
+               origin_shape=(length,),
+               layout_tag=tla.arch.RowMajor,
+           )
 
 
 @tla.kernel

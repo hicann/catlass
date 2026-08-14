@@ -1,12 +1,12 @@
-# Torch Tensor 接入
+# Host tensor 接入
 
-为便于与 `torch` / `torch_npu` 互通，TLA DSL 通过 [DLPack](https://github.com/dmlc/dlpack) 协议，将设备侧 tensor 转换为 Host 侧 `tla.Tensor`。本文说明接入约定、可用 API 与常见用法，并介绍如何绕过 DLPack、直接绑定设备缓冲区。
+本文说明如何在 Host 侧得到可供 `tla.compile` / 启动使用的 `tla.Tensor`：用 [DLPack](https://github.com/dmlc/dlpack) 的 `from_dlpack`（`torch` / `torch_npu`）绑定真实缓冲，或用 `make_fake_tensor` 造不带设备指针的类型样本。动态 layout 见 [动态 Layout](dsl_dynamic_layout.md)。
 
 ---
 
 ## 1. 使用 `from_dlpack` 显式转换
 
-运行时提供将兼容 DLPack 的张量转为 `tla.Tensor` 的接口。下面从 torch 开始，经 `from_dlpack` 绑定，一直到 `compile` / launch：
+运行时提供将兼容 DLPack 的 tensor 转为 `tla.Tensor` 的接口。下面从 torch 开始，经 `from_dlpack` 绑定，一直到 `compile` / launch：
 
 ```python
 import torch
@@ -35,7 +35,7 @@ artifact(tx, ty, block_num=1)
 torch.npu.synchronize()
 ```
 
-其中 `x` 须实现 `__dlpack__`（通常为 NPU 上的 `torch` 张量，如经 `torch_npu`）。转换**零拷贝**：返回的 `tla.Tensor` 与源张量共享同一块设备内存；源张量生命周期须覆盖后续 `tla.compile` / launch，否则指针失效。
+其中 `x` 须实现 `__dlpack__`（通常为 NPU 上的 `torch` tensor，如经 `torch_npu`）。转换**零拷贝**：返回的 `tla.Tensor` 与源 tensor 共享同一块设备内存；源 tensor 生命周期须覆盖后续 `tla.compile` / launch，否则指针失效。
 
 默认得到**静态 layout**（具体 shape / stride / origin 写进编译类型）。要得到动态或混合静态/动态 layout，须在转换后调用 `mark_layout_dynamic` / `mark_compact_shape_dynamic`（见 [动态 Layout](dsl_dynamic_layout.md)）。
 
@@ -56,9 +56,9 @@ def from_dlpack(
 |------|------|
 | `tensor_dlpack` | 实现 `__dlpack__` 的对象；须为 **Ascend/NPU 设备**上的缓冲区，CPU / NumPy 不可用 |
 | `layout_tag` | **必填**。`tla.arch` 布局哨兵，如 `RowMajor` / `ColumnMajor` |
-| `origin_shape` | 可选。逻辑 origin，须为 `tla.make_shape(...)` 的结果。省略时由物理 shape/stride 与 `layout_tag` 推导 |
+| `origin_shape` | 可选。逻辑 origin，普通 `tuple`（如 `(M, K)`）。省略时由物理 shape/stride 与 `layout_tag` 推导 |
 | `assumed_align` | **预留参数**。当前 `from_dlpack` 路径统一按元素自然对齐（如 `f32`→4）处理，传入值不影响实际 lowering / 访存行为 |
-| `stream` | 传给框架的 `__dlpack__(stream=...)`，只影响「把 torch 张量交给 `from_dlpack` 时」框架侧要不要做流同步；默认 `-1` 表示不做同步 |
+| `stream` | 传给框架的 `__dlpack__(stream=...)`，只影响「把 torch tensor 交给 `from_dlpack` 时」框架侧要不要做流同步；默认 `-1` 表示不做同步 |
 
 ### 1.1 布局与物理存储
 
@@ -75,7 +75,7 @@ def from_dlpack(
 
 ### 1.2 代码示例
 
-下面演示如何用 `from_dlpack` 将 PyTorch 张量转为 `tla.Tensor`，并查看转换结果：
+下面演示如何用 `from_dlpack` 将 PyTorch tensor 转为 `tla.Tensor`，并查看转换结果：
 
 ```python
 import torch
@@ -97,7 +97,7 @@ print(y.data_ptr)      # 设备地址
 print(y)               # !tla.tensor 类型串（编译元数据）
 ```
 
-转换后可通过下列属性查看张量信息：
+转换后可通过下列属性查看 tensor 信息：
 
 - `tensor.shape`：逻辑 shape  
 - `tensor.stride`：stride  
@@ -109,66 +109,30 @@ print(y)               # !tla.tensor 类型串（编译元数据）
 
 ---
 
-## 2. 绕过 DLPack 协议
+## 2. 使用 `make_fake_tensor` 造不带 ptr 的 fake tensor
 
-仍可使用 **torch / torch_npu** 上的设备张量；绕过的只是 DLPack capsule 解析与自动 layout 推导，改为用手写元数据绑定。公开入口是 `make_fake_tensor`。
+仅需给 `tla.compile` 提供类型 / layout 样本、不绑定真实 NPU 缓冲时，用 `make_fake_tensor`。它始终返回未绑定 Host tensor（`data_ptr == 0`）；真实 buffer 请走 `from_dlpack`。
 
-适用场景：
-
-1. 避免 DLPack 解析开销；  
-2. 需要完全自管 shape / stride / `layout_tag` / `origin_shape`；  
-3. 没有真实设备缓冲，只需给 `tla.compile` 提供类型样本。
-
-`data_ptr` 为 `None` / `0`（默认）表示未绑定的 compile 期占位；传入非 0 设备地址则视为已绑定缓冲。源 `torch` 张量须在后续 compile / launch 期间保持存活。
-
-手写元数据并绑定已有 NPU 缓冲：
-
-```python
-import torch
-import torch_npu
-import catlass.tla as tla
-from catlass.tla.runtime import make_fake_tensor
-
-torch.npu.set_device(0)
-# 数据仍在 torch 侧；须在 NPU 上
-a = torch.rand(64, 128, dtype=torch.float32, device="npu") * 10.0 - 5.0
-rows, cols = a.shape
-
-ta = make_fake_tensor(
-    tla.make_shape(rows, cols),
-    tla.Float32,
-    origin_shape=tla.make_shape(rows, cols),
-    coord=tla.make_coord(0, 0),
-    stride=tla.make_stride(cols, 1),  # 行主紧凑，须与 a 的物理布局一致
-    layout_tag=tla.arch.RowMajor,
-    data_ptr=int(a.contiguous().data_ptr()),
-)
-
-# 需要动态 GM 时可继续：
-# ta = ta.mark_layout_dynamic()
-
-artifact = tla.compile(kernel, ta, ...)
-artifact(ta, ..., block_num=...)
-```
-
-与 `from_dlpack` 路径的差别：不调用 `from_dlpack`，dtype / shape / stride / `layout_tag` 全部由 Host 手写；指针来自 `torch.Tensor.data_ptr()`。须自行保证这些元数据与物理缓冲一致；若再调用 `mark_*_dynamic`，该 tensor 的各维 `coord` 也必须为 0。
-
-仅需类型样本、不绑真实缓冲时，省略 `data_ptr`（或传 `0` / `None`）即可：
+用法：必传 ``(dtype, shape, stride)``；``layout_tag`` 可选，默认 ``RowMajor``。显式传入的 shape/stride 不会被 layout remap 改写。
 
 ```python
 import catlass.tla as tla
 from catlass.tla.runtime import make_fake_tensor
 
-rows, cols = 64, 128
 fake = make_fake_tensor(
-    tla.make_shape(rows, cols),
     tla.Float32,
-    origin_shape=tla.make_shape(rows, cols),
-    coord=tla.make_coord(0, 0),
-    stride=tla.make_stride(cols, 1),
-    layout_tag=tla.arch.RowMajor,
+    (64, 128),
+    (128, 1),
 )
-artifact = tla.compile(kernel, fake, options="--npu-arch 3510")
-```
+assert fake.data_ptr == 0
+assert fake.layout_tag == "row_major"
 
-有 NPU 上的框架张量时，优先走第 1 节 `from_dlpack`；需要自管元数据时走本节 `make_fake_tensor`。
+# Fractal / 非紧凑布局：自行传入 layout 的 shape/stride 树
+zn = make_fake_tensor(
+    tla.Float16,
+    ((16, 2), (16, 4)),
+    ((16, 256), (1, 512)),
+    layout_tag=tla.arch.zN,
+    origin_shape=(32, 64),
+)
+```

@@ -3,7 +3,7 @@
 Preferred DSL import::
 
     import catlass.tla as tla
-    from catlass.tla.runtime import from_dlpack, make_fake_tensor
+    from catlass.tla.runtime import from_dlpack
 """
 
 from __future__ import annotations

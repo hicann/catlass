@@ -3482,7 +3482,7 @@ def make_shape(
     *components: IndexTree,
     loc: mlir_ir.Location | None = None,
 ) -> TlaShape:
-    """Build a packed Tla shape from nested tuple components."""
+    """Build a packed Tla shape from nested tuple components (Kernel / frontend only)."""
     if len(components) == 0:
         _op_error("make_shape", "expected at least 1 component")
     _require_frontend_state("make_shape")
@@ -3495,7 +3495,7 @@ def make_coord(
     *components: IndexTree,
     loc: mlir_ir.Location | None = None,
 ) -> TlaCoord:
-    """Build a packed Tla coordinate from nested tuple components."""
+    """Build a packed Tla coordinate from nested tuple components (Kernel / frontend only)."""
     if len(components) == 0:
         _op_error("make_coord", "expected at least 1 component")
     _require_frontend_state("make_coord")
@@ -3508,7 +3508,7 @@ def make_stride(
     *components: IndexTree,
     loc: mlir_ir.Location | None = None,
 ) -> TlaStride:
-    """Build a packed Tla stride from nested tuple components."""
+    """Build a packed Tla stride from nested tuple components (Kernel / frontend only)."""
     if len(components) == 0:
         _op_error("make_stride", "expected at least 1 component")
     _require_frontend_state("make_stride")

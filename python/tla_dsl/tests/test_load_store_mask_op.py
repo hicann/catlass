@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from catlass.tla.runtime import make_fake_tensor
+
+
 from typing import Any
 
 import pytest
@@ -14,15 +17,14 @@ def _ub_tensor(
     dtype: type[tla.Numeric],
     extent: int,
 ) -> tla.Tensor:
-    with runtime_mod._eager_capture():
-        shape = tla.make_shape(extent)
-        return tla.Tensor(
-            shape,
-            dtype,
-            addrspace=tla.AddressSpace.ub,
-            origin_shape=shape,
-            layout_tag=tla.arch.RowMajor,
-        )
+    return make_fake_tensor(
+        dtype,
+        (extent,),
+        (1,),
+        addrspace=tla.AddressSpace.ub,
+        origin_shape=(extent,),
+        layout_tag=tla.arch.RowMajor,
+    )
 
 
 def _ub_tensor_2d(
@@ -30,30 +32,27 @@ def _ub_tensor_2d(
     rows: int,
     cols: int,
 ) -> tla.Tensor:
-    with runtime_mod._eager_capture():
-        shape = tla.make_shape(rows, cols)
-        return tla.Tensor(
-            shape,
-            dtype,
-            addrspace=tla.AddressSpace.ub,
-            origin_shape=shape,
-            layout_tag=tla.arch.RowMajor,
-        )
+    return make_fake_tensor(
+        dtype,
+        (rows, cols),
+        (cols, 1),
+        addrspace=tla.AddressSpace.ub,
+        origin_shape=(rows, cols),
+        layout_tag=tla.arch.RowMajor,
+    )
 
 
 def _gm_tensor(
     dtype: type[tla.Numeric],
     extent: int,
 ) -> tla.Tensor:
-    with runtime_mod._eager_capture():
-        shape = tla.make_shape(extent)
-        return tla.Tensor(
-            shape,
-            dtype,
-            addrspace=tla.AddressSpace.gm,
-            origin_shape=shape,
-            layout_tag=tla.arch.RowMajor,
-        )
+    return make_fake_tensor(
+        dtype,
+        (extent,),
+        (1,),
+        origin_shape=(extent,),
+        layout_tag=tla.arch.RowMajor,
+    )
 
 
 @tla.kernel

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from catlass.tla.runtime import make_fake_tensor
+
+
 from collections.abc import Callable
 
 import pytest
@@ -9,14 +12,14 @@ import catlass.runtime as runtime_mod
 
 
 def _vector_tensor(dtype: object = tla.Float32) -> tla.Tensor:
-    with runtime_mod._eager_capture():
-        return tla.Tensor(
-            tla.make_shape(64),
-            dtype,
-            addrspace=tla.AddressSpace.ub,
-            origin_shape=tla.make_shape(64),
-            layout_tag=tla.arch.RowMajor,
-        )
+    return make_fake_tensor(
+        dtype,
+        (64,),
+        (1,),
+        addrspace=tla.AddressSpace.ub,
+        origin_shape=(64,),
+        layout_tag=tla.arch.RowMajor,
+    )
 
 
 @tla.kernel
@@ -76,14 +79,14 @@ def vector_scalar_numeric_ssa_kernel(
 
 
 def test_vector_scalar_accepts_numeric_ssa() -> None:
-    with runtime_mod._eager_capture():
-        scalar_buf = tla.Tensor(
-            tla.make_shape(1),
-            tla.Float32,
-            addrspace=tla.AddressSpace.gm,
-            origin_shape=tla.make_shape(1),
-            layout_tag=tla.arch.RowMajor,
-        )
+    scalar_buf = make_fake_tensor(
+                     tla.Float32,
+                     (1,),
+                     (1,),
+                     addrspace=tla.AddressSpace.ub,
+                     origin_shape=(1,),
+                     layout_tag=tla.arch.RowMajor,
+                 )
     mlir = vector_scalar_numeric_ssa_kernel.dump_mlir(
         type_args=(_vector_tensor(), scalar_buf)
     )

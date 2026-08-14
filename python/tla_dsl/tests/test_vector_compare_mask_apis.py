@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from catlass.tla.runtime import make_fake_tensor
+
+
 import pytest
 
 import catlass.tla as tla
@@ -8,14 +11,14 @@ from catlass.core_api import MaskSSA
 
 
 def _vector_tensor(shape: int = 64, dtype: object = tla.Float32) -> tla.Tensor:
-    with runtime_mod._eager_capture():
-        return tla.Tensor(
-            tla.make_shape(shape),
-            dtype,
-            addrspace=tla.AddressSpace.ub,
-            origin_shape=tla.make_shape(shape),
-            layout_tag=tla.arch.RowMajor,
-        )
+    return make_fake_tensor(
+        dtype,
+        (shape,),
+        (1,),
+        addrspace=tla.AddressSpace.ub,
+        origin_shape=(shape,),
+        layout_tag=tla.arch.RowMajor,
+    )
 
 
 @tla.kernel

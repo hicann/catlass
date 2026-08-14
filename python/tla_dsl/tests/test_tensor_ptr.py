@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from catlass.tla.runtime import make_fake_tensor
+
+
 import pytest
 
 import catlass.tla as tla
@@ -29,12 +32,13 @@ def ptr_extract_kernel(mem_in: tla.Tensor) -> None:
 
 
 def _host_mem():
-    with runtime_mod._eager_capture():
-        return tla.Tensor(
-            tla.make_shape(16, 16),
-            tla.Float32,
-            origin_shape=tla.make_shape(16, 16),
-        )
+    return make_fake_tensor(
+               tla.Float32,
+               (16, 16),
+               (16, 1),
+               origin_shape=(16, 16),
+               layout_tag=tla.arch.RowMajor,
+           )
 
 
 def test_ptr_emits_tensor_ptr_and_ptr_add() -> None:

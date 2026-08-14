@@ -2,21 +2,21 @@
 
 from __future__ import annotations
 
+from catlass.tla.runtime import make_fake_tensor
+
+
 import catlass.tla as tla
 import catlass.runtime as runtime_mod
 
 
 def _gm_tensor_1d(length: int, *, dtype: type) -> tla.Tensor:
-    with runtime_mod._eager_capture():
-        return tla.Tensor(
-            tla.make_shape(length),
-            dtype,
-            addrspace=tla.AddressSpace.gm,
-            origin_shape=tla.make_shape(length),
-            coord=tla.make_coord(0),
-            stride=tla.make_stride(1),
-            layout_tag=tla.arch.RowMajor,
-        )
+    return make_fake_tensor(
+               dtype,
+               (length,),
+               (1,),
+               origin_shape=(length,),
+               layout_tag=tla.arch.RowMajor,
+           )
 
 
 @tla.kernel

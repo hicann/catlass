@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from catlass.tla.runtime import make_fake_tensor
+
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -46,16 +48,13 @@ def _native_debug_kernel_abi(value: tla.Int32) -> None:
 
 
 def _gm_i32_tensor() -> tla.Tensor:
-    with runtime_mod._eager_capture():
-        return tla.Tensor(
-            tla.make_shape(1),
-            tla.Int32,
-            addrspace=tla.AddressSpace.gm,
-            origin_shape=tla.make_shape(1),
-            coord=tla.make_coord(0),
-            stride=tla.make_stride(1),
-            layout_tag=tla.arch.RowMajor,
-        )
+    return make_fake_tensor(
+               tla.Int32,
+               (1,),
+               (1,),
+               origin_shape=(1,),
+               layout_tag=tla.arch.RowMajor,
+           )
 
 
 def _native_lower(kernel, *, type_args=None):
@@ -640,44 +639,29 @@ def test_cached_older_kernel_abi_schema_is_stale(schema_version: int) -> None:
 
 
 def _dynamic_gm_rank1_tensor() -> tla.Tensor:
-    with runtime_mod._eager_capture():
-        tensor = tla.Tensor(
-            tla.make_shape(8),
-            tla.Int32,
-            addrspace=tla.AddressSpace.gm,
-            origin_shape=tla.make_shape(8),
-            coord=tla.make_coord(0),
-            stride=tla.make_stride(1),
-            layout_tag=tla.arch.RowMajor,
-        )
+    tensor = make_fake_tensor(
+                 tla.Int32,
+                 (8,),
+                 (1,),
+                 origin_shape=(8,),
+                 layout_tag=tla.arch.RowMajor,
+             )
     return tensor.mark_compact_shape_dynamic(0)
 
 
 def _dynamic_gm_rank2_tensor() -> tla.Tensor:
-    with runtime_mod._eager_capture():
-        tensor = tla.Tensor(
-            tla.make_shape(16, 32),
-            tla.Float16,
-            addrspace=tla.AddressSpace.gm,
-            origin_shape=tla.make_shape(16, 32),
-            coord=tla.make_coord(0, 0),
-            stride=tla.make_stride(32, 1),
-            layout_tag=tla.arch.RowMajor,
-        )
+    tensor = make_fake_tensor(
+                 tla.Float16,
+                 (16, 32),
+                 (32, 1),
+                 origin_shape=(16, 32),
+                 layout_tag=tla.arch.RowMajor,
+             )
     return tensor.mark_layout_dynamic()
 
 
 def _dynamic_gm_zn_tensor() -> tla.Tensor:
-    with runtime_mod._eager_capture():
-        tensor = tla.Tensor(
-            tla.make_shape((16, 2), (16, 4)),
-            tla.Float16,
-            addrspace=tla.AddressSpace.gm,
-            origin_shape=tla.make_shape(32, 64),
-            coord=tla.make_coord(0, 0),
-            stride=tla.make_stride((16, 512), (1, 512)),
-            layout_tag=tla.arch.zN,
-        )
+    tensor = make_fake_tensor(tla.Float16, ((16, 2), (16, 4)), ((16, 256), (1, 512)), layout_tag=tla.arch.zN, origin_shape=(32, 64), coord=(0, 0))
     return tensor.mark_layout_dynamic(leading_dim=2)
 
 
@@ -826,16 +810,13 @@ def test_dataclass_kernel_arg_layout_abi() -> None:
     aligned args; even the 8-byte tensor pointer sits at a 4-byte-aligned offset
     (12), which is sufficient. The total payload is rounded up to a multiple of 8.
     """
-    with runtime_mod._eager_capture():
-        tensor = tla.Tensor(
-            tla.make_shape(8),
-            tla.Float32,
-            addrspace=tla.AddressSpace.gm,
-            origin_shape=tla.make_shape(8),
-            coord=tla.make_coord(0),
-            stride=tla.make_stride(1),
-            layout_tag=tla.arch.RowMajor,
-        )
+    tensor = make_fake_tensor(
+                 tla.Float32,
+                 (8,),
+                 (1,),
+                 origin_shape=(8,),
+                 layout_tag=tla.arch.RowMajor,
+             )
     result = _native_lower(
         _native_scalar_then_tensor_abi,
         type_args=(

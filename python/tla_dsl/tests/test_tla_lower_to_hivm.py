@@ -1,3 +1,5 @@
+from catlass.tla.runtime import make_fake_tensor
+
 import pathlib
 import os
 import re
@@ -9,7 +11,28 @@ import catlass.tla as tla
 import catlass.runtime as runtime_mod
 from catlass.execution_lowering import TlaLoweringError
 from catlass.params import BlockStoreParams
+from catlass import _tla_type_bridge
+from mlir import ir as mlir_ir
 
+
+def _ensure_compute_order_or_skip() -> None:
+    with mlir_ir.Context() as ctx:
+        _tla_type_bridge.load_tla_dialect(ctx)
+        try:
+            mlir_ir.Attribute.parse("#tla.compute_order<M_FIRST>", context=ctx)
+        except Exception as exc:  # noqa: BLE001
+            if "compute_order" in str(exc) and "expected valid keyword" in str(exc):
+                pytest.skip("linked BiShengIR lacks tla.compute_order enum used by mmad")
+            raise
+
+
+@pytest.fixture(autouse=True)
+def _skip_without_compute_order(request):
+    name = getattr(request.node, "name", "")
+    if "mmad" in name.lower() or (
+        "cube" in name.lower() and "mutex" not in name.lower()
+    ):
+        _ensure_compute_order_or_skip()
 
 def _require_hivm_tla_compile() -> pathlib.Path:
     repo_root = pathlib.Path(__file__).resolve().parents[1]
@@ -47,7 +70,6 @@ def _require_hivm_tla_compile() -> pathlib.Path:
         pytest.skip("BiShengIR/HIVM support is not available in this build environment")
     return tla_compile
 
-
 def _run_tla_compile_ir_after_pass(
     mlir_text: str, pass_name: str, *, require_success: bool = False
 ) -> str:
@@ -75,8 +97,6 @@ def _run_tla_compile_ir_after_pass(
         assert f"({pass_name})" in output, output
         return output
 
-
-
 def _extract_function(ir_dump: str, name: str) -> str:
     marker = f"func.func @{name}("
     start = ir_dump.index(marker)
@@ -86,7 +106,6 @@ def _extract_function(ir_dump: str, name: str) -> str:
     assert ends, ir_dump[start:]
     return ir_dump[start : min(ends)]
 
-
 def _dump_after_mixed_split(
     kernel: object, *, type_args: tuple[object, ...] = ()
 ) -> str:
@@ -95,75 +114,58 @@ def _dump_after_mixed_split(
         mlir_text, "tla-split-mixed-func", require_success=True
     )
 
-
 def _mmad_tensor_args() -> tuple[tla.Tensor, tla.Tensor, tla.Tensor]:
-    with runtime_mod._eager_capture():
-        return (
-            tla.Tensor(
-                tla.make_shape(128, 64),
-                tla.Float16,
-                addrspace=tla.AddressSpace.gm,
-                origin_shape=tla.make_shape(128, 64),
-                coord=tla.make_coord(0, 0),
-                stride=tla.make_stride(64, 1),
-                layout_tag=tla.arch.RowMajor,
-            ),
-            tla.Tensor(
-                tla.make_shape(64, 128),
-                tla.Float16,
-                addrspace=tla.AddressSpace.gm,
-                origin_shape=tla.make_shape(64, 128),
-                coord=tla.make_coord(0, 0),
-                stride=tla.make_stride(128, 1),
-                layout_tag=tla.arch.RowMajor,
-            ),
-            tla.Tensor(
-                tla.make_shape(128, 128),
-                tla.Float32,
-                addrspace=tla.AddressSpace.gm,
-                origin_shape=tla.make_shape(128, 128),
-                coord=tla.make_coord(0, 0),
-                stride=tla.make_stride(128, 1),
-                layout_tag=tla.arch.RowMajor,
-            ),
-        )
-
+    return (
+        make_fake_tensor(
+            tla.Float16,
+            (128, 64),
+            (64, 1),
+            origin_shape=(128, 64),
+            layout_tag=tla.arch.RowMajor,
+        ),
+        make_fake_tensor(
+            tla.Float16,
+            (64, 128),
+            (128, 1),
+            origin_shape=(64, 128),
+            layout_tag=tla.arch.RowMajor,
+        ),
+        make_fake_tensor(
+            tla.Float32,
+            (128, 128),
+            (128, 1),
+            origin_shape=(128, 128),
+            layout_tag=tla.arch.RowMajor,
+        ),
+    )
 
 def _dynamic_gm_tensor() -> tla.Tensor:
-    with runtime_mod._eager_capture():
-        tensor = tla.Tensor(
-            tla.make_shape(8),
-            tla.Float32,
-            addrspace=tla.AddressSpace.gm,
-            origin_shape=tla.make_shape(8),
-            coord=tla.make_coord(0),
-            layout_tag=tla.arch.RowMajor,
-        )
+    tensor = make_fake_tensor(
+                 tla.Float32,
+                 (8,),
+                 (1,),
+                 origin_shape=(8,),
+                 layout_tag=tla.arch.RowMajor,
+             )
     tensor.mark_compact_shape_dynamic(0)
     return tensor
-
 
 def _dynamic_cube_gm_tensor() -> tla.Tensor:
-    with runtime_mod._eager_capture():
-        tensor = tla.Tensor(
-            tla.make_shape(64, 128),
-            tla.Float16,
-            addrspace=tla.AddressSpace.gm,
-            origin_shape=tla.make_shape(64, 128),
-            coord=tla.make_coord(0, 0),
-            stride=tla.make_stride(128, 1),
-            layout_tag=tla.arch.RowMajor,
-        )
+    tensor = make_fake_tensor(
+                 tla.Float16,
+                 (64, 128),
+                 (128, 1),
+                 origin_shape=(64, 128),
+                 layout_tag=tla.arch.RowMajor,
+             )
     tensor.mark_compact_shape_dynamic(0)
     return tensor
-
 
 def _skip_if_mmad_rank2_tile_view_regression(exc: BaseException) -> None:
     if isinstance(exc, TlaLoweringError) and "rank-2 tiles only" in str(exc):
         pytest.skip(
             "tla.mmad rank-2 check rejects tile_view operand types until metadata matches"
         )
-
 
 @tla.kernel
 def _cube_attr_kernel(mem_a: tla.Tensor, mem_b: tla.Tensor, mem_c: tla.Tensor) -> None:
@@ -182,7 +184,6 @@ def _cube_attr_kernel(mem_a: tla.Tensor, mem_b: tla.Tensor, mem_c: tla.Tensor) -
     with tla.cube():
         tla.mmad(acc, lhs, rhs, init_c=False)
 
-
 @tla.kernel
 def _cube_dynamic_l1_pointer_join_kernel(
     source: tla.Tensor, rows: int, offset: int
@@ -198,7 +199,6 @@ def _cube_dynamic_l1_pointer_join_kernel(
     with tla.cube():
         tla.copy(local, dynamic_source)
 
-
 @tla.kernel
 def _split_cube_only_kernel() -> None:
     seed = tla.arch.block_idx()
@@ -206,7 +206,6 @@ def _split_cube_only_kernel() -> None:
     with tla.cube():
         tla.pipe_barrier(tla.pipes.CUBE)
     tla.make_coord(value)
-
 
 @tla.kernel
 def _split_vector_only_kernel() -> None:
@@ -216,13 +215,11 @@ def _split_vector_only_kernel() -> None:
         tla.pipe_barrier(tla.pipes.MTE2)
     tla.make_coord(value)
 
-
 @tla.kernel
 def _split_no_scope_kernel() -> None:
     seed = tla.arch.block_idx()
     value = seed + 9
     tla.make_coord(value)
-
 
 @tla.kernel
 def _mixed_interleaved_scopes_kernel() -> None:
@@ -242,7 +239,6 @@ def _mixed_interleaved_scopes_kernel() -> None:
     tail = after + 105
     tla.make_coord(tail)
 
-
 @tla.kernel
 def _mixed_if_branches_kernel() -> None:
     seed = tla.arch.block_idx()
@@ -261,7 +257,6 @@ def _mixed_if_branches_kernel() -> None:
     tail = branch_value + 206
     tla.make_coord(tail)
 
-
 @tla.kernel
 def _mixed_for_kernel(limit: int) -> None:
     state = 0
@@ -272,7 +267,6 @@ def _mixed_for_kernel(limit: int) -> None:
         with tla.vector():
             tla.pipe_barrier(tla.pipes.MTE2)
     tla.make_coord(state)
-
 
 @tla.kernel
 def _mixed_while_kernel(limit: int) -> None:
@@ -286,7 +280,6 @@ def _mixed_while_kernel(limit: int) -> None:
             tla.pipe_barrier(tla.pipes.MTE2)
         index = index + 1
     tla.make_coord(state)
-
 
 @tla.kernel
 def _pointer_if_kernel(mem_a: tla.Tensor) -> None:
@@ -308,7 +301,6 @@ def _pointer_if_kernel(mem_a: tla.Tensor) -> None:
             tla.make_coord(tag, 0)
             tla.copy(local, tile)
 
-
 @tla.kernel
 def _loop_carried_pointer_same_capacity_kernel(mem_a: tla.Tensor) -> None:
     root = tla.tile_view(mem_a, tla.make_shape(16, 4), tla.make_coord(0, 0))
@@ -322,7 +314,6 @@ def _loop_carried_pointer_same_capacity_kernel(mem_a: tla.Tensor) -> None:
             if i == 0:
                 selected = ptr1
 
-
 @tla.kernel
 def _loop_carried_pointer_changed_capacity_kernel(mem_a: tla.Tensor) -> None:
     root = tla.tile_view(mem_a, tla.make_shape(16, 4), tla.make_coord(0, 0))
@@ -335,7 +326,6 @@ def _loop_carried_pointer_changed_capacity_kernel(mem_a: tla.Tensor) -> None:
             tla.copy(local, root)
             if i == 0:
                 selected = ptr1
-
 
 @tla.kernel
 def _tensor_if_mixed_base_carrier_kernel(
@@ -362,7 +352,6 @@ def _tensor_if_mixed_base_carrier_kernel(
         local = tla.make_tensor_like(ptr, nested_view, tla.arch.zN)
         tla.copy(local, nested_view)
 
-
 @tla.kernel
 def _tensor_if_packed_carrier_kernel(mem_a: tla.Tensor, choice: int) -> None:
     root = tla.tile_view(mem_a, tla.make_shape(16, 16), tla.make_coord(0, 0))
@@ -387,7 +376,6 @@ def _tensor_if_packed_carrier_kernel(mem_a: tla.Tensor, choice: int) -> None:
         )
         tla.copy(selected_view, root)
 
-
 def _make_dynamic_metadata_tensor(value: int):
     layout = tla.make_layout(
         tla.make_shape(2, value),
@@ -400,7 +388,6 @@ def _make_dynamic_metadata_tensor(value: int):
         tla.make_coord(0, value),
     )
 
-
 @tla.kernel
 def _tensor_if_dynamic_metadata_access_kernel(
     first_value: int, second_value: int, choice: int
@@ -411,7 +398,6 @@ def _tensor_if_dynamic_metadata_access_kernel(
     tla.make_shape(selected.shape[1], selected.origin_shape[1])
     tla.make_stride(selected.stride[0])
     tla.make_coord(selected.coord[1])
-
 
 @tla.kernel
 def _tensor_statement_if_dynamic_metadata_access_kernel(
@@ -426,7 +412,6 @@ def _tensor_statement_if_dynamic_metadata_access_kernel(
         selected = second
     tla.make_shape(selected.shape[1])
 
-
 @tla.kernel
 def _tensor_for_dynamic_metadata_access_kernel(
     first_value: int, second_value: int, limit: int
@@ -437,7 +422,6 @@ def _tensor_for_dynamic_metadata_access_kernel(
     for _ in tla.range(0, limit, 1):
         selected = second
     tla.make_shape(selected.shape[1])
-
 
 @tla.kernel
 def _tensor_while_dynamic_metadata_access_kernel(
@@ -451,7 +435,6 @@ def _tensor_while_dynamic_metadata_access_kernel(
         selected = second
         index = index + 1
     tla.make_shape(selected.shape[1])
-
 
 @tla.kernel
 def _tensor_if_dynamic_stride_carrier_kernel(
@@ -478,7 +461,6 @@ def _tensor_if_dynamic_stride_carrier_kernel(
             value = chunk.load()
             chunk.store(value)
 
-
 @tla.kernel
 def _tensor_for_carrier_kernel(mem_a: tla.Tensor, limit: int) -> None:
     source = tla.tile_view(mem_a, tla.make_shape(16, 16), tla.make_coord(0, 0))
@@ -500,7 +482,6 @@ def _tensor_for_carrier_kernel(mem_a: tla.Tensor, limit: int) -> None:
             selected, tla.make_shape(16, 16), tla.make_coord(0, 0)
         )
         tla.copy(selected_view, source)
-
 
 @tla.kernel
 def _tensor_while_carrier_kernel(mem_a: tla.Tensor, limit: int) -> None:
@@ -526,7 +507,6 @@ def _tensor_while_carrier_kernel(mem_a: tla.Tensor, limit: int) -> None:
         )
         tla.copy(selected_view, source)
 
-
 @tla.kernel
 def _vector_pitched_tile_view_kernel() -> None:
     ptr = tla.allocate((2, 128), tla.Float32, tla.AddressSpace.ub, 256)
@@ -540,7 +520,6 @@ def _vector_pitched_tile_view_kernel() -> None:
             value = chunk.load()
             chunk.store(value)
 
-
 @tla.kernel
 def _vector_dynamic_pitched_tile_view_kernel(pitch: int) -> None:
     ptr = tla.allocate((2, 128), tla.Float32, tla.AddressSpace.ub, 256)
@@ -553,7 +532,6 @@ def _vector_dynamic_pitched_tile_view_kernel(pitch: int) -> None:
             chunk = tla.tile_view(parent, tla.make_shape(1, 64), tla.make_coord(1, 0))
             value = chunk.load()
             chunk.store(value)
-
 
 @tla.kernel
 def _vector_dynamic_zn_unalign_address_kernel(rows: int) -> None:
@@ -581,7 +559,6 @@ def _vector_dynamic_zn_unalign_address_kernel(rows: int) -> None:
                     params=BlockStoreParams(block_stride=rows + 1),
                 )
 
-
 @tla.kernel
 def _vector_dynamic_row_major_loop_unknown_base_kernel(
     rows: int, ptr_offset: int
@@ -599,7 +576,6 @@ def _vector_dynamic_row_major_loop_unknown_base_kernel(
                 )
                 chunk.store(chunk.load())
 
-
 @tla.kernel
 def _vector_static_rank_one_pointer_join_kernel(choice: int) -> None:
     layout = tla.make_layout(tla.make_shape(128), tla.make_stride(1))
@@ -614,14 +590,12 @@ def _vector_static_rank_one_pointer_join_kernel(choice: int) -> None:
         with tla.vec.func(mode="simd"):
             target.store(source.load())
 
-
 @tla.kernel
 def _vector_dynamic_gm_descriptor_kernel(scalar_buf: tla.Tensor) -> None:
     with tla.vector():
         with tla.vec.func(mode="simd"):
             scalar = scalar_buf[0]
             scalar_buf[0] = scalar
-
 
 @tla.kernel
 def _vector_dynamic_packed_pointer_join_kernel(rows: int, choice: int) -> None:
@@ -654,7 +628,6 @@ def _vector_dynamic_packed_pointer_join_kernel(rows: int, choice: int) -> None:
             )
             packed_chunk.store(source_chunk.load(), mask=mask)
 
-
 @tla.kernel
 def _vector_static_packed_pointer_join_kernel(choice: int) -> None:
     _ = tla.allocate((16384,), tla.Float16, tla.AddressSpace.l1, 512)
@@ -686,7 +659,6 @@ def _vector_static_packed_pointer_join_kernel(choice: int) -> None:
             )
             packed_chunk.store(source_chunk.load(), mask=mask)
 
-
 def test_cube_tla_compile_emits_minimal_hivm_attrs_after_tla_func_to_hacc() -> None:
     ta, tb, tc = _mmad_tensor_args()
     try:
@@ -704,7 +676,6 @@ def test_cube_tla_compile_emits_minimal_hivm_attrs_after_tla_func_to_hacc() -> N
     assert "hacc.entry" in output
     assert "hacc.function_kind = #hacc.function_kind<DEVICE>" in output
 
-
 def test_non_mixed_functions_are_not_split() -> None:
     for kernel, name in (
         (_split_cube_only_kernel, "_split_cube_only_kernel"),
@@ -715,7 +686,6 @@ def test_non_mixed_functions_are_not_split() -> None:
         assert f"func.func @{name}(" in output
         assert f"@{name}_mix_aic" not in output
         assert f"@{name}_mix_aiv" not in output
-
 
 def test_mixed_split_preserves_interleaved_scopes_and_all_scalar_operations() -> None:
     output = _dump_after_mixed_split(_mixed_interleaved_scopes_kernel)
@@ -731,7 +701,6 @@ def test_mixed_split_preserves_interleaved_scopes_and_all_scalar_operations() ->
         assert f"arith.constant {marker}" in aiv
     assert aic.count("arith.addi") == 5
     assert aiv.count("arith.addi") == 5
-
 
 def test_mixed_split_preserves_if_and_scalar_logic_in_opposite_scope_branch() -> None:
     output = _dump_after_mixed_split(_mixed_if_branches_kernel)
@@ -749,7 +718,6 @@ def test_mixed_split_preserves_if_and_scalar_logic_in_opposite_scope_branch() ->
     for marker in (201, 202, 203, 204, 205, 206):
         assert f"arith.constant {marker}" in aic
         assert f"arith.constant {marker}" in aiv
-
 
 @pytest.mark.parametrize(
     ("kernel", "name", "control_flow"),
@@ -774,14 +742,14 @@ def test_mixed_split_preserves_loop_carried_control_flow(
     assert aiv.count("tla.vector") == 1
     assert "tla.cube" not in aiv
 
-
 def test_pointer_if_mixed_results_compile_through_tla_lower_ptr() -> None:
-    with runtime_mod._eager_capture():
-        mem = tla.Tensor(
-            tla.make_shape(16, 8),
-            tla.Float16,
-            origin_shape=tla.make_shape(16, 8),
-        )
+    mem = make_fake_tensor(
+              tla.Float16,
+              (16, 8),
+              (8, 1),
+              origin_shape=(16, 8),
+              layout_tag=tla.arch.RowMajor,
+          )
     mlir_text = _pointer_if_kernel.dump_mlir(type_args=(mem,))
     output = _run_tla_compile_ir_after_pass(
         mlir_text, "tla-lower-ptr", require_success=True
@@ -791,7 +759,6 @@ def test_pointer_if_mixed_results_compile_through_tla_lower_ptr() -> None:
     assert "-> (i64, i32)" in output
     assert "tla.inttoptr" in output
     assert "tla.alloc_ptr" not in output
-
 
 @pytest.mark.parametrize(
     ("kernel", "expected_storage_elements"),
@@ -803,12 +770,13 @@ def test_pointer_if_mixed_results_compile_through_tla_lower_ptr() -> None:
 def test_loop_carried_pointer_consumed_in_body_compiles_with_safe_capacity(
     kernel: object, expected_storage_elements: int
 ) -> None:
-    with runtime_mod._eager_capture():
-        mem = tla.Tensor(
-            tla.make_shape(16, 4),
-            tla.Float16,
-            origin_shape=tla.make_shape(16, 4),
-        )
+    mem = make_fake_tensor(
+              tla.Float16,
+              (16, 4),
+              (4, 1),
+              origin_shape=(16, 4),
+              layout_tag=tla.arch.RowMajor,
+          )
     mlir_text = kernel.dump_mlir(type_args=(mem,))
     assert "scf.for" in mlir_text
     assert "iter_args(" in mlir_text
@@ -833,7 +801,6 @@ def test_loop_carried_pointer_consumed_in_body_compiles_with_safe_capacity(
         "#hivm.address_space<cbuf>>"
     )
     assert any(expected_type in line for line in pointer_cast_lines), output
-
 
 def test_cube_dynamic_on_chip_pointer_uses_zero_extents() -> None:
     mlir_text = _cube_dynamic_l1_pointer_join_kernel.dump_mlir(
@@ -868,7 +835,6 @@ def test_cube_dynamic_on_chip_pointer_uses_zero_extents() -> None:
     assert "memref<0xf16" not in output
     assert '"tla.copy"' not in output
 
-
 @pytest.mark.parametrize(
     ("kernel", "control_flow", "tensor_arg_count", "producer"),
     (
@@ -881,12 +847,13 @@ def test_cube_dynamic_on_chip_pointer_uses_zero_extents() -> None:
 def test_tensor_valued_scf_carrier_is_materialized_as_descriptor_fields(
     kernel: object, control_flow: str, tensor_arg_count: int, producer: str
 ) -> None:
-    with runtime_mod._eager_capture():
-        mem = tla.Tensor(
-            tla.make_shape(128, 128),
-            tla.Float32,
-            origin_shape=tla.make_shape(128, 128),
-        )
+    mem = make_fake_tensor(
+              tla.Float32,
+              (128, 128),
+              (128, 1),
+              origin_shape=(128, 128),
+              layout_tag=tla.arch.RowMajor,
+          )
     type_args = (mem,) * tensor_arg_count + (2,)
     mlir_text = kernel.dump_mlir(type_args=type_args)
     assert control_flow in mlir_text
@@ -919,7 +886,6 @@ def test_tensor_valued_scf_carrier_is_materialized_as_descriptor_fields(
     fixed_descriptor_types = re.compile(r"i64(?:, index){12}")
     assert any(fixed_descriptor_types.search(line) for line in carrier_lines), output
 
-
 def test_tensor_scf_carrier_preserves_dynamic_descriptor_fields() -> None:
     mlir_text = _tensor_if_dynamic_stride_carrier_kernel.dump_mlir(
         type_args=(128, 96, 1)
@@ -938,7 +904,6 @@ def test_tensor_scf_carrier_preserves_dynamic_descriptor_fields() -> None:
     ]
     assert carrier_lines
     assert all("!tla.tensor" not in line for line in carrier_lines), output
-
 
 @pytest.mark.parametrize(
     ("kernel", "control_flow", "result_count", "metadata_fields"),
@@ -999,7 +964,6 @@ def test_tensor_scf_carrier_preserves_dynamic_metadata_ssa(
     assert carrier_lines
     assert all("!tla.tensor" not in line for line in carrier_lines), output
 
-
 def test_vector_tile_view_uses_static_parent_pitch_in_flat_offset() -> None:
     mlir_text = _vector_pitched_tile_view_kernel.dump_mlir()
     assert "!tla.shape<1,64>" in mlir_text
@@ -1010,7 +974,6 @@ def test_vector_tile_view_uses_static_parent_pitch_in_flat_offset() -> None:
     )
     assert "arith.constant 128 : index" in output
     assert "memref<256xf32, #hivm.address_space<ub>>" in output
-
 
 def test_vector_tile_view_captures_dynamic_parent_pitch() -> None:
     mlir_text = _vector_dynamic_pitched_tile_view_kernel.dump_mlir(type_args=(128,))
@@ -1030,7 +993,6 @@ def test_vector_tile_view_captures_dynamic_parent_pitch() -> None:
         mlir_text, "tla-vector-region", require_success=True
     )
     assert "arith.muli" in output
-
 
 def test_vector_zn_unalign_address_arithmetic_uses_i32() -> None:
     mlir_text = _vector_dynamic_zn_unalign_address_kernel.dump_mlir(type_args=(50,))
@@ -1064,7 +1026,6 @@ def test_vector_zn_unalign_address_arithmetic_uses_i32() -> None:
         "arith.addi" in line and line.rstrip().endswith(": i32")
         for line in output.splitlines()
     ) >= 3, output
-
 
 def test_vector_static_tile_does_not_narrow_unknown_base_capacity() -> None:
     """UB base stays memref<?xf16> with extent 0; tile size must not become capacity."""
@@ -1108,7 +1069,6 @@ def test_vector_static_tile_does_not_narrow_unknown_base_capacity() -> None:
         output,
     ), output
 
-
 def test_vector_dynamic_on_chip_pointer_uses_unknown_flat_extent() -> None:
     mlir_text = _vector_dynamic_packed_pointer_join_kernel.dump_mlir(
         type_args=(64, 0)
@@ -1136,7 +1096,6 @@ def test_vector_dynamic_on_chip_pointer_uses_unknown_flat_extent() -> None:
     assert '"tla.vec.func"' not in output
     assert "memref.dim" not in output
 
-
 def test_vector_static_rank_one_pointer_keeps_inferred_flat_extent() -> None:
     mlir_text = _vector_static_rank_one_pointer_join_kernel.dump_mlir(type_args=(0,))
     assert "!tla.shape<128>" in mlir_text
@@ -1155,7 +1114,6 @@ def test_vector_static_rank_one_pointer_keeps_inferred_flat_extent() -> None:
     assert "memref<?xf16, #hivm.address_space<ub>>" not in output
     assert "memref<0xf16" not in output
     assert '"tla.vec.func"' not in output
-
 
 def test_vector_static_view_with_unproven_capacity_uses_unknown_extent() -> None:
     mlir_text = _vector_static_packed_pointer_join_kernel.dump_mlir(type_args=(0,))
@@ -1183,7 +1141,6 @@ def test_vector_static_view_with_unproven_capacity_uses_unknown_extent() -> None
     ), output
     assert "memref<0xf16" not in output
     assert '"tla.vec.func"' not in output
-
 
 def test_vector_dynamic_gm_memref_keeps_real_descriptor() -> None:
     mlir_text = _vector_dynamic_gm_descriptor_kernel.dump_mlir(

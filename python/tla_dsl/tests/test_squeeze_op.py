@@ -2,28 +2,32 @@
 
 from __future__ import annotations
 
+from catlass.tla.runtime import make_fake_tensor
+
+
 import catlass.tla as tla
 import catlass.runtime as runtime_mod
 
 
 def _vector_tensor_pair() -> tuple[tla.Tensor, tla.Tensor]:
-    with runtime_mod._eager_capture():
-        return (
-            tla.Tensor(
-                tla.make_shape(64),
-                tla.Float32,
-                addrspace=tla.AddressSpace.ub,
-                origin_shape=tla.make_shape(64),
-                layout_tag=tla.arch.RowMajor,
-            ),
-            tla.Tensor(
-                tla.make_shape(64),
-                tla.Float32,
-                addrspace=tla.AddressSpace.ub,
-                origin_shape=tla.make_shape(64),
-                layout_tag=tla.arch.RowMajor,
-            ),
-        )
+    return (
+        make_fake_tensor(
+            tla.Float32,
+            (64,),
+            (1,),
+            addrspace=tla.AddressSpace.ub,
+            origin_shape=(64,),
+            layout_tag=tla.arch.RowMajor,
+        ),
+        make_fake_tensor(
+            tla.Float32,
+            (64,),
+            (1,),
+            addrspace=tla.AddressSpace.ub,
+            origin_shape=(64,),
+            layout_tag=tla.arch.RowMajor,
+        ),
+    )
 
 
 @tla.kernel

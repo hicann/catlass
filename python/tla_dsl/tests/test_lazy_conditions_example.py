@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from catlass.tla.runtime import make_fake_tensor
+
+
 import ast
 import importlib.util
 from pathlib import Path
@@ -26,16 +29,13 @@ def _load_example():
 
 
 def _gm_tensor(length: int) -> tla.Tensor:
-    with runtime_mod._eager_capture():
-        return tla.Tensor(
-            tla.make_shape(length),
-            tla.Float32,
-            addrspace=tla.AddressSpace.gm,
-            origin_shape=tla.make_shape(length),
-            coord=tla.make_coord(0),
-            stride=tla.make_stride(1),
-            layout_tag=tla.arch.RowMajor,
-        )
+    return make_fake_tensor(
+               tla.Float32,
+               (length,),
+               (1,),
+               origin_shape=(length,),
+               layout_tag=tla.arch.RowMajor,
+           )
 
 
 def test_example_contains_the_exact_runtime_lazy_guards() -> None:

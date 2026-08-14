@@ -290,27 +290,17 @@ def kernel_func(...):
 
 **文件**：`basic_mmad_ptr.py`
 
-片上数据直采的矩阵乘示例，展示 **TLA DSL** 通过手写 `tla.Tensor` 绕过DLPack的传参做法，样例仅支持静态场景，以及 Device 侧的处理，默认问题规模为 64×64×64。
+片上数据直采的矩阵乘示例。Host 侧用 `from_dlpack` 绑定真实 NPU buffer（静态规模）；Device 侧 `tla.allocate` 分配片上空间。默认问题规模为 64×64×64。
 
-在Host侧，根据原指针显式创建 `tla.Tensor`表示。例如：
+在 Host 侧：
 ```python
+import torch
 import catlass.tla as tla
+from catlass.tla.runtime import from_dlpack
 
-# ...
-
-# 创建 torch.Tensor
-_torch_tensor = torch.rand(M_DIM, K_DIM, dtype=torch.float32, device="cpu") * 10.0 - 5.0
-contiguous = _torch_tensor.contiguous()
-with runtime_mod._eager_capture():
-   # 通过显式 tla.Tensor创建
-   _tensor =  tla.Tensor(
-         tla.make_shape(row, col),
-         tla.Float32,
-         origin_shape=tla.make_shape(row, col),
-         coord=tla.make_coord(0, 0),
-         stride=tla.make_stride(col, 1),
-         data_ptr=int(contiguous.data_ptr()),  # 传入源数据指针
-   )
+# 创建 torch.Tensor（须在 NPU 上）
+a = torch.rand(M_DIM, K_DIM, dtype=torch.float32, device="npu").contiguous()
+a_tensor = from_dlpack(a, layout_tag=tla.arch.RowMajor)
 ```
 
 在 Device 侧，通过 `tla.allocate()` 按元素数量和数据类型分配片上空间，直接取得 typed pointer。例如分配 L1A 和 L1B：

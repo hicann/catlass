@@ -1,3 +1,5 @@
+from catlass.tla.runtime import make_fake_tensor
+
 import ast
 import builtins
 import inspect
@@ -262,12 +264,13 @@ def test_make_coord_accepts_index_arith_var() -> None:
 
 
 def test_range_alias_lowers_to_scf_for() -> None:
-    with runtime_mod._eager_capture():
-        mem = tla.Tensor(
-            tla.make_shape(16, 16),
-            tla.Float16,
-            origin_shape=tla.make_shape(16, 16),
-        )
+    mem = make_fake_tensor(
+              tla.Float16,
+              (16, 16),
+              (16, 1),
+              origin_shape=(16, 16),
+              layout_tag=tla.arch.RowMajor,
+          )
     mlir = range_alias_kernel.dump_mlir(type_args=(mem,))
     assert "scf.for" in mlir
     assert "tla.range" not in mlir
@@ -335,12 +338,13 @@ def test_range_alias_keeps_hidden_exit_owned_by_nested_dynamic_loop() -> None:
 
 
 def test_range_arities_lower_to_scf_for() -> None:
-    with runtime_mod._eager_capture():
-        mem = tla.Tensor(
-            tla.make_shape(16, 16),
-            tla.Float16,
-            origin_shape=tla.make_shape(16, 16),
-        )
+    mem = make_fake_tensor(
+              tla.Float16,
+              (16, 16),
+              (16, 1),
+              origin_shape=(16, 16),
+              layout_tag=tla.arch.RowMajor,
+          )
     for kernel in (range_stop_kernel, range_start_stop_kernel):
         mlir = kernel.dump_mlir(type_args=(mem,))
         assert "scf.for" in mlir
@@ -350,12 +354,13 @@ def test_range_arities_lower_to_scf_for() -> None:
 
 
 def test_prefixed_range_module_alias_lowers_to_scf_for() -> None:
-    with runtime_mod._eager_capture():
-        mem = tla.Tensor(
-            tla.make_shape(16, 16),
-            tla.Float16,
-            origin_shape=tla.make_shape(16, 16),
-        )
+    mem = make_fake_tensor(
+              tla.Float16,
+              (16, 16),
+              (16, 1),
+              origin_shape=(16, 16),
+              layout_tag=tla.arch.RowMajor,
+          )
     mlir = range_module_alias_kernel.dump_mlir(type_args=(mem,))
     assert "scf.for" in mlir
     assert "tla.range" not in mlir
@@ -364,12 +369,13 @@ def test_prefixed_range_module_alias_lowers_to_scf_for() -> None:
 
 
 def test_range_function_alias_lowers_to_scf_for() -> None:
-    with runtime_mod._eager_capture():
-        mem = tla.Tensor(
-            tla.make_shape(16, 16),
-            tla.Float16,
-            origin_shape=tla.make_shape(16, 16),
-        )
+    mem = make_fake_tensor(
+              tla.Float16,
+              (16, 16),
+              (16, 1),
+              origin_shape=(16, 16),
+              layout_tag=tla.arch.RowMajor,
+          )
     mlir = range_function_alias_kernel.dump_mlir(type_args=(mem,))
     assert "scf.for" in mlir
     assert "tla.range" not in mlir
@@ -378,12 +384,13 @@ def test_range_function_alias_lowers_to_scf_for() -> None:
 
 
 def test_imported_bare_range_lowers_to_scf_for() -> None:
-    with runtime_mod._eager_capture():
-        mem = tla.Tensor(
-            tla.make_shape(16, 16),
-            tla.Float16,
-            origin_shape=tla.make_shape(16, 16),
-        )
+    mem = make_fake_tensor(
+              tla.Float16,
+              (16, 16),
+              (16, 1),
+              origin_shape=(16, 16),
+              layout_tag=tla.arch.RowMajor,
+          )
     old_range = globals().get("range", builtins.range)
     globals()["range"] = tla.range
     try:
@@ -397,12 +404,13 @@ def test_imported_bare_range_lowers_to_scf_for() -> None:
 
 
 def test_builtin_bare_range_remains_static_python_loop() -> None:
-    with runtime_mod._eager_capture():
-        mem = tla.Tensor(
-            tla.make_shape(16, 16),
-            tla.Float16,
-            origin_shape=tla.make_shape(16, 16),
-        )
+    mem = make_fake_tensor(
+              tla.Float16,
+              (16, 16),
+              (16, 1),
+              origin_shape=(16, 16),
+              layout_tag=tla.arch.RowMajor,
+          )
     old_range = globals().get("range", builtins.range)
     globals()["range"] = builtins.range
     try:
@@ -416,12 +424,13 @@ def test_builtin_bare_range_remains_static_python_loop() -> None:
 
 
 def test_local_shadowed_range_remains_static_python_loop() -> None:
-    with runtime_mod._eager_capture():
-        mem = tla.Tensor(
-            tla.make_shape(16, 16),
-            tla.Float16,
-            origin_shape=tla.make_shape(16, 16),
-        )
+    mem = make_fake_tensor(
+              tla.Float16,
+              (16, 16),
+              (16, 1),
+              origin_shape=(16, 16),
+              layout_tag=tla.arch.RowMajor,
+          )
     mlir = local_shadowed_range_kernel.dump_mlir(type_args=(mem,))
     assert "scf.for" not in mlir
     assert "tla.range" not in mlir
@@ -430,12 +439,13 @@ def test_local_shadowed_range_remains_static_python_loop() -> None:
 
 
 def test_range_constexpr_unrolls_as_python_loop() -> None:
-    with runtime_mod._eager_capture():
-        mem = tla.Tensor(
-            tla.make_shape(16, 16),
-            tla.Float16,
-            origin_shape=tla.make_shape(16, 16),
-        )
+    mem = make_fake_tensor(
+              tla.Float16,
+              (16, 16),
+              (16, 1),
+              origin_shape=(16, 16),
+              layout_tag=tla.arch.RowMajor,
+          )
     mlir = range_constexpr_kernel.dump_mlir(type_args=(mem,))
     assert "scf.for" not in mlir
     assert "tla.range" not in mlir
@@ -444,12 +454,13 @@ def test_range_constexpr_unrolls_as_python_loop() -> None:
 
 
 def test_range_constexpr_aliases_unroll_as_python_loop() -> None:
-    with runtime_mod._eager_capture():
-        mem = tla.Tensor(
-            tla.make_shape(16, 16),
-            tla.Float16,
-            origin_shape=tla.make_shape(16, 16),
-        )
+    mem = make_fake_tensor(
+              tla.Float16,
+              (16, 16),
+              (16, 1),
+              origin_shape=(16, 16),
+              layout_tag=tla.arch.RowMajor,
+          )
     for kernel in (
         range_constexpr_module_alias_kernel,
         range_constexpr_function_alias_kernel,
@@ -462,12 +473,13 @@ def test_range_constexpr_aliases_unroll_as_python_loop() -> None:
 
 
 def test_imported_bare_range_constexpr_unrolls_as_python_loop() -> None:
-    with runtime_mod._eager_capture():
-        mem = tla.Tensor(
-            tla.make_shape(16, 16),
-            tla.Float16,
-            origin_shape=tla.make_shape(16, 16),
-        )
+    mem = make_fake_tensor(
+              tla.Float16,
+              (16, 16),
+              (16, 1),
+              origin_shape=(16, 16),
+              layout_tag=tla.arch.RowMajor,
+          )
     mlir = bare_range_constexpr_kernel.dump_mlir(type_args=(mem,))
     assert "scf.for" not in mlir
     assert "tla.range" not in mlir
@@ -476,12 +488,13 @@ def test_imported_bare_range_constexpr_unrolls_as_python_loop() -> None:
 
 
 def test_range_negative_step_rewrites_at_ast_level() -> None:
-    with runtime_mod._eager_capture():
-        mem = tla.Tensor(
-            tla.make_shape(16, 16),
-            tla.Float16,
-            origin_shape=tla.make_shape(16, 16),
-        )
+    mem = make_fake_tensor(
+              tla.Float16,
+              (16, 16),
+              (16, 1),
+              origin_shape=(16, 16),
+              layout_tag=tla.arch.RowMajor,
+          )
     mlir = range_negative_step_kernel.dump_mlir(type_args=(mem,))
     assert "scf.for" in mlir
     assert "arith.cmpi slt" not in mlir
@@ -493,12 +506,13 @@ def test_range_negative_step_rewrites_at_ast_level() -> None:
 
 
 def test_range_dynamic_step_rewrites_at_ast_level() -> None:
-    with runtime_mod._eager_capture():
-        mem = tla.Tensor(
-            tla.make_shape(16, 16),
-            tla.Float16,
-            origin_shape=tla.make_shape(16, 16),
-        )
+    mem = make_fake_tensor(
+              tla.Float16,
+              (16, 16),
+              (16, 1),
+              origin_shape=(16, 16),
+              layout_tag=tla.arch.RowMajor,
+          )
     mlir = range_dynamic_step_kernel.dump_mlir(type_args=(mem, 4, 0, -1))
     assert "scf.for" in mlir
     assert "scf.if" in mlir
@@ -546,12 +560,13 @@ def test_execution_only_mode_lowers_tla_range_loop() -> None:
         for _i in tla.range(0, 16, 1):
             tla.make_coord(0, 0)
 
-    with runtime_mod._eager_capture():
-        mem_a = tla.Tensor(
-            tla.make_shape(1, 2),
-            tla.Float16,
-            origin_shape=tla.make_shape(1, 2),
-        )
+    mem_a = make_fake_tensor(
+                tla.Float16,
+                (1, 2),
+                (2, 1),
+                origin_shape=(1, 2),
+                layout_tag=tla.arch.RowMajor,
+            )
     mlir = BaseDSL()._func(
         lowered,
         kind="kernel",
@@ -569,12 +584,13 @@ def test_dynamic_tla_range_loop_rejects_return() -> None:
         for _i in tla.range(0, 16, 1):
             return
 
-    with runtime_mod._eager_capture():
-        mem_a = tla.Tensor(
-            tla.make_shape(1, 2),
-            tla.Float16,
-            origin_shape=tla.make_shape(1, 2),
-        )
+    mem_a = make_fake_tensor(
+                tla.Float16,
+                (1, 2),
+                (2, 1),
+                origin_shape=(1, 2),
+                layout_tag=tla.arch.RowMajor,
+            )
     with pytest.raises(SyntaxError, match="dynamic Tla for"):
         _ = BaseDSL()._func(lowered, kind="kernel", options={}, type_args=(mem_a,))
 
@@ -619,12 +635,13 @@ def test_dynamic_tla_range_loop_rejects_break() -> None:
         for _i in tla.range(0, 16, 1):
             break
 
-    with runtime_mod._eager_capture():
-        mem_a = tla.Tensor(
-            tla.make_shape(1, 2),
-            tla.Float16,
-            origin_shape=tla.make_shape(1, 2),
-        )
+    mem_a = make_fake_tensor(
+                tla.Float16,
+                (1, 2),
+                (2, 1),
+                origin_shape=(1, 2),
+                layout_tag=tla.arch.RowMajor,
+            )
     with pytest.raises(SyntaxError, match="dynamic Tla for"):
         _ = BaseDSL()._func(lowered, kind="kernel", options={}, type_args=(mem_a,))
 
@@ -634,12 +651,13 @@ def test_dynamic_tla_range_loop_rejects_continue() -> None:
         for _i in tla.range(0, 16, 1):
             continue
 
-    with runtime_mod._eager_capture():
-        mem_a = tla.Tensor(
-            tla.make_shape(1, 2),
-            tla.Float16,
-            origin_shape=tla.make_shape(1, 2),
-        )
+    mem_a = make_fake_tensor(
+                tla.Float16,
+                (1, 2),
+                (2, 1),
+                origin_shape=(1, 2),
+                layout_tag=tla.arch.RowMajor,
+            )
     with pytest.raises(SyntaxError, match="dynamic Tla for"):
         _ = BaseDSL()._func(lowered, kind="kernel", options={}, type_args=(mem_a,))
 
@@ -649,12 +667,13 @@ def test_dynamic_tla_range_loop_rejects_raise() -> None:
         for _i in tla.range(0, 16, 1):
             raise RuntimeError("unsupported")
 
-    with runtime_mod._eager_capture():
-        mem_a = tla.Tensor(
-            tla.make_shape(1, 2),
-            tla.Float16,
-            origin_shape=tla.make_shape(1, 2),
-        )
+    mem_a = make_fake_tensor(
+                tla.Float16,
+                (1, 2),
+                (2, 1),
+                origin_shape=(1, 2),
+                layout_tag=tla.arch.RowMajor,
+            )
     with pytest.raises(SyntaxError, match="dynamic Tla for"):
         _ = BaseDSL()._func(lowered, kind="kernel", options={}, type_args=(mem_a,))
 
@@ -666,12 +685,13 @@ def test_dynamic_tla_range_loop_rejects_for_else() -> None:
         else:
             tla.make_coord(0, 0)
 
-    with runtime_mod._eager_capture():
-        mem_a = tla.Tensor(
-            tla.make_shape(1, 2),
-            tla.Float16,
-            origin_shape=tla.make_shape(1, 2),
-        )
+    mem_a = make_fake_tensor(
+                tla.Float16,
+                (1, 2),
+                (2, 1),
+                origin_shape=(1, 2),
+                layout_tag=tla.arch.RowMajor,
+            )
     with pytest.raises(SyntaxError, match="for-else"):
         _ = BaseDSL()._func(lowered, kind="kernel", options={}, type_args=(mem_a,))
 
@@ -682,12 +702,13 @@ def test_dynamic_tla_range_loop_rejects_non_name_target() -> None:
         for pair[0] in tla.range(0, 16, 1):
             tla.make_coord(0, 0)
 
-    with runtime_mod._eager_capture():
-        mem_a = tla.Tensor(
-            tla.make_shape(1, 2),
-            tla.Float16,
-            origin_shape=tla.make_shape(1, 2),
-        )
+    mem_a = make_fake_tensor(
+                tla.Float16,
+                (1, 2),
+                (2, 1),
+                origin_shape=(1, 2),
+                layout_tag=tla.arch.RowMajor,
+            )
     with pytest.raises(SyntaxError, match="simple local name target"):
         _ = BaseDSL()._func(lowered, kind="kernel", options={}, type_args=(mem_a,))
 
@@ -698,12 +719,13 @@ def test_dynamic_tla_range_loop_rejects_new_value_used_after() -> None:
             coord = i
         tla.make_coord(coord, 0)
 
-    with runtime_mod._eager_capture():
-        mem_a = tla.Tensor(
-            tla.make_shape(1, 2),
-            tla.Float16,
-            origin_shape=tla.make_shape(1, 2),
-        )
+    mem_a = make_fake_tensor(
+                tla.Float16,
+                (1, 2),
+                (2, 1),
+                origin_shape=(1, 2),
+                layout_tag=tla.arch.RowMajor,
+            )
     with pytest.raises(SyntaxError, match="initialized before the loop"):
         _ = BaseDSL()._func(lowered, kind="kernel", options={}, type_args=(mem_a,))
 
@@ -714,12 +736,13 @@ def test_dynamic_tla_range_loop_rejects_induction_value_used_after() -> None:
             tla.make_coord(0, 0)
         tla.make_coord(i, 0)
 
-    with runtime_mod._eager_capture():
-        mem_a = tla.Tensor(
-            tla.make_shape(1, 2),
-            tla.Float16,
-            origin_shape=tla.make_shape(1, 2),
-        )
+    mem_a = make_fake_tensor(
+                tla.Float16,
+                (1, 2),
+                (2, 1),
+                origin_shape=(1, 2),
+                layout_tag=tla.arch.RowMajor,
+            )
     with pytest.raises(SyntaxError, match="induction variables"):
         _ = BaseDSL()._func(lowered, kind="kernel", options={}, type_args=(mem_a,))
 
@@ -729,12 +752,13 @@ def test_execution_only_mode_handles_python_range_loop() -> None:
         for _i in range(4):
             tla.make_coord(0, 0)
 
-    with runtime_mod._eager_capture():
-        mem_a = tla.Tensor(
-            tla.make_shape(1, 2),
-            tla.Float16,
-            origin_shape=tla.make_shape(1, 2),
-        )
+    mem_a = make_fake_tensor(
+                tla.Float16,
+                (1, 2),
+                (2, 1),
+                origin_shape=(1, 2),
+                layout_tag=tla.arch.RowMajor,
+            )
     mlir = BaseDSL()._func(
         supported,
         kind="kernel",

@@ -1,4 +1,4 @@
-"""Unit tests for DLPack helpers in :mod:`catlass.runtime`."""
+"""Unit tests for DLPack helpers in :mod:`catlass.tla.runtime`."""
 
 from __future__ import annotations
 
@@ -7,58 +7,50 @@ from typing import Any
 
 import pytest
 
+import catlass.tla as tla
 from catlass.base_dsl.runtime.dlpack_types import DLDataType, DLDataTypeCode, DLDevice, DLTensor
-from catlass.tla.runtime import DlpackBridgeError, _Tensor, export_dlpack_capsule
+from catlass.tla.runtime import from_dlpack
+from catlass.types import RuntimeTensorError
 
 np = pytest.importorskip("numpy")
 
-
-class _DLManagedTensor(ctypes.Structure):
-    _fields_ = [
-        ("dl_tensor", DLTensor),
-        ("deleter", ctypes.c_void_p),
-        ("manager_ctx", ctypes.c_void_p),
-    ]
+# Keep ctypes-backed objects alive for as long as tests hold the capsule.
+_CAPSULE_PINS: list[Any] = []
 
 
-def _null_strides_dltensor_capsule() -> Any:
-    """Build a ``dltensor`` capsule with ``strides == NULL`` (NumPy 2+ often exports explicit strides)."""
-    storage = np.ascontiguousarray(np.arange(6, dtype=np.float32).reshape(2, 3))
-    shape_arr = (ctypes.c_int64 * 2)(2, 3)
-    managed = _DLManagedTensor()
-    managed.dl_tensor = DLTensor(
-        data=ctypes.cast(storage.ctypes.data, ctypes.c_void_p),
-        device=DLDevice(int(1), 0),
-        ndim=2,
-        dtype=DLDataType(int(DLDataTypeCode.kDLFloat), 32, 1),
-        shape=ctypes.cast(shape_arr, ctypes.POINTER(ctypes.c_int64)),
-        strides=None,
-        byte_offset=0,
-    )
-    managed.deleter = None
-    managed.manager_ctx = None
-    # Keep backing arrays alive for the lifetime of the capsule consumer.
-    managed._storage = storage  # type: ignore[attr-defined]
-    managed._shape_arr = shape_arr  # type: ignore[attr-defined]
-    ptr = ctypes.pointer(managed)
-    ctypes.pythonapi.PyCapsule_New.restype = ctypes.py_object
-    ctypes.pythonapi.PyCapsule_New.argtypes = [
-        ctypes.c_void_p,
-        ctypes.c_char_p,
-        ctypes.c_void_p,
-    ]
-    capsule = ctypes.pythonapi.PyCapsule_New(
-        ctypes.cast(ptr, ctypes.c_void_p),
-        b"dltensor",
-        None,
-    )
-    if not capsule:
-        raise MemoryError("PyCapsule_New failed")
+def _wrap_as_dltensor_capsule(dl: DLTensor, *, keep: list[Any]) -> Any:
+    """Put a ``DLTensor`` behind a ``dltensor`` capsule (parse path only reads that header)."""
+    create = ctypes.pythonapi.PyCapsule_New
+    create.restype = ctypes.py_object
+    # Intentionally leave argtypes unset so ctypes converts from ``c_void_p``.
+    payload = ctypes.cast(ctypes.pointer(dl), ctypes.c_void_p)
+    capsule = create(payload, b"dltensor", None)
+    if capsule is None:
+        raise MemoryError("failed to allocate dltensor capsule")
+    _CAPSULE_PINS.append((capsule, tuple(keep)))
     return capsule
 
 
+def _null_stride_capsule() -> Any:
+    """Host-only fixture: rank-2 DLTensor whose stride pointer is NULL."""
+    elems = np.ascontiguousarray(np.arange(6, dtype=np.float32).reshape(2, 3))
+    extents = (ctypes.c_int64 * 2)(2, 3)
+    header = DLTensor()
+    header.data = ctypes.cast(elems.ctypes.data, ctypes.c_void_p)
+    header.device = DLDevice(1, 0)
+    header.ndim = 2
+    header.dtype = DLDataType(int(DLDataTypeCode.kDLFloat), 32, 1)
+    header.shape = ctypes.cast(extents, ctypes.POINTER(ctypes.c_int64))
+    header.strides = None
+    header.byte_offset = 0
+    return _wrap_as_dltensor_capsule(header, keep=[elems, extents, header])
+
 
 def test_parse_rejects_null_dlpack_strides() -> None:
-    with pytest.raises(DlpackBridgeError, match="null strides"):
-        _Tensor._parse_capsule(_null_strides_dltensor_capsule())
+    class _Exporter:
+        def __dlpack__(self, stream: int | None = None):
+            del stream
+            return _null_stride_capsule()
 
+    with pytest.raises(RuntimeTensorError, match="null strides"):
+        from_dlpack(_Exporter(), layout_tag=tla.arch.RowMajor)

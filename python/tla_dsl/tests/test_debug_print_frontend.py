@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from catlass.tla.runtime import make_fake_tensor
+
+
 import inspect
 import re
 
@@ -148,14 +151,14 @@ def _formatted_vector_value_kernel(value: tla.Tensor) -> None:
 
 
 def _host_vector_tensor() -> tla.Tensor:
-    with runtime_mod._eager_capture():
-        return tla.Tensor(
-            tla.make_shape(64),
-            tla.Float32,
-            addrspace=tla.AddressSpace.ub,
-            origin_shape=tla.make_shape(64),
-            layout_tag=tla.arch.RowMajor,
-        )
+    return make_fake_tensor(
+               tla.Float32,
+               (64,),
+               (1,),
+               addrspace=tla.AddressSpace.ub,
+               origin_shape=(64,),
+               layout_tag=tla.arch.RowMajor,
+           )
 
 
 def test_print_signature_is_variadic() -> None:

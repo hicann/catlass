@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import inspect
 from contextlib import contextmanager
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 
 from .base_dsl.runtime.dlpack_types import (
     ASCEND_DEVICE_TYPES,
@@ -50,9 +50,12 @@ class TlaCoreAPIError(RuntimeError):
 
 
 @contextmanager
-def _eager_capture() -> Any:
-    """Compatibility context that provides a minimal direct-emission session."""
+def _eager_capture() -> Iterator[Any]:
+    """Internal minimal frontend session (not a user-facing API).
 
+    Used by :func:`~catlass.tla.runtime.make_fake_tensor` so Host fake construction
+    can open a disposable emission context without exposing capture to callers.
+    """
     from mlir import ir as mlir_ir  # type: ignore[assignment]
 
     with mlir_ir.Context() as ctx:
@@ -497,7 +500,6 @@ from .tla.runtime import (  # noqa: E402
     export_dlpack_capsule,
     from_dlpack,
     make_fake_tensor,
-    _Tensor,
 )
 
 
@@ -519,7 +521,6 @@ __all__ = [
     "export_dlpack_capsule",
     "from_dlpack",
     "make_fake_tensor",
-    "_Tensor",
     "arch",
     "const_expr",
     "jit",

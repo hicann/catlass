@@ -1,3 +1,5 @@
+from catlass.tla.runtime import make_fake_tensor
+
 import pathlib
 import re
 import subprocess
@@ -42,12 +44,13 @@ def copy_kernel_arg_directly_to_ub_kernel(mem_in: tla.Tensor) -> None:
 
 def test_frontend_copy_gm_to_l1_lowers_to_runtime_call(tmp_path) -> None:
     tla_compile = _require_hivm_tla_compile()
-    with runtime_mod._eager_capture():
-        mem = tla.Tensor(
-            tla.make_shape(128, 128),
-            tla.Float32,
-            origin_shape=tla.make_shape(128, 128),
-        )
+    mem = make_fake_tensor(
+              tla.Float32,
+              (128, 128),
+              (128, 1),
+              origin_shape=(128, 128),
+              layout_tag=tla.arch.RowMajor,
+          )
 
     mlir = copy_gm_to_l1_kernel.dump_mlir(type_args=(mem,))
     assert "!tla.layout<!tla.shape<(16,2),(8,4)>" in mlir
@@ -86,15 +89,13 @@ def test_frontend_copy_gm_to_l1_lowers_to_runtime_call(tmp_path) -> None:
 
 def test_kernel_gm_arg_copies_directly_to_ub(tmp_path) -> None:
     tla_compile = _require_hivm_tla_compile()
-    with runtime_mod._eager_capture():
-        mem_in = tla.Tensor(
-            tla.make_shape(16, 16),
-            tla.Float32,
-            origin_shape=tla.make_shape(16, 16),
-            coord=tla.make_coord(0, 0),
-            stride=tla.make_stride(16, 1),
-            layout_tag=tla.arch.RowMajor,
-        )
+    mem_in = make_fake_tensor(
+                 tla.Float32,
+                 (16, 16),
+                 (16, 1),
+                 origin_shape=(16, 16),
+                 layout_tag=tla.arch.RowMajor,
+             )
 
     mlir = copy_kernel_arg_directly_to_ub_kernel.dump_mlir(type_args=(mem_in,))
     assert "tla.tile_view" not in mlir
@@ -148,15 +149,13 @@ def copy_l0c_to_ub_split_mismatch_dtype_kernel(gm_c: tla.Tensor) -> None:
 
 def test_copy_l0c_to_ub_split_mismatch_dtype_raises() -> None:
     """L0C->UB copy with SPLIT_M where src(f32) != dst(f16) must raise TlaLoweringError."""
-    with runtime_mod._eager_capture():
-        gm_c = tla.Tensor(
-            tla.make_shape(32, 32),
-            tla.Float16,
-            origin_shape=tla.make_shape(32, 32),
-            coord=tla.make_coord(0, 0),
-            stride=tla.make_stride(32, 1),
-            layout_tag=tla.arch.RowMajor,
-        )
+    gm_c = make_fake_tensor(
+               tla.Float16,
+               (32, 32),
+               (32, 1),
+               origin_shape=(32, 32),
+               layout_tag=tla.arch.RowMajor,
+           )
     with pytest.raises(
         TlaLoweringError,
         match=r"When copy l0c to ub with split mode, src and dst dtype must be same",
@@ -189,15 +188,13 @@ def copy_dynamic_l0c_to_ub_split_m_kernel(gm_c: tla.Tensor) -> None:
 def test_split_m_dynamic_row_major_stride_uses_child_n_extent(tmp_path) -> None:
     """Split-M destination stride0 must be aligned N, not the L0C packing stride."""
     tla_compile = _require_hivm_tla_compile()
-    with runtime_mod._eager_capture():
-        gm_c = tla.Tensor(
-            tla.make_shape(128, 128),
-            tla.Float32,
-            origin_shape=tla.make_shape(128, 128),
-            coord=tla.make_coord(0, 0),
-            stride=tla.make_stride(1, 128),
-            layout_tag=tla.arch.ColumnMajor,
-        )
+    gm_c = make_fake_tensor(
+               tla.Float32,
+               (128, 128),
+               (1, 128),
+               origin_shape=(128, 128),
+               layout_tag=tla.arch.ColumnMajor,
+           )
 
     mlir = copy_dynamic_l0c_to_ub_split_m_kernel.dump_mlir(type_args=(gm_c,))
     assert "!tla.shape<128,?>" in mlir
@@ -374,15 +371,13 @@ def test_make_tensor_like_supports_every_layout_pair(
     monkeypatch.setitem(
         globals(), "_MAKE_TENSOR_LIKE_CHILD_LAYOUT", child_layout
     )
-    with runtime_mod._eager_capture():
-        mem_in = tla.Tensor(
-            tla.make_shape(128, 128),
-            tla.Float32,
-            origin_shape=tla.make_shape(128, 128),
-            coord=tla.make_coord(0, 0),
-            stride=tla.make_stride(128, 1),
-            layout_tag=tla.arch.RowMajor,
-        )
+    mem_in = make_fake_tensor(
+                 tla.Float32,
+                 (128, 128),
+                 (128, 1),
+                 origin_shape=(128, 128),
+                 layout_tag=tla.arch.RowMajor,
+             )
 
     mlir = make_tensor_like_layout_pair_kernel.dump_mlir(
         type_args=(mem_in, 64, 96)
@@ -451,17 +446,20 @@ def nested_ub_subtile_copy_kernel(mem_in: tla.Tensor, mem_out: tla.Tensor) -> No
 def test_nested_ub_subtile_copy_lowers(tmp_path) -> None:
     """GM<->UB staging copies lower to vector-core (AIV) cifax runtime calls."""
     tla_compile = _require_hivm_tla_compile()
-    with runtime_mod._eager_capture():
-        mem_in = tla.Tensor(
-            tla.make_shape(64, 64),
-            tla.Float32,
-            origin_shape=tla.make_shape(64, 64),
-        )
-        mem_out = tla.Tensor(
-            tla.make_shape(32, 32),
-            tla.Float32,
-            origin_shape=tla.make_shape(32, 32),
-        )
+    mem_in = make_fake_tensor(
+                 tla.Float32,
+                 (64, 64),
+                 (64, 1),
+                 origin_shape=(64, 64),
+                 layout_tag=tla.arch.RowMajor,
+             )
+    mem_out = make_fake_tensor(
+                  tla.Float32,
+                  (32, 32),
+                  (32, 1),
+                  origin_shape=(32, 32),
+                  layout_tag=tla.arch.RowMajor,
+              )
 
     mlir = nested_ub_subtile_copy_kernel.dump_mlir(type_args=(mem_in, mem_out))
     input_path = tmp_path / "nested_ub_subtile_copy.mlir"
@@ -496,21 +494,24 @@ def ptradd_ub_subtile_copy_kernel(mem_in: tla.Tensor, mem_src: tla.Tensor) -> No
 def test_ptradd_ub_subtile_copy_applies_ptr_offset(tmp_path) -> None:
     """The ptr_add offset is preserved in the cifax base pointer_cast and tile payload."""
     tla_compile = _require_hivm_tla_compile()
-    with runtime_mod._eager_capture():
-        mem_in = tla.Tensor(
-            tla.make_shape(64, 64),
-            tla.Float32,
-            origin_shape=tla.make_shape(64, 64),
-        )
-        mem_src = tla.Tensor(
-            tla.make_shape(32, 32),
-            tla.Float32,
-            origin_shape=tla.make_shape(32, 32),
-        )
+    mem_in = make_fake_tensor(
+                 tla.Float32,
+                 (64, 64),
+                 (64, 1),
+                 origin_shape=(64, 64),
+                 layout_tag=tla.arch.RowMajor,
+             )
+    mem_src = make_fake_tensor(
+                  tla.Float32,
+                  (32, 32),
+                  (32, 1),
+                  origin_shape=(32, 32),
+                  layout_tag=tla.arch.RowMajor,
+              )
 
     mlir = ptradd_ub_subtile_copy_kernel.dump_mlir(type_args=(mem_in, mem_src))
     input_path = tmp_path / "ptradd_ub_subtile.mlir"
-    input_path.write_text(mlir)
+    input_path.write_text(mlir),
     output_path = tmp_path / "out.mlir"
     result = subprocess.run(
         [
@@ -552,15 +553,13 @@ def copy_l0c_to_ub_split_m_col_major_dst_kernel(gm_c: tla.Tensor) -> None:
 
 def test_copy_l0c_to_ub_split_m_col_major_dst_raises() -> None:
     """L0C->UB copy with SPLIT_M + column_major dst must raise TlaLoweringError."""
-    with runtime_mod._eager_capture():
-        gm_c = tla.Tensor(
-            tla.make_shape(32, 32),
-            tla.Float32,
-            origin_shape=tla.make_shape(32, 32),
-            coord=tla.make_coord(0, 0),
-            stride=tla.make_stride(32, 1),
-            layout_tag=tla.arch.RowMajor,
-        )
+    gm_c = make_fake_tensor(
+               tla.Float32,
+               (32, 32),
+               (32, 1),
+               origin_shape=(32, 32),
+               layout_tag=tla.arch.RowMajor,
+           )
     with pytest.raises(
         TlaLoweringError,
         match=r"When copy l0c to ub and dst layout_tag is column_major, only support `NO_SPLIT` mode",

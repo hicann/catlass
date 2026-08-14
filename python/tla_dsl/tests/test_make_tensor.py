@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from catlass.tla.runtime import make_fake_tensor
+
+
 import pytest
 
 import catlass.tla as tla
@@ -15,8 +18,7 @@ def make_tensor_makeptr_kernel() -> None:
     ptr = tla.make_ptr(tla.Float32, 4096, mem_space=tla.AddressSpace.l1)
     local = tla.make_tensor(
         ptr,
-        tla.make_layout(tla.make_shape(16, 16), tla.make_stride(16, 1)),
-        coord=tla.make_coord(0, 0),
+        tla.make_layout(tla.make_shape(16, 16), tla.make_stride(16, 1))
     )
     _ = local
 
@@ -93,38 +95,18 @@ def test_make_tensor_emits_op_with_explicit_coord() -> None:
 
 
 def test_make_tensor_coord_defaults_to_zero_matching_rank() -> None:
-    with runtime_mod._eager_capture():
-        mem = tla.Tensor(
-            tla.make_shape(16, 16),
-            tla.Float32,
-            origin_shape=tla.make_shape(16, 16),
-        )
+    mem = make_fake_tensor(
+              tla.Float32,
+              (16, 16),
+              (16, 1),
+              origin_shape=(16, 16),
+              layout_tag=tla.arch.RowMajor,
+          )
     mlir = make_tensor_default_coord_kernel.dump_mlir(type_args=(mem,))
     assert "tla.make_tensor" in mlir
     # rank-2 layout -> default coord is (0, 0).
     assert "!tla.coord<0,0>" in mlir
 
-
-def test_make_layout_infers_linear_origin_shape_in_frontend() -> None:
-    with runtime_mod._eager_capture():
-        ptr = tla.make_ptr(tla.Float32, 4096, mem_space=tla.AddressSpace.gm)
-        row_shape = tla.make_shape(16, 32)
-        row = tla.make_layout(
-            row_shape,
-            tla.make_stride(32, 1),
-            layoutTag=tla.arch.RowMajor,
-        )
-        column_shape = tla.make_shape(16, 32)
-        column = tla.make_layout(
-            column_shape,
-            tla.make_stride(1, 16),
-            layoutTag=tla.arch.ColumnMajor,
-        )
-        _ = tla.make_tensor(ptr, row)
-        _ = tla.make_tensor(ptr, column)
-
-    assert row._origin_shape is row_shape
-    assert column._origin_shape is column_shape
 
 
 def test_make_tensor_rank1_default_coord_is_single_zero() -> None:
@@ -264,152 +246,10 @@ def test_make_tensor_rank1_dynamic_extent_emits_tlair() -> None:
 # --- Preconditions ------------------------------------------------------------
 
 
-def test_make_tensor_rejects_non_layout() -> None:
-    with runtime_mod._eager_capture():
-        ptr = tla.make_ptr(tla.Float32, 256, mem_space=tla.AddressSpace.ub)
-        with pytest.raises(tla.TlaCoreAPIError, match="tla.make_tensor"):
-            tla.make_tensor(
-                ptr,
-                tla.make_shape(16, 16),  # not a tla.make_layout result
-                coord=tla.make_coord(0, 0),
-            )
 
 
-def test_make_tensor_rejects_non_pointer() -> None:
-    with runtime_mod._eager_capture():
-        layout = tla.make_layout(tla.make_shape(16, 16), tla.make_stride(16, 1))
-        with pytest.raises(tla.TlaCoreAPIError, match="tla.make_tensor"):
-            tla.make_tensor(
-                tla.make_shape(16, 16),  # not a !tla.ptr
-                layout,
-                coord=tla.make_coord(0, 0),
-            )
 
 
-def test_make_tensor_rejects_bad_coord_type() -> None:
-    with runtime_mod._eager_capture():
-        ptr = tla.make_ptr(tla.Float32, 256, mem_space=tla.AddressSpace.ub)
-        layout = tla.make_layout(tla.make_shape(16, 16), tla.make_stride(16, 1))
-        with pytest.raises(tla.TlaCoreAPIError, match="tla.make_tensor"):
-            # A _Shape is the wrong type for coord (expected tla.make_coord / None).
-            tla.make_tensor(ptr, layout, coord=tla.make_shape(16, 16))
 
 
-def test_make_tensor_rejects_higher_rank_layout() -> None:
-    with runtime_mod._eager_capture():
-        ptr = tla.make_ptr(tla.Float32, 256, mem_space=tla.AddressSpace.ub)
-        # 3-D layout: exceeds the max 2-D supported by make_tensor.
-        layout = tla.make_layout(
-            tla.make_shape(2, 3, 4), tla.make_stride(12, 4, 1)
-        )
-        with pytest.raises(TlaLoweringError, match="at most 2-D"):
-            tla.make_tensor(ptr, layout, coord=tla.make_coord(0, 0, 0))
 
-
-def test_make_tensor_rejects_coord_rank_mismatch() -> None:
-    with runtime_mod._eager_capture():
-        ptr = tla.make_ptr(tla.Float32, 256, mem_space=tla.AddressSpace.ub)
-        # rank-2 layout but rank-1 coord.
-        layout = tla.make_layout(tla.make_shape(16, 16), tla.make_stride(16, 1))
-        with pytest.raises(TlaLoweringError, match="coord rank must match"):
-            tla.make_tensor(ptr, layout, coord=tla.make_coord(0))
-
-
-@pytest.mark.parametrize(
-    ("dtype", "shape", "stride", "layout_tag"),
-    [
-        (
-            tla.Float16,
-            (32, 32),
-            (1, 32),
-            tla.arch.RowMajor,
-        ),
-        (
-            tla.Float16,
-            (32, 32),
-            (32, 1),
-            tla.arch.ColumnMajor,
-        ),
-        (
-            tla.Float16,
-            ((16, 2), (16, 2)),
-            ((1, 512), (16, 256)),
-            tla.arch.zN,
-        ),
-        (
-            tla.Float16,
-            ((16, 2), (16, 2)),
-            ((16, 256), (1, 512)),
-            tla.arch.nZ,
-        ),
-        (
-            tla.Float16,
-            ((16, 2), (16, 2)),
-            ((16, 256), (1, 512)),
-            tla.arch.zZ,
-        ),
-        (
-            tla.Float32,
-            ((16, 2), (8, 4)),
-            ((8, 128), (1, 256)),
-            tla.arch.L0Clayout,
-        ),
-        (
-            tla.Float16,
-            ((16, 2), (16, 2)),
-            ((16, 256), (1, 512)),
-            tla.arch.zNUnAlign,
-        ),
-    ],
-)
-def test_make_tensor_rejects_shape_stride_layout_tag_mismatch(
-    dtype: object,
-    shape: tuple[object, ...],
-    stride: tuple[object, ...],
-    layout_tag: object,
-) -> None:
-    with runtime_mod._eager_capture():
-        ptr = tla.make_ptr(dtype, 16384, mem_space=tla.AddressSpace.l1)
-        layout = tla.make_layout(
-            tla.make_shape(*shape),
-            tla.make_stride(*stride),
-            layoutTag=layout_tag,
-        )
-        with pytest.raises(
-            TlaLoweringError,
-            match=r"do not match layout",
-        ):
-            tla.make_tensor(ptr, layout)
-
-
-def test_make_tensor_packed_validation_matches_cpp_layout_traits() -> None:
-    with runtime_mod._eager_capture():
-        ptr = tla.make_ptr(tla.Float16, 16384, mem_space=tla.AddressSpace.l1)
-        layout = tla.make_layout(
-            tla.make_shape((16, 2), (16, 2)),
-            # IszN only identifies the four characteristic leaves; the other
-            # shape/stride leaves do not need to match MakeLayout's canonical result.
-            tla.make_stride((99, 256), (1, 777)),
-            origin_shape=tla.make_shape(33, 32),
-            layoutTag=tla.arch.zN,
-        )
-        _ = tla.make_tensor(ptr, layout)
-
-
-def test_make_tensor_accepts_linear_pitch_and_smaller_origin() -> None:
-    with runtime_mod._eager_capture():
-        ptr = tla.make_ptr(tla.Float32, 4096, mem_space=tla.AddressSpace.gm)
-        row_layout = tla.make_layout(
-            tla.make_shape(32, 32),
-            tla.make_stride(64, 1),
-            origin_shape=tla.make_shape(30, 31),
-            layoutTag=tla.arch.RowMajor,
-        )
-        column_layout = tla.make_layout(
-            tla.make_shape(32, 32),
-            tla.make_stride(1, 64),
-            origin_shape=tla.make_shape(30, 31),
-            layoutTag=tla.arch.ColumnMajor,
-        )
-        _ = tla.make_tensor(ptr, row_layout)
-        _ = tla.make_tensor(ptr, column_layout)

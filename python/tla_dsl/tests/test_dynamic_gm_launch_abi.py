@@ -1,15 +1,17 @@
 from __future__ import annotations
 
+from catlass.tla.runtime import make_fake_tensor
+
 import struct
 
 import pytest
+
 
 compiler_bridge = pytest.importorskip(
     "catlass.compiler_bridge", exc_type=ImportError
 )
 execution = pytest.importorskip("catlass.execution", exc_type=ImportError)
 tla = pytest.importorskip("catlass.tla", exc_type=ImportError)
-runtime_mod = pytest.importorskip("catlass.runtime", exc_type=ImportError)
 
 _UNIFIED_FIELDS = (
     "allocated",
@@ -26,6 +28,35 @@ _UNIFIED_FIELDS = (
     "originShape0",
     "originShape1",
 )
+
+
+def _bound_fake(
+    shape_args: tuple,
+    dtype: object,
+    *,
+    stride_args: tuple,
+    coord_args: tuple,
+    data_ptr: int,
+    mark_dynamic: bool = False,
+):
+    """Fake host tensor with a synthetic ``data_ptr`` for launch-ABI packing tests.
+
+    Built via :func:`make_fake_tensor` (unbound), then stamped with ``data_ptr`` so
+    memref field packing can be exercised without a real DLPack buffer.
+    """
+    tensor = make_fake_tensor(
+                 dtype,
+                 (*shape_args,),
+                 (*stride_args,),
+                 origin_shape=(*shape_args,),
+                 coord=(*coord_args,),
+                 layout_tag=tla.arch.RowMajor,
+             )
+    if mark_dynamic:
+        tensor = tensor.mark_layout_dynamic()
+    tensor.data_ptr = int(data_ptr)
+    tensor._external_binding = True
+    return tensor
 
 
 def _memref_field_layout() -> compiler_bridge.KernelAbiLayout:
@@ -55,17 +86,7 @@ def _memref_field_layout() -> compiler_bridge.KernelAbiLayout:
 
 
 def test_build_memref_launch_fields_rank1() -> None:
-    with runtime_mod._eager_capture():
-        tensor = tla.Tensor(
-            tla.make_shape(17),
-            tla.Int32,
-            origin_shape=tla.make_shape(17),
-            coord=tla.make_coord(0),
-            stride=tla.make_stride(1),
-            layout_tag=tla.arch.RowMajor,
-            data_ptr=0xABCD00,
-        )
-    tensor._external_binding = True
+    tensor = _bound_fake((17,), tla.Int32, stride_args=(1,), coord_args=(0,), data_ptr=0xABCD00)
     assert tensor.build_memref_launch_fields() == {
         "allocated": 0xABCD00,
         "aligned": 0xABCD00,
@@ -84,17 +105,9 @@ def test_build_memref_launch_fields_rank1() -> None:
 
 
 def test_build_memref_launch_fields_rank2() -> None:
-    with runtime_mod._eager_capture():
-        tensor = tla.Tensor(
-            tla.make_shape(4, 8),
-            tla.Float16,
-            origin_shape=tla.make_shape(4, 8),
-            coord=tla.make_coord(0, 0),
-            stride=tla.make_stride(8, 1),
-            layout_tag=tla.arch.RowMajor,
-            data_ptr=0x1000,
-        )
-    tensor._external_binding = True
+    tensor = _bound_fake(
+        (4, 8), tla.Float16, stride_args=(8, 1), coord_args=(0, 0), data_ptr=0x1000
+    )
     assert tensor.build_memref_launch_fields() == {
         "allocated": 0x1000,
         "aligned": 0x1000,
@@ -113,17 +126,9 @@ def test_build_memref_launch_fields_rank2() -> None:
 
 
 def test_build_memref_launch_fields_reuses_metadata_and_tracks_pointer_change() -> None:
-    with runtime_mod._eager_capture():
-        tensor = tla.Tensor(
-            tla.make_shape(4, 8),
-            tla.Float16,
-            origin_shape=tla.make_shape(4, 8),
-            coord=tla.make_coord(0, 0),
-            stride=tla.make_stride(8, 1),
-            layout_tag=tla.arch.RowMajor,
-            data_ptr=0x1000,
-        )
-    tensor._external_binding = True
+    tensor = _bound_fake(
+        (4, 8), tla.Float16, stride_args=(8, 1), coord_args=(0, 0), data_ptr=0x1000
+    )
 
     first = tensor.build_memref_launch_fields()
     assert tensor.build_memref_launch_fields() is first
@@ -140,17 +145,7 @@ def test_build_memref_launch_fields_reuses_metadata_and_tracks_pointer_change() 
 
 
 def test_pack_launch_args_expands_unified_memref_fields() -> None:
-    with runtime_mod._eager_capture():
-        tensor = tla.Tensor(
-            tla.make_shape(17),
-            tla.Int32,
-            origin_shape=tla.make_shape(17),
-            coord=tla.make_coord(0),
-            stride=tla.make_stride(1),
-            layout_tag=tla.arch.RowMajor,
-            data_ptr=0xABCD00,
-        )
-    tensor._external_binding = True
+    tensor = _bound_fake((17,), tla.Int32, stride_args=(1,), coord_args=(0,), data_ptr=0xABCD00)
     payload = execution._pack_launch_args([tensor], _memref_field_layout())
     assert len(payload) == 104
     values = struct.unpack("<13Q", payload)
@@ -158,17 +153,7 @@ def test_pack_launch_args_expands_unified_memref_fields() -> None:
 
 
 def test_pack_launch_args_expands_rank2_unified_memref_fields() -> None:
-    with runtime_mod._eager_capture():
-        tensor = tla.Tensor(
-            tla.make_shape(4, 8),
-            tla.Float16,
-            origin_shape=tla.make_shape(4, 8),
-            coord=tla.make_coord(0, 0),
-            stride=tla.make_stride(8, 1),
-            layout_tag=tla.arch.RowMajor,
-            data_ptr=0x1000,
-        )
-    tensor._external_binding = True
+    tensor = _bound_fake((4, 8), tla.Float16, stride_args=(8, 1), coord_args=(0, 0), data_ptr=0x1000)
     payload = execution._pack_launch_args([tensor], _memref_field_layout())
     assert len(payload) == 104
     values = struct.unpack("<13Q", payload)
@@ -209,18 +194,14 @@ def test_mixed_handoff_uses_logical_abi_count_for_dynamic_gm(tmp_path) -> None:
     passes one Tensor per logical arg. Packing must follow ABI logical_index."""
 
     def _make_tensor(ptr: int, rows: int, cols: int):
-        with runtime_mod._eager_capture():
-            tensor = tla.Tensor(
-                tla.make_shape(rows, cols),
-                tla.Float32,
-                origin_shape=tla.make_shape(rows, cols),
-                coord=tla.make_coord(0, 0),
-                stride=tla.make_stride(cols, 1),
-                layout_tag=tla.arch.RowMajor,
-                data_ptr=ptr,
-            ).mark_layout_dynamic()
-        tensor._external_binding = True
-        return tensor
+        return _bound_fake(
+            (rows, cols),
+            tla.Float32,
+            stride_args=(cols, 1),
+            coord_args=(0, 0),
+            data_ptr=ptr,
+            mark_dynamic=True,
+        )
 
     # 2 logical tensors → 2*(memref + origin0 + origin1) = 6 device params.
     lowered = (

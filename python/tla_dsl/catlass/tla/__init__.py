@@ -3,7 +3,7 @@
 Preferred import::
 
     import catlass.tla as tla
-    from catlass.tla.runtime import from_dlpack, make_fake_tensor
+    from catlass.tla.runtime import from_dlpack
 """
 
 from __future__ import annotations
@@ -16,16 +16,12 @@ from .runtime import (
     export_dlpack_capsule,
     from_dlpack,
     make_fake_tensor,
-    _Tensor,
 )
 from .tensor import (
     normalize_tile_view_coord,
     scale_tile_coord_by_shape,
 )
-from .typing import TypedTensor
-
-# Host concrete tensor (type annotation / runtime object). ABC lives in typing.Tensor.
-Tensor = _Tensor
+from .typing import Tensor, TypedTensor
 
 _EXPLICIT_EXPORTS = (
     "Tensor",
@@ -34,7 +30,6 @@ _EXPLICIT_EXPORTS = (
     "export_dlpack_capsule",
     "from_dlpack",
     "make_fake_tensor",
-    "_Tensor",
     "lower_copy",
     "normalize_tile_view_coord",
     "scale_tile_coord_by_shape",

@@ -19,7 +19,7 @@ class Tensor(ABC):
 
     Concrete implementations:
 
-    * :class:`~catlass.tla.runtime._Tensor` — runtime host tensor
+    * :class:`~catlass.tla.runtime._Tensor` — runtime host tensor（``make_fake_tensor`` / ``from_dlpack``）
     * :class:`~catlass.tla.tensor._Tensor` — frontend ``!tla.tensor`` SSA value
 
     Subclasses should expose ``dtype``, ``shape``, and ``stride`` via read-only
@@ -168,7 +168,7 @@ class TypedTensor:
     def __tla_type__(self) -> str:
         raise TypeError(
             "TypedTensor cannot lower to !tla.tensor without tla.make_shape/make_stride; "
-            "use make_fake_tensor(...) / from_dlpack(...), or compare against "
+            "use from_dlpack(...), or compare against "
             "an existing tensor with TypedTensor.isinstance(...)"
         )
 

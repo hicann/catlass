@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from catlass.tla.runtime import make_fake_tensor
+
 import inspect
 
 import catlass.tla as tla
@@ -107,19 +109,22 @@ def test_generated_binding_symbols_exist_for_wrapped_ops() -> None:
 
 
 def test_mask_bitwise_public_dispatch_emits_mask_ops() -> None:
-    with runtime_mod._eager_capture():
-        src = tla.Tensor(
-            tla.make_shape(64),
-            tla.Float32,
-            addrspace=tla.AddressSpace.ub,
-            origin_shape=tla.make_shape(64),
-        )
-        dst = tla.Tensor(
-            tla.make_shape(64),
-            tla.Float32,
-            addrspace=tla.AddressSpace.ub,
-            origin_shape=tla.make_shape(64),
-        )
+    src = make_fake_tensor(
+              tla.Float32,
+              (64,),
+              (1,),
+              addrspace=tla.AddressSpace.ub,
+              origin_shape=(64,),
+              layout_tag=tla.arch.RowMajor,
+          )
+    dst = make_fake_tensor(
+              tla.Float32,
+              (64,),
+              (1,),
+              addrspace=tla.AddressSpace.ub,
+              origin_shape=(64,),
+              layout_tag=tla.arch.RowMajor,
+          )
     mlir = _mask_bitwise_surface_kernel.dump_mlir(type_args=(src, dst))
     for op_name in (
         "tla.bitwise_not",
@@ -131,13 +136,20 @@ def test_mask_bitwise_public_dispatch_emits_mask_ops() -> None:
 
 
 def test_cross_flag_public_api_emits_call_site_pipes() -> None:
-    with runtime_mod._eager_capture():
-        src = tla.Tensor(
-            tla.make_shape(1, 16), tla.Float16, origin_shape=tla.make_shape(1, 16)
-        )
-        dst = tla.Tensor(
-            tla.make_shape(1, 16), tla.Float16, origin_shape=tla.make_shape(1, 16)
-        )
+    src = make_fake_tensor(
+              tla.Float16,
+              (1, 16),
+              (16, 1),
+              origin_shape=(1, 16),
+              layout_tag=tla.arch.RowMajor,
+          )
+    dst = make_fake_tensor(
+              tla.Float16,
+              (1, 16),
+              (16, 1),
+              origin_shape=(1, 16),
+              layout_tag=tla.arch.RowMajor,
+          )
     mlir = _ops_surface_kernel.dump_mlir(type_args=(src, dst))
     cross_flag_line = next(
         line
@@ -190,13 +202,20 @@ def test_public_api_exports_representative_helpers() -> None:
 
 
 def test_ops_surface_kernel_lowers_key_op_families() -> None:
-    with runtime_mod._eager_capture():
-        src = tla.Tensor(
-            tla.make_shape(1, 16), tla.Float16, origin_shape=tla.make_shape(1, 16)
-        )
-        dst = tla.Tensor(
-            tla.make_shape(1, 16), tla.Float16, origin_shape=tla.make_shape(1, 16)
-        )
+    src = make_fake_tensor(
+              tla.Float16,
+              (1, 16),
+              (16, 1),
+              origin_shape=(1, 16),
+              layout_tag=tla.arch.RowMajor,
+          )
+    dst = make_fake_tensor(
+              tla.Float16,
+              (1, 16),
+              (16, 1),
+              origin_shape=(1, 16),
+              layout_tag=tla.arch.RowMajor,
+          )
     mlir = _ops_surface_kernel.dump_mlir(type_args=(src, dst))
     for op_name in (
         "tla.alloc_ptr",

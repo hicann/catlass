@@ -2,7 +2,7 @@
 
 与框架张量集成时，需要关心转换得到的 `tla.Tensor` 的 layout：默认是**静态 layout**（编译期固定具体 shape / stride），也可标记为**动态 layout**（部分或全部维在类型中写作 `?`，运行时再注入真实 extent）。
 
-本文介绍静态与动态 layout 的含义、如何把 Host tensor 设成动态 layout，以及在 Kernel 中如何编程。`from_dlpack` 等接入方式见 [Torch Tensor 接入](framework_integration.md)。
+本文介绍静态与动态 layout 的含义、如何把 Host tensor 设成动态 layout，以及在 Kernel 中如何编程。`from_dlpack` 等接入方式见 [Host Tensor 接入](framework_integration.md)。
 
 ---
 
@@ -160,7 +160,7 @@ t.mark_compact_shape_dynamic(mode=1, stride_order=(0, 1))
 
 | | 静态 layout | 动态 layout |
 |--|-------------|-------------|
-| Host | `from_dlpack` / `make_fake_tensor` | 再 `mark_*_dynamic` |
+| Host | `from_dlpack` | 再 `mark_*_dynamic` |
 | 编译类型 | 具体数字 | 动态维为 `?` |
 | 换 shape | 通常需重新编译 | 同一 artifact 可复用 |
 | 尺寸来源 | 编译期写死在类型里 | launch 时注入当次 extent |

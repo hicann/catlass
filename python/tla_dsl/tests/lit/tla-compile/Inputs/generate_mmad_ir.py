@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from catlass.tla.runtime import make_fake_tensor
+
+
 import argparse
 
 import catlass.tla as tla
 import catlass.runtime as runtime_mod
-from catlass.tla.runtime import make_fake_tensor
 
 
 @tla.kernel
@@ -170,38 +172,29 @@ def _dynamic_init_unit_mmad_kernel(
 
 
 def _f32_mmad_args() -> tuple[tla.Tensor, tla.Tensor, tla.Tensor]:
-    # make_shape/coord/stride args are evaluated before make_fake_tensor's
-    # internal capture, so wrap the whole construction.
-    with runtime_mod._eager_capture():
-        return (
-            make_fake_tensor(
-                tla.make_shape(32, 32),
-                tla.Float32,
-                addrspace=tla.AddressSpace.gm,
-                origin_shape=tla.make_shape(32, 32),
-                coord=tla.make_coord(0, 0),
-                stride=tla.make_stride(32, 1),
-                layout_tag=tla.arch.RowMajor,
-            ),
-            make_fake_tensor(
-                tla.make_shape(32, 32),
-                tla.Float32,
-                addrspace=tla.AddressSpace.gm,
-                origin_shape=tla.make_shape(32, 32),
-                coord=tla.make_coord(0, 0),
-                stride=tla.make_stride(32, 1),
-                layout_tag=tla.arch.RowMajor,
-            ),
-            make_fake_tensor(
-                tla.make_shape(32, 32),
-                tla.Float32,
-                addrspace=tla.AddressSpace.gm,
-                origin_shape=tla.make_shape(32, 32),
-                coord=tla.make_coord(0, 0),
-                stride=tla.make_stride(32, 1),
-                layout_tag=tla.arch.RowMajor,
-            ),
-        )
+    return (
+        make_fake_tensor(
+            tla.Float32,
+            (32, 32),
+            (32, 1),
+            origin_shape=(32, 32),
+            layout_tag=tla.arch.RowMajor,
+        ),
+        make_fake_tensor(
+            tla.Float32,
+            (32, 32),
+            (32, 1),
+            origin_shape=(32, 32),
+            layout_tag=tla.arch.RowMajor,
+        ),
+        make_fake_tensor(
+            tla.Float32,
+            (32, 32),
+            (32, 1),
+            origin_shape=(32, 32),
+            layout_tag=tla.arch.RowMajor,
+        ),
+    )
 
 
 def main() -> None:
