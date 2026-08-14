@@ -521,6 +521,54 @@ def _vector_pitched_tile_view_kernel() -> None:
             chunk.store(value)
 
 @tla.kernel
+def _vector_tile_view_outside_region_kernel() -> None:
+    ptr = tla.allocate((2, 128), tla.Float32, tla.AddressSpace.ub, 256)
+    parent = tla.make_tensor(
+        ptr,
+        tla.make_layout(tla.make_shape(2, 128), tla.make_stride(128, 1)),
+    )
+    with tla.vector():
+        # Built in tla.vector scope and used inside the region. The descriptor
+        # then lives in the parent function, so the offset has to be applied
+        # inside the helper or the access silently lands on chunk 0.
+        chunk = tla.tile_view(parent, tla.make_shape(1, 64), tla.make_coord(1, 0))
+        with tla.vec.func(mode="simd"):
+            chunk.store(chunk.load())
+
+@tla.kernel
+def _vector_dynamic_view_outside_region_kernel(row: int) -> None:
+    ptr = tla.allocate((4, 128), tla.Float32, tla.AddressSpace.ub, 256)
+    parent = tla.make_tensor(
+        ptr,
+        tla.make_layout(tla.make_shape(4, 128), tla.make_stride(128, 1)),
+    )
+    with tla.vector():
+        # Same as above, but the coord is a runtime value. The offset cannot be
+        # folded to a constant, so it has to reach the helper as a captured
+        # scalar and be applied there.
+        chunk = tla.tile_view(parent, tla.make_shape(1, 64), tla.make_coord(row, 0))
+        with tla.vec.func(mode="simd"):
+            chunk.store(chunk.load())
+
+
+@tla.kernel
+def _vector_two_dynamic_views_outside_region_kernel(row_a: int, row_b: int) -> None:
+    ptr = tla.allocate((4, 128), tla.Float32, tla.AddressSpace.ub, 256)
+    parent = tla.make_tensor(
+        ptr,
+        tla.make_layout(tla.make_shape(4, 128), tla.make_stride(128, 1)),
+    )
+    with tla.vector():
+        # Two runtime-offset views over one allocation. They share a storage
+        # identity, so they collapse to a single helper argument -- each must
+        # still carve its own offset, which is exactly what used to be lost.
+        a = tla.tile_view(parent, tla.make_shape(1, 64), tla.make_coord(row_a, 0))
+        b = tla.tile_view(parent, tla.make_shape(1, 64), tla.make_coord(row_b, 0))
+        with tla.vec.func(mode="simd"):
+            b.store(a.load())
+
+
+@tla.kernel
 def _vector_dynamic_pitched_tile_view_kernel(pitch: int) -> None:
     ptr = tla.allocate((2, 128), tla.Float32, tla.AddressSpace.ub, 256)
     parent = tla.make_tensor(
@@ -993,6 +1041,79 @@ def test_vector_tile_view_captures_dynamic_parent_pitch() -> None:
         mlir_text, "tla-vector-region", require_success=True
     )
     assert "arith.muli" in output
+
+
+def test_vector_tile_view_built_outside_region_keeps_its_offset() -> None:
+    """A view built outside tla.vec.func must not collapse to base + 0.
+
+    Views over one allocation share a storage identity and dedup to a single
+    helper argument, so the per-view offset cannot travel through the helper
+    ABI; it has to be materialized inside the helper. When it was not, the
+    region read and wrote chunk 0 whatever coord the view carried -- correct
+    numerics for one region, silently wrong from the second on.
+    """
+    mlir_text = _vector_tile_view_outside_region_kernel.dump_mlir()
+    assert "!tla.shape<1,64>" in mlir_text
+
+    output = _run_tla_compile_ir_after_pass(
+        mlir_text, "tla-vector-region", require_success=True
+    )
+    helper = output[output.index("func.func private @vector_region_"):]
+    # coord (1, 0) over a 128-element pitch: the tile starts at element 128.
+    assert "memref.reinterpret_cast" in helper, output
+    assert "arith.constant 128 : index" in output, output
+    offsets = re.findall(r"reinterpret_cast %\w+ to offset: \[([^\]]+)\]", helper)
+    assert offsets, helper
+    assert not all(o.strip() == "0" for o in offsets), helper
+
+
+def _helper_body(output: str) -> str:
+    return output[output.index("func.func private @vector_region_"):]
+
+
+def _reinterpret_offsets(helper: str) -> list[str]:
+    return re.findall(r"reinterpret_cast %\w+ to offset: \[([^\]]+)\]", helper)
+
+
+def test_vector_dynamic_view_built_outside_region_keeps_its_offset() -> None:
+    """A runtime coord has to travel to the helper and be applied there.
+
+    With a constant coord the offset can be folded, so this is the case that
+    actually exercises capturing the descriptor's operands as helper scalars.
+    """
+    mlir_text = _vector_dynamic_view_outside_region_kernel.dump_mlir(type_args=(2,))
+    assert "tla.make_coord %" in mlir_text, mlir_text
+
+    output = _run_tla_compile_ir_after_pass(
+        mlir_text, "tla-vector-region", require_success=True
+    )
+    helper = _helper_body(output)
+    offsets = _reinterpret_offsets(helper)
+    assert offsets, helper
+    # The offset is computed from a helper argument, not folded to a constant.
+    assert all(o.strip() != "0" for o in offsets), helper
+    assert "arith.muli" in helper, helper
+
+
+def test_two_dynamic_views_on_one_allocation_keep_distinct_offsets() -> None:
+    """Two runtime-offset views over one allocation dedup to one argument.
+
+    The per-view offset therefore cannot come from the helper ABI; each has to
+    be materialized separately inside the helper. Before the fix both accesses
+    landed on the same chunk.
+    """
+    mlir_text = _vector_two_dynamic_views_outside_region_kernel.dump_mlir(
+        type_args=(1, 3)
+    )
+    output = _run_tla_compile_ir_after_pass(
+        mlir_text, "tla-vector-region", require_success=True
+    )
+    helper = _helper_body(output)
+    offsets = _reinterpret_offsets(helper)
+    assert len(offsets) >= 2, helper
+    # Distinct offsets: the two views must not collapse onto one another.
+    assert len(set(o.strip() for o in offsets)) >= 2, helper
+
 
 def test_vector_zn_unalign_address_arithmetic_uses_i32() -> None:
     mlir_text = _vector_dynamic_zn_unalign_address_kernel.dump_mlir(type_args=(50,))
