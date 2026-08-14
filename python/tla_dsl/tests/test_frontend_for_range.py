@@ -3,6 +3,7 @@ from catlass.tla.runtime import make_fake_tensor
 import ast
 import builtins
 import inspect
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -219,23 +220,6 @@ def range_custom_class_carried_state_kernel(limit: int) -> None:
     for i in tla.range(0, limit, 1):
         state = CustomLoopState(i, i + 1)
     tla.make_coord(state.coord, state.offset)
-
-
-@tla.kernel
-def range_active_object_method_call_kernel(limit: int) -> None:
-    values = [0, 1]
-    for i in tla.range(0, limit, 1):
-        values.reverse()
-        values = [i, i + 1]
-    tla.make_coord(values[0], values[1])
-
-
-@tla.kernel
-def bad_range_active_object_method_structure_kernel(limit: int) -> None:
-    values = [0]
-    for i in tla.range(0, limit, 1):
-        values.append(i)
-    tla.make_coord(values[0], 0)
 
 
 @tla.kernel
@@ -538,18 +522,6 @@ def test_range_structured_carried_values_lower_to_scf_for_results() -> None:
         assert "tla.make_coord" in mlir
 
 
-def test_range_active_object_method_call_lowers_as_carried_value() -> None:
-    mlir = range_active_object_method_call_kernel.dump_mlir(type_args=(2,))
-    assert "scf.for" in mlir
-    assert "scf.yield" in mlir
-    assert "tla.make_coord" in mlir
-
-
-def test_range_rejects_active_object_method_structure_change() -> None:
-    with pytest.raises(tla.TlaCoreAPIError, match="'values'.*structure"):
-        _ = bad_range_active_object_method_structure_kernel.dump_mlir(type_args=(2,))
-
-
 def test_range_rejects_active_closure_call() -> None:
     with pytest.raises(SyntaxError, match="nested function definition"):
         _ = bad_range_active_closure_call_kernel.dump_mlir(type_args=(2,))
@@ -812,3 +784,191 @@ def test_dynamic_for_body_error_reports_original_source_location() -> None:
     assert "source: values[i]" in message
     assert "cannot be used as a Python index" in message or "list indices" in message
     assert "Int32" in message
+
+
+# --- carriers are decided by control-flow semantics --------------------------
+# A name the body *assigns to* is redefined each iteration and must be carried.
+# A name the body only invokes a method on is mutated in place -- a side effect
+# on an object reached from the enclosing scope, the same classification a
+# subscript store already gets. Carrying the latter put a UB tile into scf.for's
+# iter_args, where it has lost the allocation it came from and its loads no
+# longer legalize.
+
+
+def _ub_tile(n: int):
+    gm = tla.make_tensor(
+        tla.allocate(n, tla.Float32, tla.AddressSpace.ub, 256),
+        tla.make_layout(
+            tla.make_shape(n), tla.make_stride(1), origin_shape=tla.make_shape(n)
+        ),
+        tla.make_coord(0),
+    )
+    return tla.tile_view(gm, tla.make_shape(64), tla.make_coord(0))
+
+
+@tla.kernel
+def _tile_store_in_dynamic_loop_kernel(limit: int) -> None:
+    with tla.vector():
+        acc = _ub_tile(1024)
+        src = _ub_tile(1024)
+        with tla.vec.func(mode="simd"):
+            for _ in tla.range(0, limit, 1):
+                acc.store(acc.load() + src.load())
+
+
+@tla.kernel
+def _tile_rebound_in_dynamic_loop_kernel(limit: int) -> None:
+    with tla.vector():
+        first = _ub_tile(1024)
+        second = _ub_tile(1024)
+        selected = first
+        for _ in tla.range(0, limit, 1):
+            selected = second
+        tla.make_shape(selected.shape[0])
+
+
+def _scf_for_operand_count(mlir_text: str) -> int:
+    """Number of values the generated scf.for carries."""
+    match = re.search(r"scf\.for[^\n]*iter_args\(([^)]*)\)", mlir_text)
+    return 0 if match is None else len(
+        [p for p in match.group(1).split(",") if p.strip()]
+    )
+
+
+def test_stored_tile_is_not_carried_through_scf_for() -> None:
+    mlir_text = _tile_store_in_dynamic_loop_kernel.dump_mlir(type_args=(4,))
+    assert "scf.for" in mlir_text, mlir_text
+    carrier_lines = [ln for ln in mlir_text.splitlines() if "scf.for" in ln]
+    assert carrier_lines
+    assert all("!tla.tensor" not in ln for ln in carrier_lines), mlir_text
+    assert _scf_for_operand_count(mlir_text) == 0, mlir_text
+
+
+def test_rebound_tile_is_carried_and_still_reads_metadata() -> None:
+    """Rebinding a tensor across a runtime construct stays supported.
+
+    The tensor is carried, and reading metadata off the merged value works --
+    the shape is resolved at trace time. What does not survive the merge is the
+    base address, which only matters to an op that needs it; see
+    test_copy_through_a_selected_tensor_is_the_known_gap.
+    """
+    mlir_text = _tile_rebound_in_dynamic_loop_kernel.dump_mlir(type_args=(4,))
+    assert "scf.for" in mlir_text, mlir_text
+
+
+@dataclass
+class _TileHolder:
+    tile: Any
+
+
+@tla.kernel
+def _struct_tile_store_in_dynamic_loop_kernel(limit: int) -> None:
+    with tla.vector():
+        state = _TileHolder(_ub_tile(1024))
+        src = _ub_tile(1024)
+        with tla.vec.func(mode="simd"):
+            for _ in tla.range(0, limit, 1):
+                state.tile.store(state.tile.load() + src.load())
+
+
+def test_structured_state_holding_a_tile_is_not_carried() -> None:
+    """The handle check is at the leaves, not the top level.
+
+    `state` is a dataclass, not a tensor, so a top-level check misses it -- and
+    the pytree machinery then flattens it and puts the inner tile into
+    iter_args regardless.
+    """
+    mlir_text = _struct_tile_store_in_dynamic_loop_kernel.dump_mlir(type_args=(4,))
+    assert "scf.for" in mlir_text, mlir_text
+    carrier_lines = [ln for ln in mlir_text.splitlines() if "scf.for" in ln]
+    assert carrier_lines
+    assert all("!tla.tensor" not in ln for ln in carrier_lines), mlir_text
+    assert _scf_for_operand_count(mlir_text) == 0, mlir_text
+
+
+@tla.kernel
+def _struct_tile_rebound_in_dynamic_loop_kernel(limit: int) -> None:
+    with tla.vector():
+        first = _ub_tile(1024)
+        second = _ub_tile(1024)
+        state = _TileHolder(first)
+        for _ in tla.range(0, limit, 1):
+            state = _TileHolder(second)
+        with tla.vec.func(mode="simd"):
+            state.tile.store(state.tile.load())
+
+
+def test_rebound_tile_inside_a_dataclass_is_carried() -> None:
+    """A tensor nested in a dataclass is carried like a bare one.
+
+    pytree flattens the tile into the scf carriers either way, so the dataclass
+    is not a special case -- it just has to survive the round trip.
+    """
+    mlir_text = _struct_tile_rebound_in_dynamic_loop_kernel.dump_mlir(type_args=(4,))
+    assert "scf.for" in mlir_text, mlir_text
+
+
+@tla.kernel
+def _host_list_mutated_in_dynamic_loop_kernel(limit: int) -> None:
+    values = [0, 1]
+    for _ in tla.range(0, limit, 1):
+        values.reverse()
+    tla.make_coord(values[0], values[1])
+
+
+def test_method_call_on_a_host_object_is_rejected() -> None:
+    """A method-only capture has to be a tla handle.
+
+    The body traces once, so `values.reverse()` runs once at trace time and the
+    emitted IR does not depend on the trip count -- the loop silently computes
+    something else. Only a handle whose methods emit ops is safe here.
+    """
+    with pytest.raises(tla.TlaCoreAPIError, match="calls a method on it"):
+        _host_list_mutated_in_dynamic_loop_kernel.dump_mlir(type_args=(4,))
+
+
+def _analyze_for(source: str, *, active: set[str]):
+    """Run the shared control-flow analysis over a single `for` statement."""
+    from catlass.base_dsl.ast_preprocessor import _ControlFlowAnalyzer
+
+    node = ast.parse(source).body[0]
+    return _ControlFlowAnalyzer().analyze(
+        node=node,
+        construct_name="for",
+        assigned_regions=[node.body],
+        active_call_nodes=[node],
+        active_symbols=set(active),
+        active_callables=set(),
+    )
+
+
+def test_method_only_name_is_captured_not_carried() -> None:
+    """The rule is lexical, so it holds whatever the object's runtime type is.
+
+    `state.tile.store(...)` invokes on `state`; a check on the carried value
+    would have to see through the dataclass to the tile inside it.
+    """
+    plan = _analyze_for(
+        "for i in tla.range(0, limit, 1):\n    state.tile.store(value)\n",
+        active={"state", "value", "limit"},
+    )
+    assert plan.carried_names == ()
+    assert plan.captured_names == ("state",)
+
+
+def test_assigned_name_is_carried() -> None:
+    plan = _analyze_for(
+        "for i in tla.range(0, limit, 1):\n    total = total + i\n",
+        active={"total", "limit"},
+    )
+    assert plan.carried_names == ("total",)
+    assert plan.captured_names == ()
+
+
+def test_assigned_and_invoked_name_is_carried_once() -> None:
+    plan = _analyze_for(
+        "for i in tla.range(0, limit, 1):\n    acc.update(i)\n    acc = acc + i\n",
+        active={"acc", "limit"},
+    )
+    assert plan.carried_names == ("acc",)
+    assert plan.captured_names == ()

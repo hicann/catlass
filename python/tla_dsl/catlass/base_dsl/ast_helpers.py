@@ -92,6 +92,8 @@ def while_executor(
     write_args: list[Any] | tuple[Any, ...] = (),
     full_write_args_count: int = 0,
     write_args_names: list[str] | tuple[str, ...] = (),
+    captured_names: tuple[str, ...] | None = None,
+    captured_values: tuple[Any, ...] | None = None,
 ) -> Any:
     """Execute an AST-generated dynamic while loop."""
 
@@ -102,6 +104,8 @@ def while_executor(
         while_after_block,
         *write_args,
         carried_names=write_args_names,
+        captured_names=captured_names,
+        captured_values=captured_values,
         full_write_args_count=full_write_args_count,
     )
 

@@ -244,28 +244,6 @@ def bad_statement_while_active_closure_call_kernel(limit: int) -> None:
         i = i + 1
 
 
-@tla.kernel
-def statement_while_active_object_method_call_kernel(limit: int) -> None:
-    values = [0, 1]
-    i = 0
-    while i < limit:
-        values.reverse()
-        values = [i, i + 1]
-        i = i + 1
-    tla.make_coord(values[0], values[1])
-
-
-@tla.kernel
-def bad_statement_while_active_object_method_structure_kernel(limit: int) -> None:
-    values = [0]
-    i = 0
-    while i < limit:
-        values.append(i)
-        i = i + 1
-    tla.make_coord(values[0], 0)
-
-
-
 def test_statement_while_carried_index_lowers_to_scf_while() -> None:
     mlir = statement_while_carried_index_kernel.dump_mlir(type_args=(4,))
     assert "scf.while" in mlir
@@ -399,22 +377,5 @@ def test_statement_while_rejects_custom_class_type_mismatch_by_leaf_name() -> No
 def test_statement_while_rejects_active_closure_call() -> None:
     with pytest.raises(SyntaxError, match="nested function definition"):
         _ = bad_statement_while_active_closure_call_kernel.dump_mlir(type_args=(4,))
-
-
-def test_statement_while_active_object_method_call_lowers_as_carried_value() -> None:
-    mlir = statement_while_active_object_method_call_kernel.dump_mlir(type_args=(4,))
-    assert "scf.while" in mlir
-    assert "scf.condition" in mlir
-    assert "scf.yield" in mlir
-    assert "tla.make_coord" in mlir
-
-
-def test_statement_while_rejects_active_object_method_structure_change() -> None:
-    with pytest.raises(tla.TlaCoreAPIError, match="structure"):
-        _ = bad_statement_while_active_object_method_structure_kernel.dump_mlir(
-            type_args=(4,)
-        )
-
-
 
 

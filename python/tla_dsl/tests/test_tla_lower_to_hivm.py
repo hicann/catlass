@@ -5,6 +5,8 @@ import os
 import re
 import subprocess
 import tempfile
+from dataclasses import dataclass
+from typing import Any
 
 import pytest
 import catlass.tla as tla
@@ -1291,3 +1293,89 @@ def test_vector_dynamic_gm_memref_keeps_real_descriptor() -> None:
     ]
     assert not gm_pointer_cast_lines, output
     assert '"tla.vec.func"' not in output
+
+
+@dataclass
+class _CarriedTileState:
+    tile: Any
+
+
+def _carried_ub_tile(n: int):
+    gm = tla.make_tensor(
+        tla.allocate(n, tla.Float32, tla.AddressSpace.ub, 256),
+        tla.make_layout(
+            tla.make_shape(n), tla.make_stride(1), origin_shape=tla.make_shape(n)
+        ),
+        tla.make_coord(0),
+    )
+    return tla.tile_view(gm, tla.make_shape(64), tla.make_coord(0))
+
+
+@tla.kernel
+def _store_through_loop_carried_tile_kernel(limit: int) -> None:
+    with tla.vector():
+        first = _carried_ub_tile(1024)
+        second = _carried_ub_tile(1024)
+        state = _CarriedTileState(first)
+        for _ in tla.range(0, limit, 1):
+            state = _CarriedTileState(second)
+        with tla.vec.func(mode="simd"):
+            state.tile.store(state.tile.load())
+
+
+def test_store_through_a_loop_carried_tile_lowers() -> None:
+    """A tile the loop rebinds can still be stored through.
+
+    tla-lower-tensor-desc splits the tile into scalar carriers and rebuilds a
+    descriptor after the loop, so the store's origin_shape operands are scf.for
+    results rather than constants. The vector pass can only clone constants, so
+    the lane count was unresolvable until runtime scalars became helper
+    arguments -- which is why this needs the vec.func scalar capture.
+    """
+    mlir_text = _store_through_loop_carried_tile_kernel.dump_mlir(type_args=(4,))
+    assert "scf.for" in mlir_text, mlir_text
+
+    output = _run_tla_compile_ir_after_pass(
+        mlir_text, "tla-vector-region", require_success=True
+    )
+    assert '"tla.vec.func"' not in output, output
+
+
+@tla.kernel
+def _copy_into_loop_carried_tile_kernel(mem: tla.Tensor, limit: int) -> None:
+    with tla.vector():
+        source = tla.tile_view(mem, tla.make_shape(64), tla.make_coord(0))
+        first = _carried_ub_tile(1024)
+        second = _carried_ub_tile(1024)
+        selected = first
+        for _ in tla.range(0, limit, 1):
+            selected = second
+        tla.copy(selected, source)
+
+
+def test_copy_into_a_loop_carried_tile_lowers() -> None:
+    """tla.copy works through a tile the loop rebinds, on a supported route.
+
+    The destination is chosen at runtime, so the two candidates have different
+    base addresses -- which the scalar carriers preserve. Note the route is what
+    tla.copy is fussy about: the vector pass handles gm<->ub and ub->l1, and a
+    ub->ub copy fails here whether or not a loop is involved.
+    """
+    mlir_text = _copy_into_loop_carried_tile_kernel.dump_mlir(
+        type_args=(
+            make_fake_tensor(
+                tla.Float32,
+                (1024,),
+                (1,),
+                origin_shape=(1024,),
+                layout_tag=tla.arch.RowMajor,
+            ),
+            4,
+        )
+    )
+    assert "scf.for" in mlir_text, mlir_text
+
+    output = _run_tla_compile_ir_after_pass(
+        mlir_text, "tla-vector-region", require_success=True
+    )
+    assert "tla.copy" not in output, output

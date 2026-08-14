@@ -8,6 +8,7 @@ import contextvars
 import linecache
 import operator
 import types
+from dataclasses import fields
 from typing import Any, Callable, Iterator
 
 from . import runtime as _runtime
@@ -416,11 +417,102 @@ def _internal_frontend_bool_and(*values: Any) -> Any:
     return Bool(current)
 
 
+def _is_tensor_handle(value: Any) -> bool:
+    """Whether a value owns a tla tensor's descriptor.
+
+    The single place that decides what a tensor *is* for carrier analysis. A
+    new frontend tensor representation has to be added here, or it silently
+    becomes carriable again.
+    """
+    from .types import TlaTensor
+    from .tla.tensor import _Tensor as _FrontendTensor
+
+    return isinstance(value, (TlaTensor, _FrontendTensor))
+
+
+def _find_tensor_leaves(value: Any, path: str, found: list[str]) -> None:
+    """Collect the paths of every tensor inside ``value``.
+
+    Mirrors the node cases of ``flatten_frontend_if_tree`` -- but tests for a
+    tensor *before* descending, which is why it cannot reuse that function. A
+    tensor satisfies ``is_frontend_if_dynamic_expression``, so flattening
+    decomposes it into its descriptor SSA fields and no leaf is ever a tensor;
+    a leaf-level isinstance check against the flattened result passes on
+    exactly the trees this is meant to reject.
+    """
+    if _is_tensor_handle(value):
+        found.append(path)
+        return
+    if isinstance(value, (tuple, list)):
+        for index, element in enumerate(value):
+            _find_tensor_leaves(element, f"{path}[{index}]", found)
+        return
+    if isinstance(value, dict):
+        for key in value:
+            _find_tensor_leaves(value[key], f"{path}[{key!r}]", found)
+        return
+    if tree_utils.is_frontend_if_dataclass_instance(value):
+        for field in fields(value):
+            _find_tensor_leaves(
+                getattr(value, field.name), f"{path}.{field.name}", found
+            )
+
+
+# Method-only captures are restricted to objects from these packages: a method
+# on one of them emits IR, rather than mutating host state at trace time.
+_TLA_HANDLE_MODULES = frozenset({"catlass", "mlir"})
+
+
+def _reject_host_captures(
+    names: tuple[str, ...] | None,
+    values: tuple[Any, ...] | None,
+    construct: str,
+) -> None:
+    """Reject calling a method on a host object inside a runtime construct.
+
+    A name the body only invokes a method on is not a carrier, so it is not
+    rebound per iteration -- and the body is traced exactly once. For a TLA
+    handle that is correct: ``tile.store(...)`` emits an op into the region and
+    the op runs every iteration on device. For an ordinary Python object it is
+    silently wrong: ``values.reverse()`` mutates the host list once, at trace
+    time, and the emitted IR is independent of the runtime trip count.
+
+    The two are indistinguishable syntactically -- whether a method touches
+    device memory is a property of the object -- so the runtime value decides.
+
+    A capture need not *be* a handle, only reach one: ``state.tile.store(...)``
+    invokes on ``state``, and the method that emits the op belongs to the tile
+    inside it, so a structure holding a handle is accepted too. That is as far
+    as a value-based rule goes -- mutating a host container that happens to
+    hold handles (``tiles.reverse()``) still traces once and is not caught
+    here.
+    """
+    for name, value in zip(names or (), values or ()):
+        root = (type(value).__module__ or "").split(".")[0]
+        if root in _TLA_HANDLE_MODULES:
+            continue
+        reached: list[str] = []
+        _find_tensor_leaves(value, name, reached)
+        if reached:
+            continue
+        raise TlaCoreAPIError(
+            f"tla.{construct}: {name!r} is a {type(value).__name__}, and the "
+            f"body calls a method on it. Only tla handles may be used that "
+            f"way: the body is traced once, so a method on a tla handle emits "
+            f"an op that runs every iteration, while a method on a host object "
+            f"mutates it once at trace time and the loop count never reaches "
+            f"the generated code. Hoist the call out of the construct, or "
+            f"carry the value the method would have produced."
+        )
+
+
 def _internal_frontend_for(
     range_value: Any,
     body_fn: Callable[..., Any],
     *carried_values: Any,
     carried_names: tuple[str, ...] | list[str] | None = None,
+    captured_names: tuple[str, ...] | None = None,
+    captured_values: tuple[Any, ...] | None = None,
 ) -> Any:
     from mlir.dialects import scf  # type: ignore[import-not-found]
     from . import core_api as _core_api
@@ -429,14 +521,19 @@ def _internal_frontend_for(
         raise TlaCoreAPIError(
             "for loops over tla.range require frontend range metadata"
         )
-    carried_names_tuple = tree_utils.normalize_frontend_if_carried_names(
+    all_names = tree_utils.normalize_frontend_if_carried_names(
         carried_names, len(carried_values)
     )
+    _reject_host_captures(captured_names, captured_values, "range")
+    loop_values = carried_values
+    loop_names = all_names
+
     carried_specs = [
-        tree_utils.frontend_if_tree_spec(value) for value in carried_values
+        tree_utils.frontend_if_tree_spec(value)
+        for value in loop_values
     ]
     _, carried_pytree_def = _core_api.unpack_to_irvalue(
-        carried_values, "for", len(carried_values), carried_names_tuple
+        loop_values, "for", len(loop_values), loop_names
     )
     carried_leaf_names = carried_pytree_def[1]
 
@@ -461,30 +558,32 @@ def _internal_frontend_for(
         _mix_iter_args: list[Any] | tuple[Any, ...],
         _full_write_args_count: int,
     ) -> list[Any]:
-        carried_args = _core_api.pack_from_irvalue(
-            block_args[1:], carried_pytree_def, carried_values, len(carried_values)
+        loop_args = _core_api.pack_from_irvalue(
+            block_args[1:], carried_pytree_def, loop_values, len(loop_values)
         )
         # ``as_numeric(induction_variable)``; IV SSA is already i32.
         body_result = _call_with_control_flow_source(
-            body_fn, as_numeric(block_args[0]), *carried_args
+            body_fn, as_numeric(block_args[0]), *list(loop_args)
         )
         return tree_utils.extract_frontend_if_yields(
             body_result,
-            carried_values,
+            loop_values,
             carried_specs,
-            carried_names_tuple,
+            loop_names,
             carried_leaf_names,
             "for",
         )
 
-    return generator.scf_execute_dynamic(
+    results = generator.scf_execute_dynamic(
         op_type_name="for",
-        mix_iter_args=carried_values,
-        full_write_args_count=len(carried_values),
-        mix_iter_arg_names=carried_names_tuple,
+        mix_iter_args=loop_values,
+        full_write_args_count=len(loop_values),
+        mix_iter_arg_names=loop_names,
         create_op_func=create_for_op,
         region_builders=[build_body],
     )
+
+    return results
 
 
 def _while_execute_dynamic(
@@ -492,6 +591,8 @@ def _while_execute_dynamic(
     while_after_block: Callable[..., Any],
     *carried_values: Any,
     carried_names: tuple[str, ...] | list[str] | None = None,
+    captured_names: tuple[str, ...] | None = None,
+    captured_values: tuple[Any, ...] | None = None,
     full_write_args_count: int | None = None,
 ) -> Any:
     from mlir.dialects import scf  # type: ignore[import-not-found]
@@ -509,6 +610,7 @@ def _while_execute_dynamic(
     carried_names_tuple = tree_utils.normalize_frontend_if_carried_names(
         carried_names, len(carried_values)
     )
+    _reject_host_captures(captured_names, captured_values, "while")
     initial_ir_values, carried_pytree_def = _core_api.unpack_to_irvalue(
         carried_values, "while", carried_count, carried_names_tuple
     )
@@ -925,6 +1027,8 @@ def _internal_frontend_if(
     else_fn: Callable[..., Any] | None,
     *carried_values: Any,
     carried_names: tuple[str, ...] | list[str] | None = None,
+    captured_names: tuple[str, ...] | None = None,
+    captured_values: tuple[Any, ...] | None = None,
 ) -> Any:
     from mlir.dialects import scf  # type: ignore[import-not-found]
     from . import core_api as _core_api
@@ -948,6 +1052,7 @@ def _internal_frontend_if(
         _raise_unknown_protocol("truth testing", condition)
 
     cond = _coerce_bool_value(condition)
+    _reject_host_captures(captured_names, captured_values, "if")
     carried_mlir, carried_pytree_def = _core_api.unpack_to_irvalue(
         carried_values, "if", len(carried_values), carried_names_tuple
     )

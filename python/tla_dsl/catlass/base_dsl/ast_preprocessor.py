@@ -579,6 +579,7 @@ class ControlFlowPlan:
     assigned_bindings: frozenset[Binding]
     invoked_bindings: frozenset[Binding]
     carried_bindings: tuple[Binding, ...]
+    captured_bindings: tuple[Binding, ...]
     full_write_args_count: int
     assignment_targets: tuple[str, ...]
     tensor_store_assignments: frozenset[int]
@@ -606,6 +607,10 @@ class ControlFlowPlan:
     @property
     def carried_names(self) -> tuple[str, ...]:
         return tuple(binding.name for binding in self.carried_bindings)
+
+    @property
+    def captured_names(self) -> tuple[str, ...]:
+        return tuple(binding.name for binding in self.captured_bindings)
 
 
 class _ControlFlowAnalyzer:
@@ -676,11 +681,22 @@ class _ControlFlowAnalyzer:
         invoked_bindings = frozenset(
             bindings_by_name[name] for name in invoked_names if name in bindings_by_name
         )
+        # Carriers follow control-flow semantics, not the runtime type of the
+        # value. A name the body *assigns to* is redefined each iteration and
+        # has to be carried; a name the body only invokes a method on is a side
+        # effect on an object reached from the enclosing scope -- the same
+        # classification a subscript store (`out[i] = v`) already gets.
+        #
+        # Carrying the latter is what forced a UB tile into scf.for's iter_args,
+        # where it has lost the allocation it came from and its loads no longer
+        # legalize. Deciding it here rather than by inspecting the value keeps
+        # one rule in one place, and covers a tile nested in a dataclass or
+        # container, which a check on the carried value alone cannot see.
         carried_bindings = tuple(
-            sorted(
-                (assigned_bindings & active_bindings) | invoked_bindings,
-                key=lambda binding: binding.name,
-            )
+            sorted(assigned_bindings & active_bindings, key=lambda b: b.name)
+        )
+        captured_bindings = tuple(
+            sorted(invoked_bindings - set(carried_bindings), key=lambda b: b.name)
         )
         return ControlFlowPlan(
             construct_name=construct_name,
@@ -692,6 +708,7 @@ class _ControlFlowAnalyzer:
             assigned_bindings=assigned_bindings,
             invoked_bindings=invoked_bindings,
             carried_bindings=carried_bindings,
+            captured_bindings=captured_bindings,
             full_write_args_count=len(carried_bindings),
             assignment_targets=tuple(policy.assignment_targets),
             tensor_store_assignments=frozenset(policy.tensor_store_assignments),
@@ -1338,7 +1355,8 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
                             elts=[ast.Constant(value=name) for name in carried_names],
                             ctx=ast.Load(),
                         ),
-                    )
+                    ),
+                    *_captured_keywords(analysis),
                 ],
             )
         )
@@ -1583,7 +1601,8 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
                         elts=[ast.Constant(value=name) for name in carried_names],
                         ctx=ast.Load(),
                     ),
-                )
+                ),
+                *_captured_keywords(analysis),
             ],
         )
         ast.copy_location(helper_call, node)
@@ -1701,6 +1720,7 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
                         ctx=ast.Load(),
                     ),
                 ),
+                *_captured_keywords(analysis),
             ],
         )
         ast.copy_location(execute_call, node)
@@ -3952,6 +3972,35 @@ def _reject_unsupported_dynamic_while_new_defs(
             "dynamic Tla while requires variables used after the loop to be "
             f"initialized before the while: {names}"
         )
+
+
+def _captured_keywords(analysis: Any) -> list[ast.keyword]:
+    """Pass the method-only captures to the frontend helper for validation.
+
+    A captured name is never a carrier, so the body traces once and any method
+    called on it runs once. That is correct for a TLA handle, whose methods
+    emit ops into the region, and silently wrong for a host object, whose
+    methods mutate at trace time. The helper can only tell the two apart from
+    the runtime value, so send the values along with the names.
+    """
+    names = list(analysis.captured_names)
+    if not names:
+        return []
+    return [
+        ast.keyword(
+            arg="captured_names",
+            value=ast.Tuple(
+                elts=[ast.Constant(value=name) for name in names], ctx=ast.Load()
+            ),
+        ),
+        ast.keyword(
+            arg="captured_values",
+            value=ast.Tuple(
+                elts=[ast.Name(id=name, ctx=ast.Load()) for name in names],
+                ctx=ast.Load(),
+            ),
+        ),
+    ]
 
 
 def _names_list(names: list[str]) -> ast.List:

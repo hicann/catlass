@@ -695,35 +695,6 @@ def statement_if_elif_carried_index_kernel(limit: int) -> None:
             coord = i + 3
         tla.make_coord(coord, 0)
 
-@tla.kernel
-def statement_if_carried_tensor_kernel(mem_a: tla.Tensor) -> None:
-    root = tla.tile_view(mem_a, tla.make_shape(16, 8), tla.make_coord(0, 0))
-    for i in tla.range(0, 2, 1):
-        left = tla.tile_view(root, tla.make_shape(16, 4), tla.make_coord(0, 0))
-        right = tla.tile_view(root, tla.make_shape(16, 4), tla.make_coord(0, 0))
-        selected = left
-        if i == 0:
-            selected = left
-        else:
-            selected = right
-        tla.copy(selected, left)
-
-@tla.kernel
-def statement_if_mixed_index_tensor_kernel(mem_a: tla.Tensor) -> None:
-    root = tla.tile_view(mem_a, tla.make_shape(16, 8), tla.make_coord(0, 0))
-    for i in tla.range(0, 2, 1):
-        left = tla.tile_view(root, tla.make_shape(16, 4), tla.make_coord(0, 0))
-        right = tla.tile_view(root, tla.make_shape(16, 4), tla.make_coord(0, 0))
-        coord = i
-        selected = left
-        if i == 0:
-            coord = i + 1
-            selected = left
-        else:
-            coord = i + 2
-            selected = right
-        tla.make_coord(coord, 0)
-        tla.copy(selected, left)
 
 @tla.kernel
 def statement_if_not_predicate_kernel(limit: int) -> None:
@@ -920,20 +891,6 @@ def bad_statement_if_active_closure_call_kernel(limit: int) -> None:
         if i == 0:
             helper(i)
 
-@tla.kernel
-def bad_statement_if_active_object_method_call_kernel(limit: int) -> None:
-    for i in tla.range(0, limit, 1):
-        values = []
-        if i == 0:
-            values.append(i)
-
-@tla.kernel
-def statement_if_active_object_method_call_kernel(limit: int) -> None:
-    for i in tla.range(0, limit, 1):
-        values = [i, i + 1]
-        if i == 0:
-            values.reverse()
-        tla.make_coord(values[0], values[1])
 
 def test_const_expr_true_branch_stays_static() -> None:
     mlir = const_expr_if_kernel.dump_mlir(type_args=(True,))
@@ -1468,34 +1425,6 @@ def test_statement_if_elif_lowers_to_nested_scf_if() -> None:
     assert "scf.yield" in mlir
     assert "tla.make_coord" in mlir
 
-def test_statement_if_carried_tensor_lowers_to_scf_if_result() -> None:
-    mem = make_fake_tensor(
-              tla.Float16,
-              (16, 8),
-              (8, 1),
-              origin_shape=(16, 8),
-              layout_tag=tla.arch.RowMajor,
-          )
-    mlir = statement_if_carried_tensor_kernel.dump_mlir(type_args=(mem,))
-    assert "scf.if" in mlir
-    assert "scf.yield" in mlir
-    assert "!tla.tensor<!tla.layout<!tla.shape<16,4>" in mlir
-    assert "tla.copy" in mlir
-
-def test_statement_if_mixed_index_tensor_lowers_to_scf_if_results() -> None:
-    mem = make_fake_tensor(
-              tla.Float16,
-              (16, 8),
-              (8, 1),
-              origin_shape=(16, 8),
-              layout_tag=tla.arch.RowMajor,
-          )
-    mlir = statement_if_mixed_index_tensor_kernel.dump_mlir(type_args=(mem,))
-    assert "scf.if" in mlir
-    assert "scf.yield" in mlir
-    assert "!tla.tensor<!tla.layout<!tla.shape<16,4>" in mlir
-    assert "index" in mlir
-    assert "tla.copy" in mlir
 
 def test_statement_if_not_predicate_lowers() -> None:
     mlir = statement_if_not_predicate_kernel.dump_mlir(type_args=(2,))
@@ -1614,15 +1543,6 @@ def test_statement_if_rejects_active_closure_call() -> None:
     with pytest.raises(SyntaxError, match="nested function definition"):
         _ = bad_statement_if_active_closure_call_kernel.dump_mlir(type_args=(2,))
 
-def test_statement_if_active_object_method_call_lowers_as_carried_value() -> None:
-    mlir = statement_if_active_object_method_call_kernel.dump_mlir(type_args=(2,))
-    assert "scf.if" in mlir
-    assert "scf.yield" in mlir
-    assert "tla.make_coord" in mlir
-
-def test_statement_if_rejects_active_object_method_call_structure_change() -> None:
-    with pytest.raises(tla.TlaCoreAPIError, match="'values'.*structure"):
-        _ = bad_statement_if_active_object_method_call_kernel.dump_mlir(type_args=(2,))
 
 @tla.kernel
 def dynamic_if_bad_list_index_kernel() -> None:
