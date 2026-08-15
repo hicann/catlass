@@ -8,6 +8,6 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # ----------------------------------------------------------------------------
 
-set_source_files_properties(grouped_matmul_slice_m_gelu.cpp PROPERTIES LANGUAGE ASC)
-catlass_example_add_executable(grouped_matmul_slice_m_gelu mix grouped_matmul_slice_m_gelu.cpp)
-target_compile_definitions(grouped_matmul_slice_m_gelu PRIVATE L2_CACHE_HINT)
+set_source_files_properties(ascend950_grouped_matmul_slice_m_gelu.cpp PROPERTIES LANGUAGE ASC)
+catlass_example_add_executable(80_ascend950_grouped_matmul_slice_m_gelu mix ascend950_grouped_matmul_slice_m_gelu.cpp)
+target_compile_definitions(80_ascend950_grouped_matmul_slice_m_gelu PRIVATE L2_CACHE_HINT)

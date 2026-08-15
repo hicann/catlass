@@ -1,7 +1,5 @@
 # PlanarComplexMatmul
 
-本文档用于说明 `experimental/matmul/planar_complex_matmul` 平面复数矩阵乘算子示例所依赖的 Catlass GEMM 模板库能力、外部接口、分层设计方案。
-
 ## 1. 功能说明
 
  - 算子功能：完成平面复数矩阵乘计算。复数矩阵以实部、虚部分离的 planar complex 形式输入，样例输出实部与虚部两路结果。
@@ -61,7 +59,7 @@ PlanarComplexMatmul 所涉及的关键模板参数如下：
 
 #### 4.1.1 参数解析
 
-`planar_complex_matmul` 命令执行参数：
+`77_planar_complex_matmul` 命令执行参数：
 
 ```text
 m, n, k, [device_id], [--datapath DATA_PATH]
@@ -186,7 +184,7 @@ Four-Pass 复用通用 BlockMmadTla。kernel 层负责 4 次调用的编排和 a
 
 Fused 使用 `BlockMmadTla` 针对 `MmadPlanarComplexFused` policy 的偏特化（`block_mmad_planar_complex_fused_tla.hpp`）：
 
-1. **4 路输入 tensor**：`A_real`、（`A_imag` or `A_imag_signed`)、`B_real`、(`B_imag` or `B_imag_signed`)。block 对 `NEGATE_A` 无感知，始终从 Signed 槽位读 C_real 交叉项，从原始槽位读 C_imag。
+1. **4 路输入 tensor**：`A_real`、（`A_imag` or `A_imag_signed`）、`B_real`、(`B_imag` or `B_imag_signed`)。block 对 `NEGATE_A` 无感知，始终从 Signed 槽位读 C_real 交叉项，从原始槽位读 C_imag。
 2. **L1 4 槽 K-pingpong**：`[A_K0 | A_K1 | B_K0 | B_K1]`，A/B 槽位通用，GM 来源按子迭代交替。
 3. **L0A/L0B 双缓冲 pingpong**：重叠 L1->L0 搬运与 Cube MMAD。
 4. **L0C 单缓冲**：C_real FixPipe 完成后 C_imag 才开始，分时复用。
@@ -235,76 +233,3 @@ L0C 单缓冲（C_real/C_imag 分时复用）打满 128 KB；L0B 双缓冲打满
 - `NEGATE_A=false`（`m >= n`）：`K × N × 2B`（对 `B_imag` 取负）
 
 Host 选择较小的一侧取负以减少 workspace 开销。
-
-## 6. 代码组织
-
-```
-├── experimental
-│   └── matmul
-│       └── planar_complex_matmul
-│           ├── CMakeLists.txt              # CMake 编译文件
-│           ├── README.md                   # 本文档
-│           ├── gen_data_compare.py         # NumPy golden 数据生成与精度比对脚本
-│           └── planar_complex_matmul.cpp   # 样例主文件（Host 层入口）
-└── include
-    └── catlass
-        ├── gemm
-        │   ├── block
-        │   │   └── block_mmad_planar_complex_fused_tla.hpp
-        │   │       # BlockMmadTla 针对 MmadPlanarComplexFused 的偏特化
-        │   │       # 实现 Fused 路径的双 stage K-loop 与 L0C 分时复用
-        │   └── kernel
-        │       └── planar_complex_gemm_tla.hpp
-        │           # PlanarComplexGemm 统一 kernel（Four-Pass / Fused 编排）
-        │           # 含 NegateMatrixAiv AIV 取负预处理
-        └── dispatch_policy.hpp
-            # MmadPlanarComplexFused policy（ENABLE_SHUFFLE_K 参数）
-```
-
-## 7. 使用示例
-
-1. 编译样例代码，并生成相应的算子可执行文件。
-
-```
-bash scripts/build.sh planar_complex_matmul
-```
-
-2. 切换到可执行文件的编译目录 `output/bin` 下，执行算子样例程序。该方式随机生成输入数据，只输出 kernel 调度路径与平均耗时，不做精度比对。
-
-```
-cd output/bin
-./planar_complex_matmul 256 512 1024 0
-```
-
-• 256：矩阵 m 轴
-
-• 512：矩阵 n 轴
-
-• 1024：矩阵 k 轴
-
-• 0：Device ID，可选，默认为 0
-
-执行结果中包含如下信息，说明样例执行成功。
-
-```
-PlanarComplexGemm dispatch: M=256 N=512 K=1024 ... -> Fused ...
-PlanarComplexGemm: M=256 N=512 K=1024 variant=Fused gemm=... ms (20 iters)
-No --datapath provided, skipping validation.
-```
-
-3. 使用 `gen_data_compare.py` 生成输入数据、运行 NPU 可执行文件并与 NumPy golden 结果进行比对。脚本默认从仓库根目录自动定位 `output/bin/planar_complex_matmul`，默认在当前目录下生成 `data`、`golden` 目录并在结束后删除；如需指定保存路径可使用 `--save_path`，如需保留可指定 `--clean false`。
-
-```
-python examples/planar_complex_matmul/gen_data_compare.py 256 512 1024
-```
-
-执行结果如下，说明精度比对成功。
-
-```
-Data generated: M=256, N=512, K=1024, BLAS threads=8
-------计算npu------
------- 计算相对误差 -----
-Precision metric: ...
------- 开始比较 ------
-比较结果：Compare success
-```

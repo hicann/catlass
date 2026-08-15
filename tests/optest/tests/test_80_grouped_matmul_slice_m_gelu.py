@@ -1,3 +1,12 @@
+# This program is free software, you can redistribute it and/or modify.
+# Copyright (c) 2026 Huawei Technologies Co., Ltd.
+# This file is a part of the CANN Open Software.
+# Licensed under CANN Open Software License Agreement Version 2.0 (the "License").
+# Please refer to the License for details. You may not use this file except in compliance with the License.
+# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE. See LICENSE in the root of
+# the software repository for the full text of the License.
+
 import re
 
 import pytest
@@ -14,10 +23,8 @@ M_TOTAL = sum(GROUP_SIZES)
 N = 256
 K = 256
 
-
 def _prefix_sum_group_list(group_sizes: tuple[int, ...]) -> torch.Tensor:
     return torch.tensor(group_sizes, dtype=torch.int64).cumsum(0).npu()
-
 
 def _grouped_matmul_reference(
     a: torch.Tensor, b: torch.Tensor, group_sizes: tuple[int, ...]
@@ -29,7 +36,6 @@ def _grouped_matmul_reference(
         expected.append(a[offset:end].float() @ b[group_id].float())
         offset = end
     return torch.cat(expected, dim=0)
-
 
 def group_matmul_reference(tensor_a, tensor_b, m_cumsum_list):
     if m_cumsum_list is None:
@@ -48,11 +54,9 @@ def group_matmul_reference(tensor_a, tensor_b, m_cumsum_list):
         ab[m_start:m_end, :] = ab_in_group
     return ab
 
-
 def gelu_reference_origin(ab):
     sqrt_2_over_pi = math.sqrt(2.0 / math.pi)
     return 0.5 * ab * (1.0 + torch.tanh(sqrt_2_over_pi * (ab + 0.044715 * torch.pow(ab, 3))))
-
 
 def gelu_reference_sigmod(x: torch.Tensor) -> torch.Tensor:
     # 近似公式实现
@@ -61,7 +65,6 @@ def gelu_reference_sigmod(x: torch.Tensor) -> torch.Tensor:
     denominator = 1 + torch.exp(exponent)
     return x / denominator
 
-
 def _grouped_matmul_slice_m_gelu_reference(tensor_a, tensor_b, m_cumsum_list, gelu_flag=0):
     ab = group_matmul_reference(tensor_a, tensor_b, m_cumsum_list)
     if gelu_flag == 0:
@@ -69,7 +72,6 @@ def _grouped_matmul_slice_m_gelu_reference(tensor_a, tensor_b, m_cumsum_list, ge
     # gelu处理：torch.nn.functional.gelu(ab)
     gelu_out = gelu_reference_sigmod(ab)
     return ab, gelu_out
-
 
 @only_on_3510
 def test_grouped_matmul_slice_gelu():
@@ -91,7 +93,6 @@ def test_grouped_matmul_slice_gelu():
     assert torch.allclose(result.cpu().float(), expected.cpu(), rtol=1e-2, atol=1e-2), (
         f"max diff = {(result.cpu().float() - expected.cpu()).abs().max().item()}"
     )
-
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "-s"])

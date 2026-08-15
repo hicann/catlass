@@ -14,3 +14,6 @@
 - [52_quant_multi_core_splitk_matmul_tla](../../../../examples/52_quant_multi_core_splitk_matmul_tla/52_quant_multi_core_splitk_matmul_tla.md) - 拆解模板库下的样例52、quant量化下的多核切K样例的实现。
 - [65_ascend950_fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant](../../../../examples/65_ascend950_fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant/65_ascend950_fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant.md) - 拆解模板库下的样例65、亲和昇腾950硬件的FP8分组Matmul+Swiglu+Quant样例的实现。
 - [71_ascend950_fp8_mx_grouped_matmul_finalize_routing](../../../../examples/71_ascend950_fp8_mx_grouped_matmul_finalize_routing/71_ascend950_fp8_mx_grouped_matmul_finalize_routing.md) - 拆解模板库下的样例71、亲和昇腾950硬件的FP8分组Matmul+FinalizeRouting样例的实现。
+- [75_symm](../../../../examples/75_symm/75_symm.md) - 拆解模板库下的样例75、symm对称矩阵乘样例的实现。
+- [76_trmm](../../../../examples/76_trmm/76_trmm.md) - 拆解模板库下的样例76、trmm矩阵乘样例的实现。
+- [77_planar_complex_matmul](../../../../examples/77_planar_complex_matmul/77_planar_complex_matmul.md) - 拆解模板库下的样例77、平面复数矩阵乘样例的实现。

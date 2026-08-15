@@ -1,7 +1,5 @@
 # trmm
 
-> **注意**：本样例位于 `experimental/` 目录下，如需编译运行，请先将样例目录拷贝至 `examples/` 下，并在 `examples/CMakeLists.txt` 中添加样例名称 `trmm`。
-
 ## 功能说明
 
 本样例演示基于 CATLASS GEMM kernel 组件实现 TRMM（triangular matrix multiply）：
@@ -16,7 +14,7 @@
 ## 构建
 
 ```bash
-bash scripts/build.sh trmm
+bash scripts/build.sh 76_trmm
 ```
 
 ## 运行
@@ -24,14 +22,14 @@ bash scripts/build.sh trmm
 命令格式：
 
 ```bash
-./output/bin/trmm m n side uplo trans diag alpha [device_id]
+./output/bin/76_trmm m n side uplo trans diag alpha [device_id]
 ```
 
 示例：
 
 ```bash
-./output/bin/trmm 256 512 0 0 0 0 1.0
-./output/bin/trmm 512 256 1 1 1 0 1.0
+./output/bin/76_trmm 256 512 0 0 0 0 1.0
+./output/bin/76_trmm 512 256 1 1 1 0 1.0
 ```
 
 程序会在 host 侧构造三角矩阵与 dense 矩阵，运行 NPU kernel，并与 CPU reference 结果做精度比对。

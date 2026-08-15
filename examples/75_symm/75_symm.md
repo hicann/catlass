@@ -1,6 +1,6 @@
 # 对称矩阵乘算子（symm）设计文档
 
-本文档用于说明 `experimental/matmul/symm` 对称矩阵乘算子示例所依赖的 Catlass GEMM 模板库能力、外部接口、分层设计方案。
+本文档用于说明 `./examples/75_symm` 对称矩阵乘算子示例所依赖的 Catlass GEMM 模板库能力、外部接口、分层设计方案。
 
 ## 1. 功能说明
 
@@ -364,7 +364,7 @@ using L0TileShape = Shape<256, 128, 32>;
 ### 6.1 编译
 
 ```
-bash scripts/build.sh symm
+bash scripts/build.sh 75_symm
 ```
 
 ### 6.2 运行
@@ -372,23 +372,23 @@ bash scripts/build.sh symm
 左乘，上三角：
 
 ```bash
-./symm 768 4096 768 0 0 1
+.output/bin/75_symm 768 4096 768 0 0 1
 ```
 
 左乘，下三角：
 
 ```bash
-./symm 768 4096 768 0 0 0
+.output/bin/75_symm 768 4096 768 0 0 0
 ```
 
 右乘，上三角：
 
 ```bash
-./symm 4096 768 768 0 1 1
+.output/bin/75_symm 4096 768 768 0 1 1
 ```
 
 右乘，下三角：
 
 ```bash
-./symm 4096 768 768 0 1 0
+.output/bin/75_symm 4096 768 768 0 1 0
 ```

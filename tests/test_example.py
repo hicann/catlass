@@ -508,6 +508,35 @@ class CatlassExampleTest(unittest.TestCase):
             "74_ascend950_weight_quant_a8w4_grouped_mx_matmul", case_cpp
         )
 
+    @only_on_3510 
+    def test_80_ascned950_grouped_matmul_slice_m_gelu(self): 
+        case_py = [ 
+            "4",               # group_num 
+            "2048",            # m 
+            "256",             # n 
+            "256",             # k 
+            "0",               # device_id 
+        ] 
+        ret = subprocess.run( 
+            [ 
+                "python3", 
+                os.path.join( 
+                    CMAKE_EXAMPLES_PATH, 
+                    "80_ascend950_grouped_matmul_slice_m_gelu", 
+                    "gen_data.py", 
+                ), 
+            ] 
+            + case_py, 
+            stdout=subprocess.PIPE, 
+            stderr=subprocess.PIPE, 
+        ) 
+        self._ret_check(ret)
+
+        case_cpp = ["4", "2048", "256", "256", "0"]
+        self.run_case(
+            "80_ascend950_grouped_matmul_slice_m_gelu", case_cpp
+        )
+
 normal_cases_2201 = [
     "00_basic_matmul 256 512 1024 0",
     "01_batched_matmul 5 256 512 1024 0",
@@ -544,6 +573,9 @@ normal_cases_2201 = [
     "44_quant_matmul_full_loadA_tla 256 512 1024 0",
     "45_strided_batched_matmul_tla 5 256 512 1024 0",
     "52_quant_multi_core_splitk_matmul_tla 256 512 1024 0",
+    "75_symm 256 512 256 0 0 0", 
+    "76_trmm 512 256 0 0 0 0 1.0 0", 
+    "77_planar_complex_matmul 256 512 1024 0",
     "102_dynamic_optimized_matmul 256 512 1024 0 0 0"
     "103_dynamic_optimized_quant_matmul_per_token_basic 256 512 1024 0 0 0",
 ]

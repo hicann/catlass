@@ -8,5 +8,6 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 
-set_source_files_properties(symm.cpp PROPERTIES LANGUAGE ASC)
-catlass_example_add_executable(symm cube symm.cpp)
+set_source_files_properties(trmm.cpp PROPERTIES LANGUAGE ASC)
+catlass_example_add_executable(76_trmm mix trmm.cpp)
+target_link_libraries(76_trmm PRIVATE pthread)

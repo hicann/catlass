@@ -141,6 +141,9 @@ set(EXAMPLE_ATLASA2
     44_quant_matmul_full_loadA_tla
     45_strided_batched_matmul_tla
     52_quant_multi_core_splitk_matmul_tla
+    75_symm
+    76_trmm
+    77_planar_complex_matmul
     102_dynamic_optimized_matmul
     103_dynamic_optimized_quant_matmul_per_token_basic
 )
@@ -174,6 +177,7 @@ set(EXAMPLE_ASCEND950
     71_ascend950_fp8_mx_grouped_matmul_finalize_routing
     73_ascend950_matmul_full_loadA
     74_ascend950_weight_quant_a8w4_grouped_mx_matmul
+    80_ascend950_grouped_matmul_slice_m_gelu
 )
 
 if(CATLASS_ARCH STREQUAL "2201")
