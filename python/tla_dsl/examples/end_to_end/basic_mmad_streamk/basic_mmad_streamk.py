@@ -1155,7 +1155,7 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Compile, launch, and compare the full output matrix. This is the default.",
     )
-    parser.add_argument("--device", type=int, default=2, help="NPU device id.")
+    parser.add_argument("--device", type=int, default=0, help="NPU device id.")
     parser.add_argument(
         "--m",
         type=int,

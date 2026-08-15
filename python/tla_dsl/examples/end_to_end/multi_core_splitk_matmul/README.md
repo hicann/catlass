@@ -1,34 +1,73 @@
-# 多核切 K Matmul（example 68 / 69）
+# 多核切 K Matmul 端到端示例
 
-本目录包含两个单文件示例（Kernel + Host），结构均与 [`basic_matmul.py`](../basic_mmad/basic_matmul.py) 对齐：
+本目录下提供的样例演示 **CATLASS DSL** 下多核切 K 矩阵乘的两种实现，对齐 C++ 参考实现 `examples/68_ascend950_multi_core_splitk_matmul` 和 `examples/69_ascend950_tail_multi_core_splitk_matmul` 。
 
-| 文件 | 算法 |
+## 功能说明
+
+功能和基础矩阵乘一致，实现形如$(m, k)$和$(k, n)$的两矩阵的乘法运算，输出形如$(m, n)$，计算公式为：
+$$
+\begin{aligned}
+C &= A \times B \\
+C_{i,j} &= \Sigma_{k} A_{i,k}B_{k,j}
+\end{aligned}
+$$
+
+Split-K 将 K 维度的计算切分到多个核上并行执行，各核的部分积累入 workspace，再由 AIV 做 ReduceAdd 归约得到最终结果 C。
+
+## 代码组织
+
+```plain
+./multi_core_splitk_matmul
+├── multi_core_splitk_matmul.py
+├── tail_multi_core_splitk_matmul.py
+└── README.md
+```
+
+| 文件 | 概述 |
 |------|------|
-| `multi_core_splitk_matmul.py` | **ex68**：全部 M×N tile 做 K 维 split-K → workspace，AIV ReduceAdd → C |
-| `tail_multi_core_splitk_matmul.py` | **ex69**：normal tile full-K 直写 C；tail tile（`mn_blocks % AIC != 0`）再 split-K + ReduceAdd |
+| [**`multi_core_splitk_matmul.py`**](multi_core_splitk_matmul.py) | 设备侧 `@tla.kernel` 与 host 侧运行/校验逻辑同文件。全部 M×N tile 做 K 维 split-K 写入 workspace，AIV 做 ReduceAdd 写回 GM C。 |
+| [**`tail_multi_core_splitk_matmul.py`**](tail_multi_core_splitk_matmul.py) | 设备侧 `@tla.kernel` 与 host 侧运行/校验逻辑同文件。normal tile full-K 直接写回 gmC；tail tile 再做 split-K + ReduceAdd。 |
 
-CLI 与 basic 同形：`--dtype-a/b/c`、`--block-dim`（default `-1` → 平台 AICore 数）等。当前要求 **A/B/C dtype 同型**；`SWIZZLE_DIRECTION` 由 Host 按 `m>n`→Zn / 否则 Nz 注入。
+## 约束说明
 
-## 运行
+ - 左、右矩阵及结果矩阵所支持的数据组合类型如下。
 
-在 `python/tla_dsl` 目录下：
+| `DTYPE_A` | `DTYPE_B` | `DTYPE_C` |
+|---------|---------|------------------|
+| f16 | f16 | f16 |
+| bf16 | bf16 | bf16 |
+| f32 | f32 | f32 |
+
+
+## 使用示例
+
+要运行本路径下的样例，请参考[环境配置](../../../docs/dev_guide/00_environment_setup.md)完成部署。
+
+### 命令行参数
+
+CLI 与 basic 同形，主要参数如下：
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `--device` | `0` | 上板执行使用的 NPU 设备号。 |
+| `--m` | `256` | 矩阵乘左矩阵 A 的行数 |
+| `--n` | `512` | 矩阵乘右矩阵 B 的列数 |
+| `--k` | `1024` | 矩阵乘累加轴的大小 |
+| `--layout-a` / `--layout-b` | `row` / `row` | 左、右矩阵 A、B 的数据排布格式，可选 `"row"` 或 `"col"`，表示行优先或列优先布局。 |
+| `--dtype-a` / `--dtype-b` / `--dtype-c` | `"f16"` / `"f16"` / `"f16"` | 左、右矩阵 A、B 和结果矩阵 C 的数据类型，可选范围参考约束说明。 |
+
+### 执行示例
+
+在 `python/tla_dsl` 目录下执行：
 
 ```bash
 export PYTHONPATH="$(pwd):${PYTHONPATH:-}"
 
-# ex68
+# multi_core_splitk
 python examples/end_to_end/multi_core_splitk_matmul/multi_core_splitk_matmul.py \
   --device 0 --m 256 --n 512 --k 1024
 
-# ex69（诱导 tail：mn_blocks=32, block_dim=24 → normal=24, tail=8）
+# tail_multi_core_splitk
 python examples/end_to_end/multi_core_splitk_matmul/tail_multi_core_splitk_matmul.py \
-  --device 0 --m 2048 --n 1024 --k 2048 --block-dim 24 --force-recompile
+  --device 0 --m 2048 --n 1024 --k 2048
 ```
-
-常用参数：`--device/--m/--n/--k/--layout-a/--layout-b/--dtype-a/--dtype-b/--dtype-c/--block-dim/--sentinel/--cache-dir/--force-recompile/--no-cache`。完整列表见各脚本 `--help`。
-
-## ex69 尾轮调度摘要
-
-- L1 `256×256×128`；L0 `256×256×32`；Zn/Nz swizzle 与 C++ `DynamicSplitkGemmIdentityBlockSwizzle` 一致。
-- `compute_tail_scheduler`：`tail_block_num = mn_blocks % AIC`，`splitk_factor = min(AIC/tail, k_tiles)`。
-- Workspace 按 AIC 行槽存放 tail 部分积；L0C / W / reduce UB 为 fp32。

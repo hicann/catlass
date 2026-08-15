@@ -680,7 +680,7 @@ def _build_parser() -> argparse.ArgumentParser:
         )
     )
     parser.add_argument("--run", action="store_true")
-    parser.add_argument("--device", type=int, default=4)
+    parser.add_argument("--device", type=int, default=0)
     parser.add_argument("--batch", type=int, default=batch_count)
     parser.add_argument("--m", type=int, default=m)
     parser.add_argument("--n", type=int, default=n)

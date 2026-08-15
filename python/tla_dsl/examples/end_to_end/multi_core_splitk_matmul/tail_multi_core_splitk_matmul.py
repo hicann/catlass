@@ -889,7 +889,7 @@ def main() -> int:
     p.add_argument("--layout-b", choices=("row", "col"), default="row")
     p.add_argument("--dtype-a", choices=("f16", "bf16", "f32"), default="f16")
     p.add_argument("--dtype-b", choices=("f16", "bf16", "f32"), default="f16")
-    p.add_argument("--dtype-c", choices=("f16", "bf16", "f32"), default="f32")
+    p.add_argument("--dtype-c", choices=("f16", "bf16", "f32"), default="f16")
     p.add_argument("--block-dim", type=int, default=-1)
     p.add_argument("--sentinel", type=float, default=-7.0)
     p.add_argument("--cache-dir", default=str(DEFAULT_CACHE_DIR))
