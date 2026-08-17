@@ -60,7 +60,7 @@ basic_vadd.py [-h] [--device DEVICE] [--n N]
 |------|--------|------|
 | `--device` | `0` | 上板执行使用的 NPU 设备号。 |
 | `--n` | `400` | 向量长度。 |
-| `--block-num` | `-1`（哨兵值，纯 Vector 算子默认取 `vector_core_num` 满核）| 所启用的 AI Vector 核数 |
+| `--block-num` | `-1`（依据所使用的 NPU 设备采集其满核值） | 所启用的 AI Vector 核数 |
 | `--dtype` | `"f32"` | 数据类型，可选 `"f32"`、`"f16"`、`"i8"`、`"i16"`、`"i32"`。 |
 | `--use-mutex` | `False` | 切换到显式 Mutex `lock` / `unlock` 同步（执行 `basic_vadd_mutex`）。 |
 | `--use-mutex-with` | `False` | 切换到 `with tla.mutex_guard(...)` 同步（执行 `basic_vadd_mutex_with`）。 |

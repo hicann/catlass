@@ -9,9 +9,17 @@
 # -----------------------------------------------------------------------------------------------------------
 
 from __future__ import annotations
-import argparse
+
 import sys
 from pathlib import Path
+
+_DSL_BASE_PATH = str((Path(__file__).resolve().parent / "../../../").resolve())
+
+_DSL_PATH_ADDED = _DSL_BASE_PATH not in sys.path
+if _DSL_PATH_ADDED:
+    sys.path.insert(0, _DSL_BASE_PATH)
+
+import argparse
 
 import catlass.tla as tla
 from catlass.tla.runtime import from_dlpack
@@ -324,7 +332,11 @@ def main() -> int:
     parser_group.add_argument("--use-mutex", action="store_true")
     parser_group.add_argument("--use-mutex-with", action="store_true")
     parser_group.add_argument("--use-atomic-add", action="store_true")
-    return run(parser.parse_args())
+    try:
+        return run(parser.parse_args())
+    finally:
+        if _DSL_PATH_ADDED:
+            sys.path.remove(_DSL_BASE_PATH)
 
 if __name__ == "__main__":
     raise SystemExit(main())

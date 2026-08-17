@@ -14,10 +14,20 @@ Static problem sizes. Host binds buffers via ``from_dlpack`` Prefer ``basic_matm
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+_DSL_BASE_PATH = str((Path(__file__).resolve().parent / "../../../").resolve())
+
+_DSL_PATH_ADDED = _DSL_BASE_PATH not in sys.path
+if _DSL_PATH_ADDED:
+    sys.path.insert(0, _DSL_BASE_PATH)
+
 import argparse
 import catlass.tla as tla
 import torch
-import torch_npu
+import torch_npu  # noqa: F401
+
 M_DIM = 64
 N_DIM = 64
 K_DIM = 64
@@ -143,7 +153,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Minimal ptr/make_tensor MMAD.")
     parser.add_argument("--device", type=int, default=0)
     parser.add_argument("--block-num", type=int, default=1)
-    return run(parser.parse_args())
+    try:
+        return run(parser.parse_args())
+    finally:
+        if _DSL_PATH_ADDED:
+            sys.path.remove(_DSL_BASE_PATH)
 
 
 if __name__ == "__main__":

@@ -10,8 +10,16 @@
 
 from __future__ import annotations
 
-import argparse
+import sys
 from pathlib import Path
+
+_DSL_BASE_PATH = str((Path(__file__).resolve().parent / "../../../").resolve())
+
+_DSL_PATH_ADDED = _DSL_BASE_PATH not in sys.path
+if _DSL_PATH_ADDED:
+    sys.path.insert(0, _DSL_BASE_PATH)
+
+import argparse
 
 import catlass.tla as tla
 import torch
@@ -738,7 +746,11 @@ def main() -> int:
     p.add_argument("--dtype-b", choices=("f16", "bf16", "f32"), default="f32")
     p.add_argument("--dtype-c", choices=("f16", "f32"), default="f32")
     p.add_argument("--block-num", type=int, default=-1)
-    return run(p.parse_args())
+    try:
+        return run(p.parse_args())
+    finally:
+        if _DSL_PATH_ADDED:
+            sys.path.remove(_DSL_BASE_PATH)
 
 
 if __name__ == "__main__":

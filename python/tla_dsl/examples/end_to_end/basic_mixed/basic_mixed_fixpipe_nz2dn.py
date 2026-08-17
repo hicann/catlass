@@ -10,11 +10,18 @@
 
 from __future__ import annotations
 
-import argparse
+import sys
 from pathlib import Path
 
+_DSL_BASE_PATH = str((Path(__file__).resolve().parent / "../../../").resolve())
+
+_DSL_PATH_ADDED = _DSL_BASE_PATH not in sys.path
+if _DSL_PATH_ADDED:
+    sys.path.insert(0, _DSL_BASE_PATH)
+
+import argparse
+
 import catlass.tla as tla
-import sys
 from catlass.params import CopyL0C2DstParams, L0C2UBMode
 
 M_DIM = 60
@@ -137,7 +144,6 @@ def prepare_npu(buf, layout: str):
     return storage.npu()
 
 
-
 def run(args: argparse.Namespace) -> int:
     import torch
     import torch_npu
@@ -187,7 +193,11 @@ def main() -> int:
     parser.add_argument("--layout-b", choices=("row", "col"), default="row")
     parser.add_argument("--block-num", type=int, default=1)
     parser.add_argument("--sentinel", type=float, default=-9.0)
-    return run(parser.parse_args())
+    try:
+        return run(parser.parse_args())
+    finally:
+        if _DSL_PATH_ADDED:
+            sys.path.remove(_DSL_BASE_PATH)
 
 
 if __name__ == "__main__":

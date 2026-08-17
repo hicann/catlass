@@ -17,12 +17,22 @@ into GM C, and the result is verified for accuracy.
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+_DSL_BASE_PATH = str((Path(__file__).resolve().parent / "../../../").resolve())
+
+_DSL_PATH_ADDED = _DSL_BASE_PATH not in sys.path
+if _DSL_PATH_ADDED:
+    sys.path.insert(0, _DSL_BASE_PATH)
+
 import argparse
 from typing import Any, Literal
 
 import catlass.tla as tla
 import torch
-import torch_npu
+import torch_npu  # noqa: F401
+
 from examples.end_to_end.common import (
     TilingParams,
     SwizzleParams,
@@ -845,7 +855,11 @@ def main() -> int:
     parser.add_argument("--dtype-c", choices=("f16", "bf16", "f32"), default="f32")
     parser.add_argument("--block-num", type=int, default=-1)
     parser.add_argument("--atol", type=float, default=1e-3, help="Comparison tolerance.")
-    return run(parser.parse_args())
+    try:
+        return run(parser.parse_args())
+    finally:
+        if _DSL_PATH_ADDED:
+            sys.path.remove(_DSL_BASE_PATH)
 
 
 if __name__ == "__main__":

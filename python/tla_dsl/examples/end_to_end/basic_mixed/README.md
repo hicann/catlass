@@ -70,7 +70,7 @@ basic_mixed.py [-h] [--device DEVICE] [--m M] [--n N] [--k K]
 | `--device`                    | `0`                                                   | 上板执行使用的 NPU 设备号。                                                          |
 | `--m` / `--n` / `--k`     | `32`, `32`, `32`                                  | 矩阵乘加的问题大小                                                                   |
 | `--layout-a` / `--layout-b` | `"row"` / `"row"`                                   | 左、右矩阵 A、B 的数据排布格式，可选`"row"` 或 `"col"`，表示行优先或列优先布局。 |
-| `--block-num`                 | `-1`（哨兵值，后续根据所使用的 NPU 设备采集其满核值） | 所启用的 AI Core 核数                                                                |
+| `--block-num`                 | `-1`（依据所使用的 NPU 设备采集其满核值） | 所启用的 AI Core 核数                                                                |
 | `--sentinel`                  | `-9.0`                                                | Kernel 启动前写入结果 C 的哨兵值。                                                   |
 
 ### 执行示例
@@ -83,8 +83,6 @@ cd python/tla_dsl
 # 基础测试 (默认 m=32, n=32, k=32)
 python examples/end_to_end/basic_mixed/basic_mixed.py
 
-# 指定输入形状大小（m=222, n=333, k=444）
-python examples/end_to_end/basic_mixed/basic_mixed.py --m 222 --n 333 --k 444
 
 # 使用 Mutex 同步
 python examples/end_to_end/basic_mixed/basic_mixed_mutex.py
