@@ -34,9 +34,9 @@ _KERNEL_DTYPE = tla.Float32
 _KERNEL_ELEMENT_BYTES = 4
 _KERNEL_SHAPE = (VECTOR_ELE,)
 _DEFAULT_SENTINEL: float | int = -7
-_UNARY_MODE: Literal[
-    "unmasked_unary", "masked_unary", "masked_abs", "masked_neg"
-] = "unmasked_unary"
+_UNARY_MODE: Literal["unmasked_unary", "masked_unary", "masked_abs", "masked_neg"] = (
+    "unmasked_unary"
+)
 _UNARY_OP: Callable[[Any], Any] | None = None
 _BATCH_OPS = ("exp", "exp", "exp", "exp")
 
@@ -416,8 +416,6 @@ def _set_kernel_config(
         _UNARY_MODE = "masked_neg"
         _UNARY_OP = None
     return config.tla_dtype, config.torch_dtype, config.default_sentinel
-
-
 
 
 def _configure_batch(

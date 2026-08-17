@@ -33,10 +33,10 @@ def _numeric_compare_if_kernel(src: tla.Tensor, out: tla.Tensor) -> None:
 def _loop_iv_vs_numeric_compare_kernel(limit_buf: tla.Tensor, out: tla.Tensor) -> None:
     # Loop IV and scalar load are both Int32; compare stays on i32.
     limit = limit_buf[0]
-    idx = 0
+    idx = tla.as_numeric(0)
     for i in tla.range(0, 4, 1):
         idx = i
-    result = tla.Int32(0)
+    result = tla.as_numeric(0)
     if idx >= limit:
         result = tla.Int32(1)
     else:

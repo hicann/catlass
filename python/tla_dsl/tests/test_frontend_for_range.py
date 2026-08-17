@@ -11,7 +11,6 @@ import pytest
 
 import catlass.tla as tla
 import catlass.core_api as core_api_mod
-import catlass.runtime as runtime_mod
 from catlass.base_dsl import BaseDSL
 from catlass.base_dsl.ast_preprocessor import (
     _FrontendControlFlowTransformer,
@@ -24,6 +23,29 @@ tla_range = tla.range
 tla_range_constexpr = tla.range_constexpr
 range_constexpr = tla.range_constexpr
 
+@tla.kernel
+def for_compile_time_binding_write_inside_kernel(limit: int) -> None:
+    scale = 2
+    for i in tla.range(0, limit, 1):
+        tla.make_coord(i * scale, 0)
+        scale = 3
+        tla.make_coord(i * scale, 0)
+
+def test_for_rejects_compile_time_binding_write_at_assignment() -> None:
+    with pytest.raises(
+        Exception,
+        match="compile-time binding 'scale'.*use tla.as_numeric",
+    ) as exc:
+        for_compile_time_binding_write_inside_kernel.dump_mlir(type_args=(2,))
+
+    diagnostic = exc.value.__cause__.__cause__
+    assert isinstance(diagnostic, SyntaxError)
+    assert (
+        diagnostic.lineno
+        == inspect.getsourcelines(for_compile_time_binding_write_inside_kernel.fn)[1]
+        + 5
+    )
+    assert diagnostic.text.strip() == "scale = 3"
 
 def _return_in_tuple_loop(limit: int) -> None:
     for i in tla.range(0, limit, 1):
@@ -136,6 +158,27 @@ def builtin_range_kernel(mem_a: tla.Tensor) -> None:
     for i in range(2):
         tla.tile_view(mem_a, tla.make_shape(4, 4), tla.make_coord(i, 0))
 
+@tla.kernel
+def builtin_range_start_stop_kernel(mem_a: tla.Tensor) -> None:
+    for i in range(1, 4):
+        tla.tile_view(mem_a, tla.make_shape(4, 4), tla.make_coord(i, 0))
+
+@tla.kernel
+def builtin_range_dynamic_step_kernel(limit: int) -> None:
+    zero = tla.as_numeric(0)
+    state = zero
+    for i in range(limit, zero, zero - 1):
+        state = i
+    tla.make_coord(state, zero)
+
+@tla.kernel
+def builtin_range_nested_kernel(limit: int) -> None:
+    zero = tla.as_numeric(0)
+    state = zero
+    for outer in range(limit):
+        for inner in range(zero, outer, 1):
+            state = inner
+    tla.make_coord(state, zero)
 
 @tla.kernel
 def local_shadowed_range_kernel(mem_a: tla.Tensor) -> None:
@@ -184,7 +227,8 @@ def range_dynamic_step_kernel(
 
 @tla.kernel
 def range_tuple_carried_state_kernel(limit: int) -> None:
-    state = (0, 1)
+    zero = tla.as_numeric(0)
+    state = (zero, zero + 1)
     for i in tla.range(0, limit, 1):
         state = (i, i + 1)
     tla.make_coord(state[0], state[1])
@@ -192,7 +236,8 @@ def range_tuple_carried_state_kernel(limit: int) -> None:
 
 @tla.kernel
 def range_list_carried_state_kernel(limit: int) -> None:
-    state = [0, 1]
+    zero = tla.as_numeric(0)
+    state = [zero, zero + 1]
     for i in tla.range(0, limit, 1):
         state = [i, i + 1]
     tla.make_coord(state[0], state[1])
@@ -200,7 +245,8 @@ def range_list_carried_state_kernel(limit: int) -> None:
 
 @tla.kernel
 def range_dict_carried_state_kernel(limit: int) -> None:
-    state = {"coord": 0, "offset": 1}
+    zero = tla.as_numeric(0)
+    state = {"coord": zero, "offset": zero + 1}
     for i in tla.range(0, limit, 1):
         state = {"coord": i, "offset": i + 1}
     tla.make_coord(state["coord"], state["offset"])
@@ -208,7 +254,8 @@ def range_dict_carried_state_kernel(limit: int) -> None:
 
 @tla.kernel
 def range_dataclass_carried_state_kernel(limit: int) -> None:
-    state = LoopState(0, 1)
+    zero = tla.as_numeric(0)
+    state = LoopState(zero, zero + 1)
     for i in tla.range(0, limit, 1):
         state = LoopState(i, i + 1)
     tla.make_coord(state.coord, state.offset)
@@ -216,11 +263,27 @@ def range_dataclass_carried_state_kernel(limit: int) -> None:
 
 @tla.kernel
 def range_custom_class_carried_state_kernel(limit: int) -> None:
-    state = CustomLoopState(0, 1)
+    zero = tla.as_numeric(0)
+    state = CustomLoopState(zero, zero + 1)
     for i in tla.range(0, limit, 1):
         state = CustomLoopState(i, i + 1)
     tla.make_coord(state.coord, state.offset)
 
+@tla.kernel
+def range_active_object_method_call_kernel(limit: int) -> None:
+    zero = tla.as_numeric(0)
+    values = [zero, zero + 1]
+    for i in tla.range(0, limit, 1):
+        values.reverse()
+        values = [i, i + 1]
+    tla.make_coord(values[0], values[1])
+
+@tla.kernel
+def bad_range_active_object_method_structure_kernel(limit: int) -> None:
+    values = [tla.as_numeric(0)]
+    for i in tla.range(0, limit, 1):
+        values.append(i)
+    tla.make_coord(values[0], 0)
 
 @tla.kernel
 def bad_range_active_closure_call_kernel(limit: int) -> None:
@@ -288,10 +351,13 @@ def test_range_alias_is_preserved_in_nested_outlined_regions() -> None:
 
     transformed = transformer.visit(tree)
 
-    assert sum(
-        isinstance(node, ast.Name) and node.id == "__tladsl_internal_for__"
-        for node in ast.walk(transformed)
-    ) == 1
+    assert (
+        sum(
+            isinstance(node, ast.Name) and node.id == "__tladsl_internal_for__"
+            for node in ast.walk(transformed)
+        )
+        == 1
+    )
 
 
 def test_range_alias_keeps_hidden_exit_owned_by_nested_dynamic_loop() -> None:
@@ -387,25 +453,46 @@ def test_imported_bare_range_lowers_to_scf_for() -> None:
     assert "tla.tile_view" in mlir
 
 
-def test_builtin_bare_range_remains_static_python_loop() -> None:
+def test_builtin_bare_range_lowers_to_scf_for() -> None:
     mem = make_fake_tensor(
-              tla.Float16,
-              (16, 16),
-              (16, 1),
-              origin_shape=(16, 16),
-              layout_tag=tla.arch.RowMajor,
-          )
+        tla.Float16,
+        (16, 16),
+        (16, 1),
+        origin_shape=(16, 16),
+        layout_tag=tla.arch.RowMajor,
+    )
     old_range = globals().get("range", builtins.range)
     globals()["range"] = builtins.range
     try:
         mlir = builtin_range_kernel.dump_mlir(type_args=(mem,))
     finally:
         globals()["range"] = old_range
-    assert "scf.for" not in mlir
+    assert "scf.for" in mlir
     assert "tla.range" not in mlir
     assert "tla.for" not in mlir
-    assert mlir.count("tla.tile_view") == 2
+    assert mlir.count("tla.tile_view") == 1
 
+def test_builtin_range_arities_and_runtime_bounds_lower_to_scf_for() -> None:
+    mem = make_fake_tensor(
+        tla.Float16,
+        (16, 16),
+        (16, 1),
+        origin_shape=(16, 16),
+        layout_tag=tla.arch.RowMajor,
+    )
+    start_stop_mlir = builtin_range_start_stop_kernel.dump_mlir(type_args=(mem,))
+    dynamic_mlir = builtin_range_dynamic_step_kernel.dump_mlir(type_args=(4,))
+
+    assert "scf.for" in start_stop_mlir
+    assert "scf.for" in dynamic_mlir
+    assert "scf.if" in dynamic_mlir
+    assert "arith.subi" in dynamic_mlir
+
+def test_nested_builtin_range_carries_runtime_state() -> None:
+    mlir = builtin_range_nested_kernel.dump_mlir(type_args=(3,))
+    assert mlir.count("scf.for") == 2
+    assert "scf.yield" in mlir
+    assert "tla.make_coord" in mlir
 
 def test_local_shadowed_range_remains_static_python_loop() -> None:
     mem = make_fake_tensor(
@@ -513,19 +600,28 @@ def test_range_structured_carried_values_lower_to_scf_for_results() -> None:
         range_list_carried_state_kernel,
         range_dict_carried_state_kernel,
         range_dataclass_carried_state_kernel,
-        range_custom_class_carried_state_kernel,
     ):
         mlir = kernel.dump_mlir(type_args=(2,))
         assert "scf.for" in mlir
         assert "scf.yield" in mlir
         assert "tla.for" not in mlir
         assert "tla.make_coord" in mlir
+    for kernel in (range_custom_class_carried_state_kernel,):
+        with pytest.raises(SyntaxError, match="user-defined class"):
+            kernel.dump_mlir(type_args=(2,))
 
+def test_range_active_object_method_call_lowers_as_carried_value() -> None:
+    with pytest.raises(SyntaxError, match="requires @tla.jit"):
+        range_active_object_method_call_kernel.dump_mlir(type_args=(2,))
 
-def test_range_rejects_active_closure_call() -> None:
-    with pytest.raises(SyntaxError, match="nested function definition"):
-        _ = bad_range_active_closure_call_kernel.dump_mlir(type_args=(2,))
+def test_range_rejects_active_object_method_structure_change() -> None:
+    with pytest.raises(SyntaxError, match="requires @tla.jit"):
+        _ = bad_range_active_object_method_structure_kernel.dump_mlir(type_args=(2,))
 
+def test_range_allows_active_closure_call() -> None:
+    mlir = bad_range_active_closure_call_kernel.dump_mlir(type_args=(2,))
+    assert "scf.for" in mlir
+    assert "tla.make_coord" in mlir
 
 def test_execution_only_mode_lowers_tla_range_loop() -> None:
     def lowered(mem_a: tla.Tensor) -> None:
@@ -719,25 +815,26 @@ def test_dynamic_tla_range_loop_rejects_induction_value_used_after() -> None:
         _ = BaseDSL()._func(lowered, kind="kernel", options={}, type_args=(mem_a,))
 
 
-def test_execution_only_mode_handles_python_range_loop() -> None:
+def test_execution_only_mode_lowers_python_range_loop() -> None:
     def supported(mem_a: tla.Tensor) -> None:
         for _i in range(4):
             tla.make_coord(0, 0)
 
     mem_a = make_fake_tensor(
-                tla.Float16,
-                (1, 2),
-                (2, 1),
-                origin_shape=(1, 2),
-                layout_tag=tla.arch.RowMajor,
-            )
+        tla.Float16,
+        (1, 2),
+        (2, 1),
+        origin_shape=(1, 2),
+        layout_tag=tla.arch.RowMajor,
+    )
     mlir = BaseDSL()._func(
         supported,
         kind="kernel",
         options={},
         type_args=(mem_a,),
     )
-    assert mlir.count("tla.make_coord") == 4
+    assert "scf.for" in mlir
+    assert mlir.count("tla.make_coord") == 1
 
 @tla.kernel
 def dynamic_for_bad_list_index_kernel(limit: int) -> None:
@@ -830,8 +927,8 @@ def _tile_rebound_in_dynamic_loop_kernel(limit: int) -> None:
 def _scf_for_operand_count(mlir_text: str) -> int:
     """Number of values the generated scf.for carries."""
     match = re.search(r"scf\.for[^\n]*iter_args\(([^)]*)\)", mlir_text)
-    return 0 if match is None else len(
-        [p for p in match.group(1).split(",") if p.strip()]
+    return (
+        0 if match is None else len([p for p in match.group(1).split(",") if p.strip()])
     )
 
 
@@ -923,7 +1020,7 @@ def test_method_call_on_a_host_object_is_rejected() -> None:
     emitted IR does not depend on the trip count -- the loop silently computes
     something else. Only a handle whose methods emit ops is safe here.
     """
-    with pytest.raises(tla.TlaCoreAPIError, match="calls a method on it"):
+    with pytest.raises(SyntaxError, match="requires @tla.jit"):
         _host_list_mutated_in_dynamic_loop_kernel.dump_mlir(type_args=(4,))
 
 

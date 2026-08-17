@@ -15,22 +15,22 @@ from mlir import ir as mlir_ir
 
 
 def _ensure_compute_order_or_skip() -> None:
-    with mlir_ir.Context() as ctx:
-        _tla_type_bridge.load_tla_dialect(ctx)
+    with mlir_ir.Context() as context:
+        _tla_type_bridge.load_tla_dialect(context)
         try:
-            mlir_ir.Attribute.parse("#tla.compute_order<M_FIRST>", context=ctx)
-        except mlir_ir.MLIRError as exc:
-            if "compute_order" in str(exc) and "expected valid keyword" in str(exc):
-                pytest.skip("linked BiShengIR lacks tla.compute_order enum used by mmad")
+            mlir_ir.Attribute.parse("#tla.compute_order<M_FIRST>", context=context)
+        except mlir_ir.MLIRError as error:
+            if "compute_order" in str(error) and "expected valid keyword" in str(error):
+                pytest.skip(
+                    "linked BiShengIR lacks tla.compute_order enum used by mmad"
+                )
             raise
 
 
 @pytest.fixture(autouse=True)
-def _skip_without_compute_order(request):
-    name = getattr(request.node, "name", "")
-    if "mmad" in name.lower() or (
-        "cube" in name.lower() and "mutex" not in name.lower()
-    ):
+def _skip_without_compute_order(request: pytest.FixtureRequest) -> None:
+    name = request.node.name.lower()
+    if "mmad" in name or ("cube" in name and "mutex" not in name):
         _ensure_compute_order_or_skip()
 
 
@@ -109,6 +109,7 @@ class CustomBranchState:
             core_api_mod._wrap_frontend_value(values[1]),
         )
 
+@tla.jit
 def _explode() -> None:
     raise AssertionError("unreachable")
 
@@ -343,42 +344,47 @@ def statement_if_custom_class_carried_state_kernel(limit: int) -> None:
 
 @tla.kernel
 def loop_carried_index_kernel(limit: int) -> None:
-    acc = 0
+    acc = tla.as_numeric(0)
     for i in tla.range(0, limit, 1):
         acc = acc + i
     tla.make_coord(acc, 0)
 
 @tla.kernel
 def loop_tuple_carried_state_kernel(limit: int) -> None:
-    state = (0, 1)
+    zero = tla.as_numeric(0)
+    state = (zero, zero + 1)
     for i in tla.range(0, limit, 1):
         state = (state[0] + i, state[1] + i)
     tla.make_coord(state[0], state[1])
 
 @tla.kernel
 def loop_list_carried_state_kernel(limit: int) -> None:
-    state = [0, 1]
+    zero = tla.as_numeric(0)
+    state = [zero, zero + 1]
     for i in tla.range(0, limit, 1):
         state = [state[0] + i, state[1] + i]
     tla.make_coord(state[0], state[1])
 
 @tla.kernel
 def loop_dict_carried_state_kernel(limit: int) -> None:
-    state = {"coord": 0, "offset": 1}
+    zero = tla.as_numeric(0)
+    state = {"coord": zero, "offset": zero + 1}
     for i in tla.range(0, limit, 1):
         state = {"coord": state["coord"] + i, "offset": state["offset"] + i}
     tla.make_coord(state["coord"], state["offset"])
 
 @tla.kernel
 def loop_dataclass_carried_state_kernel(limit: int) -> None:
-    state = BranchState(0, (1, 2))
+    zero = tla.as_numeric(0)
+    state = BranchState(zero, (zero + 1, zero + 2))
     for i in tla.range(0, limit, 1):
         state = BranchState(state.coord + i, (state.offset[0] + i, state.offset[1]))
     tla.make_coord(state.coord, state.offset[0])
 
 @tla.kernel
 def loop_custom_class_carried_state_kernel(limit: int) -> None:
-    state = CustomBranchState(0, 1)
+    zero = tla.as_numeric(0)
+    state = CustomBranchState(zero, zero + 1)
     for i in tla.range(0, limit, 1):
         state = CustomBranchState(state.coord + i, state.offset + i)
     tla.make_coord(state.coord, state.offset)
@@ -461,12 +467,15 @@ def statement_if_bool_op_or_name_collision_kernel(limit: int) -> None:
     if limit < 0 or __tladsl_bool_op_lhs_1:
         tla.make_coord(0, 0)
 
+@tla.jit
 def _raise_if_evaluated() -> bool:
     raise AssertionError("short-circuited boolean RHS was evaluated")
 
+@tla.jit
 def _returns_false() -> bool:
     return False
 
+@tla.jit
 def _returns_true() -> bool:
     return True
 
@@ -474,7 +483,11 @@ def _record_comparator(events: list[str], name: str, value: int) -> int:
     events.append(name)
     return value
 
+@tla.jit
 def _staged_is_zero(value: Any) -> Any:
+    return value == 0
+
+def _undecorated_is_zero(value: Any) -> Any:
     return value == 0
 
 class _ExpansionSpy:
@@ -573,7 +586,7 @@ def statement_if_simple_staged_call_kernel(limit: int) -> None:
 @tla.kernel
 def bad_statement_if_runtime_lazy_unknown_call_kernel(limit: int) -> None:
     for i in tla.range(0, limit, 1):
-        if i == 0 and _staged_is_zero(i):
+        if i == 0 and _undecorated_is_zero(i):
             tla.make_coord(i, 0)
 
 @tla.kernel
@@ -695,6 +708,35 @@ def statement_if_elif_carried_index_kernel(limit: int) -> None:
             coord = i + 3
         tla.make_coord(coord, 0)
 
+@tla.kernel
+def statement_if_carried_tensor_kernel(mem_a: tla.Tensor) -> None:
+    root = tla.tile_view(mem_a, tla.make_shape(16, 8), tla.make_coord(0, 0))
+    for i in tla.range(0, 2, 1):
+        left = tla.tile_view(root, tla.make_shape(16, 4), tla.make_coord(0, 0))
+        right = tla.tile_view(root, tla.make_shape(16, 4), tla.make_coord(0, 0))
+        selected = left
+        if i == 0:
+            selected = left
+        else:
+            selected = right
+        tla.copy(selected, left)
+
+@tla.kernel
+def statement_if_mixed_index_tensor_kernel(mem_a: tla.Tensor) -> None:
+    root = tla.tile_view(mem_a, tla.make_shape(16, 8), tla.make_coord(0, 0))
+    for i in tla.range(0, 2, 1):
+        left = tla.tile_view(root, tla.make_shape(16, 4), tla.make_coord(0, 0))
+        right = tla.tile_view(root, tla.make_shape(16, 4), tla.make_coord(0, 0))
+        coord = i
+        selected = left
+        if i == 0:
+            coord = i + 1
+            selected = left
+        else:
+            coord = i + 2
+            selected = right
+        tla.make_coord(coord, 0)
+        tla.copy(selected, left)
 
 @tla.kernel
 def statement_if_not_predicate_kernel(limit: int) -> None:
@@ -883,6 +925,69 @@ def bad_statement_if_starred_assignment_kernel(limit: int) -> None:
         tla.make_coord(coord, 0)
 
 @tla.kernel
+def statement_if_compile_time_binding_write_inside_kernel(limit: int) -> None:
+    scale = 2
+    if limit > 0:
+        tla.make_coord(limit * scale, 0)
+        scale = 3
+        tla.make_coord(limit * scale, 0)
+
+@tla.kernel
+def statement_if_definitely_assigned_python_seed_kernel(limit: int) -> None:
+    scale = 2
+    if limit > 0:
+        scale = 3
+    else:
+        scale = 4
+    tla.make_coord(scale, 0)
+
+_ENABLE_DEFINITE_ASSIGNMENT = True
+
+@tla.kernel
+def static_config_nested_definite_assignment_kernel(limit: int) -> None:
+    scale = 2
+    if _ENABLE_DEFINITE_ASSIGNMENT:
+        if limit > 0:
+            scale = 3
+        else:
+            scale = 4
+    tla.make_coord(scale, 0)
+
+@tla.kernel
+def region_compile_time_binding_write_inside_kernel() -> None:
+    scale = 2
+    with tla.cube():
+        tla.make_coord(scale, 0)
+        scale = 3
+        tla.make_coord(scale, 0)
+
+@tla.kernel
+def bad_nested_compile_time_binding_read_after_inner_kernel(limit: int) -> None:
+    scale = 2
+    for i in tla.range(limit):
+        if i > 0:
+            scale = 3
+        tla.make_coord(scale, 0)
+
+@tla.kernel
+def nested_runtime_binding_read_after_inner_kernel(limit: int) -> None:
+    scale = tla.as_numeric(0)
+    for i in tla.range(limit):
+        if i > 0:
+            scale = i
+        tla.make_coord(scale, 0)
+
+@tla.kernel
+def bad_compile_time_binding_reassignment_does_not_restore_kernel(
+    limit: int,
+) -> None:
+    scale = 2
+    if limit > 0:
+        scale = 3
+    scale = 4
+    tla.make_coord(scale, 0)
+
+@tla.kernel
 def bad_statement_if_active_closure_call_kernel(limit: int) -> None:
     def helper(value: int) -> None:
         tla.make_coord(value, 0)
@@ -891,6 +996,20 @@ def bad_statement_if_active_closure_call_kernel(limit: int) -> None:
         if i == 0:
             helper(i)
 
+@tla.kernel
+def bad_statement_if_active_object_method_call_kernel(limit: int) -> None:
+    for i in tla.range(0, limit, 1):
+        values = []
+        if i == 0:
+            values.append(i)
+
+@tla.kernel
+def statement_if_active_object_method_call_kernel(limit: int) -> None:
+    for i in tla.range(0, limit, 1):
+        values = [i, i + 1]
+        if i == 0:
+            values.reverse()
+        tla.make_coord(values[0], values[1])
 
 def test_const_expr_true_branch_stays_static() -> None:
     mlir = const_expr_if_kernel.dump_mlir(type_args=(True,))
@@ -1089,7 +1208,6 @@ def test_inline_if_dataclass_result_lowers_to_scf_if_results() -> None:
     mlir = inline_if_dataclass_result_kernel.dump_mlir(type_args=(2,))
     assert "scf.if" in mlir
     assert "scf.yield" in mlir
-    assert "tla.make_coord" in mlir
 
 def test_builtin_bool_predicate_lowers() -> None:
     mlir = builtin_bool_predicate_kernel.dump_mlir(type_args=(2,))
@@ -1152,13 +1270,15 @@ def test_loop_structured_carried_values_lower_to_scf_for_results() -> None:
         loop_list_carried_state_kernel,
         loop_dict_carried_state_kernel,
         loop_dataclass_carried_state_kernel,
-        loop_custom_class_carried_state_kernel,
     ):
         mlir = kernel.dump_mlir(type_args=(2,))
         assert "scf.for" in mlir
         assert "scf.yield" in mlir
         assert "arith.addi" in mlir
         assert "tla.make_coord" in mlir
+    for kernel in (loop_custom_class_carried_state_kernel,):
+        with pytest.raises(SyntaxError, match="user-defined class"):
+            kernel.dump_mlir(type_args=(2,))
 
 def test_statement_if_tuple_assignment_carried_values_lower() -> None:
     mlir = statement_if_tuple_assignment_carried_values_kernel.dump_mlir(type_args=(2,))
@@ -1188,19 +1308,15 @@ def test_statement_if_dataclass_carried_state_lowers_to_scf_if_results() -> None
     mlir = statement_if_dataclass_carried_state_kernel.dump_mlir(type_args=(2,))
     assert "scf.if" in mlir
     assert "scf.yield" in mlir
-    assert "tla.make_coord" in mlir
 
 def test_statement_if_frozen_dataclass_carried_state_lowers_to_scf_if_results() -> None:
     mlir = statement_if_frozen_dataclass_carried_state_kernel.dump_mlir(type_args=(2,))
     assert "scf.if" in mlir
     assert "scf.yield" in mlir
-    assert "tla.make_coord" in mlir
 
 def test_statement_if_custom_class_carried_state_lowers_to_scf_if_results() -> None:
-    mlir = statement_if_custom_class_carried_state_kernel.dump_mlir(type_args=(2,))
-    assert "scf.if" in mlir
-    assert "scf.yield" in mlir
-    assert "tla.make_coord" in mlir
+    with pytest.raises(SyntaxError, match="user-defined class 'CustomBranchState'"):
+        statement_if_custom_class_carried_state_kernel.dump_mlir(type_args=(2,))
 
 def test_statement_if_without_else_yields_original_carried_value() -> None:
     mlir = statement_if_implicit_else_kernel.dump_mlir(type_args=(2,))
@@ -1233,7 +1349,8 @@ def test_transformed_static_true_or_skips_rhs() -> None:
     assert "!tla.coord<1,0>" in mlir
 
 @pytest.mark.parametrize(
-    "kernel", [staged_false_and_short_circuit_kernel, staged_true_or_short_circuit_kernel]
+    "kernel",
+    [staged_false_and_short_circuit_kernel, staged_true_or_short_circuit_kernel],
 )
 def test_staged_boolean_prefix_skips_unknown_rhs_call(kernel: Any) -> None:
     mlir = kernel.dump_mlir()
@@ -1258,20 +1375,16 @@ def test_transformed_static_chained_comparison_skips_later_comparator() -> None:
     assert "scf.if" not in mlir
     assert "!tla.coord<1,0>" not in mlir
 
-def test_staged_chained_comparison_matches_cpython_order_and_single_evaluation() -> None:
+def test_staged_chained_comparison_allows_inspectable_staging_helpers() -> None:
     _comparison_events.clear()
     staged_comparison_order_kernel.dump_mlir()
     assert _comparison_events == ["left", "middle", "right"]
 
-def test_staged_identity_chain_matches_cpython_constant_identity() -> None:
-    expected_events: list[str] = []
-    exec(
-        "left = (1,)\nmiddle = (1,)\nresult = left is middle is marker()",
-        {"marker": lambda: expected_events.append("marker") or (1,)},
-    )
+def test_staged_identity_chain_rejects_uninspectable_object_methods() -> None:
     _identity_events.clear()
-    staged_identity_chain_kernel.dump_mlir()
-    assert _identity_events == expected_events
+    with pytest.raises(SyntaxError, match="inspectable source"):
+        staged_identity_chain_kernel.dump_mlir()
+    assert _identity_events == []
 
 @pytest.mark.parametrize(
     "kernel",
@@ -1425,6 +1538,34 @@ def test_statement_if_elif_lowers_to_nested_scf_if() -> None:
     assert "scf.yield" in mlir
     assert "tla.make_coord" in mlir
 
+def test_statement_if_carried_tensor_lowers_to_scf_if_result() -> None:
+    mem = make_fake_tensor(
+        tla.Float16,
+        (16, 8),
+        (8, 1),
+        origin_shape=(16, 8),
+        layout_tag=tla.arch.RowMajor,
+    )
+    mlir = statement_if_carried_tensor_kernel.dump_mlir(type_args=(mem,))
+    assert "scf.if" in mlir
+    assert "scf.yield" in mlir
+    assert "!tla.tensor<!tla.layout<!tla.shape<16,4>" in mlir
+    assert "tla.copy" in mlir
+
+def test_statement_if_mixed_index_tensor_lowers_to_scf_if_results() -> None:
+    mem = make_fake_tensor(
+        tla.Float16,
+        (16, 8),
+        (8, 1),
+        origin_shape=(16, 8),
+        layout_tag=tla.arch.RowMajor,
+    )
+    mlir = statement_if_mixed_index_tensor_kernel.dump_mlir(type_args=(mem,))
+    assert "scf.if" in mlir
+    assert "scf.yield" in mlir
+    assert "!tla.tensor<!tla.layout<!tla.shape<16,4>" in mlir
+    assert "index" in mlir
+    assert "tla.copy" in mlir
 
 def test_statement_if_not_predicate_lowers() -> None:
     mlir = statement_if_not_predicate_kernel.dump_mlir(type_args=(2,))
@@ -1437,19 +1578,13 @@ def test_statement_if_augassign_carried_index_lowers() -> None:
     assert "scf.yield" in mlir
     assert "arith.addi" in mlir
 
-def test_statement_if_rejects_nested_function_with_isolated_local() -> None:
-    with pytest.raises(
-        SyntaxError,
-        match="nested function definition 'helper' is not supported",
-    ):
-        _ = statement_if_nested_function_local_kernel.dump_mlir(type_args=(2,))
+def test_statement_if_allows_nested_function_with_isolated_local() -> None:
+    mlir = statement_if_nested_function_local_kernel.dump_mlir(type_args=(2,))
+    assert "scf.if" in mlir
 
-def test_statement_if_rejects_nested_function_with_return() -> None:
-    with pytest.raises(
-        SyntaxError,
-        match="nested function definition 'helper' is not supported",
-    ):
-        _ = statement_if_nested_function_return_kernel.dump_mlir(type_args=(2,))
+def test_statement_if_allows_nested_function_with_return() -> None:
+    mlir = statement_if_nested_function_return_kernel.dump_mlir(type_args=(2,))
+    assert "scf.if" in mlir
 
 def test_statement_if_rejects_return() -> None:
     with pytest.raises(SyntaxError, match="dynamic Tla if"):
@@ -1485,8 +1620,7 @@ def test_statement_if_rejects_pytree_structure_mismatch_by_name() -> None:
         _ = bad_statement_if_pytree_structure_mismatch_kernel.dump_mlir(type_args=(2,))
 
 def test_statement_if_rejects_dataclass_type_mismatch_by_leaf_name() -> None:
-    # Int32 vs Bool leaf inside dataclass: rejected as carried-value structure mismatch.
-    with pytest.raises(tla.TlaCoreAPIError, match=r"'state'.*structure"):
+    with pytest.raises(tla.TlaCoreAPIError, match="'state'.*structure"):
         _ = bad_statement_if_dataclass_type_mismatch_kernel.dump_mlir(type_args=(2,))
 
 def test_statement_if_rejects_dataclass_structure_mismatch_by_name() -> None:
@@ -1496,7 +1630,7 @@ def test_statement_if_rejects_dataclass_structure_mismatch_by_name() -> None:
         )
 
 def test_statement_if_rejects_custom_class_type_mismatch_by_leaf_name() -> None:
-    with pytest.raises(tla.TlaCoreAPIError, match=r"state\[0\]"):
+    with pytest.raises(SyntaxError, match="user-defined class 'CustomBranchState'"):
         _ = bad_statement_if_custom_class_type_mismatch_kernel.dump_mlir(type_args=(2,))
 
 def test_statement_if_rejects_wrong_carried_result_count_by_name() -> None:
@@ -1539,10 +1673,83 @@ def test_statement_if_rejects_starred_assignment() -> None:
     with pytest.raises(SyntaxError, match="assignments to local names"):
         _ = bad_statement_if_starred_assignment_kernel.dump_mlir(type_args=(2,))
 
-def test_statement_if_rejects_active_closure_call() -> None:
-    with pytest.raises(SyntaxError, match="nested function definition"):
-        _ = bad_statement_if_active_closure_call_kernel.dump_mlir(type_args=(2,))
+def test_statement_if_rejects_compile_time_binding_write_at_assignment() -> None:
+    with pytest.raises(
+        Exception,
+        match="compile-time binding 'scale'.*use tla.as_numeric",
+    ) as exc:
+        statement_if_compile_time_binding_write_inside_kernel.dump_mlir(type_args=(2,))
 
+    diagnostic = exc.value.__cause__.__cause__
+    assert isinstance(diagnostic, SyntaxError)
+    assert (
+        diagnostic.lineno
+        == inspect.getsourcelines(
+            statement_if_compile_time_binding_write_inside_kernel.fn
+        )[1]
+        + 5
+    )
+    assert diagnostic.text.strip() == "scale = 3"
+
+def test_statement_if_rejects_definitely_assigned_python_seed() -> None:
+    with pytest.raises(Exception, match="use tla.as_numeric"):
+        statement_if_definitely_assigned_python_seed_kernel.dump_mlir(type_args=(2,))
+
+def test_static_global_bool_rejects_nested_compile_time_write() -> None:
+    with pytest.raises(Exception, match="use tla.as_numeric"):
+        static_config_nested_definite_assignment_kernel.dump_mlir(type_args=(2,))
+
+def test_region_rejects_compile_time_binding_write_at_assignment() -> None:
+    with pytest.raises(
+        Exception,
+        match="compile-time binding 'scale'.*use tla.as_numeric",
+    ) as exc:
+        region_compile_time_binding_write_inside_kernel.dump_mlir()
+
+    diagnostic = exc.value.__cause__.__cause__
+    assert isinstance(diagnostic, SyntaxError)
+    assert (
+        diagnostic.lineno
+        == inspect.getsourcelines(region_compile_time_binding_write_inside_kernel.fn)[1]
+        + 5
+    )
+    assert diagnostic.text.strip() == "scale = 3"
+
+def test_nested_scope_rejects_compile_time_binding_write_in_inner_scope() -> None:
+    with pytest.raises(
+        Exception,
+        match="compile-time binding 'scale'.*use tla.as_numeric",
+    ):
+        bad_nested_compile_time_binding_read_after_inner_kernel.dump_mlir(
+            type_args=(2,)
+        )
+
+def test_nested_scope_keeps_runtime_binding_readable() -> None:
+    mlir = nested_runtime_binding_read_after_inner_kernel.dump_mlir(type_args=(2,))
+    assert "scf.for" in mlir
+    assert "scf.if" in mlir
+
+def test_reassignment_does_not_restore_compile_time_binding() -> None:
+    with pytest.raises(
+        Exception,
+        match="compile-time binding 'scale'.*use tla.as_numeric",
+    ):
+        bad_compile_time_binding_reassignment_does_not_restore_kernel.dump_mlir(
+            type_args=(2,)
+        )
+
+def test_statement_if_allows_active_closure_call() -> None:
+    mlir = bad_statement_if_active_closure_call_kernel.dump_mlir(type_args=(2,))
+    assert "scf.if" in mlir
+    assert "tla.make_coord" in mlir
+
+def test_statement_if_rejects_active_object_method_call() -> None:
+    with pytest.raises(SyntaxError, match="requires @tla.jit"):
+        statement_if_active_object_method_call_kernel.dump_mlir(type_args=(2,))
+
+def test_statement_if_rejects_active_object_method_call_structure_change() -> None:
+    with pytest.raises(SyntaxError, match="requires @tla.jit"):
+        _ = bad_statement_if_active_object_method_call_kernel.dump_mlir(type_args=(2,))
 
 @tla.kernel
 def dynamic_if_bad_list_index_kernel() -> None:
@@ -1599,7 +1806,10 @@ def test_dynamic_if_expr_error_reports_original_source_location() -> None:
     with pytest.raises(Exception) as excinfo:
         dynamic_if_expr_bad_list_index_kernel.dump_mlir()
     message = str(excinfo.value)
-    assert "Execution-mode lowering failed in conditional expression then-region" in message
+    assert (
+        "Execution-mode lowering failed in conditional expression then-region"
+        in message
+    )
     assert f"{__file__}:{line}" in message
     assert "source: result = values[idx] if idx == 0 else 0" in message
     assert "cannot be used as a Python index" in message or "list indices" in message

@@ -13,7 +13,11 @@ from mlir import ir as mlir_ir  # type: ignore[assignment]
 from . import _tla_type_bridge
 from . import runtime
 from . import tla_ast_decorators as ast_decorators
-from .base_dsl.ast_preprocessor import maybe_transform_for_lowering
+from .base_dsl.ast_preprocessor import (
+    maybe_transform_for_lowering,
+    reject_user_class_value,
+    validate_language_boundaries,
+)
 from .base_dsl import DSLLocation
 from .base_dsl.typing import Numeric, is_constexpr_annotation
 from .tla.typing import Tensor
@@ -111,11 +115,11 @@ def lower_jit_to_tlair_module_by_execution(
     auto_sync = (options or {}).get("auto_sync")
     if kind == "kernel" and auto_sync not in (None, "v0"):
         raise TlaLoweringError(
-            "kernel option auto_sync must be 'v0' or None, "
-            f"got {auto_sync!r}"
+            f"kernel option auto_sync must be 'v0' or None, got {auto_sync!r}"
         )
     if kind != "kernel" and auto_sync is not None:
         raise TlaLoweringError("auto_sync is supported only for tla.kernel")
+    validate_language_boundaries(fn)
     fn = maybe_transform_for_lowering(
         fn,
         internal_for=ast_decorators._internal_frontend_for,
@@ -137,6 +141,8 @@ def lower_jit_to_tlair_module_by_execution(
     arg_names = [p.name for p in params]
     constexpr_names = {p.name for p in params if _is_constexpr_annotation(p.annotation)}
     call_args = _prepare_call_args(arg_names=arg_names, type_args=type_args)
+    for name, value in zip(arg_names, call_args, strict=False):
+        reject_user_class_value(value, context=f"kernel argument {name!r}")
 
     ctx = mlir_ir.Context()
     ctx.allow_unregistered_dialects = True
@@ -573,7 +579,10 @@ def _resolve_execution_arg_types(
                     continue
             if _is_dataclass_instance(value):
                 # Unpack a stdlib dataclass into one scalar type per field.
-                resolved[name] = ("scalar_group", _resolve_dataclass_field_types(value, ctx))
+                resolved[name] = (
+                    "scalar_group",
+                    _resolve_dataclass_field_types(value, ctx),
+                )
                 continue
             if isinstance(value, bool):
                 resolved[name] = "i1"

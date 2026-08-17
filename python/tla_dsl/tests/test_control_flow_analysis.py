@@ -589,6 +589,37 @@ def test_runtime_lazy_call_trust_uses_exact_identity_not_metadata() -> None:
     assert "__tladsl_internal_unknown_effect_call__" in rendered
 
 
+def test_nested_dynamic_if_write_keeps_post_scope_python_binding_guard() -> None:
+    rendered = _transform_source(
+        "def kernel(limit):\n"
+        "    scale = 2\n"
+        "    if limit > 0:\n"
+        "        if limit > 1:\n"
+        "            scale = 3\n"
+        "    else:\n"
+        "        scale = 4\n"
+        "    tla.make_coord(scale, 0)\n",
+        {"tla": catlass_module},
+    )
+
+    assert "__tladsl_internal_runtime_write_check__" in rendered
+
+
+def test_dynamic_if_annotations_do_not_clear_python_binding_guard() -> None:
+    rendered = _transform_source(
+        "def kernel(limit):\n"
+        "    scale = 2\n"
+        "    if limit > 0:\n"
+        "        scale: int\n"
+        "    else:\n"
+        "        scale: int\n"
+        "    tla.make_coord(scale, 0)\n",
+        {"tla": catlass_module},
+    )
+
+    assert "__tladsl_internal_runtime_write_check__" in rendered
+
+
 def test_runtime_lazy_call_trust_ignores_module_namespace_injection(
     monkeypatch,
 ) -> None:
@@ -845,11 +876,42 @@ def test_function_analyzer_plans_only_runtime_and_outlined_blocks() -> None:
 
     assert [(child.construct_name, child.lineno) for child in plan.child_plans] == [
         ("if", 6),
+        ("for", 8),
         ("for", 12),
         ("with", 18),
         ("while", 19),
         ("with", 21),
     ]
+
+
+def test_builtin_range_only_function_is_planned_and_transformed() -> None:
+    source = "def kernel(limit):\n    for i in range(limit):\n        pass\n"
+    function = _parse_function(source)
+    plan = _FunctionAnalyzer(global_names={"range"}, global_symbols={}).analyze(
+        function
+    )
+
+    assert [(child.construct_name, child.lineno) for child in plan.child_plans] == [
+        ("for", 2)
+    ]
+    assert _function_needs_frontend_transform(function, {})
+    assert "__tladsl_internal_for__" in _transform_source(source, {})
+
+
+def test_non_builtin_global_range_remains_python() -> None:
+    def custom_range(limit):
+        return (limit,)
+
+    source = "def kernel(limit):\n    for i in range(limit):\n        pass\n"
+    function = _parse_function(source)
+    plan = _FunctionAnalyzer(
+        global_names={"range"}, global_symbols={"range": custom_range}
+    ).analyze(function)
+
+    assert plan.child_plans == ()
+    assert "__tladsl_internal_for__" not in _transform_source(
+        source, {"range": custom_range}
+    )
 
 
 def test_function_analyzer_child_plans_follow_range_alias_rebinding() -> None:
@@ -881,6 +943,9 @@ def test_function_analyzer_child_plans_follow_range_alias_rebinding() -> None:
 
     assert [(child.construct_name, child.lineno) for child in plan.child_plans] == [
         ("for", 3),
+        ("for", 5),
+        ("for", 6),
+        ("for", 9),
         ("for", 11),
         ("with", 13),
     ]
@@ -1611,6 +1676,26 @@ def test_module_member_resolver_is_at_each_nested_call_evaluation_point(
         {"tla": catlass_module},
     )
     assert rendered.count("__tladsl_internal_checked_dsl_member__(tla, 'const_expr')") == expression.count("tla.const_expr")
+
+
+def test_constexpr_while_warning_runs_before_user_body() -> None:
+    rendered = _transform_source(
+        "def kernel(limit):\n"
+        "    i = 0\n"
+        "    while tla.const_expr(i < limit):\n"
+        "        i += 1\n"
+        "        continue\n",
+        {"tla": catlass_module},
+    )
+
+    tree = ast.parse(rendered)
+    function = tree.body[0]
+    assert isinstance(function, ast.FunctionDef)
+    loop = next(statement for statement in function.body if isinstance(statement, ast.While))
+    assert isinstance(loop.body[0], ast.AugAssign)
+    assert isinstance(loop.body[1], ast.Expr)
+    assert "__tladsl_internal_static_loop_iteration__" in ast.unparse(loop.body[1])
+    assert isinstance(loop.body[-1], ast.Continue)
 
 
 def _guarded_module_order(argument):
@@ -2490,6 +2575,34 @@ def test_control_flow_analyzer_builds_immutable_plans(
     assert plan.carried_names == ("state",)
     with pytest.raises(FrozenInstanceError):
         plan.construct_name = "changed"  # type: ignore[misc]
+
+
+def test_control_flow_plan_records_immutable_assigned_bindings() -> None:
+    function = _parse_function(
+        "def kernel(predicate):\n"
+        "    scale = 2\n"
+        "    if predicate:\n"
+        "        scale = 3\n"
+    )
+    function_plan = _FunctionAnalyzer().analyze(function)
+    node = function.body[1]
+    assert isinstance(node, ast.If)
+
+    plan = _ControlFlowAnalyzer().analyze(
+        node=node,
+        construct_name="if",
+        assigned_regions=[node.body, node.orelse],
+        active_call_nodes=[node],
+        active_symbols={"predicate", "scale"},
+        active_callables=set(),
+        function_plan=function_plan,
+    )
+
+    scale = function_plan.resolve("scale")
+    assert plan.assigned_bindings == frozenset({scale})
+    assert plan.carried_bindings == (scale,)
+    with pytest.raises(FrozenInstanceError):
+        plan.assigned_bindings = frozenset()  # type: ignore[misc]
 
 
 def test_control_flow_analyzer_classifies_tensor_store_as_side_effect() -> None:

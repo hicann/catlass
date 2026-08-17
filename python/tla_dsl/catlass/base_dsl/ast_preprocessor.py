@@ -5,7 +5,9 @@ from __future__ import annotations
 import ast
 import builtins
 import contextlib
+import dataclasses
 import inspect
+import sys
 import symtable
 import textwrap
 from dataclasses import dataclass
@@ -33,6 +35,11 @@ _INTERNAL_INDEX_ADD = "__tladsl_internal_index_add__"
 _INTERNAL_INDEX_SUB = "__tladsl_internal_index_sub__"
 _INTERNAL_ATTACH_SOURCE_INFO = "__tladsl_internal_attach_source_info__"
 _INTERNAL_UNKNOWN_EFFECT_CALL = "__tladsl_internal_unknown_effect_call__"
+_INTERNAL_RUNTIME_BINDING_IS_COMPILETIME = (
+    "__tladsl_internal_runtime_binding_is_compiletime__"
+)
+_INTERNAL_RUNTIME_WRITE_CHECK = "__tladsl_internal_runtime_write_check__"
+_INTERNAL_STATIC_LOOP_ITERATION = "__tladsl_internal_static_loop_iteration__"
 _INTERNAL_LAZY_ATTRIBUTE = "__tladsl_internal_lazy_attribute__"
 _INTERNAL_LAZY_SUBSCRIPT = "__tladsl_internal_lazy_subscript__"
 _INTERNAL_LAZY_BINOP = "__tladsl_internal_lazy_binop__"
@@ -40,6 +47,65 @@ _INTERNAL_LAZY_UNARY = "__tladsl_internal_lazy_unary__"
 _SOURCE_INFO_ATTR = "__tladsl_source_info__"
 _WHILE_SELECTOR = "while_selector"
 _WHILE_EXECUTOR = "while_executor"
+
+
+_UNKNOWN_LANGUAGE_VALUE = object()
+
+
+def _is_exact_builtin_dict(value: object) -> bool:
+    """Return whether *value* is a dict without subclass-defined behavior."""
+
+    return isinstance(value, dict) and (
+        object.__getattribute__(value, "__class__") is dict
+    )
+
+
+def _is_tla_owned_type(value_type: type[Any]) -> bool:
+    module = str(getattr(value_type, "__module__", ""))
+    if module == "builtins":
+        return getattr(builtins, value_type.__name__, None) is value_type
+    if module == "enum":
+        return getattr(sys.modules.get("enum"), value_type.__name__, None) is value_type
+    if not module.startswith("catlass"):
+        return False
+    return getattr(sys.modules.get(module), value_type.__name__, None) is value_type
+
+
+def reject_user_class_value(value: Any, *, context: str) -> None:
+    """Reject arbitrary Python class instances before frontend evaluation."""
+
+    seen: set[int] = set()
+
+    def check(item: Any) -> None:
+        if item is None or isinstance(item, (bool, int, float, str, bytes)):
+            return
+        if id(item) in seen:
+            return
+        seen.add(id(item))
+        if isinstance(item, dict):
+            for key, nested in item.items():
+                check(key)
+                check(nested)
+            return
+        if isinstance(item, (tuple, list, set, frozenset)):
+            for nested in item:
+                check(nested)
+            return
+        if dataclasses.is_dataclass(item) and not isinstance(item, type):
+            for field in dataclasses.fields(item):
+                check(getattr(item, field.name))
+            return
+        item_type = item if inspect.isclass(item) else type(item)
+        if _is_tla_owned_type(item_type):
+            return
+        raise TypeError(
+            f"user-defined class {item_type.__name__!r} is not supported in "
+            f"Tla DSL functions ({context})"
+        )
+
+    check(value)
+
+
 _BUILTIN_REDIRECTS = {
     "any": _INTERNAL_ANY,
     "all": _INTERNAL_ALL,
@@ -56,6 +122,7 @@ _TRUSTED_CUBE_CALLABLE: Callable[..., Any] | None = None
 _TRUSTED_VECTOR_CALLABLE: Callable[..., Any] | None = None
 _TRUSTED_VEC_NAMESPACE: Any | None = None
 _TRUSTED_VEC_FUNC_CALLABLE: Callable[..., Any] | None = None
+_TRUSTED_AS_NUMERIC_CALLABLE: Callable[..., Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -68,13 +135,16 @@ class _TrustedDslIdentities:
     vector_callable: Callable[..., Any] | None
     vec_namespace: Any | None
     vec_func_callable: Callable[..., Any] | None
+    as_numeric_callable: Callable[..., Any] | None
 
 
 @dataclass(frozen=True)
 class _TrustedDslSymbols:
     range_names: frozenset[str]
+    builtin_range_names: frozenset[str]
     range_constexpr_names: frozenset[str]
     const_expr_names: frozenset[str]
+    as_numeric_names: frozenset[str]
     module_aliases: frozenset[str]
 
 
@@ -88,6 +158,7 @@ def _trusted_dsl_identities() -> _TrustedDslIdentities:
         vector_callable=_TRUSTED_VECTOR_CALLABLE,
         vec_namespace=_TRUSTED_VEC_NAMESPACE,
         vec_func_callable=_TRUSTED_VEC_FUNC_CALLABLE,
+        as_numeric_callable=_TRUSTED_AS_NUMERIC_CALLABLE,
     )
 
 
@@ -98,6 +169,11 @@ def _trusted_dsl_symbols(
         range_names=frozenset(
             _tla_function_names_from_globals(global_symbols, "range", identities)
         ),
+        builtin_range_names=frozenset(
+            name
+            for name in ("range",)
+            if global_symbols.get(name, builtins.range) is builtins.range
+        ),
         range_constexpr_names=frozenset(
             _tla_function_names_from_globals(
                 global_symbols, "range_constexpr", identities
@@ -105,6 +181,9 @@ def _trusted_dsl_symbols(
         ),
         const_expr_names=frozenset(
             _tla_const_expr_names_from_globals(global_symbols, identities)
+        ),
+        as_numeric_names=frozenset(
+            _tla_as_numeric_names_from_globals(global_symbols, identities)
         ),
         module_aliases=frozenset(
             _tla_module_aliases_from_globals(global_symbols, identities)
@@ -123,6 +202,7 @@ def _register_trusted_lazy_callables(
     vector_callable: Callable[..., Any],
     vec_namespace: Any,
     vec_func_callable: Callable[..., Any],
+    as_numeric_callable: Callable[..., Any],
 ) -> None:
     """Freeze genuine DSL call identities once core_api has initialized."""
 
@@ -131,6 +211,7 @@ def _register_trusted_lazy_callables(
     global _TRUSTED_RANGE_CALLABLE, _TRUSTED_RANGE_CONSTEXPR_CALLABLE
     global _TRUSTED_CUBE_CALLABLE, _TRUSTED_VECTOR_CALLABLE
     global _TRUSTED_VEC_NAMESPACE, _TRUSTED_VEC_FUNC_CALLABLE
+    global _TRUSTED_AS_NUMERIC_CALLABLE
     if _TRUSTED_LAZY_CALLABLES or _TRUSTED_DSL_MODULE is not None:
         raise RuntimeError("trusted lazy callables are already registered")
     _TRUSTED_LAZY_CALLABLES = callables
@@ -142,6 +223,7 @@ def _register_trusted_lazy_callables(
     _TRUSTED_VECTOR_CALLABLE = vector_callable
     _TRUSTED_VEC_NAMESPACE = vec_namespace
     _TRUSTED_VEC_FUNC_CALLABLE = vec_func_callable
+    _TRUSTED_AS_NUMERIC_CALLABLE = as_numeric_callable
 
 
 @dataclass(frozen=True)
@@ -303,6 +385,88 @@ def _has_scope_declaration(
     )
 
 
+def _contains_runtime_value(value: Any, seen: set[int] | None = None) -> bool:
+    """Classify a prepared lowering value without speculating about calls."""
+
+    from mlir import ir as mlir_ir
+
+    from .typing import Numeric
+
+    from ..core_api import _resolve_bound_value
+
+    seen = seen if seen is not None else set()
+    if id(value) in seen:
+        return False
+    seen.add(id(value))
+    resolved = _resolve_bound_value(value)
+    if resolved is not value:
+        return _contains_runtime_value(resolved, seen)
+    if isinstance(value, mlir_ir.Value):
+        return True
+    # An explicitly typed DSL scalar is a runtime-stage value even when its
+    # literal is materialized lazily on first use.
+    if isinstance(value, Numeric):
+        return True
+    numeric_value = getattr(value, "value", None)
+    if isinstance(numeric_value, mlir_ir.Value):
+        return True
+    if isinstance(value, dict):
+        return any(
+            _contains_runtime_value(item, seen)
+            for pair in value.items()
+            for item in pair
+        )
+    if isinstance(value, (tuple, list, set, frozenset)):
+        return any(_contains_runtime_value(item, seen) for item in value)
+    if dataclasses.is_dataclass(value) and not isinstance(value, type):
+        return any(
+            _contains_runtime_value(getattr(value, field.name), seen)
+            for field in dataclasses.fields(value)
+        )
+    attributes = getattr(value, "__dict__", None)
+    return isinstance(attributes, dict) and any(
+        _contains_runtime_value(item, seen) for item in attributes.values()
+    )
+
+
+def _runtime_binding_is_compiletime(value: Any) -> bool:
+    from .. import runtime as runtime_mod
+
+    # Source transformation is also used by eager Python-only unit execution.
+    if runtime_mod._current_frontend_state() is None:
+        return False
+    return not _contains_runtime_value(value)
+
+
+def _runtime_write_check(
+    compiletime_origin: bool,
+    explicit_promotion: bool,
+    name: str,
+    construct_name: str,
+    filename: str,
+    lineno: int,
+    col_offset: int,
+    source_line: str | None,
+) -> None:
+    from .. import runtime as runtime_mod
+
+    if (
+        runtime_mod._current_frontend_state() is None
+        or not compiletime_origin
+        or explicit_promotion
+    ):
+        return
+    error = SyntaxError(
+        f"compile-time binding {name!r} cannot be assigned in dynamic Tla "
+        f"{construct_name}; use tla.as_numeric(...) to promote it first"
+    )
+    error.filename = filename
+    error.lineno = lineno
+    error.offset = col_offset + 1
+    error.text = source_line
+    raise error
+
+
 class _FunctionAnalyzer:
     """Build lexical bindings without entering nested function scopes."""
 
@@ -370,6 +534,7 @@ class _FunctionAnalyzer:
                     node,
                     lexical_shadow_names=lexical_shadows,
                     trusted_symbols=self.trusted_symbols,
+                    global_symbols=self.global_symbols,
                 )
             ),
         )
@@ -582,7 +747,7 @@ class ControlFlowPlan:
     captured_bindings: tuple[Binding, ...]
     full_write_args_count: int
     assignment_targets: tuple[str, ...]
-    tensor_store_assignments: frozenset[int]
+    tensor_store_assignments: frozenset[ast.Assign]
     nested_constructs: tuple[tuple[str, int, int], ...]
 
     @property
@@ -619,7 +784,7 @@ class _ControlFlowAnalyzer:
     def analyze(
         self,
         *,
-        node: ast.If | ast.For | ast.While,
+        node: ast.If | ast.For | ast.While | ast.With,
         construct_name: str,
         assigned_regions: list[list[ast.stmt]],
         active_call_nodes: list[ast.AST],
@@ -632,9 +797,6 @@ class _ControlFlowAnalyzer:
         is_runtime_for: Callable[[ast.For], bool] | None = None,
         is_static_test: Callable[[ast.AST], bool] | None = None,
     ) -> ControlFlowPlan:
-        _reject_unsupported_dynamic_active_callable_calls(
-            active_call_nodes, active_callables, construct_name
-        )
         policy = _DynamicControlFlowPolicy(
             construct_name,
             filename=filename,
@@ -653,6 +815,9 @@ class _ControlFlowAnalyzer:
         invoked_names = _invoked_active_names_from_statements(
             active_call_nodes, active_symbols
         )
+        # Local bare helpers are Python closures captured by the outlined
+        # region, not runtime SSA state that must be threaded through it.
+        invoked_names.difference_update(active_callables)
         if function_plan is None:
             fallback_scope = f"<analysis>:{construct_name}"
             bindings_by_name = {
@@ -660,10 +825,9 @@ class _ControlFlowAnalyzer:
                 for name in active_symbols | assigned_names | invoked_names
             }
         else:
-            bindings_by_name = {
-                binding.name: binding
-                for binding in function_plan.bindings
-            }
+            bindings_by_name = {}
+            for binding in function_plan.bindings:
+                bindings_by_name[binding.name] = binding
         active_bindings = frozenset(
             bindings_by_name[name]
             for name in active_symbols
@@ -722,6 +886,7 @@ class ScopeManager:
     def __init__(self) -> None:
         self.scopes: list[set[str]] = []
         self.callables: list[set[str]] = []
+        self.callable_definitions: list[dict[str, ast.FunctionDef]] = []
 
     @classmethod
     def create(cls) -> "ScopeManager":
@@ -743,6 +908,22 @@ class ScopeManager:
             return
         self.callables[-1].add(name)
 
+    def add_callable_definition(self, node: ast.FunctionDef) -> None:
+        if self.callable_definitions:
+            self.callable_definitions[-1][node.name] = node
+
+    def add_callable_alias(self, name: str, target: str) -> None:
+        definition = self.get_callable_definition(target)
+        if definition is not None and self.callable_definitions:
+            self.callable_definitions[-1][name] = definition
+
+    def get_callable_definition(self, name: str) -> ast.FunctionDef | None:
+        for definitions in reversed(self.callable_definitions):
+            definition = definitions.get(name)
+            if definition is not None:
+                return definition
+        return None
+
     def get_active_symbols(self) -> set[str]:
         active: set[str] = set()
         for scope in self.scopes:
@@ -760,12 +941,15 @@ class ScopeManager:
         self,
         initial_names: set[str] | list[str] | tuple[str, ...] | None = None,
         initial_callables: set[str] | list[str] | tuple[str, ...] | None = None,
+        initial_callable_definitions: dict[str, ast.FunctionDef] | None = None,
     ) -> Iterator[None]:
         self.scopes.append(set(initial_names or ()))
         self.callables.append(set(initial_callables or ()))
+        self.callable_definitions.append(dict(initial_callable_definitions or {}))
         try:
             yield
         finally:
+            self.callable_definitions.pop()
             self.callables.pop()
             self.scopes.pop()
 
@@ -847,7 +1031,11 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
         self._range_alias_stack: list[set[str]] = []
         self._scope_manager = ScopeManager.create()
         self._following_loads_stack: list[set[str]] = []
-        self._tensor_store_assignments: set[int] = set()
+        self._binding_origin_markers: dict[Binding, str] = {}
+        self._runtime_origin_initializers: dict[int, list[ast.stmt]] = {}
+        self._runtime_transform_depth = 0
+        self._runtime_local_bindings: set[Binding] = set()
+        self._tensor_store_assignments: set[ast.Assign] = set()
         self._control_flow_analyzer = _ControlFlowAnalyzer()
         self._function_plan_stack: list[FunctionPlan] = []
         self._global_symbols = global_symbols or {}
@@ -865,10 +1053,10 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
             self._global_symbols, self._trusted_identities
         )
         self._tla_range_names = set(trusted_symbols.range_names)
-        self._tla_range_constexpr_names = set(
-            trusted_symbols.range_constexpr_names
-        )
+        self._builtin_range_names = set(trusted_symbols.builtin_range_names)
+        self._tla_range_constexpr_names = set(trusted_symbols.range_constexpr_names)
         self._tla_const_expr_names = set(trusted_symbols.const_expr_names)
+        self._tla_as_numeric_names = set(trusted_symbols.as_numeric_names)
         self._tla_module_aliases = set(trusted_symbols.module_aliases)
 
     def visit_Module(self, node: ast.Module) -> Any:
@@ -890,6 +1078,267 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
                 continue
             self._reserved_names.add(name)
             return name
+
+    def _ensure_runtime_origin_markers(self, plan: ControlFlowPlan) -> None:
+        initializers: list[ast.stmt] = []
+        for binding in sorted(
+            plan.active_bindings & plan.assigned_bindings,
+            key=lambda item: item.name,
+        ):
+            if binding in self._runtime_local_bindings:
+                continue
+            # A nested runtime region can receive this binding as a materialized
+            # block argument. Preserve the first marker instead of classifying
+            # that runtime representation as a new source value: the promotion
+            # rule is about the binding's provenance before entering runtime
+            # control flow.
+            if binding in self._binding_origin_markers:
+                continue
+            marker = self._fresh(f"{binding.name}_compiletime_origin")
+            self._binding_origin_markers[binding] = marker
+            assignment = ast.Assign(
+                targets=[ast.Name(id=marker, ctx=ast.Store())],
+                value=ast.Call(
+                    func=ast.Name(
+                        id=_INTERNAL_RUNTIME_BINDING_IS_COMPILETIME,
+                        ctx=ast.Load(),
+                    ),
+                    args=[ast.Name(id=binding.name, ctx=ast.Load())],
+                    keywords=[],
+                ),
+            )
+            assignment.lineno = plan.lineno
+            assignment.col_offset = plan.col_offset
+            initializers.append(assignment)
+        self._runtime_origin_initializers[id(plan)] = initializers
+
+    def _runtime_write_guards(self, plan: ControlFlowPlan) -> list[ast.stmt]:
+        return self._runtime_origin_initializers.pop(id(plan), [])
+
+    def _is_direct_as_numeric_call(self, value: ast.expr) -> bool:
+        if not isinstance(value, ast.Call) or value.keywords or len(value.args) != 1:
+            return False
+        func = value.func
+        is_module_member = (
+            isinstance(func, ast.Attribute)
+            and isinstance(func.value, ast.Name)
+            and func.value.id in self._tla_module_aliases
+            and func.value.id not in self._recognition_scope()
+            and func.attr == "as_numeric"
+        )
+        is_direct_import = (
+            isinstance(func, ast.Name)
+            and func.id in self._tla_as_numeric_names
+            and func.id not in self._recognition_scope()
+        )
+        return is_module_member or is_direct_import
+
+    def _is_static_comprehension_iterable(self, value: ast.expr) -> bool:
+        """Accept only fixed Python iterables used to build runtime carriers."""
+        if isinstance(value, (ast.List, ast.Tuple)):
+            # The literal fixes the carrier's structure.  Its elements may be
+            # runtime expressions, because ``as_numeric`` materializes each
+            # element independently in the comprehension body.
+            return not any(isinstance(node, ast.Starred) for node in ast.walk(value))
+        return False
+
+    @staticmethod
+    def _is_compiletime_dict_key_literal(value: ast.expr) -> bool:
+        return isinstance(value, ast.Constant) or (
+            isinstance(value, ast.Tuple)
+            and all(
+                _FrontendControlFlowTransformer._is_compiletime_dict_key_literal(
+                    element
+                )
+                for element in value.elts
+            )
+        )
+
+    def _compiletime_comprehension_target_names(
+        self, generators: list[ast.comprehension]
+    ) -> set[str]:
+        """Return targets whose literal source values are compile-time keys."""
+
+        name_is_compiletime: dict[str, bool] = {}
+
+        def target_paths(
+            target: ast.expr, generator: ast.comprehension, path: tuple[int, ...] = ()
+        ) -> None:
+            if isinstance(target, ast.Name):
+                source_values: list[ast.expr] = []
+                if not isinstance(generator.iter, (ast.List, ast.Tuple)):
+                    is_compiletime = False
+                else:
+                    for element in generator.iter.elts:
+                        source = element
+                        for index in path:
+                            if not isinstance(source, (ast.List, ast.Tuple)) or (
+                                index >= len(source.elts)
+                            ):
+                                break
+                            source = source.elts[index]
+                        else:
+                            source_values.append(source)
+                    is_compiletime = len(source_values) == len(
+                        generator.iter.elts
+                    ) and all(
+                        self._is_compiletime_dict_key_literal(source)
+                        for source in source_values
+                    )
+                name_is_compiletime[target.id] = (
+                    name_is_compiletime.get(target.id, True) and is_compiletime
+                )
+                return
+            if isinstance(target, (ast.List, ast.Tuple)):
+                for index, element in enumerate(target.elts):
+                    target_paths(element, generator, (*path, index))
+
+        for generator in generators:
+            target_paths(generator.target, generator)
+        return {
+            name
+            for name, is_compiletime in name_is_compiletime.items()
+            if is_compiletime
+        }
+
+    def _is_static_runtime_comprehension(
+        self, value: ast.ListComp | ast.DictComp | ast.GeneratorExp
+    ) -> bool:
+        if not value.generators or any(
+            generator.is_async
+            or generator.ifs
+            or not self._is_static_comprehension_iterable(generator.iter)
+            for generator in value.generators
+        ):
+            return False
+        if isinstance(value, ast.DictComp):
+            key_is_compiletime = self._is_compiletime_dict_key_literal(value.key) or (
+                isinstance(value.key, ast.Name)
+                and value.key.id
+                in self._compiletime_comprehension_target_names(value.generators)
+            )
+            return self._is_direct_as_numeric_call(value.value) and key_is_compiletime
+        return self._is_direct_as_numeric_call(value.elt)
+
+    def _is_explicit_runtime_promotion(self, value: ast.expr) -> bool:
+        if self._is_direct_as_numeric_call(value):
+            return True
+        if isinstance(value, ast.ListComp):
+            return self._is_static_runtime_comprehension(value)
+        if isinstance(value, ast.DictComp):
+            return self._is_static_runtime_comprehension(value)
+        return self._is_builtin_tuple_promotion_call(value)
+
+    def _is_builtin_tuple_promotion_call(self, value: ast.expr | None) -> bool:
+        """Whether ``value`` uses the unshadowed built-in tuple constructor."""
+
+        return (
+            isinstance(value, ast.Call)
+            and isinstance(value.func, ast.Name)
+            and value.func.id == "tuple"
+            and value.func.id not in self._recognition_scope()
+            and self._global_symbols.get("tuple", builtins.tuple) is builtins.tuple
+            and not value.keywords
+            and len(value.args) == 1
+            and isinstance(value.args[0], ast.GeneratorExp)
+            and self._is_static_runtime_comprehension(value.args[0])
+        )
+
+    def _rewrite_builtin_tuple_promotion(self, value: ast.expr | None) -> None:
+        """Bind a recognized promotion to the injected built-in tuple object."""
+
+        if not self._is_builtin_tuple_promotion_call(value):
+            return
+        if not isinstance(value, ast.Call):
+            return
+        value.func = ast.copy_location(
+            ast.Attribute(
+                value=ast.Name(id="__tladsl_builtins__", ctx=ast.Load()),
+                attr="tuple",
+                ctx=ast.Load(),
+            ),
+            value.func,
+        )
+
+    def _runtime_assignment_guards(
+        self,
+        node: ast.Assign | ast.AnnAssign | ast.AugAssign | ast.For,
+        targets: list[ast.expr],
+        value: ast.expr | None,
+    ) -> list[ast.stmt]:
+        if self._runtime_transform_depth == 0 or not self._function_plan_stack:
+            return []
+        explicit_promotion = value is not None and self._is_explicit_runtime_promotion(
+            value
+        )
+        function_plan = self._function_plan_stack[-1]
+        source_lines = self._source_text.splitlines()
+        guards: list[ast.stmt] = []
+        target_names = set().union(*(_assigned_names(target) for target in targets))
+        for name in sorted(target_names):
+            binding = function_plan.resolve(name)
+            if binding is None or binding in self._runtime_local_bindings:
+                continue
+            marker = self._binding_origin_markers.get(binding)
+            if marker is None:
+                continue
+            relative_lineno = int(getattr(node, "lineno", 0) or 0)
+            relative_col_offset = int(getattr(node, "col_offset", 0) or 0)
+            source_line = (
+                source_lines[relative_lineno - 1]
+                if 0 < relative_lineno <= len(source_lines)
+                else None
+            )
+            call = ast.Call(
+                func=ast.Name(id=_INTERNAL_RUNTIME_WRITE_CHECK, ctx=ast.Load()),
+                args=[
+                    ast.Name(id=marker, ctx=ast.Load()),
+                    ast.Constant(value=explicit_promotion),
+                    ast.Constant(value=name),
+                    ast.Constant(value=self._runtime_construct_name(node)),
+                    ast.Constant(value=self._filename),
+                    ast.Constant(value=self._line_offset + relative_lineno),
+                    ast.Constant(value=relative_col_offset),
+                    ast.Constant(value=source_line),
+                ],
+                keywords=[],
+            )
+            guards.append(ast.copy_location(ast.Expr(value=call), node))
+        return guards
+
+    def _refresh_compiletime_origin_markers(
+        self, node: ast.Assign | ast.AnnAssign, targets: list[ast.expr]
+    ) -> list[ast.stmt]:
+        """Refresh provenance after an ordinary lexical-scope rebinding."""
+
+        if self._runtime_transform_depth != 0 or not self._function_plan_stack:
+            return []
+        function_plan = self._function_plan_stack[-1]
+        refreshes: list[ast.stmt] = []
+        target_names = set().union(*(_assigned_names(target) for target in targets))
+        for name in sorted(target_names):
+            binding = function_plan.resolve(name)
+            marker = self._binding_origin_markers.get(binding)
+            if marker is None:
+                continue
+            refresh = ast.Assign(
+                targets=[ast.Name(id=marker, ctx=ast.Store())],
+                value=ast.Call(
+                    func=ast.Name(
+                        id=_INTERNAL_RUNTIME_BINDING_IS_COMPILETIME, ctx=ast.Load()
+                    ),
+                    args=[ast.Name(id=name, ctx=ast.Load())],
+                    keywords=[],
+                ),
+            )
+            refreshes.append(ast.copy_location(refresh, node))
+        return refreshes
+
+    def _runtime_construct_name(self, node: ast.AST) -> str:
+        # The innermost runtime construct owns the transformed statement. The
+        # diagnostic contract only requires the source-local dynamic scope.
+        del node
+        return "control-flow scope"
 
     def _source_info_dict(
         self,
@@ -979,6 +1428,7 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
             self._tla_const_expr_names,
             self._tla_module_aliases,
             self._local_scope() | self._trusted_symbol_shadows(),
+            self._global_symbols,
         )
 
     def analyze_control_flow(
@@ -989,6 +1439,7 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
         assigned_regions: list[list[ast.stmt]],
         active_call_nodes: list[ast.AST],
     ) -> ControlFlowPlan:
+        self._reject_dynamic_helper_rebindings(active_call_nodes)
         plan = self._control_flow_analyzer.analyze(
             node=node,
             construct_name=construct_name,
@@ -1012,11 +1463,49 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
             is_static_test=self._is_static_control_flow_test,
         )
         self._tensor_store_assignments.update(plan.tensor_store_assignments)
+        self._ensure_runtime_origin_markers(plan)
         return plan
 
+    def _reject_dynamic_helper_rebindings(self, body: list[ast.AST]) -> None:
+        transformer = self
+
+        class Visitor(ast.NodeVisitor):
+            def visit_Call(self, node: ast.Call) -> None:
+                if isinstance(node.func, ast.Name):
+                    helper = transformer._scope_manager.get_callable_definition(
+                        node.func.id
+                    )
+                    if helper is not None and _has_nonlocal_or_global_declaration(
+                        helper
+                    ):
+                        transformer._raise_source_syntax(
+                            node.func,
+                            "bare Python helpers called from runtime control flow "
+                            "cannot declare global or nonlocal bindings",
+                        )
+                self.generic_visit(node)
+
+            def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+                del node
+
+            visit_AsyncFunctionDef = visit_FunctionDef
+            visit_ClassDef = visit_FunctionDef
+            visit_Lambda = visit_FunctionDef
+
+        visitor = Visitor()
+        for statement in body:
+            visitor.visit(statement)
+
     def visit_Assign(self, node: ast.Assign) -> Any:
-        if id(node) not in self._tensor_store_assignments:
-            return self.generic_visit(node)
+        self._record_runtime_local_bindings(node)
+        guards = self._runtime_assignment_guards(node, node.targets, node.value)
+        if self._runtime_transform_depth != 0:
+            self._rewrite_builtin_tuple_promotion(node.value)
+        refreshes = self._refresh_compiletime_origin_markers(node, node.targets)
+        if node not in self._tensor_store_assignments:
+            rewritten = self.generic_visit(node)
+            statements = [*guards, rewritten, *refreshes]
+            return statements if len(statements) > 1 else rewritten
         if len(node.targets) != 1 or not isinstance(node.targets[0], ast.Subscript):
             raise SyntaxError(
                 "dynamic Tla control flow requires a tensor store to have one target"
@@ -1034,15 +1523,58 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
                 keywords=[],
             )
         )
-        return ast.copy_location(rewritten, node)
+        rewritten = ast.copy_location(rewritten, node)
+        statements = [*guards, rewritten, *refreshes]
+        return statements if len(statements) > 1 else rewritten
+
+    def visit_AnnAssign(self, node: ast.AnnAssign) -> Any:
+        self._record_runtime_local_bindings(node)
+        guards = self._runtime_assignment_guards(node, [node.target], node.value)
+        if self._runtime_transform_depth != 0:
+            self._rewrite_builtin_tuple_promotion(node.value)
+        refreshes = self._refresh_compiletime_origin_markers(node, [node.target])
+        rewritten = self.generic_visit(node)
+        statements = [*guards, rewritten, *refreshes]
+        return statements if len(statements) > 1 else rewritten
+
+    def visit_AugAssign(self, node: ast.AugAssign) -> Any:
+        guards = self._runtime_assignment_guards(node, [node.target], None)
+        rewritten = self.generic_visit(node)
+        return [*guards, rewritten] if guards else rewritten
+
+    def _record_runtime_local_bindings(self, node: ast.Assign | ast.AnnAssign) -> None:
+        if self._runtime_transform_depth == 0 or not self._function_plan_stack:
+            return
+        active = self._local_scope()
+        function_plan = self._function_plan_stack[-1]
+        for name in _assigned_names(node) - active:
+            binding = function_plan.resolve(name)
+            if binding is not None:
+                self._runtime_local_bindings.add(binding)
+
+    def _record_runtime_for_target(self, target: ast.expr) -> None:
+        if self._runtime_transform_depth == 0 or not self._function_plan_stack:
+            return
+        function_plan = self._function_plan_stack[-1]
+        for name in _assigned_names(target):
+            binding = function_plan.resolve(name)
+            if binding is not None:
+                self._runtime_local_bindings.add(binding)
+
+    @contextlib.contextmanager
+    def _runtime_transform_scope(self) -> Iterator[None]:
+        self._runtime_transform_depth += 1
+        try:
+            yield
+        finally:
+            self._runtime_transform_depth -= 1
 
     def _visit_statement_list(self, body: list[ast.stmt]) -> list[ast.stmt]:
         rewritten_body: list[ast.stmt] = []
         aliases = self._range_aliases()
         for index, stmt in enumerate(body):
-            self._following_loads_stack.append(
-                _loaded_names_from_statements(body[index + 1 :])
-            )
+            following_loads = _loaded_names_from_statements(body[index + 1 :])
+            self._following_loads_stack.append(following_loads)
             try:
                 rewritten = self.visit(stmt)
                 stmts = rewritten if isinstance(rewritten, list) else [rewritten]
@@ -1058,24 +1590,32 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
                         self._recognition_scope(),
                     )
                     self._scope_manager.add_names_to_scope(_assigned_names(out_stmt))
-                    for callable_name in _callable_names(out_stmt):
+                    for callable_name in _callable_names(
+                        out_stmt, self._scope_manager.get_active_callables()
+                    ):
                         self._scope_manager.add_to_callables(callable_name)
+                    if isinstance(out_stmt, ast.FunctionDef):
+                        self._scope_manager.add_callable_definition(out_stmt)
+                    elif (
+                        isinstance(out_stmt, ast.Assign)
+                        and len(out_stmt.targets) == 1
+                        and isinstance(out_stmt.targets[0], ast.Name)
+                        and isinstance(out_stmt.value, ast.Name)
+                    ):
+                        self._scope_manager.add_callable_alias(
+                            out_stmt.targets[0].id, out_stmt.value.id
+                        )
             finally:
                 self._following_loads_stack.pop()
         return rewritten_body
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> Any:
         if self._function_plan_stack:
-            error = SyntaxError(
-                f"nested function definition '{node.name}' is not supported "
-                "in a transformed Tla function"
-            )
-            error.filename = self._filename
-            error.lineno = self._line_offset + int(getattr(node, "lineno", 0) or 0)
-            error.offset = int(getattr(node, "col_offset", 0) or 0) + 1
-            source = ast.get_source_segment(self._source_text, node) or ""
-            error.text = next(iter(source.splitlines()), None)
-            raise error
+            # A nested definition is a bare Python helper. Preserve it
+            # verbatim whether it appears in the root or an outlined region:
+            # its body executes under the caller's active emission context and
+            # is never independently transformed.
+            return node
         if self._root_plan is None:
             raise RuntimeError(
                 "frontend transformer requires an authoritative root FunctionPlan"
@@ -1172,7 +1712,14 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
             and func.value.id in self._tla_module_aliases
             and func.value.id not in self._recognition_scope()
             and func.attr
-            in {"range", "range_constexpr", "const_expr", "cube", "vector"}
+            in {
+                "range",
+                "range_constexpr",
+                "const_expr",
+                "as_numeric",
+                "cube",
+                "vector",
+            }
         ):
             return func.attr
         if _is_tla_vec_func(
@@ -1199,6 +1746,8 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
     def _direct_dsl_path(self, func: ast.expr) -> str | None:
         if not isinstance(func, ast.Name) or func.id in self._recognition_scope():
             return None
+        if func.id in self._builtin_range_names:
+            return "builtin_range"
         if func.id in self._tla_range_names:
             return "range"
         if func.id in self._tla_range_constexpr_names:
@@ -1225,7 +1774,7 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
         )
         recognized_range = _is_tla_range_call(
             node.iter,
-            self._tla_range_names,
+            self._tla_range_names | self._builtin_range_names,
             self._tla_module_aliases,
             self._recognition_scope(),
         )
@@ -1265,7 +1814,7 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
             else _is_tla_range_iter(
                 node.iter,
                 self._range_aliases(),
-                self._tla_range_names,
+                self._tla_range_names | self._builtin_range_names,
                 self._tla_module_aliases,
                 self._recognition_scope(),
             )
@@ -1274,6 +1823,13 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
             if node.orelse:
                 raise SyntaxError("dynamic Tla for does not support for-else")
         if not is_tla_range:
+            # A Python ``for`` nested in runtime control flow executes while
+            # lowering, but its target still writes a binding in the enclosing
+            # kernel scope.  Check that write before marking the target as a
+            # runtime-local binding so it cannot overwrite a compile-time
+            # value and later be read as though it were still compile-time.
+            guards = self._runtime_assignment_guards(node, [node.target], None)
+            self._record_runtime_for_target(node.target)
             self._scope_manager.add_names_to_scope(_assigned_names(node.target))
             self._range_alias_stack.append(set())
             try:
@@ -1285,7 +1841,7 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
                 node.orelse = self._visit_statement_list(node.orelse)
             finally:
                 self._range_alias_stack.pop()
-            return node
+            return [*guards, node] if guards else node
         if not isinstance(node.target, ast.Name):
             raise SyntaxError("dynamic Tla for requires a simple local name target")
 
@@ -1390,6 +1946,7 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
             [
                 *negative_step_prelude,
                 range_assign,
+                *self._runtime_write_guards(analysis),
                 body_fn,
                 self._source_info_stmt(
                     body_name, node, construct="dynamic for", region="body"
@@ -1419,8 +1976,10 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
         direct_path = self._direct_dsl_path(node.iter.func)
         if module_path == "range":
             checked_callable = self._checked_module_callable(node.iter.func, "range")
-        elif direct_path == "range":
-            checked_callable = self._checked_direct_callable(node.iter.func, "range")
+        elif direct_path in {"range", "builtin_range"}:
+            checked_callable = self._checked_direct_callable(
+                node.iter.func, direct_path
+            )
         else:
             raise RuntimeError("recognized explicit-step range lost its callable role")
 
@@ -1545,6 +2104,7 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
             self._following_loads(),
         )
         carried_names = list(analysis.carried_names)
+        result = self._runtime_write_guards(analysis)
 
         test = self.visit(node.test)
         then_body = self._transform_nested_function_body(
@@ -1562,15 +2122,17 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
         else_name = self._fresh("if_else") if node.orelse or carried_names else None
 
         then_fn = self._branch_function(then_name, carried_names, then_body)
-        result: list[ast.stmt] = [
-            then_fn,
-            self._source_info_stmt(
-                then_name,
-                node.body[0] if node.body else node,
-                construct="dynamic if",
-                region="then-region",
-            ),
-        ]
+        result.extend(
+            [
+                then_fn,
+                self._source_info_stmt(
+                    then_name,
+                    node.body[0] if node.body else node,
+                    construct="dynamic if",
+                    region="then-region",
+                ),
+            ]
+        )
         if else_name is not None:
             result.append(self._branch_function(else_name, carried_names, else_body))
             result.append(
@@ -1636,16 +2198,45 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
         if planned is False or (
             planned is None and self._is_static_control_flow_test(node.test)
         ):
-            node.test = self.visit(node.test)
-            node.body = self._transform_static_statement_region(node.body)
-            node.orelse = self._transform_static_statement_region(node.orelse)
-            if isinstance(node.test, ast.Call) and _is_constexpr_cf_test(
+            is_constexpr_while = _is_constexpr_cf_test(
                 node.test,
                 self._tla_const_expr_names,
                 self._tla_module_aliases,
-                self._recognition_scope(),
-            ):
-                return [*_cf_symbol_check_stmts(node.test), node]
+                self._local_scope() | self._trusted_symbol_shadows(),
+            )
+            node.test = self.visit(node.test)
+            node.body = self._transform_static_statement_region(node.body)
+            node.orelse = self._transform_static_statement_region(node.orelse)
+            if is_constexpr_while:
+                iteration_name = self._fresh("constexpr_while_iteration")
+                initialize = ast.Assign(
+                    targets=[ast.Name(id=iteration_name, ctx=ast.Store())],
+                    value=ast.Constant(value=0),
+                )
+                ast.copy_location(initialize, node)
+                increment = ast.AugAssign(
+                    target=ast.Name(id=iteration_name, ctx=ast.Store()),
+                    op=ast.Add(),
+                    value=ast.Constant(value=1),
+                )
+                ast.copy_location(increment, node)
+                warn = ast.Expr(
+                    value=ast.Call(
+                        func=ast.Name(
+                            id=_INTERNAL_STATIC_LOOP_ITERATION, ctx=ast.Load()
+                        ),
+                        args=[ast.Name(id=iteration_name, ctx=ast.Load())],
+                        keywords=[
+                            ast.keyword(
+                                arg="once_at_threshold",
+                                value=ast.Constant(value=True),
+                            )
+                        ],
+                    )
+                )
+                ast.copy_location(warn, node)
+                node.body = [increment, warn, *node.body]
+                return [*_cf_symbol_check_stmts(node.test), initialize, node]
             return node
         if node.orelse:
             raise SyntaxError("dynamic Tla while does not support while-else")
@@ -1798,7 +2389,7 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
                 value=region_result,
             )
         ast.copy_location(helper_stmt, node)
-        return [region_fn, helper_stmt]
+        return [*self._runtime_write_guards(analysis), region_fn, helper_stmt]
 
     def _validate_dynamic_condition(
         self, condition: ast.AST, construct_name: str
@@ -1820,11 +2411,14 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
         self._range_alias_stack.append(
             set(self._range_aliases()) - set(shadowed_range_aliases or ())
         )
-        with self._scope_manager.enter_local_scope(initial_scope, initial_callables):
-            try:
-                transformed = self._visit_statement_list(body)
-            finally:
-                self._range_alias_stack.pop()
+        with self._runtime_transform_scope():
+            with self._scope_manager.enter_local_scope(
+                initial_scope, initial_callables
+            ):
+                try:
+                    transformed = self._visit_statement_list(body)
+                finally:
+                    self._range_alias_stack.pop()
         return transformed or [ast.Pass()]
 
     def _transform_static_statement_region(
@@ -2170,11 +2764,9 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
         return any(target is trusted for trusted in _trusted_lazy_callables())
 
     def _resolve_global_call_target(self, node: ast.expr) -> Any | None:
-        shadowed_names = {
-            name
-            for scope in self._call_shadow_stack
-            for name in scope
-        }
+        shadowed_names: set[str] = set()
+        for scope in self._call_shadow_stack:
+            shadowed_names.update(scope)
         if isinstance(node, ast.Name):
             if node.id in shadowed_names or node.id in _BUILTIN_REDIRECTS:
                 return None
@@ -2288,6 +2880,7 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
         region_mode = None
         region_thread_block_dim = None
         region_guard: ast.expr | None = None
+        analysis: ControlFlowPlan | None = None
         if len(node.items) == 1 and planned is not False:
             region_name = _region_name_from_with_item(
                 node.items[0], self._tla_module_aliases, self._recognition_scope()
@@ -2310,7 +2903,34 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
                     )
                 path = self._module_qualified_dsl_path(context_expr.func)
                 if path is not None:
-                    region_guard = self._checked_module_callable(context_expr.func, path)
+                    region_guard = self._checked_module_callable(
+                        context_expr.func, path
+                    )
+                analysis = self._control_flow_analyzer.analyze(
+                    node=node,
+                    construct_name="with",
+                    assigned_regions=[node.body],
+                    active_call_nodes=node.body,
+                    active_symbols=set(enclosing_symbols),
+                    active_callables=set(self._active_callables()),
+                    function_plan=(
+                        self._function_plan_stack[-1]
+                        if self._function_plan_stack
+                        else None
+                    ),
+                    filename=self._filename,
+                    line_offset=self._line_offset,
+                    source_text=self._source_text,
+                    is_runtime_for=lambda nested: _is_tla_range_iter(
+                        nested.iter,
+                        self._range_aliases(),
+                        self._tla_range_names,
+                        self._tla_module_aliases,
+                        self._local_scope() | self._trusted_symbol_shadows(),
+                    ),
+                    is_static_test=self._is_static_control_flow_test,
+                )
+                self._ensure_runtime_origin_markers(analysis)
         for item in node.items:
             self._validate_reserved_module_call(item.context_expr)
             if isinstance(item.optional_vars, ast.Name):
@@ -2332,8 +2952,9 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
             set(self._range_aliases()) - with_target_names
         )
         try:
-            with self._scope_manager.enter_local_scope():
-                node.body = self._visit_statement_list(node.body) or [ast.Pass()]
+            with self._runtime_transform_scope():
+                with self._scope_manager.enter_local_scope():
+                    node.body = self._visit_statement_list(node.body) or [ast.Pass()]
         finally:
             self._range_alias_stack.pop()
         if len(node.items) != 1:
@@ -2392,6 +3013,7 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
         )
         ast.copy_location(helper_call, node)
         return [
+            *self._runtime_write_guards(analysis),
             *(
                 [ast.copy_location(ast.Expr(value=region_guard), node)]
                 if region_guard is not None
@@ -2452,7 +3074,11 @@ def maybe_transform_for_lowering(
     ).analyze(target)
     root_shadows = {binding.name for binding in shadow_plan.bindings}
     if not _has_scope_declaration(target) and not _function_needs_frontend_transform(
-        target, fn.__globals__, root_shadows, trusted_identities
+        target,
+        fn.__globals__,
+        root_shadows,
+        trusted_identities,
+        is_root=True,
     ):
         return fn
 
@@ -2487,6 +3113,10 @@ def maybe_transform_for_lowering(
     exec_globals[_INTERNAL_MIN] = internal_min
     exec_globals[_INTERNAL_MAX] = internal_max
     exec_globals[_INTERNAL_CF_SYMBOL_CHECK] = _cf_symbol_check
+    exec_globals[_INTERNAL_RUNTIME_BINDING_IS_COMPILETIME] = (
+        _runtime_binding_is_compiletime
+    )
+    exec_globals[_INTERNAL_RUNTIME_WRITE_CHECK] = _runtime_write_check
     exec_globals[_INTERNAL_CHECKED_DSL_MEMBER] = _checked_dsl_member
     exec_globals[_INTERNAL_CHECKED_DSL_IDENTITY] = _checked_dsl_identity
     exec_globals[_INTERNAL_INDEX_ADD] = _index_add
@@ -2506,7 +3136,9 @@ def maybe_transform_for_lowering(
     exec_globals[_INTERNAL_LAZY_SUBSCRIPT] = _internal_lazy_subscript
     exec_globals[_INTERNAL_LAZY_BINOP] = _internal_lazy_binop
     exec_globals[_INTERNAL_LAZY_UNARY] = _internal_lazy_unary
-    from .ast_helpers import while_executor, while_selector
+    from .ast_helpers import _warn_static_loop, while_executor, while_selector
+
+    exec_globals[_INTERNAL_STATIC_LOOP_ITERATION] = _warn_static_loop
 
     exec_globals[_WHILE_EXECUTOR] = while_executor
     exec_globals[_WHILE_SELECTOR] = while_selector
@@ -2555,6 +3187,366 @@ def maybe_transform_for_lowering(
     rewritten.__module__ = fn.__module__
     rewritten.__qualname__ = fn.__qualname__
     return rewritten
+
+
+def validate_language_boundaries(fn: Callable[..., Any]) -> None:
+    """Validate calls and class use reachable from one decorated function."""
+
+    try:
+        source_lines, first_lineno = inspect.getsourcelines(fn)
+    except (OSError, IOError, TypeError):
+        raise SyntaxError("Tla DSL function source must be available for validation")
+    source = textwrap.dedent("".join(source_lines))
+    filename = inspect.getsourcefile(fn) or "<unknown>"
+    target = _find_function_def(ast.parse(source, filename=filename), fn.__name__)
+    if target is None:
+        raise SyntaxError("Tla DSL function source could not be analyzed")
+    _validate_language_boundaries(
+        fn,
+        target=target,
+        source=source,
+        filename=filename,
+        line_offset=int(first_lineno) - 1,
+    )
+
+
+def _validate_language_boundaries(
+    fn: Callable[..., Any],
+    *,
+    target: ast.FunctionDef,
+    source: str,
+    filename: str,
+    line_offset: int,
+    validated: set[int] | None = None,
+) -> None:
+    """Validate the boundary between Python staging and DSL lowering.
+
+    Ordinary inspectable Python code is valid while a kernel is being staged.
+    The frontend owns only values that cross the kernel ABI, explicit runtime
+    promotion, or a transformed runtime-control-flow region.
+    """
+
+    validated = validated if validated is not None else set()
+    if id(fn) in validated:
+        return
+    validated.add(id(fn))
+    symbols = dict(fn.__globals__)
+    try:
+        closure = inspect.getclosurevars(fn)
+    except (TypeError, ValueError):
+        closure = None
+    if closure is not None:
+        symbols.update(closure.globals)
+        symbols.update(closure.nonlocals)
+        symbols.update(closure.builtins)
+    local_names = _function_arg_names(target.args) | _assigned_names_from_statements(
+        target.body
+    )
+    aliases = {name: _UNKNOWN_LANGUAGE_VALUE for name in local_names}
+    source_lines = source.splitlines()
+
+    def fail(node: ast.AST, message: str) -> NoReturn:
+        error = SyntaxError(message)
+        relative_lineno = int(getattr(node, "lineno", 0) or 0)
+        error.filename = filename
+        error.lineno = line_offset + relative_lineno
+        error.offset = int(getattr(node, "col_offset", 0) or 0) + 1
+        if 0 < relative_lineno <= len(source_lines):
+            error.text = source_lines[relative_lineno - 1]
+        raise error
+
+    def resolve(node: ast.AST) -> Any:
+        if isinstance(node, ast.Name):
+            return aliases.get(node.id, symbols.get(node.id, _UNKNOWN_LANGUAGE_VALUE))
+        literal_types = {
+            ast.Dict: dict,
+            ast.List: list,
+            ast.Set: set,
+            ast.Tuple: tuple,
+        }
+        for literal_node, literal_type in literal_types.items():
+            if isinstance(node, literal_node):
+                return literal_type
+        if isinstance(node, ast.Subscript):
+            container = resolve(node.value)
+            if (
+                isinstance(container, (tuple, list))
+                and isinstance(node.slice, ast.Constant)
+                and isinstance(node.slice.value, int)
+            ):
+                try:
+                    return container[node.slice.value]
+                except IndexError:
+                    return _UNKNOWN_LANGUAGE_VALUE
+            if _is_exact_builtin_dict(container) and isinstance(
+                node.slice, ast.Constant
+            ):
+                try:
+                    return container[node.slice.value]
+                except (KeyError, TypeError):
+                    return _UNKNOWN_LANGUAGE_VALUE
+            return _UNKNOWN_LANGUAGE_VALUE
+        if not isinstance(node, ast.Attribute):
+            return _UNKNOWN_LANGUAGE_VALUE
+        owner = resolve(node.value)
+        if owner is _UNKNOWN_LANGUAGE_VALUE:
+            return owner
+        try:
+            return inspect.getattr_static(owner, node.attr)
+        except (AttributeError, TypeError):
+            members = inspect.getattr_static(owner, "_members", None)
+            if isinstance(members, dict) and node.attr in members:
+                return members[node.attr]
+            return _UNKNOWN_LANGUAGE_VALUE
+
+    def is_jit(value: Any) -> bool:
+        jit_type = getattr(sys.modules.get("catlass.dsl"), "TlaJitFunction", None)
+        return (
+            jit_type is not None
+            # Deliberately reject subclasses: only the DSL's exact decorator
+            # wrapper proves that the helper is genuine.
+            and value.__class__ is jit_type
+            and getattr(value, "kind", None) == "jit"
+            and callable(getattr(value, "fn", None))
+        )
+
+    def validate_jit(node: ast.AST, helper: Callable[..., Any]) -> None:
+        try:
+            helper_lines, helper_lineno = inspect.getsourcelines(helper)
+        except (OSError, IOError, TypeError):
+            fail(node, "@tla.jit helper source must be available for validation")
+        helper_source = textwrap.dedent("".join(helper_lines))
+        helper_filename = inspect.getsourcefile(helper) or "<unknown>"
+        helper_target = _find_function_def(
+            ast.parse(helper_source, filename=helper_filename), helper.__name__
+        )
+        if helper_target is None:
+            fail(node, "@tla.jit helper source could not be analyzed")
+        if _function_needs_frontend_transform(helper_target, helper.__globals__):
+            fail(
+                node,
+                "@tla.jit helper control-flow composition is not supported yet; "
+                "inline the helper body or move the call outside runtime control flow",
+            )
+        _validate_language_boundaries(
+            helper,
+            target=helper_target,
+            source=helper_source,
+            filename=helper_filename,
+            line_offset=int(helper_lineno) - 1,
+            validated=validated,
+        )
+
+    def is_supported_isinstance_type(node: ast.AST) -> bool:
+        if isinstance(node, ast.Tuple):
+            return bool(node.elts) and all(
+                is_supported_isinstance_type(element) for element in node.elts
+            )
+        value = resolve(node)
+        # ``isinstance`` remains Python staging when its type operand is a
+        # statically resolved class. User classes are valid staging objects;
+        # they are still rejected if they cross the kernel ABI or are promoted.
+        return inspect.isclass(value)
+
+    def validate_callable(node: ast.Call, value: Any) -> None:
+        if value is _UNKNOWN_LANGUAGE_VALUE:
+            # Local lambdas and nested functions deliberately resolve here:
+            # they are ordinary Python staging code.
+            return
+        if is_jit(value):
+            validate_jit(node.func, value.fn)
+            return
+        jit_type = getattr(sys.modules.get("catlass.dsl"), "TlaJitFunction", None)
+        if jit_type is not None and value.__class__ is jit_type:
+            name = getattr(getattr(value, "fn", None), "__name__", "<kernel>")
+            fail(
+                node.func,
+                f"calling @tla.kernel {name!r} from a Tla DSL function is not "
+                "supported; use @tla.jit",
+            )
+        if inspect.isclass(value):
+            return
+        owner = getattr(value, "__self__", None)
+        if owner is not None and not inspect.ismodule(owner):
+            return
+        module = str(getattr(value, "__module__", ""))
+        if module.startswith("catlass"):
+            return
+        if module == "builtins":
+            if value is isinstance:
+                if len(node.args) != 2 or node.keywords:
+                    fail(
+                        node.func,
+                        "isinstance requires exactly a value and trusted type operand",
+                    )
+                if not is_supported_isinstance_type(node.args[1]):
+                    fail(
+                        node.args[1],
+                        "isinstance only supports built-in or Tla DSL types in "
+                        "Tla DSL functions",
+                    )
+                return
+            supported_builtins = {
+                abs,
+                all,
+                any,
+                bool,
+                enumerate,
+                float,
+                int,
+                len,
+                list,
+                max,
+                min,
+                range,
+                reversed,
+                sorted,
+                str,
+                sum,
+                tuple,
+                zip,
+            }
+            if value in supported_builtins:
+                return
+            name = getattr(value, "__name__", type(value).__name__)
+            fail(node.func, f"builtin {name!r} is not supported in Tla DSL functions")
+        if inspect.isfunction(value):
+            # Bare Python functions execute directly during staging. They share
+            # the caller's active frontend emission context, so TLA operations
+            # in their body emit IR without helper transformation or source
+            # inspection.
+            return
+        if callable(value):
+            try:
+                callable_lines, callable_lineno = inspect.getsourcelines(value)
+            except (OSError, IOError, TypeError):
+                name = getattr(value, "__name__", type(value).__name__)
+                fail(
+                    node.func,
+                    f"call to Python callable {name!r} requires @tla.jit with "
+                    "inspectable source when it is lowered by Tla DSL",
+                )
+            callable_source = textwrap.dedent("".join(callable_lines))
+            callable_filename = inspect.getsourcefile(value) or filename
+            callable_target = _find_function_def(
+                ast.parse(callable_source, filename=callable_filename),
+                getattr(value, "__name__", ""),
+            )
+            if callable_target is not None and _function_needs_frontend_transform(
+                callable_target, getattr(value, "__globals__", {})
+            ):
+                fail(
+                    node.func,
+                    "Python helper control-flow composition is not supported yet; "
+                    "inline the helper body or move the call outside runtime control flow",
+                )
+
+    class Validator(ast.NodeVisitor):
+        def __init__(self) -> None:
+            self._runtime_constructs: list[str] = []
+
+        @contextlib.contextmanager
+        def _runtime_construct(self, name: str) -> Iterator[None]:
+            self._runtime_constructs.append(name)
+            try:
+                yield
+            finally:
+                self._runtime_constructs.pop()
+
+        def _visit_runtime_body(self, name: str, body: list[ast.stmt]) -> None:
+            with self._runtime_construct(name):
+                for statement in body:
+                    self.visit(statement)
+
+        def visit_Assign(self, node: ast.Assign) -> None:
+            self.visit(node.value)
+            resolved = resolve(node.value)
+            for assignment_target in node.targets:
+                if isinstance(assignment_target, ast.Name):
+                    aliases[assignment_target.id] = resolved
+                else:
+                    self.visit(assignment_target)
+
+        def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
+            if node.value is not None:
+                self.visit(node.value)
+                if isinstance(node.target, ast.Name):
+                    aliases[node.target.id] = resolve(node.value)
+
+        def visit_If(self, node: ast.If) -> None:
+            self.visit(node.test)
+            if isinstance(node.test, ast.Constant) and isinstance(
+                node.test.value, bool
+            ):
+                for statement in node.body if node.test.value else node.orelse:
+                    self.visit(statement)
+                return
+            before = dict(aliases)
+            try:
+                for body in (node.body, node.orelse):
+                    aliases.clear()
+                    aliases.update(before)
+                    self._visit_runtime_body("if", body)
+            finally:
+                aliases.clear()
+                aliases.update(before)
+
+        def visit_For(self, node: ast.For) -> None:
+            self.visit(node.iter)
+            if _is_syntactic_tla_range_for(node):
+                self._visit_runtime_body("for", node.body)
+                self._visit_runtime_body("for", node.orelse)
+                return
+            for statement in [*node.body, *node.orelse]:
+                self.visit(statement)
+
+        def visit_While(self, node: ast.While) -> None:
+            self.visit(node.test)
+            self._visit_runtime_body("while", node.body)
+            self._visit_runtime_body("while", node.orelse)
+
+        def visit_With(self, node: ast.With) -> None:
+            for item in node.items:
+                self.visit(item.context_expr)
+            self._visit_runtime_body("with", node.body)
+
+        def visit_Call(self, node: ast.Call) -> None:
+            value = resolve(node.func)
+            validate_callable(node, value)
+            if self._runtime_constructs and inspect.isclass(value):
+                if not _is_tla_owned_type(value) and not dataclasses.is_dataclass(
+                    value
+                ):
+                    fail(
+                        node.func,
+                        f"user-defined class {value.__name__!r} cannot be "
+                        "constructed in dynamic Tla control flow",
+                    )
+            for argument in node.args:
+                self.visit(argument)
+            for keyword in node.keywords:
+                self.visit(keyword.value)
+
+        def visit_Attribute(self, node: ast.Attribute) -> None:
+            self.visit(node.value)
+
+        def visit_ClassDef(self, node: ast.ClassDef) -> None:
+            # Definitions execute during Python staging. Do not recurse into a
+            # class body: it is not part of the kernel's lowered body.
+            del node
+
+        def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+            # Nested functions are staging-local Python callables.
+            del node
+
+        visit_AsyncFunctionDef = visit_FunctionDef
+
+        def visit_Lambda(self, node: ast.Lambda) -> None:
+            self.visit(node.body)
+
+    validator = Validator()
+    for statement in target.body:
+        validator.visit(statement)
 
 
 _CLOSURE_FACTORY_NAME = "__tladsl_internal_closure_factory__"
@@ -2631,6 +3623,8 @@ def _function_needs_frontend_transform(
     global_symbols: dict[str, Any],
     lexical_shadow_names: set[str] | None = None,
     trusted_identities: _TrustedDslIdentities | None = None,
+    *,
+    is_root: bool = False,
 ) -> bool:
     """Return whether *target* contains syntax handled by the frontend rewrite."""
 
@@ -2644,16 +3638,47 @@ def _function_needs_frontend_transform(
     module_aliases = _tla_module_aliases_from_globals(global_symbols, identities)
     lexical_shadows = set(lexical_shadow_names or ())
 
+    # Keep helper discovery aligned with the root frontend plan: an ``if`` or
+    # ``while`` only needs PR-5 composition when it is dynamic control flow.
+    # Static Python branches remain ordinary staging-time Python.
+    if _function_child_plans(
+        target,
+        lexical_shadow_names=lexical_shadows,
+        trusted_symbols=_trusted_dsl_symbols(global_symbols, identities),
+        global_symbols=global_symbols,
+    ):
+        return True
+
     class Discovery(ast.NodeVisitor):
         needed = False
 
         def visit_If(self, node: ast.If) -> None:
-            self.needed = True
+            if _is_constexpr_cf_test(
+                node.test,
+                _tla_const_expr_names_from_globals(global_symbols, identities),
+                module_aliases,
+                lexical_shadows,
+            ):
+                self.needed = True
+                return
+            self.generic_visit(node)
 
         def visit_While(self, node: ast.While) -> None:
-            self.needed = True
+            # Root kernels must route even static ``while`` through the
+            # frontend so its static-loop warning instrumentation is installed.
+            # Staging helpers keep ordinary static Python ``while`` semantics
+            # until PR 5 transforms their bodies.
+            if is_root:
+                self.needed = True
+                return
+            self.generic_visit(node)
 
         def visit_IfExp(self, node: ast.IfExp) -> None:
+            self.needed = True
+
+        def visit_ClassDef(self, node: ast.ClassDef) -> None:
+            # Nested classes need the frontend's source-location diagnostic.
+            del node
             self.needed = True
 
         def visit_Global(self, node: ast.Global) -> None:
@@ -2664,13 +3689,18 @@ def _function_needs_frontend_transform(
 
         def visit_Call(self, node: ast.Call) -> None:
             func = node.func
-            if isinstance(func, ast.Name) and func.id not in lexical_shadows and func.id in {
-                "range",
-                "range_constexpr",
-                *_BUILTIN_REDIRECTS,
-                *range_names,
-                *range_constexpr_names,
-            }:
+            if (
+                isinstance(func, ast.Name)
+                and func.id not in lexical_shadows
+                and func.id
+                in {
+                    "range",
+                    "range_constexpr",
+                    *_BUILTIN_REDIRECTS,
+                    *range_names,
+                    *range_constexpr_names,
+                }
+            ):
                 self.needed = True
                 return
             if (
@@ -2728,6 +3758,17 @@ def _tla_const_expr_names_from_globals(
         for name, value in global_symbols.items()
         if identities.const_expr_callable is not None
         and value is identities.const_expr_callable
+    }
+
+
+def _tla_as_numeric_names_from_globals(
+    global_symbols: dict[str, Any], identities: _TrustedDslIdentities
+) -> set[str]:
+    return {
+        name
+        for name, value in global_symbols.items()
+        if identities.as_numeric_callable is not None
+        and value is identities.as_numeric_callable
     }
 
 
@@ -2801,7 +3842,8 @@ def _is_checked_dsl_call(node: ast.AST, path: str) -> bool:
         in {_INTERNAL_CHECKED_DSL_MEMBER, _INTERNAL_CHECKED_DSL_IDENTITY}
         and len(node.args) == 2
         and isinstance(node.args[1], ast.Constant)
-        and node.args[1].value == path
+        and node.args[1].value
+        in ({path, "builtin_range"} if path == "range" else {path})
         and not node.keywords
     )
 
@@ -2985,6 +4027,7 @@ def _checked_dsl_member(module: Any, path: str) -> Any:
         "range": (identities.range_callable,),
         "range_constexpr": (identities.range_constexpr_callable,),
         "const_expr": (identities.const_expr_callable,),
+        "as_numeric": (identities.as_numeric_callable,),
         "cube": (identities.cube_callable,),
         "vector": (identities.vector_callable,),
         "vec.func": (identities.vec_namespace, identities.vec_func_callable),
@@ -3010,11 +4053,16 @@ def _checked_dsl_identity(symbol: Any, path: str) -> Any:
     identities = _trusted_dsl_identities()
     expected = {
         "range": identities.range_callable,
+        "builtin_range": builtins.range,
         "range_constexpr": identities.range_constexpr_callable,
         "const_expr": identities.const_expr_callable,
     }.get(path)
     if expected is None or symbol is not expected:
         _raise_incorrect_dsl_symbol(symbol)
+    if path == "builtin_range":
+        if identities.range_callable is None:
+            _raise_incorrect_dsl_symbol(symbol)
+        return identities.range_callable
     return symbol
 
 
@@ -3153,10 +4201,15 @@ def _is_static_python_if_test(
     tla_const_expr_names: set[str] | None = None,
     tla_module_aliases: set[str] | None = None,
     local_names: set[str] | None = None,
+    global_symbols: dict[str, Any] | None = None,
 ) -> bool:
+    locals_in_scope = local_names if local_names is not None else set()
     return (
         isinstance(node, ast.Constant)
         and isinstance(node.value, bool)
+        or isinstance(node, ast.Name)
+        and node.id not in locals_in_scope
+        and isinstance((global_symbols or {}).get(node.id), bool)
         or _is_constexpr_cf_test(
             node,
             (
@@ -3165,7 +4218,7 @@ def _is_static_python_if_test(
                 else {"const_expr"}
             ),
             tla_module_aliases if tla_module_aliases is not None else {"tla"},
-            local_names if local_names is not None else set(),
+            locals_in_scope,
         )
     )
 
@@ -3310,10 +4363,12 @@ def _function_child_plans(
     *,
     lexical_shadow_names: set[str] | None = None,
     trusted_symbols: _TrustedDslSymbols,
+    global_symbols: dict[str, Any] | None = None,
 ) -> tuple[FunctionBlockPlan, ...]:
     plans: list[FunctionBlockPlan] = []
     lexical_shadows = set(lexical_shadow_names or ())
     tla_range_names = set(trusted_symbols.range_names)
+    tla_range_names.update(trusted_symbols.builtin_range_names)
     tla_const_expr_names = set(trusted_symbols.const_expr_names)
     tla_module_aliases = set(trusted_symbols.module_aliases)
 
@@ -3357,6 +4412,7 @@ def _function_child_plans(
                     tla_const_expr_names,
                     tla_module_aliases,
                     active_names | lexical_shadows,
+                    global_symbols,
                 ):
                     self._record("if", statement)
                 self._visit_regions(
@@ -3387,6 +4443,7 @@ def _function_child_plans(
                     tla_const_expr_names,
                     tla_module_aliases,
                     active_names | lexical_shadows,
+                    global_symbols,
                 ):
                     self._record("while", statement)
                 self._visit_regions(
@@ -3581,14 +4638,47 @@ def _assigned_names(node: ast.AST) -> set[str]:
     return assigned
 
 
-def _callable_names(node: ast.AST) -> set[str]:
+def _callable_names(node: ast.AST, active_callables: set[str]) -> set[str]:
     if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
         return {node.name}
+    if (
+        isinstance(node, ast.Assign)
+        and len(node.targets) == 1
+        and isinstance(node.targets[0], ast.Name)
+        and isinstance(node.value, ast.Name)
+        and node.value.id in active_callables
+    ):
+        return {node.targets[0].id}
     return set()
 
 
-def _loaded_names_from_statements(body: list[ast.stmt]) -> set[str]:
-    loaded: set[str] = set()
+def _has_nonlocal_or_global_declaration(node: ast.FunctionDef) -> bool:
+    class Visitor(ast.NodeVisitor):
+        found = False
+
+        def visit_Global(self, declaration: ast.Global) -> None:
+            del declaration
+            self.found = True
+
+        def visit_Nonlocal(self, declaration: ast.Nonlocal) -> None:
+            del declaration
+            self.found = True
+
+        def visit_FunctionDef(self, nested: ast.FunctionDef) -> None:
+            if nested is node:
+                self.generic_visit(nested)
+
+        visit_AsyncFunctionDef = visit_FunctionDef
+        visit_ClassDef = visit_FunctionDef
+        visit_Lambda = visit_FunctionDef
+
+    visitor = Visitor()
+    visitor.visit(node)
+    return visitor.found
+
+
+def _loaded_name_nodes_from_statements(body: list[ast.stmt]) -> dict[str, ast.Name]:
+    loaded: dict[str, ast.Name] = {}
 
     class Visitor(ast.NodeVisitor):
         def __init__(self) -> None:
@@ -3599,7 +4689,7 @@ def _loaded_names_from_statements(body: list[ast.stmt]) -> set[str]:
                 name_node.id in bindings
                 for bindings in self._comprehension_bindings
             ):
-                loaded.add(name_node.id)
+                loaded.setdefault(name_node.id, name_node)
 
         def visit_FunctionDef(self, function_node: ast.FunctionDef) -> None:
             del function_node
@@ -3647,6 +4737,10 @@ def _loaded_names_from_statements(body: list[ast.stmt]) -> set[str]:
     for stmt in body:
         Visitor().visit(stmt)
     return loaded
+
+
+def _loaded_names_from_statements(body: list[ast.stmt]) -> set[str]:
+    return set(_loaded_name_nodes_from_statements(body))
 
 
 def _invoked_active_names_from_statements(
@@ -3699,7 +4793,7 @@ class _DynamicControlFlowPolicy(ast.NodeVisitor):
         self.is_static_test = is_static_test or _is_static_python_if_test
         self.python_loop_depth = 0
         self.assignment_targets: list[str] = []
-        self.tensor_store_assignments: set[int] = set()
+        self.tensor_store_assignments: set[ast.Assign] = set()
         self.nested_constructs: list[tuple[str, int, int]] = []
 
     def visit_Return(self, node: ast.Return) -> None:
@@ -3816,7 +4910,7 @@ class _DynamicControlFlowPolicy(ast.NodeVisitor):
         if _contains_slice(target.slice):
             self._raise(target, "does not support tensor slice assignment")
         self.assignment_targets.append("tensor subscript")
-        self.tensor_store_assignments.add(id(assignment))
+        self.tensor_store_assignments.add(assignment)
         self.visit(target.value)
         self.visit(target.slice)
 
@@ -3900,39 +4994,6 @@ def _reject_unsupported_dynamic_for_new_defs(
             "dynamic Tla for values used after the loop must be initialized "
             f"before the loop: {', '.join(used_after)}"
         )
-
-
-def _reject_unsupported_dynamic_active_callable_calls(
-    body: list[ast.stmt], active_callables: set[str], construct_name: str
-) -> None:
-    class Visitor(ast.NodeVisitor):
-        def visit_Call(self, call_node: ast.Call) -> None:
-            func = call_node.func
-            if isinstance(func, ast.Name) and func.id in active_callables:
-                self._raise_callable(func.id)
-            self.generic_visit(call_node)
-
-        def visit_FunctionDef(self, function_node: ast.FunctionDef) -> None:
-            del function_node
-
-        def visit_AsyncFunctionDef(self, function_node: ast.AsyncFunctionDef) -> None:
-            del function_node
-
-        def visit_ClassDef(self, class_node: ast.ClassDef) -> None:
-            del class_node
-
-        def visit_Lambda(self, lambda_node: ast.Lambda) -> None:
-            del lambda_node
-
-        def _raise_callable(self, name: str) -> None:
-            raise SyntaxError(
-                f"dynamic Tla {construct_name} does not support calling active local callable "
-                f"{name!r}; inline the branch body or move the call outside the "
-                f"dynamic {construct_name}"
-            )
-
-    for stmt in body:
-        Visitor().visit(stmt)
 
 
 def _call_base_name(node: ast.AST) -> str | None:

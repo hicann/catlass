@@ -37,7 +37,7 @@ def _int_arg_and_iv_min_kernel(limit: int, out: tla.Tensor) -> None:
 
 @tla.kernel
 def _bare_int_carry_kernel(out: tla.Tensor) -> None:
-    idx = 0
+    idx = out[0] - out[0]
     for i in tla.range(0, 4, 1):
         idx = i
     out[0] = idx

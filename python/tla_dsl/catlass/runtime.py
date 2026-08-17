@@ -97,6 +97,7 @@ def _coerce_bool_value(value: Any) -> Any:
         return _const_i1(int(bool(value.value)))
     if isinstance(value, bool):
         return _const_i1(int(value))
+
     def require_scalar_i1(candidate: Any) -> Any:
         if not (
             isinstance(candidate.type, mlir_ir.IntegerType)
@@ -331,7 +332,11 @@ def _normalize_vec_func_thread_block_dim(thread_block_dim: Any, mode: Any) -> tu
                 "tla.vec.func: thread_block_dim must be an int or a triple of ints; "
                 f"got {thread_block_dim!r}"
             )
-        values = (int(thread_block_dim[0]), int(thread_block_dim[1]), int(thread_block_dim[2]))
+        values = (
+            int(thread_block_dim[0]),
+            int(thread_block_dim[1]),
+            int(thread_block_dim[2]),
+        )
     else:
         raise TlaCoreAPIError(
             "tla.vec.func: thread_block_dim must be an int or a triple of ints; "
@@ -349,7 +354,11 @@ def _normalize_vec_func_thread_block_dim(thread_block_dim: Any, mode: Any) -> tu
 
 
 def _internal_frontend_region(
-    kind: str, body_fn: Callable[[], Any], *, mode: Any = None, thread_block_dim: Any = None
+    kind: str,
+    body_fn: Callable[[], Any],
+    *,
+    mode: Any = None,
+    thread_block_dim: Any = None,
 ) -> None:
     from mlir import ir as mlir_ir  # type: ignore[assignment]
 
@@ -480,7 +489,6 @@ def kernel(fn: Callable[..., Any]) -> Any:
     from .dsl import kernel as _kernel
 
     return _kernel(fn)
-
 
 
 def __getattr__(name: str) -> Any:

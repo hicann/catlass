@@ -38,7 +38,9 @@ def _skip_without_compute_order(request):
 
 def _require_hivm_tla_compile() -> pathlib.Path:
     repo_root = pathlib.Path(__file__).resolve().parents[1]
-    tla_compile = repo_root / "csrc" / "mlir" / "build" / "tools" / "tla-compile" / "TlaCompile"
+    tla_compile = (
+        repo_root / "csrc" / "mlir" / "build" / "tools" / "tla-compile" / "TlaCompile"
+    )
     if not tla_compile.exists():
         raise AssertionError("TlaCompile binary not found. Build csrc/mlir first.")
     prebuilt = os.environ.get("CATLASS_DSL_PREBUILT_ASCENDNPU_IR")
@@ -175,13 +177,19 @@ def _cube_attr_kernel(mem_a: tla.Tensor, mem_b: tla.Tensor, mem_c: tla.Tensor) -
     rhs_parent = tla.tile_view(mem_b, tla.make_shape(16, 16), tla.make_coord(0, 0))
     acc_parent = tla.tile_view(mem_c, tla.make_shape(16, 16), tla.make_coord(0, 0))
     lhs = tla.make_tensor_like(
-        tla.allocate((16, 16), tla.Float16, tla.AddressSpace.l0a, 512), lhs_parent, tla.arch.zN
+        tla.allocate((16, 16), tla.Float16, tla.AddressSpace.l0a, 512),
+        lhs_parent,
+        tla.arch.zN,
     )
     rhs = tla.make_tensor_like(
-        tla.allocate((16, 16), tla.Float16, tla.AddressSpace.l0b, 512), rhs_parent, tla.arch.nZ
+        tla.allocate((16, 16), tla.Float16, tla.AddressSpace.l0b, 512),
+        rhs_parent,
+        tla.arch.nZ,
     )
     acc = tla.make_tensor_like(
-        tla.allocate((16, 16), tla.Float32, tla.AddressSpace.l0c, 512), acc_parent, tla.arch.L0Clayout
+        tla.allocate((16, 16), tla.Float32, tla.AddressSpace.l0c, 512),
+        acc_parent,
+        tla.arch.L0Clayout,
     )
     with tla.cube():
         tla.mmad(acc, lhs, rhs, init_c=False)
@@ -261,7 +269,7 @@ def _mixed_if_branches_kernel() -> None:
 
 @tla.kernel
 def _mixed_for_kernel(limit: int) -> None:
-    state = 0
+    state = tla.as_numeric(0)
     for index in tla.range(0, limit, 1):
         state = index + 301
         with tla.cube():
@@ -272,8 +280,8 @@ def _mixed_for_kernel(limit: int) -> None:
 
 @tla.kernel
 def _mixed_while_kernel(limit: int) -> None:
-    index = 0
-    state = 0
+    index = tla.as_numeric(0)
+    state = tla.as_numeric(0)
     while index < limit:
         state = state + 401
         with tla.cube():
@@ -378,6 +386,7 @@ def _tensor_if_packed_carrier_kernel(mem_a: tla.Tensor, choice: int) -> None:
         )
         tla.copy(selected_view, root)
 
+@tla.jit
 def _make_dynamic_metadata_tensor(value: int):
     layout = tla.make_layout(
         tla.make_shape(2, value),
@@ -432,7 +441,7 @@ def _tensor_while_dynamic_metadata_access_kernel(
     first = _make_dynamic_metadata_tensor(first_value)
     second = _make_dynamic_metadata_tensor(second_value)
     selected = first
-    index = 0
+    index = tla.as_numeric(0)
     while index < limit:
         selected = second
         index = index + 1
@@ -495,7 +504,7 @@ def _tensor_while_carrier_kernel(mem_a: tla.Tensor, limit: int) -> None:
     second = tla.make_tensor(
         tla.allocate((16, 16), tla.Float32, tla.AddressSpace.ub, 256), layout
     )
-    index = 0
+    index = tla.as_numeric(0)
     selected = first
     with tla.vector():
         while index < limit:
@@ -847,8 +856,7 @@ def test_loop_carried_pointer_consumed_in_body_compiles_with_safe_capacity(
         line for line in output.splitlines() if "hivm.hir.pointer_cast" in line
     ]
     expected_type = (
-        f"memref<{expected_storage_elements}xf16, "
-        "#hivm.address_space<cbuf>>"
+        f"memref<{expected_storage_elements}xf16, #hivm.address_space<cbuf>>"
     )
     assert any(expected_type in line for line in pointer_cast_lines), output
 
@@ -1000,7 +1008,9 @@ def test_tensor_scf_carrier_preserves_dynamic_metadata_ssa(
     assert match is not None, mlir_text
     result = match.group(1)
     for field in metadata_fields:
-        assert f"arith.index_cast {result}#{field} : i32 to index" in mlir_text, mlir_text
+        assert f"arith.index_cast {result}#{field} : i32 to index" in mlir_text, (
+            mlir_text
+        )
     assert "tla.make_shape" in mlir_text
 
     output = _run_tla_compile_ir_after_pass(
@@ -1141,14 +1151,20 @@ def test_vector_zn_unalign_address_arithmetic_uses_i32() -> None:
         f"arith.index_cast {result} : i32 to index" not in output
         for result in div_rem_results
     ), output
-    assert sum(
-        "arith.muli" in line and line.rstrip().endswith(": i32")
-        for line in output.splitlines()
-    ) >= 4, output
-    assert sum(
-        "arith.addi" in line and line.rstrip().endswith(": i32")
-        for line in output.splitlines()
-    ) >= 3, output
+    assert (
+        sum(
+            "arith.muli" in line and line.rstrip().endswith(": i32")
+            for line in output.splitlines()
+        )
+        >= 4
+    ), output
+    assert (
+        sum(
+            "arith.addi" in line and line.rstrip().endswith(": i32")
+            for line in output.splitlines()
+        )
+        >= 3
+    ), output
 
 def test_vector_static_tile_does_not_narrow_unknown_base_capacity() -> None:
     """UB base stays memref<?xf16> with extent 0; tile size must not become capacity."""
@@ -1228,11 +1244,10 @@ def test_vector_static_rank_one_pointer_keeps_inferred_flat_extent() -> None:
     )
 
     expected_type = "memref<128xf16, #hivm.address_space<ub>>"
-    pointer_cast_lines = [
-        line
-        for line in output.splitlines()
-        if "hivm.hir.pointer_cast" in line
-    ]
+    pointer_cast_lines = []
+    for line in output.splitlines():
+        if "hivm.hir.pointer_cast" in line:
+            pointer_cast_lines.append(line)
     assert any(expected_type in line for line in pointer_cast_lines), output
     assert "memref<?xf16, #hivm.address_space<ub>>" not in output
     assert "memref<0xf16" not in output

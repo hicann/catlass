@@ -67,6 +67,7 @@ def _load_debug_print_example(*, mixed: bool = False):
 def _load_print_tensor_example():
     fake_catlass = types.ModuleType("catlass")
     fake_catlass.kernel = lambda function: function
+    fake_catlass.jit = lambda function: function
     fake_catlass.TlaExecutionError = execution.TlaExecutionError
     previous = sys.modules.get("catlass")
     sys.modules["catlass"] = fake_catlass

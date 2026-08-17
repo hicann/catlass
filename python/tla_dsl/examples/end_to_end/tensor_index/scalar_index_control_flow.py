@@ -17,7 +17,7 @@ Layout notes (Phase-1 ``scalar_load`` / ``scalar_store``):
 Control-flow patterns in this example:
 - Static 1D/2D scalar read + store (no loop)
 - Python scalar literal store (``out[i] = 1.1125``)
-- ``tla.range`` loop copy
+- Built-in ``range`` loop copy lowered as a runtime loop
 - Dynamic ``if`` selecting read index (index merge, load after branch)
 - Dynamic ``if`` selecting scalar *values* (Numeric carried through ``scf.if``)
 - Scalar stores directly inside dynamic ``if`` and ``while``
@@ -67,7 +67,7 @@ def scalar_index_literal_store_kernel(out: tla.Tensor) -> None:
 
 @tla.kernel
 def scalar_index_loop_kernel(meta: tla.Tensor, out: tla.Tensor) -> None:
-    for i in tla.range(0, LENGTH, 1):
+    for i in range(0, LENGTH, 1):
         out[i] = meta[i]
 
 
@@ -103,7 +103,7 @@ def scalar_index_store_in_dynamic_control_flow_kernel(
     selector: int,
 ) -> None:
     """Store side effects stay in their selected branch and loop iteration."""
-    i = 0
+    i = tla.as_numeric(0)
     while i < 2:
         if selector == 0:
             out[i] = i + 10

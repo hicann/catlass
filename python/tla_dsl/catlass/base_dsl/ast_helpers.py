@@ -19,7 +19,7 @@ class DSLOptimizationWarning(Warning):
         return self.message
 
 
-_RANGE_CONSTEXPR_WARNING_THRESHOLD = 64
+_STATIC_LOOP_WARNING_THRESHOLD = 64
 
 
 @dataclass(frozen=True)
@@ -63,14 +63,24 @@ def range_constexpr(
 def _checked_range_constexpr(*args: int) -> builtins.range:
     result = builtins.range(*args)
     range_length = len(result)
-    if range_length >= _RANGE_CONSTEXPR_WARNING_THRESHOLD:
-        warnings.warn(
-            f"This static loop has {range_length} iterations, which may be very "
-            "slow to compile, consider using `tla.range(...)` instead.",
-            category=DSLOptimizationWarning,
-            stacklevel=3,
-        )
+    if range_length >= _STATIC_LOOP_WARNING_THRESHOLD:
+        _warn_static_loop(range_length, stacklevel=4)
     return result
+
+
+def _warn_static_loop(
+    iterations: int, *, once_at_threshold: bool = False, stacklevel: int = 2
+) -> None:
+    if iterations < _STATIC_LOOP_WARNING_THRESHOLD or (
+        once_at_threshold and iterations != _STATIC_LOOP_WARNING_THRESHOLD
+    ):
+        return
+    warnings.warn(
+        f"This static loop has {iterations} iterations, which may be very "
+        "slow to compile, consider using `tla.range(...)` instead.",
+        category=DSLOptimizationWarning,
+        stacklevel=stacklevel,
+    )
 
 
 def is_frontend_range(value: Any) -> bool:

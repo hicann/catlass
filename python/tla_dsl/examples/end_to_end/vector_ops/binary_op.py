@@ -14,7 +14,13 @@ from pathlib import Path
 from typing import Any, Callable
 
 import catlass.tla as tla
-from catlass.params import LoadDist, NormalLoadParams, UnalignLoadParams, NormalStoreParams, UnalignStoreParams
+from catlass.params import (
+    LoadDist,
+    NormalLoadParams,
+    UnalignLoadParams,
+    NormalStoreParams,
+    UnalignStoreParams,
+)
 
 from vector_op_harness import (
     DirectVectorOpConfig,
@@ -232,7 +238,13 @@ def _set_kernel_config(
     op_name: str, dtype_name: str, shape: tuple[int, ...] | None = None
 ) -> tuple[type[Any], Any, float | int]:
     global VL_ELE, LOOPS, VECTOR_ELE, _KERNEL_DTYPE, _KERNEL_ELEMENT_BYTES
-    global _KERNEL_SHAPE, _BINARY_OP, _X_LOAD_PARAMS, _X_STORE_PARAMS, _X_TILE_ELE, _STORE_LOADED_X_ONLY
+    global \
+        _KERNEL_SHAPE, \
+        _BINARY_OP, \
+        _X_LOAD_PARAMS, \
+        _X_STORE_PARAMS, \
+        _X_TILE_ELE, \
+        _STORE_LOADED_X_ONLY
     specs = _operator_specs()
     if op_name not in specs:
         choices = ", ".join(sorted(specs))
@@ -252,8 +264,6 @@ def _set_kernel_config(
     _X_TILE_ELE = spec.get("x_tile_ele", 0)
     _STORE_LOADED_X_ONLY = spec.get("store_loaded_x_only", False)
     return config.tla_dtype, config.torch_dtype, config.default_sentinel
-
-
 
 
 def _configure_batch(

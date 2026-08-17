@@ -4,6 +4,7 @@ from catlass.tla.runtime import make_fake_tensor
 
 
 import inspect
+import warnings
 from typing import Any
 
 from mlir import ir as mlir_ir
@@ -527,13 +528,34 @@ def test_range_constexpr_returns_python_range() -> None:
         _ = tla.range_constexpr(0, 4.0)
 
 
-def test_range_constexpr_warns_for_large_static_loop() -> None:
-    with pytest.warns(
-        ast_helpers.DSLOptimizationWarning,
-        match=r"This static loop has 64 iterations.*`tla\.range\(\.\.\.\)`",
-    ):
-        result = tla.range_constexpr(64)
-    assert len(result) == 64
+@pytest.mark.parametrize(
+    ("args", "expected_length", "warns"),
+    [
+        ((63,), 63, False),
+        ((64,), 64, True),
+        ((65,), 65, True),
+        ((5, 5), 0, False),
+        ((64, 0, -1), 64, True),
+    ],
+)
+def test_range_constexpr_static_loop_warning_boundary(
+    args: tuple[int, ...], expected_length: int, warns: bool
+) -> None:
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        result = tla.range_constexpr(*args)
+
+    assert len(result) == expected_length
+    optimization_warnings = [
+        warning
+        for warning in caught
+        if issubclass(warning.category, ast_helpers.DSLOptimizationWarning)
+    ]
+    assert bool(optimization_warnings) is warns
+    if warns:
+        assert len(optimization_warnings) == 1
+        assert "This static loop has" in str(optimization_warnings[0].message)
+        assert "`tla.range(...)`" in str(optimization_warnings[0].message)
 
 
 _MAKE_TENSOR_LIKE_DEST_SPACE = tla.AddressSpace.ub

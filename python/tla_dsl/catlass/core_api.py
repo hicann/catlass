@@ -7443,6 +7443,7 @@ _ast_preprocessor._register_trusted_lazy_callables(
     _dsl_module,
     range_callable=range,
     range_constexpr_callable=range_constexpr,
+    as_numeric_callable=as_numeric,
     const_expr_callable=_runtime.const_expr,
     cube_callable=cube,
     vector_callable=vector,

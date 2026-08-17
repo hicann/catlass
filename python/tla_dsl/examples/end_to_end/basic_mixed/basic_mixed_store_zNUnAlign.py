@@ -11,14 +11,12 @@
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
 
 import catlass.tla as tla
-import sys
 from catlass.params import BlockStoreParams
 
 
-def ceil_div(a: int, b: int):
+def ceil_div(a: int, b: int) -> int:
     return (a + b - 1) // b
 
 
@@ -49,6 +47,7 @@ DESCRIPTION = "Basic Mixed UB RowMajor→zNUnAlign Store; f32 only."
 # ---------------------------------------------------------------------------
 # Kernel
 # ---------------------------------------------------------------------------
+
 
 @tla.kernel
 def basic_mixed_store_zNUnAlign(
@@ -121,12 +120,12 @@ def basic_mixed_store_zNUnAlign(
         ub_a_tile = tla.make_tensor(
             ub_a_ptr,
             tla.make_layout(tla.make_shape(M_L1 // 2, K_L1), tla.make_stride(K_L1, 1)),
-            tla.make_coord(0, 0)
+            tla.make_coord(0, 0),
         )
         ub_a = tla.tile_view(
             ub_a_tile,
             tla.make_shape(gm_a.origin_shape[0], gm_a.origin_shape[1]),
-            tla.make_coord(0, 0)
+            tla.make_coord(0, 0),
         )
 
         tla.copy(ub_a, gm_a)
@@ -158,7 +157,10 @@ def basic_mixed_store_zNUnAlign(
                         tla.make_shape(1, VF_LEN),
                         tla.make_coord(row_tile_idx, col_tile_idx),
                     )
-                    a_zN_chunk.store(a_chunk.load(), params=BlockStoreParams(block_stride=block_stride))
+                    a_zN_chunk.store(
+                        a_chunk.load(),
+                        params=BlockStoreParams(block_stride=block_stride),
+                    )
 
         tla.set_flag(store_done)
         tla.wait_flag(store_done)
@@ -195,12 +197,9 @@ def prepare_npu(buf, layout: str):
 
 def run(args: argparse.Namespace) -> int:
     import torch
-    import torch_npu
+    import torch_npu  # noqa: F401
 
-    from examples.end_to_end.common import (
-        create_tla_tensor,
-        compare,
-    )
+    from examples.end_to_end.common import create_tla_tensor, compare
 
     mi, ni, ki = int(args.m), int(args.n), int(args.k)
 
@@ -223,7 +222,7 @@ def run(args: argparse.Namespace) -> int:
         a_tensor,
         b_tensor,
         c_tensor,
-        options="--npu-arch 3510"
+        options="--npu-arch 3510",
     )
     artifact(a_tensor, b_tensor, c_tensor, block_num=args.block_num)
     torch.npu.synchronize()

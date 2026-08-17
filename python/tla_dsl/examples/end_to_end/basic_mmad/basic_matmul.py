@@ -19,7 +19,8 @@ import argparse
 
 import catlass.tla as tla
 import torch
-import torch_npu
+import torch_npu  # noqa: F401
+from catlass.tla.runtime import from_dlpack
 
 from examples.end_to_end.common import TilingParams
 
@@ -82,8 +83,9 @@ def basic_mmad_kernel(
         tla.set_flag(l0b1_available)
         tla.set_flag(l0c_available)
 
-        l1_buf_idx = c0
-        l0_buf_idx = c0
+        runtime_zero = tla.as_numeric(0)
+        l1_buf_idx = runtime_zero
+        l0_buf_idx = runtime_zero
 
         block_range = tla.range(
             tla.arch.block_idx(), total_blocks, tla.arch.block_num()

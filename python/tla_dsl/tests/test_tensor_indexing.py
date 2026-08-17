@@ -14,7 +14,6 @@ import pytest
 
 from mlir import ir as mlir_ir
 import catlass.tla as tla
-import catlass.runtime as runtime_mod
 from catlass.base_dsl.ast_preprocessor import (
     _FrontendControlFlowTransformer,
     _FunctionAnalyzer,
@@ -139,8 +138,14 @@ def _kernel_scalar_store_dynamic_for(out: tla.Tensor, limit: int) -> None:
 
 
 @tla.kernel
+def _kernel_scalar_store_negative_step_for(out: tla.Tensor, limit: int) -> None:
+    for i in tla.range(limit, 0, -1):
+        out[i] = i
+
+
+@tla.kernel
 def _kernel_scalar_store_dynamic_while(out: tla.Tensor, limit: int) -> None:
-    i = 0
+    i = tla.as_numeric(0)
     while i < limit:
         out[i] = i
         i = i + 1
@@ -310,6 +315,12 @@ def test_tensor_scalar_store_supported_in_all_runtime_control_flow() -> None:
     assert "scf.for" in for_mlir
     assert for_mlir.count("tla.scalar_store") == 1
 
+    negative_for_mlir = _kernel_scalar_store_negative_step_for.dump_mlir(
+        type_args=(out, 4)
+    )
+    assert "scf.for" in negative_for_mlir
+    assert negative_for_mlir.count("tla.scalar_store") == 1
+
     while_mlir = _kernel_scalar_store_dynamic_while.dump_mlir(type_args=(out, 4))
     assert "scf.while" in while_mlir
     assert while_mlir.count("tla.scalar_store") == 1
@@ -369,12 +380,12 @@ def test_tensor_scalar_store_accepts_local_tensor_view() -> None:
     assert mlir.count("tla.scalar_store") == 1
 
 
-def test_tensor_scalar_store_preserves_python_assignment_evaluation_order() -> None:
+def test_tensor_scalar_store_stages_undecorated_assignment_helpers() -> None:
     out = _gm_tensor_1d(8)
     _assignment_evaluation_log.clear()
     mlir = _kernel_scalar_store_evaluation_order.dump_mlir(type_args=(out, 0))
-    assert "tla.scalar_store" in mlir
     assert _assignment_evaluation_log == ["value", "target", "index"]
+    assert mlir.count("tla.scalar_store") == 1
 
 
 @pytest.mark.parametrize(

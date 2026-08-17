@@ -246,12 +246,12 @@ def flash_attention_infer_kernel(
         TOTAL_TASKS,
         tla.arch.block_num(),
     )
-    cur_batch = c0
-    pre_total_task_num = c0
-    cur_total_task_num = first_batch_task_num
-    q_b_offset = c0
-    o_b_offset = c0
-    q_seqlen_cur = Q_SEQ
+    cur_batch = tla.as_numeric(c0)
+    pre_total_task_num = tla.as_numeric(c0)
+    cur_total_task_num = tla.as_numeric(first_batch_task_num)
+    q_b_offset = tla.as_numeric(c0)
+    o_b_offset = tla.as_numeric(c0)
+    q_seqlen_cur = tla.as_numeric(Q_SEQ)
     kv_block_count_cur = KV_BLOCK_COUNT
     for task in task_range:
         if task >= cur_total_task_num:

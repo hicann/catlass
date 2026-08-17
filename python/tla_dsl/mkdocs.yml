@@ -15,6 +15,8 @@ nav:
   - Dynamic Layout: dsl_dynamic_layout.md
   - Kernel API Reference: kernel-api-reference.md
   - Kernel API Reference (中文): kernel-api-reference.zh.md
+  - Control Flow: control_flow.md
+  - Core API Reference: api-reference.md
   - DSL Syntax Constraints: dsl_python_syntax_guide.md
   - DSL Syntax Constraints (English): dsl_python_syntax_guide_en.md
   - BC Backend Integration: bc-backend-integration.md

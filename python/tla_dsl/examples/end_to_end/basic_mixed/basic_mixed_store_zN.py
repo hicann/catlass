@@ -11,14 +11,12 @@
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
 
 import catlass.tla as tla
-import sys
 from catlass.params import BlockStoreParams
 
 
-def ceil_div(a: int, b: int):
+def ceil_div(a: int, b: int) -> int:
     return (a + b - 1) // b
 
 
@@ -49,6 +47,7 @@ DESCRIPTION = "Basic Mixed UB RowMajor→zN Store + BlockStore; f32 only."
 # ---------------------------------------------------------------------------
 # Kernel
 # ---------------------------------------------------------------------------
+
 
 @tla.kernel
 def basic_mixed_store_zN(
@@ -115,7 +114,7 @@ def basic_mixed_store_zN(
         gm_a = tla.tile_view(
             gm_a_tile,
             tla.make_shape(gm_a_tile.origin_shape[0] // 2, K_L1),
-            tla.make_coord(vec_idx, 0)
+            tla.make_coord(vec_idx, 0),
         )
 
         ub_a_tile = tla.make_tensor(
@@ -126,7 +125,7 @@ def basic_mixed_store_zN(
         ub_a = tla.tile_view(
             ub_a_tile,
             tla.make_shape(gm_a.origin_shape[0], gm_a.origin_shape[1]),
-            tla.make_coord(0, 0)
+            tla.make_coord(0, 0),
         )
 
         tla.copy(ub_a, gm_a)
@@ -138,7 +137,9 @@ def basic_mixed_store_zN(
 
         vf_row_loops = ub_a.origin_shape[0]
         vf_col_loops = ceil_div(K_L1, VF_LEN)
-        block_stride = ub_a_zN.stride[1][1] // ub_a_zN.shape[1][0] # data blocks in zN rows
+        block_stride = (
+            ub_a_zN.stride[1][1] // ub_a_zN.shape[1][0]
+        )  # data blocks in zN rows
         for row_tile_idx in tla.range(vf_row_loops):
             for col_tile_idx in tla.range(vf_col_loops):
                 with tla.vec.func(mode="simd"):
@@ -152,7 +153,10 @@ def basic_mixed_store_zN(
                         tla.make_shape(1, VF_LEN),
                         tla.make_coord(row_tile_idx, col_tile_idx),
                     )
-                    a_zN_chunk.store(a_chunk.load(), params=BlockStoreParams(block_stride=block_stride))
+                    a_zN_chunk.store(
+                        a_chunk.load(),
+                        params=BlockStoreParams(block_stride=block_stride),
+                    )
 
         tla.set_flag(store_done)
         tla.wait_flag(store_done)
@@ -165,7 +169,7 @@ def basic_mixed_store_zN(
         )
 
         tla.copy(l1_a, ub_a_zN)
-        tla.cross_core_set_flag(ub2l1_done, tla.arch.MTE3) # wait uba -> l1a
+        tla.cross_core_set_flag(ub2l1_done, tla.arch.MTE3)  # wait uba -> l1a
 
         tla.pipe_barrier(tla.pipes.ALL)
 
@@ -189,12 +193,9 @@ def prepare_npu(buf, layout: str):
 
 def run(args: argparse.Namespace) -> int:
     import torch
-    import torch_npu
+    import torch_npu  # noqa: F401
 
-    from examples.end_to_end.common import (
-        create_tla_tensor,
-        compare,
-    )
+    from examples.end_to_end.common import create_tla_tensor, compare
 
     mi, ni, ki = int(args.m), int(args.n), int(args.k)
 
@@ -213,11 +214,7 @@ def run(args: argparse.Namespace) -> int:
     c_tensor = create_tla_tensor(out, "row")
 
     artifact = tla.compile(
-        basic_mixed_store_zN,
-        a_tensor,
-        b_tensor,
-        c_tensor,
-        options="--npu-arch 3510"
+        basic_mixed_store_zN, a_tensor, b_tensor, c_tensor, options="--npu-arch 3510"
     )
     artifact(a_tensor, b_tensor, c_tensor, block_num=args.block_num)
     torch.npu.synchronize()

@@ -5,6 +5,7 @@ import pytest
 import catlass.tla as tla
 
 
+@tla.jit
 def _ub_tensor(dtype: object, elements: int = 64) -> object:
     ptr = tla.allocate(elements, dtype, tla.AddressSpace.ub, 256)
     return tla.make_tensor(
@@ -67,7 +68,7 @@ def vector_while_kernel(limit: int) -> None:
     with tla.vector():
         with tla.vec.func(mode="simd"):
             value = src_tile.load()
-            index = 0
+            index = tla.as_numeric(0)
             while index < limit:
                 dst_tile.store(value)
                 index += 1
@@ -134,7 +135,7 @@ def mask_while_kernel(limit: int) -> None:
         with tla.vec.func(mode="simd"):
             value = src_tile.load()
             mask = tla.create_mask(pattern=tla.mask.H, dtype=tla.Float32)
-            index = 0
+            index = tla.as_numeric(0)
             while index < limit:
                 dst_tile.store(value, mask=mask)
                 mask = tla.bitwise_not(mask)

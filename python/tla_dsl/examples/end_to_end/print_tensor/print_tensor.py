@@ -490,10 +490,7 @@ def _run_spec(args: argparse.Namespace, torch: Any, spec: _DTypeSpec) -> None:
             .contiguous()
         )
         value = tla.from_dlpack(source, layout_tag=tla.arch.RowMajor)
-        expected_values: list[float | int] = [
-            float(value)
-            for value in range(CAPACITY_SHAPE[0])
-        ]
+        expected_values: list[float | int] = [float(value) for value in range(CAPACITY_SHAPE[0])]
     else:
         runtime_input = _make_runtime_input(
             torch,
@@ -507,10 +504,7 @@ def _run_spec(args: argparse.Namespace, torch: Any, spec: _DTypeSpec) -> None:
         if args.layout == "column-major":
             source = source.detach().cpu().permute(1, 0).contiguous().npu()
             value = tla.from_dlpack(source, layout_tag=tla.arch.ColumnMajor)
-            expected_values = [
-                value
-                for value in source.flatten()[: len(spec.values)].tolist()
-            ]
+            expected_values = [value for value in source.flatten()[: len(spec.values)].tolist()]
     if args.case == "dynamic-control-flow":
         kernel_args = (value, tla.Int32(args.enabled), tla.Int32(args.repeats))
     elif (args.storage == "ub" and args.case == "dynamic") or (

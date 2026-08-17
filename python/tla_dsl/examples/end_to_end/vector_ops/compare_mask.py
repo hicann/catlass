@@ -262,8 +262,6 @@ def _set_kernel_config(
     return config.tla_dtype, config.torch_dtype, config.default_sentinel
 
 
-
-
 def _configure_batch(
     ops: tuple[str, ...], dtype_name: str, shape: tuple[int, ...]
 ) -> tuple[type[Any], Any, float | int]:

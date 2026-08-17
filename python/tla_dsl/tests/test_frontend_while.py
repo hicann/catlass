@@ -1,12 +1,13 @@
 from typing import Any
 
+import inspect
+import warnings
+
 import pytest
 
 import catlass.tla as tla
-import catlass.tla_ast_decorators as ast_decorators_mod
 import catlass.core_api as core_api_mod
-import catlass.runtime as runtime_mod
-from catlass.base_dsl.ast_helpers import while_executor
+from catlass.base_dsl import ast_helpers
 
 const_expr = tla.const_expr
 
@@ -65,8 +66,36 @@ _while_protocol_spy = _WhileProtocolSpy()
 
 
 @tla.kernel
+def while_compile_time_binding_write_inside_kernel(limit: int) -> None:
+    scale = 2
+    i = tla.as_numeric(0)
+    while i < limit:
+        tla.make_coord(i * scale, 0)
+        scale = 3
+        tla.make_coord(i * scale, 0)
+        i = i + 1
+
+
+def test_while_rejects_compile_time_binding_write_at_assignment() -> None:
+    with pytest.raises(
+        Exception,
+        match="compile-time binding 'scale'.*use tla.as_numeric",
+    ) as exc:
+        while_compile_time_binding_write_inside_kernel.dump_mlir(type_args=(2,))
+
+    diagnostic = exc.value.__cause__.__cause__
+    assert isinstance(diagnostic, SyntaxError)
+    assert (
+        diagnostic.lineno
+        == inspect.getsourcelines(while_compile_time_binding_write_inside_kernel.fn)[1]
+        + 6
+    )
+    assert diagnostic.text.strip() == "scale = 3"
+
+
+@tla.kernel
 def statement_while_carried_index_kernel(limit: int) -> None:
-    i = 0
+    i = tla.as_numeric(0)
     while i < limit:
         i = i + 1
     tla.make_coord(i, 0)
@@ -74,21 +103,15 @@ def statement_while_carried_index_kernel(limit: int) -> None:
 
 @tla.kernel
 def statement_while_compound_bool_kernel(limit: int) -> None:
-    i = 0
-    while (
-        i < limit
-        and i < 1024
-        and i >= 0
-        and i != 1025
-        and i <= 1024
-    ):
+    i = tla.as_numeric(0)
+    while i < limit and i < 1024 and i >= 0 and i != 1025 and i <= 1024:
         i = i + 1
     tla.make_coord(i, 0)
 
 
 @tla.kernel
 def statement_while_guarded_division_kernel(limit: int) -> None:
-    i = 0
+    i = tla.as_numeric(0)
     while i != 0 and 10 // i > 2 and i < limit:
         i = i + 1
     tla.make_coord(i, 0)
@@ -96,7 +119,7 @@ def statement_while_guarded_division_kernel(limit: int) -> None:
 
 @tla.kernel
 def statement_while_guarded_division_or_kernel(limit: int) -> None:
-    i = 0
+    i = tla.as_numeric(0)
     while (i == 0 or 10 // i > 2) and i < limit:
         i = i + 1
     tla.make_coord(i, 0)
@@ -110,7 +133,8 @@ def staged_false_while_skips_custom_protocol_kernel() -> None:
 
 @tla.kernel
 def statement_while_structured_carried_kernel(limit: int) -> None:
-    state = (0, 1)
+    zero = tla.as_numeric(0)
+    state = (zero, zero + 1)
     while state[0] < limit:
         state = (state[0] + 1, state[1] + 2)
     tla.make_coord(state[0], state[1])
@@ -118,8 +142,8 @@ def statement_while_structured_carried_kernel(limit: int) -> None:
 
 @tla.kernel
 def statement_while_nested_if_kernel(limit: int) -> None:
-    i = 0
-    offset = 0
+    i = tla.as_numeric(0)
+    offset = tla.as_numeric(0)
     while i < limit:
         if i == 0:
             offset = i + 1
@@ -131,8 +155,8 @@ def statement_while_nested_if_kernel(limit: int) -> None:
 
 @tla.kernel
 def statement_while_nested_for_kernel(limit: int) -> None:
-    i = 0
-    offset = 0
+    i = tla.as_numeric(0)
+    offset = tla.as_numeric(0)
     while i < limit:
         for j in tla.range(0, 2, 1):
             offset = j
@@ -142,7 +166,7 @@ def statement_while_nested_for_kernel(limit: int) -> None:
 
 @tla.kernel
 def statement_while_contains_cube_region_kernel(limit: int) -> None:
-    i = 0
+    i = tla.as_numeric(0)
     while i < limit:
         with tla.cube():
             tla.make_coord(i, 0)
@@ -170,6 +194,44 @@ def imported_const_expr_while_kernel(limit: tla.Constexpr[int]) -> None:
     while const_expr(i < limit):
         tla.make_coord(i, 0)
         i = i + 1
+
+
+@tla.kernel
+def const_expr_while_break_kernel(limit: tla.Constexpr[int]) -> None:
+    i = 0
+    while tla.const_expr(True):
+        if tla.const_expr(i == limit):
+            break
+        i = i + 1
+
+
+@tla.kernel
+def const_expr_while_continue_kernel(limit: tla.Constexpr[int]) -> None:
+    i = 0
+    while tla.const_expr(i < limit):
+        i = i + 1
+        continue
+
+
+@tla.kernel
+def nested_const_expr_while_kernel(limit: tla.Constexpr[int]) -> None:
+    outer = 0
+    while tla.const_expr(outer < limit):
+        inner = 0
+        while tla.const_expr(inner < limit):
+            inner = inner + 1
+        outer = outer + 1
+
+
+@tla.kernel
+def const_expr_while_generated_name_collision_kernel(
+    limit: tla.Constexpr[int],
+) -> None:
+    __tladsl_constexpr_while_iteration_1 = 99
+    i = 0
+    while tla.const_expr(i < limit):
+        i = i + 1
+    assert __tladsl_constexpr_while_iteration_1 == 99
 
 
 @tla.kernel
@@ -211,7 +273,7 @@ def bad_statement_while_new_value_used_after_kernel(limit: int) -> None:
 
 @tla.kernel
 def bad_statement_while_type_mismatch_kernel(limit: int) -> None:
-    i = 0
+    i = tla.as_numeric(0)
     while i < limit:
         i = True
     tla.make_coord(i, 0)
@@ -219,7 +281,8 @@ def bad_statement_while_type_mismatch_kernel(limit: int) -> None:
 
 @tla.kernel
 def bad_statement_while_structure_mismatch_kernel(limit: int) -> None:
-    state = (0, 1)
+    zero = tla.as_numeric(0)
+    state = (zero, zero + 1)
     while state[0] < limit:
         state = (state[0] + 1,)
     tla.make_coord(state[0], 0)
@@ -227,7 +290,8 @@ def bad_statement_while_structure_mismatch_kernel(limit: int) -> None:
 
 @tla.kernel
 def bad_statement_while_custom_class_type_mismatch_kernel(limit: int) -> None:
-    state = CustomWhileState(0, 1)
+    zero = tla.as_numeric(0)
+    state = CustomWhileState(zero, zero + 1)
     while state.coord < limit:
         state = CustomWhileState(True, state.offset + 1)
     tla.make_coord(state.coord, state.offset)
@@ -238,10 +302,33 @@ def bad_statement_while_active_closure_call_kernel(limit: int) -> None:
     def helper(value: int) -> None:
         tla.make_coord(value, 0)
 
-    i = 0
+    i = tla.as_numeric(0)
     while i < limit:
         helper(i)
         i = i + 1
+
+
+@tla.kernel
+def statement_while_active_object_method_call_kernel(limit: int) -> None:
+    zero = tla.as_numeric(0)
+    values = [zero, zero + 1]
+    i = zero
+    while i < limit:
+        values.reverse()
+        values = [i, i + 1]
+        i = i + 1
+    tla.make_coord(values[0], values[1])
+
+
+@tla.kernel
+def bad_statement_while_active_object_method_structure_kernel(limit: int) -> None:
+    zero = tla.as_numeric(0)
+    values = [zero]
+    i = zero
+    while i < limit:
+        values.append(i)
+        i = i + 1
+    tla.make_coord(values[0], 0)
 
 
 def test_statement_while_carried_index_lowers_to_scf_while() -> None:
@@ -332,6 +419,84 @@ def test_imported_const_expr_while_stays_python_control_flow() -> None:
     assert "!tla.coord<1,0>" in mlir
 
 
+def test_imported_const_expr_while_uses_static_loop_warning_policy() -> None:
+    with pytest.warns(
+        ast_helpers.DSLOptimizationWarning,
+        match="This static loop has 64 iterations",
+    ):
+        imported_const_expr_while_kernel.dump_mlir(type_args=(64,))
+
+
+@pytest.mark.parametrize(("limit", "warns"), [(63, False), (64, True), (65, True)])
+def test_const_expr_while_static_loop_warning_boundary(limit: int, warns: bool) -> None:
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        const_expr_while_kernel.dump_mlir(type_args=(limit,))
+
+    optimization_warnings = [
+        warning
+        for warning in caught
+        if issubclass(warning.category, ast_helpers.DSLOptimizationWarning)
+    ]
+    assert bool(optimization_warnings) is warns
+    if warns:
+        assert len(optimization_warnings) == 1
+        assert "This static loop has 64 iterations" in str(
+            optimization_warnings[0].message
+        )
+        assert optimization_warnings[0].filename == __file__
+        source_lines, source_start = inspect.getsourcelines(const_expr_while_kernel.fn)
+        while_offset = next(
+            offset
+            for offset, source_line in enumerate(source_lines)
+            if "while tla.const_expr" in source_line
+        )
+        assert optimization_warnings[0].lineno == source_start + while_offset
+
+
+def test_const_expr_while_break_before_threshold_does_not_warn() -> None:
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        const_expr_while_break_kernel.dump_mlir(type_args=(62,))
+    assert not [
+        warning
+        for warning in caught
+        if issubclass(warning.category, ast_helpers.DSLOptimizationWarning)
+    ]
+
+
+def test_const_expr_while_continue_cannot_bypass_warning() -> None:
+    with pytest.warns(
+        ast_helpers.DSLOptimizationWarning,
+        match="This static loop has 64 iterations",
+    ):
+        const_expr_while_continue_kernel.dump_mlir(type_args=(65,))
+
+
+def test_nested_const_expr_while_counters_are_independent() -> None:
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        nested_const_expr_while_kernel.dump_mlir(type_args=(64,))
+    optimization_warnings = [
+        warning
+        for warning in caught
+        if issubclass(warning.category, ast_helpers.DSLOptimizationWarning)
+    ]
+    assert len(optimization_warnings) == 65
+
+
+def test_const_expr_while_generated_counter_name_does_not_collide() -> None:
+    with pytest.warns(ast_helpers.DSLOptimizationWarning):
+        const_expr_while_generated_name_collision_kernel.dump_mlir(type_args=(64,))
+
+
+def test_const_expr_while_warning_respects_filters() -> None:
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("ignore", ast_helpers.DSLOptimizationWarning)
+        const_expr_while_kernel.dump_mlir(type_args=(64,))
+    assert not caught
+
+
 def test_statement_while_rejects_break() -> None:
     with pytest.raises(SyntaxError, match="dynamic Tla while"):
         _ = bad_statement_while_break_kernel.dump_mlir(type_args=(4,))
@@ -368,14 +533,25 @@ def test_statement_while_rejects_mismatched_carried_structure() -> None:
 
 
 def test_statement_while_rejects_custom_class_type_mismatch_by_leaf_name() -> None:
-    with pytest.raises(tla.TlaCoreAPIError, match=r"state\[0\]"):
+    with pytest.raises(SyntaxError, match="user-defined class"):
         _ = bad_statement_while_custom_class_type_mismatch_kernel.dump_mlir(
             type_args=(4,)
         )
 
 
-def test_statement_while_rejects_active_closure_call() -> None:
-    with pytest.raises(SyntaxError, match="nested function definition"):
-        _ = bad_statement_while_active_closure_call_kernel.dump_mlir(type_args=(4,))
+def test_statement_while_allows_active_closure_call() -> None:
+    mlir = bad_statement_while_active_closure_call_kernel.dump_mlir(type_args=(4,))
+    assert "scf.while" in mlir
+    assert "tla.make_coord" in mlir
 
 
+def test_statement_while_active_object_method_call_lowers_as_carried_value() -> None:
+    with pytest.raises(SyntaxError, match="requires @tla.jit"):
+        statement_while_active_object_method_call_kernel.dump_mlir(type_args=(4,))
+
+
+def test_statement_while_rejects_active_object_method_structure_change() -> None:
+    with pytest.raises(SyntaxError, match="requires @tla.jit"):
+        _ = bad_statement_while_active_object_method_structure_kernel.dump_mlir(
+            type_args=(4,)
+        )

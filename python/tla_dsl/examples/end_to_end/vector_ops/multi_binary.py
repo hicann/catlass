@@ -145,8 +145,8 @@ def multi_binary(
             tla.copy(x_gm, x_ub)
         if block_idx == 1:
             tla.copy(t_gm, t_ub)
-    
-    tla.pipe_barrier(tla.pipes.ALL)
+
+        tla.pipe_barrier(tla.pipes.ALL)
 
 
 def _make_ub_tensor(like_tensor: Any) -> Any:
@@ -165,8 +165,8 @@ def _chunk(tensor: Any, chunk_idx: Any) -> Any:
 
 # Straight-line (no control flow) per-chunk loads + compute. Returns the tile
 # handles and the intermediate so the kernel body can do the store and the
-# block_idx-gated store itself: `if`/`for` must stay in the AST-traced @tla.kernel
-# body (a plain helper would hit a raw Python `if` on an SSA bool).
+# block_idx-gated store itself: `if`/`for` stays in the AST-traced @tla.kernel
+# body because this bare helper executes as ordinary Python staging code.
 def _chunk_compute(
     a_ub: Any,
     b_ub: Any,

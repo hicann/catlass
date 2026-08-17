@@ -56,7 +56,7 @@ def test_execution_only_mode_lowers_tla_range_loop() -> None:
     assert "tla.make_coord" in mlir
 
 
-def test_execution_only_mode_handles_python_range_loop() -> None:
+def test_execution_only_mode_lowers_python_range_loop() -> None:
     def supported(mem_a: tla.Tensor) -> None:
         for _i in range(4):
             tla.make_coord(0, 0)
@@ -74,7 +74,8 @@ def test_execution_only_mode_handles_python_range_loop() -> None:
         options={},
         type_args=(mem_a,),
     )
-    assert mlir.count("tla.make_coord") == 4
+    assert "scf.for" in mlir
+    assert mlir.count("tla.make_coord") == 1
 
 
 def test_mixed_kernel_module_attrs_are_formatted_correctly() -> None:
