@@ -28,8 +28,7 @@ from ._mlir_bindings import tla_ops_gen as _tla_ops_gen
 from .base_dsl import ast_helpers as _ast_helpers
 from .base_dsl.op import dsl_user_op, _capture_user_loc
 from .base_dsl.typing import Bool, Float32, Int8, Int32, Numeric, as_numeric
-from .base_dsl.typing import Pointer as PointerABC
-from .base_dsl.typing import Pointer as PointerTypeHint
+from .base_dsl.typing import Pointer
 from .tla.tensor import normalize_tile_view_coord
 from .tla.typing import Tensor
 from . import runtime as _runtime
@@ -210,7 +209,6 @@ IndexTree: TypeAlias = IndexLike | tuple["IndexTree", ...]
 ShapeLike: TypeAlias = IndexTree
 CoordLike: TypeAlias = IndexTree
 StrideLike: TypeAlias = IndexTree
-TileLike: TypeAlias = mlir_ir.Value
 MemrefLike: TypeAlias = Tensor | mlir_ir.Value
 FlagLike: TypeAlias = mlir_ir.Value
 CrossFlagLike: TypeAlias = mlir_ir.Value
@@ -222,12 +220,12 @@ DTypeLike: TypeAlias = mlir_ir.Type | type[Numeric]
 LiteralLike: TypeAlias = bool | int | float | str | mlir_ir.Type
 
 
-class _LayoutTagSentinel(_Sentinel):
+class _LayoutTag(_Sentinel):
     """Marks ``tla.arch.*`` values that are valid ``Tensor.layout_tag`` / ``make_tensor_like`` tags."""
 
 
 @_register_value_caster(PtrType.get_static_typeid(), replace=True)
-class _Pointer(PointerABC):
+class _Pointer(Pointer):
     """Concrete JIT pointer for ``!tla.ptr<...>``."""
 
     __slots__ = ("value", "_ptr_ty", "_alloc_size_bytes")
@@ -416,7 +414,18 @@ class _RegisterSSA:
 
 
 class VectorSSA(_RegisterSSA):
-    """Frontend proxy for a register-resident data vector SSA value."""
+    """Frontend proxy for a register-resident data vector SSA value.
+
+    Arithmetic overloads (inside ``tla.vec.func``) map to the matching Core APIs:
+
+    - ``a + b`` / ``b + a`` → :func:`add`
+    - ``a - b`` → :func:`sub`
+    - ``a * b`` / ``b * a`` → :func:`mul`
+    - ``a / b`` → :func:`div`
+
+    Prefer the operators for unmasked vector–vector / vector–scalar math; use
+    ``tla.add`` / ``tla.sub`` / … when you need an explicit ``mask=``.
+    """
 
     _category = "vector_ssa"
     _expected_type = "!tla.vector<NxT>"
@@ -3334,8 +3343,26 @@ def _emit_tensor_print(
     _tla_ops_gen.print_tensor(value, length_value, shape, loc=loc)
 
 
-def print(*args: Any, **kwargs: Any) -> None:
-    """Print one scalar, a formatted scalar string, or a tensor prefix."""
+def print(*args: object, **kwargs: object) -> None:
+    """Directory: Debug APIs
+Description:
+    Print a scalar, a formatted scalar string, or a physical prefix of a GM/UB tensor inside a `cube` / `vector` region.
+
+    Parameters:
+    - *`args`* (`object`): Values to print (variadic positional arguments). Required.
+    - **`kwargs`** (`object`): Keyword arguments are not accepted; passing any raises an error. Optional.
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - Must be called inside `tla.cube()` or `tla.vector()`; tensor printing supports GM/UB only with restricted dtypes.
+
+    Example:
+    ```python
+    with tla.vector():
+        tla.print(x_scalar)
+        tla.print(x_ub, 64)  # tensor + prefix length
+    ```
+    """
     if kwargs:
         _op_error("print", "does not accept keyword arguments")
     if len(args) < 1:
@@ -3482,7 +3509,35 @@ def make_shape(
     *components: IndexTree,
     loc: mlir_ir.Location | None = None,
 ) -> TlaShape:
-    """Build a packed Tla shape from nested tuple components (Kernel / frontend only)."""
+    """Directory: Basic Data Types and Operations
+Description:
+    Build a packed `!tla.shape`; components may be nested tuples.
+
+    Parameters:
+    - *`components`* (`IndexTree`): Shape components per dimension. Nested
+      tuples are used for `zN` / `nZ` / `zZ` / `L0Clayout` / `zNUnAlign`
+      physical layouts. Required.
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - Provide at least one shape component.
+    - RowMajor / ColumnMajor: use a 2D shape `(M, N)`.
+    - `zN` / `nZ` / `zZ` / `L0Clayout` / `zNUnAlign`: for `make_layout` /
+      `make_tensor`, use a nested physical shape `((m0, m1), (n0, n1))`.
+      A plain 2D `(M, N)` is **not** valid for those tags; either nest it, or
+      prefer `make_tensor_like(..., layoutTag=zN)` which remaps from the
+      logical 2D `origin_shape`.
+
+    Example:
+    ```python
+    # RowMajor / ColumnMajor (logical 2D):
+    shape = tla.make_shape(256, 128)
+
+    # zN physical shape (f16, logical 128x64):
+    # m0=16, m1=8 (=128/16); n0=16, n1=4 (=64/16)
+    zn_shape = tla.make_shape((16, 8), (16, 4))
+    ```
+    """
     if len(components) == 0:
         _op_error("make_shape", "expected at least 1 component")
     _require_frontend_state("make_shape")
@@ -3495,7 +3550,23 @@ def make_coord(
     *components: IndexTree,
     loc: mlir_ir.Location | None = None,
 ) -> TlaCoord:
-    """Build a packed Tla coordinate from nested tuple components (Kernel / frontend only)."""
+    """Directory: Basic Data Types and Operations
+
+Description:
+    Build a packed `!tla.coord`.
+
+    Parameters:
+    - *`components`* (`IndexTree`): Coordinate components per dimension. Required.
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - Provide at least one coordinate component.
+
+    Example:
+    ```python
+    coord = tla.make_coord(block_row, 0)
+    ```
+    """
     if len(components) == 0:
         _op_error("make_coord", "expected at least 1 component")
     _require_frontend_state("make_coord")
@@ -3508,7 +3579,54 @@ def make_stride(
     *components: IndexTree,
     loc: mlir_ir.Location | None = None,
 ) -> TlaStride:
-    """Build a packed Tla stride from nested tuple components (Kernel / frontend only)."""
+    """Directory: Basic Data Types and Operations
+
+Description:
+    Build a packed `!tla.stride` (same nesting rules as `make_shape`).
+
+    Parameters:
+    - *`components`* (`IndexTree`): Stride components per dimension. Required.
+
+      Common patterns:
+
+      | Layout | Typical `make_stride(...)` | Meaning |
+      |---|---|---|
+      | RowMajor 2D `(M, N)` | `(N, 1)` | Row step is `N` elements; column step is 1 |
+      | ColumnMajor 2D `(M, N)` | `(1, M)` | Row step is 1; column step is `M` |
+      | `zN` / `nZ` / `zZ` / … | nested `((s00, s01), (s10, s11))` | Same nesting as physical `shape`; values must match the layout tag |
+
+      For `zN` / `nZ` / `zZ` / `L0Clayout` / `zNUnAlign`, C0 is 32 bytes and
+      the M-side block size is 16. Let
+      `elems_per_c0 = 32 // sizeof(dtype)` (f16→16, f32→8) and
+      `elems_per_block = elems_per_c0 * 16`.
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - Provide at least one stride component.
+    - For `zN` / `nZ` / `zZ` / `L0Clayout` / `zNUnAlign`, stride values must
+      match the layout tag (see examples); `make_tensor` checks them against
+      `shape` + `layoutTag`.
+
+    Example:
+    ```python
+    # RowMajor 2D (logical 256x128, tightly packed):
+    stride = tla.make_stride(128, 1)
+
+    # f16 zN for logical origin (128, 64):
+    # shape = ((16, 8), (16, 4))
+    # stride = ((elems_per_c0, elems_per_block),
+    #           (1, round_up(M, 16) * elems_per_c0))
+    #        = ((16, 256), (1, 2048))
+    zn_stride = tla.make_stride((16, 256), (1, 2048))
+
+    # f16 nZ for the same logical (128, 64):
+    # shape = ((16, 8), (16, 4))
+    # stride = ((1, round_up(N, 16) * elems_per_c0),
+    #           (elems_per_c0, elems_per_block))
+    #        = ((1, 1024), (16, 256))
+    nz_stride = tla.make_stride((1, 1024), (16, 256))
+    ```
+    """
     if len(components) == 0:
         _op_error("make_stride", "expected at least 1 component")
     _require_frontend_state("make_stride")
@@ -3522,16 +3640,57 @@ def make_layout(
     stride: _Stride,
     *,
     origin_shape: _Shape | None = None,
-    layoutTag: Any | None = None,
+    layoutTag: _LayoutTag | None = None,
     loc: mlir_ir.Location | None = None,
 ) -> TlaLayout:
-    """Combine packed :func:`make_shape` and :func:`make_stride` into ``!tla.layout`` (``tla.make_layout``).
+    """Directory: Basic Data Types and Operations
 
-    For linear layouts, an omitted ``origin_shape`` is inferred as ``shape`` and
-    retains the same SSA. For NZFamily layouts, it is inferred as the padded
-    logical pair ``(m0*m1, n0*n1)`` from
-    ``shape=((m0,m1),(n0,n1))``. A third operand is emitted only when its SSA
-    differs from ``shape``'s.
+Description:
+    Compose a `!tla.layout` from shape / stride (maps to `tla.make_layout`).
+
+    Parameters:
+    - `shape` (`_Shape`): Layout shape from `tla.make_shape`. Required.
+      RowMajor / ColumnMajor: 2D `(M, N)`.
+      `zN` / `nZ` / `zZ` / `L0Clayout` / `zNUnAlign`: nested
+      `((m0, m1), (n0, n1))`.
+    - `stride` (`_Stride`): Layout stride from `tla.make_stride`. Required.
+      Use the same nesting as `shape`.
+    - `origin_shape` (`_Shape | None`): Logical working shape (true data size
+      before alignment fill). Optional, default `None`. Copy / tiling use this
+      logical size; physical packing lives in `shape` / `stride`.
+    - `layoutTag` (`_LayoutTag | None`): Layout tag (e.g. `tla.arch.RowMajor`,
+      `tla.arch.zN`). Optional, default `None` (RowMajor).
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - `shape` / `stride` must be values returned by `make_shape` / `make_stride`.
+    - For RowMajor / ColumnMajor, an omitted `origin_shape` is inferred as
+      `shape`. For `zN` / `nZ` / `zZ` / `L0Clayout` / `zNUnAlign`, it is
+      inferred as `(m0*m1, n0*n1)` from `shape=((m0,m1),(n0,n1))`.
+    - Do **not** pass a plain 2D `shape` with a `zN` / `nZ` / `zZ` /
+      `L0Clayout` / `zNUnAlign` tag; that fails checks. Either build the nested
+      physical shape, or use `make_tensor_like(ptr, like, layoutTag=...)` so
+      the front end remaps from `like.origin_shape`.
+
+    Example:
+    ```python
+    # RowMajor 2D:
+    layout = tla.make_layout(
+        tla.make_shape(256, 128),
+        tla.make_stride(128, 1),
+        layoutTag=tla.arch.RowMajor,
+    )
+
+    # Explicit f16 zN (logical 128x64 → nested physical + 2D origin):
+    # Before: logical ND tile is (128, 64).
+    zn = tla.make_layout(
+        tla.make_shape((16, 8), (16, 4)),
+        tla.make_stride((16, 256), (1, 2048)),
+        origin_shape=tla.make_shape(128, 64),  # logical size for copy/tiling
+        layoutTag=tla.arch.zN,
+    )
+    # After: layout.shape is zN-packed; layout.origin_shape stays (128, 64).
+    ```
     """
     if not isinstance(shape, _Shape) or not isinstance(stride, _Stride):
         _op_error(
@@ -3646,13 +3805,33 @@ def _emit_tile_view(
 
 @dsl_user_op
 def tile_view(
-    source: Any,
+    source: Tensor,
     shape: _Shape,
     coord: _Coord,
     *,
     loc: mlir_ir.Location | None = None,
 ) -> TlaTensor:
-    """Create a tile view using tile-coordinate granularity on a ``!tla.tensor`` source."""
+    """Directory: Basic Data Types and Operations
+
+Description:
+    Create a tile view on a `!tla.tensor` source at tile-coordinate granularity.
+
+    Parameters:
+    - `source` (`Tensor`): Source `!tla.tensor`. Required.
+    - `shape` (`_Shape`): Tile shape from `tla.make_shape`. Required.
+    - `coord` (`_Coord`): Tile coordinate from `tla.make_coord` (tile granularity). Required.
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - `coord` is tile-granularity; the front end converts it to an element offset using `shape`.
+
+    Example:
+    ```python
+    tile = tla.tile_view(
+        source, tla.make_shape(256, 128), tla.make_coord(block_row, 0)
+    )
+    ```
+    """
     if not isinstance(shape, _Shape) or not isinstance(coord, _Coord):
         _op_error(
             "tile_view",
@@ -3673,32 +3852,42 @@ def tile_view(
 
 @dsl_user_op
 def make_tensor(
-    ptr: Any,
+    ptr: Pointer,
     layout: TlaLayout,
     coord: CoordLike | None = None,
     *,
     loc: mlir_ir.Location | None = None,
 ) -> TlaTensor:
-    """Construct a ``!tla.tensor`` from an explicit pointer, layout, and coord.
+    """Directory: Basic Data Types and Operations
 
-    Unlike :func:`make_tensor_like` (which clones layout/coord from a reference tensor),
-    this takes the layout and coord directly, mirroring the
-    ``!tla.tensor<layout, coord, ptr>`` type structure:
+Description:
+    Build a `!tla.tensor` from an explicit pointer, layout, and optional coord.
 
-        tla.make_tensor(ptr, tla.make_layout(shape, stride), coord=tla.make_coord(...))
+    Parameters:
+    - `ptr` (`Pointer`): Underlying data pointer (`!tla.ptr`). Required.
+    - `layout` (`TlaLayout`): Tensor layout from `tla.make_layout`. Required.
+    - `coord` (`CoordLike | None`): Optional start coordinate; treated as zeros when omitted. Optional, default `None`.
 
-    ``coord`` defaults to a zero coord matching the layout's rank (rank-2 layout ->
-    ``make_coord(0, 0)``, rank-1 -> ``make_coord(0)``). Element type and address space
-    come from ``ptr``'s ``!tla.ptr`` type; the layout tag, shape, stride, and origin come
-    from the ``!tla.layout`` operand (origin defaults to ``shape``).
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - Pointer, layout, and coord must match the target address space and dtype.
+    - `coord` defaults to a zero coord matching the layout's rank (rank-2 ->
+      `make_coord(0, 0)`, rank-1 -> `make_coord(0)`). Element type and address
+      space come from `ptr`'s `!tla.ptr`; layout tag, shape, stride, and origin
+      come from the `!tla.layout` operand (origin defaults to `shape`).
+    - Lowering supports RowMajor, ColumnMajor, zN, nZ, zZ, L0Clayout, and
+      zNUnAlign. For `zN` / `nZ` / `zZ` / `L0Clayout` / `zNUnAlign`, physical
+      `shape` / `stride` are nested 2x2, while logical coord / `origin_shape`
+      stay 2D `(M, N)`. If `make_layout` omitted `origin_shape`, the logical
+      size is inferred from the physical shape (for example `(m0*m1, n0*n1)`).
+    - A full compile requires `ptr` to carry backing storage; an on-chip pointer
+      from `allocate` (optionally via `recast_ptr`) is the supported form for
+      runnable kernels.
 
-    Lowering supports RowMajor, ColumnMajor, zN, nZ, zZ, L0Clayout, and
-    zNUnAlign. NZFamily layouts use a nested 2x2 physical shape/stride tree and a
-    flat logical 2-D coord/origin. If their ``origin_shape`` was omitted from
-    :func:`make_layout`, the padded logical pair is inferred from the physical
-    shape. Like :func:`make_tensor_like`, a full compile requires ``ptr`` to
-    carry backing storage; a pointer returned by :func:`allocate` is the supported
-    form for runnable kernels.
+    Example:
+    ```python
+    tensor = tla.make_tensor(ptr, layout, coord=tla.make_coord(0, 0))
+    ```
     """
     _require_category("make_tensor", "ptr", ptr, "pointer", 0)
     if not isinstance(layout, _Layout):
@@ -3860,27 +4049,31 @@ def make_tensor(
 
 @dsl_user_op
 def make_tensor_like(
-    ptr: Any,
-    like: TileLike,
-    layoutTag: Any | None = None,
+    ptr: Pointer,
+    like: Tensor,
+    layoutTag: _LayoutTag | None = None,
     *,
     loc: mlir_ir.Location | None = None,
 ) -> TlaTensor:
-    """Create a tensor over ``ptr`` from ``like`` using structured Tla tensor metadata.
+    """Directory: Basic Data Types and Operations
 
-    The ``layoutTag`` must be a ``tla.arch`` layout sentinel (e.g. ``tla.arch.RowMajor``,
-    ``tla.arch.zN``); raw strings are not accepted. It selects a layout policy aligned with
-    ``tla/layout.hpp``. Remapping uses logical ``M,N`` from ``like``'s flat
-    **origin_shape** tree; nested origin trees skip remap. **shape** and **stride** are recomputed
-    from that pair (e.g. ``zN`` nested 2×2 fractal spelling). **coord** is always ``0,0`` for
-    every layout tag that participates in remap; **origin_shape** in the result matches the same
-    flat logical pair. The tensor element type is taken from ``ptr``'s ``!tla.ptr``
-    pointee, while its address space follows the pointer's memspace; L0 pointer names
-    are remapped to tensor ABI names. ``like`` supplies only the tensor
-    shape/layout/coord structure.
-    Only destination pointers in on-chip address spaces are accepted.
-    The ``ptr`` operand is required by
-    ``tla.make_tensor_like`` for lowering to attach backing storage.
+Description:
+    Build a same-shaped tensor on the given pointer using structured metadata from a reference tile.
+
+    Parameters:
+    - `ptr` (`Pointer`): Destination data pointer. Required.
+    - `like` (`Tensor`): Reference tile providing structured tensor metadata. Required.
+    - `layoutTag` (`_LayoutTag | None`): Layout tag overriding the reference tile. Optional, default `None`.
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - The reference tile must provide usable structured tensor metadata.
+    - Element type comes from `ptr`'s `!tla.ptr` pointee; only on-chip destination pointers are accepted.
+
+    Example:
+    ```python
+    dst = tla.make_tensor_like(ptr, like=src_tile, layoutTag=tla.arch.RowMajor)
+    ```
     """
     _require_category("make_tensor_like", "like", like, "tensor", 1)
     _require_frontend_state("make_tensor_like")
@@ -3945,7 +4138,7 @@ def make_tensor_like(
             )
     else:
         # Validate user-provided layoutTag
-        if not isinstance(layoutTag, _LayoutTagSentinel):
+        if not isinstance(layoutTag, _LayoutTag):
             _op_error(
                 "make_tensor_like",
                 "invalid argument 'layoutTag': "
@@ -4045,17 +4238,77 @@ _COPY_VECTOR_ROUTES = {("gm", "ub"), ("ub", "gm"), ("ub", "l1")}
 
 
 @dsl_user_op
-def copy(dst: TileLike, src: TileLike, params: CopyParams | None = None, *, loc: mlir_ir.Location | None = None) -> None:
-    """Copy between Tla tensor/view values.
+def copy(dst: Tensor, src: Tensor, params: CopyParams | None = None, *, loc: mlir_ir.Location | None = None) -> None:
+    """Directory: Data Movement
+Description:
+    Copy data between tiles. The hardware path follows `src`/`dst` address spaces
+    (vector: GM↔UB, UB→L1; cube: GM→L1, L1→L0A/L0B, L0C→GM|UB, L1→UB).
+    Layout tags on the tiles select format conversion (for example ND→zN).
 
-    Frontend policy is intentionally minimal: ``tla.copy`` accepts only tensor
-    operands and leaves layout/route selection to lowering.
+    Copy / tiling sizes follow each tile's logical `origin_shape`
+    (not the nested physical `shape`). Physical `shape` / `stride` describe
+    how those logical elements are stored (alignment fill, zN packing, …).
 
-    If ``atomic_mode`` set to ``AtomicMode.ADD``, the operation acts like:
-    ```plain
-    set_atomic_add();
-    copyOp();
-    set_atomic_none();
+    Parameters:
+    - `dst` (`Tensor`): Destination tile. Required.
+    - `src` (`Tensor`): Source tile. Required.
+    - `params` (`CopyParams | None`): Optional path-specific params
+      (`CopyL0C2DstParams`, `CopyUbToGmParams` / atomic, …). Default `None`.
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - Must be called inside `tla.cube()` or `tla.vector()` (cube routes above
+      in `cube()`, vector routes in `vector()`).
+    - Whole-tile DMA uses `tla.copy`. Register-level UB unaligned access uses
+      `tensor.load` / `tensor.store` with `UnalignLoadParams` /
+      `UnalignStoreParams` instead.
+    - **Shapes not aligned to 32 bytes:** C0 is 32 bytes. For ND GM↔UB, prefer
+      a leading dimension whose byte size is a multiple of 32 (e.g. for
+      RowMajor f16, choose `N` so `N % 16 == 0`). If the true data size cannot
+      meet that for DMA, keep `origin_shape` as the real logical size and
+      either enlarge the physical layout to the aligned size, or use the
+      unaligned register load/store path above. For zN when `M` is not a
+      multiple of 16, use `tla.arch.zNUnAlign` instead of `zN`.
+
+    Example:
+    ```python
+    # --- 1) Aligned GM ↔ UB (RowMajor, 32B-friendly) ---
+    # Before: x_gm[i, j] holds ND data; x_ub is empty. origin_shape==(M, N).
+    with tla.vector():
+        tla.copy(dst=x_ub, src=x_gm)
+        # After: x_ub[i, j] == x_gm[i, j] for all logical (i, j) in origin_shape.
+        tla.copy(dst=y_gm, src=y_ub)
+
+    # --- 2) ND → zN: GM RowMajor → L1 zN (layout change) ---
+    # Before (logical): gm_a.origin_shape==(128, 64), RowMajor; element (r, c)
+    #   sits at ND offset r*64+c.
+    # After (physical on L1): l1_a uses nested zN shape/stride; the same
+    #   logical (r, c) is zN-packed. l1_a.origin_shape stays (128, 64).
+    l1_a = tla.make_tensor_like(l1_ptr, gm_a, layoutTag=tla.arch.zN)
+    with tla.cube():
+        tla.copy(dst=l1_a, src=gm_a)
+
+    # Explicit zN (same logical 128x64 f16) if not using make_tensor_like:
+    l1_a = tla.make_tensor(
+        l1_ptr,
+        tla.make_layout(
+            tla.make_shape((16, 8), (16, 4)),
+            tla.make_stride((16, 256), (1, 2048)),
+            origin_shape=tla.make_shape(128, 64),
+            layoutTag=tla.arch.zN,
+        ),
+    )
+
+    # --- 3) M not a multiple of 16: zNUnAlign ---
+    # Before: rows may be runtime and not a multiple of 16.
+    l1_unalign = tla.make_tensor_like(l1_ptr, gm_tile, layoutTag=tla.arch.zNUnAlign)
+    with tla.cube():
+        tla.copy(dst=l1_unalign, src=gm_tile)
+
+    # Related (register path, not tla.copy): unaligned UB ↔ vector register
+    #   with tla.vec.func(mode="simd"):
+    #       x_reg = x_ub.load(tla.params.UnalignLoadParams())
+    #       y_ub.store(y_reg, tla.params.UnalignStoreParams())
     ```
     """
     _require_category("copy", "dst", dst, "tensor", 0)
@@ -4168,32 +4421,38 @@ def copy(dst: TileLike, src: TileLike, params: CopyParams | None = None, *, loc:
 @dsl_user_op
 def flag(
     name: str,
-    src_pipe: PipeLike | None = None,
-    dst_pipe: PipeLike | None = None,
+    src_pipe: PipeLike,
+    dst_pipe: PipeLike,
     *,
     loc: mlir_ir.Location | None = None,
 ) -> TlaFlag:
-    """Materialize a synchronization flag. Legacy one-arg form is supported."""
+    """Directory: Sync Control
+Description:
+    Create an in-pipe synchronization flag between two pipes.
+
+    Parameters:
+    - `name` (`str`): In-pipe flag name. Required.
+    - `src_pipe` (`PipeLike`): Source pipe id (e.g. `tla.arch.MTE2`). Required.
+    - `dst_pipe` (`PipeLike`): Destination pipe id (e.g. `tla.arch.VECTOR`). Required.
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - Creates a flag handle; `set_flag`/`wait_flag` must be paired inside cube/vector regions.
+
+    Example:
+    ```python
+    # MTE2 finishes a GM→UB copy, then VECTOR may consume the UB tile.
+    ub_loaded = tla.flag("ub_loaded", src_pipe=tla.arch.MTE2, dst_pipe=tla.arch.VECTOR)
+    with tla.vector():
+        tla.copy(dst=x_ub, src=x_gm)
+        tla.set_flag(ub_loaded)   # after copy: mark UB data ready
+        tla.wait_flag(ub_loaded)  # before compute: wait until ready
+    ```
+    """
     if not isinstance(name, str):
         _op_error(
             "flag",
             f"invalid argument 'name' (position 0): expected str, got {_type_name(name)}",
-        )
-    if src_pipe is None and dst_pipe is None:
-        _require_frontend_state("flag")
-        ctx = loc.context if loc is not None else mlir_ir.Context.current
-        all_attr = mlir_ir.Attribute.parse("#tla.pipe<all>", context=ctx)
-        return _tla_ops_gen.flag(
-            _tla_type_bridge.flag_type_get(ctx),
-            name,
-            all_attr,
-            all_attr,
-            loc=loc,
-        )
-    if src_pipe is None or dst_pipe is None:
-        _op_error(
-            "flag",
-            "expected either 1 argument (name) or 3 arguments (name, src_pipe, dst_pipe)",
         )
     _require_pipe("flag", "src_pipe", src_pipe, 1)
     _require_pipe("flag", "dst_pipe", dst_pipe, 2)
@@ -4219,9 +4478,23 @@ def cross_flag(
     mode: int = 2,
     loc: mlir_ir.Location | None = None,
 ) -> TlaCrossFlag:
-    """Materialize a named cross-core synchronization flag.
-    Source and destination pipes are specified by the corresponding set and wait operations.
-    Mode 4 selects 1:1 AIC-to-AIV synchronization, addressing AIV0 and AIV1 independently.
+    """Directory: Sync Control
+
+Description:
+    Create a cross-core synchronization flag.
+
+    Parameters:
+    - `name` (`str`): Cross-core flag name. Required.
+    - `mode` (`int`): Cross-core sync mode. Optional, default `2`.
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - `mode` supports only 0/1/2/4; source/destination pipes are specified by the matching set/wait.
+
+    Example:
+    ```python
+    cf = tla.cross_flag("aic_aiv", mode=2)
+    ```
     """
     if not isinstance(name, str):
         _op_error(
@@ -4278,7 +4551,27 @@ def cross_core_set_flag(
     *,
     loc: mlir_ir.Location | None = None,
 ) -> None:
-    """Set a cross-core synchronization flag from ``pipe``."""
+    """Directory: Sync Control
+
+Description:
+    Set a cross-core flag on the given pipe.
+
+    Parameters:
+    - `cross_flag_value` (`CrossFlagLike`): Cross-core flag from `tla.cross_flag`. Required.
+    - `pipe` (`PipeLike`): Pipe that issues the set. Required.
+    - `aiv_id` (`int | None`): Target AIV id; omit for broadcast/default routing. Optional, default `None`.
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - Must be called inside `tla.cube()` or `tla.vector()`; when `mode=4`, `aiv_id` must be 0 or 1.
+
+    Example:
+    ```python
+    with tla.cube():
+        tla.cross_core_set_flag(cf, tla.arch.CUBE)
+        # mode=4: tla.cross_core_set_flag(cf, tla.arch.CUBE, aiv_id=0)
+    ```
+    """
     _require_category(
         "cross_core_set_flag", "flag", cross_flag_value, "cross_flag", 0
     )
@@ -4304,7 +4597,26 @@ def cross_core_wait_flag(
     *,
     loc: mlir_ir.Location | None = None,
 ) -> None:
-    """Wait on a cross-core synchronization flag on ``pipe``."""
+    """Directory: Sync Control
+
+Description:
+    Wait on a cross-core flag on the given pipe.
+
+    Parameters:
+    - `cross_flag_value` (`CrossFlagLike`): Cross-core flag from `tla.cross_flag`. Required.
+    - `pipe` (`PipeLike`): Pipe that performs the wait. Required.
+    - `aiv_id` (`int | None`): Target AIV id; omit for broadcast/default routing. Optional, default `None`.
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - Must be called inside `tla.cube()` or `tla.vector()`; when `mode=4`, `aiv_id` must be 0 or 1.
+
+    Example:
+    ```python
+    with tla.vector():
+        tla.cross_core_wait_flag(cf, tla.arch.VECTOR)
+    ```
+    """
     _require_category(
         "cross_core_wait_flag", "flag", cross_flag_value, "cross_flag", 0
     )
@@ -4324,7 +4636,24 @@ def cross_core_wait_flag(
 
 @dsl_user_op
 def set_flag(flag_value: FlagLike, *, loc: mlir_ir.Location | None = None) -> None:
-    """Set a synchronization flag."""
+    """Directory: Sync Control
+
+Description:
+    Set an in-pipe flag.
+
+    Parameters:
+    - `flag_value` (`FlagLike`): In-pipe flag from `tla.flag`. Required.
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - Must be called inside `tla.cube()` or `tla.vector()`.
+
+    Example:
+    ```python
+    with tla.vector():
+        tla.set_flag(ub_loaded)
+    ```
+    """
     _require_category("set_flag", "flag", flag_value, "flag", 0)
     _require_frontend_state("set_flag")
     _runtime._require_enclosing_cube_or_vector("set_flag")
@@ -4333,7 +4662,24 @@ def set_flag(flag_value: FlagLike, *, loc: mlir_ir.Location | None = None) -> No
 
 @dsl_user_op
 def wait_flag(flag_value: FlagLike, *, loc: mlir_ir.Location | None = None) -> None:
-    """Wait on a synchronization flag."""
+    """Directory: Sync Control
+
+Description:
+    Wait on an in-pipe flag.
+
+    Parameters:
+    - `flag_value` (`FlagLike`): In-pipe flag from `tla.flag`. Required.
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - Must be called inside `tla.cube()` or `tla.vector()`.
+
+    Example:
+    ```python
+    with tla.vector():
+        tla.wait_flag(ub_loaded)
+    ```
+    """
     _require_category("wait_flag", "flag", flag_value, "flag", 0)
     _require_frontend_state("wait_flag")
     _runtime._require_enclosing_cube_or_vector("wait_flag")
@@ -4342,7 +4688,24 @@ def wait_flag(flag_value: FlagLike, *, loc: mlir_ir.Location | None = None) -> N
 
 @dsl_user_op
 def pipe_barrier(pipe: PipeLike, *, loc: mlir_ir.Location | None = None) -> None:
-    """Insert a pipe barrier for a specific pipe."""
+    """Directory: Sync Control
+
+Description:
+    Insert a pipe barrier.
+
+    Parameters:
+    - `pipe` (`PipeLike`): Pipe on which to insert the barrier. Required.
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - Must be called inside `tla.cube()` or `tla.vector()`.
+
+    Example:
+    ```python
+    with tla.vector():
+        tla.pipe_barrier(tla.arch.MTE2)
+    ```
+    """
     _require_pipe("pipe_barrier", "pipe", pipe, 0)
     _require_frontend_state("pipe_barrier")
     _runtime._require_enclosing_cube_or_vector("pipe_barrier")
@@ -4365,7 +4728,24 @@ def mutex(
     *,
     loc: mlir_ir.Location | None = None,
 ) -> TlaMutex:
-    """Materialize a mutex associated with a semantic resource."""
+    """Directory: Sync Control
+
+Description:
+    Create a mutex for a named resource.
+
+    Parameters:
+    - `resource` (`str`): Mutex resource name. Required.
+    - `id` (`int`): Mutex instance id; `-1` means default. Optional, default `-1`.
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - `resource` must be non-empty; `id` must be -1 or 0..31.
+
+    Example:
+    ```python
+    mtx = tla.mutex("l1_buf", id=0)
+    ```
+    """
     if not isinstance(resource, str):
         _op_error(
             "mutex",
@@ -4393,7 +4773,24 @@ def mutex(
 def mutex_guard(
     *mutexes: MutexLike, loc: mlir_ir.Location | None = None
 ) -> _MutexGuard:
-    """Create a context manager that wraps a block with inferred mutex access."""
+    """Directory: Sync Control
+
+Description:
+    Context manager that locks/unlocks one or more mutexes.
+
+    Parameters:
+    - *`mutexes`* (`MutexLike`): One or more mutex objects. Required.
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - The block must emit `copy` or `mmad`; do not explicitly lock/unlock inside the guard.
+
+    Example:
+    ```python
+    with tla.mutex_guard(mtx):
+        tla.copy(dst, src)
+    ```
+    """
     if not mutexes:
         _op_error("mutex_guard", "expected at least one mutex")
     return _MutexGuard(tuple(mutexes), loc=loc)
@@ -4417,7 +4814,24 @@ def _emit_mutex_unlock_op(
 def mutex_lock(
     mutex_value: MutexLike, *, pipe: PipeLike, loc: mlir_ir.Location | None = None
 ) -> None:
-    """Acquire a mutex from the specified pipe."""
+    """Directory: Sync Control
+
+Description:
+    Lock a mutex on the given pipe.
+
+    Parameters:
+    - `mutex_value` (`MutexLike`): Mutex to lock. Required.
+    - `pipe` (`PipeLike`): Pipe used for the lock. Required.
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - Must be called inside `tla.cube()` or `tla.vector()`; `pipe` is required.
+
+    Example:
+    ```python
+    tla.mutex_lock(mtx, pipe=tla.arch.MTE2)
+    ```
+    """
     _ensure_no_explicit_mutex_access_in_guard()
     _require_category("mutex_lock", "mutex", mutex_value, "mutex", 0)
     _require_pipe("mutex_lock", "pipe", pipe, 1)
@@ -4430,7 +4844,24 @@ def mutex_lock(
 def mutex_unlock(
     mutex_value: MutexLike, *, pipe: PipeLike, loc: mlir_ir.Location | None = None
 ) -> None:
-    """Release a mutex from the specified pipe."""
+    """Directory: Sync Control
+
+Description:
+    Unlock a mutex on the given pipe.
+
+    Parameters:
+    - `mutex_value` (`MutexLike`): Mutex to unlock. Required.
+    - `pipe` (`PipeLike`): Pipe used for the unlock. Required.
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - Must be called inside `tla.cube()` or `tla.vector()`; `pipe` is required.
+
+    Example:
+    ```python
+    tla.mutex_unlock(mtx, pipe=tla.arch.MTE2)
+    ```
+    """
     _ensure_no_explicit_mutex_access_in_guard()
     _require_category("mutex_unlock", "mutex", mutex_value, "mutex", 0)
     _require_pipe("mutex_unlock", "pipe", pipe, 1)
@@ -4446,6 +4877,25 @@ def local_mem_bar(
     loc: mlir_ir.Location | None = None,
 ):
     # MemType pair → encoded I32 imm (matching hivmave.membar encoding)
+    """Directory: Sync Control
+
+Description:
+    Insert a local-memory barrier inside `vec.func` (encoded from a `MemType` pair).
+
+    Parameters:
+    - `src` (`MemType`): Source local memory type. Required.
+    - `dst` (`MemType`): Destination local memory type. Required.
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - Must be called inside `tla.vec.func()`; `(src, dst)` must be a supported `MemType` pair.
+
+    Example:
+    ```python
+    with tla.vec.func(mode="simd"):
+        tla.local_mem_bar(tla.params.MemType.VEC_STORE, tla.params.MemType.VEC_LOAD)
+    ```
+    """
     _local_mem_bar_barrier_kind = {
         (MemType.VEC_STORE, MemType.VEC_LOAD): 1,
         (MemType.VEC_LOAD, MemType.VEC_STORE): 2,
@@ -4477,7 +4927,26 @@ def range(
     *,
     loc: mlir_ir.Location | None = None,
 ) -> _ast_helpers.FrontendRange:
-    """Create a frontend Tla dynamic range. Supports Python range arities."""
+    """Directory: Scopes and Control Flow
+
+Description:
+    Create a dynamic loop range for kernel-side iteration.
+
+    Parameters:
+    - `start` (`IndexLike`): Loop start (or exclusive end when `end` is omitted, with start 0). Required.
+    - `end` (`IndexLike | None`): Exclusive loop end; when omitted, `start` is treated as the end. Optional, default `None`.
+    - `step` (`IndexLike | None`): Step; defaults to 1. Optional, default `None`.
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - Dynamic range; the loop body must satisfy front-end dynamic-for constraints.
+
+    Example:
+    ```python
+    for i in tla.range(0, n, 1):
+        ...
+    ```
+    """
     del loc
     if end is None and step is None:
         _require_index_or_numeric("range", "end", start, 0)
@@ -4507,8 +4976,26 @@ def range_constexpr(
     step: int | None = None,
     *,
     loc: mlir_ir.Location | None = None,
-) -> Any:
-    """Create a frontend-time static range for unrolled Python loops."""
+) -> range:
+    """Directory: Scopes and Control Flow
+Description:
+    Create a front-end static range for unrollable Python loops.
+
+    Parameters:
+    - `start` (`int`): Compile-time loop start (or exclusive end when `end` is omitted). Required.
+    - `end` (`int | None`): Compile-time exclusive loop end. Optional, default `None`.
+    - `step` (`int | None`): Compile-time step; defaults to 1. Optional, default `None`.
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - Bounds and step must be compile-time constants for unrollable loops.
+
+    Example:
+    ```python
+    for k in tla.range_constexpr(0, 4):
+        ...
+    ```
+    """
     del loc
     if end is None and step is None:
         return _ast_helpers.range_constexpr(
@@ -4530,13 +5017,46 @@ def range_constexpr(
 
 @dsl_user_op
 def cube(*, loc: mlir_ir.Location | None = None) -> TlaRegion:
-    """Create a cube region stub for lowering-only usage."""
+    """Directory: Scopes and Control Flow
+Description:
+    Enter a cube-core region.
+
+    Parameters:
+    None.
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - Wraps cube-side matmul and related copies.
+
+    Example:
+    ```python
+    with tla.cube():
+        tla.mmad(acc=l0c, lhs=l0a, rhs=l0b, init_c=True)
+    ```
+    """
     return _region_stub("cube")
 
 
 @dsl_user_op
 def vector(*, loc: mlir_ir.Location | None = None) -> TlaRegion:
-    """Create a vector region stub for lowering-only usage."""
+    """Directory: Scopes and Control Flow
+
+Description:
+    Enter a vector-core region.
+
+    Parameters:
+    None.
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - Wraps vector-side copies and sync; `tla.vec.func` must nest inside it.
+
+    Example:
+    ```python
+    with tla.vector():
+        tla.copy(dst=x_ub, src=x_gm)
+    ```
+    """
     return _region_stub("vector")
 
 
@@ -4555,10 +5075,32 @@ def _validate_vec_func_mode(mode: str) -> None:
 def _vec_func(
     *,
     mode: str = "simd",
-    thread_block_dim: Any = None,
+    thread_block_dim: int | tuple[int, int, int] | list[int] | None = None,
     loc: mlir_ir.Location | None = None,
 ) -> TlaRegion:
-    """Create a vector function region stub for lowering-only usage."""
+    """Directory: Scopes and Control Flow
+Description:
+    Enter a vector-function region for register-vector / mask compute
+    (`tla.vec.func`).
+
+    Parameters:
+    - `mode` (`str`): Execution mode; `simd` (default) or `simt`. Optional,
+      default `"simd"`.
+    - `thread_block_dim` (`int | tuple[int, int, int] | list[int] | None`): SIMT thread-block shape; only valid with
+      `mode="simt"`. Optional, default `None`.
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - Must nest inside `tla.vector()`.
+    - Register-vector / mask APIs and `local_mem_bar` must run in this region.
+
+    Example:
+    ```python
+    with tla.vector():
+        with tla.vec.func(mode="simd"):
+            z = tla.add(x_reg, y_reg)
+    ```
+    """
     del loc
     _validate_vec_func_mode(mode)
     if thread_block_dim is not None:
@@ -4570,18 +5112,42 @@ def _vec_func(
 
 @dsl_user_op
 def mmad(
-    acc: TileLike,
-    lhs: TileLike,
-    rhs: TileLike,
+    acc: Tensor,
+    lhs: Tensor,
+    rhs: Tensor,
     init_c: bool | Bool | None = None,
     unit_flag: IndexLike | None = None,
     compute_order: ComputeOrder = ComputeOrder.M_FIRST,
     loc: mlir_ir.Location | None = None,
-    **extra_kwargs: Any,
+    **extra_kwargs: object,
 ) -> None:
-    """Emit a matrix-multiply-accumulate operation over Tla tiles.
-    ``init_c`` accepts only a Python ``bool`` or an SSA value of type ``i1``.
-    ``compute_order`` selects the M/N compute-direction priority, defaulting to ``M_FIRST``.
+    """Directory: Matrix Compute
+Description:
+    Emit matrix-multiply-accumulate on TLA tiles.
+
+    Parameters:
+    - `acc` (`Tensor`): Accumulator / output tile (usually on L0C). Required.
+    - `lhs` (`Tensor`): Left-hand matrix tile (usually on L0A). Required.
+    - `rhs` (`Tensor`): Right-hand matrix tile (usually on L0B). Required.
+    - `init_c` (`bool | Bool | None`): Whether to clear the accumulator first;
+      defaults to `False` when omitted. Optional, default `None`.
+    - `unit_flag` (`IndexLike | None`): Unit-flag control bits; defaults to `0`
+      when omitted. Optional, default `None`.
+    - `compute_order` (`ComputeOrder`): M/N compute-direction priority; default `M_FIRST`.
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - Must be called inside `tla.cube()`; `acc`/`lhs`/`rhs` must be matching L0 tiles.
+    - `init_c` accepts only a Python `bool` or an `i1` SSA value.
+    - Unknown keyword arguments are not accepted; passing any raises an error.
+
+    Example:
+    ```python
+    # Before: l0a / l0b hold the current K-slice; l0c is the accumulator on L0C.
+    with tla.cube():
+        tla.mmad(l0c, l0a, l0b, init_c=True, unit_flag=0b11)
+        # After: l0c accumulates lhs@rhs (cleared first when init_c=True).
+    ```
     """
     if extra_kwargs:
         _op_error(
@@ -4643,12 +5209,29 @@ def mmad(
 
 @dsl_user_op
 def full(
-    value: Any,
-    dtype: Any,
+    value: bool | int | float | Numeric,
+    dtype: type[Numeric],
     *,
     loc: mlir_ir.Location | None = None,
 ) -> VectorSSA:
-    """Create a 1-D vector SSA filled with a Python scalar literal."""
+    """Directory: Vector Compute / Data Fill
+Description:
+    Fill a 1-D vector SSA with a Python scalar literal.
+
+    Parameters:
+    - `value` (`bool | int | float | Numeric`): Fill constant. Required.
+    - `dtype` (`type[Numeric]`): Vector element type. Required.
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - Must be called inside `tla.vec.func()`; `value` must be a Python scalar literal.
+
+    Example:
+    ```python
+    with tla.vec.func(mode="simd"):
+        zeros = tla.full(0.0, dtype=tla.Float32)
+    ```
+    """
     state = _runtime._current_frontend_state()
     if state is None or not state.active_regions:
         raise TlaCoreAPIError("tla.full is only allowed inside tla.vec.func")
@@ -4699,29 +5282,30 @@ def _full_vector_ssa_descriptor(dtype_token: str) -> TlaVectorSSATypeDescriptor:
 
 @dsl_user_op
 def arange(
-    base: Any = 0,
+    base: bool | int | float | Numeric = 0,
     *,
     order: str = "increase",
-    dtype: Any,
+    dtype: type[Numeric],
     loc: mlir_ir.Location | None = None,
 ) -> VectorSSA:
-    """Create a 1-D vector SSA with monotonically increasing or decreasing values.
+    """Directory: Vector Compute / Data Fill
 
-    - ``order="increase"`` (default): Create a 1-D vector SSA filled with ``base + lane`` (monotonic increase)
+Description:
+    Create a monotonically increasing or decreasing 1-D vector SSA (`base` + `order`).
 
-    - ``order="decrease"``: Create a 1-D vector SSA filled with ``base + VL - 1 - lane`` (monotonic decrease)
+    Parameters:
+    - `base` (`bool | int | float | Numeric`): Base offset. Optional, default `0`.
+    - `order` (`str`): `'increase'` ascending or `'decrease'` descending. Optional, default `'increase'`.
+    - `dtype` (`type[Numeric]`): Vector element type. Required.
 
-    Maps directly to AVE ``vci`` with ``INCREASE`` or ``DECREASE``;
-    adjacent lanes are always spaced by 1 (no ``step`` parameter).
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - Must be called inside `tla.vec.func()`; `order` supports only `increase` / `decrease`.
 
     Example:
     ```python
-    # Store an ascending sequence [0, 1, 2, ..., 63] into ``dst`` (a ``tla.Tensor`` on ``tla.AddressSpace.ub``)
-    dst_tile = tla.tile_view(dst, tla.make_shape(64), tla.make_coord(0))
-    dst_tile.store(tla.arange(0, dtype=tla.Int32))
-
-    # Or with descending order, store [63, 62, ..., 0]
-    dst_tile.store(tla.arange(0, order="decrease", dtype=tla.Int32))
+    with tla.vec.func(mode="simd"):
+        lane_idx = tla.arange(base=0, order="increase", dtype=tla.Int32)
     ```
     """
     op_name = "arange"
@@ -5091,7 +5675,7 @@ def _emit_vector_unary(
     return VectorSSA(result)
 
 
-def _make_unary_op(mnemonic: str) -> Callable[..., VectorSSA]:
+def _make_unary_op(mnemonic: str, *, doc: str) -> Callable[..., VectorSSA]:
     @dsl_user_op
     def _unary(
         operand: VectorSSA,
@@ -5108,14 +5692,120 @@ def _make_unary_op(mnemonic: str) -> Callable[..., VectorSSA]:
         )
 
     _unary.__name__ = mnemonic
+    _unary.__doc__ = doc
     return _unary
 
 
-exp = _make_unary_op("exp")
-log = _make_unary_op("log")
-sqrt = _make_unary_op("sqrt")
-abs = _make_unary_op("abs")
-neg = _make_unary_op("neg")
+exp = _make_unary_op(
+    "exp",
+    doc="""Directory: Vector Compute / Basic Arithmetic
+
+Description:
+    Element-wise exponential on a vector (requires f16/f32).
+
+    Parameters:
+    - `operand` (`VectorSSA`): Source vector register. Required.
+    - `mask` (`MaskSSA | None`): Optional execution mask; `None` means all lanes enabled. Optional, default `None`.
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - Must be called inside `tla.vec.func()`; element type must be f16/f32.
+
+    Example:
+    ```python
+    with tla.vec.func(mode="simd"):
+        y = tla.exp(x_reg)
+    ```
+    """,
+)
+log = _make_unary_op(
+    "log",
+    doc="""Directory: Vector Compute / Basic Arithmetic
+
+Description:
+    Element-wise logarithm on a vector (requires f16/f32).
+
+    Parameters:
+    - `operand` (`VectorSSA`): Source vector register. Required.
+    - `mask` (`MaskSSA | None`): Optional execution mask; `None` means all lanes enabled. Optional, default `None`.
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - Must be called inside `tla.vec.func()`; element type must be f16/f32.
+
+    Example:
+    ```python
+    with tla.vec.func(mode="simd"):
+        y = tla.log(x_reg)
+    ```
+    """,
+)
+sqrt = _make_unary_op(
+    "sqrt",
+    doc="""Directory: Vector Compute / Basic Arithmetic
+
+Description:
+    Element-wise square root on a vector (requires f16/f32).
+
+    Parameters:
+    - `operand` (`VectorSSA`): Source vector register. Required.
+    - `mask` (`MaskSSA | None`): Optional execution mask; `None` means all lanes enabled. Optional, default `None`.
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - Must be called inside `tla.vec.func()`; element type must be f16/f32.
+
+    Example:
+    ```python
+    with tla.vec.func(mode="simd"):
+        y = tla.sqrt(x_reg)
+    ```
+    """,
+)
+abs = _make_unary_op(
+    "abs",
+    doc="""Directory: Vector Compute / Basic Arithmetic
+
+Description:
+    Element-wise absolute value on a vector.
+
+    Parameters:
+    - `operand` (`VectorSSA`): Source vector register. Required.
+    - `mask` (`MaskSSA | None`): Optional execution mask; `None` means all lanes enabled. Optional, default `None`.
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - Must be called inside `tla.vec.func()`.
+
+    Example:
+    ```python
+    with tla.vec.func(mode="simd"):
+        y = tla.abs(x_reg)
+    ```
+    """,
+)
+neg = _make_unary_op(
+    "neg",
+    doc="""Directory: Vector Compute / Basic Arithmetic
+
+Description:
+    Element-wise negation on a vector.
+
+    Parameters:
+    - `operand` (`VectorSSA`): Source vector register. Required.
+    - `mask` (`MaskSSA | None`): Optional execution mask; `None` means all lanes enabled. Optional, default `None`.
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - Must be called inside `tla.vec.func()`.
+
+    Example:
+    ```python
+    with tla.vec.func(mode="simd"):
+        y = tla.neg(x_reg)
+    ```
+    """,
+)
 
 
 _INTERLEAVE_ELEMENT_TYPES = frozenset(
@@ -5137,6 +5827,24 @@ def interleave(
     *,
     loc: mlir_ir.Location | None = None,
 ) -> tuple[VectorSSA, VectorSSA]:
+    """Directory: Vector Compute / Data Rearrange
+Description:
+    Interleave two vector registers lane-wise.
+
+    Parameters:
+    - `src0` (`VectorSSA`): Even-lane input vector register. Required.
+    - `src1` (`VectorSSA`): Odd-lane input vector register. Required.
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - Must be called inside `tla.vec.func()`; both vectors must match element type and lane count.
+
+    Example:
+    ```python
+    with tla.vec.func(mode="simd"):
+        lo, hi = tla.interleave(a, b)
+    ```
+    """
     _require_category("interleave", "src0", src0, "vector_ssa", 0)
     _require_category("interleave", "src1", src1, "vector_ssa", 1)
     _require_frontend_state("interleave")
@@ -5173,6 +5881,25 @@ def deinterleave(
     *,
     loc: mlir_ir.Location | None = None,
 ) -> tuple[VectorSSA, VectorSSA]:
+    """Directory: Vector Compute / Data Rearrange
+
+Description:
+    Deinterleave two vector registers lane-wise.
+
+    Parameters:
+    - `src0` (`VectorSSA`): First half / one stream of interleaved input. Required.
+    - `src1` (`VectorSSA`): Second half / other stream of interleaved input. Required.
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - Must be called inside `tla.vec.func()`; both vectors must match element type and lane count.
+
+    Example:
+    ```python
+    with tla.vec.func(mode="simd"):
+        even, odd = tla.deinterleave(a, b)
+    ```
+    """
     _require_category("deinterleave", "src0", src0, "vector_ssa", 0)
     _require_category("deinterleave", "src1", src1, "vector_ssa", 1)
     _require_frontend_state("deinterleave")
@@ -5204,11 +5931,29 @@ def deinterleave(
 
 @dsl_user_op
 def bitwise_not(
-    operand: Any,
+    operand: VectorSSA | MaskSSA,
     *,
     mask: MaskSSA | None = None,
     loc: mlir_ir.Location | None = None,
 ) -> MaskSSA | VectorSSA:
+    """Directory: Vector Compute / Logical Compute
+Description:
+    Element-wise bitwise/logical not (Mask or Vector).
+
+    Parameters:
+    - `operand` (`VectorSSA | MaskSSA`): Source operand for bitwise/logical not. Required.
+    - `mask` (`MaskSSA | None`): Optional execution mask; `None` means all lanes enabled. Optional, default `None`.
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - Must be called inside `tla.vec.func()`.
+
+    Example:
+    ```python
+    with tla.vec.func(mode="simd"):
+        m2 = tla.bitwise_not(m)
+    ```
+    """
     return _emit_bitwise_unary(
         "bitwise_not",
         _tla_ops_gen.bitwise_not,
@@ -5220,13 +5965,38 @@ def bitwise_not(
 
 @dsl_user_op
 def add(
-    lhs: Any,
-    rhs: Any,
+    lhs: VectorSSA | Numeric | bool | int | float,
+    rhs: VectorSSA | Numeric | bool | int | float,
     *,
     mask: MaskSSA | None = None,
     loc: mlir_ir.Location | None = None,
 ) -> VectorSSA:
-    """Emit element-wise add for loaded vector SSA values."""
+    """Directory: Vector Compute / Basic Arithmetic
+Description:
+    Element-wise vector addition (supports vector–vector and vector–scalar).
+    `VectorSSA` also overloads `+` / `__radd__` to this op when `mask` is not needed.
+
+    Parameters:
+    - `lhs` (`VectorSSA | Numeric | bool | int | float`): Left-hand operand. Required.
+    - `rhs` (`VectorSSA | Numeric | bool | int | float`): Right-hand operand. Required.
+    - `mask` (`MaskSSA | None`): Optional execution mask; `None` means all lanes enabled. Optional, default `None`.
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - Must be called inside `tla.vec.func()`; supports vector–vector and vector–scalar.
+
+    Example:
+    ```python
+    with tla.vec.func(mode="simd"):
+        # Before: x_reg, y_reg are register vectors loaded from UB.
+        z = x_reg + y_reg            # same as tla.add(x_reg, y_reg)
+        z = x_reg + 1.0              # vector–scalar via __add__/__radd__
+        # Masked path: build MaskSSA, then pass mask= (no operator overload).
+        m = tla.create_mask(pattern=tla.mask.VL16, dtype=tla.Float16)
+        z = tla.add(x_reg, y_reg, mask=m)
+        # After: valid elements hold the sum; other elements stay inactive.
+    ```
+    """
     return _emit_vector_binary_or_scalar(
         "add",
         _tla_ops_gen.add,
@@ -5241,13 +6011,36 @@ def add(
 
 @dsl_user_op
 def sub(
-    lhs: Any,
-    rhs: Any,
+    lhs: VectorSSA | Numeric | bool | int | float,
+    rhs: VectorSSA | Numeric | bool | int | float,
     *,
     mask: MaskSSA | None = None,
     loc: mlir_ir.Location | None = None,
 ) -> VectorSSA:
-    """Emit element-wise subtract for loaded vector SSA values."""
+    """Directory: Vector Compute / Basic Arithmetic
+
+Description:
+    Element-wise vector subtraction.
+    `VectorSSA` also overloads `-` (`__sub__`) to this op when `mask` is not needed.
+
+    Parameters:
+    - `lhs` (`VectorSSA | Numeric | bool | int | float`): Left-hand operand (minuend). Required.
+    - `rhs` (`VectorSSA | Numeric | bool | int | float`): Right-hand operand (subtrahend). Required.
+    - `mask` (`MaskSSA | None`): Optional execution mask; `None` means all lanes enabled. Optional, default `None`.
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - Must be called inside `tla.vec.func()`.
+
+    Example:
+    ```python
+    with tla.vec.func(mode="simd"):
+        # Before: x_reg / y_reg are source vectors.
+        z = x_reg - y_reg                 # same as tla.sub(x_reg, y_reg)
+        z = tla.sub(x_reg, y_reg, mask=m) # use the function when masking
+        # After: z holds the difference.
+    ```
+    """
     return _emit_vector_binary_or_scalar(
         "sub", _tla_ops_gen.sub, "subs", lhs, rhs, mask=mask, loc=loc
     )
@@ -5255,13 +6048,37 @@ def sub(
 
 @dsl_user_op
 def mul(
-    lhs: Any,
-    rhs: Any,
+    lhs: VectorSSA | Numeric | bool | int | float,
+    rhs: VectorSSA | Numeric | bool | int | float,
     *,
     mask: MaskSSA | None = None,
     loc: mlir_ir.Location | None = None,
 ) -> VectorSSA:
-    """Emit element-wise multiply for loaded vector SSA values."""
+    """Directory: Vector Compute / Basic Arithmetic
+
+Description:
+    Element-wise vector multiplication.
+    `VectorSSA` also overloads `*` / `__rmul__` to this op when `mask` is not needed.
+
+    Parameters:
+    - `lhs` (`VectorSSA | Numeric | bool | int | float`): Left-hand operand. Required.
+    - `rhs` (`VectorSSA | Numeric | bool | int | float`): Right-hand operand. Required.
+    - `mask` (`MaskSSA | None`): Optional execution mask; `None` means all lanes enabled. Optional, default `None`.
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - Must be called inside `tla.vec.func()`.
+
+    Example:
+    ```python
+    with tla.vec.func(mode="simd"):
+        # Before: x_reg holds activations; scale may be a vector or a scalar.
+        z = x_reg * y_reg      # same as tla.mul(x_reg, y_reg)
+        z = x_reg * 2.0        # vector–scalar
+        z = tla.mul(x_reg, y_reg, mask=m)
+        # After: z holds the products.
+    ```
+    """
     return _emit_vector_binary_or_scalar(
         "mul",
         _tla_ops_gen.mul,
@@ -5276,13 +6093,32 @@ def mul(
 
 @dsl_user_op
 def max(
-    lhs: Any,
-    rhs: Any,
+    lhs: VectorSSA | Numeric | bool | int | float,
+    rhs: VectorSSA | Numeric | bool | int | float,
     *,
     mask: MaskSSA | None = None,
     loc: mlir_ir.Location | None = None,
 ) -> VectorSSA:
-    """Emit element-wise maximum for loaded vector SSA values."""
+    """Directory: Vector Compute / Basic Arithmetic
+
+Description:
+    Element-wise vector maximum.
+
+    Parameters:
+    - `lhs` (`VectorSSA | Numeric | bool | int | float`): Left-hand operand. Required.
+    - `rhs` (`VectorSSA | Numeric | bool | int | float`): Right-hand operand. Required.
+    - `mask` (`MaskSSA | None`): Optional execution mask; `None` means all lanes enabled. Optional, default `None`.
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - Must be called inside `tla.vec.func()`.
+
+    Example:
+    ```python
+    with tla.vec.func(mode="simd"):
+        z = tla.max(x_reg, y_reg)
+    ```
+    """
     return _emit_vector_binary_or_scalar(
         "max",
         _tla_ops_gen.max,
@@ -5297,13 +6133,32 @@ def max(
 
 @dsl_user_op
 def min(
-    lhs: Any,
-    rhs: Any,
+    lhs: VectorSSA | Numeric | bool | int | float,
+    rhs: VectorSSA | Numeric | bool | int | float,
     *,
     mask: MaskSSA | None = None,
     loc: mlir_ir.Location | None = None,
 ) -> VectorSSA:
-    """Emit element-wise minimum for loaded vector SSA values."""
+    """Directory: Vector Compute / Basic Arithmetic
+
+Description:
+    Element-wise vector minimum.
+
+    Parameters:
+    - `lhs` (`VectorSSA | Numeric | bool | int | float`): Left-hand operand. Required.
+    - `rhs` (`VectorSSA | Numeric | bool | int | float`): Right-hand operand. Required.
+    - `mask` (`MaskSSA | None`): Optional execution mask; `None` means all lanes enabled. Optional, default `None`.
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - Must be called inside `tla.vec.func()`.
+
+    Example:
+    ```python
+    with tla.vec.func(mode="simd"):
+        z = tla.min(x_reg, y_reg)
+    ```
+    """
     return _emit_vector_binary_or_scalar(
         "min",
         _tla_ops_gen.min,
@@ -5318,13 +6173,36 @@ def min(
 
 @dsl_user_op
 def div(
-    lhs: Any,
-    rhs: Any,
+    lhs: VectorSSA | Numeric | bool | int | float,
+    rhs: VectorSSA | Numeric | bool | int | float,
     *,
     mask: MaskSSA | None = None,
     loc: mlir_ir.Location | None = None,
 ) -> VectorSSA:
-    """Emit element-wise divide for loaded vector SSA values."""
+    """Directory: Vector Compute / Basic Arithmetic
+
+Description:
+    Element-wise vector division.
+    `VectorSSA` also overloads `/` (`__truediv__`) to this op when `mask` is not needed.
+
+    Parameters:
+    - `lhs` (`VectorSSA | Numeric | bool | int | float`): Left-hand operand (dividend). Required.
+    - `rhs` (`VectorSSA | Numeric | bool | int | float`): Right-hand operand (divisor). Required.
+    - `mask` (`MaskSSA | None`): Optional execution mask; `None` means all lanes enabled. Optional, default `None`.
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - Must be called inside `tla.vec.func()`.
+
+    Example:
+    ```python
+    with tla.vec.func(mode="simd"):
+        # Before: x_reg is the dividend; y_reg / scalar is the divisor.
+        z = x_reg / y_reg                 # same as tla.div(x_reg, y_reg)
+        z = tla.div(x_reg, y_reg, mask=m)
+        # After: z holds the quotients.
+    ```
+    """
     return _emit_vector_binary_or_scalar(
         "div", _tla_ops_gen.div, "divs", lhs, rhs, mask=mask, loc=loc
     )
@@ -5385,12 +6263,25 @@ def where(
     *,
     loc: mlir_ir.Location | None = None,
 ) -> VectorSSA:
-    """Emit element-wise select for loaded vector SSA values.
+    """Directory: Vector Compute / Compare and Select
 
-    Lanes where ``mask`` (a ``MaskSSA`` from ``tla.create_mask`` or
-    ``tla.update_mask``) is active take the corresponding lane of ``x``; the
-    remaining lanes take ``y``. ``x`` and ``y`` must have the same VectorSSA
-    element type; their valid-lane metadata may differ. Lowers to ``ave.hir.vsel``.
+Description:
+    Select between two vectors under a mask.
+
+    Parameters:
+    - `mask` (`MaskSSA`): Select mask; true selects `x`, false selects `y`. Required.
+    - `x` (`VectorSSA`): Value when the mask is true. Required.
+    - `y` (`VectorSSA`): Value when the mask is false. Required.
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - Must be called inside `tla.vec.func()`; `mask`/`x`/`y` lane layouts must match.
+
+    Example:
+    ```python
+    with tla.vec.func(mode="simd"):
+        z = tla.where(m, x_reg, y_reg)
+    ```
     """
     _require_category("where", "mask", mask, "mask_ssa", 0)
     _require_category("where", "x", x, "vector_ssa", 1)
@@ -5425,11 +6316,23 @@ def squeeze(
     *,
     loc: mlir_ir.Location | None = None,
 ) -> VectorSSA:
-    """Pack lanes of ``src`` selected by ``mask`` into low indices of the result.
+    """Directory: Vector Compute / Data Compress
+Description:
+    Compress vector lanes kept by a mask.
 
-    Lanes where ``mask`` is inactive are dropped; the remaining selected lanes
-    are written contiguously from lane 0. Trailing lanes in the result vector
-    are zeroed. This matches AscendC ``Squeeze`` semantics.
+    Parameters:
+    - `src` (`VectorSSA`): Source vector to compress. Required.
+    - `mask` (`MaskSSA`): Mask of elements to keep. Required.
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - Must be called inside `tla.vec.func()`.
+
+    Example:
+    ```python
+    with tla.vec.func(mode="simd"):
+        packed = tla.squeeze(src, m)
+    ```
     """
     _require_category("squeeze", "src", src, "vector_ssa", 0)
     _require_category("squeeze", "mask", mask, "mask_ssa", 1)
@@ -5562,13 +6465,32 @@ def _emit_bitwise_binary(
 @dsl_user_op
 def cmp(
     lhs: VectorSSA,
-    rhs: Any,
+    rhs: VectorSSA | Numeric | bool | int | float,
     mode: str,
     *,
     mask: MaskSSA | None = None,
     loc: mlir_ir.Location | None = None,
 ) -> MaskSSA:
-    """Return a mask for element-wise vector compare."""
+    """Directory: Vector Compute / Compare and Select
+Description:
+    Element-wise compare; returns a MaskSSA.
+
+    Parameters:
+    - `lhs` (`VectorSSA`): Left-hand compare operand. Required.
+    - `rhs` (`VectorSSA | Numeric | bool | int | float`): Right-hand compare operand (scalar or vector). Required.
+    - `mode` (`str`): Compare mode, e.g. `'eq'` / `'lt'` / `'gt'`. Required.
+    - `mask` (`MaskSSA | None`): Optional execution mask; `None` means all lanes enabled. Optional, default `None`.
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - Must be called inside `tla.vec.func()`; `mode` must be a supported compare mnemonic.
+
+    Example:
+    ```python
+    with tla.vec.func(mode="simd"):
+        m = tla.cmp(x_reg, y_reg, mode="lt")
+    ```
+    """
     mode = str(mode).lower()
     if mode not in _MASK_CMP_MODES:
         _op_error(
@@ -5620,13 +6542,32 @@ def cmp(
 
 @dsl_user_op
 def bitwise_and(
-    src0_reg: Any,
-    src1_reg: Any,
+    src0_reg: VectorSSA | MaskSSA,
+    src1_reg: VectorSSA | MaskSSA,
     *,
-    mask: Any | None = None,
+    mask: MaskSSA | None = None,
     loc: mlir_ir.Location | None = None,
 ) -> MaskSSA | VectorSSA:
-    """Emit element-wise bitwise AND for MaskSSA or VectorSSA values."""
+    """Directory: Vector Compute / Logical Compute
+
+Description:
+    Element-wise bitwise and (Mask or Vector).
+
+    Parameters:
+    - `src0_reg` (`VectorSSA | MaskSSA`): Left-hand bitwise-and operand. Required.
+    - `src1_reg` (`VectorSSA | MaskSSA`): Right-hand bitwise-and operand. Required.
+    - `mask` (`MaskSSA | None`): Optional execution mask; `None` means all lanes enabled. Optional, default `None`.
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - Must be called inside `tla.vec.func()`.
+
+    Example:
+    ```python
+    with tla.vec.func(mode="simd"):
+        m3 = tla.bitwise_and(m0, m1)
+    ```
+    """
     return _emit_bitwise_binary(
         "bitwise_and",
         _tla_ops_gen.bitwise_and,
@@ -5639,13 +6580,32 @@ def bitwise_and(
 
 @dsl_user_op
 def bitwise_or(
-    src0_reg: Any,
-    src1_reg: Any,
+    src0_reg: VectorSSA | MaskSSA,
+    src1_reg: VectorSSA | MaskSSA,
     *,
-    mask: Any | None = None,
+    mask: MaskSSA | None = None,
     loc: mlir_ir.Location | None = None,
 ) -> MaskSSA | VectorSSA:
-    """Emit element-wise bitwise OR for MaskSSA or VectorSSA values."""
+    """Directory: Vector Compute / Logical Compute
+
+Description:
+    Element-wise bitwise or (Mask or Vector).
+
+    Parameters:
+    - `src0_reg` (`VectorSSA | MaskSSA`): Left-hand bitwise-or operand. Required.
+    - `src1_reg` (`VectorSSA | MaskSSA`): Right-hand bitwise-or operand. Required.
+    - `mask` (`MaskSSA | None`): Optional execution mask; `None` means all lanes enabled. Optional, default `None`.
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - Must be called inside `tla.vec.func()`.
+
+    Example:
+    ```python
+    with tla.vec.func(mode="simd"):
+        m3 = tla.bitwise_or(m0, m1)
+    ```
+    """
     return _emit_bitwise_binary(
         "bitwise_or",
         _tla_ops_gen.bitwise_or,
@@ -5658,13 +6618,32 @@ def bitwise_or(
 
 @dsl_user_op
 def bitwise_xor(
-    src0_reg: Any,
-    src1_reg: Any,
+    src0_reg: VectorSSA | MaskSSA,
+    src1_reg: VectorSSA | MaskSSA,
     *,
-    mask: Any | None = None,
+    mask: MaskSSA | None = None,
     loc: mlir_ir.Location | None = None,
 ) -> MaskSSA | VectorSSA:
-    """Emit element-wise bitwise XOR for MaskSSA or VectorSSA values."""
+    """Directory: Vector Compute / Logical Compute
+
+Description:
+    Element-wise bitwise xor (Mask or Vector).
+
+    Parameters:
+    - `src0_reg` (`VectorSSA | MaskSSA`): Left-hand bitwise-xor operand. Required.
+    - `src1_reg` (`VectorSSA | MaskSSA`): Right-hand bitwise-xor operand. Required.
+    - `mask` (`MaskSSA | None`): Optional execution mask; `None` means all lanes enabled. Optional, default `None`.
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - Must be called inside `tla.vec.func()`.
+
+    Example:
+    ```python
+    with tla.vec.func(mode="simd"):
+        m3 = tla.bitwise_xor(m0, m1)
+    ```
+    """
     return _emit_bitwise_binary(
         "bitwise_xor",
         _tla_ops_gen.bitwise_xor,
@@ -5677,17 +6656,30 @@ def bitwise_xor(
 
 @dsl_user_op
 def gather(
-    x: TileLike,
+    x: Tensor,
     y: VectorSSA,
     *,
     mask: MaskSSA | None = None,
     loc: mlir_ir.Location | None = None,
 ) -> VectorSSA:
-    """Gather elements from a UB tensor according to vector indices.
+    """Directory: Vector Compute / Discrete and Aggregate
+Description:
+    Gather vector values from a tile/table by indices.
 
-    ``x`` is a tensor view pointing to UB memory (from ``tla.tile_view``).
-    ``y`` is a vector of per-lane indices (from ``.load()``).
-    Returns a vector register with gathered elements.
+    Parameters:
+    - `x` (`Tensor`): Source tile / table to gather from. Required.
+    - `y` (`VectorSSA`): Index vector register. Required.
+    - `mask` (`MaskSSA | None`): Optional execution mask; `None` means all lanes enabled. Optional, default `None`.
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - Must be called inside `tla.vec.func()`; the source tensor must reside in UB.
+
+    Example:
+    ```python
+    with tla.vec.func(mode="simd"):
+        vals = tla.gather(ub_tile, idx_reg)
+    ```
     """
     _require_category("gather", "x", x, "tensor", 0)
     _require_category("gather", "y", y, "vector_ssa", 1)
@@ -5824,8 +6816,8 @@ def arch_sync_threads(*, loc: mlir_ir.Location | None = None) -> None:
 def arch_block_num(*, loc: mlir_ir.Location | None = None) -> Int32:
     """Return the number of blocks (AI cores) in the launch (``Int32``).
 
-    The grid extent, matching AscendC ``GetBlockNum()``. For the per-block
-    thread extents inside a SIMT region see :func:`arch_thread_block_dim`.
+    The grid extent for the current kernel launch. For the per-block thread
+    extents inside a SIMT region see :func:`arch_thread_block_dim`.
     """
     _require_frontend_state("arch.block_num")
     i32 = mlir_ir.IntegerType.get_signless(32)
@@ -5859,12 +6851,30 @@ def allocate(
     byte_alignment: int,
     *,
     loc: mlir_ir.Location | None = None,
-) -> PointerTypeHint:
-    """Allocate static on-chip scratch memory and return a typed ``!tla.ptr``.
+) -> Pointer:
+    """Directory: Resource Management
+Description:
+    Allocate local memory and return a typed pointer.
 
-    ``shape`` is an element shape (or element count), not bytes. It must be fully
-    static; ``size_bytes`` is computed as ``prod(shape) * sizeof(dtype)`` and
-    stored on the resulting ``tla.alloc_ptr`` op.
+    Parameters:
+    - `shape` (`ShapeLike`): Shape of the allocation. Required.
+    - `dtype` (`type[Numeric]`): Element numeric type. Required.
+    - `mem_scope` (`AddressSpace`): Address space (e.g. L1 / UB). Required.
+    - `byte_alignment` (`int`): Byte alignment requirement. Required.
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - `mem_scope` must be an on-chip address space (l1/l0a/l0b/l0c/ub), not gm/generic; `shape` must be fully static.
+
+    Example:
+    ```python
+    ptr = tla.allocate(
+        shape=(256, 128),
+        dtype=tla.Float16,
+        mem_scope=tla.AddressSpace.ub,
+        byte_alignment=32,
+    )
+    ```
     """
     _require_frontend_state("allocate")
     dtype, element_bytes = _require_allocation_dtype("allocate", dtype)
@@ -5903,8 +6913,28 @@ def make_ptr(
     *,
     assumed_align: int | None = None,
     loc: mlir_ir.Location | None = None,
-) -> PointerTypeHint:
-    """Build a :class:`Pointer` from an integer bit pattern via ``tla.inttoptr``."""
+) -> Pointer:
+    """Directory: Basic Data Types and Operations
+
+Description:
+    Build a `!tla.ptr` from an address value.
+
+    Parameters:
+    - `dtype` (`type[Numeric] | None`): Pointee element type; `None` means
+      `Int8`. Optional, default `None`.
+    - `value` (`int | mlir_ir.Value | Numeric`): Address value (int, MLIR Value, or Numeric). Required.
+    - `mem_space` (`AddressSpace`): Address space of the pointer. Optional, default `AddressSpace.gm`.
+    - `assumed_align` (`int | None`): Assumed alignment in bytes. Optional, default `None`.
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - Integer address bit-width must match the target `mem_space`.
+
+    Example:
+    ```python
+    ptr = tla.make_ptr(tla.Float16, addr, mem_space=tla.AddressSpace.gm)
+    ```
+    """
     _require_frontend_state("make_ptr")
 
     if dtype is not None and (
@@ -5931,19 +6961,28 @@ def make_ptr(
 
 @dsl_user_op
 def recast_ptr(
-    ptr: PointerTypeHint,
+    ptr: Pointer,
     *,
     dtype: type[Numeric],
     loc: mlir_ir.Location | None = None,
-) -> Any:
-    """Change the logical pointee type of a ``!tla.ptr`` (dtype-only; no swizzle).
+) -> Pointer:
+    """Directory: Basic Data Types and Operations
 
-    The operand must already be a ``!tla.ptr`` (typically from :func:`make_ptr`).
-    Allocator or bare integer addresses are not accepted; use :func:`make_ptr`
-    first, then ``recast_ptr``.
+Description:
+    Reinterpret a `!tla.ptr` element type only (no swizzle).
 
-    Preserves address space and alignment; element size vs alignment is not
-    re-validated here (that check exists only on :func:`make_ptr`).
+    Parameters:
+    - `ptr` (`Pointer`): Pointer to reinterpret. Required.
+    - `dtype` (`type[Numeric]`): New element type. Required.
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - Changes the logical element type only; address and swizzle are unchanged.
+
+    Example:
+    ```python
+    ptr_f32 = tla.recast_ptr(ptr_f16, dtype=tla.Float32)
+    ```
     """
     _require_frontend_state("recast_ptr")
     _require_category("recast_ptr", "ptr", ptr, "pointer", 0)
@@ -6037,6 +7076,51 @@ _require_generated("inttoptr")
 _require_generated("recast_ptr")
 
 arch = _Namespace()
+arch.__doc__ = """Directory: System Variable Access
+Description:
+Architecture attribute group under `tla.arch`: layout tags, pipe identifiers,
+on-chip memory-scope tokens, and block / SIMT helpers.
+
+Parameters:
+- Layout tags (`_LayoutTag`, used by `make_layout` / `make_tensor` /
+  `make_tensor_like`): `RowMajor`, `ColumnMajor`, `zN`, `nZ`, `zZ`, `nN`,
+  `L0Clayout`, `zNUnAlign`.
+- Pipe identifiers (used by `flag` / `pipe_barrier` / `mutex_*` /
+  cross-core sync): `SCALAR`, `VECTOR`, `CUBE`, `MTE1`, `MTE2`, `MTE3`, `FIX`.
+- Memory-scope tokens (used by `local_mem_bar` and related APIs): `L1`,
+  `L0A`, `L0B`, `L0C`, `UB`.
+- Callables (return `Int32` or `tuple[Int32, Int32, Int32]` as noted):
+  - `block_idx()`: Block index for the current AI core in the launch.
+  - `block_num()`: Number of blocks (AI cores) in the launch.
+  - `sub_block_idx()`: Sub-block index within the current block.
+  - `thread_idx()`: SIMT thread index `(x, y, z)` inside the thread block
+    (only inside `tla.vec.func(mode="simt")`).
+  - `thread_block_dim()`: SIMT thread-block extents `(x, y, z)`
+    (only inside `tla.vec.func(mode="simt")`).
+  - `sync_threads()`: Barrier across threads of the enclosing SIMT
+    `tla.vec.func` (only inside `mode="simt"`).
+
+Constraints:
+- Layout tags / pipe identifiers / memory-scope tokens are ordinary attributes
+  on the `tla.arch` object (Python has no C++-style namespace); they do not
+  emit compute ops by themselves.
+- `block_idx` / `block_num` / `sub_block_idx` / `thread_idx` /
+  `thread_block_dim` / `sync_threads` are callables and must be used inside a
+  `@tla.kernel`-decorated kernel function.
+- `thread_idx` / `thread_block_dim` / `sync_threads` additionally require
+  nesting inside `tla.vec.func(mode="simt")`.
+
+Example:
+```python
+# Layout tag for make_layout / make_tensor:
+tag = tla.arch.RowMajor
+# Pipe id for flag / barrier / mutex:
+pipe = tla.arch.MTE2
+# Runtime block helpers:
+bid = tla.arch.block_idx()
+nblocks = tla.arch.block_num()
+```
+"""
 arch._set("block_idx", arch_block_idx)
 arch._set("sub_block_idx", arch_sub_block_idx)
 arch._set("block_num", arch_block_num)
@@ -6055,25 +7139,25 @@ arch._set("MTE1", _runtime.pipes.MTE1)
 arch._set("MTE2", _runtime.pipes.MTE2)
 arch._set("MTE3", _runtime.pipes.MTE3)
 arch._set("FIX", _runtime.pipes.FIX)
-arch._set("zN", _LayoutTagSentinel("zN"))
-arch._set("nZ", _LayoutTagSentinel("nZ"))
-arch._set("zZ", _LayoutTagSentinel("zZ"))
-arch._set("nN", _LayoutTagSentinel("nN"))
-arch._set("RowMajor", _LayoutTagSentinel("row_major"))
-arch._set("ColumnMajor", _LayoutTagSentinel("column_major"))
-arch._set("L0Clayout", _LayoutTagSentinel("L0Clayout"))
-arch._set("zNUnAlign", _LayoutTagSentinel("zNUnAlign"))
+arch._set("zN", _LayoutTag("zN"))
+arch._set("nZ", _LayoutTag("nZ"))
+arch._set("zZ", _LayoutTag("zZ"))
+arch._set("nN", _LayoutTag("nN"))
+arch._set("RowMajor", _LayoutTag("row_major"))
+arch._set("ColumnMajor", _LayoutTag("column_major"))
+arch._set("L0Clayout", _LayoutTag("L0Clayout"))
+arch._set("zNUnAlign", _LayoutTag("zNUnAlign"))
 
 vec = _Namespace()
 vec._set("func", _vec_func)
 
 
-class _MaskPatternSentinel:
-    """A fixed ``tla.mask`` pattern (e.g. ``tla.mask.ALL``, ``tla.mask.VL8``).
+class _MaskPattern:
+    """A fixed ``tla.mask`` pattern token (e.g. ``tla.mask.ALL``, ``tla.mask.VL8``).
 
     Pass it to ``tla.create_mask(pattern=...)`` to materialize a ``MaskSSA``;
     ops that take ``mask=`` accept only a ``MaskSSA`` (from ``tla.create_mask``
-    or ``tla.update_mask``), not a pattern sentinel directly.
+    or ``tla.update_mask``), not a pattern token directly.
     """
 
     __slots__ = ("_token",)
@@ -6085,7 +7169,7 @@ class _MaskPatternSentinel:
         return f"tla.mask.{self._token}"
 
 
-# AVE pge patterns exposed under the tla.mask namespace.
+# AVE pge patterns exposed under tla.mask.* attributes.
 _MASK_PATTERN_TOKENS = (
     "ALL",
     "ALLF",
@@ -6126,16 +7210,50 @@ def _mask_elem_type(
 @dsl_user_op
 def create_mask(
     *,
-    pattern: Any | None = None,
-    dtype: Any = Float32,
+    pattern: _MaskPattern | str | None = None,
+    dtype: DTypeLike = Float32,
     loc: mlir_ir.Location | None = None,
 ) -> MaskSSA:
-    """Create a vector mask inside a vector region from a fixed pattern.
+    """Directory: Vector Compute / Mask Compute
+Description:
+    Create a vector mask from a fixed pattern (`tla.mask.*` tokens).
 
-    ``pattern=tla.mask.ALL`` (or ``VL8``, ``H``, ``Q``, ``M4``, ...) emits a
-    fixed AVE pge pattern. ``dtype`` (default ``f32``) fixes the mask lane count
-    (256 bytes / dtype size) and must match the enclosing vector region's element
-    width. For tail handling over a loop, use :func:`update_mask`.
+    Parameters:
+    - `pattern` (`_MaskPattern | str | None`): Mask pattern token or its name
+      string. Required at runtime (`None` raises). Tokens live under `tla.mask`
+      (for example `tla.mask.ALL`, `tla.mask.VL8`):
+
+      | Pattern | Meaning |
+      |---|---|
+      | `ALL` | All elements are valid |
+      | `ALLF` | All elements are invalid |
+      | `VL1` / `VL2` / `VL3` / `VL4` | Lowest 1 / 2 / 3 / 4 elements are valid |
+      | `VL8` / `VL16` / `VL32` / `VL64` / `VL128` | Lowest 8 / 16 / 32 / 64 / 128 elements are valid |
+      | `M3` | Elements whose index is a multiple of 3 are valid |
+      | `M4` | Elements whose index is a multiple of 4 are valid |
+      | `H` | Lowest half of the elements are valid |
+      | `Q` | Lowest quarter of the elements are valid |
+
+    - `dtype` (`DTypeLike`): Element type associated with the mask (also decides
+      how many elements fit in one vector: 256 bytes / element size). Optional,
+      default `Float32`.
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - Must be called inside `tla.vec.func()`; `pattern` is required.
+    - Ops that take `mask=` need a `MaskSSA` from `create_mask` /
+      `update_mask`, not a raw `tla.mask.*` token.
+
+    Example:
+    ```python
+    with tla.vec.func(mode="simd"):
+        # Build masks from pattern tokens:
+        m_all = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Float16)
+        m_tail = tla.create_mask(pattern=tla.mask.VL8, dtype=tla.Float16)
+        # Before: x_reg / y_reg are full vectors; only the lowest 8 elements add.
+        z = tla.add(x_reg, y_reg, mask=m_tail)
+        # After: valid elements hold x+y; masked-out elements stay inactive.
+    ```
     """
     if pattern is None:
         _op_error("create_mask", "pattern is required")
@@ -6146,7 +7264,7 @@ def create_mask(
         elem_type.context
     )
     token = (
-        pattern._token if isinstance(pattern, _MaskPatternSentinel) else str(pattern)
+        pattern._token if isinstance(pattern, _MaskPattern) else str(pattern)
     )
     return MaskSSA(
         _tla_ops_gen.create_mask(
@@ -6157,23 +7275,29 @@ def create_mask(
 
 @dsl_user_op
 def update_mask(
-    true_shape: Any,
-    dtype: Any = Float32,
+    true_shape: IndexLike,
+    dtype: DTypeLike = Float32,
     *,
     loc: mlir_ir.Location | None = None,
-) -> tuple[MaskSSA, Any]:
-    """Create a tail mask and the remaining element count.
+) -> tuple[MaskSSA, Numeric]:
+    """Directory: Vector Compute / Mask Compute
 
-    Maps to AVE ``plt``. Given ``true_shape`` (the number of elements still to
-    process), returns ``(mask, new_true_shape)`` where ``mask`` activates lane
-    ``i`` iff ``i < true_shape`` (saturating to all-true once ``true_shape``
-    reaches the lane count) and ``new_true_shape = true_shape - lanes`` with
-    ``lanes = 256 bytes / dtype size`` (= 64 for ``f32``).
+Description:
+    Create a tail mask and return the remaining element count.
 
-    Seed a loop-carried counter with the total element count and thread
-    ``new_true_shape`` back each iteration to mask successive chunks, including
-    the partial tail. ``dtype`` (default ``f32``) fixes the lane count and must
-    match the enclosing vector region's element width.
+    Parameters:
+    - `true_shape` (`IndexLike`): Shape of the currently valid (true) region. Required.
+    - `dtype` (`DTypeLike`): Element type associated with the mask. Optional, default `Float32`.
+
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - Must be called inside `tla.vec.func()`.
+
+    Example:
+    ```python
+    with tla.vec.func(mode="simd"):
+        tail_mask, remain = tla.update_mask(true_shape, dtype=tla.Float32)
+    ```
     """
     _require_frontend_state("update_mask")
     _runtime._require_enclosing_region("update_mask", "vec.func")
@@ -6191,7 +7315,7 @@ def update_mask(
 
 _mask_namespace = _Namespace()
 for _mask_pattern_token in _MASK_PATTERN_TOKENS:
-    _mask_namespace._set(_mask_pattern_token, _MaskPatternSentinel(_mask_pattern_token))
+    _mask_namespace._set(_mask_pattern_token, _MaskPattern(_mask_pattern_token))
 
 
 def __getattr__(name: str) -> Any:
@@ -6206,7 +7330,7 @@ def _resolve_arch_layout_tag(value: Any | None, *, for_op: str) -> str:
         token = _name_token(arch.RowMajor)
         assert token is not None
         return token
-    if not isinstance(value, _LayoutTagSentinel):
+    if not isinstance(value, _LayoutTag):
         raise TypeError(
             f"{for_op}: layout_tag must be a tla.arch layout sentinel "
             f"(e.g. tla.arch.RowMajor); got {_type_name(value)}"
@@ -6236,6 +7360,7 @@ __all__ = [
     "set_flag",
     "wait_flag",
     "pipe_barrier",
+    "local_mem_bar",
     "mutex",
     "mutex_guard",
     "mutex_lock",

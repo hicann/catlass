@@ -68,3 +68,30 @@ def test_loc_none_without_frontend_state_rejects_make_shape() -> None:
 # ---------------------------------------------------------------------------
 
 
+def test_representative_ops_work_without_explicit_loc() -> None:
+    """Representative DSL ops across categories work with auto-captured location."""
+    # Region-requiring verbs (set_flag/wait_flag/pipe_barrier/cross_core_*/
+    # mutex_lock/unlock) can't be emitted here: they must be nested in a
+    # tla.cube/tla.vector region, and region ops are not enterable under
+    # _eager_capture. The auto-location path is identical for every dsl_user_op,
+    # so representative region-free ops across categories still exercise it.
+    with runtime_mod._eager_capture() as state:
+        sh = tla.make_shape(1, 2)
+        tla.make_coord(0, 0)
+        st = tla.make_stride(1, 100)
+        tla.make_layout(sh, st)
+        tla.flag("ready", tla.arch.MTE2, tla.arch.VECTOR)
+        tla.cross_flag("x")
+        tla.mutex(resource="l0a_ping", id=-1)
+
+    mlir = state.module.operation.get_asm(
+        print_generic_op_form=True, assume_verified=False
+    )
+    for op_name in (
+        "tla.make_shape",
+        "tla.make_layout",
+        "tla.flag",
+        "tla.cross_flag",
+        "tla.mutex",
+    ):
+        assert op_name in mlir

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from mlir import ir as mlir_ir  # type: ignore[assignment]
 
@@ -11,7 +11,11 @@ from .._mlir_bindings import tla_ops_gen as _tla_ops_gen
 from ..base_dsl.op import dsl_user_op
 from .. import runtime as _runtime
 from ..base_dsl.typing import Bool, Numeric
+from ..params import LoadParams, StoreParams
 from .typing import Tensor as TensorABC
+
+if TYPE_CHECKING:
+    from ..core_api import MaskSSA, VectorSSA
 
 
 def _dynamic_metadata_values(type_tree: Any, metadata_tree: Any) -> list[Any]:
@@ -210,22 +214,31 @@ class _Tensor(TensorABC):
     @dsl_user_op
     def load(
         self,
-        params: Any | None = None,
+        params: LoadParams | None = None,
         *,
         loc: mlir_ir.Location | None = None,
-    ) -> Any:
-        """Load this tensor tile into vector or mask SSA inside a ``tla.vec.func``.
+    ) -> MaskSSA | VectorSSA | tuple[VectorSSA, VectorSSA]:
+        """Directory: Data Movement
+Description:
+    Load this UB tensor tile into vector or mask SSA (`tile.load`).
 
-        Dispatch by ``params`` type:
+    Parameters:
+    - `params` (`LoadParams | None`): Load mode. `None` / `NormalLoadParams` /
+      `UnalignLoadParams` → `VectorSSA` (or a pair for `DIST_DINTLV_B32`);
+      `MaskLoadParams` → `MaskSSA`. Optional, default `None`.
 
-        * ``MaskLoadParams`` → ``MaskSSA``. UB element type may be any
-          1/2/4-byte scalar (``i8``/``f16``/``f32``/…). ``N`` on
-          ``!tla.mask<N>`` is ``256 / sizeof(UB elem)`` (same rule as
-          ``create_mask``); match the companion vector element width.
-          The tile only supplies the UB address.
-        * ``None`` / ``NormalLoadParams`` / ``UnalignLoadParams`` → ``VectorSSA``
-          (or a ``(VectorSSA, VectorSSA)`` pair for ``DIST_DINTLV_B32``).
-        """
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - Must be called inside `tla.vec.func()`; source tile must be UB.
+    - Mask load requires a 1/2/4-byte scalar UB element type.
+
+    Example:
+    ```python
+    with tla.vec.func(mode="simd"):
+        x_reg = x_ub.load()
+        x_unalign = x_ub.load(tla.params.UnalignLoadParams())
+    ```
+    """
         from ..core_api import (
             MaskSSA,
             VectorSSA,
@@ -372,23 +385,35 @@ class _Tensor(TensorABC):
     @dsl_user_op
     def store(
         self,
-        value: Any,
-        params: Any | None = None,
+        value: VectorSSA | MaskSSA,
+        params: StoreParams | None = None,
         *,
-        mask: Any | None = None,
+        mask: MaskSSA | None = None,
         loc: mlir_ir.Location | None = None,
     ) -> None:
-        """Store vector or mask SSA into this tensor tile inside a ``tla.vec.func``.
+        """Directory: Data Movement
+Description:
+    Store vector or mask SSA into this UB tensor tile (`tile.store`).
 
-        Dispatch by ``params`` type:
+    Parameters:
+    - `value` (`VectorSSA | MaskSSA`): `VectorSSA` or `MaskSSA` to store. Required.
+    - `params` (`StoreParams | None`): Store mode. `None` / `NormalStoreParams` /
+      `UnalignStoreParams` / `BlockStoreParams` → vector store;
+      `MaskStoreParams` → mask store. Optional, default `None`.
+    - `mask` (`MaskSSA | None`): Optional predicate for vector stores; not
+      allowed with `MaskStoreParams`. Optional, default `None`.
 
-        * ``MaskStoreParams`` → MaskSSA store. UB element type may be any
-          1/2/4-byte scalar. ``value`` must be ``MaskSSA`` whose ``N`` matches
-          ``256 / sizeof(UB elem)``; predicate ``mask=`` is not allowed.
-          Spill size is ``N/8`` bytes; the tile only supplies the address.
-        * ``None`` / ``NormalStoreParams`` / ``UnalignStoreParams`` → data store
-          (``VectorSSA``), with optional predicate ``mask``.
-        """
+    Constraints:
+    - Must be called inside a `@tla.kernel`-decorated kernel function.
+    - Must be called inside `tla.vec.func()`; destination tile must be UB.
+
+    Example:
+    ```python
+    with tla.vec.func(mode="simd"):
+        y_ub.store(y_reg)
+        y_ub.store(y_reg, tla.params.UnalignStoreParams())
+    ```
+    """
         from ..core_api import (
             _as_value,
             _mask_ssa_type_for_element_type,

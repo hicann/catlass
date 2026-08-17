@@ -42,7 +42,7 @@ def _ops_surface_kernel(src: tla.Tensor, dst: tla.Tensor) -> None:
     tla.copy(src_tile, dst_tile)
 
     with tla.vector():
-        ready = tla.flag("ready")
+        ready = tla.flag("ready", tla.arch.MTE2, tla.arch.VECTOR)
         tla.set_flag(ready)
         tla.wait_flag(ready)
         cross = tla.cross_flag("x")

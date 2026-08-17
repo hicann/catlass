@@ -13,7 +13,8 @@ nav:
   - Environment Variables: environment_variables.md
   - Torch Tensor Binding: framework_integration.md
   - Dynamic Layout: dsl_dynamic_layout.md
-  - Core API Reference: api-reference.md
+  - Kernel API Reference: kernel-api-reference.md
+  - Kernel API Reference (中文): kernel-api-reference.zh.md
   - DSL Syntax Constraints: dsl_python_syntax_guide.md
   - DSL Syntax Constraints (English): dsl_python_syntax_guide_en.md
   - BC Backend Integration: bc-backend-integration.md

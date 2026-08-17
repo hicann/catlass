@@ -55,7 +55,7 @@ def from_dlpack(
 | 参数 | 说明 |
 |------|------|
 | `tensor_dlpack` | 实现 `__dlpack__` 的对象；须为 **Ascend/NPU 设备**上的缓冲区，CPU / NumPy 不可用 |
-| `layout_tag` | **必填**。`tla.arch` 布局哨兵，如 `RowMajor` / `ColumnMajor` |
+| `layout_tag` | **必填**。`tla.arch` 布局标签，如 `RowMajor` / `ColumnMajor` |
 | `origin_shape` | 可选。逻辑 origin，普通 `tuple`（如 `(M, K)`）。省略时由物理 shape/stride 与 `layout_tag` 推导 |
 | `assumed_align` | **预留参数**。当前 `from_dlpack` 路径统一按元素自然对齐（如 `f32`→4）处理，传入值不影响实际 lowering / 访存行为 |
 | `stream` | 传给框架的 `__dlpack__(stream=...)`，只影响「把 torch tensor 交给 `from_dlpack` 时」框架侧要不要做流同步；默认 `-1` 表示不做同步 |
