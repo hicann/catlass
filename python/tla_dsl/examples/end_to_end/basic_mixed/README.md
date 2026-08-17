@@ -2,10 +2,10 @@
 
 本目录下提供的系列样例演示 **CATLASS DSL** 下基础 CV（Cube + Vector）融合算子的计算过程。
 
-
 ## 功能说明
 
 基础 CV 融合算子实现形如 $(m, k)$ 和 $(k, n)$ 的两矩阵乘法后与加和矩阵逐元素相加，输出形如 $(m, n)$，计算公式为：
+
 $$
 \begin{aligned}
 D &= A \times B + C \\
@@ -13,12 +13,12 @@ D_{i,j} &= \Sigma_{k} A_{i,k}B_{k,j} + C_{i,j}
 \end{aligned}
 $$
 
- - [`basic_mixed_fixpipe_nz2dn`](basic_mixed_fixpipe_nz2dn.py) 实现基本矩阵乘功能，无后续加和操作。
+- [`basic_mixed_fixpipe_nz2dn`](basic_mixed_fixpipe_nz2dn.py) 实现基本矩阵乘功能，无后续加和操作。
 
 与基础矩阵乘相比，CV 融合除 AIC 上的矩阵计算外，还包含 AIV 上的加法运算，二者之间存在两条数据通路：
 
- - `L0C` → `UB` 数据通路：矩阵乘结果计算完成后启动 FIXPIPE 由 L0C 搬出到 UB (Unified Buffer)，可便于后续 Vector 运算；
- - `UB` → `L1` 数据通路：矩阵 A 从 GM 加载到 UB 后，通过该通路搬运到 L1 上，可随路转换为 `zN` / `zNUnAlign` 排布。
+- `L0C` → `UB` 数据通路：矩阵乘结果计算完成后启动 FIXPIPE 由 L0C 搬出到 UB (Unified Buffer)，可便于后续 Vector 运算；
+- `UB` → `L1` 数据通路：矩阵 A 从 GM 加载到 UB 后，通过该通路搬运到 L1 上，可随路转换为 `zN` / `zNUnAlign` 排布。
 
 ## 代码组织
 
@@ -37,23 +37,22 @@ $$
 
 各子文件所承载样例特性概述如下：
 
-| 文件 | 概述 |
-|------|------|
-| [**`basic_mixed.py`**](basic_mixed.py) | 基础 CV 融合示例，CUBE 单元矩阵乘计算完成后经 `L0C`→`UB` 通路搬移到 UB，AIV 上执行逐元素加法，是其他变体的基准版本。 |
-| [**`basic_mixed_mutex.py`**](basic_mixed_mutex.py) | 使用 `Mutex` 原语实现流水同步的 CV 融合示例。 |
-| [**`basic_mixed_fixpipe_nz2dn.py`**](basic_mixed_fixpipe_nz2dn.py) | 使用 `L0C`→`UB` 通路定向搬运到 AIV0 上进行计算。 |
-| [**`basic_mixed_ub2l1.py`**](basic_mixed_ub2l1.py) | 启用 `UB`→`L1` 通路的 CV 融合示例，AIV 将矩阵 A 从 GM 经 UB 搬运到 L1，不改动数据排布。 |
-| [**`basic_mixed_store_zN.py`**](basic_mixed_store_zN.py) | 启用 `UB`→`L1` 通路的 CV 融合示例，AIV 将矩阵 A 转为 `zN` 排布后再写入 L1。 |
-| [**`basic_mixed_store_zNUnAlign.py`**](basic_mixed_store_zNUnAlign.py) | 同上，但使用 `zNUnAlign` 排布，M 轴不对齐到分形大小。 |
+| 文件                                                                          | 概述                                                                                                                     |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| [**`basic_mixed.py`**](basic_mixed.py)                                 | 基础 CV 融合示例，CUBE 单元矩阵乘计算完成后经`L0C`→`UB` 通路搬移到 UB，AIV 上执行逐元素加法，是其他变体的基准版本。 |
+| [**`basic_mixed_mutex.py`**](basic_mixed_mutex.py)                     | 使用`Mutex` 原语实现流水同步的 CV 融合示例。                                                                           |
+| [**`basic_mixed_fixpipe_nz2dn.py`**](basic_mixed_fixpipe_nz2dn.py)     | 使用`L0C`→`UB` 通路定向搬运到 AIV0 上进行计算。                                                                     |
+| [**`basic_mixed_ub2l1.py`**](basic_mixed_ub2l1.py)                     | 启用`UB`→`L1` 通路的 CV 融合示例，AIV 将矩阵 A 从 GM 经 UB 搬运到 L1，不改动数据排布。                              |
+| [**`basic_mixed_store_zN.py`**](basic_mixed_store_zN.py)               | 启用`UB`→`L1` 通路的 CV 融合示例，AIV 将矩阵 A 转为 `zN` 排布后再写入 L1。                                        |
+| [**`basic_mixed_store_zNUnAlign.py`**](basic_mixed_store_zNUnAlign.py) | 同上，但使用`zNUnAlign` 排布，M 轴不对齐到分形大小。                                                                   |
 
 ## 约束说明
 
- - 本目录下示例固定采用 `f32` 数据类型。
-
+- 本目录下示例固定采用 `f32` 数据类型。
 
 ## 使用示例
 
-要运行本路径下的样例，请参考[环境配置](../../../docs/dev_guide/00_environment_setup.md)一节的有关内容。
+要运行本路径下的样例，请参考[环境配置](../../../docs/dev_guide/00_environment_setup.md)完成部署。
 
 ### 命令行参数
 
@@ -66,14 +65,13 @@ basic_mixed.py [-h] [--device DEVICE] [--m M] [--n N] [--k K]
 
 上述命令行参数具体说明如下：
 
-| 参数 | 默认值 | 说明 |
-|------|--------|------|
-| `--device` | `0` | 上板执行使用的 NPU 设备号。 |
-| `--m` / `--n` / `--k` | `32`, `32`, `32` | 矩阵乘加的问题大小 |
-| `--layout-a` / `--layout-b` | `"row"` / `"row"` | 左、右矩阵 A、B 的数据排布格式，可选 `"row"` 或 `"col"`，表示行优先或列优先布局。 |
-| `--block-num` | `-1`（哨兵值，后续根据所使用的 NPU 设备采集其满核值）| 所启用的 AI Core 核数 |
-| `--sentinel` | `-9.0` | Kernel 启动前写入结果 C 的哨兵值。 |
-
+| 参数                            | 默认值                                                  | 说明                                                                                 |
+| ------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `--device`                    | `0`                                                   | 上板执行使用的 NPU 设备号。                                                          |
+| `--m` / `--n` / `--k`     | `32`, `32`, `32`                                  | 矩阵乘加的问题大小                                                                   |
+| `--layout-a` / `--layout-b` | `"row"` / `"row"`                                   | 左、右矩阵 A、B 的数据排布格式，可选`"row"` 或 `"col"`，表示行优先或列优先布局。 |
+| `--block-num`                 | `-1`（哨兵值，后续根据所使用的 NPU 设备采集其满核值） | 所启用的 AI Core 核数                                                                |
+| `--sentinel`                  | `-9.0`                                                | Kernel 启动前写入结果 C 的哨兵值。                                                   |
 
 ### 执行示例
 

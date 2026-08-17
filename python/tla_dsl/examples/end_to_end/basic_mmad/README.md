@@ -2,10 +2,10 @@
 
 本目录下提供的系列样例演示 **CATLASS DSL** 下基础矩阵乘的计算。
 
-
 ## 功能说明
 
 基础矩阵乘算子实现形如$(m, k)$和$(k, n)$的两矩阵的乘法运算，输出形如$(m, n)$，计算公式为：
+
 $$
 \begin{aligned}
 C &= A \times B \\
@@ -28,31 +28,30 @@ $$
 └── README.md
 ```
 
-| 文件 | 概述 |
-|------|------|
-| [**`basic_matmul.py`**](basic_matmul.py) | 基础矩阵乘示例，支持动态场景，含双缓冲优化，是其他变体的基准版本。 |
-| [**`basic_matmul_atomic_add.py`**](basic_matmul_atomic_add.py) | 启用原子加的矩阵乘示例，每个 tile 块计算后立刻搬移，在 GM 上进行累加，`DTYPE_C` 固定为累加类型（即 `tla.Float32`）。 |
-| [**`basic_matmul_mutex.py`**](basic_matmul_mutex.py) | 使用 `Mutex` 原语的矩阵乘示例，不同于`set`/`wait` 原语， `Mutex` 原语同步不再区分源和目的指令。 |
-| [**`basic_matmul_mutex_with.py`**](basic_matmul_mutex_with.py) | 同样是利用 `Mutex` 原语的矩阵乘示例，使用 `with tla.mutex_guard(...)` 表达，替换 `mutex.lock/unlock` 的做法。 |
-| [**`basic_matmul_auto_sync.py`**](basic_matmul_auto_sync.py) | 使用 `@tla.kernel(auto_sync="v0")` 自动插入核内 mutex 的独立端到端用例，覆盖 MMAD/FIX unit flag 协议且无需手写本地同步。 |
-| [**`basic_mmad_ptr.py`**](basic_mmad_ptr.py) | 矩阵乘最小集示例，显式构造 `tla.Tensor` 供 kernel 计算，仅支持静态场景。 |
+| 文件                                                                  | 概述                                                                                                                      |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| [**`basic_matmul.py`**](basic_matmul.py)                       | 基础矩阵乘示例，支持动态场景，含双缓冲优化，是其他变体的基准版本。                                                        |
+| [**`basic_matmul_atomic_add.py`**](basic_matmul_atomic_add.py) | 启用原子加的矩阵乘示例，每个 tile 块计算后立刻搬移，在 GM 上进行累加，`DTYPE_C` 固定为累加类型（即 `tla.Float32`）。  |
+| [**`basic_matmul_mutex.py`**](basic_matmul_mutex.py)           | 使用`Mutex` 原语的矩阵乘示例，不同于`set`/`wait` 原语， `Mutex` 原语同步不再区分源和目的指令。                    |
+| [**`basic_matmul_mutex_with.py`**](basic_matmul_mutex_with.py) | 同样是利用`Mutex` 原语的矩阵乘示例，使用 `with tla.mutex_guard(...)` 表达，替换 `mutex.lock/unlock` 的做法。        |
+| [**`basic_matmul_auto_sync.py`**](basic_matmul_auto_sync.py)   | 使用`@tla.kernel(auto_sync="v0")` 自动插入核内 mutex 的独立端到端用例，覆盖 MMAD/FIX unit flag 协议且无需手写本地同步。 |
+| [**`basic_mmad_ptr.py`**](basic_mmad_ptr.py)                   | 矩阵乘最小集示例，显式构造`tla.Tensor` 供 kernel 计算，仅支持静态场景。                                                 |
 
 ## 约束说明
 
- - 左、右矩阵及结果矩阵所支持的数据组合类型如下。
+- 左、右矩阵及结果矩阵所支持的数据组合类型如下。
 
 | `DTYPE_A` | `DTYPE_B` | `DTYPE_C` |
-|---------|---------|------------------|
-| f16 | f16 | f32 |
-| f16 | f16 | f16 |
-| bf16 | bf16 | f32 |
-| bf16 | bf16 | bf16 |
-| f32 | f32 | f32 |
-
+| ----------- | ----------- | ----------- |
+| f16         | f16         | f32         |
+| f16         | f16         | f16         |
+| bf16        | bf16        | f32         |
+| bf16        | bf16        | bf16        |
+| f32         | f32         | f32         |
 
 ## 使用示例
 
-要运行本路径下的样例，请参考[环境配置](../../../docs/dev_guide/00_environment_setup.md)一节的有关内容。
+要运行本路径下的样例，请参考[环境配置](../../../docs/dev_guide/00_environment_setup.md)完成部署。
 
 ### 命令行参数
 
@@ -67,16 +66,15 @@ basic_matmul.py [-h] [--device DEVICE] [--m M] [--n N] [--k K]
 
 上述命令行参数具体说明如下：
 
-| 参数 | 默认值 | 说明 |
-|------|--------|------|
-| `--device` | `0` | 上板执行使用的 NPU 设备号。 |
-| `--m` | `256` | 矩阵乘左矩阵 A 的行数 |
-| `--n` | `512` | 矩阵乘右矩阵 B 的列数 |
-| `--k` | `1024` | 矩阵乘累加轴的大小 |
-| `--layout-a` / `--layout-b` | `"row"` / `"row"` | 左、右矩阵 A、B 的数据排布格式，可选 `"row"` 或 `"col"`，表示行优先或列优先布局。 |
-| `--dtype-a` / `--dtype-b` / `--dtype-c` | `"f16"` / `"f16"` / `"f32"` | 左、右矩阵 A、B 和结果矩阵 C 的数据类型，可选范围包括 `"f16"`, `"bf16"` 和 `"f32"` 。 |
-| `--block-num` | `-1`（哨兵值，后续根据所使用的 NPU 设备采集其满核值）| 所启用的 AI Core 核数 |
-
+| 参数                                          | 默认值                                                  | 说明                                                                                       |
+| --------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `--device`                                  | `0`                                                   | 上板执行使用的 NPU 设备号。                                                                |
+| `--m`                                       | `256`                                                 | 矩阵乘左矩阵 A 的行数                                                                      |
+| `--n`                                       | `512`                                                 | 矩阵乘右矩阵 B 的列数                                                                      |
+| `--k`                                       | `1024`                                                | 矩阵乘累加轴的大小                                                                         |
+| `--layout-a` / `--layout-b`               | `"row"` / `"row"`                                   | 左、右矩阵 A、B 的数据排布格式，可选`"row"` 或 `"col"`，表示行优先或列优先布局。       |
+| `--dtype-a` / `--dtype-b` / `--dtype-c` | `"f16"` / `"f16"` / `"f32"`                       | 左、右矩阵 A、B 和结果矩阵 C 的数据类型，可选范围包括`"f16"`, `"bf16"` 和 `"f32"` 。 |
+| `--block-num`                               | `-1`（哨兵值，后续根据所使用的 NPU 设备采集其满核值） | 所启用的 AI Core 核数                                                                      |
 
 ### 执行示例
 
@@ -99,6 +97,7 @@ python examples/end_to_end/basic_mmad/basic_matmul.py \
 ```
 
 执行测试后，预期输出：
+
 ```plain
 --- mnk=(<m>, <n>, <k>) layout=<layout_a>/<layout_b> dtype=<dtype_a>/<dtype_b>/<dtype_c> ---
 passed=True cache_key=<cache_key>
@@ -118,6 +117,7 @@ kernel.o=<cache_dir>/<cache_key>/kernel.o
 **文件**：`basic_matmul_atomic_add.py`
 
 使用 **原子加（Atomic Add）** 将K 维度的 Tile 分块在 GM 上进行累加，通过Cube计算单元每个分块计算完毕后立即通过 FIX 流水写回 GM。其中原子加特性关键代码如下：
+
 ```python
 import catlass.tla as tla
 
@@ -145,7 +145,6 @@ else:
 
 启用原子加的操作在`tla.copy(...)`中通过向 `CopyL0C2DstParams` 参数中传入 `atomic_mode` 实现，目前支持的模式包括 `AtomicMode.ADD` 和 `AtomicMode.NONE` （默认行为，无原子操作）。
 
-
 ## basic_matmul_mutex
 
 **文件**：`basic_matmul_mutex.py`
@@ -155,6 +154,7 @@ else:
 可以使用显式 Mutex 锁/解锁 （`mutex.lock(pipe)` / `mutex.unlock(pipe)`）操作，当某条流水线申请到对某个`mutex`资源的 `lock` 操作后，该锁供其所有，阻塞其他申请该 `mutex` 资源的流水，直至其释放（ `unlock` 操作），`lock` / `unlock` 操作必须配对。
 
 以 GM 向 L1A 的数据搬运操作为例，示例如下：
+
 ```python
 import catlass.tla as tla
 
@@ -190,6 +190,7 @@ mutex_l1a.unlock(pipe=tla.arch.MTE1)
 使用 `with tla.mutex_guard(...)` **上下文管理器**实现 `Mutex` 同步，省去 `mutex.lock(pipe)` 和 `mutex.unlock(pipe)` 的手动管理。
 
 仍以GM 至 L1A 的数据搬运过程为例，相应写法是：
+
 ```python
 import catlass.tla as tla
 
