@@ -119,7 +119,7 @@
 | 默认值：空 | `tests/run_dsl_test.sh` 等脚本会依次回退到 `CATLASS_DSL_ASCENDNPU_IR_ROOT`、工作区旁路 `AscendNPU-IR`、仓库内 `python/tla_dsl/3rdparty/AscendNPU-IR` |
 | 某个目录路径 | 指向该 IR 工程根目录（需已完成构建） |
 
-请指向工程根目录，而不是其中的安装子目录。
+请将该变量设为 IR 工程根目录，而不是其中的安装子目录。
 
 ---
 

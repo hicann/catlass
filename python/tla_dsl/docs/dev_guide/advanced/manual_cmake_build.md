@@ -1,27 +1,34 @@
-# 手动 CMake 编译
+# 手动 CMake 构建
 
-正常构建请使用 `build.sh`。本章只说明如何直接配置 `csrc/mlir`。
+正常开发构建请使用 [`build.sh`](../01_build_and_test.md#2-构建)。本文只面向需要直接配置 `csrc/mlir`、调试 CMake 选项或单独运行编译器回归测试的开发者。
 
 ## 1. 前置条件
 
-当前 shell 必须满足以下条件：
-
-- `ASCEND_HOME_PATH` 指向 CANN Toolkit 根目录。
-- `CATLASS_DSL_PREBUILT_ASCENDNPU_IR` 指向已构建的 AscendNPU-IR 源码根目录。
-- 当前 Python 可以导入 `pybind11`。
-- `PYTHONPATH` 中包含 AscendNPU-IR 的 `mlir_core`。
+先加载 CANN，并设置环境变量 `CATLASS_DSL_PREBUILT_ASCENDNPU_IR` 为已构建的 AscendNPU-IR **源码根目录**：
 
 ```bash
-export ASCEND_HOME_PATH="/path/to/ascend-toolkit"
+source /path/to/cann/set_env.sh
 export CATLASS_DSL_PREBUILT_ASCENDNPU_IR="/path/to/AscendNPU-IR"
 export PYTHONPATH="${CATLASS_DSL_PREBUILT_ASCENDNPU_IR}/build/install/python_packages/mlir_core${PYTHONPATH:+:${PYTHONPATH}}"
+```
+
+检查当前 Python 与关键依赖：
+
+```bash
+test -n "${ASCEND_HOME_PATH}"
+test -f "${CATLASS_DSL_PREBUILT_ASCENDNPU_IR}/build/install/lib/cmake/mlir/MLIRConfig.cmake"
 python -c "import pybind11; import mlir"
 ```
 
+手动构建不会安装缺失依赖。环境准备方式见[环境准备](../00_environment_setup.md)。
+
 ## 2. 配置和编译
 
+在 DSL 子项目根目录执行：
+
 ```bash
-cd "${CATLASS_ROOT}/python/tla_dsl"
+# /path/to/catlass 需替换为你 clone 的 CATLASS 仓库实际路径
+cd /path/to/catlass/python/tla_dsl
 
 cmake -S csrc/mlir -B build/cmake/manual \
   -G Ninja \
@@ -34,37 +41,61 @@ cmake --build build/cmake/manual --target tla-compiler
 主要产物位于：
 
 ```text
-build/cmake/manual/python/catlass/
+build/cmake/manual/python/catlass/_tla_type_bridge_native*.so
 build/cmake/manual/tools/tla-compile/TlaCompile
 build/cmake/manual/tests/lit/
 ```
 
-## 3. CMake 选项
+检查产物：
 
-以下选项由 `csrc/mlir/CMakeLists.txt` 定义：
+```bash
+test -x build/cmake/manual/tools/tla-compile/TlaCompile
+test -n "$(find build/cmake/manual/python/catlass -name '_tla_type_bridge_native*.so' -print -quit)"
+```
 
-| 选项 | 默认值 | 含义 |
+该构建目录不满足 `tests/conftest.py` 对 `csrc/mlir/build` 的固定路径检查，也不会把扩展链接到源码包。需要运行完整 pytest 时使用 `./build.sh`。
+
+## 3. 运行 lit
+
+手动构建目录包含独立配置的 lit 测试，可通过 CMake 目标运行：
+
+```bash
+cmake --build build/cmake/manual --target check-tla-lit
+```
+
+也可以直接执行：
+
+```bash
+lit -sv build/cmake/manual/tests/lit
+```
+
+## 4. CMake 配置项
+
+以下配置项由 `csrc/mlir/CMakeLists.txt` 读取：
+
+| 配置项 | 默认值 | 含义 |
 | --- | --- | --- |
 | `ENABLE_CPU_TRACE_INTRINSIC` | `OFF` | 启用 CPU trace intrinsic |
 | `BISHENGIR_BUILD_TEMPLATE` | `ON` | 构建 HIVM template bitcode |
-| `CATLASS_INCLUDE_DIR` | 仓库的 `include/` | CATLASS 公共头文件目录 |
+| `CATLASS_INCLUDE_DIR` | `/path/to/catlass/include` | CATLASS 公共头文件目录 |
 
-示例：
+例如配置 Release 构建并关闭 HIVM template bitcode：
 
 ```bash
-cmake -S csrc/mlir -B build/cmake/manual \
+cmake -S csrc/mlir -B build/cmake/manual-release \
   -G Ninja \
   -DPython3_EXECUTABLE="$(command -v python)" \
-  -DCMAKE_BUILD_TYPE=Release
+  -DCMAKE_BUILD_TYPE=Release \
+  -DBISHENGIR_BUILD_TEMPLATE=OFF
 ```
 
-`MLIR_DIR`、`LLVM_DIR` 和 `MLIR_TBLGEN_INCLUDE_DIR` 会根据 `CATLASS_DSL_PREBUILT_ASCENDNPU_IR` 自动设置。
+`MLIR_DIR`、`LLVM_DIR` 和 `MLIR_TBLGEN_INCLUDE_DIR` 由 CMake 根据 `CATLASS_DSL_PREBUILT_ASCENDNPU_IR` 指向的源码树自动设置。
 
-## 4. 常见错误
+## 5. 常见错误
 
 ### 找不到 AscendNPU-IR 头文件或库
 
-确认 `CATLASS_DSL_PREBUILT_ASCENDNPU_IR` 指向源码根目录，而不是 `build/install`，并检查[AscendNPU-IR 文档](ascend_npu_ir.md)列出的构建产物。
+`CATLASS_DSL_PREBUILT_ASCENDNPU_IR` 的取值是源码根目录。所需文件见 [AscendNPU-IR 构建](ascend_npu_ir.md#3-验证构建产物)。
 
 ### 找不到 `pybind11`
 
@@ -72,12 +103,12 @@ cmake -S csrc/mlir -B build/cmake/manual \
 python -c "import pybind11; print(pybind11.get_include())"
 ```
 
-手动 CMake 构建不使用 PEP 517 构建隔离，因此 `pybind11` 必须能在当前 Python 环境中导入。
+手动 CMake 构建不使用 PEP 517 构建隔离，因此 `pybind11` 必须能在 `Python3_EXECUTABLE` 对应的环境中导入。
 
-### 找不到 `libMLIRPythonCAPI.so`
+### 无法导入 `mlir` 或找不到 `libMLIRPythonCAPI.so`
 
 ```bash
 python -c "import mlir._mlir_libs as libs; print(libs.__file__)"
 ```
 
-若导入失败，检查 `PYTHONPATH` 是否包含 `${CATLASS_DSL_PREBUILT_ASCENDNPU_IR}/build/install/python_packages/mlir_core`。
+若导入失败，检查 `PYTHONPATH` 是否包含 `${CATLASS_DSL_PREBUILT_ASCENDNPU_IR}/build/install/python_packages/mlir_core`。若导入成功但动态库加载失败，还需确认系统动态库搜索路径包含 AscendNPU-IR 的 MLIR Python 库目录。

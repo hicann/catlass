@@ -20,6 +20,16 @@ nav:
   - DSL Syntax Constraints: dsl_python_syntax_guide.md
   - DSL Syntax Constraints (English): dsl_python_syntax_guide_en.md
   - BC Backend Integration: bc-backend-integration.md
+  - Developer Guide:
+      - Environment Setup:
+          - Choose a Setup Method: dev_guide/00_environment_setup.md
+          - Conda Installation: dev_guide/environment/conda.md
+          - Docker Installation: dev_guide/environment/docker.md
+      - Build and Test: dev_guide/01_build_and_test.md
+      - API Documentation: dev_guide/02_api_docs.md
+      - Advanced:
+          - Build AscendNPU-IR: dev_guide/advanced/ascend_npu_ir.md
+          - Manual CMake Build: dev_guide/advanced/manual_cmake_build.md
 
 markdown_extensions:
   - toc:
