@@ -203,6 +203,80 @@ def _binary_op(
     return wrapper
 
 
+def _decorate_generated_method(
+    owner: str,
+    name: str,
+    method: Callable[..., Any],
+    *,
+    comparison: bool = False,
+) -> Callable[..., Any]:
+    """Preserve public metadata and decorate a generated numeric method."""
+    method.__name__ = name
+    method.__qualname__ = f"{owner}.{name}"
+    method.__annotations__["return"] = "Any" if comparison else "Numeric"
+    return dsl_user_op(method)
+
+
+def _binary_method(
+    owner: str,
+    name: str,
+    op: Callable[..., Any],
+    *,
+    flip: bool = False,
+    comparison: bool = False,
+) -> Callable[..., Any]:
+    """Create a user-facing special method backed by ``_binary_op``."""
+
+    def method(
+        self,
+        other: Any,
+        *,
+        loc: mlir_ir.Location | None = None,
+    ) -> Any:
+        return _binary_op(op, flip=flip)(self, other, loc=loc)
+
+    return _decorate_generated_method(owner, name, method, comparison=comparison)
+
+
+def _reflected_method(
+    owner: str,
+    name: str,
+    forward_name: str,
+) -> Callable[..., Any]:
+    """Create a reflected method that preserves forward-method overrides."""
+
+    def method(
+        self,
+        other: Any,
+        *,
+        loc: mlir_ir.Location | None = None,
+    ) -> Any:
+        return getattr(self, forward_name)(other, loc=loc)
+
+    return _decorate_generated_method(owner, name, method)
+
+
+def _reflected_shift_method(
+    name: str,
+    forward_name: str,
+    direction: str,
+) -> Callable[..., Any]:
+    """Create a reflected integer shift with the public operand diagnostic."""
+
+    def method(
+        self,
+        other: Any,
+        *,
+        loc: mlir_ir.Location | None = None,
+    ) -> Any:
+        other_ = as_numeric(other)
+        if not isinstance(other_, Integer):
+            raise ValueError(f"Cannot {direction} shift {other_} with {self}")
+        return getattr(other_, forward_name)(self, loc=loc)
+
+    return _decorate_generated_method("Integer", name, method)
+
+
 class DslType(type):
     """Metaclass for DSL types: ``is_abstract`` + type identity."""
 
@@ -720,77 +794,22 @@ class Numeric(metaclass=NumericMeta, is_abstract=True):
             f"float{{16, 32, 64}}, bf16, index; got {type(self).__name__}"
         )
 
-    @dsl_user_op
-    def __add__(
-        self, other: Any, *, loc: mlir_ir.Location | None = None
-    ) -> "Numeric":
-        return _binary_op(operator.add)(self, other, loc=loc)
-
-    @dsl_user_op
-    def __radd__(
-        self, other: Any, *, loc: mlir_ir.Location | None = None
-    ) -> "Numeric":
-        return _binary_op(operator.add)(self, other, loc=loc)
-
-    @dsl_user_op
-    def __sub__(
-        self, other: Any, *, loc: mlir_ir.Location | None = None
-    ) -> "Numeric":
-        return _binary_op(operator.sub)(self, other, loc=loc)
-
-    @dsl_user_op
-    def __rsub__(
-        self, other: Any, *, loc: mlir_ir.Location | None = None
-    ) -> "Numeric":
-        return _binary_op(operator.sub, flip=True)(self, other, loc=loc)
-
-    @dsl_user_op
-    def __mul__(
-        self, other: Any, *, loc: mlir_ir.Location | None = None
-    ) -> "Numeric":
-        return _binary_op(operator.mul)(self, other, loc=loc)
-
-    @dsl_user_op
-    def __rmul__(
-        self, other: Any, *, loc: mlir_ir.Location | None = None
-    ) -> "Numeric":
-        return _binary_op(operator.mul)(self, other, loc=loc)
-
-    @dsl_user_op
-    def __truediv__(
-        self, other: Any, *, loc: mlir_ir.Location | None = None
-    ) -> "Numeric":
-        return _binary_op(operator.truediv)(self, other, loc=loc)
-
-    @dsl_user_op
-    def __rtruediv__(
-        self, other: Any, *, loc: mlir_ir.Location | None = None
-    ) -> "Numeric":
-        return _binary_op(operator.truediv, flip=True)(self, other, loc=loc)
-
-    @dsl_user_op
-    def __floordiv__(
-        self, other: Any, *, loc: mlir_ir.Location | None = None
-    ) -> "Numeric":
-        return _binary_op(operator.floordiv)(self, other, loc=loc)
-
-    @dsl_user_op
-    def __rfloordiv__(
-        self, other: Any, *, loc: mlir_ir.Location | None = None
-    ) -> "Numeric":
-        return _binary_op(operator.floordiv, flip=True)(self, other, loc=loc)
-
-    @dsl_user_op
-    def __mod__(
-        self, other: Any, *, loc: mlir_ir.Location | None = None
-    ) -> "Numeric":
-        return _binary_op(operator.mod)(self, other, loc=loc)
-
-    @dsl_user_op
-    def __rmod__(
-        self, other: Any, *, loc: mlir_ir.Location | None = None
-    ) -> "Numeric":
-        return _binary_op(operator.mod, flip=True)(self, other, loc=loc)
+    __add__ = _binary_method("Numeric", "__add__", operator.add)
+    __radd__ = _binary_method("Numeric", "__radd__", operator.add)
+    __sub__ = _binary_method("Numeric", "__sub__", operator.sub)
+    __rsub__ = _binary_method("Numeric", "__rsub__", operator.sub, flip=True)
+    __mul__ = _binary_method("Numeric", "__mul__", operator.mul)
+    __rmul__ = _binary_method("Numeric", "__rmul__", operator.mul)
+    __truediv__ = _binary_method("Numeric", "__truediv__", operator.truediv)
+    __rtruediv__ = _binary_method(
+        "Numeric", "__rtruediv__", operator.truediv, flip=True
+    )
+    __floordiv__ = _binary_method("Numeric", "__floordiv__", operator.floordiv)
+    __rfloordiv__ = _binary_method(
+        "Numeric", "__rfloordiv__", operator.floordiv, flip=True
+    )
+    __mod__ = _binary_method("Numeric", "__mod__", operator.mod)
+    __rmod__ = _binary_method("Numeric", "__rmod__", operator.mod, flip=True)
 
     @dsl_user_op
     def __neg__(self, *, loc: mlir_ir.Location | None = None) -> "Numeric":
@@ -827,54 +846,16 @@ class Numeric(metaclass=NumericMeta, is_abstract=True):
             ).results[0]
         return type(self)(result)
 
-    @dsl_user_op
-    def __eq__(
-        self, other: Any, *, loc: mlir_ir.Location | None = None
-    ) -> Any:
-        # Same-type mismatches must raise (do not swallow into NotImplemented,
-        # or Python falls back to identity ``==`` / ``!=``).
-        return _binary_op(operator.eq)(self, other, loc=loc)
-
-    @dsl_user_op
-    def __ne__(
-        self, other: Any, *, loc: mlir_ir.Location | None = None
-    ) -> Any:
-        return _binary_op(operator.ne)(self, other, loc=loc)
-    @dsl_user_op
-    def __lt__(
-        self, other: Any, *, loc: mlir_ir.Location | None = None
-    ) -> Any:
-        return _binary_op(operator.lt)(self, other, loc=loc)
-
-    @dsl_user_op
-    def __le__(
-        self, other: Any, *, loc: mlir_ir.Location | None = None
-    ) -> Any:
-        return _binary_op(operator.le)(self, other, loc=loc)
-
-    @dsl_user_op
-    def __gt__(
-        self, other: Any, *, loc: mlir_ir.Location | None = None
-    ) -> Any:
-        return _binary_op(operator.gt)(self, other, loc=loc)
-
-    @dsl_user_op
-    def __ge__(
-        self, other: Any, *, loc: mlir_ir.Location | None = None
-    ) -> Any:
-        return _binary_op(operator.ge)(self, other, loc=loc)
-
-    @dsl_user_op
-    def __pow__(
-        self, other: Any, *, loc: mlir_ir.Location | None = None
-    ) -> "Numeric":
-        return _binary_op(operator.pow)(self, other, loc=loc)
-
-    @dsl_user_op
-    def __rpow__(
-        self, other: Any, *, loc: mlir_ir.Location | None = None
-    ) -> "Numeric":
-        return _binary_op(operator.pow, flip=True)(self, other, loc=loc)
+    # Type mismatches must raise here; returning NotImplemented would let Python
+    # silently fall back to identity comparison for ``==`` and ``!=``.
+    __eq__ = _binary_method("Numeric", "__eq__", operator.eq, comparison=True)
+    __ne__ = _binary_method("Numeric", "__ne__", operator.ne, comparison=True)
+    __lt__ = _binary_method("Numeric", "__lt__", operator.lt, comparison=True)
+    __le__ = _binary_method("Numeric", "__le__", operator.le, comparison=True)
+    __gt__ = _binary_method("Numeric", "__gt__", operator.gt, comparison=True)
+    __ge__ = _binary_method("Numeric", "__ge__", operator.ge, comparison=True)
+    __pow__ = _binary_method("Numeric", "__pow__", operator.pow)
+    __rpow__ = _binary_method("Numeric", "__rpow__", operator.pow, flip=True)
 
     @staticmethod
     def _from_python_value(value: Any) -> "Numeric":
@@ -901,8 +882,6 @@ class Numeric(metaclass=NumericMeta, is_abstract=True):
 
 def as_numeric(obj: Any) -> Numeric:
     """Convert a Python primitive or MLIR value to a Numeric."""
-    if isinstance(obj, Numeric):
-        return obj
     return Numeric._from_python_value(obj)
 
 
@@ -923,75 +902,30 @@ class Integer(Numeric, metaclass=IntegerMeta, width=32, mlir_type=_mlir_i(32), i
         ).results[0]
         return cls(result)
 
-    @dsl_user_op
-    def __lshift__(
-        self, other: Any, *, loc: mlir_ir.Location | None = None
-    ) -> "Numeric":
-        return _binary_op(operator.lshift)(self, other, loc=loc)
-
-    @dsl_user_op
-    def __rlshift__(
-        self, other: Any, *, loc: mlir_ir.Location | None = None
-    ) -> "Numeric":
-        other_ = as_numeric(other)
-        if not isinstance(other_, Integer):
-            raise ValueError(f"Cannot left shift {other_} with {self}")
-        return other_.__lshift__(self, loc=loc)
-
-    @dsl_user_op
-    def __rshift__(
-        self, other: Any, *, loc: mlir_ir.Location | None = None
-    ) -> "Numeric":
-        return _binary_op(operator.rshift)(self, other, loc=loc)
-
-    @dsl_user_op
-    def __rrshift__(
-        self, other: Any, *, loc: mlir_ir.Location | None = None
-    ) -> "Numeric":
-        other_ = as_numeric(other)
-        if not isinstance(other_, Integer):
-            raise ValueError(f"Cannot right shift {other_} with {self}")
-        return other_.__rshift__(self, loc=loc)
-
-    @dsl_user_op
-    def __and__(
-        self, other: Any, *, loc: mlir_ir.Location | None = None
-    ) -> "Numeric":
-        return _binary_op(operator.and_)(self, other, loc=loc)
-
-    @dsl_user_op
-    def __rand__(
-        self, other: Any, *, loc: mlir_ir.Location | None = None
-    ) -> "Numeric":
-        return self.__and__(other, loc=loc)
-
-    @dsl_user_op
-    def __or__(
-        self, other: Any, *, loc: mlir_ir.Location | None = None
-    ) -> "Numeric":
-        return _binary_op(operator.or_)(self, other, loc=loc)
-
-    @dsl_user_op
-    def __ror__(
-        self, other: Any, *, loc: mlir_ir.Location | None = None
-    ) -> "Numeric":
-        return self.__or__(other, loc=loc)
-
-    @dsl_user_op
-    def __xor__(
-        self, other: Any, *, loc: mlir_ir.Location | None = None
-    ) -> "Numeric":
-        return _binary_op(operator.xor)(self, other, loc=loc)
-
-    @dsl_user_op
-    def __rxor__(
-        self, other: Any, *, loc: mlir_ir.Location | None = None
-    ) -> "Numeric":
-        return self.__xor__(other, loc=loc)
+    __lshift__ = _binary_method("Integer", "__lshift__", operator.lshift)
+    __rlshift__ = _reflected_shift_method("__rlshift__", "__lshift__", "left")
+    __rshift__ = _binary_method("Integer", "__rshift__", operator.rshift)
+    __rrshift__ = _reflected_shift_method("__rrshift__", "__rshift__", "right")
+    __and__ = _binary_method("Integer", "__and__", operator.and_)
+    __rand__ = _reflected_method("Integer", "__rand__", "__and__")
+    __or__ = _binary_method("Integer", "__or__", operator.or_)
+    __ror__ = _reflected_method("Integer", "__ror__", "__or__")
+    __xor__ = _binary_method("Integer", "__xor__", operator.xor)
+    __rxor__ = _reflected_method("Integer", "__rxor__", "__xor__")
 
 
 class Float(Numeric, metaclass=FloatMeta, width=32, mlir_type=_mlir_f32, is_abstract=True):
     """Abstract floating-point numeric family."""
+
+    _host_bits: ClassVar[Callable[[float], int]]
+
+    def __c_pointers__(self) -> list[int]:
+        cls = type(self)
+        if isinstance(self.value, mlir_ir.Value):
+            raise TypeError(
+                f"{cls.__name__} SSA value cannot provide host __c_pointers__"
+            )
+        return [cls._host_bits(float(self.value))]
 
 
 class Bool(Integer, metaclass=IntegerMeta, width=1, dtype="i1", signed=False, mlir_type=_mlir_i(1)):
@@ -1062,32 +996,21 @@ class Float16(Float, metaclass=FloatMeta, width=16, dtype="f16", mlir_type=_mlir
         f16_val = np.float16(value)
         return int(f16_val.view(np.uint16))
 
-    def __c_pointers__(self) -> list[int]:
-        if isinstance(self.value, mlir_ir.Value):
-            raise TypeError("Float16 SSA value cannot provide host __c_pointers__")
-        return [Float16._host_bits(float(self.value))]
-
 
 class BFloat16(Float, metaclass=FloatMeta, width=16, dtype="bf16", mlir_type=_mlir_bf16):
-    def __c_pointers__(self) -> list[int]:
-        if isinstance(self.value, mlir_ir.Value):
-            raise TypeError("BFloat16 SSA value cannot provide host __c_pointers__")
-        bits = int(np.float32(self.value).view(np.uint32))
+    @staticmethod
+    def _host_bits(value: float) -> int:
+        bits = int(np.float32(value).view(np.uint32))
         # Round-to-nearest-even when truncating f32 → bf16 (not plain >> 16).
         if (bits & 0x7F800000) != 0x7F800000:
             bits = (bits + 0x00007FFF + ((bits >> 16) & 1)) & 0xFFFFFFFF
-        return [int(np.uint16(bits >> 16))]
+        return int(np.uint16(bits >> 16))
 
 
 class Float32(Float, metaclass=FloatMeta, width=32, dtype="f32", mlir_type=_mlir_f32):
     @staticmethod
     def _host_bits(value: float) -> int:
         return struct.unpack("I", struct.pack("f", float(value)))[0]
-
-    def __c_pointers__(self) -> list[int]:
-        if isinstance(self.value, mlir_ir.Value):
-            raise TypeError("Float32 SSA value cannot provide host __c_pointers__")
-        return [Float32._host_bits(float(self.value))]
 
 
 class Constexpr(Generic[_T]):

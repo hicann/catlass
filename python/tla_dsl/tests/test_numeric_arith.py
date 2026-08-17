@@ -162,8 +162,31 @@ def test_as_numeric_and_host_constructors() -> None:
     assert isinstance(tla.Float32(1.5), tla.Float32)
     assert isinstance(tla.as_numeric(3), tla.Int32)
     assert isinstance(tla.as_numeric(1.25), tla.Float32)
+    numeric = tla.Int32(3)
+    assert tla.as_numeric(numeric) is numeric
     assert tla.Int32(2) + tla.Int32(3)  # host python path
     assert int(tla.Int32(2) + tla.Int32(3)) == 5
+
+
+def test_numeric_generated_methods_preserve_python_contract() -> None:
+    assert tla.Numeric.__add__.__name__ == "__add__"
+    assert tla.Numeric.__add__.__qualname__ == "Numeric.__add__"
+    assert tla.Integer.__rand__.__name__ == "__rand__"
+    assert tla.Numeric.__hash__ is None
+    with pytest.raises(TypeError, match="unhashable type"):
+        hash(tla.Int32(1))
+
+    assert int(2 + tla.Int32(3)) == 5
+    assert int(7 - tla.Int32(2)) == 5
+    assert int(3 * tla.Int32(4)) == 12
+    assert int(8 // tla.Int32(2)) == 4
+    assert int(8 % tla.Int32(3)) == 2
+    assert int(1 << tla.Int32(3)) == 8
+    assert int(16 >> tla.Int32(2)) == 4
+    assert int(0b1100 & tla.Int32(0b1010)) == 0b1000
+    assert int(0b1100 | tla.Int32(0b0011)) == 0b1111
+    assert int(0b1100 ^ tla.Int32(0b1010)) == 0b0110
+    assert (2.0 ** tla.Float32(3.0)).value == 8.0
 
 
 def test_numeric_same_type_required_and_div_rules() -> None:
