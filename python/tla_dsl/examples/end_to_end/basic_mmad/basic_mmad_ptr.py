@@ -99,6 +99,7 @@ def basic_mmad_ptr(
 
 
 def run(args: argparse.Namespace) -> int:
+    from examples.end_to_end.common import compare
     from catlass.tla.runtime import from_dlpack
 
     torch.npu.set_device(args.device)
@@ -133,14 +134,7 @@ def run(args: argparse.Namespace) -> int:
     artifact(a_tensor, b_tensor, c_tensor, block_num=args.block_num)
     torch.npu.synchronize()
 
-    rtol = (1.0 / 256.0) if K_DIM < 2048 else (1.0 / 128.0)
-    result = c.detach().cpu().float()
-    passed = bool(
-        (
-            (result - ref).abs()
-            <= rtol * torch.maximum(torch.ones_like(ref), ref.abs())
-        ).all()
-    )
+    passed = compare(c.detach().cpu(), ref, K_DIM)
     print(f"passed={passed} kernel.o={artifact.kernel_binary_path}")
     return 0 if passed else 1
 

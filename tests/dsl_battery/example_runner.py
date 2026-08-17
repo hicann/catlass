@@ -32,6 +32,8 @@ EXAMPLES_DIR = (
     / "python" / "tla_dsl" / "examples" / "end_to_end"
 )
 
+_TLA_DSL_ROOT = EXAMPLES_DIR.parents[1]
+
 _MODULE_CACHE: dict[Path, Any] = {}
 
 
@@ -78,6 +80,14 @@ def _sibling_imports(directory: Path) -> Any:
     # structurally unable to shadow the stdlib, site-packages or anything else --
     # a prepended finder would sit ahead of the entire import machinery.
     sys.meta_path.append(finder)
+
+    # Make the `examples` shared-helpers package importable
+    # (`from examples.end_to_end.common import ...`).
+    _root = str(_TLA_DSL_ROOT)
+    _root_added = _root not in sys.path
+    if _root_added:
+        sys.path.append(_root)
+
     try:
         yield
     finally:
@@ -85,6 +95,11 @@ def _sibling_imports(directory: Path) -> Any:
             sys.meta_path.remove(finder)
         except ValueError:
             pass
+        if _root_added:
+            try:
+                sys.path.remove(_root)
+            except ValueError:
+                pass
 
 
 def load_example(path: Path) -> Any:

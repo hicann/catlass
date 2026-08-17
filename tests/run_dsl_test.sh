@@ -17,7 +17,8 @@
 # python/tla_dsl/examples/end_to_end/vector_ops (binary_op.py, masked_binary.py,
 # bitwise_ops.py, reduction_ops.py, compare_mask.py, unary_ops.py, arange_op.py,
 # interleave_op.py, load_dintlv_op.py, load_store_mask.py, squeeze_op.py,
-# register_control_flow.py, load_and_store_scalar_after_reduction.py, load_us_b8_op.py).
+# register_control_flow.py, load_and_store_scalar_after_reduction.py, load_us_b8_op.py,
+# cast_multi.py, gather_op.py).
 # python/tla_dsl/examples/end_to_end/tensor_index (scalar_index_control_flow.py,
 # scalar_kernel_arg.py).
 # python/tla_dsl/examples/end_to_end/debug_print (debug_print.py, debug_print_mixed.py,
@@ -27,6 +28,16 @@
 # @dataclass instance unpacked into scalar kernel args).
 # python/tla_dsl/examples/end_to_end/print_tensor (print_tensor.py: all eight
 # supported GM/UB dtypes plus multi-block and multi-call cases).
+# python/tla_dsl/examples/end_to_end/basic_mmad_evg (matmul_add.py, matmul_add_ub.py,
+# matmul_bias.py, matmul_leaky_relu.py, matmul_sigmoid.py, matmul_silu.py, matmul_tanh.py).
+# python/tla_dsl/examples/end_to_end/flash_attention_infer (flash_attention_infer.py).
+# python/tla_dsl/examples/end_to_end/lazy_conditions (lazy_conditions.py).
+# python/tla_dsl/examples/end_to_end/simt (basic_vadd_simt.py).
+# python/tla_dsl/examples/end_to_end/multi_core_splitk_matmul (multi_core_splitk_matmul.py,
+# tail_multi_core_splitk_matmul.py).
+# python/tla_dsl/examples/end_to_end/basic_mmad_streamk (basic_mmad_streamk.py).
+# python/tla_dsl/examples/end_to_end/batched_matmul (batched_matmul.py).
+# python/tla_dsl/examples/end_to_end/grouped_matmul_slice_m (grouped_matmul_slice_m.py).
 #
 # Toolchain paths (env overrides first; directory-layout fallbacks last):
 #   CANN:             ASCEND_HOME_PATH (source set_env.sh if not already in env)
@@ -119,6 +130,23 @@ DEBUG_PRINT_MIXED_REL="examples/end_to_end/debug_print/debug_print_mixed.py"
 DEBUG_PRINT_FORMAT_REL="examples/end_to_end/debug_print/debug_print_format.py"
 SCALAR_ARG_ALIGNMENT_REL="examples/end_to_end/scalar_arg_alignment/scalar_arg_alignment.py"
 PRINT_TENSOR_REL="examples/end_to_end/print_tensor/print_tensor.py"
+STREAMK_OPS_REL="examples/end_to_end/basic_mmad_streamk/basic_mmad_streamk.py"
+GROUPED_MATMUL_SLICEM_REL="examples/end_to_end/grouped_matmul_slice_m/grouped_matmul_slice_m.py"
+BATCHED_MATMUL_REL="examples/end_to_end/batched_matmul/batched_matmul.py"
+FLASH_ATTENTION_INFER_REL="examples/end_to_end/flash_attention_infer/flash_attention_infer.py"
+LAZY_CONDITIONS_REL="examples/end_to_end/lazy_conditions/lazy_conditions.py"
+SIMT_VADD_REL="examples/end_to_end/simt/basic_vadd_simt.py"
+MULTI_CORE_SPLITK_REL="examples/end_to_end/multi_core_splitk_matmul/multi_core_splitk_matmul.py"
+TAIL_MULTI_CORE_SPLITK_REL="examples/end_to_end/multi_core_splitk_matmul/tail_multi_core_splitk_matmul.py"
+BASIC_MMAD_EVG_ADD_REL="examples/end_to_end/basic_mmad_evg/matmul_add.py"
+BASIC_MMAD_EVG_ADD_UB_REL="examples/end_to_end/basic_mmad_evg/matmul_add_ub.py"
+BASIC_MMAD_EVG_BIAS_REL="examples/end_to_end/basic_mmad_evg/matmul_bias.py"
+BASIC_MMAD_EVG_LEAKY_RELU_REL="examples/end_to_end/basic_mmad_evg/matmul_leaky_relu.py"
+BASIC_MMAD_EVG_SIGMOID_REL="examples/end_to_end/basic_mmad_evg/matmul_sigmoid.py"
+BASIC_MMAD_EVG_SILU_REL="examples/end_to_end/basic_mmad_evg/matmul_silu.py"
+BASIC_MMAD_EVG_TANH_REL="examples/end_to_end/basic_mmad_evg/matmul_tanh.py"
+CAST_MULTI_REL="examples/end_to_end/vector_ops/cast_multi.py"
+GATHER_OP_REL="examples/end_to_end/vector_ops/gather_op.py"
 
 _ascendnpu_ir_dev_is_prebuilt() {
     local root="$1"
@@ -170,6 +198,16 @@ Run end-to-end validation for:
     per-field scalar kernel args; constexpr + tensor + scalar fields)
   - print_tensor (print_tensor.py: all supported GM/UB dtypes with AIV/AIC
     multi-block and multi-call coverage)
+  - basic_mmad_evg (matmul_add.py, ...: CV fused examples)
+  - flash_attention_infer (flash_attention_infer.py)
+  - lazy_conditions (lazy_conditions.py)
+  - simt (basic_vadd_simt.py: SIMT thread-block add)
+  - multi_core_splitk_matmul (multi_core_splitk_matmul.py: using split-k strategy for workload balancing)
+  - basic_mmad_streamk (basic_mmad_streamk.py: streamK workload balancing)
+  - batched_matmul (batched_matmul.py)
+  - grouped_matmul_slice_m (grouped_matmul_slice_m.py)
+  - cast_multi (cast_multi.py)
+  - gather_op (gather_op.py)
 Runs the basic_mmad flag-sync matrix with irregular CLI shapes (333×444×555
 and 1×2×3); representative mutex and atomic-add cases use 333×444×555.
 Example defaults remain regular (256×512×1024).
@@ -453,6 +491,74 @@ if [[ ! -f "${CATLASS_DSL_DIR}/${SCALAR_ARG_ALIGNMENT_REL}" ]]; then
 fi
 if [[ ! -f "${CATLASS_DSL_DIR}/${PRINT_TENSOR_REL}" ]]; then
     echo "error: missing ${PRINT_TENSOR_REL} under ${CATLASS_DSL_DIR}" >&2
+    exit 1
+fi
+if [[ ! -f "${CATLASS_DSL_DIR}/${FLASH_ATTENTION_INFER_REL}" ]]; then
+    echo "error: missing ${FLASH_ATTENTION_INFER_REL} under ${CATLASS_DSL_DIR}" >&2
+    exit 1
+fi
+if [[ ! -f "${CATLASS_DSL_DIR}/${LAZY_CONDITIONS_REL}" ]]; then
+    echo "error: missing ${LAZY_CONDITIONS_REL} under ${CATLASS_DSL_DIR}" >&2
+    exit 1
+fi
+if [[ ! -f "${CATLASS_DSL_DIR}/${SIMT_VADD_REL}" ]]; then
+    echo "error: missing ${SIMT_VADD_REL} under ${CATLASS_DSL_DIR}" >&2
+    exit 1
+fi
+if [[ ! -f "${CATLASS_DSL_DIR}/${MULTI_CORE_SPLITK_REL}" ]]; then
+    echo "error: missing ${MULTI_CORE_SPLITK_REL} under ${CATLASS_DSL_DIR}" >&2
+    exit 1
+fi
+if [[ ! -f "${CATLASS_DSL_DIR}/${TAIL_MULTI_CORE_SPLITK_REL}" ]]; then
+    echo "error: missing ${TAIL_MULTI_CORE_SPLITK_REL} under ${CATLASS_DSL_DIR}" >&2
+    exit 1
+fi
+if [[ ! -f "${CATLASS_DSL_DIR}/${STREAMK_OPS_REL}" ]]; then
+    echo "error: missing ${STREAMK_OPS_REL} under ${CATLASS_DSL_DIR}" >&2
+    exit 1
+fi
+if [[ ! -f "${CATLASS_DSL_DIR}/${BATCHED_MATMUL_REL}" ]]; then
+    echo "error: missing ${BATCHED_MATMUL_REL} under ${CATLASS_DSL_DIR}" >&2
+    exit 1
+fi
+if [[ ! -f "${CATLASS_DSL_DIR}/${GROUPED_MATMUL_SLICEM_REL}" ]]; then
+    echo "error: missing ${GROUPED_MATMUL_SLICEM_REL} under ${CATLASS_DSL_DIR}" >&2
+    exit 1
+fi
+if [[ ! -f "${CATLASS_DSL_DIR}/${BASIC_MMAD_EVG_ADD_REL}" ]]; then
+    echo "error: missing ${BASIC_MMAD_EVG_ADD_REL} under ${CATLASS_DSL_DIR}" >&2
+    exit 1
+fi
+if [[ ! -f "${CATLASS_DSL_DIR}/${BASIC_MMAD_EVG_ADD_UB_REL}" ]]; then
+    echo "error: missing ${BASIC_MMAD_EVG_ADD_UB_REL} under ${CATLASS_DSL_DIR}" >&2
+    exit 1
+fi
+if [[ ! -f "${CATLASS_DSL_DIR}/${BASIC_MMAD_EVG_BIAS_REL}" ]]; then
+    echo "error: missing ${BASIC_MMAD_EVG_BIAS_REL} under ${CATLASS_DSL_DIR}" >&2
+    exit 1
+fi
+if [[ ! -f "${CATLASS_DSL_DIR}/${BASIC_MMAD_EVG_LEAKY_RELU_REL}" ]]; then
+    echo "error: missing ${BASIC_MMAD_EVG_LEAKY_RELU_REL} under ${CATLASS_DSL_DIR}" >&2
+    exit 1
+fi
+if [[ ! -f "${CATLASS_DSL_DIR}/${BASIC_MMAD_EVG_SIGMOID_REL}" ]]; then
+    echo "error: missing ${BASIC_MMAD_EVG_SIGMOID_REL} under ${CATLASS_DSL_DIR}" >&2
+    exit 1
+fi
+if [[ ! -f "${CATLASS_DSL_DIR}/${BASIC_MMAD_EVG_SILU_REL}" ]]; then
+    echo "error: missing ${BASIC_MMAD_EVG_SILU_REL} under ${CATLASS_DSL_DIR}" >&2
+    exit 1
+fi
+if [[ ! -f "${CATLASS_DSL_DIR}/${BASIC_MMAD_EVG_TANH_REL}" ]]; then
+    echo "error: missing ${BASIC_MMAD_EVG_TANH_REL} under ${CATLASS_DSL_DIR}" >&2
+    exit 1
+fi
+if [[ ! -f "${CATLASS_DSL_DIR}/${CAST_MULTI_REL}" ]]; then
+    echo "error: missing ${CAST_MULTI_REL} under ${CATLASS_DSL_DIR}" >&2
+    exit 1
+fi
+if [[ ! -f "${CATLASS_DSL_DIR}/${GATHER_OP_REL}" ]]; then
+    echo "error: missing ${GATHER_OP_REL} under ${CATLASS_DSL_DIR}" >&2
     exit 1
 fi
 

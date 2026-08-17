@@ -1,3 +1,13 @@
+# -----------------------------------------------------------------------------------------------------------
+# Copyright (c) 2026 Huawei Technologies Co., Ltd.
+# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# CANN Open Software License Agreement Version 2.0 (the "License").
+# Please refer to the License for details. You may not use this file except in compliance with the License.
+# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+# See LICENSE in the root of the software repository for the full text of the License.
+# -----------------------------------------------------------------------------------------------------------
+
 """Basic MMAD (atomic add): Kernel + Host in one file.
 
 Dynamic GM; mnk/dtype/layout from CLI (GM C must be f32).
@@ -10,19 +20,14 @@ import argparse
 import catlass.tla as tla
 import torch
 import torch_npu
-from catlass.tla.runtime import from_dlpack
+from examples.end_to_end.common import TilingParams
 
 @tla.kernel
 def basic_mmad_atomic_add_kernel(
     gm_a: tla.Tensor,
     gm_b: tla.Tensor,
     gm_c: tla.Tensor,
-    l1_tm: tla.Constexpr[int],
-    l1_tn: tla.Constexpr[int],
-    l1_tk: tla.Constexpr[int],
-    l0_tm: tla.Constexpr[int],
-    l0_tn: tla.Constexpr[int],
-    l0_tk: tla.Constexpr[int],
+    _tiling: TilingParams,
 ) -> None:
     c0 = 0
     c1 = 1
@@ -48,20 +53,20 @@ def basic_mmad_atomic_add_kernel(
     l0b1_available = tla.flag("l0b1_available", tla.arch.CUBE, tla.arch.MTE1)
     l0_ab_data_ready = tla.flag("l0_ab_data_ready", tla.arch.MTE1, tla.arch.CUBE)
 
-    l1a0_ptr = tla.allocate(l1_tm * l1_tk, dtype_a, tla.AddressSpace.l1, 512)
-    l1a1_ptr = tla.allocate(l1_tm * l1_tk, dtype_a, tla.AddressSpace.l1, 512)
-    l1b0_ptr = tla.allocate(l1_tk * l1_tn, dtype_b, tla.AddressSpace.l1, 512)
-    l1b1_ptr = tla.allocate(l1_tk * l1_tn, dtype_b, tla.AddressSpace.l1, 512)
+    l1a0_ptr = tla.allocate(_tiling.l1_tm * _tiling.l1_tk, dtype_a, tla.AddressSpace.l1, 512)
+    l1a1_ptr = tla.allocate(_tiling.l1_tm * _tiling.l1_tk, dtype_a, tla.AddressSpace.l1, 512)
+    l1b0_ptr = tla.allocate(_tiling.l1_tk * _tiling.l1_tn, dtype_b, tla.AddressSpace.l1, 512)
+    l1b1_ptr = tla.allocate(_tiling.l1_tk * _tiling.l1_tn, dtype_b, tla.AddressSpace.l1, 512)
 
-    l0a0_ptr = tla.allocate(l0_tm * l0_tk, dtype_a, tla.AddressSpace.l0a, 512)
-    l0a1_ptr = tla.allocate(l0_tm * l0_tk, dtype_a, tla.AddressSpace.l0a, 512)
-    l0b0_ptr = tla.allocate(l0_tk * l0_tn, dtype_b, tla.AddressSpace.l0b, 512)
-    l0b1_ptr = tla.allocate(l0_tk * l0_tn, dtype_b, tla.AddressSpace.l0b, 512)
+    l0a0_ptr = tla.allocate(_tiling.l0_tm * _tiling.l0_tk, dtype_a, tla.AddressSpace.l0a, 512)
+    l0a1_ptr = tla.allocate(_tiling.l0_tm * _tiling.l0_tk, dtype_a, tla.AddressSpace.l0a, 512)
+    l0b0_ptr = tla.allocate(_tiling.l0_tk * _tiling.l0_tn, dtype_b, tla.AddressSpace.l0b, 512)
+    l0b1_ptr = tla.allocate(_tiling.l0_tk * _tiling.l0_tn, dtype_b, tla.AddressSpace.l0b, 512)
 
-    l0c_ptr = tla.allocate(l0_tm * l0_tn, tla.Float32, tla.AddressSpace.l0c, 512)
+    l0c_ptr = tla.allocate(_tiling.l0_tm * _tiling.l0_tn, tla.Float32, tla.AddressSpace.l0c, 512)
 
-    grid_m = (m + l1_tm - 1) // l1_tm
-    grid_n = (n + l1_tn - 1) // l1_tn
+    grid_m = (m + _tiling.l1_tm - 1) // _tiling.l1_tm
+    grid_n = (n + _tiling.l1_tn - 1) // _tiling.l1_tn
     total_blocks = grid_m * grid_n
 
     with tla.cube():
@@ -84,19 +89,19 @@ def basic_mmad_atomic_add_kernel(
             block_row = block_linear // grid_n
             block_col = block_linear % grid_n
             gm_a_by_core = tla.tile_view(
-                gm_a, tla.make_shape(l1_tm, k), tla.make_coord(block_row, c0)
+                gm_a, tla.make_shape(_tiling.l1_tm, k), tla.make_coord(block_row, c0)
             )
             gm_b_by_core = tla.tile_view(
-                gm_b, tla.make_shape(k, l1_tn), tla.make_coord(c0, block_col)
+                gm_b, tla.make_shape(k, _tiling.l1_tn), tla.make_coord(c0, block_col)
             )
             gm_c_by_core = tla.tile_view(
                 gm_c,
-                tla.make_shape(l1_tm, l1_tn),
+                tla.make_shape(_tiling.l1_tm, _tiling.l1_tn),
                 tla.make_coord(block_row, block_col),
             )
 
             k_block = gm_a_by_core.origin_shape[1]
-            k_l1_count = (k_block + l1_tk - 1) // l1_tk
+            k_l1_count = (k_block + _tiling.l1_tk - 1) // _tiling.l1_tk
             k_l1_range = tla.range(c0, k_l1_count, c1)
             l0_c = tla.make_tensor_like(l0c_ptr, gm_c_by_core)
 
@@ -105,12 +110,12 @@ def basic_mmad_atomic_add_kernel(
 
                 gm_a_by_l1 = tla.tile_view(
                     gm_a_by_core,
-                    tla.make_shape(l1_tm, l1_tk),
+                    tla.make_shape(_tiling.l1_tm, _tiling.l1_tk),
                     tla.make_coord(c0, k_l1),
                 )
                 gm_b_by_l1 = tla.tile_view(
                     gm_b_by_core,
-                    tla.make_shape(l1_tk, l1_tn),
+                    tla.make_shape(_tiling.l1_tk, _tiling.l1_tn),
                     tla.make_coord(k_l1, c0),
                 )
 
@@ -141,18 +146,18 @@ def basic_mmad_atomic_add_kernel(
                 else:
                     tla.set_flag(l1b1_data_ready)
 
-                k_l0_count = (l1_a.origin_shape[1] + l0_tk - 1) // l0_tk
+                k_l0_count = (l1_a.origin_shape[1] + _tiling.l0_tk - 1) // _tiling.l0_tk
                 k_l0_range = tla.range(c0, k_l0_count, c1)
 
                 for k_l0 in k_l0_range:
                     l1_a_by_l0 = tla.tile_view(
                         l1_a,
-                        tla.make_shape(l0_tm, l0_tk),
+                        tla.make_shape(_tiling.l0_tm, _tiling.l0_tk),
                         tla.make_coord(c0, k_l0),
                     )
                     l1_b_by_l0 = tla.tile_view(
                         l1_b,
-                        tla.make_shape(l0_tk, l0_tn),
+                        tla.make_shape(_tiling.l0_tk, _tiling.l0_tn),
                         tla.make_coord(k_l0, c0),
                     )
 
@@ -249,28 +254,13 @@ def basic_mmad_atomic_add_kernel(
         tla.wait_flag(l0b1_available)
 
 
-def get_block_num(block_num: int, device: int = 0, *, kind: str = "vector") -> int:
-    """Get launch ``block_num``.
-
-    Non-``-1`` uses the host argument. ``-1`` means full-device launch:
-    pure vector → ``vector_core_num`` (AIV); cube/mix → ``cube_core_num`` (AIC).
-    """
-    if int(block_num) != -1:
-        return max(1, int(block_num))
-    props = torch.npu.get_device_properties(int(device))
-    if kind == "vector":
-        return max(1, int(props.vector_core_num))
-    if kind in {"cube", "mix"}:
-        return max(1, int(props.cube_core_num))
-    raise ValueError(f"Unsupported kernel kind for block_num default: {kind!r}")
-
-
-def create_tla_tensor(buf, layout: str):
-    tag = tla.arch.RowMajor if layout == "row" else tla.arch.ColumnMajor
-    return from_dlpack(buf, layout_tag=tag).mark_layout_dynamic()
-
-
 def run(args: argparse.Namespace) -> int:
+    from examples.end_to_end.common import (
+        get_block_num,
+        create_tla_tensor,
+        compare,
+    )
+
     if args.dtype_c != "f32":
         raise SystemExit("atomic-add requires --dtype-c f32")
 
@@ -303,38 +293,19 @@ def run(args: argparse.Namespace) -> int:
     b_tensor = create_tla_tensor(b, args.layout_b)
     c_tensor = create_tla_tensor(c, "row")
 
-    l1_tm, l1_tn, l1_tk = 256, 256, 128
-    l0_tm, l0_tn, l0_tk = 256, 256, 32
     artifact = tla.compile(
         basic_mmad_atomic_add_kernel,
         a_tensor,
         b_tensor,
         c_tensor,
-        l1_tm,
-        l1_tn,
-        l1_tk,
-        l0_tm,
-        l0_tn,
-        l0_tk,
+        TilingParams(),
         options="--npu-arch 3510",
     )
     block_num = get_block_num(args.block_num, args.device, kind="cube")
     artifact(a_tensor, b_tensor, c_tensor, block_num=block_num)
     torch.npu.synchronize()
 
-    if args.dtype_c == "bf16":
-        rtol = (1.0 / 128.0) if args.k < 2048 else (1.0 / 64.0)
-        floor = 1.0 / 256.0
-    else:
-        rtol = (1.0 / 256.0) if args.k < 2048 else (1.0 / 128.0)
-        floor = 1.0
-    result = c.detach().cpu().float()
-    passed = bool(
-        (
-            (result - ref).abs()
-            <= rtol * torch.maximum(torch.full_like(ref, floor), ref.abs())
-        ).all()
-    )
+    passed = compare(c.detach().cpu(), ref, args.k)
     print(f"passed={passed} cache_key={artifact.cache_key}")
     print(f"kernel.o={artifact.kernel_binary_path}")
     return 0 if passed else 1

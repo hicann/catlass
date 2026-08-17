@@ -16,24 +16,6 @@ from pathlib import Path
 
 import catlass.tla as tla
 import sys
-from catlass.tla.runtime import from_dlpack
-
-def get_block_num(block_num: int, device: int = 0, *, kind: str = "vector") -> int:
-    """Get launch ``block_num``.
-
-    Non-``-1`` uses the host argument. ``-1`` means full-device launch:
-    pure vector → ``vector_core_num`` (AIV); cube/mix → ``cube_core_num`` (AIC).
-    """
-    if int(block_num) != -1:
-        return max(1, int(block_num))
-    import torch
-
-    props = torch.npu.get_device_properties(int(device))
-    if kind == "vector":
-        return max(1, int(props.vector_core_num))
-    if kind in {"cube", "mix"}:
-        return max(1, int(props.cube_core_num))
-    raise ValueError(f"Unsupported kernel kind for block_num default: {kind!r}")
 
 M_DIM = 32
 N_DIM = 32
@@ -223,13 +205,15 @@ def prepare_npu(buf, layout: str):
     storage = buf.contiguous() if layout == "row" else buf.permute(1, 0).contiguous()
     return storage.npu()
 
-def create_tla_tensor(buf, layout: str):
-    tag = tla.arch.RowMajor if layout == "row" else tla.arch.ColumnMajor
-    return from_dlpack(buf, layout_tag=tag)
-
 def run(args: argparse.Namespace) -> int:
     import torch
     import torch_npu
+
+    from examples.end_to_end.common import (
+        get_block_num,
+        create_tla_tensor,
+        compare,
+    )
 
     mi, ni, ki = int(args.m), int(args.n), int(args.k)
 
@@ -262,16 +246,7 @@ def run(args: argparse.Namespace) -> int:
     artifact(a_tensor, b_tensor, c_tensor, d_tensor, block_num=block_num)
     torch.npu.synchronize()
 
-    # dtype -- f32
-    rtol = (1.0 / 256.0) if ki < 2048 else (1.0 / 128.0)
-    floor = 1.0
-    result = out.detach().cpu().float()
-    passed = bool(
-        (
-            (result - ref).abs()
-            <= rtol * torch.maximum(torch.full_like(ref, floor), ref.abs())
-        ).all()
-    )
+    passed = compare(out.detach().cpu(), ref, ki)
     print(f"passed={passed} cache_key={artifact.cache_key}")
     print(f"kernel.o={artifact.kernel_binary_path}")
     return 0 if passed else 1

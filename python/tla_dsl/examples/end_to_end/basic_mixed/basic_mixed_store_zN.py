@@ -16,7 +16,6 @@ from pathlib import Path
 import catlass.tla as tla
 import sys
 from catlass.params import BlockStoreParams
-from catlass.tla.runtime import from_dlpack
 
 
 def ceil_div(a: int, b: int):
@@ -187,14 +186,16 @@ def prepare_npu(buf, layout: str):
     return storage.npu()
 
 
-def create_tla_tensor(buf, layout: str):
-    tag = tla.arch.RowMajor if layout == "row" else tla.arch.ColumnMajor
-    return from_dlpack(buf, layout_tag=tag)
-
 
 def run(args: argparse.Namespace) -> int:
     import torch
     import torch_npu
+
+    from examples.end_to_end.common import (
+        create_tla_tensor,
+        compare,
+    )
+
     mi, ni, ki = int(args.m), int(args.n), int(args.k)
 
     torch.npu.set_device(args.device)
@@ -221,16 +222,7 @@ def run(args: argparse.Namespace) -> int:
     artifact(a_tensor, b_tensor, c_tensor, block_num=args.block_num)
     torch.npu.synchronize()
 
-    # dtype -- f32
-    rtol = (1.0 / 256.0) if ki < 2048 else (1.0 / 128.0)
-    floor = 1.0
-    result = out.detach().cpu().float()
-    passed = bool(
-        (
-            (result - ref).abs()
-            <= rtol * torch.maximum(torch.full_like(ref, floor), ref.abs())
-        ).all()
-    )
+    passed = compare(out.detach().cpu(), ref, ki)
     print(f"passed={passed} cache_key={artifact.cache_key}")
     print(f"kernel.o={artifact.kernel_binary_path}")
     return 0 if passed else 1

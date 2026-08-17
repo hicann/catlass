@@ -11,12 +11,16 @@ this file is that the whole gate is readable in one place.
 from __future__ import annotations
 
 from typing import Any, Callable, Iterator
+from pathlib import Path
+from typing import Iterator
 
 import pytest
 
 pytestmark = pytest.mark.npu
 
 MMAD_SHAPES = (("333", "444", "555"), ("1", "2", "3"))
+BIG_SHAPES = (("3200", "4096", "257"), ("8192", "2906", "1027"))
+BATCH_SHAPES = (("1", "333", "444", "555"), ("1", "1", "2", "3"), ("8", "320", "333", "444"))
 MMAD_LAYOUTS = (("row", "row"), ("row", "col"), ("col", "row"), ("col", "col"))
 #: (dtype-a/b, dtype-c)
 MMAD_TRIPLES = (
@@ -54,6 +58,39 @@ PRINT_TENSOR_UB_VARIANTS = (
     ("aligned-offset", "1", "1", ("--all-dtypes",)),
 )
 
+EVG_OPS = (
+    "add",
+    "add_ub",
+    "bias",
+    "leaky_relu",
+    "sigmoid",
+    "silu",
+    "tanh",
+)
+
+def _mmad_cases(
+    op_name: str,
+    op_script: str,
+    device: int,
+    **kwargs,
+) -> Iterator[tuple[str, list[list[str]]]]:
+    """Matmul-like cases generator
+    
+    Iterate over all shapes, layouts and dtype triples
+    """
+    for m, n, k in kwargs.get("shapes", MMAD_SHAPES):
+        for la, lb in kwargs.get("layouts", MMAD_LAYOUTS):
+            for dab, dc in kwargs.get("triples", MMAD_TRIPLES):
+                yield (
+                    f"{op_name}-{m}x{n}x{k}-{la}{lb}-{dab}-{dc}",
+                    [[
+                        op_script,
+                        "--m", m, "--n", n, "--k", k,
+                        "--layout-a", la, "--layout-b", lb,
+                        "--dtype-a", dab, "--dtype-b", dab, "--dtype-c", dc,
+                        "--device", str(device)
+                    ]]
+                )
 
 def _cases(device: int) -> Iterator[tuple[str, list[list[str]]]]:
     """Yield (test id, [argv, ...]) for every case in the battery.
@@ -67,19 +104,11 @@ def _cases(device: int) -> Iterator[tuple[str, list[list[str]]]]:
     dev = ["--device", str(device)]
 
     # --- basic_mmad: the flag-sync layout x dtype matrix ---
-    for m, n, k in MMAD_SHAPES:
-        for la, lb in MMAD_LAYOUTS:
-            for dab, dc in MMAD_TRIPLES:
-                yield (
-                    f"mmad-{m}x{n}x{k}-{la}{lb}-{dab}-{dc}",
-                    [[
-                        "basic_mmad/basic_matmul.py",
-                        "--m", m, "--n", n, "--k", k,
-                        "--layout-a", la, "--layout-b", lb,
-                        "--dtype-a", dab, "--dtype-b", dab, "--dtype-c", dc,
-                        *dev,
-                    ]],
-                )
+    yield from _mmad_cases(
+        "mmad",
+        "basic_mmad/basic_matmul.py",
+        device,
+    )
 
     for script, label in (
         ("basic_matmul_mutex.py", "mutex"),
@@ -141,6 +170,77 @@ def _cases(device: int) -> Iterator[tuple[str, list[list[str]]]]:
             [["basic_mixed/basic_mixed_store_zNUnAlign.py", *dev, "--m", m]],
         )
     yield ("mixed-fixpipe-nz2dn", [["basic_mixed/basic_mixed_fixpipe_nz2dn.py", *dev]])
+
+    # --- mixed-core handshake and standalone control-flow probes ---
+    yield (
+        "flash-attention-infer",
+        [["flash_attention_infer/flash_attention_infer.py", *dev]],
+    )
+    yield (
+        "lazy-conditions",
+        [["lazy_conditions/lazy_conditions.py", *dev]],
+    )
+    yield (
+        "simt-basic-vadd",
+        [["simt/basic_vadd_simt.py", "--block-num", "1", *dev]],
+    )
+
+    # --- multi_core_splitk_matmul and tail_multi_core_splitk_matmul ---
+    for script in ("multi_core_splitk_matmul.py", "tail_multi_core_splitk_matmul.py"):
+        for m, n, k in MMAD_SHAPES + BIG_SHAPES:
+            yield (
+                f"{script}-{m}x{n}x{k}",
+                [[f"multi_core_splitk_matmul/{script}", "--m", m, "--n", n, "--k", k, *dev]],
+            )
+
+    # --- basic_mmad_streamk: a streamK example for workload balance ---
+    for m, n, k in MMAD_SHAPES + BIG_SHAPES:
+        yield (
+            f"mmad-streamk-{m}x{n}x{k}",
+            [["basic_mmad_streamk/basic_mmad_streamk.py", "--m", m, "--n", n, "--k", k, *dev]],
+        )
+
+    # --- batched_matmul ---
+    for b, m, n, k in BATCH_SHAPES:
+        yield (
+            f"batched-matmul-{b}x{m}x{n}x{k}",
+            [["batched_matmul/batched_matmul.py", "--batch", b, "--m", m, "--n", n, "--k", k, *dev]],
+        )
+
+    # --- grouped_matmul_slice_m: grouped matmul example ---
+    yield (
+        "grouped-matmul-slice-m",
+        [["grouped_matmul_slice_m/grouped_matmul_slice_m.py", *dev],
+         ["grouped_matmul_slice_m/grouped_matmul_slice_m.py", 
+            "--groups", "3", "--m", "768", "--n", "333", "--k", "333", *dev]]
+    ) 
+
+    # --- basic_mmad_evg: multiple epilogue examples ---
+    for op in EVG_OPS:
+        if op in ("add_ub", "tanh"):
+            # f32 (dtype-c) only examples
+            triples = (
+                ("f16", "f32"),
+                ("f32", "f32"),
+            )
+        else:
+            triples = (
+                ("f16", "f32"),
+                ("f32", "f32"),
+                ("f16", "f16"),
+                ("bf16", "f16"),
+            )
+        for m, n, k in MMAD_SHAPES:
+            for dab, dc in triples:
+                yield (
+                    f"mmad-evg-{op.replace('_', '-')}-{m}x{n}x{k}-{dab}-{dc}",
+                    [[
+                        f"basic_mmad_evg/matmul_{op}.py",
+                        "--m", m, "--n", n, "--k", k,
+                        "--dtype-a", dab, "--dtype-b", dab, "--dtype-c", dc,
+                        *dev
+                    ]],
+                )
 
     # --- vector_ops: each of these sweeps or batches many kernels internally ---
     yield (
@@ -216,6 +316,14 @@ def _cases(device: int) -> Iterator[tuple[str, list[list[str]]]]:
     yield (
         "vector-register-control-flow",
         [["vector_ops/register_control_flow.py", "register_carriers", *dev]],
+    )
+    yield (
+        "vector-cast-multi",
+        [["vector_ops/cast_multi.py", "cast_multi", "--shape", "256", *dev]],
+    )
+    yield (
+        "vector-gather",
+        [["vector_ops/gather_op.py", "--run", *dev]],
     )
 
     # --- tensor_index ---

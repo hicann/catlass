@@ -16,7 +16,6 @@ from pathlib import Path
 import catlass.tla as tla
 import sys
 from catlass.params import CopyL0C2DstParams, L0C2UBMode
-from catlass.tla.runtime import from_dlpack
 
 M_DIM = 60
 N_DIM = 100
@@ -138,14 +137,13 @@ def prepare_npu(buf, layout: str):
     return storage.npu()
 
 
-def create_tla_tensor(buf, layout: str):
-    tag = tla.arch.RowMajor if layout == "row" else tla.arch.ColumnMajor
-    return from_dlpack(buf, layout_tag=tag)
-
 
 def run(args: argparse.Namespace) -> int:
     import torch
     import torch_npu
+
+    from examples.end_to_end.common import create_tla_tensor
+
     mi, ni, ki = int(args.m), int(args.n), int(args.k)
 
     torch.npu.set_device(args.device)

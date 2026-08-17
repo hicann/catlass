@@ -13,23 +13,19 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-import catlass as tla
-from catlass.runtime import from_dlpack
+import catlass.tla as tla
+import torch
+import torch_npu  # noqa: F401
+
 from catlass.types import dtype_size_bytes
+from catlass.base_dsl.arch import get_localmem_capacity_bytes
+
+from examples.end_to_end.common import TilingParams, SwizzleParams
 
 # ---- kernel constants + @tla.kernel ----
-# Target device: Ascend950.
-L0C_SIZE = 256 * 1024
-UB_SIZE = 248 * 1024
+UB_SIZE = get_localmem_capacity_bytes("ub")
 BYTE_PER_C0 = 32
-
-# Default tiling: L1 256×256×128, L0 256×256×32.
-l1_tm = 256
-l1_tn = 256
-l1_tk = 128
-l0_tm = 256
-l0_tn = 256
-l0_tk = 32
+VECTOR_ELE = 256
 
 # One SIMD register = 256B; lane count = 256 / sizeof(ElementC). REG_M=1.
 REG_M = 1
@@ -37,56 +33,39 @@ REG_M = 1
 # After this many MN tiles per core, AIC/AIV exchange the reverse cross-core flag.
 REVERSE_DEPTH = 15
 
-# Host may rewrite these before compile.
-# ``DTYPE_C``: L0C accumulate (fp32).
-# ``DTYPE_GM_C``: GM D, GM workspace, and UB epilogue buffers.
-DTYPE_A = tla.Float32
-DTYPE_B = tla.Float32
-DTYPE_C = tla.Float32  # L0C accumulator only
-DTYPE_GM_C = tla.Float32  # ElementC: GM D, workspace, UB epilogue
 ENABLE_UNIT_FLAG = True
 
 # UB nodes counted for sizing: load Acc and compute (store reuses Out).
 EVG_UB_NODES = 2
-# EVG UB multi-buffer depth (1 or 2 physical slots). Manual edit only, like l1_tn.
+# EVG UB multi-buffer depth (1 or 2 physical slots). Manual edit only, like _tiling.l1_tn.
 EVG_UB_STAGES = 2
-
-# MN tile swizzle: direction 0 = Zn (prefer when m>n), 1 = Nz (prefer when m<=n).
-# Host rewrites SWIZZLE_DIRECTION before compile.
-SWIZZLE_OFFSET = 3
-SWIZZLE_DIRECTION = 1
 
 # LeakyReLU negative slope.
 LEAKY_RELU_ALPHA = 0.1
 
-
-def _refresh_ub_derived() -> None:
-    """Recompute UB_SLOT_ELEMS / SIMD_LANES after DTYPE / EVG_UB_STAGES edits."""
-    global _ELEM_C_BYTES, UB_SLOT_ELEMS, SIMD_LANES
-    _ELEM_C_BYTES = dtype_size_bytes(DTYPE_GM_C.dtype)
-    _ub_slot_raw = UB_SIZE // EVG_UB_NODES // EVG_UB_STAGES // _ELEM_C_BYTES
-    UB_SLOT_ELEMS = (_ub_slot_raw // BYTE_PER_C0) * BYTE_PER_C0
-    # SIMD lanes for ElementC; must match ``tla.update_mask`` (256B / sizeof).
-    SIMD_LANES = 256 // _ELEM_C_BYTES
-
-_ELEM_C_BYTES = 0
-UB_SLOT_ELEMS = 0
-SIMD_LANES = 0
-_refresh_ub_derived()
-
 @tla.kernel
 def matmul_evg_leaky_relu_kernel(
-    mem_a: tla.Tensor,
-    mem_b: tla.Tensor,
-    mem_d: tla.Tensor,
-    mem_workspace: tla.Tensor,
+    gm_a: tla.Tensor,
+    gm_b: tla.Tensor,
+    gm_d: tla.Tensor,
+    gm_workspace: tla.Tensor,
+    _tiling: TilingParams,
+    _swizzle: SwizzleParams,
+    UB_SLOT_ELEMS: tla.Constexpr[int],
+    SIMD_LANES: tla.Constexpr[int],
 ) -> None:
     """Cube GEMM to GM workspace; vector epilogue D = leaky_relu(Acc, alpha)."""
-    m = mem_a.origin_shape[0]
-    n = mem_b.origin_shape[1]
-    k = mem_a.origin_shape[1]
     c0 = 0
     c1 = 1
+
+    dtype_a = gm_a.ptr.dtype
+    dtype_b = gm_b.ptr.dtype
+    dtype_gm_c = gm_d.ptr.dtype
+    DTYPE_C = tla.Float32  # L0C accumulator only
+
+    m = gm_a.origin_shape[0]
+    n = gm_b.origin_shape[1]
+    k = gm_a.origin_shape[1]
 
 
     # ---- soft-flags (cube pingpong) ----
@@ -123,36 +102,36 @@ def matmul_evg_leaky_relu_kernel(
     aic_finish_rv = tla.cross_flag("aic_finish_rv", mode=2)
 
     # ---- L1/L0/L0C allocates ----
-    l1a0_ptr = tla.allocate(l1_tm * l1_tk, DTYPE_A, tla.AddressSpace.l1, 512)
-    l1a1_ptr = tla.allocate(l1_tm * l1_tk, DTYPE_A, tla.AddressSpace.l1, 512)
-    l1b0_ptr = tla.allocate(l1_tk * l1_tn, DTYPE_B, tla.AddressSpace.l1, 512)
-    l1b1_ptr = tla.allocate(l1_tk * l1_tn, DTYPE_B, tla.AddressSpace.l1, 512)
+    l1a0_ptr = tla.allocate(_tiling.l1_tm * _tiling.l1_tk, dtype_a, tla.AddressSpace.l1, 512)
+    l1a1_ptr = tla.allocate(_tiling.l1_tm * _tiling.l1_tk, dtype_a, tla.AddressSpace.l1, 512)
+    l1b0_ptr = tla.allocate(_tiling.l1_tk * _tiling.l1_tn, dtype_b, tla.AddressSpace.l1, 512)
+    l1b1_ptr = tla.allocate(_tiling.l1_tk * _tiling.l1_tn, dtype_b, tla.AddressSpace.l1, 512)
 
-    l0a0_ptr = tla.allocate(l0_tm * l0_tk, DTYPE_A, tla.AddressSpace.l0a, 512)
-    l0a1_ptr = tla.allocate(l0_tm * l0_tk, DTYPE_A, tla.AddressSpace.l0a, 512)
-    l0b0_ptr = tla.allocate(l0_tk * l0_tn, DTYPE_B, tla.AddressSpace.l0b, 512)
-    l0b1_ptr = tla.allocate(l0_tk * l0_tn, DTYPE_B, tla.AddressSpace.l0b, 512)
+    l0a0_ptr = tla.allocate(_tiling.l0_tm * _tiling.l0_tk, dtype_a, tla.AddressSpace.l0a, 512)
+    l0a1_ptr = tla.allocate(_tiling.l0_tm * _tiling.l0_tk, dtype_a, tla.AddressSpace.l0a, 512)
+    l0b0_ptr = tla.allocate(_tiling.l0_tk * _tiling.l0_tn, dtype_b, tla.AddressSpace.l0b, 512)
+    l0b1_ptr = tla.allocate(_tiling.l0_tk * _tiling.l0_tn, dtype_b, tla.AddressSpace.l0b, 512)
 
-    l0c_ptr = tla.allocate(l0_tm * l0_tn, DTYPE_C, tla.AddressSpace.l0c, 512)
+    l0c_ptr = tla.allocate(_tiling.l0_tm * _tiling.l0_tn, DTYPE_C, tla.AddressSpace.l0c, 512)
 
     # ---- UB allocates ----
-    ub_acc_ptr0 = tla.allocate(UB_SLOT_ELEMS, DTYPE_GM_C, tla.AddressSpace.ub, 256)
-    ub_out_ptr0 = tla.allocate(UB_SLOT_ELEMS, DTYPE_GM_C, tla.AddressSpace.ub, 256)
+    ub_acc_ptr0 = tla.allocate(UB_SLOT_ELEMS, dtype_gm_c, tla.AddressSpace.ub, 256)
+    ub_out_ptr0 = tla.allocate(UB_SLOT_ELEMS, dtype_gm_c, tla.AddressSpace.ub, 256)
     ub_acc_ptr1 = ub_acc_ptr0
     ub_out_ptr1 = ub_out_ptr0
     if tla.const_expr(EVG_UB_STAGES >= 2):
-        ub_acc_ptr1 = tla.allocate(UB_SLOT_ELEMS, DTYPE_GM_C, tla.AddressSpace.ub, 256)
-        ub_out_ptr1 = tla.allocate(UB_SLOT_ELEMS, DTYPE_GM_C, tla.AddressSpace.ub, 256)
+        ub_acc_ptr1 = tla.allocate(UB_SLOT_ELEMS, dtype_gm_c, tla.AddressSpace.ub, 256)
+        ub_out_ptr1 = tla.allocate(UB_SLOT_ELEMS, dtype_gm_c, tla.AddressSpace.ub, 256)
 
     # ---- grid / swizzle setup ----
-    grid_m = (m + l1_tm - 1) // l1_tm
-    grid_n = (n + l1_tn - 1) // l1_tn
+    grid_m = (m + _tiling.l1_tm - 1) // _tiling.l1_tm
+    grid_n = (n + _tiling.l1_tn - 1) // _tiling.l1_tn
     total_blocks = grid_m * grid_n
-    # Folded at compile time via SWIZZLE_DIRECTION (host-set).
-    if tla.const_expr(SWIZZLE_DIRECTION == 0):
-        swizzle_tile_count = (grid_m + SWIZZLE_OFFSET - 1) // SWIZZLE_OFFSET
+    # Folded at compile time via _swizzle.SWIZZLE_DIRECTION (host-set).
+    if tla.const_expr(_swizzle.SWIZZLE_DIRECTION == 0):
+        swizzle_tile_count = (grid_m + _swizzle.SWIZZLE_OFFSET - 1) // _swizzle.SWIZZLE_OFFSET
     else:
-        swizzle_tile_count = (grid_n + SWIZZLE_OFFSET - 1) // SWIZZLE_OFFSET
+        swizzle_tile_count = (grid_n + _swizzle.SWIZZLE_OFFSET - 1) // _swizzle.SWIZZLE_OFFSET
 
     # ---- cube: prime flags; MN tile loop; K pingpong; FixPipe; handoff; drain ----
     with tla.cube():
@@ -174,15 +153,15 @@ def matmul_evg_leaky_relu_kernel(
             # Map linear MN task id → (block_row, block_col) with swizzle (must stay in kernel AST).
             block_row = c0
             block_col = c0
-            if tla.const_expr(SWIZZLE_DIRECTION == 0):
-                swizzle_tile_idx = block_linear // (SWIZZLE_OFFSET * grid_n)
-                in_tile_idx = block_linear % (SWIZZLE_OFFSET * grid_n)
+            if tla.const_expr(_swizzle.SWIZZLE_DIRECTION == 0):
+                swizzle_tile_idx = block_linear // (_swizzle.SWIZZLE_OFFSET * grid_n)
+                in_tile_idx = block_linear % (_swizzle.SWIZZLE_OFFSET * grid_n)
                 swizzle_n_rows = (
-                    SWIZZLE_OFFSET
+                    _swizzle.SWIZZLE_OFFSET
                     if swizzle_tile_idx != (swizzle_tile_count - 1)
-                    else (grid_m - SWIZZLE_OFFSET * swizzle_tile_idx)
+                    else (grid_m - _swizzle.SWIZZLE_OFFSET * swizzle_tile_idx)
                 )
-                block_row = swizzle_tile_idx * SWIZZLE_OFFSET + in_tile_idx % swizzle_n_rows
+                block_row = swizzle_tile_idx * _swizzle.SWIZZLE_OFFSET + in_tile_idx % swizzle_n_rows
                 block_col = in_tile_idx // swizzle_n_rows
                 block_col = (
                     (grid_n - block_col - 1)
@@ -190,34 +169,34 @@ def matmul_evg_leaky_relu_kernel(
                     else block_col
                 )
             else:
-                swizzle_tile_idx = block_linear // (SWIZZLE_OFFSET * grid_m)
-                in_tile_idx = block_linear % (SWIZZLE_OFFSET * grid_m)
+                swizzle_tile_idx = block_linear // (_swizzle.SWIZZLE_OFFSET * grid_m)
+                in_tile_idx = block_linear % (_swizzle.SWIZZLE_OFFSET * grid_m)
                 swizzle_n_cols = (
-                    SWIZZLE_OFFSET
+                    _swizzle.SWIZZLE_OFFSET
                     if swizzle_tile_idx != (swizzle_tile_count - 1)
-                    else (grid_n - SWIZZLE_OFFSET * swizzle_tile_idx)
+                    else (grid_n - _swizzle.SWIZZLE_OFFSET * swizzle_tile_idx)
                 )
                 block_row = in_tile_idx // swizzle_n_cols
-                block_col = swizzle_tile_idx * SWIZZLE_OFFSET + in_tile_idx % swizzle_n_cols
+                block_col = swizzle_tile_idx * _swizzle.SWIZZLE_OFFSET + in_tile_idx % swizzle_n_cols
                 block_row = (
                     (grid_m - block_row - 1)
                     if (swizzle_tile_idx % 2 == 1)
                     else block_row
                 )
             gm_a_by_core = tla.tile_view(
-                mem_a, tla.make_shape(l1_tm, k), tla.make_coord(block_row, c0)
+                gm_a, tla.make_shape(_tiling.l1_tm, k), tla.make_coord(block_row, c0)
             )
             gm_b_by_core = tla.tile_view(
-                mem_b, tla.make_shape(k, l1_tn), tla.make_coord(c0, block_col)
+                gm_b, tla.make_shape(k, _tiling.l1_tn), tla.make_coord(c0, block_col)
             )
             gm_workspace_by_core = tla.tile_view(
-                mem_workspace,
-                tla.make_shape(l1_tm, l1_tn),
+                gm_workspace,
+                tla.make_shape(_tiling.l1_tm, _tiling.l1_tn),
                 tla.make_coord(block_row, block_col),
             )
 
             k_block = gm_a_by_core.origin_shape[1]
-            k_l1_count = (k_block + l1_tk - 1) // l1_tk
+            k_l1_count = (k_block + _tiling.l1_tk - 1) // _tiling.l1_tk
             k_l1_range = tla.range(c0, k_l1_count, c1)
 
             l0_c = tla.make_tensor_like(l0c_ptr, gm_workspace_by_core)
@@ -226,10 +205,10 @@ def matmul_evg_leaky_relu_kernel(
                 tla.wait_flag(l0c_available)
             for k_l1 in k_l1_range:
                 gm_a_l1 = tla.tile_view(
-                    gm_a_by_core, tla.make_shape(l1_tm, l1_tk), tla.make_coord(c0, k_l1)
+                    gm_a_by_core, tla.make_shape(_tiling.l1_tm, _tiling.l1_tk), tla.make_coord(c0, k_l1)
                 )
                 gm_b_l1 = tla.tile_view(
-                    gm_b_by_core, tla.make_shape(l1_tk, l1_tn), tla.make_coord(k_l1, c0)
+                    gm_b_by_core, tla.make_shape(_tiling.l1_tk, _tiling.l1_tn), tla.make_coord(k_l1, c0)
                 )
 
                 l1_a = tla.make_tensor_like(
@@ -258,15 +237,15 @@ def matmul_evg_leaky_relu_kernel(
                 else:
                     tla.set_flag(l1b1_data_ready)
 
-                k_l0_count = (l1_a.origin_shape[1] + l0_tk - 1) // l0_tk
+                k_l0_count = (l1_a.origin_shape[1] + _tiling.l0_tk - 1) // _tiling.l0_tk
                 k_l0_range = tla.range(c0, k_l0_count, c1)
 
                 for k_l0 in k_l0_range:
                     l1_a_l0 = tla.tile_view(
-                        l1_a, tla.make_shape(l0_tm, l0_tk), tla.make_coord(c0, k_l0)
+                        l1_a, tla.make_shape(_tiling.l0_tm, _tiling.l0_tk), tla.make_coord(c0, k_l0)
                     )
                     l1_b_l0 = tla.tile_view(
-                        l1_b, tla.make_shape(l0_tk, l0_tn), tla.make_coord(k_l0, c0)
+                        l1_b, tla.make_shape(_tiling.l0_tk, _tiling.l0_tn), tla.make_coord(k_l0, c0)
                     )
 
                     l0_a = tla.make_tensor_like(
@@ -373,15 +352,15 @@ def matmul_evg_leaky_relu_kernel(
             # Map linear MN task id → (block_row, block_col) with swizzle (must stay in kernel AST).
             block_row = c0
             block_col = c0
-            if tla.const_expr(SWIZZLE_DIRECTION == 0):
-                swizzle_tile_idx = block_linear // (SWIZZLE_OFFSET * grid_n)
-                in_tile_idx = block_linear % (SWIZZLE_OFFSET * grid_n)
+            if tla.const_expr(_swizzle.SWIZZLE_DIRECTION == 0):
+                swizzle_tile_idx = block_linear // (_swizzle.SWIZZLE_OFFSET * grid_n)
+                in_tile_idx = block_linear % (_swizzle.SWIZZLE_OFFSET * grid_n)
                 swizzle_n_rows = (
-                    SWIZZLE_OFFSET
+                    _swizzle.SWIZZLE_OFFSET
                     if swizzle_tile_idx != (swizzle_tile_count - 1)
-                    else (grid_m - SWIZZLE_OFFSET * swizzle_tile_idx)
+                    else (grid_m - _swizzle.SWIZZLE_OFFSET * swizzle_tile_idx)
                 )
-                block_row = swizzle_tile_idx * SWIZZLE_OFFSET + in_tile_idx % swizzle_n_rows
+                block_row = swizzle_tile_idx * _swizzle.SWIZZLE_OFFSET + in_tile_idx % swizzle_n_rows
                 block_col = in_tile_idx // swizzle_n_rows
                 block_col = (
                     (grid_n - block_col - 1)
@@ -389,15 +368,15 @@ def matmul_evg_leaky_relu_kernel(
                     else block_col
                 )
             else:
-                swizzle_tile_idx = block_linear // (SWIZZLE_OFFSET * grid_m)
-                in_tile_idx = block_linear % (SWIZZLE_OFFSET * grid_m)
+                swizzle_tile_idx = block_linear // (_swizzle.SWIZZLE_OFFSET * grid_m)
+                in_tile_idx = block_linear % (_swizzle.SWIZZLE_OFFSET * grid_m)
                 swizzle_n_cols = (
-                    SWIZZLE_OFFSET
+                    _swizzle.SWIZZLE_OFFSET
                     if swizzle_tile_idx != (swizzle_tile_count - 1)
-                    else (grid_n - SWIZZLE_OFFSET * swizzle_tile_idx)
+                    else (grid_n - _swizzle.SWIZZLE_OFFSET * swizzle_tile_idx)
                 )
                 block_row = in_tile_idx // swizzle_n_cols
-                block_col = swizzle_tile_idx * SWIZZLE_OFFSET + in_tile_idx % swizzle_n_cols
+                block_col = swizzle_tile_idx * _swizzle.SWIZZLE_OFFSET + in_tile_idx % swizzle_n_cols
                 block_row = (
                     (grid_m - block_row - 1)
                     if (swizzle_tile_idx % 2 == 1)
@@ -412,12 +391,12 @@ def matmul_evg_leaky_relu_kernel(
                 tla.cross_core_set_flag(aic_finish_rv, tla.arch.MTE2)
 
             gm_workspace_by_core = tla.tile_view(
-                mem_workspace,
-                tla.make_shape(l1_tm, l1_tn),
+                gm_workspace,
+                tla.make_shape(_tiling.l1_tm, _tiling.l1_tn),
                 tla.make_coord(block_row, block_col),
             )
             gm_d_by_core = tla.tile_view(
-                mem_d, tla.make_shape(l1_tm, l1_tn), tla.make_coord(block_row, block_col)
+                gm_d, tla.make_shape(_tiling.l1_tm, _tiling.l1_tn), tla.make_coord(block_row, block_col)
             )
 
             # Split the MN tile on M across the two AIV sub-blocks.
@@ -502,7 +481,7 @@ def matmul_evg_leaky_relu_kernel(
                                     tla.make_coord(row_i, col_j),
                                 )
                                 tail, remaining = tla.update_mask(
-                                    remaining, dtype=DTYPE_GM_C
+                                    remaining, dtype=dtype_gm_c
                                 )
                                 # LeakyRelu(x, a) = x if x>=0 else a*x
                                 # = max(x,0) + a*min(x,0)
@@ -599,7 +578,7 @@ def matmul_evg_leaky_relu_kernel(
                                         tla.make_coord(r_i, col_j),
                                     )
                                     tail, remaining = tla.update_mask(
-                                        remaining, dtype=DTYPE_GM_C
+                                        remaining, dtype=dtype_gm_c
                                     )
                                     # LeakyRelu(x, a) = max(x,0) + a*min(x,0)
                                     xv = c_chunk.load()
@@ -647,89 +626,75 @@ EXAMPLE_DIR = Path(__file__).resolve().parent
 DEFAULT_CACHE_DIR = EXAMPLE_DIR / "artifacts" / "runtime-cache"
 DESCRIPTION = "Matmul EVG leaky_relu: D=leaky_relu(A@B) via L0C→GM workspace + AIV; dynamic GM."
 
-
-def golden(a, b, out_dtype):
-    import torch
-
-    mm = a.to(torch.float32) @ b.to(torch.float32)
-    expected = torch.nn.functional.leaky_relu(mm, negative_slope=float(LEAKY_RELU_ALPHA))
-    if out_dtype in (torch.float16, torch.bfloat16):
-        expected = expected.to(out_dtype).to(torch.float32)
-    return expected
-
+def _compute_ub_slots(dtype_c: str) -> tuple[int, int]:
+    """Compute UB_SLOT_ELEMS / SIMD_LANES according to the stages and element data type."""
+    _ELEM_C_BYTES = dtype_size_bytes(dtype_c)
+    _ub_slot = UB_SIZE // EVG_UB_NODES // EVG_UB_STAGES // _ELEM_C_BYTES
+    return (
+        (_ub_slot + BYTE_PER_C0 - 1) // BYTE_PER_C0 * BYTE_PER_C0, 
+        VECTOR_ELE // _ELEM_C_BYTES
+    )
 
 def run(args: argparse.Namespace) -> int:
-    import sys
-    import torch
-    import torch_npu  # noqa: F401
+    from examples.end_to_end.common import (
+        get_block_num,
+        create_tla_tensor,
+        compare,
+    )
 
-    mod = sys.modules[__name__]
-    tla_of = {"f16": tla.Float16, "bf16": tla.BFloat16, "f32": tla.Float32}
-    torch_of = {"f16": torch.float16, "bf16": torch.bfloat16, "f32": torch.float32}
-    da, db, dc = args.dtype_a, args.dtype_b, args.dtype_c
-    la, lb = args.layout_a, args.layout_b
-    mi, ni, ki = int(args.m), int(args.n), int(args.k)
-    mod.DTYPE_A = tla_of[da]
-    mod.DTYPE_B = tla_of[db]
-    mod.DTYPE_C = tla.Float32
-    mod.DTYPE_GM_C = tla_of[dc]
-    mod.SWIZZLE_DIRECTION = 0 if mi > ni else 1
-    mod._refresh_ub_derived()
+    torch.npu.set_device(args.device)
+    print(
+        f"--- mnk=({args.m},{args.n},{args.k}) "
+        f"layout={args.layout_a}/{args.layout_b} "
+        f"dtype={args.dtype_a}/{args.dtype_b}/{args.dtype_c} ---"
+    )
 
-    def create_tla_tensor(buf, layout: str):
-        storage = buf.contiguous() if layout == "row" else buf.permute(1, 0).contiguous()
-        tag = tla.arch.RowMajor if layout == "row" else tla.arch.ColumnMajor
-        return from_dlpack(storage, layout_tag=tag).mark_layout_dynamic()
+    torch.npu.manual_seed(0)
+    dtypes = {"f16": torch.float16, "bf16": torch.bfloat16, "f32": torch.float32}
+    dtype_a = dtypes[args.dtype_a]
+    dtype_b = dtypes[args.dtype_b]
+    dtype_c = dtypes[args.dtype_c]
 
-    cache_dir = str(Path(args.cache_dir).expanduser().resolve())
+    a = torch.rand(args.m, args.k, dtype=dtype_a, device="npu") * 10.0 - 5.0
+    b = torch.rand(args.k, args.n, dtype=dtype_b, device="npu") * 10.0 - 5.0
+    d = torch.zeros(args.m, args.n, dtype=dtype_c, device="npu")
+    workspace = torch.zeros(args.m, args.n, dtype=dtype_c, device="npu")
+    ref = torch.nn.functional.leaky_relu(a.float() @ b.float(), negative_slope=float(LEAKY_RELU_ALPHA))
+    if dtype_c in (torch.float16, torch.bfloat16):
+        ref = ref.to(dtype_c).float()
 
-    tla.initialize(device=args.device)
-    try:
-        torch.npu.set_device(args.device)
-        print(f"--- mnk=({mi},{ni},{ki}) layout={la}/{lb} dtype={da}/{db}/{dc} ---")
-        torch.npu.manual_seed(0)
-        a = torch.rand(mi, ki, dtype=torch_of[da], device="npu") * 10.0 - 5.0
-        b = torch.rand(ki, ni, dtype=torch_of[db], device="npu") * 10.0 - 5.0
-        d = torch.zeros((mi, ni), dtype=torch_of[dc], device="npu")
-        workspace = torch.zeros((mi, ni), dtype=torch_of[dc], device="npu")
-        expected = golden(a, b, torch_of[dc])
+    a = a.contiguous() if args.layout_a == "row" else a.permute(1, 0).contiguous()
+    b = b.contiguous() if args.layout_b == "row" else b.permute(1, 0).contiguous()
+    a_tensor = create_tla_tensor(a, args.layout_a)
+    b_tensor = create_tla_tensor(b, args.layout_b)
+    d_tensor = create_tla_tensor(d, "row")
+    wks_tensor = create_tla_tensor(workspace, "row")
 
-        ta, tb, td, tw = (
-            create_tla_tensor(a, la),
-            create_tla_tensor(b, lb),
-            create_tla_tensor(d, "row"),
-            create_tla_tensor(workspace, "row"),
-        )
-        artifact = tla.compile(
-            matmul_evg_leaky_relu_kernel,
-            ta, tb, td, tw,
-            arch_scope="aic.c310",
-            cache=not args.no_cache,
-            cache_dir=cache_dir,
-            force_recompile=args.force_recompile,
-        )
-        block_dim = max(
-            1,
-            args.block_dim if args.block_dim != -1 else tla.get_aicore_num(args.device),
-        )
-        artifact(ta, tb, td, tw, block_dim=block_dim)
-        torch.npu.synchronize()
-        got = d.detach().to(device="cpu", dtype=torch.float32)
-        if dc == "bf16":
-            rtol = (1.0 / 128.0) if ki < 2048 else (1.0 / 64.0)
-            floor = 1.0 / 256.0
-        else:
-            rtol = (1.0 / 256.0) if ki < 2048 else (1.0 / 128.0)
-            floor = 1.0
-        exp = expected.detach().to(device="cpu", dtype=torch.float32)
-        passed = bool(
-            ((got - exp).abs() <= rtol * torch.maximum(torch.full_like(exp, floor), exp.abs())).all()
-        )
-        print(f"passed={passed} cache_key={artifact.cache_key}")
-        print(f"kernel.o={artifact.kernel_binary_path}")
-        return 0 if passed else 1
-    finally:
-        tla.finalize()
+    _ub_slot_elements, _simd_lanes = _compute_ub_slots(args.dtype_c)
+    artifact = tla.compile(
+        matmul_evg_leaky_relu_kernel,
+        a_tensor,
+        b_tensor,
+        d_tensor,
+        wks_tensor,
+        TilingParams(),
+        SwizzleParams(
+            SWIZZLE_DIRECTION=0 if int(args.m) > int(args.n) else 1,
+            SWIZZLE_OFFSET=3,
+        ),
+        _ub_slot_elements,
+        _simd_lanes,
+        options="--npu-arch 3510"
+    )
+    block_num = get_block_num(args.block_num, args.device, kind="cube")
+    artifact(a_tensor, b_tensor, d_tensor, wks_tensor, block_num=block_num)
+    torch.npu.synchronize()
+
+
+    passed = compare(d.detach().cpu(), ref.cpu(), args.k)
+    print(f"passed={passed} cache_key={artifact.cache_key}")
+    print(f"kernel.o={artifact.kernel_binary_path}")
+    return 0 if passed else 1
 
 
 def main() -> int:
@@ -743,11 +708,7 @@ def main() -> int:
     p.add_argument("--dtype-a", choices=("f16", "bf16", "f32"), default="f32")
     p.add_argument("--dtype-b", choices=("f16", "bf16", "f32"), default="f32")
     p.add_argument("--dtype-c", choices=("f16", "f32"), default="f32")
-    p.add_argument("--block-dim", type=int, default=-1)
-    p.add_argument("--sentinel", type=float, default=-7.0)
-    p.add_argument("--cache-dir", default=str(DEFAULT_CACHE_DIR))
-    p.add_argument("--force-recompile", action="store_true")
-    p.add_argument("--no-cache", action="store_true")
+    p.add_argument("--block-num", type=int, default=-1)
     return run(p.parse_args())
 
 

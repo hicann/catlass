@@ -1,3 +1,13 @@
+# -----------------------------------------------------------------------------------------------------------
+# Copyright (c) 2026 Huawei Technologies Co., Ltd.
+# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# CANN Open Software License Agreement Version 2.0 (the "License").
+# Please refer to the License for details. You may not use this file except in compliance with the License.
+# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+# See LICENSE in the root of the software repository for the full text of the License.
+# -----------------------------------------------------------------------------------------------------------
+
 from __future__ import annotations
 import argparse
 import sys
@@ -208,26 +218,14 @@ def basic_vadd_atomic_add(
 def golden(a, b):
     return a + b
 
-def get_block_num(block_num: int, device: int = 0, *, kind: str = "vector") -> int:
-    """Get launch ``block_num``.
-
-    Non-``-1`` uses the host argument. ``-1`` means full-device launch:
-    pure vector → ``vector_core_num`` (AIV); cube/mix → ``cube_core_num`` (AIC).
-    """
-    if int(block_num) != -1:
-        return max(1, int(block_num))
-    import torch
-
-    props = torch.npu.get_device_properties(int(device))
-    if kind == "vector":
-        return max(1, int(props.vector_core_num))
-    if kind in {"cube", "mix"}:
-        return max(1, int(props.cube_core_num))
-    raise ValueError(f"Unsupported kernel kind for block_num default: {kind!r}")
-
 def run(args: argparse.Namespace) -> int:
     import torch
     import torch_npu
+
+    from examples.end_to_end.common import (
+        get_block_num,
+        compare,
+    )
 
     mod = sys.modules[__name__]
     dtype_name = args.dtype
@@ -250,12 +248,12 @@ def run(args: argparse.Namespace) -> int:
         "i8": torch.int8,
     }
     vl_of = {"f32": 64, "f16": 128, "i16": 128, "i32": 64, "i8": 256}
-    default_sentinel = {"f32": -7.0, "f16": -7.0, "i16": -7, "i32": -7, "i8": -101}
+    sentinel_of = {"f32": -7.0, "f16": -7.0, "i16": -7, "i32": -7, "i8": -101}
 
     mod.VL_ELE = vl_of[dtype_name]
     mod._KERNEL_DTYPE = tla_of[dtype_name]
     torch_dtype = torch_of[dtype_name]
-    sentinel = args.sentinel if args.sentinel is not None else default_sentinel[dtype_name]
+    sentinel = sentinel_of[dtype_name]
 
     def create_tla_tensor(dev_buf):
         return from_dlpack(
@@ -270,8 +268,6 @@ def run(args: argparse.Namespace) -> int:
         kernel = basic_vadd_atomic_add
     else:
         kernel = basic_vadd
-
-    atol = float(args.atol)
 
     torch.npu.set_device(args.device)
     # Pure AIV kernel: default (-1) uses vector_core_num, not cube_core_num.
@@ -305,10 +301,7 @@ def run(args: argparse.Namespace) -> int:
     artifact(tla_a, tla_b, tla_c, block_num=block_num)
     torch.npu.synchronize()
 
-    if dtype_name in {"f32", "f16"}:
-        passed = bool(torch.isclose(c, expected, rtol=0.0, atol=atol).all())
-    else:
-        passed = bool(c.eq(expected).all())
+    passed = compare(c, expected, rtol=0.0, atol=1e-4)
 
     print(f"passed={passed} cache_key={artifact.cache_key}")
     print(f"kernel.o={artifact.kernel_binary_path}")
@@ -318,19 +311,19 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Compile and run a vector add.")
     parser.add_argument("--device", type=int, default=0)
     parser.add_argument("--n", type=int, default=VECTOR_ELE)
+    parser.add_argument("--dtype", choices=("f32", "f16", "i8", "i16", "i32"), default="f32")
     parser.add_argument(
         "--block-num",
         type=int,
         default=-1,
         help="Launch block count; -1 = full vector_core_num (AIV) for this pure-v kernel",
     )
-    parser.add_argument("--dtype", choices=("f32", "f16", "i8", "i16", "i32"), default="f32")
-    parser.add_argument("--sentinel", type=float, default=None)
-    parser.add_argument("--atol", type=float, default=1e-4)
-    sync = parser.add_mutually_exclusive_group()
-    sync.add_argument("--use-mutex", action="store_true")
-    sync.add_argument("--use-mutex-with", action="store_true")
-    sync.add_argument("--use-atomic-add", action="store_true")
+
+    # Kernel selector
+    parser_group = parser.add_mutually_exclusive_group()
+    parser_group.add_argument("--use-mutex", action="store_true")
+    parser_group.add_argument("--use-mutex-with", action="store_true")
+    parser_group.add_argument("--use-atomic-add", action="store_true")
     return run(parser.parse_args())
 
 if __name__ == "__main__":

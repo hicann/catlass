@@ -1,33 +1,36 @@
 # 基础 VADD 端到端示例
 
-本目录下提供的系列样例演示 **TLA DSL** 下基础向量加法的计算，包括 GM→UB 拷贝、Vector 侧 SIMD 计算与写回 GM 的完整链路。
+本目录下样例演示 **CATLASS DSL** 下基础向量加法的计算。
+
+
+## 功能说明
+
+向量加法算子实现两个一维向量的逐元素加法，计算公式为：
+$$
+\begin{aligned}
+C &= A + B
+\end{aligned}
+$$
+
+## 代码组织
+
+本目录组织结构如下所示：
+
+```plain
+./basic_vadd
+├── basic_vadd.py
+└── README.md
+```
+
+各子文件所承载样例特性概述如下：
 
 | 文件 | 概述 |
 |------|------|
 | [**`basic_vadd.py`**](basic_vadd.py) | 基础向量加法示例，含 4 个 kernel 变体：flag 同步（默认）、mutex（`--use-mutex`）、mutex_with（`--use-mutex-with`）和 atomic_add（`--use-atomic-add`）。 |
 
+## 约束说明
 
----
-
-## 1. 基本介绍
-
-向量加法算子实现两个一维向量的逐元素加法，计算公式为：
-$$
-\begin{aligned}
-C &= A + B \\
-C_i &= A_i + B_i
-\end{aligned}
-$$
-
-### 1.1 问题规模与分块
-
-- 向量长度 `N`：默认 400（ `VECTOR_ELE = 400` ），可通过 `--n` 指定。
-- VL 分块：`VL_ELE` 按 dtype 自适应（`f32`=64、`f16`=128、`i8`=256、`i16`=128、`i32`=64）。
-- 加和向量的排布格式均为 `tla.arch.RowMajor` ，即等价为 `(N, 1)` 的矩阵。
-
-### 1.2 支持元素类型
-
-- **`DTYPE_A` / `DTYPE_B`**：分别为加和向量的数据类型，要求二者类型相同，满足下述数据类型：
+ - 加和向量 A、B 的数据类型要求一致，所支持的数据类型及分块lane大小如下。
 
 | dtype | VL_ELE | 浮点/整数 | 校验方式 |
 |-------|--------|----------|---------|
@@ -38,31 +41,16 @@ $$
 | `i32` | 64 | 整数 | 精确匹配 |
 
 
-### 1.3 执行流程
+## 使用示例
 
-样例同样由 Host 侧数据准备、Kernel 编译与启动、Device 侧计算、Host 侧校验四部分组成，可参考 [执行流程](../basic_mmad/README.md#13-执行流程)一节，下面主要介绍 AIV 侧计算过程。
+要运行本路径下的样例，请参考[环境配置](../../../docs/dev_guide/00_environment_setup.md)一节的有关内容。
 
-
-1. 空间预分配，预先读取向量长度 `n_ele`，在 UB 上分配 `ub_a`、`ub_b`、`ub_c` 三份空间，并绑定为 RowMajor 格式。
-2. 数据搬运，启用 MTE2 将 GM 上的 A 和 B 搬入 UB。
-3. 加法运算，AIV 核中按 VL 分块循环，每次加载一块 A 和 B 到寄存器，调用 `tla.add` 后将结果输出到目标 UB 位置。
-4. 输出搬出，MTE3 将结果 从 UB 写回 GM C，最后流水线排空。
-
-> 当选择 `--use-atomic-add` 时，执行 `basic_vadd_atomic_add`，加和操作在 GM 上完成（启用原子加）
-> 当选择 `--use-mutex` 或 `--use-mutex-with` 时，执行 `basic_vadd_mutex` 或 `basic_vadd_mutex_with`， 关于 Mutex 原语的有关内容可参考 [Mutex 说明](../basic_mmad/README.md#32-basic_matmul_mutex) 一节。
----
-
-## 2. 运行样例
-
-要运行本路径下的样例，请参考[环境配置](../../../README.md#2.从零开始：环境与完整指令)一节的有关内容。
-
-### 2.1 命令行参数
+### 命令行参数
 
 ```text
 basic_vadd.py [-h] [--device DEVICE] [--n N]
+              [--block-num BLOCK_NUM]
               [--dtype {f32,f16,i8,i16,i32}]
-              [--block-num BLOCK_DIM]
-              [--sentinel SENTINEL]
               [--use-mutex | --use-mutex-with | --use-atomic-add]
 ```
 
@@ -70,47 +58,98 @@ basic_vadd.py [-h] [--device DEVICE] [--n N]
 
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
-| `--device` | `0` | TLA 和 PyTorch 使用的 NPU 设备号。 |
-| `--n` | `400` | 向量长度，范围 `[1, VECTOR_ELE]`。 |
-| `--block-num` | `-1`（哨兵：按算子类型取满核；本示例为纯 Vector，默认 `vector_core_num`） | 启动 block 数。非 `-1` 时用入参；`-1` 时纯 v 用 AIV 物理核数，cube/mix 用 AIC 物理核数。 |
+| `--device` | `0` | 上板执行使用的 NPU 设备号。 |
+| `--n` | `400` | 向量长度。 |
+| `--block-num` | `-1`（哨兵值，纯 Vector 算子默认取 `vector_core_num` 满核）| 所启用的 AI Vector 核数 |
 | `--dtype` | `"f32"` | 数据类型，可选 `"f32"`、`"f16"`、`"i8"`、`"i16"`、`"i32"`。 |
-| `--sentinel` | 按 dtype 自适应 | Kernel 启动前写入输出的哨兵值。 |
-| `--use-mutex` | 关闭 | 切换到显式 Mutex lock/unlock 同步。 |
-| `--use-mutex-with` | 关闭 | 切换到 `with tla.mutex_guard(...)` 同步。 |
-| `--use-atomic-add` | 关闭 | 切换到原子加同步（先 copy A→C，再 atomic_add B→C）。 |
+| `--use-mutex` | `False` | 切换到显式 Mutex `lock` / `unlock` 同步（执行 `basic_vadd_mutex`）。 |
+| `--use-mutex-with` | `False` | 切换到 `with tla.mutex_guard(...)` 同步（执行 `basic_vadd_mutex_with`）。 |
+| `--use-atomic-add` | `False` | 切换到原子加同步（执行 `basic_vadd_atomic_add`）。 |
 
 > `--use-mutex`、`--use-mutex-with`、`--use-atomic-add` 三者互斥。
 
-### 2.3 调用示例
+
+### 执行示例
 
 在 `python/tla_dsl` 目录下执行：
 
 ```bash
 cd python/tla_dsl
 
-# 查看帮助
-python examples/end_to_end/basic_vadd/basic_vadd.py --help
+# 基础测试 (默认 f32, n=400)
+python examples/end_to_end/basic_vadd/basic_vadd.py
 
-# 默认运行（flag 同步，f32，n=400）
-python examples/end_to_end/basic_vadd/basic_vadd.py --device 0
+# 指定向量长度和 dtype
+python examples/end_to_end/basic_vadd/basic_vadd.py --n 256 --dtype f16
 
-# 指定长度和 dtype
-python examples/end_to_end/basic_vadd/basic_vadd.py --device 0 --n 256 --dtype f16
+# 使用 Mutex 同步
+python examples/end_to_end/basic_vadd/basic_vadd.py --use-mutex
+python examples/end_to_end/basic_vadd/basic_vadd.py --use-mutex-with
 
-# 执行带Mutex同步的样例
-python examples/end_to_end/basic_vadd/basic_vadd.py --device 0 --use-mutex
-python examples/end_to_end/basic_vadd/basic_vadd.py --device 0 --use-mutex-with
-
-# 执行带原子加操作的样例
-python examples/end_to_end/basic_vadd/basic_vadd.py --device 0 --use-atomic-add
+# 使用原子加
+python examples/end_to_end/basic_vadd/basic_vadd.py --use-atomic-add
 ```
 
-执行上述测试后，预期输出：
+执行测试后，预期输出：
 
 ```plain
---- dtype=f32 n=400 ---
-passed=True cache_key=<CACHE_KEY>
-kernel.o=/path/to/artifacts/runtime-cache/<CACHE_KEY>/kernel.o
+--- dtype=<dtype> n=<n> ---
+passed=True cache_key=<cache_key>
+kernel.o=<cache_dir>/<cache_key>/kernel.o
 ```
 
-其中 `passed` 结果为 `True` 或 `False`，表明 NPU 计算结果与 golden 参考值精度校验是否通过；`cache_key` 是编译缓存的哈希值，`kernel.o` 后续的路径即为编译后的二进制路径。
+- 上述 `<dtype>`， `<n>` 等为占位符，具体依赖外部参数或环境变量传入。
+
+其中 `passed` 结果为 `True` 或 `False` 表明 NPU 计算结果与 golden 参考值精度校验是否通过；`cache_dir` 是指定的缓存目录，`cache_key` 是编译缓存的哈希值。
+
+---
+
+## 特性 Kernel 介绍
+
+以下针对本文件中的特性 Kernel 做简略介绍。
+
+### basic_vadd_mutex
+
+**文件**：[`basic_vadd.py`](basic_vadd.py#L67)
+
+使用显式 `mutex.lock(pipe)` / `mutex.unlock(pipe)` 实现同步，以 GM 至 UB 的搬运为例：
+
+```python
+import catlass.tla as tla
+
+# ...
+mutex_ub_a = tla.mutex(resource="ub_a", id=0)
+
+mutex_ub_a.lock(pipe=tla.arch.MTE2)
+tla.copy(ub_a, gm_a)
+mutex_ub_a.unlock(pipe=tla.arch.MTE2)
+```
+
+## basic_vadd_mutex_with
+
+**文件**：[`basic_vadd.py`](basic_vadd.py#L127)
+
+使用 `with tla.mutex_guard(...)` 上下文管理器替代手动 `lock`/`unlock`：
+
+```python
+import catlass.tla as tla
+
+# ...
+with tla.mutex_guard(mutex_ub_a):
+    tla.copy(ub_a, gm_a)
+```
+
+## basic_vadd_atomic_add
+
+**文件**：[`basic_vadd.py`](basic_vadd.py#L175)
+
+先将 A 写回 GM 覆盖目的位置，再将 B 写回 GM 上同一片区域，并开启原子加操作，关键代码如下：
+
+```python
+import catlass.tla as tla
+
+# ...
+tla.copy(gm_c, ub_a)  # C = A
+tla.pipe_barrier(tla.pipes.MTE3)
+tla.copy(gm_c, ub_b, tla.params.CopyUbToGmParams(atomic_mode=tla.params.AtomicMode.ADD))
+```

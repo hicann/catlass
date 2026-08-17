@@ -13,66 +13,56 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-import catlass as tla
-from catlass.runtime import from_dlpack
+import catlass.tla as tla
+import torch
+import torch_npu  # noqa: F401
+
 from catlass.types import dtype_size_bytes
+from catlass.base_dsl.arch import get_localmem_capacity_bytes
+
+from examples.end_to_end.common import TilingParams, SwizzleParams
 
 # ---- kernel constants + @tla.kernel ----
-# Target device: Ascend950.
-L0C_SIZE = 256 * 1024
-UB_SIZE = 248 * 1024
+UB_SIZE = get_localmem_capacity_bytes("ub")
+L0C_SIZE = get_localmem_capacity_bytes("cc")
 BYTE_PER_C0 = 32
-
-# Default tiling: L1 256×256×128, L0 256×256×32.
-l1_tm = 256
-l1_tn = 256
-l1_tk = 128
-l0_tm = 256
-l0_tn = 256
-l0_tk = 32
+VECTOR_ELE = 256
 
 # One SIMD register = 256B; lane count = 256 / sizeof(ElementC). REG_M=1.
 REG_M = 1
 
-# Host may rewrite these before compile.
-DTYPE_A = tla.Float32
-DTYPE_B = tla.Float32
-# Matches C++ ElementC: L0C / UB Acc / GM C (X→D) / EVG Aux·Out all share one type.
-DTYPE_C = tla.Float32
 # Use unit_flag on the final FixPipe of each MN tile.
 ENABLE_UNIT_FLAG = True
 
 # UB nodes counted for sizing: load Aux(X) and compute (Acc already in UB from FixPipe).
 EVG_UB_NODES = 2
-# EVG UB multi-buffer depth (1 or 2 physical slots). Manual edit only, like l1_tn.
+# EVG UB multi-buffer depth (1 or 2 physical slots). Manual edit only, like _tiling.l1_tn.
 EVG_UB_STAGES = 2
 # FixPipe C workspace: [0, L0C/2) in fp32 elements.
 C_UB_ELEMS = L0C_SIZE // 2 // 4
 
-# Max elements per UB epilogue slot: floor(budget/nodes/stages/elem_bytes) to BYTE_PER_C0.
-_ELEM_C_BYTES = dtype_size_bytes(DTYPE_C.dtype)
-_UB_SLOT_RAW = (UB_SIZE - L0C_SIZE // 2) // EVG_UB_NODES // EVG_UB_STAGES // _ELEM_C_BYTES
-UB_SLOT_ELEMS = (_UB_SLOT_RAW // BYTE_PER_C0) * BYTE_PER_C0
-# SIMD lanes for ElementC; must match ``tla.update_mask`` (256B / sizeof).
-SIMD_LANES = 256 // _ELEM_C_BYTES
-
-# MN tile swizzle: direction 0 = Zn (prefer when m>n), 1 = Nz (prefer when m<=n).
-# Host rewrites SWIZZLE_DIRECTION before compile.
-SWIZZLE_OFFSET = 3
-SWIZZLE_DIRECTION = 1
-
 @tla.kernel
 def matmul_evg_add_ub_kernel(
-    mem_a: tla.Tensor,
-    mem_b: tla.Tensor,
-    mem_c: tla.Tensor,
+    gm_a: tla.Tensor,
+    gm_b: tla.Tensor,
+    gm_c: tla.Tensor,
+    _tiling: TilingParams,
+    _swizzle: SwizzleParams,
+    UB_SLOT_ELEMS: tla.Constexpr[int],
+    SIMD_LANES: tla.Constexpr[int],
 ) -> None:
-    """Cube GEMM FixPipe into UB; vector epilogue D = Acc + X in-place on mem_c."""
-    m = mem_a.origin_shape[0]
-    n = mem_b.origin_shape[1]
-    k = mem_a.origin_shape[1]
+    """Cube GEMM FixPipe into UB; vector epilogue D = Acc + X in-place on gm_c."""
     c0 = 0
     c1 = 1
+
+    dtype_a = gm_a.ptr.dtype
+    dtype_b = gm_b.ptr.dtype
+    dtype_gm_c = gm_c.ptr.dtype
+    DTYPE_C = tla.Float32  # L0C accumulator only
+
+    m = gm_a.origin_shape[0]
+    n = gm_b.origin_shape[1]
+    k = gm_a.origin_shape[1]
 
     # ---- soft-flags (cube pingpong) ----
     l1a0_data_ready = tla.flag("l1a0_data_ready", tla.arch.MTE2, tla.arch.MTE1)
@@ -113,39 +103,39 @@ def matmul_evg_add_ub_kernel(
     aiv_finish = tla.cross_flag("aiv_finish", mode=4)
 
     # ---- L1/L0/L0C allocates ----
-    l1a0_ptr = tla.allocate(l1_tm * l1_tk, DTYPE_A, tla.AddressSpace.l1, 512)
-    l1a1_ptr = tla.allocate(l1_tm * l1_tk, DTYPE_A, tla.AddressSpace.l1, 512)
-    l1b0_ptr = tla.allocate(l1_tk * l1_tn, DTYPE_B, tla.AddressSpace.l1, 512)
-    l1b1_ptr = tla.allocate(l1_tk * l1_tn, DTYPE_B, tla.AddressSpace.l1, 512)
+    l1a0_ptr = tla.allocate(_tiling.l1_tm * _tiling.l1_tk, dtype_a, tla.AddressSpace.l1, 512)
+    l1a1_ptr = tla.allocate(_tiling.l1_tm * _tiling.l1_tk, dtype_a, tla.AddressSpace.l1, 512)
+    l1b0_ptr = tla.allocate(_tiling.l1_tk * _tiling.l1_tn, dtype_b, tla.AddressSpace.l1, 512)
+    l1b1_ptr = tla.allocate(_tiling.l1_tk * _tiling.l1_tn, dtype_b, tla.AddressSpace.l1, 512)
 
-    l0a0_ptr = tla.allocate(l0_tm * l0_tk, DTYPE_A, tla.AddressSpace.l0a, 512)
-    l0a1_ptr = tla.allocate(l0_tm * l0_tk, DTYPE_A, tla.AddressSpace.l0a, 512)
-    l0b0_ptr = tla.allocate(l0_tk * l0_tn, DTYPE_B, tla.AddressSpace.l0b, 512)
-    l0b1_ptr = tla.allocate(l0_tk * l0_tn, DTYPE_B, tla.AddressSpace.l0b, 512)
+    l0a0_ptr = tla.allocate(_tiling.l0_tm * _tiling.l0_tk, dtype_a, tla.AddressSpace.l0a, 512)
+    l0a1_ptr = tla.allocate(_tiling.l0_tm * _tiling.l0_tk, dtype_a, tla.AddressSpace.l0a, 512)
+    l0b0_ptr = tla.allocate(_tiling.l0_tk * _tiling.l0_tn, dtype_b, tla.AddressSpace.l0b, 512)
+    l0b1_ptr = tla.allocate(_tiling.l0_tk * _tiling.l0_tn, dtype_b, tla.AddressSpace.l0b, 512)
 
-    l0c_ptr = tla.allocate(l0_tm * l0_tn, DTYPE_C, tla.AddressSpace.l0c, 512)
+    l0c_ptr = tla.allocate(_tiling.l0_tm * _tiling.l0_tn, DTYPE_C, tla.AddressSpace.l0c, 512)
 
     # ---- UB allocates ----
     # stages==1 must not allocate a second slot pair (UB_SLOT_ELEMS already uses full budget).
     # Pre-init stage1 aliases so AST allows the compile-time if (see ENABLE_UNIT_FLAG).
-    ub_acc_ptr = tla.allocate(C_UB_ELEMS, DTYPE_C, tla.AddressSpace.ub, 256)
-    ub_aux_ptr0 = tla.allocate(UB_SLOT_ELEMS, DTYPE_C, tla.AddressSpace.ub, 256)
-    ub_out_ptr0 = tla.allocate(UB_SLOT_ELEMS, DTYPE_C, tla.AddressSpace.ub, 256)
+    ub_acc_ptr = tla.allocate(C_UB_ELEMS, dtype_gm_c, tla.AddressSpace.ub, 256)
+    ub_aux_ptr0 = tla.allocate(UB_SLOT_ELEMS, dtype_gm_c, tla.AddressSpace.ub, 256)
+    ub_out_ptr0 = tla.allocate(UB_SLOT_ELEMS, dtype_gm_c, tla.AddressSpace.ub, 256)
     ub_aux_ptr1 = ub_aux_ptr0
     ub_out_ptr1 = ub_out_ptr0
     if tla.const_expr(EVG_UB_STAGES >= 2):
-        ub_aux_ptr1 = tla.allocate(UB_SLOT_ELEMS, DTYPE_C, tla.AddressSpace.ub, 256)
-        ub_out_ptr1 = tla.allocate(UB_SLOT_ELEMS, DTYPE_C, tla.AddressSpace.ub, 256)
+        ub_aux_ptr1 = tla.allocate(UB_SLOT_ELEMS, dtype_gm_c, tla.AddressSpace.ub, 256)
+        ub_out_ptr1 = tla.allocate(UB_SLOT_ELEMS, dtype_gm_c, tla.AddressSpace.ub, 256)
 
     # ---- grid / swizzle setup ----
-    grid_m = (m + l1_tm - 1) // l1_tm
-    grid_n = (n + l1_tn - 1) // l1_tn
+    grid_m = (m + _tiling.l1_tm - 1) // _tiling.l1_tm
+    grid_n = (n + _tiling.l1_tn - 1) // _tiling.l1_tn
     total_blocks = grid_m * grid_n
-    # Folded at compile time via SWIZZLE_DIRECTION (host-set).
-    if tla.const_expr(SWIZZLE_DIRECTION == 0):
-        swizzle_tile_count = (grid_m + SWIZZLE_OFFSET - 1) // SWIZZLE_OFFSET
+    # Folded at compile time via _swizzle.SWIZZLE_DIRECTION (host-set).
+    if tla.const_expr(_swizzle.SWIZZLE_DIRECTION == 0):
+        swizzle_tile_count = (grid_m + _swizzle.SWIZZLE_OFFSET - 1) // _swizzle.SWIZZLE_OFFSET
     else:
-        swizzle_tile_count = (grid_n + SWIZZLE_OFFSET - 1) // SWIZZLE_OFFSET
+        swizzle_tile_count = (grid_n + _swizzle.SWIZZLE_OFFSET - 1) // _swizzle.SWIZZLE_OFFSET
 
     # ---- cube: prime flags; MN tile loop; K pingpong; FixPipe; handoff; drain ----
     with tla.cube():
@@ -167,15 +157,15 @@ def matmul_evg_add_ub_kernel(
             # Map linear MN task id → (block_row, block_col) with swizzle (must stay in kernel AST).
             block_row = c0
             block_col = c0
-            if tla.const_expr(SWIZZLE_DIRECTION == 0):
-                swizzle_tile_idx = block_linear // (SWIZZLE_OFFSET * grid_n)
-                in_tile_idx = block_linear % (SWIZZLE_OFFSET * grid_n)
+            if tla.const_expr(_swizzle.SWIZZLE_DIRECTION == 0):
+                swizzle_tile_idx = block_linear // (_swizzle.SWIZZLE_OFFSET * grid_n)
+                in_tile_idx = block_linear % (_swizzle.SWIZZLE_OFFSET * grid_n)
                 swizzle_n_rows = (
-                    SWIZZLE_OFFSET
+                    _swizzle.SWIZZLE_OFFSET
                     if swizzle_tile_idx != (swizzle_tile_count - 1)
-                    else (grid_m - SWIZZLE_OFFSET * swizzle_tile_idx)
+                    else (grid_m - _swizzle.SWIZZLE_OFFSET * swizzle_tile_idx)
                 )
-                block_row = swizzle_tile_idx * SWIZZLE_OFFSET + in_tile_idx % swizzle_n_rows
+                block_row = swizzle_tile_idx * _swizzle.SWIZZLE_OFFSET + in_tile_idx % swizzle_n_rows
                 block_col = in_tile_idx // swizzle_n_rows
                 block_col = (
                     (grid_n - block_col - 1)
@@ -183,32 +173,32 @@ def matmul_evg_add_ub_kernel(
                     else block_col
                 )
             else:
-                swizzle_tile_idx = block_linear // (SWIZZLE_OFFSET * grid_m)
-                in_tile_idx = block_linear % (SWIZZLE_OFFSET * grid_m)
+                swizzle_tile_idx = block_linear // (_swizzle.SWIZZLE_OFFSET * grid_m)
+                in_tile_idx = block_linear % (_swizzle.SWIZZLE_OFFSET * grid_m)
                 swizzle_n_cols = (
-                    SWIZZLE_OFFSET
+                    _swizzle.SWIZZLE_OFFSET
                     if swizzle_tile_idx != (swizzle_tile_count - 1)
-                    else (grid_n - SWIZZLE_OFFSET * swizzle_tile_idx)
+                    else (grid_n - _swizzle.SWIZZLE_OFFSET * swizzle_tile_idx)
                 )
                 block_row = in_tile_idx // swizzle_n_cols
-                block_col = swizzle_tile_idx * SWIZZLE_OFFSET + in_tile_idx % swizzle_n_cols
+                block_col = swizzle_tile_idx * _swizzle.SWIZZLE_OFFSET + in_tile_idx % swizzle_n_cols
                 block_row = (
                     (grid_m - block_row - 1)
                     if (swizzle_tile_idx % 2 == 1)
                     else block_row
                 )
             gm_a_by_core = tla.tile_view(
-                mem_a, tla.make_shape(l1_tm, k), tla.make_coord(block_row, c0)
+                gm_a, tla.make_shape(_tiling.l1_tm, k), tla.make_coord(block_row, c0)
             )
             gm_b_by_core = tla.tile_view(
-                mem_b, tla.make_shape(k, l1_tn), tla.make_coord(c0, block_col)
+                gm_b, tla.make_shape(k, _tiling.l1_tn), tla.make_coord(c0, block_col)
             )
             gm_d_by_core = tla.tile_view(
-                mem_c, tla.make_shape(l1_tm, l1_tn), tla.make_coord(block_row, block_col)
+                gm_c, tla.make_shape(_tiling.l1_tm, _tiling.l1_tn), tla.make_coord(block_row, block_col)
             )
 
             k_block = gm_a_by_core.origin_shape[1]
-            k_l1_count = (k_block + l1_tk - 1) // l1_tk
+            k_l1_count = (k_block + _tiling.l1_tk - 1) // _tiling.l1_tk
             k_l1_range = tla.range(c0, k_l1_count, c1)
 
             l0_c = tla.make_tensor_like(l0c_ptr, gm_d_by_core)
@@ -221,10 +211,10 @@ def matmul_evg_add_ub_kernel(
                 tla.wait_flag(l0c_available)
             for k_l1 in k_l1_range:
                 gm_a_l1 = tla.tile_view(
-                    gm_a_by_core, tla.make_shape(l1_tm, l1_tk), tla.make_coord(c0, k_l1)
+                    gm_a_by_core, tla.make_shape(_tiling.l1_tm, _tiling.l1_tk), tla.make_coord(c0, k_l1)
                 )
                 gm_b_l1 = tla.tile_view(
-                    gm_b_by_core, tla.make_shape(l1_tk, l1_tn), tla.make_coord(k_l1, c0)
+                    gm_b_by_core, tla.make_shape(_tiling.l1_tk, _tiling.l1_tn), tla.make_coord(k_l1, c0)
                 )
 
                 l1_a = tla.make_tensor_like(
@@ -253,15 +243,15 @@ def matmul_evg_add_ub_kernel(
                 else:
                     tla.set_flag(l1b1_data_ready)
 
-                k_l0_count = (l1_a.origin_shape[1] + l0_tk - 1) // l0_tk
+                k_l0_count = (l1_a.origin_shape[1] + _tiling.l0_tk - 1) // _tiling.l0_tk
                 k_l0_range = tla.range(c0, k_l0_count, c1)
 
                 for k_l0 in k_l0_range:
                     l1_a_l0 = tla.tile_view(
-                        l1_a, tla.make_shape(l0_tm, l0_tk), tla.make_coord(c0, k_l0)
+                        l1_a, tla.make_shape(_tiling.l0_tm, _tiling.l0_tk), tla.make_coord(c0, k_l0)
                     )
                     l1_b_l0 = tla.tile_view(
-                        l1_b, tla.make_shape(l0_tk, l0_tn), tla.make_coord(k_l0, c0)
+                        l1_b, tla.make_shape(_tiling.l0_tk, _tiling.l0_tn), tla.make_coord(k_l0, c0)
                     )
 
                     l0_a = tla.make_tensor_like(
@@ -324,16 +314,16 @@ def matmul_evg_add_ub_kernel(
                 l1_buf_idx = c1 - l1_buf_idx
 
             # FixPipe L0C→UB (SPLIT_M).
-            # Use *actual* tile MN from GM view. A fixed (l1_tm, l1_tn) dst makes
+            # Use *actual* tile MN from GM view. A fixed (_tiling.l1_tm, _tiling.l1_tn) dst makes
             # FixPipe drain a full tile on N/M tails (e.g. n=129 → width-1 tile)
-            # and hangs. Pitch stays l1_tn so the UB buffer layout is stable.
+            # and hangs. Pitch stays _tiling.l1_tn so the UB buffer layout is stable.
             actual_m = gm_d_by_core.origin_shape[0]
             actual_n = gm_d_by_core.origin_shape[1]
             ub_c = tla.make_tensor(
                 ub_acc_ptr,
                 tla.make_layout(
                     tla.make_shape(actual_m, actual_n),
-                    tla.make_stride(l1_tn, 1),
+                    tla.make_stride(_tiling.l1_tn, 1),
                     layoutTag=tla.arch.RowMajor,
                 ),
             )
@@ -393,15 +383,15 @@ def matmul_evg_add_ub_kernel(
             # Same MN swizzle as cube path (AIC/AIV must visit identical tiles).
             block_row = c0
             block_col = c0
-            if tla.const_expr(SWIZZLE_DIRECTION == 0):
-                swizzle_tile_idx = block_linear // (SWIZZLE_OFFSET * grid_n)
-                in_tile_idx = block_linear % (SWIZZLE_OFFSET * grid_n)
+            if tla.const_expr(_swizzle.SWIZZLE_DIRECTION == 0):
+                swizzle_tile_idx = block_linear // (_swizzle.SWIZZLE_OFFSET * grid_n)
+                in_tile_idx = block_linear % (_swizzle.SWIZZLE_OFFSET * grid_n)
                 swizzle_n_rows = (
-                    SWIZZLE_OFFSET
+                    _swizzle.SWIZZLE_OFFSET
                     if swizzle_tile_idx != (swizzle_tile_count - 1)
-                    else (grid_m - SWIZZLE_OFFSET * swizzle_tile_idx)
+                    else (grid_m - _swizzle.SWIZZLE_OFFSET * swizzle_tile_idx)
                 )
-                block_row = swizzle_tile_idx * SWIZZLE_OFFSET + in_tile_idx % swizzle_n_rows
+                block_row = swizzle_tile_idx * _swizzle.SWIZZLE_OFFSET + in_tile_idx % swizzle_n_rows
                 block_col = in_tile_idx // swizzle_n_rows
                 block_col = (
                     (grid_n - block_col - 1)
@@ -409,15 +399,15 @@ def matmul_evg_add_ub_kernel(
                     else block_col
                 )
             else:
-                swizzle_tile_idx = block_linear // (SWIZZLE_OFFSET * grid_m)
-                in_tile_idx = block_linear % (SWIZZLE_OFFSET * grid_m)
+                swizzle_tile_idx = block_linear // (_swizzle.SWIZZLE_OFFSET * grid_m)
+                in_tile_idx = block_linear % (_swizzle.SWIZZLE_OFFSET * grid_m)
                 swizzle_n_cols = (
-                    SWIZZLE_OFFSET
+                    _swizzle.SWIZZLE_OFFSET
                     if swizzle_tile_idx != (swizzle_tile_count - 1)
-                    else (grid_n - SWIZZLE_OFFSET * swizzle_tile_idx)
+                    else (grid_n - _swizzle.SWIZZLE_OFFSET * swizzle_tile_idx)
                 )
                 block_row = in_tile_idx // swizzle_n_cols
-                block_col = swizzle_tile_idx * SWIZZLE_OFFSET + in_tile_idx % swizzle_n_cols
+                block_col = swizzle_tile_idx * _swizzle.SWIZZLE_OFFSET + in_tile_idx % swizzle_n_cols
                 block_row = (
                     (grid_m - block_row - 1)
                     if (swizzle_tile_idx % 2 == 1)
@@ -427,10 +417,10 @@ def matmul_evg_add_ub_kernel(
             tla.cross_core_wait_flag(aic_finish, tla.arch.VECTOR, aiv_id=0)
             tla.cross_core_wait_flag(aic_finish, tla.arch.VECTOR, aiv_id=1)
 
-            # In-place GM C: load addend X from mem_c, store D=A@B+X back to mem_c
-            # mem_c is both the addend source and the final output destination.
+            # In-place GM C: load addend X from gm_c, store D=A@B+X back to gm_c
+            # gm_c is both the addend source and the final output destination.
             gm_c_by_core = tla.tile_view(
-                mem_c, tla.make_shape(l1_tm, l1_tn), tla.make_coord(block_row, block_col)
+                gm_c, tla.make_shape(_tiling.l1_tm, _tiling.l1_tn), tla.make_coord(block_row, block_col)
             )
             actual_m = gm_c_by_core.origin_shape[0]
             actual_n = gm_c_by_core.origin_shape[1]
@@ -445,12 +435,12 @@ def matmul_evg_add_ub_kernel(
             aiv_m = gm_result.origin_shape[0]
             aiv_n = gm_result.origin_shape[1]
 
-            # Pitch l1_tn matches FixPipe UB layout; do not inherit GM stride (=N).
+            # Pitch _tiling.l1_tn matches FixPipe UB layout; do not inherit GM stride (=N).
             ub_c_full = tla.make_tensor(
                 ub_acc_ptr,
                 tla.make_layout(
                     tla.make_shape(aiv_m, aiv_n),
-                    tla.make_stride(l1_tn, 1),
+                    tla.make_stride(_tiling.l1_tn, 1),
                     layoutTag=tla.arch.RowMajor,
                 ),
             )
@@ -485,7 +475,7 @@ def matmul_evg_add_ub_kernel(
                     )
                     tile_rows = gm_x_tile.origin_shape[0]
                     tile_cols = gm_x_tile.origin_shape[1]
-                    # X/D slot pitch: RoundUp(cols); C keeps FixPipe pitch l1_tn.
+                    # X/D slot pitch: RoundUp(cols); C keeps FixPipe pitch _tiling.l1_tn.
                     ub_xd_layout = tla.make_layout(
                         tla.make_shape(tile_rows, tile_cols),
                         tla.make_stride(ub_row_stride, 1),
@@ -539,7 +529,7 @@ def matmul_evg_add_ub_kernel(
                                     tla.make_coord(row_i, col_j),
                                 )
                                 tail, remaining = tla.update_mask(
-                                    remaining, dtype=DTYPE_C
+                                    remaining, dtype=dtype_gm_c
                                 )
                                 result_chunk.store(
                                     c_chunk.load() + addend_chunk.load(), mask=tail
@@ -638,7 +628,7 @@ def matmul_evg_add_ub_kernel(
                                         tla.make_coord(r_i, col_j),
                                     )
                                     tail, remaining = tla.update_mask(
-                                        remaining, dtype=DTYPE_C
+                                        remaining, dtype=dtype_gm_c
                                     )
                                     result_chunk.store(
                                         c_chunk.load() + addend_chunk.load(),
@@ -683,87 +673,73 @@ EXAMPLE_DIR = Path(__file__).resolve().parent
 DEFAULT_CACHE_DIR = EXAMPLE_DIR / "artifacts" / "runtime-cache"
 DESCRIPTION = "Matmul EVG add_ub: D=A@B+X via L0C→UB; dynamic GM."
 
-
-def golden(a, b, out_dtype):
-    import torch
-
-    expected = a.to(torch.float32) @ b.to(torch.float32)
-    if out_dtype in (torch.float16, torch.bfloat16):
-        expected = expected.to(out_dtype).to(torch.float32)
-    return expected
-
+def _compute_ub_slots(dtype_c: str) -> tuple[int, int]:
+    """Compute UB_SLOT_ELEMS / SIMD_LANES according to the stages and element data type."""
+    _ELEM_C_BYTES = dtype_size_bytes(dtype_c)
+    _ub_slot = (UB_SIZE - L0C_SIZE // 2) // EVG_UB_NODES // EVG_UB_STAGES // _ELEM_C_BYTES
+    return (
+        (_ub_slot + BYTE_PER_C0 - 1) // BYTE_PER_C0 * BYTE_PER_C0, 
+        VECTOR_ELE // _ELEM_C_BYTES
+    )
 
 def run(args: argparse.Namespace) -> int:
-    import sys
-    import torch
-    import torch_npu  # noqa: F401
+    from examples.end_to_end.common import (
+        get_block_num,
+        create_tla_tensor,
+        compare,
+    )
 
-    mod = sys.modules[__name__]
-    tla_of = {"f16": tla.Float16, "bf16": tla.BFloat16, "f32": tla.Float32}
-    torch_of = {"f16": torch.float16, "bf16": torch.bfloat16, "f32": torch.float32}
-    da, db, dc = args.dtype_a, args.dtype_b, args.dtype_c
-    la, lb = args.layout_a, args.layout_b
-    mi, ni, ki = int(args.m), int(args.n), int(args.k)
-    mod.DTYPE_A = tla_of[da]
-    mod.DTYPE_B = tla_of[db]
-    mod.DTYPE_C = tla_of[dc]
-    mod.SWIZZLE_DIRECTION = 0 if mi > ni else 1
+    torch.npu.set_device(args.device)
+    print(
+        f"--- mnk=({args.m},{args.n},{args.k}) "
+        f"layout={args.layout_a}/{args.layout_b} "
+        f"dtype={args.dtype_a}/{args.dtype_b}/{args.dtype_c} ---"
+    )
 
-    def create_tla_tensor(buf, layout: str):
-        storage = buf.contiguous() if layout == "row" else buf.permute(1, 0).contiguous()
-        tag = tla.arch.RowMajor if layout == "row" else tla.arch.ColumnMajor
-        return from_dlpack(storage, layout_tag=tag).mark_layout_dynamic()
+    torch.npu.manual_seed(0)
+    dtypes = {"f16": torch.float16, "bf16": torch.bfloat16, "f32": torch.float32}
+    dtype_a = dtypes[args.dtype_a]
+    dtype_b = dtypes[args.dtype_b]
+    dtype_c = dtypes[args.dtype_c]
 
-    cache_dir = str(Path(args.cache_dir).expanduser().resolve())
+    a = torch.rand(args.m, args.k, dtype=dtype_a, device="npu") * 10.0 - 5.0
+    b = torch.rand(args.k, args.n, dtype=dtype_b, device="npu") * 10.0 - 5.0
+    # gm_c starts as addend X, overwritten with D = A@B+X.
+    c = torch.rand(args.m, args.n, dtype=dtype_c, device="npu") * 10.0 - 5.0
+    ref = a.float() @ b.float() + c.float()
+    if dtype_c in (torch.float16, torch.bfloat16):
+        ref = ref.to(dtype_c).float()
 
-    tla.initialize(device=args.device)
-    try:
-        torch.npu.set_device(args.device)
-        print(f"--- mnk=({mi},{ni},{ki}) layout={la}/{lb} dtype={da}/{db}/{dc} ---")
-        torch.npu.manual_seed(0)
-        a = torch.rand(mi, ki, dtype=torch_of[da], device="npu") * 10.0 - 5.0
-        b = torch.rand(ki, ni, dtype=torch_of[db], device="npu") * 10.0 - 5.0
-        # mem_c starts as addend X, overwritten with D = A@B+X.
-        c = torch.full((mi, ni), args.sentinel, dtype=torch_of[dc], device="npu")
-        expected = golden(a, b, torch.float32) + c.to(torch.float32)
-        if dc in ("f16", "bf16"):
-            expected = expected.to(torch_of[dc]).to(torch.float32)
+    a = a.contiguous() if args.layout_a == "row" else a.permute(1, 0).contiguous()
+    b = b.contiguous() if args.layout_b == "row" else b.permute(1, 0).contiguous()
+    a_tensor = create_tla_tensor(a, args.layout_a)
+    b_tensor = create_tla_tensor(b, args.layout_b)
+    c_tensor = create_tla_tensor(c, "row")
 
-        ta, tb, tc = create_tla_tensor(a, la), create_tla_tensor(b, lb), create_tla_tensor(c, "row")
-        artifact = tla.compile(
-            matmul_evg_add_ub_kernel,
-            ta,
-            tb,
-            tc,
-            arch_scope="aic.c310",
-            cache=not args.no_cache,
-            cache_dir=cache_dir,
-            force_recompile=args.force_recompile,
-        )
-        block_dim = max(
-            1,
-            args.block_dim if args.block_dim != -1 else tla.get_aicore_num(args.device),
-        )
-        artifact(ta, tb, tc, block_dim=block_dim)
-        torch.npu.synchronize()
+    _ub_slot_elements, _simd_lanes = _compute_ub_slots(args.dtype_c)
+    artifact = tla.compile(
+        matmul_evg_add_ub_kernel,
+        a_tensor,
+        b_tensor,
+        c_tensor,
+        TilingParams(),
+        SwizzleParams(
+            SWIZZLE_DIRECTION=0 if int(args.m) > int(args.n) else 1,
+            SWIZZLE_OFFSET=3,
+        ),
+        _ub_slot_elements,
+        _simd_lanes,
+        options="--npu-arch 3510"
+    )
+    block_num = get_block_num(args.block_num, args.device, kind="cube")
+    artifact(a_tensor, b_tensor, c_tensor, block_num=block_num)
+    torch.npu.synchronize()
 
-        # f16/f32 path (GM C is f32 on add_ub P0): rtol 1/256 or 1/128, floor 1.
-        if dc == "bf16":
-            rtol = (1.0 / 128.0) if ki < 2048 else (1.0 / 64.0)
-            floor = 1.0 / 256.0
-        else:
-            rtol = (1.0 / 256.0) if ki < 2048 else (1.0 / 128.0)
-            floor = 1.0
-        got = c.detach().to(device="cpu", dtype=torch.float32)
-        exp = expected.detach().to(device="cpu", dtype=torch.float32)
-        passed = bool(
-            ((got - exp).abs() <= rtol * torch.maximum(torch.full_like(exp, floor), exp.abs())).all()
-        )
-        print(f"passed={passed} cache_key={artifact.cache_key}")
-        print(f"kernel.o={artifact.kernel_binary_path}")
-        return 0 if passed else 1
-    finally:
-        tla.finalize()
+
+    passed = compare(c.detach().cpu(), ref.cpu(), args.k)
+    print(f"passed={passed} cache_key={artifact.cache_key}")
+    print(f"kernel.o={artifact.kernel_binary_path}")
+    return 0 if passed else 1
 
 
 def main() -> int:
@@ -777,11 +753,7 @@ def main() -> int:
     p.add_argument("--dtype-a", choices=("f16", "bf16", "f32"), default="f32")
     p.add_argument("--dtype-b", choices=("f16", "bf16", "f32"), default="f32")
     p.add_argument("--dtype-c", choices=("f32",), default="f32")
-    p.add_argument("--block-dim", type=int, default=-1)
-    p.add_argument("--sentinel", type=float, default=-7.0)
-    p.add_argument("--cache-dir", default=str(DEFAULT_CACHE_DIR))
-    p.add_argument("--force-recompile", action="store_true")
-    p.add_argument("--no-cache", action="store_true")
+    p.add_argument("--block-num", type=int, default=-1)
     return run(p.parse_args())
 
 
