@@ -213,6 +213,8 @@ class _Utils:
     L0B = _Sentinel("L0B")
     L0C = _Sentinel("L0C")
     UB = _Sentinel("UB")
+    BIASBUF = _Sentinel("BIASBUF")
+    FIXBUF = _Sentinel("FIXBUF")
 
 
 class _Pipes:

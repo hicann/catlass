@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+import os
 
 
 class Arch(str, Enum):
@@ -37,7 +38,7 @@ class Arch(str, Enum):
 _NPU_ARCH_TO_TARGET: dict[str, str] = {
     "3510": "c310",
 }
-DEFAULT_NPU_ARCH = "3510"
+DEFAULT_NPU_ARCH = os.environ.get("CATLASS_NPU_ARCH", "3510")
 
 
 def resolve_npu_arch(npu_arch: str) -> str:
@@ -60,16 +61,18 @@ class TlaKernelTarget:
     cce_arch: str
 
 
-_DEFAULT_LOCALMEM_CAPACITY_BYTES_c310 = {
-    "cbuf": 512 * 1024,
-    "ca": 64 * 1024,
-    "cb": 64 * 1024,
-    "cc": 256 * 1024,
-    "ub": 248 * 1024,
+_LOCALMEM_CAPACITY_BYTES_c310 = {
+    "L1": 512 * 1024,
+    "L0A": 64 * 1024,
+    "L0B": 64 * 1024,
+    "L0C": 256 * 1024,
+    "UB": 248 * 1024,
+    "BIASBUF": 4 * 1024,
+    "FIXBUF": 4 * 1024,
 }
 
 LOCALMEM_CAPACITY_BYTES: dict[Arch, dict[str, int]] = {
-    Arch.C310: dict(_DEFAULT_LOCALMEM_CAPACITY_BYTES_c310),
+    Arch.C310: dict(_LOCALMEM_CAPACITY_BYTES_c310),
 }
 
 KERNEL_TARGETS: dict[tuple[Arch, str], TlaKernelTarget] = {
@@ -88,12 +91,8 @@ KERNEL_TARGETS: dict[tuple[Arch, str], TlaKernelTarget] = {
 }
 
 
-def default_target_arch() -> Arch:
-    return Arch.from_string(resolve_npu_arch(DEFAULT_NPU_ARCH))
-
-
 def get_current_arch() -> Arch:
-    return default_target_arch()
+    return Arch.from_string(resolve_npu_arch(DEFAULT_NPU_ARCH))
 
 
 def parse_arch_scope(arch_scope: str) -> tuple[str, str]:
@@ -164,7 +163,6 @@ __all__ = [
     "KERNEL_TARGETS",
     "LOCALMEM_CAPACITY_BYTES",
     "arch_scope_for_target",
-    "default_target_arch",
     "get_current_arch",
     "get_kernel_target",
     "get_localmem_capacity_bytes",

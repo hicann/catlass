@@ -18,13 +18,12 @@ import torch
 import torch_npu  # noqa: F401
 
 from catlass.types import dtype_size_bytes
-from catlass.base_dsl.arch import get_localmem_capacity_bytes
 
 from examples.end_to_end.common import TilingParams, SwizzleParams
 
 # ---- kernel constants + @tla.kernel ----
-UB_SIZE = get_localmem_capacity_bytes("ub")
-L0C_SIZE = get_localmem_capacity_bytes("cc")
+UB_SIZE = tla.arch.get_capacity_in_bytes(tla.arch.UB)
+L0C_SIZE = tla.arch.get_capacity_in_bytes(tla.arch.L0C)
 BYTE_PER_C0 = 32
 VECTOR_ELE = 256
 

@@ -356,7 +356,7 @@ dst = tla.make_tensor_like(ptr, like=src_tile, layoutTag=tla.arch.RowMajor)
 
 ### `make_ptr`
 
-**Source:** [`catlass.core_api.make_ptr`](../catlass/core_api.py#L6909)
+**Source:** [`catlass.core_api.make_ptr`](../catlass/core_api.py#L6968)
 
 Description:
 
@@ -391,7 +391,7 @@ ptr = tla.make_ptr(tla.Float16, addr, mem_space=tla.AddressSpace.gm)
 
 ### `recast_ptr`
 
-**Source:** [`catlass.core_api.recast_ptr`](../catlass/core_api.py#L6963)
+**Source:** [`catlass.core_api.recast_ptr`](../catlass/core_api.py#L7022)
 
 Description:
 
@@ -643,7 +643,7 @@ Mask creation and tail-mask updates.
 
 #### `create_mask`
 
-**Source:** [`catlass.core_api.create_mask`](../catlass/core_api.py#L7211)
+**Source:** [`catlass.core_api.create_mask`](../catlass/core_api.py#L7280)
 
 Description:
 
@@ -699,7 +699,7 @@ with tla.vec.func(mode="simd"):
 
 #### `update_mask`
 
-**Source:** [`catlass.core_api.update_mask`](../catlass/core_api.py#L7277)
+**Source:** [`catlass.core_api.update_mask`](../catlass/core_api.py#L7346)
 
 Description:
 
@@ -1957,7 +1957,7 @@ Architecture attributes on `tla.arch` (layout tags, pipe identifiers, block help
 
 ### `arch`
 
-**Source:** [`catlass.core_api.arch`](../catlass/core_api.py#L7079)
+**Source:** [`catlass.core_api.arch`](../catlass/core_api.py#L7138)
 
 Description:
 
@@ -1978,7 +1978,7 @@ Parameters:
 - Pipe identifiers (used by `flag` / `pipe_barrier` / `mutex_*` /
   cross-core sync): `SCALAR`, `VECTOR`, `CUBE`, `MTE1`, `MTE2`, `MTE3`, `FIX`.
 - Memory-scope tokens (used by `local_mem_bar` and related APIs): `L1`,
-  `L0A`, `L0B`, `L0C`, `UB`.
+  `L0A`, `L0B`, `L0C`, `UB`, `BIASBUF`, `FIXBUF`.
 - Callables (return `Int32` or `tuple[Int32, Int32, Int32]` as noted):
   - `block_idx()`: Block index for the current AI core in the launch.
   - `block_num()`: Number of blocks (AI cores) in the launch.
@@ -1989,6 +1989,10 @@ Parameters:
     (only inside `tla.vec.func(mode="simt")`).
   - `sync_threads()`: Barrier across threads of the enclosing SIMT
     `tla.vec.func` (only inside `mode="simt"`).
+  - `get_capacity_in_bytes(mem_scope)`: Byte capacity of an on-chip memory
+    space for the compile target. Takes a `tla.arch` memory-scope token (`L1` /
+    `L0A` / `L0B` / `L0C` / `UB` / `BIASBUF` / `FIXBUF`). Returns a plain `int`;
+    valid on host and inside a kernel (folds to a constant).
 
 Constraints:
 
@@ -2011,6 +2015,9 @@ pipe = tla.arch.MTE2
 # Runtime block helpers:
 bid = tla.arch.block_idx()
 nblocks = tla.arch.block_num()
+# On-chip memory capacity (host or kernel side):
+l1_bytes = tla.arch.get_capacity_in_bytes(tla.arch.L1)
+ub_bytes = tla.arch.get_capacity_in_bytes(tla.arch.UB)
 ```
 
 ---
@@ -2021,7 +2028,7 @@ On-chip scratch allocation via `allocate`.
 
 ### `allocate`
 
-**Source:** [`catlass.core_api.allocate`](../catlass/core_api.py#L6847)
+**Source:** [`catlass.core_api.allocate`](../catlass/core_api.py#L6906)
 
 Description:
 
