@@ -121,15 +121,9 @@ python examples/end_to_end/flash_attention_infer/flash_attention_infer.py \
 --- BATCH=(1,117,512) HEAD=(8,1) HEAD_DIM=128 dtype=f16 sentinel=-7.0 ---
 host=torch_npu BATCH=1 Q_SEQ=117 KV_SEQ=512 ...
 O unchanged (sentinel)? False changed_count=... / ...
-dtype=f16 eps=0.007812
-  numerator  (kernel vs truth):   MARE=... MERE=... RMSE=...
-  denominator(benchmark vs truth): MARE=... MERE=... RMSE=...
-  ratio: MARE=... (<=2)  MERE=... (<=1.2)  RMSE=... (<=1.2)
 passed=True cache_key=<cache_key>
 kernel.o=<cache_dir>/<cache_key>/kernel.o
 ```
 
 其中 `passed` 结果为 `True` 或 `False` 表明 NPU 计算结果与精度校验是否通过；`cache_dir` 是缓存目录，`cache_key` 是编译缓存的哈希值。
-
-精度判定采用**双标杆比值法**：以全量 f32 attention 为真值（truth），分块 online softmax 为标杆（benchmark），分别计算 kernel/标杆 相对真值的 MARE/MERE/RMSE，取比值 `分子 / max(分母, eps)`，判定 `MARE 比值 ≤ 2`、`MERE 比值 ≤ 1.2`、`RMSE 比值 ≤ 1.2` 为通过。
 

@@ -108,12 +108,9 @@ kernel launch, start to run...
   kernel 执行完成 (<time>s)
 [Step 4/5] 生成 dense mask 用于 golden...
 [Step 5/5] 计算 golden reference 并比较...
-  [分子] kernel vs 真值:  RMSE=<num_rmse>  MARE=<num_mare>  MERE=<num_mere>
-  [分母] 标杆 vs 真值:    RMSE=<den_rmse>  MARE=<den_mare>  MERE=<den_mere>
-  [比值] floor=<floor>  RMSE=<ratio_rmse>(<=1.2)  MARE=<ratio_mare>(<=2.0)  MERE=<ratio_mere>(<=1.2)
 
-PASS  match_rate=<match_rate>  max_abs=<max_abs>  kernel=<time>s ratio_rmse=<...> ratio_mare=<...> ratio_mere=<...>
+PASS  kernel=<time>s
 ```
 
 - 上述 `<qs>`、`<ks>` 等为占位符，具体依赖外部参数传入。
-- `PASS` / `FAIL` 表明 NPU 计算结果与 golden 参考值精度校验是否通过。精度校验采用双标杆机制：以 `bsa_golden_attn` 为真值，`compute_golden_torch_bsnd` 为标杆，计算 kernel 与真值、标杆与真值的 RMSE / MARE / MERE 比值，判定标准为 `MARE比值 ≤ 2.0`、`MERE比值 ≤ 1.2`、`RMSE比值 ≤ 1.2`。
+- `PASS` / `FAIL` 表明 NPU 计算结果与 golden 参考值精度校验是否通过。

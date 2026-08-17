@@ -13,7 +13,6 @@ from __future__ import annotations
 import math
 from typing import Any
 import catlass.tla as tla
-from catlass.types import dtype_size_bytes
 from dataclasses import dataclass
 
 from catlass.params import MaskStoreParams
@@ -44,12 +43,6 @@ def _ceil_div(curQSeqlen: int, qBaseTile: int) -> int:
 _VL_F32 = 64   # VREG 半精度 lane 数
 _VL_F16 = 128  # 单 AIV 子核一次处理的最大行数
 
-def _elem_bytes(num_elems: int, dtype_tla: Any) -> int:
-    return num_elems * dtype_size_bytes(dtype_tla.dtype)
-
-def _alloc1(allocator: Any, num_elems: int, align: int, space: Any, dtype_tla: Any) -> Any:
-    return tla.recast_ptr(
-        allocator.allocate(_elem_bytes(num_elems, dtype_tla), align, space), dtype=dtype_tla)
 
 @tla.kernel
 def bsa_regular_kernel_arch35(
@@ -240,91 +233,82 @@ def bsa_regular_kernel_arch35(
         tla.cross_core_set_flag(mm2_ready_re_1, tla.arch.VECTOR)
     
     
-    # 片上内存分配：全部 ring buffer 均在此一次性分配
-    # DSL 不支持在 for 循环内分配 buffer => 每份 ring buffer 手动展开，逐份调用 _alloc1。
-    allocator = tla.utils.LocalmemAllocator()
-
+    # 片上内存分配
     # L1 ring buffers
     # Q × Q_L1_BUF(=1, SOLO)
     l1Q_ptrs = [
-        _alloc1(allocator, qBaseTile_ * 128, 512, tla.AddressSpace.l1, DTYPE_Q),
+        tla.allocate(qBaseTile_ * 128, DTYPE_Q, tla.AddressSpace.l1, 512),
     ]
     # K × K_L1_BUF(=2, DUO)
     l1K_ptrs = [
-        _alloc1(allocator, 128 * kvBaseTile_, 512, tla.AddressSpace.l1, DTYPE_K),
-        _alloc1(allocator, 128 * kvBaseTile_, 512, tla.AddressSpace.l1, DTYPE_K),
+        tla.allocate(128 * kvBaseTile_, DTYPE_K, tla.AddressSpace.l1, 512),
+        tla.allocate(128 * kvBaseTile_, DTYPE_K, tla.AddressSpace.l1, 512),
     ]
 
     # P × P_L1_BUF(=3, TRIO)
     l1P_ptrs = [
-        _alloc1(allocator, qBaseTile_ * kvBaseTile_, 512, tla.AddressSpace.l1, DTYPE_P),
-        _alloc1(allocator, qBaseTile_ * kvBaseTile_, 512, tla.AddressSpace.l1, DTYPE_P),
-        _alloc1(allocator, qBaseTile_ * kvBaseTile_, 512, tla.AddressSpace.l1, DTYPE_P),
+        tla.allocate(qBaseTile_ * kvBaseTile_, DTYPE_P, tla.AddressSpace.l1, 512),
+        tla.allocate(qBaseTile_ * kvBaseTile_, DTYPE_P, tla.AddressSpace.l1, 512),
+        tla.allocate(qBaseTile_ * kvBaseTile_, DTYPE_P, tla.AddressSpace.l1, 512),
     ]
     # V × V_L1_BUF(=2, DUO)
     l1V_ptrs = [
-        _alloc1(allocator, kvBaseTile_ * 128, 512, tla.AddressSpace.l1, DTYPE_V),
-        _alloc1(allocator, kvBaseTile_ * 128, 512, tla.AddressSpace.l1, DTYPE_V),
+        tla.allocate(kvBaseTile_ * 128, DTYPE_V, tla.AddressSpace.l1, 512),
+        tla.allocate(kvBaseTile_ * 128, DTYPE_V, tla.AddressSpace.l1, 512),
     ]
 
     # L0 pingpong buffers × L0_STAGES(=2)
     l0a_ptrs = [
-        _alloc1(allocator, L0_TILE_M * L0_TILE_K, 512, tla.AddressSpace.l0a, DTYPE_Q),
-        _alloc1(allocator, L0_TILE_M * L0_TILE_K, 512, tla.AddressSpace.l0a, DTYPE_Q),
+        tla.allocate(L0_TILE_M * L0_TILE_K, DTYPE_Q, tla.AddressSpace.l0a, 512),
+        tla.allocate(L0_TILE_M * L0_TILE_K, DTYPE_Q, tla.AddressSpace.l0a, 512),
     ]
     l0b_ptrs = [
-        _alloc1(allocator, L0_TILE_K * L0_TILE_N, 512, tla.AddressSpace.l0b, DTYPE_K),
-        _alloc1(allocator, L0_TILE_K * L0_TILE_N, 512, tla.AddressSpace.l0b, DTYPE_K),
+        tla.allocate(L0_TILE_K * L0_TILE_N, DTYPE_K, tla.AddressSpace.l0b, 512),
+        tla.allocate(L0_TILE_K * L0_TILE_N, DTYPE_K, tla.AddressSpace.l0b, 512),
     ]
     l0c_ptrs = [
-        _alloc1(allocator, L0_TILE_M * L0_TILE_N, 512, tla.AddressSpace.l0c, DTYPE_ACC),
-        _alloc1(allocator, L0_TILE_M * L0_TILE_N, 512, tla.AddressSpace.l0c, DTYPE_ACC),
-        _alloc1(allocator, L0_TILE_M * L0_TILE_N, 512, tla.AddressSpace.l0c, DTYPE_ACC),
-        _alloc1(allocator, L0_TILE_M * L0_TILE_N, 512, tla.AddressSpace.l0c, DTYPE_ACC),
+        tla.allocate(L0_TILE_M * L0_TILE_N, DTYPE_ACC, tla.AddressSpace.l0c, 512),
+        tla.allocate(L0_TILE_M * L0_TILE_N, DTYPE_ACC, tla.AddressSpace.l0c, 512),
+        tla.allocate(L0_TILE_M * L0_TILE_N, DTYPE_ACC, tla.AddressSpace.l0c, 512),
+        tla.allocate(L0_TILE_M * L0_TILE_N, DTYPE_ACC, tla.AddressSpace.l0c, 512),
     ]
 
     # UB ring buffers × UB_S_OTMP_BUF_STAGES(=2)
     ubS_ptrs = [
-        _alloc1(allocator, qBaseTile_ // 2 * kvBaseTile_, 256, tla.AddressSpace.ub, DTYPE_S),
-        _alloc1(allocator, qBaseTile_ // 2 * kvBaseTile_, 256, tla.AddressSpace.ub, DTYPE_S),
+        tla.allocate(qBaseTile_ // 2 * kvBaseTile_, DTYPE_S, tla.AddressSpace.ub, 256),
+        tla.allocate(qBaseTile_ // 2 * kvBaseTile_, DTYPE_S, tla.AddressSpace.ub, 256),
     ]
 
     ubP_ptrs = [
-        _alloc1(allocator, (qBaseTile_ // 2 + 1) * kvBaseTile_, 256, tla.AddressSpace.ub, DTYPE_P),
-        _alloc1(allocator, (qBaseTile_ // 2 + 1) * kvBaseTile_, 256, tla.AddressSpace.ub, DTYPE_P),
+        tla.allocate((qBaseTile_ // 2 + 1) * kvBaseTile_, DTYPE_P, tla.AddressSpace.ub, 256),
+        tla.allocate((qBaseTile_ // 2 + 1) * kvBaseTile_, DTYPE_P, tla.AddressSpace.ub, 256),
     ]
     ubOTmp_ptrs = [
-        _alloc1(allocator, qBaseTile_ // 2 * 128, 256, tla.AddressSpace.ub, DTYPE_OTMP),
-        _alloc1(allocator, qBaseTile_ // 2 * 128, 256, tla.AddressSpace.ub, DTYPE_OTMP),
+        tla.allocate(qBaseTile_ // 2 * 128, DTYPE_OTMP, tla.AddressSpace.ub, 256),
+        tla.allocate(qBaseTile_ // 2 * 128, DTYPE_OTMP, tla.AddressSpace.ub, 256),
     ]
-    
+
     # UB 单份 buffer：O 累加器 + 行统计标量
-    ubO_ptr = tla.recast_ptr(
-        allocator.allocate(_elem_bytes(qBaseTile_ // 2 * 128, DTYPE_OTMP), 256, tla.AddressSpace.ub), dtype=DTYPE_OTMP)
+    ubO_ptr = tla.allocate(qBaseTile_ // 2 * 128, DTYPE_OTMP, tla.AddressSpace.ub, 256)
     ubO16_ptr = tla.recast_ptr(ubO_ptr, dtype=DTYPE_Q)
-    nowMax_ptr = tla.recast_ptr(     # lmUbTensor
-        allocator.allocate(_elem_bytes(qBaseTile_ // 2, tla.Float32), 256, tla.AddressSpace.ub), dtype=tla.Float32)
+    nowMax_ptr = tla.allocate(qBaseTile_ // 2, tla.Float32, tla.AddressSpace.ub, 256)
     # expMax × P_L1_BUF(=3)：dmUbTensor，跨 prelaunch 延迟按 tile%P_L1_BUF 传给 rescale
     expMax_ptrs = [
-        _alloc1(allocator, qBaseTile_ // 2, 256, tla.AddressSpace.ub, tla.Float32),
-        _alloc1(allocator, qBaseTile_ // 2, 256, tla.AddressSpace.ub, tla.Float32),
-        _alloc1(allocator, qBaseTile_ // 2, 256, tla.AddressSpace.ub, tla.Float32),
+        tla.allocate(qBaseTile_ // 2, tla.Float32, tla.AddressSpace.ub, 256),
+        tla.allocate(qBaseTile_ // 2, tla.Float32, tla.AddressSpace.ub, 256),
+        tla.allocate(qBaseTile_ // 2, tla.Float32, tla.AddressSpace.ub, 256),
     ]
-    nowSum_ptr = tla.recast_ptr(     # llUbTensor
-        allocator.allocate(_elem_bytes(qBaseTile_ // 2, tla.Float32), 256, tla.AddressSpace.ub), dtype=tla.Float32) 
-    lastMax_ptr = tla.recast_ptr(    # gmUbTensor
-        allocator.allocate(_elem_bytes(qBaseTile_ // 2, tla.Float32), 256, tla.AddressSpace.ub), dtype=tla.Float32)
-    lastSum_ptr = tla.recast_ptr(    # glUbTensor
-        allocator.allocate(_elem_bytes(qBaseTile_ // 2, tla.Float32), 256, tla.AddressSpace.ub), dtype=tla.Float32)
+    nowSum_ptr = tla.allocate(qBaseTile_ // 2, tla.Float32, tla.AddressSpace.ub, 256)
+    lastMax_ptr = tla.allocate(qBaseTile_ // 2, tla.Float32, tla.AddressSpace.ub, 256)
+    lastSum_ptr = tla.allocate(qBaseTile_ // 2, tla.Float32, tla.AddressSpace.ub, 256)
     if tla.const_expr(return_lse):
-        ub_lse_ptr = _alloc1(allocator, qBaseTile_ // 2 * 8, 256, tla.AddressSpace.ub, tla.Float32)
+        ub_lse_ptr = tla.allocate(qBaseTile_ // 2 * 8, tla.Float32, tla.AddressSpace.ub, 256)
 
-    mask_ub_ptr = tla.recast_ptr(
-        allocator.allocate(_elem_bytes(qBaseTile_ // 2 * 128, tla.Int32), 256, tla.AddressSpace.ub), dtype=tla.Int32)
-    
-    maskr_ub_ptr = tla.recast_ptr(allocator.allocate(_elem_bytes(64, tla.Int32), 256, tla.AddressSpace.ub), dtype=tla.Int32)
-    holel_ub_ptr = tla.recast_ptr(allocator.allocate(_elem_bytes(64 * 3, tla.Int32), 256, tla.AddressSpace.ub), dtype=tla.Int32)
-    holes_ub_ptr = tla.recast_ptr(allocator.allocate(_elem_bytes(64 * 3, tla.Int32), 256, tla.AddressSpace.ub), dtype=tla.Int32)
+    mask_ub_ptr = tla.allocate(qBaseTile_ // 2 * 128, tla.Int32, tla.AddressSpace.ub, 256)
+
+    maskr_ub_ptr = tla.allocate(64, tla.Int32, tla.AddressSpace.ub, 256)
+    holel_ub_ptr = tla.allocate(64 * 3, tla.Int32, tla.AddressSpace.ub, 256)
+    holes_ub_ptr = tla.allocate(64 * 3, tla.Int32, tla.AddressSpace.ub, 256)
 
     coreIdx = tla.arch.block_idx()
     coreNum = tla.arch.block_num()
@@ -353,7 +337,7 @@ def bsa_regular_kernel_arch35(
     curBatch = 0
     
     curQSeqlen = maxQSeqlen_
-    curKvSeqlen = actualKvseqlen[curBatch] #
+    curKvSeqlen = actualKvseqlen[curBatch]
     curTotalTaskNum = firstBatchTaskNum_
     if tla.const_expr(uniform_tasks_per_batch != 0):
         # 定长 TND：q/kv 长度取 constexpr，跳过运行时 GM 读取与差分
@@ -1824,7 +1808,7 @@ def bsa_regular_kernel_arch35(
                                 tla.cross_core_set_flag(mm2_ready_re_1, tla.arch.VECTOR)
                             if isLastKvSTileDe:
                                 if tla.const_expr(return_lse):
-                                    ##  compute lse = log(lastSum) + lastMax，写回 GM
+                                    #  compute lse = log(lastSum) + lastMax，写回 GM
                                     with tla.vec.func(mode='simd'):
                                         pregFullDee5 = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Float32)
                                         one_mask_de, _ = tla.update_mask(1, dtype=tla.Float32)
@@ -2036,7 +2020,7 @@ def _runtime_kwargs(args: argparse.Namespace) -> dict[str, Any]:
 def _require_torch_npu(device_id: int) -> Any:
     """检查 torch_npu 依赖"""
     try:
-        import torch_npu  # noqa: F401
+        import torch_npu
     except ImportError as exc:
         raise SystemExit("bsa_run --run requires torch_npu.") from exc
     torch.npu.set_device(device_id)
@@ -2053,8 +2037,6 @@ def create_tla_tensor(buf, layout_tag=tla.arch.RowMajor):
 class RunResult:
     name: str
     passed: bool
-    match_rate: float
-    max_abs: float
     info: str = ""
 
 @dataclass
@@ -2718,8 +2700,7 @@ def run_debug(args: argparse.Namespace, spec: MaskSpec, spec_key: str, **kwargs)
     tile_n = kwargs.get('tile_n', 128)
     _verify_mask_consistency(dense_mask_cpu, ko.anymask, max_sq, max_kv, tile_m, tile_n)
 
-    # Step 4b: 双标杆精度校验
-    # 真值 = bsa_golden_attn，标杆 = bsa_ref_attention（通过 compute_golden_torch_bsnd/tnd 调用）
+    # Step 4b: 精度校验
     print("\n[Step 5/5] 计算 golden reference 并比较...")
     scale_val = 1.0 / math.sqrt(float(ko.D))
     op_dtype = ko.query.dtype
@@ -2773,14 +2754,9 @@ def run_debug(args: argparse.Namespace, spec: MaskSpec, spec_key: str, **kwargs)
 
     passed = (ratio_mare <= 2.0) and (ratio_mere <= 1.2) and (ratio_rmse <= 1.2)
 
-    print(f"  [分子] kernel vs 真值:  RMSE={num_rmse:.6e}  MARE={num_mare:.6e}  MERE={num_mere:.6e}")
-    print(f"  [分母] 标杆 vs 真值:    RMSE={den_rmse:.6e}  MARE={den_mare:.6e}  MERE={den_mere:.6e}")
-    print(f"  [比值] floor={floor:.6e}  RMSE={ratio_rmse:.4f}(<=1.2)  MARE={ratio_mare:.4f}(<=2.0)  MERE={ratio_mere:.4f}(<=1.2)")
-
     return RunResult(
         name=ko.display_name, passed=passed,
-        match_rate=1.0 - ratio_mare, max_abs=num_mere,
-        info=f"kernel={ko.kernel_time_s:.3f}s ratio_rmse={ratio_rmse:.3f} ratio_mare={ratio_mare:.3f} ratio_mere={ratio_mere:.3f}",
+        info=f"kernel={ko.kernel_time_s:.3f}s",
     )
 
 def _print_dense_mask(
@@ -2921,7 +2897,7 @@ def run(args: argparse.Namespace) -> int:
         op_dtype=op_dtype,
     )
     tag = "PASS" if res.passed else "FAIL"
-    print(f"\n{tag}  match_rate={res.match_rate:.4f}  max_abs={res.max_abs:.6e}  {res.info}")
+    print(f"\n{tag}  {res.info}")
     return 0 if res.passed else 1
 
 def main() -> int:

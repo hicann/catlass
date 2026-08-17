@@ -1,13 +1,3 @@
-# -----------------------------------------------------------------------------------------------------------
-# Copyright (c) 2026 Huawei Technologies Co., Ltd.
-# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-# CANN Open Software License Agreement Version 2.0 (the "License").
-# Please refer to the License for details. You may not use this file except in compliance with the License.
-# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-# INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-# See LICENSE in the root of the software repository for the full text of the License.
-# -----------------------------------------------------------------------------------------------------------
-
 from __future__ import annotations
 
 import argparse
@@ -86,6 +76,7 @@ PV_KL0_LOOP_NUM = (KV_BLOCK + L0_TILE_K - 1) // L0_TILE_K
 
 UNCHANGED_THRESHOLD = 0.1
 
+
 @tla.kernel
 def flash_attention_infer_kernel(
     mem_q: tla.Tensor,
@@ -98,15 +89,15 @@ def flash_attention_infer_kernel(
     actual_kv_seqlen: tla.Tensor,
 ):
     # QK->softmax (qkReadyFlag, id=0/1, AIC FIX set/wait <-> AIV V wait/set)
-    qk_ready_0 = tla.cross_flag("qk_ready_0", mode=4)
-    qk_ready_1 = tla.cross_flag("qk_ready_1", mode=4)
+    qk_ready_0 = tla.cross_flag("qk_ready_0")
+    qk_ready_1 = tla.cross_flag("qk_ready_1")
     # softmax->PV (softmaxReadyFlag, id=2/3/4, AIV MTE3 set <-> AIC MTE1 wait)
-    sm_ready_mm2_0 = tla.cross_flag("sm_ready_mm2_0", mode=4)
-    sm_ready_mm2_1 = tla.cross_flag("sm_ready_mm2_1", mode=4)
-    sm_ready_mm2_2 = tla.cross_flag("sm_ready_mm2_2", mode=4)
+    sm_ready_mm2_0 = tla.cross_flag("sm_ready_mm2_0")
+    sm_ready_mm2_1 = tla.cross_flag("sm_ready_mm2_1")
+    sm_ready_mm2_2 = tla.cross_flag("sm_ready_mm2_2")
     # PV->rescale (pvReadyFlag, id=5/6, AIC FIX set <-> AIV V wait) — PV fixpipe L0C->UB 后通知 rescale
-    pv_ready_0 = tla.cross_flag("pv_ready_0", mode=4)
-    pv_ready_1 = tla.cross_flag("pv_ready_1", mode=4)
+    pv_ready_0 = tla.cross_flag("pv_ready_0")
+    pv_ready_1 = tla.cross_flag("pv_ready_1")
 
     q_l0a_ready_l1 = tla.flag("q_l0a_ready_l1", tla.arch.MTE1, tla.arch.MTE2)
     q_l1_ready_l0 = tla.flag("q_l1_ready_l0", tla.arch.MTE2, tla.arch.MTE1)
@@ -165,12 +156,10 @@ def flash_attention_infer_kernel(
     l1_k_pong_ptr = tla.allocate(HEAD_DIM * KV_BLOCK, io_dtype, tla.AddressSpace.l1, ALIGNMENT)
     l1_v_ping_ptr = tla.allocate(KV_BLOCK * HEAD_DIM, io_dtype, tla.AddressSpace.l1, ALIGNMENT)
     l1_v_pong_ptr = tla.allocate(KV_BLOCK * HEAD_DIM, io_dtype, tla.AddressSpace.l1, ALIGNMENT)
-    # P L1 buffer: pL1BufNum=3
     l1_p_0_ptr = tla.allocate(Q_BLOCK * KV_BLOCK, io_dtype, tla.AddressSpace.l1, ALIGNMENT)
     l1_p_1_ptr = tla.allocate(Q_BLOCK * KV_BLOCK, io_dtype, tla.AddressSpace.l1, ALIGNMENT)
     l1_p_2_ptr = tla.allocate(Q_BLOCK * KV_BLOCK, io_dtype, tla.AddressSpace.l1, ALIGNMENT)
 
-    # L0A/L0B ping/pong 各 2 份, QK/PV 共用，全局递增
     l0a_ping_ptr = tla.allocate(L0_HALF_SIZE // 2, io_dtype, tla.AddressSpace.l0a, ALIGNMENT)
     l0a_pong_ptr = tla.allocate(L0_HALF_SIZE // 2, io_dtype, tla.AddressSpace.l0a, ALIGNMENT)
     l0b_ping_ptr = tla.allocate(L0_HALF_SIZE // 2, io_dtype, tla.AddressSpace.l0b, ALIGNMENT)
@@ -178,30 +167,24 @@ def flash_attention_infer_kernel(
 
     l0_s_ping_ptr = tla.allocate(Q_BLOCK * KV_BLOCK, tla.Float32, tla.AddressSpace.l0c, ALIGNMENT)
     l0_s_pong_ptr = tla.allocate(Q_BLOCK * KV_BLOCK, tla.Float32, tla.AddressSpace.l0c, ALIGNMENT)
-
     l0_pv_ping_ptr = tla.allocate(Q_BLOCK * HEAD_DIM, tla.Float32, tla.AddressSpace.l0c, ALIGNMENT)
     l0_pv_pong_ptr = tla.allocate(Q_BLOCK * HEAD_DIM, tla.Float32, tla.AddressSpace.l0c, ALIGNMENT)
 
     ub_s_ping_ptr = tla.allocate(Q_BLOCK_SUB * KV_BLOCK, tla.Float32, tla.AddressSpace.ub, ALIGNMENT)
     ub_s_pong_ptr = tla.allocate(Q_BLOCK_SUB * KV_BLOCK, tla.Float32, tla.AddressSpace.ub, ALIGNMENT)
-    # P buffer (zN布局, Q_BLOCK_SUB+1 padding 用于 BlockStoreParams)
     ub_p_f16_ping_ptr = tla.allocate((Q_BLOCK_SUB + 1) * KV_BLOCK, io_dtype, tla.AddressSpace.ub, ALIGNMENT)
     ub_p_f16_pong_ptr = tla.allocate((Q_BLOCK_SUB + 1) * KV_BLOCK, io_dtype, tla.AddressSpace.ub, ALIGNMENT)
-
     ub_pv_ping_ptr = tla.allocate(Q_BLOCK_SUB * HEAD_DIM, tla.Float32, tla.AddressSpace.ub, ALIGNMENT)
     ub_pv_pong_ptr = tla.allocate(Q_BLOCK_SUB * HEAD_DIM, tla.Float32, tla.AddressSpace.ub, ALIGNMENT)
 
     ub_acc_ptr = tla.allocate(Q_BLOCK_SUB * HEAD_DIM, tla.Float32, tla.AddressSpace.ub, ALIGNMENT)
-
-    ub_out_f16_ptr = tla.allocate(Q_BLOCK_SUB * HEAD_DIM, io_dtype, tla.AddressSpace.ub, ALIGNMENT)
+    ub_out_f16_ptr = tla.recast_ptr(ub_acc_ptr, dtype=io_dtype)
 
     ub_now_max_ptr = tla.allocate(Q_BLOCK_SUB, tla.Float32, tla.AddressSpace.ub, ALIGNMENT)
     ub_last_max_ptr = tla.allocate(Q_BLOCK_SUB, tla.Float32, tla.AddressSpace.ub, ALIGNMENT)
     ub_sum_ptr = tla.allocate(Q_BLOCK_SUB, tla.Float32, tla.AddressSpace.ub, ALIGNMENT)
     ub_tmp_ptr = tla.allocate(2 * VL_FLOAT_ELE, tla.Float32, tla.AddressSpace.ub, ALIGNMENT)
-    # mask占位
     ub_mask_ptr = tla.allocate(Q_BLOCK_SUB * KV_BLOCK, tla.Int8, tla.AddressSpace.ub, ALIGNMENT)
-
     ub_exp_sum_ptr = tla.allocate(Q_BLOCK_SUB, tla.Float32, tla.AddressSpace.ub, ALIGNMENT)
     ub_exp_max_0_ptr = tla.allocate(Q_BLOCK_SUB, tla.Float32, tla.AddressSpace.ub, ALIGNMENT)
     ub_exp_max_1_ptr = tla.allocate(Q_BLOCK_SUB, tla.Float32, tla.AddressSpace.ub, ALIGNMENT)
@@ -242,23 +225,16 @@ def flash_attention_infer_kernel(
         tla.set_flag(fix_ready_mmad_pv_0)
         tla.set_flag(fix_ready_mmad_pv_1)
 
-        tla.cross_core_set_flag(sm_ready_mm2_0, tla.arch.MTE1, aiv_id=0)
-        tla.cross_core_set_flag(sm_ready_mm2_0, tla.arch.MTE1, aiv_id=1)
-        tla.cross_core_set_flag(sm_ready_mm2_1, tla.arch.MTE1, aiv_id=0)
-        tla.cross_core_set_flag(sm_ready_mm2_1, tla.arch.MTE1, aiv_id=1)
-        tla.cross_core_set_flag(sm_ready_mm2_2, tla.arch.MTE1, aiv_id=0)
-        tla.cross_core_set_flag(sm_ready_mm2_2, tla.arch.MTE1, aiv_id=1)
+        tla.cross_core_set_flag(sm_ready_mm2_0, tla.arch.MTE1)
+        tla.cross_core_set_flag(sm_ready_mm2_1, tla.arch.MTE1)
+        tla.cross_core_set_flag(sm_ready_mm2_2, tla.arch.MTE1)
 
     with tla.vector():
-        tla.cross_core_set_flag(qk_ready_0, tla.arch.VECTOR, aiv_id=0)
-        tla.cross_core_set_flag(qk_ready_0, tla.arch.VECTOR, aiv_id=1)
-        tla.cross_core_set_flag(qk_ready_1, tla.arch.VECTOR, aiv_id=0)
-        tla.cross_core_set_flag(qk_ready_1, tla.arch.VECTOR, aiv_id=1)
+        tla.cross_core_set_flag(qk_ready_0, tla.arch.VECTOR)
+        tla.cross_core_set_flag(qk_ready_1, tla.arch.VECTOR)
 
-        tla.cross_core_set_flag(pv_ready_0, tla.arch.VECTOR, aiv_id=0)
-        tla.cross_core_set_flag(pv_ready_0, tla.arch.VECTOR, aiv_id=1)
-        tla.cross_core_set_flag(pv_ready_1, tla.arch.VECTOR, aiv_id=0)
-        tla.cross_core_set_flag(pv_ready_1, tla.arch.VECTOR, aiv_id=1)
+        tla.cross_core_set_flag(pv_ready_0, tla.arch.VECTOR)
+        tla.cross_core_set_flag(pv_ready_1, tla.arch.VECTOR)
 
         tla.set_flag(mte3_ready_softmax_0)
         tla.set_flag(mte3_ready_softmax_1)
@@ -366,133 +342,113 @@ def flash_attention_infer_kernel(
                     l1_q = tla.make_tensor_like(l1_q_ptr, q_gm)
                     l1_k = tla.make_tensor_like(l1_k_ptr, k_gm, layoutTag=tla.arch.nZ)
 
-                    for nL0Itr in tla.range(c0, QK_NL0_LOOP_NUM, c1):
-                        nLoopCounter = nL0Itr * QK_NL0_LOOP_NUM + nL0Itr
-                        l0c_s = tla.make_tensor_like(l0_s_ptr, k_gm, tla.arch.L0Clayout)
-                        s_ub = tla.make_tensor(ub_s_ptr,
-                                                tla.make_layout(
-                                                    tla.make_shape(q_tile_size, kv_tile_size),
-                                                    tla.make_stride(KV_BLOCK, 1)
-                                                ))
-                        ub_s_fix = tla.tile_view(
-                            s_ub,
-                            tla.make_shape(Q_BLOCK, KV_BLOCK),
-                            tla.make_coord(c0, c0),
-                        )
+                    # QK L0: 扁平化（QK_NL0_LOOP_NUM=QK_ML0_LOOP_NUM=QK_KL0_LOOP_NUM=1）
+                    l0c_s = tla.make_tensor_like(l0_s_ptr, k_gm, tla.arch.L0Clayout)
+                    s_ub = tla.make_tensor(ub_s_ptr,
+                                            tla.make_layout(
+                                                tla.make_shape(q_tile_size, kv_tile_size),
+                                                tla.make_stride(KV_BLOCK, 1)
+                                            ))
+                    ub_s_fix = tla.tile_view(
+                        s_ub,
+                        tla.make_shape(Q_BLOCK, KV_BLOCK),
+                        tla.make_coord(c0, c0),
+                    )
 
-                        if l1BBufId == c0:
-                            tla.wait_flag(k_l0b_ready_l1_0)
-                        else:
-                            tla.wait_flag(k_l0b_ready_l1_1)
-                        tla.copy(l1_k, k_gm)
-                        if l1BBufId == c0:
-                            tla.set_flag(k_l1_ready_l0_0)
-                        else:
-                            tla.set_flag(k_l1_ready_l0_1)
-
-                        for mL0Itr in tla.range(c0, QK_ML0_LOOP_NUM, c1):
-                            for kL0Itr in tla.range(c0, QK_KL0_LOOP_NUM, c1):
-                                l0ALoopCounter = prefixSumL0AStages + mL0Itr * QK_KL0_LOOP_NUM + kL0Itr
-                                l0BLoopCounter = prefixSumL0BStages + nLoopCounter * QK_KL0_LOOP_NUM + kL0Itr
-                                l0ABufId = l0ALoopCounter % L0_STAGES
-                                l0BBufId_l0 = l0BLoopCounter % L0_STAGES
-                                l0_q_ptr = l0a_ping_ptr if l0ABufId == c0 else l0a_pong_ptr
-                                l0_k_ptr = l0b_ping_ptr if l0BBufId_l0 == c0 else l0b_pong_ptr
-                                l0_q = tla.make_tensor_like(l0_q_ptr, l1_q)
-                                l0_k = tla.make_tensor_like(l0_k_ptr, l1_k)
-
-                                if l0ABufId == c0:
-                                    tla.wait_flag(mmad_ready_l0a_0)
-                                else:
-                                    tla.wait_flag(mmad_ready_l0a_1)
-                                tla.copy(l0_q, l1_q)
-                                if l0ABufId == c0:
-                                    tla.set_flag(l0a_ready_mmad_0)
-                                else:
-                                    tla.set_flag(l0a_ready_mmad_1)
-
-                                if l0BBufId_l0 == c0:
-                                    tla.wait_flag(mmad_ready_l0b_0)
-                                else:
-                                    tla.wait_flag(mmad_ready_l0b_1)
-                                # 首次L1->L0B 需等 K L1 搬运完成
-                                if mL0Itr == c0 and kL0Itr == c0:
-                                    if l1BBufId == c0:
-                                        tla.wait_flag(k_l1_ready_l0_0)
-                                    else:
-                                        tla.wait_flag(k_l1_ready_l0_1)
-                                tla.copy(l0_k, l1_k)
-                                if l0BBufId_l0 == c0:
-                                    tla.set_flag(l0b_ready_mmad_0)
-                                else:
-                                    tla.set_flag(l0b_ready_mmad_1)
-                                # 末次L1->L0B 释放 K L1 给下一base tile
-                                if mL0Itr == (QK_ML0_LOOP_NUM - c1) and kL0Itr == (QK_KL0_LOOP_NUM - c1):
-                                    if l1BBufId == c0:
-                                        tla.set_flag(k_l0b_ready_l1_0)
-                                    else:
-                                        tla.set_flag(k_l0b_ready_l1_1)
-
-                                if l0ABufId == c0:
-                                    tla.wait_flag(l0a_ready_mmad_0)
-                                else:
-                                    tla.wait_flag(l0a_ready_mmad_1)
-                                if l0BBufId_l0 == c0:
-                                    tla.wait_flag(l0b_ready_mmad_0)
-                                else:
-                                    tla.wait_flag(l0b_ready_mmad_1)
-
-                                if mL0Itr == c0 and kL0Itr == c0:
-                                    if l0CBufId == c0:
-                                        tla.wait_flag(fix_ready_mmad_qk_0)
-                                    else:
-                                        tla.wait_flag(fix_ready_mmad_qk_1)
-                                tla.mmad(l0c_s, l0_q, l0_k, init_c=True)
-                                if l0ABufId == c0:
-                                    tla.set_flag(mmad_ready_l0a_0)
-                                else:
-                                    tla.set_flag(mmad_ready_l0a_1)
-                                if l0BBufId_l0 == c0:
-                                    tla.set_flag(mmad_ready_l0b_0)
-                                else:
-                                    tla.set_flag(mmad_ready_l0b_1)
-
-                        if nL0Itr == c0:
-                            if ubSBufId == c0:
-                                tla.cross_core_wait_flag(qk_ready_0, tla.arch.FIX, aiv_id=0)
-                                tla.cross_core_wait_flag(qk_ready_0, tla.arch.FIX, aiv_id=1)
-                            else:
-                                tla.cross_core_wait_flag(qk_ready_1, tla.arch.FIX, aiv_id=0)
-                                tla.cross_core_wait_flag(qk_ready_1, tla.arch.FIX, aiv_id=1)
-                        if l0CBufId == c0:
-                            tla.set_flag(mmad_ready_fix_qk_0)
-                            tla.wait_flag(mmad_ready_fix_qk_0)
-                        else:
-                            tla.set_flag(mmad_ready_fix_qk_1)
-                            tla.wait_flag(mmad_ready_fix_qk_1)
-                        tla.copy(ub_s_fix, l0c_s, tla.params.CopyL0C2DstParams(
-                            l0c2ub_mode=tla.params.L0C2UBMode.SPLIT_M
-                        ))
-                        if l0CBufId == c0:
-                            tla.set_flag(fix_ready_mmad_qk_0)
-                        else:
-                            tla.set_flag(fix_ready_mmad_qk_1)
-                    if ubSBufId == c0:
-                        tla.cross_core_set_flag(qk_ready_0, tla.arch.FIX, aiv_id=0)
-                        tla.cross_core_set_flag(qk_ready_0, tla.arch.FIX, aiv_id=1)
+                    if l1BBufId == c0:
+                        tla.wait_flag(k_l0b_ready_l1_0)
                     else:
-                        tla.cross_core_set_flag(qk_ready_1, tla.arch.FIX, aiv_id=0)
-                        tla.cross_core_set_flag(qk_ready_1, tla.arch.FIX, aiv_id=1)
+                        tla.wait_flag(k_l0b_ready_l1_1)
+                    tla.copy(l1_k, k_gm)
+                    if l1BBufId == c0:
+                        tla.set_flag(k_l1_ready_l0_0)
+                        tla.wait_flag(k_l1_ready_l0_0)
+                    else:
+                        tla.set_flag(k_l1_ready_l0_1)
+                        tla.wait_flag(k_l1_ready_l0_1)
+
+                    l0ABufId = prefixSumL0AStages % L0_STAGES
+                    l0BBufId_l0 = prefixSumL0BStages % L0_STAGES
+                    l0_q_ptr = l0a_ping_ptr if l0ABufId == c0 else l0a_pong_ptr
+                    l0_k_ptr = l0b_ping_ptr if l0BBufId_l0 == c0 else l0b_pong_ptr
+                    l0_q = tla.make_tensor_like(l0_q_ptr, l1_q)
+                    l0_k = tla.make_tensor_like(l0_k_ptr, l1_k)
+
+                    if l0BBufId_l0 == c0:
+                        tla.wait_flag(mmad_ready_l0b_0)
+                    else:
+                        tla.wait_flag(mmad_ready_l0b_1)
+                    tla.copy(l0_k, l1_k)
+                    if l0BBufId_l0 == c0:
+                        tla.set_flag(l0b_ready_mmad_0)
+                    else:
+                        tla.set_flag(l0b_ready_mmad_1)
+                    if l1BBufId == c0:
+                        tla.set_flag(k_l0b_ready_l1_0)
+                    else:
+                        tla.set_flag(k_l0b_ready_l1_1)
+
+                    if l0ABufId == c0:
+                        tla.wait_flag(mmad_ready_l0a_0)
+                    else:
+                        tla.wait_flag(mmad_ready_l0a_1)
+                    tla.copy(l0_q, l1_q)
+                    if l0ABufId == c0:
+                        tla.set_flag(l0a_ready_mmad_0)
+                    else:
+                        tla.set_flag(l0a_ready_mmad_1)
+
+                    if l0ABufId == c0:
+                        tla.wait_flag(l0a_ready_mmad_0)
+                    else:
+                        tla.wait_flag(l0a_ready_mmad_1)
+                    if l0BBufId_l0 == c0:
+                        tla.wait_flag(l0b_ready_mmad_0)
+                    else:
+                        tla.wait_flag(l0b_ready_mmad_1)
+                    if l0CBufId == c0:
+                        tla.wait_flag(fix_ready_mmad_qk_0)
+                    else:
+                        tla.wait_flag(fix_ready_mmad_qk_1)
+                    tla.mmad(l0c_s, l0_q, l0_k, init_c=True)
+                    if l0ABufId == c0:
+                        tla.set_flag(mmad_ready_l0a_0)
+                    else:
+                        tla.set_flag(mmad_ready_l0a_1)
+                    if l0BBufId_l0 == c0:
+                        tla.set_flag(mmad_ready_l0b_0)
+                    else:
+                        tla.set_flag(mmad_ready_l0b_1)
+
+                    if ubSBufId == c0:
+                        tla.cross_core_wait_flag(qk_ready_0, tla.arch.FIX)
+                    else:
+                        tla.cross_core_wait_flag(qk_ready_1, tla.arch.FIX)
+                    if l0CBufId == c0:
+                        tla.set_flag(mmad_ready_fix_qk_0)
+                        tla.wait_flag(mmad_ready_fix_qk_0)
+                    else:
+                        tla.set_flag(mmad_ready_fix_qk_1)
+                        tla.wait_flag(mmad_ready_fix_qk_1)
+                    tla.copy(ub_s_fix, l0c_s, tla.params.CopyL0C2DstParams(
+                        l0c2ub_mode=tla.params.L0C2UBMode.SPLIT_M
+                    ))
+                    if l0CBufId == c0:
+                        tla.set_flag(fix_ready_mmad_qk_0)
+                    else:
+                        tla.set_flag(fix_ready_mmad_qk_1)
+                    if ubSBufId == c0:
+                        tla.cross_core_set_flag(qk_ready_0, tla.arch.FIX)
+                    else:
+                        tla.cross_core_set_flag(qk_ready_1, tla.arch.FIX)
                     if kv_iter == (kv_block_count_cur - c1):
                         tla.set_flag(q_l0a_ready_l1)
 
                 with tla.vector():
                     if ubSBufId == c0:
-                        tla.cross_core_wait_flag(qk_ready_0, tla.arch.VECTOR, aiv_id=0)
-                        tla.cross_core_wait_flag(qk_ready_0, tla.arch.VECTOR, aiv_id=1)
+                        tla.cross_core_wait_flag(qk_ready_0, tla.arch.VECTOR)
                     else:
-                        tla.cross_core_wait_flag(qk_ready_1, tla.arch.VECTOR, aiv_id=0)
-                        tla.cross_core_wait_flag(qk_ready_1, tla.arch.VECTOR, aiv_id=1)
+                        tla.cross_core_wait_flag(qk_ready_1, tla.arch.VECTOR)
                     if ubSBufId == c0:
                         tla.wait_flag(mte3_ready_softmax_0)
                     else:
@@ -529,24 +485,6 @@ def flash_attention_infer_kernel(
                         ),
                     )
 
-                    # Mask占位
-                    mem_mask_block = tla.make_tensor(
-                        mem_mask.ptr
-                        + (q_block_idx * Q_BLOCK + vec_idx * q_tile_size_half) * max_kv_seqlen
-                        + kv_iter * KV_BLOCK,
-                        tla.make_layout(tla.make_shape(q_tile_size_sub, kv_tile_size), tla.make_stride(max_kv_seqlen, 1)),
-                    )
-                    ub_mask_sub = tla.make_tensor(
-                        ub_mask_ptr,
-                        tla.make_layout(tla.make_shape(q_tile_size_sub, kv_tile_size), tla.make_stride(KV_BLOCK, 1)),
-                    )
-                    tla.copy(ub_mask_sub, mem_mask_block)
-                    tla.set_flag(mask_copy_end)
-                    tla.wait_flag(mask_copy_end)
-                    ub_mask = tla.make_tensor(
-                        ub_mask_ptr,
-                        tla.make_layout(tla.make_shape(q_tile_size_sub, kv_tile_size), tla.make_stride(KV_BLOCK, 1)),
-                    )
                     ub_now_max = tla.make_tensor(
                         ub_now_max_ptr,
                         tla.make_layout(tla.make_shape(q_tile_size_sub), tla.make_stride(1))
@@ -584,122 +522,185 @@ def flash_attention_infer_kernel(
                         tla.make_layout(tla.make_shape(2 * VL_FLOAT_ELE), tla.make_stride(1)),
                     )
 
-                    remaining = kv_tile_size % VL_FLOAT_ELE
-                    # Phase 1: scale*qk + mask, compute block_max
-                    with tla.vec.func(mode='simd'):
-                        reduce_mask = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Float32)
-                        one_mask_p1, _ = tla.update_mask(1, dtype=tla.Float32)
-                        mask_tail_n, _ = tla.update_mask(remaining, dtype=tla.Float32)
-                        min_reg = tla.full(MIN_VALUE, dtype=tla.Float32)
-                        for i0 in tla.range(q_tile_size_sub):
-                            if kv_tile_size > VL_FLOAT_ELE:
-                                ub_s_i0 = tla.tile_view(ub_s, tla.make_shape(1, VL_FLOAT_ELE), tla.make_coord(i0, c0))
-                                ub_s_i1 = tla.tile_view(ub_s, tla.make_shape(1, VL_FLOAT_ELE), tla.make_coord(i0, c1))
-                                ub_s_reg0_if0 = ub_s_i0.load()
-                                ub_s_reg1_if0 = ub_s_i1.load()
-                                ub_s_reg0_if0 = tla.mul(ub_s_reg0_if0, QK_SCALE, mask=reduce_mask)
-                                ub_s_reg1_if0 = tla.mul(ub_s_reg1_if0, QK_SCALE, mask=reduce_mask)
-                                if kv_tile_size < KV_BLOCK:
-                                    ub_s_reg1_if0 = tla.where(mask_tail_n, ub_s_reg1_if0, min_reg)
-                                ub_s_i0.store(ub_s_reg0_if0, mask=reduce_mask)
-                                ub_s_i1.store(ub_s_reg1_if0, mask=reduce_mask)
-                                tmp_reg_if0 = tla.max(ub_s_reg0_if0, ub_s_reg1_if0, mask=reduce_mask)
-                                max_reg_if0 = tmp_reg_if0.reduce(tla.ReductionOp.MAX, mask=reduce_mask)
-                                ub_max_dst_if0 = tla.tile_view(ub_now_max, tla.make_shape(1), tla.make_coord(i0))
-                                if kv_iter == c0:
-                                    ub_max_dst_if0.store(max_reg_if0, params=UnalignStoreParams(), mask=one_mask_p1)
-                                else:
-                                    ub_max_dst_if0 = tla.tile_view(ub_last_max, tla.make_shape(1), tla.make_coord(i0))
-                                    ub_max_dst_if0.store(max_reg_if0, params=UnalignStoreParams(), mask=one_mask_p1)
-                            else:
-                                ub_s_i0 = tla.tile_view(ub_s, tla.make_shape(1, VL_FLOAT_ELE), tla.make_coord(i0, c0))
-                                ub_s_reg0_if0 = ub_s_i0.load()
-                                ub_s_reg0_if0 = tla.mul(ub_s_reg0_if0, QK_SCALE, mask=reduce_mask)
-                                if kv_tile_size < VL_FLOAT_ELE:
-                                    ub_s_reg0_if0 = tla.where(mask_tail_n, ub_s_reg0_if0, min_reg)
-                                ub_s_i0.store(ub_s_reg0_if0, mask=reduce_mask)
-                                max_reg_if0 = ub_s_reg0_if0.reduce(tla.ReductionOp.MAX, mask=reduce_mask)
-                                ub_max_dst_if0 = tla.tile_view(ub_now_max, tla.make_shape(1), tla.make_coord(i0))
-                                if kv_iter == c0:
-                                    ub_max_dst_if0.store(max_reg_if0, params=UnalignStoreParams(), mask=one_mask_p1)
-                                else:
-                                    ub_max_dst_if0 = tla.tile_view(ub_last_max, tla.make_shape(1), tla.make_coord(i0))
-                                    ub_max_dst_if0.store(max_reg_if0, params=UnalignStoreParams(), mask=one_mask_p1)
-
-                    # Phase 1b: UpdateMax (if update)
-                    if update:
-                        with tla.vec.func(mode='simd'):
-                            pregFull_um = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Float32)
-                            one_mask_um, _ = tla.update_mask(1, dtype=tla.Float32)
-                            for i1 in tla.range(q_tile_size_sub):
-                                ub_now_max_i_if0 = tla.tile_view(ub_now_max, tla.make_shape(1), tla.make_coord(i1))
-                                ub_last_max_i_if0 = tla.tile_view(ub_last_max, tla.make_shape(1), tla.make_coord(i1))
-                                now_reg_if0 = ub_now_max_i_if0.load(params=NormalLoadParams(load_dist=LoadDist.DIST_BRC_B32))
-                                last_reg_if0 = ub_last_max_i_if0.load(params=NormalLoadParams(load_dist=LoadDist.DIST_BRC_B32))
-                                global_max_if0 = tla.max(now_reg_if0, last_reg_if0, mask=pregFull_um)
-                                ub_now_max_i_if0.store(global_max_if0, params=UnalignStoreParams(), mask=one_mask_um)
-                                ub_last_max_i_if0.store(now_reg_if0, params=UnalignStoreParams(), mask=one_mask_um)
-
-                    # Phase 2: exp(s - global_max), store back to ub_s, block_sum
-                    with tla.vec.func(mode='simd'):
-                        reduce_mask = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Float32)
-                        one_mask_p2, _ = tla.update_mask(1, dtype=tla.Float32)
-                        for i2 in tla.range(q_tile_size_sub):
-                            ub_now_max_i = tla.tile_view(ub_now_max, tla.make_shape(1), tla.make_coord(i2))
-                            max_reg = ub_now_max_i.load(params=NormalLoadParams(load_dist=LoadDist.DIST_BRC_B32))
-                            if kv_tile_size > VL_FLOAT_ELE:
-                                ub_s_i0 = tla.tile_view(ub_s, tla.make_shape(1, VL_FLOAT_ELE), tla.make_coord(i2, c0))
-                                ub_s_i1 = tla.tile_view(ub_s, tla.make_shape(1, VL_FLOAT_ELE), tla.make_coord(i2, c1))
-                                ub_s_reg0 = ub_s_i0.load()
-                                ub_s_reg1 = ub_s_i1.load()
-                                exp_reg0 = tla.sub(ub_s_reg0, max_reg, mask=reduce_mask)
-                                exp_reg1 = tla.sub(ub_s_reg1, max_reg, mask=reduce_mask)
-                                exp_reg0 = tla.exp(exp_reg0, mask=reduce_mask)
-                                exp_reg1 = tla.exp(exp_reg1, mask=reduce_mask)
-                                ub_s_i0.store(exp_reg0, mask=reduce_mask)
-                                ub_s_i1.store(exp_reg1, mask=reduce_mask)
-                                tmp_reg = tla.add(exp_reg0, exp_reg1, mask=reduce_mask)
-                                block_sum_reg = tmp_reg.reduce(tla.ReductionOp.ADD, mask=reduce_mask)
-                                if kv_iter == c0:
-                                    ub_sum_i = tla.tile_view(ub_sum, tla.make_shape(1), tla.make_coord(i2))
-                                    ub_sum_i.store(block_sum_reg, params=UnalignStoreParams(), mask=one_mask_p2)
-                                else:
-                                    ub_exp_sum_i = tla.tile_view(ub_exp_sum, tla.make_shape(1), tla.make_coord(i2))
-                                    ub_exp_sum_i.store(block_sum_reg, params=UnalignStoreParams(), mask=one_mask_p2)
-                            else:
-                                ub_s_i0 = tla.tile_view(ub_s, tla.make_shape(1, VL_FLOAT_ELE), tla.make_coord(i2, c0))
-                                ub_s_reg0 = ub_s_i0.load()
-                                exp_reg0 = tla.sub(ub_s_reg0, max_reg, mask=reduce_mask)
-                                exp_reg0 = tla.exp(exp_reg0, mask=reduce_mask)
-                                ub_s_i0.store(exp_reg0, mask=reduce_mask)
-                                block_sum_reg = exp_reg0.reduce(tla.ReductionOp.ADD, mask=reduce_mask)
-                                if kv_iter == c0:
-                                    ub_sum_i = tla.tile_view(ub_sum, tla.make_shape(1), tla.make_coord(i2))
-                                    ub_sum_i.store(block_sum_reg, params=UnalignStoreParams(), mask=one_mask_p2)
-                                else:
-                                    ub_exp_sum_i = tla.tile_view(ub_exp_sum, tla.make_shape(1), tla.make_coord(i2))
-                                    ub_exp_sum_i.store(block_sum_reg, params=UnalignStoreParams(), mask=one_mask_p2)
-
-                    # Phase 3: cast f32->f16, DINTLV+cast+bitwise_or store zNUnAlign P
-                    with tla.vec.func(mode='simd'):
-                        pregFull = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Float32)
-                        preg_all_b16 = tla.create_mask(pattern=tla.mask.ALL, dtype=io_dtype)
-                        for i3 in tla.range(q_tile_size_sub):
-                            if kv_tile_size > VL_FLOAT_ELE:
-                                ub_s_row = tla.tile_view(ub_s, tla.make_shape(1, 2 * VL_FLOAT_ELE), tla.make_coord(i3, c0))
-                                s_odd_reg, s_even_reg = ub_s_row.load(params=NormalLoadParams(load_dist=LoadDist.DIST_DINTLV_B32))
-                                p_even_reg = s_even_reg.to(io_dtype, cast_trait_one, mask=pregFull)
-                                p_odd_reg = s_odd_reg.to(io_dtype, cast_trait_zero, mask=pregFull)
-                                p_zn_reg = tla.bitwise_or(p_even_reg, p_odd_reg, mask=preg_all_b16)
-                                ub_p_zn_i0 = tla.tile_view(ub_p_zN, tla.make_shape(1, 2 * VL_FLOAT_ELE), tla.make_coord(i3, c0))
-                                ub_p_zn_i0.store(p_zn_reg, params=tla.params.BlockStoreParams(block_stride=Q_BLOCK_SUB + 1), mask=preg_all_b16)
-                            else:
-                                ub_s_i0 = tla.tile_view(ub_s, tla.make_shape(1, VL_FLOAT_ELE), tla.make_coord(i3, c0))
-                                a_reg0 = ub_s_i0.load()
-                                p_reg0 = a_reg0.to(io_dtype, cast_trait_zero, mask=pregFull)
-                                r0_qk, _ = tla.deinterleave(p_reg0, p_reg0)
-                                ub_p_zn_i0 = tla.tile_view(ub_p_zN, tla.make_shape(1, 2 * VL_FLOAT_ELE), tla.make_coord(i3, c0))
-                                ub_p_zn_i0.store(r0_qk, params=tla.params.BlockStoreParams(block_stride=Q_BLOCK_SUB + 1), mask=preg_all_b16)
+                    tailN = (kv_tile_size - 1) % VL_FLOAT_ELE + 1
+                    if kv_iter == c0:
+                        if kv_tile_size > VL_FLOAT_ELE:
+                            with tla.vec.func(mode='simd'):
+                                pregFull = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Float32)
+                                preg_all_b16 = tla.create_mask(pattern=tla.mask.ALL, dtype=io_dtype)
+                                one_mask = tla.update_mask(1, dtype=tla.Float32)[0]
+                                mask_tail_n = tla.update_mask(tailN, dtype=tla.Float32)[0]
+                                min_reg = tla.full(MIN_VALUE, dtype=tla.Float32)
+                                for i0 in tla.range(q_tile_size_sub):
+                                    ub_s_i0_p1 = tla.tile_view(ub_s, tla.make_shape(1, VL_FLOAT_ELE), tla.make_coord(i0, c0))
+                                    ub_s_i1_p1 = tla.tile_view(ub_s, tla.make_shape(1, VL_FLOAT_ELE), tla.make_coord(i0, c1))
+                                    ub_s_reg0_p1 = ub_s_i0_p1.load()
+                                    ub_s_reg1_p1 = ub_s_i1_p1.load()
+                                    ub_s_reg0_p1 = tla.mul(ub_s_reg0_p1, QK_SCALE, mask=pregFull)
+                                    ub_s_reg1_p1 = tla.mul(ub_s_reg1_p1, QK_SCALE, mask=pregFull)
+                                    ub_s_reg1_p1 = tla.where(mask_tail_n, ub_s_reg1_p1, min_reg)
+                                    ub_s_i0_p1.store(ub_s_reg0_p1, mask=pregFull)
+                                    ub_s_i1_p1.store(ub_s_reg1_p1, mask=pregFull)
+                                    tmp_reg_p1 = tla.max(ub_s_reg0_p1, ub_s_reg1_p1, mask=pregFull)
+                                    max_reg_p1 = tmp_reg_p1.reduce(tla.ReductionOp.MAX, mask=pregFull)
+                                    ub_max_dst_p1 = tla.tile_view(ub_now_max, tla.make_shape(1), tla.make_coord(i0))
+                                    ub_max_dst_p1.store(max_reg_p1, params=UnalignStoreParams(), mask=one_mask)
+                                tla.local_mem_bar(tla.params.MemType.VEC_STORE, tla.params.MemType.VEC_LOAD)
+                                for i2 in tla.range(q_tile_size_sub):
+                                    ub_now_max_i_p2 = tla.tile_view(ub_now_max, tla.make_shape(1), tla.make_coord(i2))
+                                    max_reg_p2 = ub_now_max_i_p2.load(params=NormalLoadParams(load_dist=LoadDist.DIST_BRC_B32))
+                                    ub_s_row_p2 = tla.tile_view(ub_s, tla.make_shape(1, 2 * VL_FLOAT_ELE), tla.make_coord(i2, c0))
+                                    s_odd_p2, s_even_p2 = ub_s_row_p2.load(params=NormalLoadParams(load_dist=LoadDist.DIST_DINTLV_B32))
+                                    exp_odd_p2 = tla.exp(tla.sub(s_odd_p2, max_reg_p2, mask=pregFull), mask=pregFull)
+                                    exp_even_p2 = tla.exp(tla.sub(s_even_p2, max_reg_p2, mask=pregFull), mask=pregFull)
+                                    tmp_reg_p2 = tla.add(exp_odd_p2, exp_even_p2, mask=pregFull)
+                                    block_sum_p2 = tmp_reg_p2.reduce(tla.ReductionOp.ADD, mask=pregFull)
+                                    ub_sum_i_p2 = tla.tile_view(ub_sum, tla.make_shape(1), tla.make_coord(i2))
+                                    ub_sum_i_p2.store(block_sum_p2, params=UnalignStoreParams(), mask=one_mask)
+                                    p_even_p2 = exp_even_p2.to(io_dtype, cast_trait_one, mask=pregFull)
+                                    p_odd_p2 = exp_odd_p2.to(io_dtype, cast_trait_zero, mask=pregFull)
+                                    p_zn_p2 = tla.bitwise_or(p_even_p2, p_odd_p2, mask=preg_all_b16)
+                                    ub_p_zn_i0_p2 = tla.tile_view(ub_p_zN, tla.make_shape(1, 2 * VL_FLOAT_ELE), tla.make_coord(i2, c0))
+                                    ub_p_zn_i0_p2.store(p_zn_p2, params=tla.params.BlockStoreParams(block_stride=Q_BLOCK_SUB + 1), mask=preg_all_b16)
+                        else:
+                            with tla.vec.func(mode='simd'):
+                                pregFull = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Float32)
+                                preg_all_b16 = tla.create_mask(pattern=tla.mask.ALL, dtype=io_dtype)
+                                one_mask = tla.update_mask(1, dtype=tla.Float32)[0]
+                                mask_tail_n = tla.update_mask(tailN, dtype=tla.Float32)[0]
+                                min_reg = tla.full(MIN_VALUE, dtype=tla.Float32)
+                                for i0 in tla.range(q_tile_size_sub):
+                                    ub_s_i0_p1 = tla.tile_view(ub_s, tla.make_shape(1, VL_FLOAT_ELE), tla.make_coord(i0, c0))
+                                    ub_s_reg0_p1 = ub_s_i0_p1.load()
+                                    ub_s_reg0_p1 = tla.mul(ub_s_reg0_p1, QK_SCALE, mask=pregFull)
+                                    ub_s_reg0_p1 = tla.where(mask_tail_n, ub_s_reg0_p1, min_reg)
+                                    ub_s_i0_p1.store(ub_s_reg0_p1, mask=pregFull)
+                                    max_reg_p1 = ub_s_reg0_p1.reduce(tla.ReductionOp.MAX, mask=pregFull)
+                                    ub_max_dst_p1 = tla.tile_view(ub_now_max, tla.make_shape(1), tla.make_coord(i0))
+                                    ub_max_dst_p1.store(max_reg_p1, params=UnalignStoreParams(), mask=one_mask)
+                                tla.local_mem_bar(tla.params.MemType.VEC_STORE, tla.params.MemType.VEC_LOAD)
+                                for i2 in tla.range(q_tile_size_sub):
+                                    ub_now_max_i_p2 = tla.tile_view(ub_now_max, tla.make_shape(1), tla.make_coord(i2))
+                                    max_reg_p2 = ub_now_max_i_p2.load(params=NormalLoadParams(load_dist=LoadDist.DIST_BRC_B32))
+                                    ub_s_i0_p2 = tla.tile_view(ub_s, tla.make_shape(1, VL_FLOAT_ELE), tla.make_coord(i2, c0))
+                                    ub_s_reg0_p2 = ub_s_i0_p2.load()
+                                    exp_reg0_p2 = tla.exp(tla.sub(ub_s_reg0_p2, max_reg_p2, mask=pregFull), mask=pregFull)
+                                    block_sum_p2 = exp_reg0_p2.reduce(tla.ReductionOp.ADD, mask=pregFull)
+                                    ub_sum_i_p2 = tla.tile_view(ub_sum, tla.make_shape(1), tla.make_coord(i2))
+                                    ub_sum_i_p2.store(block_sum_p2, params=UnalignStoreParams(), mask=one_mask)
+                                    p_reg0_p2 = exp_reg0_p2.to(io_dtype, cast_trait_zero, mask=pregFull)
+                                    r0_qk_p2, _ = tla.deinterleave(p_reg0_p2, p_reg0_p2)
+                                    ub_p_zn_i0_p2 = tla.tile_view(ub_p_zN, tla.make_shape(1, 2 * VL_FLOAT_ELE), tla.make_coord(i2, c0))
+                                    ub_p_zn_i0_p2.store(r0_qk_p2, params=tla.params.BlockStoreParams(block_stride=Q_BLOCK_SUB + 1), mask=preg_all_b16)
+                    else:
+                        if kv_tile_size > VL_FLOAT_ELE:
+                            with tla.vec.func(mode='simd'):
+                                pregFull = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Float32)
+                                preg_all_b16 = tla.create_mask(pattern=tla.mask.ALL, dtype=io_dtype)
+                                one_mask = tla.update_mask(1, dtype=tla.Float32)[0]
+                                mask_tail_n = tla.update_mask(tailN, dtype=tla.Float32)[0]
+                                min_reg = tla.full(MIN_VALUE, dtype=tla.Float32)
+                                for i0 in tla.range(q_tile_size_sub):
+                                    ub_s_i0_p1 = tla.tile_view(ub_s, tla.make_shape(1, VL_FLOAT_ELE), tla.make_coord(i0, c0))
+                                    ub_s_i1_p1 = tla.tile_view(ub_s, tla.make_shape(1, VL_FLOAT_ELE), tla.make_coord(i0, c1))
+                                    ub_s_reg0_p1 = ub_s_i0_p1.load()
+                                    ub_s_reg1_p1 = ub_s_i1_p1.load()
+                                    ub_s_reg0_p1 = tla.mul(ub_s_reg0_p1, QK_SCALE, mask=pregFull)
+                                    ub_s_reg1_p1 = tla.mul(ub_s_reg1_p1, QK_SCALE, mask=pregFull)
+                                    ub_s_reg1_p1 = tla.where(mask_tail_n, ub_s_reg1_p1, min_reg)
+                                    ub_s_i0_p1.store(ub_s_reg0_p1, mask=pregFull)
+                                    ub_s_i1_p1.store(ub_s_reg1_p1, mask=pregFull)
+                                    tmp_reg_p1 = tla.max(ub_s_reg0_p1, ub_s_reg1_p1, mask=pregFull)
+                                    max_reg_p1 = tmp_reg_p1.reduce(tla.ReductionOp.MAX, mask=pregFull)
+                                    ub_max_dst_p1 = tla.tile_view(ub_last_max, tla.make_shape(1), tla.make_coord(i0))
+                                    ub_max_dst_p1.store(max_reg_p1, params=UnalignStoreParams(), mask=one_mask)
+                                tla.local_mem_bar(tla.params.MemType.VEC_STORE, tla.params.MemType.VEC_LOAD)
+                                ub_now_max_vu = tla.tile_view(ub_now_max, tla.make_shape(VL_FLOAT_ELE), tla.make_coord(0))
+                                ub_last_max_vu = tla.tile_view(ub_last_max, tla.make_shape(VL_FLOAT_ELE), tla.make_coord(0))
+                                ub_sum_vu = tla.tile_view(ub_sum, tla.make_shape(VL_FLOAT_ELE), tla.make_coord(0))
+                                ub_exp_max_vu = tla.tile_view(ub_exp_max_qk, tla.make_shape(VL_FLOAT_ELE), tla.make_coord(0))
+                                now_max_vu = ub_now_max_vu.load()      # 旧 global max（上一轮存入）
+                                blk_max_vu = ub_last_max_vu.load()     # 本块 max（i0 存入）
+                                global_max_vu = tla.max(now_max_vu, blk_max_vu, mask=pregFull)
+                                dm_vu = tla.exp(tla.sub(now_max_vu, global_max_vu, mask=pregFull), mask=pregFull)  # exp(旧-新)
+                                sum_vu = ub_sum_vu.load()              # 旧 global sum
+                                update_vu = tla.mul(sum_vu, dm_vu, mask=pregFull)
+                                ub_now_max_vu.store(global_max_vu, mask=pregFull)
+                                ub_exp_max_vu.store(dm_vu, mask=pregFull)
+                                tla.local_mem_bar(tla.params.MemType.VEC_STORE, tla.params.MemType.VEC_LOAD)
+                                for i2 in tla.range(q_tile_size_sub):
+                                    ub_now_max_i_p2 = tla.tile_view(ub_now_max, tla.make_shape(1), tla.make_coord(i2))
+                                    max_reg_p2 = ub_now_max_i_p2.load(params=NormalLoadParams(load_dist=LoadDist.DIST_BRC_B32))
+                                    ub_s_row_p2 = tla.tile_view(ub_s, tla.make_shape(1, 2 * VL_FLOAT_ELE), tla.make_coord(i2, c0))
+                                    s_odd_p2, s_even_p2 = ub_s_row_p2.load(params=NormalLoadParams(load_dist=LoadDist.DIST_DINTLV_B32))
+                                    exp_odd_p2 = tla.exp(tla.sub(s_odd_p2, max_reg_p2, mask=pregFull), mask=pregFull)
+                                    exp_even_p2 = tla.exp(tla.sub(s_even_p2, max_reg_p2, mask=pregFull), mask=pregFull)
+                                    tmp_reg_p2 = tla.add(exp_odd_p2, exp_even_p2, mask=pregFull)
+                                    block_sum_p2 = tmp_reg_p2.reduce(tla.ReductionOp.ADD, mask=pregFull)
+                                    ub_exp_sum_i_p2 = tla.tile_view(ub_exp_sum, tla.make_shape(1), tla.make_coord(i2))
+                                    ub_exp_sum_i_p2.store(block_sum_p2, params=UnalignStoreParams(), mask=one_mask)
+                                    p_even_p2 = exp_even_p2.to(io_dtype, cast_trait_one, mask=pregFull)
+                                    p_odd_p2 = exp_odd_p2.to(io_dtype, cast_trait_zero, mask=pregFull)
+                                    p_zn_p2 = tla.bitwise_or(p_even_p2, p_odd_p2, mask=preg_all_b16)
+                                    ub_p_zn_i0_p2 = tla.tile_view(ub_p_zN, tla.make_shape(1, 2 * VL_FLOAT_ELE), tla.make_coord(i2, c0))
+                                    ub_p_zn_i0_p2.store(p_zn_p2, params=tla.params.BlockStoreParams(block_stride=Q_BLOCK_SUB + 1), mask=preg_all_b16)
+                                # 向量化 final add（替代 i3 逐行 sum-merge；update_vu + 本块 sum → 新 global sum）
+                                tla.local_mem_bar(tla.params.MemType.VEC_STORE, tla.params.MemType.VEC_LOAD)
+                                ub_exp_sum_vf = tla.tile_view(ub_exp_sum, tla.make_shape(VL_FLOAT_ELE), tla.make_coord(0))
+                                blk_sum_vf = ub_exp_sum_vf.load()
+                                new_sum_vf = tla.add(update_vu, blk_sum_vf, mask=pregFull)
+                                ub_sum_vf = tla.tile_view(ub_sum, tla.make_shape(VL_FLOAT_ELE), tla.make_coord(0))
+                                ub_sum_vf.store(new_sum_vf, mask=pregFull)
+                        else:
+                            with tla.vec.func(mode='simd'):
+                                pregFull = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Float32)
+                                preg_all_b16 = tla.create_mask(pattern=tla.mask.ALL, dtype=io_dtype)
+                                one_mask = tla.update_mask(1, dtype=tla.Float32)[0]
+                                mask_tail_n = tla.update_mask(tailN, dtype=tla.Float32)[0]
+                                min_reg = tla.full(MIN_VALUE, dtype=tla.Float32)
+                                for i0 in tla.range(q_tile_size_sub):
+                                    ub_s_i0_p1 = tla.tile_view(ub_s, tla.make_shape(1, VL_FLOAT_ELE), tla.make_coord(i0, c0))
+                                    ub_s_reg0_p1 = ub_s_i0_p1.load()
+                                    ub_s_reg0_p1 = tla.mul(ub_s_reg0_p1, QK_SCALE, mask=pregFull)
+                                    ub_s_reg0_p1 = tla.where(mask_tail_n, ub_s_reg0_p1, min_reg)
+                                    ub_s_i0_p1.store(ub_s_reg0_p1, mask=pregFull)
+                                    max_reg_p1 = ub_s_reg0_p1.reduce(tla.ReductionOp.MAX, mask=pregFull)
+                                    ub_max_dst_p1 = tla.tile_view(ub_last_max, tla.make_shape(1), tla.make_coord(i0))
+                                    ub_max_dst_p1.store(max_reg_p1, params=UnalignStoreParams(), mask=one_mask)
+                                tla.local_mem_bar(tla.params.MemType.VEC_STORE, tla.params.MemType.VEC_LOAD)
+                                ub_now_max_vu = tla.tile_view(ub_now_max, tla.make_shape(VL_FLOAT_ELE), tla.make_coord(0))
+                                ub_last_max_vu = tla.tile_view(ub_last_max, tla.make_shape(VL_FLOAT_ELE), tla.make_coord(0))
+                                ub_sum_vu = tla.tile_view(ub_sum, tla.make_shape(VL_FLOAT_ELE), tla.make_coord(0))
+                                ub_exp_max_vu = tla.tile_view(ub_exp_max_qk, tla.make_shape(VL_FLOAT_ELE), tla.make_coord(0))
+                                now_max_vu = ub_now_max_vu.load()      # 旧 global max（上一轮存入）
+                                blk_max_vu = ub_last_max_vu.load()     # 本块 max（i0 存入）
+                                global_max_vu = tla.max(now_max_vu, blk_max_vu, mask=pregFull)
+                                dm_vu = tla.exp(tla.sub(now_max_vu, global_max_vu, mask=pregFull), mask=pregFull)  # exp(旧-新)
+                                sum_vu = ub_sum_vu.load()              # 旧 global sum
+                                update_vu = tla.mul(sum_vu, dm_vu, mask=pregFull)
+                                ub_now_max_vu.store(global_max_vu, mask=pregFull)
+                                ub_exp_max_vu.store(dm_vu, mask=pregFull)
+                                tla.local_mem_bar(tla.params.MemType.VEC_STORE, tla.params.MemType.VEC_LOAD)
+                                for i2 in tla.range(q_tile_size_sub):
+                                    ub_now_max_i_p2 = tla.tile_view(ub_now_max, tla.make_shape(1), tla.make_coord(i2))
+                                    max_reg_p2 = ub_now_max_i_p2.load(params=NormalLoadParams(load_dist=LoadDist.DIST_BRC_B32))
+                                    ub_s_i0_p2 = tla.tile_view(ub_s, tla.make_shape(1, VL_FLOAT_ELE), tla.make_coord(i2, c0))
+                                    ub_s_reg0_p2 = ub_s_i0_p2.load()
+                                    exp_reg0_p2 = tla.exp(tla.sub(ub_s_reg0_p2, max_reg_p2, mask=pregFull), mask=pregFull)
+                                    block_sum_p2 = exp_reg0_p2.reduce(tla.ReductionOp.ADD, mask=pregFull)
+                                    ub_exp_sum_i_p2 = tla.tile_view(ub_exp_sum, tla.make_shape(1), tla.make_coord(i2))
+                                    ub_exp_sum_i_p2.store(block_sum_p2, params=UnalignStoreParams(), mask=one_mask)
+                                    p_reg0_p2 = exp_reg0_p2.to(io_dtype, cast_trait_zero, mask=pregFull)
+                                    r0_qk_p2, _ = tla.deinterleave(p_reg0_p2, p_reg0_p2)
+                                    ub_p_zn_i0_p2 = tla.tile_view(ub_p_zN, tla.make_shape(1, 2 * VL_FLOAT_ELE), tla.make_coord(i2, c0))
+                                    ub_p_zn_i0_p2.store(r0_qk_p2, params=tla.params.BlockStoreParams(block_stride=Q_BLOCK_SUB + 1), mask=preg_all_b16)
+                                # 向量化 final add（替代 i3 逐行 sum-merge；update_vu + 本块 sum → 新 global sum）
+                                tla.local_mem_bar(tla.params.MemType.VEC_STORE, tla.params.MemType.VEC_LOAD)
+                                ub_exp_sum_vf = tla.tile_view(ub_exp_sum, tla.make_shape(VL_FLOAT_ELE), tla.make_coord(0))
+                                blk_sum_vf = ub_exp_sum_vf.load()
+                                new_sum_vf = tla.add(update_vu, blk_sum_vf, mask=pregFull)
+                                ub_sum_vf = tla.tile_view(ub_sum, tla.make_shape(VL_FLOAT_ELE), tla.make_coord(0))
+                                ub_sum_vf.store(new_sum_vf, mask=pregFull)
 
                     if ubSBufId == c0:
                         tla.set_flag(v_mte3_0)
@@ -708,22 +709,17 @@ def flash_attention_infer_kernel(
                         tla.set_flag(v_mte3_1)
                         tla.wait_flag(v_mte3_1)
                     if ubSBufId == c0:
-                        tla.cross_core_set_flag(qk_ready_0, tla.arch.VECTOR, aiv_id=0)
-                        tla.cross_core_set_flag(qk_ready_0, tla.arch.VECTOR, aiv_id=1)
+                        tla.cross_core_set_flag(qk_ready_0, tla.arch.VECTOR)
                     else:
-                        tla.cross_core_set_flag(qk_ready_1, tla.arch.VECTOR, aiv_id=0)
-                        tla.cross_core_set_flag(qk_ready_1, tla.arch.VECTOR, aiv_id=1)
+                        tla.cross_core_set_flag(qk_ready_1, tla.arch.VECTOR)
 
                     # softmaxReadyFlag = l1PBufId + 2; 等 PV 用完上一轮 P buffer
                     if l1PBufId_qk == c0:
-                        tla.cross_core_wait_flag(sm_ready_mm2_0, tla.arch.MTE3, aiv_id=0)
-                        tla.cross_core_wait_flag(sm_ready_mm2_0, tla.arch.MTE3, aiv_id=1)
+                        tla.cross_core_wait_flag(sm_ready_mm2_0, tla.arch.MTE3)
                     elif l1PBufId_qk == c1:
-                        tla.cross_core_wait_flag(sm_ready_mm2_1, tla.arch.MTE3, aiv_id=0)
-                        tla.cross_core_wait_flag(sm_ready_mm2_1, tla.arch.MTE3, aiv_id=1)
+                        tla.cross_core_wait_flag(sm_ready_mm2_1, tla.arch.MTE3)
                     else:
-                        tla.cross_core_wait_flag(sm_ready_mm2_2, tla.arch.MTE3, aiv_id=0)
-                        tla.cross_core_wait_flag(sm_ready_mm2_2, tla.arch.MTE3, aiv_id=1)
+                        tla.cross_core_wait_flag(sm_ready_mm2_2, tla.arch.MTE3)
                     ub_p_zN_copy = tla.tile_view(ub_p_zN_full, tla.make_shape(q_tile_size_sub, kv_tile_size), tla.make_coord(c0, c0))
                     l1_p_ref = tla.make_tensor(
                         l1_p_ptr_qk,
@@ -742,38 +738,11 @@ def flash_attention_infer_kernel(
                         tla.set_flag(mte3_ready_softmax_1)
 
                     if l1PBufId_qk == c0:
-                        tla.cross_core_set_flag(sm_ready_mm2_0, tla.arch.MTE3, aiv_id=0)
-                        tla.cross_core_set_flag(sm_ready_mm2_0, tla.arch.MTE3, aiv_id=1)
+                        tla.cross_core_set_flag(sm_ready_mm2_0, tla.arch.MTE3)
                     elif l1PBufId_qk == c1:
-                        tla.cross_core_set_flag(sm_ready_mm2_1, tla.arch.MTE3, aiv_id=0)
-                        tla.cross_core_set_flag(sm_ready_mm2_1, tla.arch.MTE3, aiv_id=1)
+                        tla.cross_core_set_flag(sm_ready_mm2_1, tla.arch.MTE3)
                     else:
-                        tla.cross_core_set_flag(sm_ready_mm2_2, tla.arch.MTE3, aiv_id=0)
-                        tla.cross_core_set_flag(sm_ready_mm2_2, tla.arch.MTE3, aiv_id=1)
-
-                    # Phase 2b: UpdateExpSumAndExpMax
-                    if update:
-                        with tla.vec.func(mode='simd'):
-                            pregFull_ue = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Float32)
-                            one_mask_ue, _ = tla.update_mask(1, dtype=tla.Float32)
-                            for i3 in tla.range(q_tile_size_sub):
-                                ub_now_max_i_if1 = tla.tile_view(ub_now_max, tla.make_shape(1), tla.make_coord(i3))
-                                ub_last_max_i_if1 = tla.tile_view(ub_last_max, tla.make_shape(1), tla.make_coord(i3))
-                                ub_sum_i_if1 = tla.tile_view(ub_sum, tla.make_shape(1), tla.make_coord(i3))
-                                ub_exp_sum_i_if1 = tla.tile_view(ub_exp_sum, tla.make_shape(1), tla.make_coord(i3))
-                                ub_exp_max_i_if1 = tla.tile_view(ub_exp_max_qk, tla.make_shape(1), tla.make_coord(i3))
-
-                                now_reg_if1 = ub_now_max_i_if1.load(params=NormalLoadParams(load_dist=LoadDist.DIST_BRC_B32))
-                                last_reg_if1 = ub_last_max_i_if1.load(params=NormalLoadParams(load_dist=LoadDist.DIST_BRC_B32))
-                                exp_max_reg_if1 = tla.exp(tla.sub(last_reg_if1, now_reg_if1, mask=pregFull_ue), mask=pregFull_ue)
-                                ub_last_max_i_if1.store(now_reg_if1, params=UnalignStoreParams(), mask=one_mask_ue)
-                                ub_exp_max_i_if1.store(exp_max_reg_if1, params=UnalignStoreParams(), mask=one_mask_ue)
-
-                                sum_reg_if1 = ub_sum_i_if1.load(params=NormalLoadParams(load_dist=LoadDist.DIST_BRC_B32))
-                                exp_sum_reg_if1 = ub_exp_sum_i_if1.load(params=NormalLoadParams(load_dist=LoadDist.DIST_BRC_B32))
-                                mul_reg_if1 = tla.mul(sum_reg_if1, exp_max_reg_if1, mask=pregFull_ue)
-                                new_sum_if1 = tla.add(mul_reg_if1, exp_sum_reg_if1, mask=pregFull_ue)
-                                ub_sum_i_if1.store(new_sum_if1, params=UnalignStoreParams(), mask=one_mask_ue)
+                        tla.cross_core_set_flag(sm_ready_mm2_2, tla.arch.MTE3)
 
             if kv_iter >= PRE_LAUNCH:
                 kv_pv = kv_iter - PRE_LAUNCH
@@ -813,14 +782,11 @@ def flash_attention_infer_kernel(
                         tla.wait_flag(v_l1_ready_l0_1)
 
                     if l1PBufId_pv == c0:
-                        tla.cross_core_wait_flag(sm_ready_mm2_0, tla.arch.MTE1, aiv_id=0)
-                        tla.cross_core_wait_flag(sm_ready_mm2_0, tla.arch.MTE1, aiv_id=1)
+                        tla.cross_core_wait_flag(sm_ready_mm2_0, tla.arch.MTE1)
                     elif l1PBufId_pv == c1:
-                        tla.cross_core_wait_flag(sm_ready_mm2_1, tla.arch.MTE1, aiv_id=0)
-                        tla.cross_core_wait_flag(sm_ready_mm2_1, tla.arch.MTE1, aiv_id=1)
+                        tla.cross_core_wait_flag(sm_ready_mm2_1, tla.arch.MTE1)
                     else:
-                        tla.cross_core_wait_flag(sm_ready_mm2_2, tla.arch.MTE1, aiv_id=0)
-                        tla.cross_core_wait_flag(sm_ready_mm2_2, tla.arch.MTE1, aiv_id=1)
+                        tla.cross_core_wait_flag(sm_ready_mm2_2, tla.arch.MTE1)
 
                     l1_p_ptr_pv = l1_p_0_ptr
                     if l1PBufId_pv == c0:
@@ -838,129 +804,111 @@ def flash_attention_infer_kernel(
                     )
                     l1_p_pv = tla.make_tensor_like(l1_p_ptr_pv, ub_p_full_pv, tla.arch.zN)
 
-                    for nL0Itr_pv in tla.range(c0, PV_NL0_LOOP_NUM, c1):
-                        nLoopCounter_pv = nL0Itr_pv * PV_NL0_LOOP_NUM + nL0Itr_pv
-                        l0c_pv_ref = tla.make_tensor(
-                            l0_pv_ptr,
-                            tla.make_layout(
-                                tla.make_shape(q_tile_size, HEAD_DIM),
-                                tla.make_stride(HEAD_DIM, 1),
-                            ),
-                        )
-                        l0c_pv = tla.make_tensor_like(l0_pv_ptr, l0c_pv_ref, tla.arch.L0Clayout)
+                    # PV L0: 扁平化（PV_NL0_LOOP_NUM=PV_ML0_LOOP_NUM=PV_KL0_LOOP_NUM=1）
+                    l0c_pv_ref = tla.make_tensor(
+                        l0_pv_ptr,
+                        tla.make_layout(
+                            tla.make_shape(q_tile_size, HEAD_DIM),
+                            tla.make_stride(HEAD_DIM, 1),
+                        ),
+                    )
+                    l0c_pv = tla.make_tensor_like(l0_pv_ptr, l0c_pv_ref, tla.arch.L0Clayout)
 
-                        for mL0Itr_pv in tla.range(c0, PV_ML0_LOOP_NUM, c1):
-                            for kL0Itr_pv in tla.range(c0, PV_KL0_LOOP_NUM, c1):
-                                l0ALoopCounter_pv = prefixSumL0AStages_pv + mL0Itr_pv * PV_KL0_LOOP_NUM + kL0Itr_pv
-                                l0BLoopCounter_pv = prefixSumL0BStages_pv + nLoopCounter_pv * PV_KL0_LOOP_NUM + kL0Itr_pv
-                                l0ABufId_pv = l0ALoopCounter_pv % L0_STAGES
-                                l0BBufId_pv = l0BLoopCounter_pv % L0_STAGES
-                                l0_p_ptr = l0a_ping_ptr if l0ABufId_pv == c0 else l0a_pong_ptr
-                                l0_v_ptr = l0b_ping_ptr if l0BBufId_pv == c0 else l0b_pong_ptr
-                                l0_p = tla.make_tensor_like(l0_p_ptr, l1_p_pv)
-                                l0_v = tla.make_tensor_like(l0_v_ptr, l1_v)
+                    l0ABufId_pv = prefixSumL0AStages_pv % L0_STAGES
+                    l0BBufId_pv = prefixSumL0BStages_pv % L0_STAGES
+                    l0_p_ptr = l0a_ping_ptr if l0ABufId_pv == c0 else l0a_pong_ptr
+                    l0_v_ptr = l0b_ping_ptr if l0BBufId_pv == c0 else l0b_pong_ptr
+                    l0_p = tla.make_tensor_like(l0_p_ptr, l1_p_pv)
+                    l0_v = tla.make_tensor_like(l0_v_ptr, l1_v)
 
-                                if l0BBufId_pv == c0:
-                                    tla.wait_flag(mmad_ready_l0b_0)
-                                else:
-                                    tla.wait_flag(mmad_ready_l0b_1)
-                                tla.copy(l0_v, l1_v)
-                                if l0BBufId_pv == c0:
-                                    tla.set_flag(l0b_ready_mmad_0)
-                                else:
-                                    tla.set_flag(l0b_ready_mmad_1)
-                                if mL0Itr_pv == (PV_ML0_LOOP_NUM - c1) and nL0Itr_pv == (PV_NL0_LOOP_NUM - c1) and kL0Itr_pv == (PV_KL0_LOOP_NUM - c1):
-                                    if l1BBufId_pv == c0:
-                                        tla.set_flag(v_l0b_ready_l1_0)
-                                    else:
-                                        tla.set_flag(v_l0b_ready_l1_1)
-
-                                if l0ABufId_pv == c0:
-                                    tla.wait_flag(mmad_ready_l0a_0)
-                                else:
-                                    tla.wait_flag(mmad_ready_l0a_1)
-                                tla.copy(l0_p, l1_p_pv)
-                                if l0ABufId_pv == c0:
-                                    tla.set_flag(l0a_ready_mmad_0)
-                                else:
-                                    tla.set_flag(l0a_ready_mmad_1)
-                                if mL0Itr_pv == (PV_ML0_LOOP_NUM - c1) and nL0Itr_pv == (PV_NL0_LOOP_NUM - c1) and kL0Itr_pv == (PV_KL0_LOOP_NUM - c1):
-                                    if l1PBufId_pv == c0:
-                                        tla.cross_core_set_flag(sm_ready_mm2_0, tla.arch.MTE1, aiv_id=0)
-                                        tla.cross_core_set_flag(sm_ready_mm2_0, tla.arch.MTE1, aiv_id=1)
-                                    elif l1PBufId_pv == c1:
-                                        tla.cross_core_set_flag(sm_ready_mm2_1, tla.arch.MTE1, aiv_id=0)
-                                        tla.cross_core_set_flag(sm_ready_mm2_1, tla.arch.MTE1, aiv_id=1)
-                                    else:
-                                        tla.cross_core_set_flag(sm_ready_mm2_2, tla.arch.MTE1, aiv_id=0)
-                                        tla.cross_core_set_flag(sm_ready_mm2_2, tla.arch.MTE1, aiv_id=1)
-
-                                if l0ABufId_pv == c0:
-                                    tla.wait_flag(l0a_ready_mmad_0)
-                                else:
-                                    tla.wait_flag(l0a_ready_mmad_1)
-                                if l0BBufId_pv == c0:
-                                    tla.wait_flag(l0b_ready_mmad_0)
-                                else:
-                                    tla.wait_flag(l0b_ready_mmad_1)
-                                if mL0Itr_pv == c0 and kL0Itr_pv == c0:
-                                    if l0CBufId_pv == c0:
-                                        tla.wait_flag(fix_ready_mmad_pv_0)
-                                    else:
-                                        tla.wait_flag(fix_ready_mmad_pv_1)
-                                tla.mmad(l0c_pv, l0_p, l0_v, init_c=True)
-                                if l0ABufId_pv == c0:
-                                    tla.set_flag(mmad_ready_l0a_0)
-                                else:
-                                    tla.set_flag(mmad_ready_l0a_1)
-                                if l0BBufId_pv == c0:
-                                    tla.set_flag(mmad_ready_l0b_0)
-                                else:
-                                    tla.set_flag(mmad_ready_l0b_1)
-
-                        if nL0Itr_pv == c0:
-                            if ubOTmpBufId == c0:
-                                tla.cross_core_wait_flag(pv_ready_0, tla.arch.FIX, aiv_id=0)
-                                tla.cross_core_wait_flag(pv_ready_0, tla.arch.FIX, aiv_id=1)
-                            else:
-                                tla.cross_core_wait_flag(pv_ready_1, tla.arch.FIX, aiv_id=0)
-                                tla.cross_core_wait_flag(pv_ready_1, tla.arch.FIX, aiv_id=1)
-                        if l0CBufId_pv == c0:
-                            tla.set_flag(mmad_ready_fix_pv_0)
-                            tla.wait_flag(mmad_ready_fix_pv_0)
-                        else:
-                            tla.set_flag(mmad_ready_fix_pv_1)
-                            tla.wait_flag(mmad_ready_fix_pv_1)
-                        ub_pv_ptr_pv = ub_pv_ping_ptr if ubOTmpBufId == c0 else ub_pv_pong_ptr
-                        ub_pv_fix = tla.make_tensor(
-                            ub_pv_ptr_pv,
-                            tla.make_layout(
-                                tla.make_shape(q_tile_size, HEAD_DIM),
-                                tla.make_stride(HEAD_DIM, 1),
-                                layoutTag=tla.arch.RowMajor,
-                            ),
-                        )
-                        tla.copy(ub_pv_fix, l0c_pv, tla.params.CopyL0C2DstParams(
-                            l0c2ub_mode=tla.params.L0C2UBMode.SPLIT_M
-                        ))
-                        if l0CBufId_pv == c0:
-                            tla.set_flag(fix_ready_mmad_pv_0)
-                        else:
-                            tla.set_flag(fix_ready_mmad_pv_1)
-                    if ubOTmpBufId == c0:
-                        tla.cross_core_set_flag(pv_ready_0, tla.arch.FIX, aiv_id=0)
-                        tla.cross_core_set_flag(pv_ready_0, tla.arch.FIX, aiv_id=1)
+                    if l0BBufId_pv == c0:
+                        tla.wait_flag(mmad_ready_l0b_0)
                     else:
-                        tla.cross_core_set_flag(pv_ready_1, tla.arch.FIX, aiv_id=0)
-                        tla.cross_core_set_flag(pv_ready_1, tla.arch.FIX, aiv_id=1)
+                        tla.wait_flag(mmad_ready_l0b_1)
+                    tla.copy(l0_v, l1_v)
+                    if l0BBufId_pv == c0:
+                        tla.set_flag(l0b_ready_mmad_0)
+                    else:
+                        tla.set_flag(l0b_ready_mmad_1)
+                    if l1BBufId_pv == c0:
+                        tla.set_flag(v_l0b_ready_l1_0)
+                    else:
+                        tla.set_flag(v_l0b_ready_l1_1)
+
+                    if l0ABufId_pv == c0:
+                        tla.wait_flag(mmad_ready_l0a_0)
+                    else:
+                        tla.wait_flag(mmad_ready_l0a_1)
+                    tla.copy(l0_p, l1_p_pv)
+                    if l0ABufId_pv == c0:
+                        tla.set_flag(l0a_ready_mmad_0)
+                    else:
+                        tla.set_flag(l0a_ready_mmad_1)
+                    if l1PBufId_pv == c0:
+                        tla.cross_core_set_flag(sm_ready_mm2_0, tla.arch.MTE1)
+                    elif l1PBufId_pv == c1:
+                        tla.cross_core_set_flag(sm_ready_mm2_1, tla.arch.MTE1)
+                    else:
+                        tla.cross_core_set_flag(sm_ready_mm2_2, tla.arch.MTE1)
+
+                    if l0ABufId_pv == c0:
+                        tla.wait_flag(l0a_ready_mmad_0)
+                    else:
+                        tla.wait_flag(l0a_ready_mmad_1)
+                    if l0BBufId_pv == c0:
+                        tla.wait_flag(l0b_ready_mmad_0)
+                    else:
+                        tla.wait_flag(l0b_ready_mmad_1)
+                    if l0CBufId_pv == c0:
+                        tla.wait_flag(fix_ready_mmad_pv_0)
+                    else:
+                        tla.wait_flag(fix_ready_mmad_pv_1)
+                    tla.mmad(l0c_pv, l0_p, l0_v, init_c=True)
+                    if l0ABufId_pv == c0:
+                        tla.set_flag(mmad_ready_l0a_0)
+                    else:
+                        tla.set_flag(mmad_ready_l0a_1)
+                    if l0BBufId_pv == c0:
+                        tla.set_flag(mmad_ready_l0b_0)
+                    else:
+                        tla.set_flag(mmad_ready_l0b_1)
+
+                    if ubOTmpBufId == c0:
+                        tla.cross_core_wait_flag(pv_ready_0, tla.arch.FIX)
+                    else:
+                        tla.cross_core_wait_flag(pv_ready_1, tla.arch.FIX)
+                    if l0CBufId_pv == c0:
+                        tla.set_flag(mmad_ready_fix_pv_0)
+                        tla.wait_flag(mmad_ready_fix_pv_0)
+                    else:
+                        tla.set_flag(mmad_ready_fix_pv_1)
+                        tla.wait_flag(mmad_ready_fix_pv_1)
+                    ub_pv_ptr_pv = ub_pv_ping_ptr if ubOTmpBufId == c0 else ub_pv_pong_ptr
+                    ub_pv_fix = tla.make_tensor(
+                        ub_pv_ptr_pv,
+                        tla.make_layout(
+                            tla.make_shape(q_tile_size, HEAD_DIM),
+                            tla.make_stride(HEAD_DIM, 1),
+                            layoutTag=tla.arch.RowMajor,
+                        ),
+                    )
+                    tla.copy(ub_pv_fix, l0c_pv, tla.params.CopyL0C2DstParams(
+                        l0c2ub_mode=tla.params.L0C2UBMode.SPLIT_M
+                    ))
+                    if l0CBufId_pv == c0:
+                        tla.set_flag(fix_ready_mmad_pv_0)
+                    else:
+                        tla.set_flag(fix_ready_mmad_pv_1)
+                    if ubOTmpBufId == c0:
+                        tla.cross_core_set_flag(pv_ready_0, tla.arch.FIX)
+                    else:
+                        tla.cross_core_set_flag(pv_ready_1, tla.arch.FIX)
 
                 with tla.vector():
                     if ubOTmpBufId == c0:
-                        tla.cross_core_wait_flag(pv_ready_0, tla.arch.VECTOR, aiv_id=0)
-                        tla.cross_core_wait_flag(pv_ready_0, tla.arch.VECTOR, aiv_id=1)
+                        tla.cross_core_wait_flag(pv_ready_0, tla.arch.VECTOR)
                     else:
-                        tla.cross_core_wait_flag(pv_ready_1, tla.arch.VECTOR, aiv_id=0)
-                        tla.cross_core_wait_flag(pv_ready_1, tla.arch.VECTOR, aiv_id=1)
+                        tla.cross_core_wait_flag(pv_ready_1, tla.arch.VECTOR)
                     tla.wait_flag(mte3_ready_rescale)
 
                     ub_pv_ptr_re = ub_pv_ping_ptr if ubOTmpBufId == c0 else ub_pv_pong_ptr
@@ -1001,9 +949,10 @@ def flash_attention_infer_kernel(
                     )
 
                     if is_first_pv and is_last_pv:
-                        # Single block: O = PV / sum
+                        # Single block: O = PV / sum → cast → GM (1 个 vec.func + local_mem_bar)
                         with tla.vec.func(mode='simd'):
                             pregFull_re0 = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Float32)
+                            preg_all_b16_re0 = tla.create_mask(pattern=tla.mask.ALL, dtype=io_dtype)
                             for i_re0 in tla.range(q_tile_size_sub_re):
                                 ub_sum_i_re0 = tla.tile_view(ub_sum_re, tla.make_shape(1), tla.make_coord(i_re0))
                                 sum_reg_re0 = ub_sum_i_re0.load(params=NormalLoadParams(load_dist=LoadDist.DIST_BRC_B32))
@@ -1013,9 +962,7 @@ def flash_attention_infer_kernel(
                                     div_reg_re0 = tla.div(cur_reg_re0, sum_reg_re0, mask=pregFull_re0)
                                     acc_tile_re0 = tla.tile_view(ub_acc_re, tla.make_shape(1, VL_FLOAT_ELE), tla.make_coord(i_re0, j_re0))
                                     acc_tile_re0.store(div_reg_re0, mask=pregFull_re0)
-                        with tla.vec.func(mode='simd'):
-                            pregFull_re1 = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Float32)
-                            preg_all_b16_re1 = tla.create_mask(pattern=tla.mask.ALL, dtype=io_dtype)
+                            tla.local_mem_bar(tla.params.MemType.VEC_STORE, tla.params.MemType.VEC_LOAD)
                             for i_re1 in tla.range(q_tile_size_sub_re):
                                 for j_re1 in tla.range(c0, HEAD_DIM // (2 * VL_FLOAT_ELE), c1):
                                     acc_tile_re1_0 = tla.tile_view(ub_acc_re, tla.make_shape(1, VL_FLOAT_ELE), tla.make_coord(i_re1, 2 * j_re1))
@@ -1023,10 +970,10 @@ def flash_attention_infer_kernel(
                                     out_tile_re1 = tla.tile_view(ub_out_f16_re, tla.make_shape(1, 2 * VL_FLOAT_ELE), tla.make_coord(i_re1, j_re1))
                                     acc_reg_re1_0 = acc_tile_re1_0.load()
                                     acc_reg_re1_1 = acc_tile_re1_1.load()
-                                    out_reg_re1_0 = acc_reg_re1_0.to(io_dtype, cast_trait_zero, mask=pregFull_re1)
-                                    out_reg_re1_1 = acc_reg_re1_1.to(io_dtype, cast_trait_zero, mask=pregFull_re1)
+                                    out_reg_re1_0 = acc_reg_re1_0.to(io_dtype, cast_trait_zero, mask=pregFull_re0)
+                                    out_reg_re1_1 = acc_reg_re1_1.to(io_dtype, cast_trait_zero, mask=pregFull_re0)
                                     r0_re1, _ = tla.deinterleave(out_reg_re1_0, out_reg_re1_1)
-                                    out_tile_re1.store(r0_re1, mask=preg_all_b16_re1)
+                                    out_tile_re1.store(r0_re1, mask=preg_all_b16_re0)
                         tla.set_flag(rescale_v_mte3)
                         tla.wait_flag(rescale_v_mte3)
                         o_gm_re0 = tla.tile_view(mem_o_block, tla.make_shape(Q_BLOCK, HEAD_DIM), tla.make_coord(q_block_idx, c0))
@@ -1060,9 +1007,10 @@ def flash_attention_infer_kernel(
                                     pre_tile_re3.store(add_reg_re3, mask=pregFull_re3)
 
                     else:
-                        # Last block
+                        # Last block: O = (O*expMax + PV) / sum → cast → GM (1 个 vec.func + local_mem_bar)
                         with tla.vec.func(mode='simd'):
                             pregFull_re4 = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Float32)
+                            preg_all_b16_re4 = tla.create_mask(pattern=tla.mask.ALL, dtype=io_dtype)
                             for i_re4 in tla.range(q_tile_size_sub_re):
                                 ub_exp_max_i_re4 = tla.tile_view(ub_exp_max_re, tla.make_shape(1), tla.make_coord(i_re4))
                                 exp_max_reg_re4 = ub_exp_max_i_re4.load(params=NormalLoadParams(load_dist=LoadDist.DIST_BRC_B32))
@@ -1077,9 +1025,7 @@ def flash_attention_infer_kernel(
                                     add_reg_re4 = tla.add(mul_reg_re4, cur_reg_re4, mask=pregFull_re4)
                                     div_reg_re4 = tla.div(add_reg_re4, sum_reg_re4, mask=pregFull_re4)
                                     pre_tile_re4.store(div_reg_re4, mask=pregFull_re4)
-                        with tla.vec.func(mode='simd'):
-                            pregFull_re5 = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Float32)
-                            preg_all_b16_re5 = tla.create_mask(pattern=tla.mask.ALL, dtype=io_dtype)
+                            tla.local_mem_bar(tla.params.MemType.VEC_STORE, tla.params.MemType.VEC_LOAD)
                             for i_re5 in tla.range(q_tile_size_sub_re):
                                 for j_re5 in tla.range(c0, HEAD_DIM // (2 * VL_FLOAT_ELE), c1):
                                     acc_tile_re5_0 = tla.tile_view(ub_acc_re, tla.make_shape(1, VL_FLOAT_ELE), tla.make_coord(i_re5, 2 * j_re5))
@@ -1087,10 +1033,10 @@ def flash_attention_infer_kernel(
                                     out_tile_re5 = tla.tile_view(ub_out_f16_re, tla.make_shape(1, 2 * VL_FLOAT_ELE), tla.make_coord(i_re5, j_re5))
                                     acc_reg_re5_0 = acc_tile_re5_0.load()
                                     acc_reg_re5_1 = acc_tile_re5_1.load()
-                                    out_reg_re5_0 = acc_reg_re5_0.to(io_dtype, cast_trait_zero, mask=pregFull_re5)
-                                    out_reg_re5_1 = acc_reg_re5_1.to(io_dtype, cast_trait_zero, mask=pregFull_re5)
+                                    out_reg_re5_0 = acc_reg_re5_0.to(io_dtype, cast_trait_zero, mask=pregFull_re4)
+                                    out_reg_re5_1 = acc_reg_re5_1.to(io_dtype, cast_trait_zero, mask=pregFull_re4)
                                     r0_re5, _ = tla.deinterleave(out_reg_re5_0, out_reg_re5_1)
-                                    out_tile_re5.store(r0_re5, mask=preg_all_b16_re5)
+                                    out_tile_re5.store(r0_re5, mask=preg_all_b16_re4)
                         tla.set_flag(rescale_v_mte3)
                         tla.wait_flag(rescale_v_mte3)
                         o_gm_re5 = tla.tile_view(mem_o_block, tla.make_shape(Q_BLOCK, HEAD_DIM), tla.make_coord(q_block_idx, c0))
@@ -1098,11 +1044,9 @@ def flash_attention_infer_kernel(
                         tla.copy(o_sub_gm_re5, ub_out_f16_re)
 
                     if ubOTmpBufId == c0:
-                        tla.cross_core_set_flag(pv_ready_0, tla.arch.VECTOR, aiv_id=0)
-                        tla.cross_core_set_flag(pv_ready_0, tla.arch.VECTOR, aiv_id=1)
+                        tla.cross_core_set_flag(pv_ready_0, tla.arch.VECTOR)
                     else:
-                        tla.cross_core_set_flag(pv_ready_1, tla.arch.VECTOR, aiv_id=0)
-                        tla.cross_core_set_flag(pv_ready_1, tla.arch.VECTOR, aiv_id=1)
+                        tla.cross_core_set_flag(pv_ready_1, tla.arch.VECTOR)
                     # O->GM copy 完成, 释放给下一轮 rescale
                     tla.set_flag(mte3_ready_rescale)
 
@@ -1121,23 +1065,16 @@ def flash_attention_infer_kernel(
         tla.wait_flag(fix_ready_mmad_pv_0)
         tla.wait_flag(fix_ready_mmad_pv_1)
 
-        tla.cross_core_wait_flag(qk_ready_0, tla.arch.FIX, aiv_id=0)
-        tla.cross_core_wait_flag(qk_ready_0, tla.arch.FIX, aiv_id=1)
-        tla.cross_core_wait_flag(qk_ready_1, tla.arch.FIX, aiv_id=0)
-        tla.cross_core_wait_flag(qk_ready_1, tla.arch.FIX, aiv_id=1)
+        tla.cross_core_wait_flag(qk_ready_0, tla.arch.FIX)
+        tla.cross_core_wait_flag(qk_ready_1, tla.arch.FIX)
 
-        tla.cross_core_wait_flag(pv_ready_0, tla.arch.FIX, aiv_id=0)
-        tla.cross_core_wait_flag(pv_ready_0, tla.arch.FIX, aiv_id=1)
-        tla.cross_core_wait_flag(pv_ready_1, tla.arch.FIX, aiv_id=0)
-        tla.cross_core_wait_flag(pv_ready_1, tla.arch.FIX, aiv_id=1)
+        tla.cross_core_wait_flag(pv_ready_0, tla.arch.FIX)
+        tla.cross_core_wait_flag(pv_ready_1, tla.arch.FIX)
 
     with tla.vector():
-        tla.cross_core_wait_flag(sm_ready_mm2_0, tla.arch.MTE3, aiv_id=0)
-        tla.cross_core_wait_flag(sm_ready_mm2_0, tla.arch.MTE3, aiv_id=1)
-        tla.cross_core_wait_flag(sm_ready_mm2_1, tla.arch.MTE3, aiv_id=0)
-        tla.cross_core_wait_flag(sm_ready_mm2_1, tla.arch.MTE3, aiv_id=1)
-        tla.cross_core_wait_flag(sm_ready_mm2_2, tla.arch.MTE3, aiv_id=0)
-        tla.cross_core_wait_flag(sm_ready_mm2_2, tla.arch.MTE3, aiv_id=1)
+        tla.cross_core_wait_flag(sm_ready_mm2_0, tla.arch.MTE3)
+        tla.cross_core_wait_flag(sm_ready_mm2_1, tla.arch.MTE3)
+        tla.cross_core_wait_flag(sm_ready_mm2_2, tla.arch.MTE3)
         tla.wait_flag(mte3_ready_softmax_0)
         tla.wait_flag(mte3_ready_softmax_1)
         tla.wait_flag(mte3_ready_rescale)
@@ -1266,7 +1203,7 @@ def run(args: argparse.Namespace) -> int:
     )
     torch.npu.synchronize()
 
-    # ==================== 双标杆精度判定 ====================
+    # ==================== 精度校验 ====================
     scale = 1.0 / (HEAD_DIM ** 0.5)
     q_cpu = torch_q.cpu()
     k_cpu = torch_k.cpu()
@@ -1372,12 +1309,10 @@ def run(args: argparse.Namespace) -> int:
         mare = rel.max().item()
         mere = rel.mean().item()
         rmse = torch.sqrt((diff ** 2).mean()).item()
-        max_abs = diff.max().item()
-        mean_abs = diff.mean().item()
-        return mare, mere, rmse, max_abs, mean_abs
+        return mare, mere, rmse
 
-    mare_n, mere_n, rmse_n, maxabs_n, meanabs_n = _metrics(result, golden_truth)
-    mare_d, mere_d, rmse_d, maxabs_d, meanabs_d = _metrics(golden_bm, golden_truth)
+    mare_n, mere_n, rmse_n = _metrics(result, golden_truth)
+    mare_d, mere_d, rmse_d = _metrics(golden_bm, golden_truth)
     eps = (2.0 ** -7) if args.dtype == "f16" else (2.0 ** -6)
     mare_ratio = mare_n / max(mare_d, eps)
     mere_ratio = mere_n / max(mere_d, eps)
@@ -1391,10 +1326,6 @@ def run(args: argparse.Namespace) -> int:
     )
     print(f"O unchanged (sentinel)? {bool(unchanged.all())} "
           f"changed_count={int((~unchanged).sum().item())} / {result.numel()}")
-    print(f"dtype={args.dtype} eps={eps:.6f}")
-    print(f"  numerator  (kernel vs truth):   MARE={mare_n:.6e} MERE={mere_n:.6e} RMSE={rmse_n:.6e}  abs[max]={maxabs_n:.6e} abs[mean]={meanabs_n:.6e}")
-    print(f"  denominator(benchmark vs truth): MARE={mare_d:.6e} MERE={mere_d:.6e} RMSE={rmse_d:.6e}  abs[max]={maxabs_d:.6e} abs[mean]={meanabs_d:.6e}")
-    print(f"  ratio: MARE={mare_ratio:.4f} (<=2)  MERE={mere_ratio:.4f} (<=1.2)  RMSE={rmse_ratio:.4f} (<=1.2)")
     print(f"passed={passed} cache_key={artifact.cache_key}")
     print(f"kernel.o={artifact.kernel_binary_path}")
     return 0 if passed else 1
