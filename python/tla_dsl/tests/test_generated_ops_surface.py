@@ -39,11 +39,10 @@ def _ops_surface_kernel(src: tla.Tensor, dst: tla.Tensor) -> None:
     local_ptr = tla.allocate((1, 16), tla.Float16, tla.AddressSpace.l1, 32)
     _ = local_ptr
 
-    tla.copy(src_tile, dst_tile)
-
     with tla.vector():
         ready = tla.flag("ready", tla.arch.MTE2, tla.arch.VECTOR)
         tla.set_flag(ready)
+        tla.copy(dst_tile, src_tile)
         tla.wait_flag(ready)
         cross = tla.cross_flag("x")
         tla.cross_core_set_flag(cross, tla.pipes.MTE3)
@@ -148,6 +147,7 @@ def test_cross_flag_public_api_emits_call_site_pipes() -> None:
               (1, 16),
               (16, 1),
               origin_shape=(1, 16),
+              addrspace=tla.AddressSpace.ub,
               layout_tag=tla.arch.RowMajor,
           )
     mlir = _ops_surface_kernel.dump_mlir(type_args=(src, dst))
@@ -214,6 +214,7 @@ def test_ops_surface_kernel_lowers_key_op_families() -> None:
               (1, 16),
               (16, 1),
               origin_shape=(1, 16),
+              addrspace=tla.AddressSpace.ub,
               layout_tag=tla.arch.RowMajor,
           )
     mlir = _ops_surface_kernel.dump_mlir(type_args=(src, dst))

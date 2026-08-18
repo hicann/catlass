@@ -127,7 +127,9 @@ def alloc_kernel(mem_a: tla.Tensor) -> None:
     gm_tile = tla.tile_view(mem_a, tla.make_shape(16, 16), tla.make_coord(0, 0))
     ptr = tla.allocate((16, 16), tla.Float16, tla.AddressSpace.l1, 512)
     _ = ptr
-    tla.copy(gm_tile, gm_tile)
+    local_tile = tla.make_tensor_like(ptr, gm_tile, tla.arch.zN)
+    with tla.cube():
+        tla.copy(local_tile, gm_tile)
 
 @tla.kernel
 def alloc_ptr_kernel(mem_a: tla.Tensor) -> None:
@@ -135,7 +137,8 @@ def alloc_ptr_kernel(mem_a: tla.Tensor) -> None:
     ptr = tla.allocate((16, 16), tla.Float16, tla.AddressSpace.l1, 512)
     local_tile = tla.make_tensor_like(ptr, gm_tile, tla.arch.zN)
     _ = local_tile
-    tla.copy(gm_tile, gm_tile)
+    with tla.cube():
+        tla.copy(local_tile, gm_tile)
 
 @tla.kernel
 def bad_flag_name(x: int) -> None:

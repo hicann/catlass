@@ -711,6 +711,8 @@ def statement_if_elif_carried_index_kernel(limit: int) -> None:
 @tla.kernel
 def statement_if_carried_tensor_kernel(mem_a: tla.Tensor) -> None:
     root = tla.tile_view(mem_a, tla.make_shape(16, 8), tla.make_coord(0, 0))
+    ub_ptr = tla.allocate((16, 8), tla.Float16, tla.AddressSpace.ub, 256)
+    ub_tensor = tla.make_tensor_like(ub_ptr, root, tla.arch.RowMajor)
     for i in tla.range(0, 2, 1):
         left = tla.tile_view(root, tla.make_shape(16, 4), tla.make_coord(0, 0))
         right = tla.tile_view(root, tla.make_shape(16, 4), tla.make_coord(0, 0))
@@ -719,11 +721,16 @@ def statement_if_carried_tensor_kernel(mem_a: tla.Tensor) -> None:
             selected = left
         else:
             selected = right
-        tla.copy(selected, left)
+        with tla.vector():
+            tla.copy(ub_tensor, left)
+            tla.copy(ub_tensor, right)
+            tla.copy(ub_tensor, selected)
 
 @tla.kernel
 def statement_if_mixed_index_tensor_kernel(mem_a: tla.Tensor) -> None:
     root = tla.tile_view(mem_a, tla.make_shape(16, 8), tla.make_coord(0, 0))
+    ub_ptr = tla.allocate((16, 8), tla.Float16, tla.AddressSpace.ub, 256)
+    ub_tensor = tla.make_tensor_like(ub_ptr, root, tla.arch.RowMajor)
     for i in tla.range(0, 2, 1):
         left = tla.tile_view(root, tla.make_shape(16, 4), tla.make_coord(0, 0))
         right = tla.tile_view(root, tla.make_shape(16, 4), tla.make_coord(0, 0))
@@ -736,7 +743,10 @@ def statement_if_mixed_index_tensor_kernel(mem_a: tla.Tensor) -> None:
             coord = i + 2
             selected = right
         tla.make_coord(coord, 0)
-        tla.copy(selected, left)
+        with tla.vector():
+            tla.copy(ub_tensor, left)
+            tla.copy(ub_tensor, right)
+            tla.copy(ub_tensor, selected)
 
 @tla.kernel
 def statement_if_not_predicate_kernel(limit: int) -> None:

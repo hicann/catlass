@@ -257,7 +257,6 @@ static constexpr unsigned int ComputeOrderBit = 51;
         op.emitError() << "expected tla.copy " << src2Dst << " has 2 operands";
         return failure();
       }
-      bool sameElem = dstDesc.elementType == srcDesc.elementType;
       auto buildRuntimeMemref = [&](const TensorDescriptor &desc) -> FailureOr<Value> {
         FailureOr<Value> baseMemref = ::tla::getOrMaterializeDescriptorBaseMemref(
             rewriter, op.getLoc(), desc, op.getOperation(), loweredMemrefByValue);
@@ -319,18 +318,6 @@ static constexpr unsigned int ComputeOrderBit = 51;
           op.getContext(), srcAddrspace, dstAddrspace, srcDesc.layoutTag, dstDesc.layoutTag,
           srcDesc.elementType, dstDesc.elementType, extraDesc);
       if (!calleeName.empty()) {
-        bool condSrc = (srcAddrspace == "l0c") && (srcDesc.layoutTag == TensorLayoutTag::L0C);
-        bool condGm = (dstAddrspace == "gm" && dstDesc.layoutTag == TensorLayoutTag::RowMajor);
-        bool condUb = (dstAddrspace == "ub" && (dstDesc.layoutTag == TensorLayoutTag::RowMajor 
-                                            || dstDesc.layoutTag == TensorLayoutTag::ColumnMajor));
-        bool condDtype = (srcDesc.elementType == "f32") && (dstDesc.elementType == "f16" || dstDesc.elementType == "bf16");
-        bool l0c2DstNarrow = condSrc && (condGm || condUb) && condDtype;
-        if (!sameElem && !l0c2DstNarrow) {
-          op.emitError() << "tla.copy supported route has src/dst descriptor metadata mismatch "
-                            "(element type)";
-          return failure();
-        }
-
         FailureOr<Value> dstRuntimeMemref = buildRuntimeMemref(dstDesc);
         FailureOr<Value> srcRuntimeMemref = buildRuntimeMemref(srcDesc);
         if (failed(dstRuntimeMemref) || failed(srcRuntimeMemref))

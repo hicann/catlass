@@ -44,18 +44,6 @@ def _gm_tensor(
         layout_tag=tla.arch.RowMajor,
     )
 
-def _l0c_tensor(
-    dtype: type[tla.Numeric] = tla.Float32,
-    m: int = 32,
-    n: int = 64
-) -> tla.Tensor:
-    return make_fake_tensor(
-        dtype,
-        (m, n),
-        (n, 1),
-        origin_shape=(m, n),
-        layout_tag=tla.arch.RowMajor,
-    )
 
 @tla.kernel
 def atomic_add_l0c2gm_fake_atomic_mode(l0c_tensor: tla.Tensor, gm_tensor: tla.Tensor) -> None:
@@ -99,10 +87,12 @@ def atomic_add_ub2gm_direct_arg(ub_tensor: tla.Tensor, gm_tensor: tla.Tensor) ->
 
 
 @tla.kernel
-def atomic_add_l0c2gm(l0c_tensor: tla.Tensor, gm_tensor: tla.Tensor) -> None:
+def atomic_add_l0c2gm(gm_tensor: tla.Tensor) -> None:
     """Test atomic add mode, data path from L0C to GM"""
 
     _m, _n = 32, 32
+    l0c_ptr = tla.allocate(_m*_n, tla.Float32, tla.AddressSpace.l0c, 512)
+    l0c_tensor = tla.make_tensor_like(l0c_ptr, gm_tensor, tla.arch.L0Clayout)
     l0c_tile = tla.tile_view(l0c_tensor, tla.make_shape(_m, _n), tla.make_coord(0, 0))
     gm_tile = tla.tile_view(gm_tensor, tla.make_shape(_m, _n), tla.make_coord(0, 0))
     with tla.cube():
@@ -153,7 +143,7 @@ def test_atomic_add_ub2gm_direct_arg(compiler_tlair: Any) -> None:
 def test_atomic_add_l0c2gm(compiler_tlair: Any) -> None:
     mlir = compiler_tlair(
         atomic_add_l0c2gm,
-        type_args=(_l0c_tensor(m=32, n=32), _gm_tensor(dtype=tla.Float32, shape=(32, 32))),
+        type_args=(_gm_tensor(dtype=tla.Float32, shape=(32, 32)), ),
     )
 
     assert "tla.copy" in mlir

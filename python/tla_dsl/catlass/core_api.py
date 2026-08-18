@@ -4316,6 +4316,8 @@ Description:
     _require_frontend_state("copy")
     dst_value = _as_value(dst)
     src_value = _as_value(src)
+    src_desc = _tla_tensor_type_for_mlir_value(src_value)
+    dst_desc = _tla_tensor_type_for_mlir_value(dst_value)
 
     # Cube data-path copies (GM->L1, L1->L0A/L0B, L0C->GM, L0C->UB, L1->UB) must
     # live in a tla.cube region; vector staging copies (GM<->UB, UB->L1) must
@@ -4323,44 +4325,54 @@ Description:
     # needs registered tensor metadata, which is unavailable for values carried
     # through scf.if/scf.for; when it can't be resolved, skip the frontend check
     # and let the MLIR verifier enforce placement.
-    try:
-        _route = (
-            _tla_tensor_type_for_mlir_value(src_value).addrspace.lower(),
-            _tla_tensor_type_for_mlir_value(dst_value).addrspace.lower(),
-        )
-    except TlaLoweringError:
-        _route = None
+    _route = (src_desc.addrspace.lower(), dst_desc.addrspace.lower())
+
     if _route in _COPY_CUBE_ROUTES:
         _runtime._require_enclosing_region("copy", "cube")
     elif _route in _COPY_VECTOR_ROUTES:
         _runtime._require_enclosing_region("copy", "vector")
+    else:
+        raise TlaLoweringError(f"unsupported copy route {_route}")
 
-    if _route is not None and _route[0] == "l0c":
+    # Read dtype/addrspace from MLIR descriptors — kernel-arg proxies
+    # (_ArgProxy) do not expose Python .dtype / .addrspace attributes.
+    src_dtype = src_desc.element_type.lower()
+    dst_dtype = dst_desc.element_type.lower()
+    same_dtype = (src_dtype == dst_dtype)
+    src_layout = src_desc.layout_tag.lower()
+    dst_layout = dst_desc.layout_tag.lower()
+
+    if _route[0] == "l0c":
+        if src_layout != "l0clayout":
+            raise TlaLoweringError(f"L0C layout_tag only support l0clayout, got {src_layout}")
+        if src_dtype != "f32":
+            raise NotImplementedError(f"currently l0c dtype only support f32, got {src_dtype}")
+        if src_dtype == "f32" and dst_dtype not in ("f32", "f16", "bf16"):
+            raise TlaLoweringError(f"f32 fixpipe dst dtype only support [f32, f16, bf16], got {dst_dtype}")
+        if _route[1] == "gm" and dst_layout != "row_major":
+            raise NotImplementedError(f"currently copy l0c to gm only support dst row_major, got {dst_layout}")
+        if _route[1] == "ub" and dst_layout not in ("row_major", "column_major"):
+            raise NotImplementedError(
+                "currently copy l0c to ub only support dst [row_major, column_major]," 
+                f" got {dst_layout}"
+            )
+
         if params is None:
             params = CopyL0C2DstParams() # use default
         if isinstance(params, CopyL0C2DstParams):
             params._validate()
             if params.quant_mode != QuantMode.NO_QUANT:
                 raise NotImplementedError(f"currently unsupported quant mode {params.quant_mode}")
-            if params.relu_enable != False:
+            if params.relu_enable:
                 raise NotImplementedError(f"currently unsupported relu_enable {params.relu_enable}")
-            # Read dtype/addrspace from MLIR descriptors — kernel-arg proxies
-            # (_ArgProxy) do not expose Python .dtype / .addrspace attributes.
-            src_dtype = str(
-                _tla_tensor_type_for_mlir_value(src_value).element_type
-            ).strip().lower()
-            dst_dtype = str(
-                _tla_tensor_type_for_mlir_value(dst_value).element_type
-            ).strip().lower()
-            if (_route[1] == "ub") and (src_dtype != dst_dtype) and (
-                params.l0c2ub_mode == L0C2UBMode.SPLIT_M or params.l0c2ub_mode == L0C2UBMode.SPLIT_N):
+            if (_route[1] == "ub") and (not same_dtype) and (
+                params.l0c2ub_mode in (L0C2UBMode.SPLIT_M, L0C2UBMode.SPLIT_N)):
                 raise TlaLoweringError(
                     "When copy l0c to ub with split mode, src and dst dtype must be same , "
                     f"got {src_dtype} {dst_dtype}"
                 )
-            dst_layout = str(_tla_tensor_type_for_mlir_value(dst_value).layout_tag).strip().lower()
             if (_route[1] == "ub") and (dst_layout == "column_major") and (
-                params.l0c2ub_mode not in [L0C2UBMode.NO_SPLIT_VEC_0, L0C2UBMode.NO_SPLIT_VEC_1]):
+                params.l0c2ub_mode not in (L0C2UBMode.NO_SPLIT_VEC_0, L0C2UBMode.NO_SPLIT_VEC_1)):
                 raise TlaLoweringError(
                     f"When copy l0c to ub and dst layout_tag is column_major, only support `NO_SPLIT` mode,"
                     f"got {params.l0c2ub_mode}"
@@ -4383,11 +4395,11 @@ Description:
                 quant_scale_or_tensor=quant_scale_or_tensor
             )
         else:
-            raise TlaLoweringError(
-                "tla.copy operand `params` expects to be a CopyL0C2DstParams when "
-                f"{_route[0]} -> {_route[1]}"
-            )
+            raise TlaLoweringError(f"tla.copy operand `params` expects to be a CopyL0C2DstParams when route is {_route}")
     else:
+        if not same_dtype:
+            raise TlaLoweringError(f"When copy {_route[0]} to {_route[1]}, dtype must be same, "
+                f"got {src_dtype} and {dst_dtype}")
         params_value = None
 
     # Check if atomic mode enabled and acquire lowered atomic_mode_attr
@@ -4396,9 +4408,6 @@ Description:
     if atomic_mode is not None and atomic_mode != AtomicMode.NONE:
         if atomic_mode != AtomicMode.ADD:
             raise NotImplementedError(f"currently unsupported atomic mode {str(atomic_mode)}")
-
-        if _route is None:
-            raise TlaLoweringError(f"Atomic operation is enabled but the route does not exist")
 
         if _route[1] != "gm":
             raise TlaLoweringError(f"When atomic operation is enabled, the dst location should only be GM but got {_route[1]}")

@@ -33,7 +33,7 @@ def _skip_without_compute_order(request):
         _ensure_compute_order_or_skip()
 
 
-def _mmad_tensor_args() -> tuple[tla.Tensor, tla.Tensor, tla.Tensor]:
+def _mmad_tensor_args() -> tuple[tla.Tensor, tla.Tensor, tla.Tensor, tla.Tensor]:
     """Host fake tensors: logical origin + layout_tag; fractal trees via make_fake_tensor."""
     return (
         make_fake_tensor(
@@ -60,6 +60,15 @@ def _mmad_tensor_args() -> tuple[tla.Tensor, tla.Tensor, tla.Tensor]:
             ((16, 256), (1, 2048)),
             addrspace=tla.AddressSpace.l0c,
             layout_tag=tla.arch.L0Clayout,
+            origin_shape=(128, 128),
+            coord=(0, 0),
+        ),
+        make_fake_tensor(
+            tla.Float32,
+            (128, 128),
+            (128, 1),
+            addrspace=tla.AddressSpace.gm,
+            layout_tag=tla.arch.RowMajor,
             origin_shape=(128, 128),
             coord=(0, 0),
         ),
@@ -334,7 +343,7 @@ def test_generic_with_as_binding_shadows_tla_range_alias() -> None:
     generic_with_as_shadows_tla_range_alias_kernel.dump_mlir()
 
 def test_cube_region_lowering() -> None:
-    ta, tb, tc = _mmad_tensor_args()
+    ta, tb, tc, _ = _mmad_tensor_args()
     try:
         mlir = cube_static_kernel.dump_mlir(type_args=(ta, tb, tc))
     except TlaLoweringError as e:
@@ -356,8 +365,7 @@ def test_mutex_guard_copy_infers_mte1_from_l1_source() -> None:
     _assert_guard_order(mlir, "mte1")
 
 def test_mutex_guard_copy_infers_fix_from_l0c_source() -> None:
-    dst = _tensor_arg(tla.AddressSpace.gm, dtype=tla.Float32)
-    src = _tensor_arg(tla.AddressSpace.l0c, dtype=tla.Float32)
+    _, _, src, dst = _mmad_tensor_args()
     mlir = mutex_guard_copy_cube_kernel.dump_mlir(type_args=(dst, src))
     _assert_guard_order(mlir, "fix")
 
@@ -368,7 +376,7 @@ def test_mutex_guard_copy_infers_mte3_from_ub_source() -> None:
     _assert_guard_order(mlir, "mte3")
 
 def test_mutex_guard_multi_mutex_mmad_uses_cube_and_stack_unlock_order() -> None:
-    lhs, rhs, acc = _mmad_tensor_args()
+    lhs, rhs, acc, _ = _mmad_tensor_args()
     try:
         mlir = mutex_guard_multi_mmad_kernel.dump_mlir(type_args=(lhs, rhs, acc))
     except TlaLoweringError as e:
