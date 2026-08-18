@@ -9,7 +9,8 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 #
-# End-to-end validation for python/tla_dsl/examples/end_to_end/basic_mmad (basic_matmul*.py, basic_mmad_ptr.py),
+# End-to-end validation for python/tla_dsl/examples/end_to_end/basic_mmad (basic_matmul*.py, basic_mmad_ptr.py,
+# basic_matmul_l0c2l1.py),
 # python/tla_dsl/examples/end_to_end/basic_vadd (basic_vadd.py),
 # python/tla_dsl/examples/end_to_end/basic_mixed (basic_mixed.py), python/tla_dsl/examples/end_to_end/basic_mixed_mutex (basic_mixed_mutex.py) and
 # python/tla_dsl/examples/end_to_end/basic_mixed (basic_mixed_ub2l1.py, basic_mixed_store_zN.py,
@@ -96,6 +97,7 @@ export CATLASS_DSL_FORCE_RECOMPILE="${CATLASS_DSL_FORCE_RECOMPILE:-1}"
 BASIC_MMAD_REL="examples/end_to_end/basic_mmad/basic_matmul.py"
 BASIC_MMAD_AUTO_SYNC_REL="examples/end_to_end/basic_mmad/basic_matmul_auto_sync.py"
 BASIC_MMAD_PTR_REL="examples/end_to_end/basic_mmad/basic_mmad_ptr.py"
+BASIC_MMAD_L0C2L1_REL="examples/end_to_end/basic_mmad/basic_matmul_l0c2l1.py"
 BASIC_VADD_REL="examples/end_to_end/basic_vadd/basic_vadd.py"
 BASIC_MIXED_REL="examples/end_to_end/basic_mixed/basic_mixed.py"
 BASIC_MIXED_MUTEX_REL="examples/end_to_end/basic_mixed/basic_mixed_mutex.py"
@@ -164,6 +166,7 @@ Run end-to-end validation for:
   - basic_mmad (full flag-sync mnk/layout/dtype matrix; representative manual and automatic mutex cases;
     atomic-add coverage for each supported input dtype)
   - basic_mmad_ptr (basic_mmad_ptr.py)
+  - basic_mmad_l0c2l1 (basic_matmul_l0c2l1.py: cube-only E=(A@B)@D with L0C->L1 staging)
   - basic_vadd (basic_vadd.py with per-dtype CLI invocations, plus mutex variants)
   - basic_mixed (basic_mixed.py with dynamic GM mnk list, including --use-mutex; basic_mixed_ub2l1.py,
     basic_mixed_store_zN.py, basic_mixed_store_zNUnAlign.py for m=64/m=50)
@@ -399,6 +402,10 @@ if [[ ! -f "${CATLASS_DSL_DIR}/${BASIC_MMAD_AUTO_SYNC_REL}" ]]; then
 fi
 if [[ ! -f "${CATLASS_DSL_DIR}/${BASIC_MMAD_PTR_REL}" ]]; then
     echo "error: missing ${BASIC_MMAD_PTR_REL} under ${CATLASS_DSL_DIR}" >&2
+    exit 1
+fi
+if [[ ! -f "${CATLASS_DSL_DIR}/${BASIC_MMAD_L0C2L1_REL}" ]]; then
+    echo "error: missing ${BASIC_MMAD_L0C2L1_REL} under ${CATLASS_DSL_DIR}" >&2
     exit 1
 fi
 if [[ ! -f "${CATLASS_DSL_DIR}/${BASIC_VADD_REL}" ]]; then

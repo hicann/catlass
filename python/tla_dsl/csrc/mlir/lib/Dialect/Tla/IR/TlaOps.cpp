@@ -766,12 +766,13 @@ mlir::LogicalResult CopyOp::verify() {
   AddressSpace src = srcTy.getPtr().getAddrspace();
   AddressSpace dst = dstTy.getPtr().getAddrspace();
 
-  // Cube data-path copies: GM->L1, L1->L0A, L1->L0B, L0C->GM, L0C->UB, L1->UB.
+  // Cube data-path copies: GM->L1, L1->L0A, L1->L0B, L0C->GM, L0C->UB, L0C->L1, L1->UB.
   bool cubeRoute = (src == AddressSpace::gm && dst == AddressSpace::l1) ||
                    (src == AddressSpace::l1 && dst == AddressSpace::l0a) ||
                    (src == AddressSpace::l1 && dst == AddressSpace::l0b) ||
                    (src == AddressSpace::l0c && dst == AddressSpace::gm) ||
                    (src == AddressSpace::l0c && dst == AddressSpace::ub) ||
+                   (src == AddressSpace::l0c && dst == AddressSpace::l1) ||
                    (src == AddressSpace::l1 && dst == AddressSpace::ub);
   // Vector staging copies: GM->UB, UB->GM, UB->L1.
   bool vectorRoute = (src == AddressSpace::gm && dst == AddressSpace::ub) ||

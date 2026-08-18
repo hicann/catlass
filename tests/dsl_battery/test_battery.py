@@ -134,6 +134,10 @@ def _cases(device: int) -> Iterator[tuple[str, list[list[str]]]]:
 
     yield ("mmad-ptr", [["basic_mmad/basic_mmad_ptr.py", *dev]])
 
+    # basic_mmad_l0c2l1: cube-only E=(A@B)@D, L0C->L1 (fixpipe) staging reused
+    # as the second mmad's LHS; single static tile (M=50/N=60/K=64).
+    yield ("mmad-l0c2l1", [["basic_mmad/basic_matmul_l0c2l1.py", *dev]])
+
     # --- basic_vadd: every dtype under each sync mode ---
     for mode in VADD_MODES:
         for dtype in VADD_DTYPES:

@@ -4231,7 +4231,7 @@ Description:
 
 # (src addrspace, dst addrspace) routes and the region each must be nested in.
 _COPY_CUBE_ROUTES = {
-    ("gm", "l1"), ("l1", "l0a"), ("l1", "l0b"), ("l0c", "gm"),
+    ("gm", "l1"), ("l1", "l0a"), ("l1", "l0b"), ("l0c", "gm"), ("l0c", "l1"),
     ("l0c", "ub"), ("l1", "ub"),
 }
 _COPY_VECTOR_ROUTES = {("gm", "ub"), ("ub", "gm"), ("ub", "l1")}
@@ -4242,7 +4242,7 @@ def copy(dst: Tensor, src: Tensor, params: CopyParams | None = None, *, loc: mli
     """Directory: Data Movement
 Description:
     Copy data between tiles. The hardware path follows `src`/`dst` address spaces
-    (vector: GM↔UB, UB→L1; cube: GM→L1, L1→L0A/L0B, L0C→GM|UB, L1→UB).
+    (vector: GM↔UB, UB→L1; cube: GM→L1, L1→L0A/L0B, L0C→GM|UB|L1, L1→UB).
     Layout tags on the tiles select format conversion (for example ND→zN).
 
     Copy / tiling sizes follow each tile's logical `origin_shape`
@@ -4339,12 +4339,12 @@ Description:
     src_dtype = src_desc.element_type.lower()
     dst_dtype = dst_desc.element_type.lower()
     same_dtype = (src_dtype == dst_dtype)
-    src_layout = src_desc.layout_tag.lower()
-    dst_layout = dst_desc.layout_tag.lower()
+    src_layout = src_desc.layout_tag
+    dst_layout = dst_desc.layout_tag
 
     if _route[0] == "l0c":
-        if src_layout != "l0clayout":
-            raise TlaLoweringError(f"L0C layout_tag only support l0clayout, got {src_layout}")
+        if src_layout != "L0Clayout":
+            raise TlaLoweringError(f"L0C layout_tag only support L0Clayout, got {src_layout}")
         if src_dtype != "f32":
             raise NotImplementedError(f"currently l0c dtype only support f32, got {src_dtype}")
         if src_dtype == "f32" and dst_dtype not in ("f32", "f16", "bf16"):
@@ -4356,6 +4356,8 @@ Description:
                 "currently copy l0c to ub only support dst [row_major, column_major]," 
                 f" got {dst_layout}"
             )
+        if _route[1] == "l1" and dst_layout not in ("zN",):
+            raise TlaLoweringError(f"l0c2l1 dst layout shoud be zN, got {dst_layout}")
 
         if params is None:
             params = CopyL0C2DstParams() # use default

@@ -651,7 +651,7 @@ def Tla_CopyOp : Tla_Op<"copy", []> {
   let summary = "Copy";
   let description = [{
     Copy between tensors/views in different address spaces. Cube data-path
-    copies (GM->L1, L1->L0A, L1->L0B, L0C->GM, L0C->UB, L1->UB) must be nested
+    copies (GM->L1, L1->L0A, L1->L0B, L0C->GM, L0C->UB, L0C->L1, L1->UB) must be nested
     inside a ``tla.cube`` region; vector staging copies (GM->UB, UB->GM, UB->L1)
     must be nested inside a ``tla.vector`` region.
 
