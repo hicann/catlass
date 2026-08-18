@@ -13,7 +13,12 @@ __aicore__ inline AscendC::ShapeInfo MakeShapeInfo(uint32_t shape0,
                                                   uint32_t shape1) {
   uint64_t rank = shape1 == 0U ? 1 : 2;
   uint32_t shape[2] = {shape0, shape1};
-  return AscendC::ShapeInfo(static_cast<uint8_t>(rank), shape);
+  AscendC::ShapeInfo shapeInfo(static_cast<uint8_t>(rank), shape);
+  for (uint64_t index = rank; index < K_MAX_SHAPE_DIM; ++index) {
+    shapeInfo.shape[index] = 0U;
+    shapeInfo.originalShape[index] = 0U;
+  }
+  return shapeInfo;
 }
 
 #if ((defined(__NPU_ARCH__) && __NPU_ARCH__ == 3510) || \
