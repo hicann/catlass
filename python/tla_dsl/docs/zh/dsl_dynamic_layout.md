@@ -1,14 +1,25 @@
 # 静态 Layout 与动态 Layout
 
-与框架张量集成时，需要关心转换得到的 `tla.Tensor` 的 layout：默认是**静态 layout**（编译期固定具体 shape / stride），也可标记为**动态 layout**（部分或全部维在类型中写作 `?`，运行时再注入真实 extent）。
-
 本文介绍静态与动态 layout 的含义、如何把 Host tensor 设成动态 layout，以及在 Kernel 中如何编程。`from_dlpack` 等接入方式见 [Host Tensor 接入](framework_integration.md)。
+
+---
+
+## 概述
+
+Host 侧的框架张量（如 PyTorch）接入后，会得到可供 `tla.compile` / launch 使用的 `tla.Tensor`。除了数据指针，编译器还会把该 tensor 的 **layout**——主要是各维的 shape、stride——写进 kernel 的编译类型。按这些尺寸是否在**编译期**就固定，分成两类：
+
+- **静态 layout**：shape / stride 在编译期就是具体数字（例如 `(4, 8)`）。编译产物针对这一组数字特化；换一组尺寸通常需要重新编译。
+- **动态 layout**：选定维在类型里写作 `?`（表示「编译期不确定」），真实长度在每次 launch 时再填入。同一份编译产物可以服务多种具体 shape。
+
+`from_dlpack` 默认只写入**当前**张量的具体 shape / stride，得到静态 layout；DLPack 也不描述「哪些维可变」。若要跨 shape 复用编译产物，须在转换之后用 `mark_layout_dynamic` / `mark_compact_shape_dynamic` 显式标记动态维：对应维在编译类型中变为 `?`，真实尺寸在 launch 时填入。
+
+下文先给静态 layout 的完整示例，再说明如何标记并在 Kernel 中使用动态 layout。
 
 ---
 
 ## 1. 静态 Layout
 
-`from_dlpack` 默认把当前具体 shape / stride / origin 写进 Host 元数据；这些数字进入 `!tla.tensor` 类型，在编译期已知。
+`from_dlpack` 默认把当前具体 shape / stride / origin 写进 Host 元数据；这些数字进入编译类型，在编译期已知。
 
 ```python
 import torch
@@ -18,11 +29,10 @@ from catlass.tla.runtime import from_dlpack
 
 @tla.kernel
 def foo(mem: tla.Tensor) -> None:
-    # 编译期可见具体 extent，例如 shape<3>
+    # 编译期可见具体长度，例如 shape<3>
     n = mem.origin_shape[0]
     # ...
 
-torch.npu.set_device(0)
 torch.npu.set_device(0)
 
 a = torch.arange(3, dtype=torch.float32, device="npu")
@@ -31,7 +41,7 @@ artifact = tla.compile(foo, ta, options="--npu-arch 3510")
 artifact(ta, block_num=1)
 ```
 
-上例中，`ta` 带静态 layout（长度 3）。若再准备长度 5 的张量并沿用同一份编译产物，类型与编译期特化不一致，结果会错误或失败；通常需要针对新的静态 layout **再编译一次**：
+上例中，`from_dlpack` 把长度 3 写进了静态 layout，`tla.compile` 也按该尺寸特化。若之后换成长度 5 的张量却仍调用这份 `artifact`，编译期类型与运行时尺寸对不上，结果会错误或失败；通常需要针对新尺寸 **再编译一次**：
 
 ```python
 b = torch.arange(5, dtype=torch.float32, device="npu")
@@ -46,16 +56,12 @@ artifact_5(tb, block_num=1)
 
 ## 2. 动态 Layout
 
-动态 layout 把选定维在编译类型中写作 `?`（Python 元数据里为 `None`），真实 extent 在 launch 时注入；Kernel 通过 `origin_shape[i]` 等读取运行时尺寸。
-
-动态性在 `from_dlpack` **之后**用 Host API 显式标记，不扩展、不修改 DLPack 协议：
+在 `from_dlpack` 之后调用 `mark_layout_dynamic` / `mark_compact_shape_dynamic`，即可得到动态 layout。二者均原地修改并返回 `self`，可链式调用；须作用于覆盖整块缓冲、各维 `coord` 为 0 的根 Host tensor，不能对已切片的子视图调用。Kernel 侧写法与静态相同：用 `origin_shape[i]` 等读取尺寸；区别在于这些值在动态维上是运行时填入的。
 
 | API | 作用 |
 |-----|------|
 | `mark_layout_dynamic` | 整 layout：全部 shape/origin 动态；stride 除 leading 维外动态 |
 | `mark_compact_shape_dynamic` | 只标一个 compact shape mode，并传播受影响的 major stride |
-
-二者均原地修改并返回 `self`，可链式调用。调用对象须是整块缓冲上的 Host tensor：各维 `coord` 均为 0。
 
 ```python
 import torch
@@ -68,7 +74,6 @@ def foo(mem: tla.Tensor) -> None:
     n = mem.origin_shape[0]
     # ...
 
-torch.npu.set_device(0)
 torch.npu.set_device(0)
 
 a = torch.rand(4, 8, dtype=torch.float32, device="npu")
@@ -120,7 +125,7 @@ Tensor.mark_compact_shape_dynamic(
 ) -> Tensor
 ```
 
-一次只把 **一个** shape 维（及对应 origin_shape 元素）标成动态；对该维为 major 的 stride（紧凑布局下，stride 积中包含该维 extent 的更外层维）一并标成动态。
+一次只把 **一个** shape 维（及对应 origin_shape 元素）标成动态；对该维为 major 的 stride（紧凑布局下，stride 积中包含该维长度的更外层维）一并标成动态。
 
 | 参数 | 含义 |
 |------|------|
@@ -154,7 +159,7 @@ t.mark_compact_shape_dynamic(mode=1, stride_order=(0, 1))
 
 ---
 
-## 3. 静态 Layout 与动态 Layout
+## 3. 小结
 
 综上：静态 layout 按具体数字特化编译；动态 layout 用 `?` 描述可变维，同一份编译可覆盖多种具体 shape。
 
@@ -163,7 +168,7 @@ t.mark_compact_shape_dynamic(mode=1, stride_order=(0, 1))
 | Host | `from_dlpack` | 再 `mark_*_dynamic` |
 | 编译类型 | 具体数字 | 动态维为 `?` |
 | 换 shape | 通常需重新编译 | 同一 artifact 可复用 |
-| 尺寸来源 | 编译期写死在类型里 | launch 时注入当次 extent |
+| 尺寸来源 | 编译期写死在类型里 | launch 时填入当次尺寸 |
 | 适用 | 问题规模固定 | 输入 shape 会变化 |
 
 静态 layout 与动态 layout 的取舍，取决于问题尺寸是否固定，以及是否需要一份编译产物覆盖多种 shape。

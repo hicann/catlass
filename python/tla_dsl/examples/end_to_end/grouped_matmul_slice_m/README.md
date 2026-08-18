@@ -37,7 +37,7 @@ $$
 
 ## 使用示例
 
-要运行本路径下的样例，请参考[环境配置](../../../docs/dev_guide/00_environment_setup.md)完成部署。
+要运行本路径下的样例，请参考[环境配置](../../../docs/zh/dev_guide/00_environment_setup.md)完成部署。
 
 ### 命令行参数
 

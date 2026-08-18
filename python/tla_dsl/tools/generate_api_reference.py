@@ -3,7 +3,7 @@
 
 API docstrings carry ``Directory:`` plus Description / Parameters / Constraints /
 Example. Section order and blurbs live in ``DIRECTORY_SECTIONS`` below.
-Writes English Markdown to ``docs/kernel-api-reference.md`` only.
+Writes English Markdown to ``docs/en/kernel_api_reference.md`` only.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from textwrap import dedent
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]  # python/tla_dsl
 CORE_API_PATH = PACKAGE_ROOT / "catlass" / "core_api.py"
 TENSOR_API_PATH = PACKAGE_ROOT / "catlass" / "tla" / "tensor.py"
-OUTPUT_PATH = PACKAGE_ROOT / "docs" / "kernel-api-reference.md"
+OUTPUT_PATH = PACKAGE_ROOT / "docs" / "en" / "kernel_api_reference.md"
 
 # Drop from prototypes: MLIR location plumbing, not a user-facing API argument.
 HIDDEN_PARAMETERS = frozenset({"loc"})
@@ -705,8 +705,8 @@ def generate(*, docs_dir: Path | None = None) -> str:
         "This document describes the **TLA DSL kernel-side Core APIs** "
         "(typically imported as `import catlass.tla as tla`). "
         "It covers data structures, compute / sync helpers, on-chip resources, "
-        "and debug printing. Host-side launch and runtime are out of scope; "
-        "see `docs/framework_integration.md` for Host tensor binding.",
+        "and debug printing. See `docs/zh/framework_integration.md` for Host "
+        "tensor binding.",
         "",
         "Interface descriptions and examples come from each op's source docstring "
         "(`Directory:` plus `Description:` / `Parameters:` / `Constraints:` / `Example:`).",

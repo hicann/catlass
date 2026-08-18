@@ -544,8 +544,8 @@ def from_dlpack(
     """Convert a DLPack object to a TLA runtime tensor (zero-copy).
 
     ``tensor_dlpack`` must export an Ascend/NPU tensor (e.g. ``torch_npu``). CPU /
-    NumPy buffers are not supported. ``layout_tag`` must be a ``tla.arch`` layout
-    sentinel (e.g. ``tla.arch.ColumnMajor``).
+    NumPy buffers are not supported. ``layout_tag`` must be a ``tla.arch`` layout tag
+    (e.g. ``tla.arch.ColumnMajor``).
 
     When ``origin_shape`` is omitted, logical ``origin_shape`` is derived from the
     DLPack physical shape/strides and ``layout_tag``. For dense 2-D buffers the

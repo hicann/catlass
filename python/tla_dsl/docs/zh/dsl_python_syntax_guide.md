@@ -125,7 +125,7 @@ NPU 中存在cube核与vector核，在DSL中被抽象为两个可使用`with`进
 
 - **Cube 区域**：用 `with tla.cube(...)` 进入，承载cube核上的运算。
 - **Vector 区域**：用 `with tla.vector(...)` 进入，承载vector核上的运算。
-  - **Vector SIMD VF 子区域**： 用 `tla.vec.func(mode="simd")` 进入，承载[Reg 矢量计算](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/latest/API/ascendcopapi/docs/api/SIMD-API/%E5%9F%BA%E7%A1%80API/Reg%E7%9F%A2%E9%87%8F%E8%AE%A1%E7%AE%97/%E6%A6%82%E8%BF%B0.md)子函数。
+  - **Vector SIMD VF 子区域**： 用 `tla.vec.func(mode="simd")` 进入，承载[Reg Vector 计算](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/latest/API/ascendcopapi/docs/api/SIMD-API/%E5%9F%BA%E7%A1%80API/Reg%E7%9F%A2%E9%87%8F%E8%AE%A1%E7%AE%97/%E6%A6%82%E8%BF%B0.md)子函数。
 
 约束：
 
@@ -357,7 +357,7 @@ def constexpr_if_kernel(flag: tla.Constexpr[bool]) -> None:
 
 ### 4.6 with 区域
 
-NPU操作放在 `tla.vector()` 区域内，向量计算包在 `tla.vec.func(mode="simd")` 中。
+NPU操作放在 `tla.vector()` 区域内，vector 计算包在 `tla.vec.func(mode="simd")` 中。
 
 ```python
 @tla.kernel
@@ -450,6 +450,6 @@ artifact(tiling, out)
 
 ## 5. 参考资料
 
-- 控制流使用示例：[`scalar_index_control_flow.py`](../examples/end_to_end/tensor_index/scalar_index_control_flow.py)、[`basic_vadd.py`](../examples/end_to_end/basic_vadd/basic_vadd.py)、[`register_control_flow.py`](../examples/end_to_end/vector_ops/register_control_flow.py)
-- 控制流 AST 实现：[`ast_preprocessor.py`](../catlass/base_dsl/ast_preprocessor.py)、[`tla_ast_decorators.py`](../catlass/tla_ast_decorators.py)
-- 控制流测试用例参考：[`test_frontend_branching.py`](../tests/test_frontend_branching.py)、[`test_frontend_for_range.py`](../tests/test_frontend_for_range.py)、[`test_frontend_while.py`](../tests/test_frontend_while.py)、[`test_frontend_with.py`](../tests/test_frontend_with.py)
+- 控制流使用示例：[`scalar_index_control_flow.py`](../../examples/end_to_end/tensor_index/scalar_index_control_flow.py)、[`basic_vadd.py`](../../examples/end_to_end/basic_vadd/basic_vadd.py)、[`register_control_flow.py`](../../examples/end_to_end/vector_ops/register_control_flow.py)
+- 控制流 AST 实现：[`ast_preprocessor.py`](../../catlass/base_dsl/ast_preprocessor.py)、[`tla_ast_decorators.py`](../../catlass/tla_ast_decorators.py)
+- 控制流测试用例参考：[`test_frontend_branching.py`](../../tests/test_frontend_branching.py)、[`test_frontend_for_range.py`](../../tests/test_frontend_for_range.py)、[`test_frontend_while.py`](../../tests/test_frontend_while.py)、[`test_frontend_with.py`](../../tests/test_frontend_with.py)

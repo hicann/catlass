@@ -1,6 +1,6 @@
 <!--
 Manually maintained Chinese Kernel API reference.
-Generated English source of truth: docs/kernel-api-reference.md
+Generated English source of truth: docs/en/kernel_api_reference.md
 (from python/tla_dsl/tools/generate_api_reference.py + English docstrings).
 Translate/update this file by hand when the English reference changes.
 Do not regenerate this file from a glossary.
@@ -9,7 +9,7 @@ Do not regenerate this file from a glossary.
 # TLA DSL Kernel API 参考
 
 本文档介绍 **TLA DSL 的 kernel 侧 Core API**（通常以 `import catlass.tla as tla` 导入）。
-内容覆盖基本数据类型、计算与同步接口、片上资源管理以及调试打印。Host 侧启动与运行时不在本文档范围；Host tensor 接入见 [Host Tensor 接入](framework_integration.md)。
+内容覆盖基本数据类型、计算与同步接口、片上资源管理以及调试打印。Host tensor 接入见 [Host Tensor 接入](framework_integration.md)。
 
 接口说明与调用示例来自各 op 源码 docstring；所有接口均须在 `@tla.kernel` 装饰的
 kernel 函数体内调用。
@@ -23,7 +23,7 @@ kernel 函数体内调用。
 - [1. 基本数据类型与操作](#1-基本数据类型与操作)
 - [2. 数据搬运](#2-数据搬运)
 - [3. 矩阵运算](#3-矩阵运算)
-- [4. 向量运算](#4-向量运算)
+- [4. Vector 运算](#4-vector-运算)
   - [4.1 Mask 计算](#41-mask-计算)
   - [4.2 基础算术](#42-基础算术)
   - [4.3 逻辑计算](#43-逻辑计算)
@@ -46,7 +46,7 @@ Shape / Coord / Stride / Layout / Tensor 等前端结构化值的构造与视图
 ### `make_shape`
 
 
-**源码：** [`catlass.core_api.make_shape`](../catlass/core_api.py#L3516)
+**源码：** [`catlass.core_api.make_shape`](../../catlass/core_api.py#L3516)
 
 功能说明：
 
@@ -93,7 +93,7 @@ zn_shape = tla.make_shape((16, 8), (16, 4))
 ### `make_coord`
 
 
-**源码：** [`catlass.core_api.make_coord`](../catlass/core_api.py#L3557)
+**源码：** [`catlass.core_api.make_coord`](../../catlass/core_api.py#L3557)
 
 功能说明：
 
@@ -129,7 +129,7 @@ coord = tla.make_coord(block_row, 0)
 ### `make_stride`
 
 
-**源码：** [`catlass.core_api.make_stride`](../catlass/core_api.py#L3586)
+**源码：** [`catlass.core_api.make_stride`](../../catlass/core_api.py#L3586)
 
 功能说明：
 
@@ -195,7 +195,7 @@ nz_stride = tla.make_stride((1, 1024), (16, 256))
 ### `make_layout`
 
 
-**源码：** [`catlass.core_api.make_layout`](../catlass/core_api.py#L3646)
+**源码：** [`catlass.core_api.make_layout`](../../catlass/core_api.py#L3646)
 
 功能说明：
 
@@ -260,7 +260,7 @@ zn = tla.make_layout(
 ### `tile_view`
 
 
-**源码：** [`catlass.core_api.tile_view`](../catlass/core_api.py#L3815)
+**源码：** [`catlass.core_api.tile_view`](../../catlass/core_api.py#L3815)
 
 功能说明：
 
@@ -300,7 +300,7 @@ tile = tla.tile_view(
 ### `make_tensor`
 
 
-**源码：** [`catlass.core_api.make_tensor`](../catlass/core_api.py#L3862)
+**源码：** [`catlass.core_api.make_tensor`](../../catlass/core_api.py#L3862)
 
 功能说明：
 
@@ -344,7 +344,7 @@ tensor = tla.make_tensor(ptr, layout, coord=tla.make_coord(0, 0))
 ### `make_tensor_like`
 
 
-**源码：** [`catlass.core_api.make_tensor_like`](../catlass/core_api.py#L4059)
+**源码：** [`catlass.core_api.make_tensor_like`](../../catlass/core_api.py#L4059)
 
 功能说明：
 
@@ -383,7 +383,7 @@ dst = tla.make_tensor_like(ptr, like=src_tile, layoutTag=tla.arch.RowMajor)
 ### `make_ptr`
 
 
-**源码：** [`catlass.core_api.make_ptr`](../catlass/core_api.py#L6968)
+**源码：** [`catlass.core_api.make_ptr`](../../catlass/core_api.py#L6968)
 
 功能说明：
 
@@ -422,7 +422,7 @@ ptr = tla.make_ptr(tla.Float16, addr, mem_space=tla.AddressSpace.gm)
 ### `recast_ptr`
 
 
-**源码：** [`catlass.core_api.recast_ptr`](../catlass/core_api.py#L7022)
+**源码：** [`catlass.core_api.recast_ptr`](../../catlass/core_api.py#L7022)
 
 功能说明：
 
@@ -462,7 +462,7 @@ ptr_f32 = tla.recast_ptr(ptr_f16, dtype=tla.Float32)
 ### `copy`
 
 
-**源码：** [`catlass.core_api.copy`](../catlass/core_api.py#L4249)
+**源码：** [`catlass.core_api.copy`](../../catlass/core_api.py#L4249)
 
 功能说明：
 
@@ -550,11 +550,11 @@ with tla.cube():
 ### `Tensor.load`
 
 
-**源码：** [`catlass.tla.tensor._Tensor.load`](../catlass/tla/tensor.py#L211)
+**源码：** [`catlass.tla.tensor._Tensor.load`](../../catlass/tla/tensor.py#L211)
 
 功能说明：
 
-将本 UB tensor tile 载入矢量或 mask SSA（`tile.load`）。
+将本 UB tensor tile 载入 vector 或 mask SSA（`tile.load`）。
 
 函数原型：
 
@@ -589,11 +589,11 @@ with tla.vec.func(mode="simd"):
 ### `Tensor.store`
 
 
-**源码：** [`catlass.tla.tensor._Tensor.store`](../catlass/tla/tensor.py#L382)
+**源码：** [`catlass.tla.tensor._Tensor.store`](../../catlass/tla/tensor.py#L382)
 
 功能说明：
 
-将矢量或 mask SSA 写回本 UB tensor tile（`tile.store`）。
+将 vector 或 mask SSA 写回本 UB tensor tile（`tile.store`）。
 
 函数原型：
 
@@ -605,8 +605,8 @@ tile.store(value: VectorSSA | MaskSSA, params: StoreParams | None = None, *, mas
 
 - `value`（`VectorSSA | MaskSSA`）：要写入的 `VectorSSA` 或 `MaskSSA`。必填。
 - `params`（`StoreParams | None`）：写回模式。`None` / `NormalStoreParams` /
-  `UnalignStoreParams` / `BlockStoreParams` → 矢量写回；`MaskStoreParams` → mask 写回。可选，默认 `None`。
-- `mask`（`MaskSSA | None`）：矢量写回的可选谓词；与 `MaskStoreParams` 不可同时使用。可选，默认 `None`。
+  `UnalignStoreParams` / `BlockStoreParams` → vector 写回；`MaskStoreParams` → mask 写回。可选，默认 `None`。
+- `mask`（`MaskSSA | None`）：vector 写回的可选谓词；与 `MaskStoreParams` 不可同时使用。可选，默认 `None`。
 
 约束说明：
 
@@ -631,11 +631,11 @@ Cube 侧矩阵乘加（`tla.mmad`）。
 ### `mmad`
 
 
-**源码：** [`catlass.core_api.mmad`](../catlass/core_api.py#L5140)
+**源码：** [`catlass.core_api.mmad`](../../catlass/core_api.py#L5140)
 
 功能说明：
 
-在 Tla tile 上发射矩阵乘累加。
+在 TLA tile 上执行矩阵乘累加。
 
 函数原型：
 
@@ -674,8 +674,8 @@ with tla.cube():
 
 ---
 
-## 4. 向量运算
-寄存器向量路径上的计算与 mask 操作，通常须在 `tla.vec.func()` 内调用。
+## 4. Vector 运算
+寄存器 Vector 路径上的计算与 mask 操作，通常须在 `tla.vec.func()` 内调用。
 
 ### 4.1 Mask 计算
 Mask 创建与尾块更新。
@@ -683,7 +683,7 @@ Mask 创建与尾块更新。
 #### `create_mask`
 
 
-**源码：** [`catlass.core_api.create_mask`](../catlass/core_api.py#L7280)
+**源码：** [`catlass.core_api.create_mask`](../../catlass/core_api.py#L7280)
 
 功能说明：
 
@@ -712,7 +712,7 @@ tla.create_mask(*, pattern: _MaskPattern | str | None = None, dtype: DTypeLike =
   | `H` | 最低一半元素有效 |
   | `Q` | 最低四分之一元素有效 |
 
-- `dtype`（`DTypeLike`）：与掩码关联的元素类型（也决定一条向量能放多少元素：
+- `dtype`（`DTypeLike`）：与掩码关联的元素类型（也决定一条 vector 能放多少元素：
   256 字节 / 元素大小）。可选，默认 `Float32`。
 
 约束说明：
@@ -729,7 +729,7 @@ with tla.vec.func(mode="simd"):
     # 用 pattern token 构建 mask：
     m_all = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Float16)
     m_tail = tla.create_mask(pattern=tla.mask.VL8, dtype=tla.Float16)
-    # 前：x_reg / y_reg 为整向量；只让最低 8 个元素做加法。
+    # 前：x_reg / y_reg 为整 vector；只让最低 8 个元素做加法。
     z = tla.add(x_reg, y_reg, mask=m_tail)
     # 后：有效元素为 x+y；被 mask 掉的元素不参与。
 ```
@@ -743,7 +743,7 @@ with tla.vec.func(mode="simd"):
 #### `update_mask`
 
 
-**源码：** [`catlass.core_api.update_mask`](../catlass/core_api.py#L7346)
+**源码：** [`catlass.core_api.update_mask`](../../catlass/core_api.py#L7346)
 
 功能说明：
 
@@ -783,11 +783,11 @@ with tla.vec.func(mode="simd"):
 #### `exp`
 
 
-**源码：** [`catlass.core_api.exp`](../catlass/core_api.py#L5723)
+**源码：** [`catlass.core_api.exp`](../../catlass/core_api.py#L5723)
 
 功能说明：
 
-向量逐元素指数（需 f16/f32）。
+vector 逐元素指数（需 f16/f32）。
 
 函数原型：
 
@@ -797,7 +797,7 @@ tla.exp(operand: VectorSSA, *, mask: MaskSSA | None = None) -> VectorSSA
 
 参数说明：
 
-- `operand`（`VectorSSA`）：源向量寄存器。必填。
+- `operand`（`VectorSSA`）：源 vector 寄存器。必填。
 - `mask`（`MaskSSA | None`）：可选执行掩码；`None` 表示全有效。可选，默认 `None`。
 
 约束说明：
@@ -821,11 +821,11 @@ with tla.vec.func(mode="simd"):
 #### `log`
 
 
-**源码：** [`catlass.core_api.log`](../catlass/core_api.py#L5745)
+**源码：** [`catlass.core_api.log`](../../catlass/core_api.py#L5745)
 
 功能说明：
 
-向量逐元素对数（需 f16/f32）。
+vector 逐元素对数（需 f16/f32）。
 
 函数原型：
 
@@ -835,7 +835,7 @@ tla.log(operand: VectorSSA, *, mask: MaskSSA | None = None) -> VectorSSA
 
 参数说明：
 
-- `operand`（`VectorSSA`）：源向量寄存器。必填。
+- `operand`（`VectorSSA`）：源 vector 寄存器。必填。
 - `mask`（`MaskSSA | None`）：可选执行掩码；`None` 表示全有效。可选，默认 `None`。
 
 约束说明：
@@ -859,11 +859,11 @@ with tla.vec.func(mode="simd"):
 #### `sqrt`
 
 
-**源码：** [`catlass.core_api.sqrt`](../catlass/core_api.py#L5767)
+**源码：** [`catlass.core_api.sqrt`](../../catlass/core_api.py#L5767)
 
 功能说明：
 
-向量逐元素平方根（需 f16/f32）。
+vector 逐元素平方根（需 f16/f32）。
 
 函数原型：
 
@@ -873,7 +873,7 @@ tla.sqrt(operand: VectorSSA, *, mask: MaskSSA | None = None) -> VectorSSA
 
 参数说明：
 
-- `operand`（`VectorSSA`）：源向量寄存器。必填。
+- `operand`（`VectorSSA`）：源 vector 寄存器。必填。
 - `mask`（`MaskSSA | None`）：可选执行掩码；`None` 表示全有效。可选，默认 `None`。
 
 约束说明：
@@ -897,11 +897,11 @@ with tla.vec.func(mode="simd"):
 #### `abs`
 
 
-**源码：** [`catlass.core_api.abs`](../catlass/core_api.py#L5789)
+**源码：** [`catlass.core_api.abs`](../../catlass/core_api.py#L5789)
 
 功能说明：
 
-向量逐元素绝对值。
+vector 逐元素绝对值。
 
 函数原型：
 
@@ -911,7 +911,7 @@ tla.abs(operand: VectorSSA, *, mask: MaskSSA | None = None) -> VectorSSA
 
 参数说明：
 
-- `operand`（`VectorSSA`）：源向量寄存器。必填。
+- `operand`（`VectorSSA`）：源 vector 寄存器。必填。
 - `mask`（`MaskSSA | None`）：可选执行掩码；`None` 表示全有效。可选，默认 `None`。
 
 约束说明：
@@ -935,11 +935,11 @@ with tla.vec.func(mode="simd"):
 #### `neg`
 
 
-**源码：** [`catlass.core_api.neg`](../catlass/core_api.py#L5811)
+**源码：** [`catlass.core_api.neg`](../../catlass/core_api.py#L5811)
 
 功能说明：
 
-向量逐元素取负。
+vector 逐元素取负。
 
 函数原型：
 
@@ -949,7 +949,7 @@ tla.neg(operand: VectorSSA, *, mask: MaskSSA | None = None) -> VectorSSA
 
 参数说明：
 
-- `operand`（`VectorSSA`）：源向量寄存器。必填。
+- `operand`（`VectorSSA`）：源 vector 寄存器。必填。
 - `mask`（`MaskSSA | None`）：可选执行掩码；`None` 表示全有效。可选，默认 `None`。
 
 约束说明：
@@ -973,11 +973,11 @@ with tla.vec.func(mode="simd"):
 #### `add`
 
 
-**源码：** [`catlass.core_api.add`](../catlass/core_api.py#L5991)
+**源码：** [`catlass.core_api.add`](../../catlass/core_api.py#L5991)
 
 功能说明：
 
-向量逐元素加法（支持 vector–vector 与 vector–scalar）。
+vector 逐元素加法（支持 vector–vector 与 vector–scalar）。
 `VectorSSA` 在不需要 `mask` 时也可通过 `+` / `__radd__` 调用本接口。
 
 函数原型：
@@ -1019,11 +1019,11 @@ with tla.vec.func(mode="simd"):
 #### `sub`
 
 
-**源码：** [`catlass.core_api.sub`](../catlass/core_api.py#L6037)
+**源码：** [`catlass.core_api.sub`](../../catlass/core_api.py#L6037)
 
 功能说明：
 
-向量逐元素减法。
+vector 逐元素减法。
 `VectorSSA` 在不需要 `mask` 时也可通过 `-`（`__sub__`）调用本接口。
 
 函数原型：
@@ -1047,7 +1047,7 @@ tla.sub(lhs: VectorSSA | Numeric | bool | int | float, rhs: VectorSSA | Numeric 
 
 ```python
 with tla.vec.func(mode="simd"):
-    # 计算前：x_reg / y_reg 为源向量。
+    # 计算前：x_reg / y_reg 为源 vector。
     z = x_reg - y_reg                 # 等价于 tla.sub(x_reg, y_reg)
     z = tla.sub(x_reg, y_reg, mask=m) # 需要 mask 时用函数形式
     # 计算后：z 为逐元素差。
@@ -1062,11 +1062,11 @@ with tla.vec.func(mode="simd"):
 #### `mul`
 
 
-**源码：** [`catlass.core_api.mul`](../catlass/core_api.py#L6074)
+**源码：** [`catlass.core_api.mul`](../../catlass/core_api.py#L6074)
 
 功能说明：
 
-向量逐元素乘法。
+vector 逐元素乘法。
 `VectorSSA` 在不需要 `mask` 时也可通过 `*` / `__rmul__` 调用本接口。
 
 函数原型：
@@ -1090,7 +1090,7 @@ tla.mul(lhs: VectorSSA | Numeric | bool | int | float, rhs: VectorSSA | Numeric 
 
 ```python
 with tla.vec.func(mode="simd"):
-    # 计算前：x_reg 为激活；scale 可为向量或标量。
+    # 计算前：x_reg 为激活；scale 可为 vector 或标量。
     z = x_reg * y_reg      # 等价于 tla.mul(x_reg, y_reg)
     z = x_reg * 2.0        # vector–scalar
     z = tla.mul(x_reg, y_reg, mask=m)
@@ -1106,11 +1106,11 @@ with tla.vec.func(mode="simd"):
 #### `max`
 
 
-**源码：** [`catlass.core_api.max`](../catlass/core_api.py#L6119)
+**源码：** [`catlass.core_api.max`](../../catlass/core_api.py#L6119)
 
 功能说明：
 
-向量逐元素最大值。
+vector 逐元素最大值。
 
 函数原型：
 
@@ -1145,11 +1145,11 @@ with tla.vec.func(mode="simd"):
 #### `min`
 
 
-**源码：** [`catlass.core_api.min`](../catlass/core_api.py#L6159)
+**源码：** [`catlass.core_api.min`](../../catlass/core_api.py#L6159)
 
 功能说明：
 
-向量逐元素最小值。
+vector 逐元素最小值。
 
 函数原型：
 
@@ -1184,11 +1184,11 @@ with tla.vec.func(mode="simd"):
 #### `div`
 
 
-**源码：** [`catlass.core_api.div`](../catlass/core_api.py#L6199)
+**源码：** [`catlass.core_api.div`](../../catlass/core_api.py#L6199)
 
 功能说明：
 
-向量逐元素除法。
+vector 逐元素除法。
 `VectorSSA` 在不需要 `mask` 时也可通过 `/`（`__truediv__`）调用本接口。
 
 函数原型：
@@ -1229,7 +1229,7 @@ with tla.vec.func(mode="simd"):
 #### `bitwise_not`
 
 
-**源码：** [`catlass.core_api.bitwise_not`](../catlass/core_api.py#L5957)
+**源码：** [`catlass.core_api.bitwise_not`](../../catlass/core_api.py#L5957)
 
 功能说明：
 
@@ -1267,7 +1267,7 @@ with tla.vec.func(mode="simd"):
 #### `bitwise_and`
 
 
-**源码：** [`catlass.core_api.bitwise_and`](../catlass/core_api.py#L6568)
+**源码：** [`catlass.core_api.bitwise_and`](../../catlass/core_api.py#L6568)
 
 功能说明：
 
@@ -1306,7 +1306,7 @@ with tla.vec.func(mode="simd"):
 #### `bitwise_or`
 
 
-**源码：** [`catlass.core_api.bitwise_or`](../catlass/core_api.py#L6606)
+**源码：** [`catlass.core_api.bitwise_or`](../../catlass/core_api.py#L6606)
 
 功能说明：
 
@@ -1345,7 +1345,7 @@ with tla.vec.func(mode="simd"):
 #### `bitwise_xor`
 
 
-**源码：** [`catlass.core_api.bitwise_xor`](../catlass/core_api.py#L6644)
+**源码：** [`catlass.core_api.bitwise_xor`](../../catlass/core_api.py#L6644)
 
 功能说明：
 
@@ -1386,11 +1386,11 @@ with tla.vec.func(mode="simd"):
 #### `where`
 
 
-**源码：** [`catlass.core_api.where`](../catlass/core_api.py#L6283)
+**源码：** [`catlass.core_api.where`](../../catlass/core_api.py#L6283)
 
 功能说明：
 
-按 mask 在两路向量间逐元素选择。
+按 mask 在两路 vector 间逐元素选择。
 
 函数原型：
 
@@ -1425,11 +1425,11 @@ with tla.vec.func(mode="simd"):
 #### `cmp`
 
 
-**源码：** [`catlass.core_api.cmp`](../catlass/core_api.py#L6490)
+**源码：** [`catlass.core_api.cmp`](../../catlass/core_api.py#L6490)
 
 功能说明：
 
-向量比较，返回 mask。
+vector 比较，返回 mask。
 
 函数原型：
 
@@ -1440,14 +1440,14 @@ tla.cmp(lhs: VectorSSA, rhs: VectorSSA | Numeric | bool | int | float, mode: str
 参数说明：
 
 - `lhs`（`VectorSSA`）：比较左操作数。必填。
-- `rhs`（`VectorSSA | Numeric | bool | int | float`）：比较右操作数（可为标量或向量）。必填。
+- `rhs`（`VectorSSA | Numeric | bool | int | float`）：比较右操作数（可为标量或 vector）。必填。
 - `mode`（`str`）：比较模式，如 `'eq'` / `'lt'` / `'gt'` 等。必填。
 - `mask`（`MaskSSA | None`）：可选执行掩码；`None` 表示全有效。可选，默认 `None`。
 
 约束说明：
 
 - 须在 `@tla.kernel` 装饰的 kernel 函数体内调用。
-- 须在 `tla.vec.func()` 内调用；`mode` 须为支持的比较助记符。
+- 须在 `tla.vec.func()` 内调用；`mode` 须为支持的比较模式名。
 
 调用示例：
 
@@ -1467,7 +1467,7 @@ with tla.vec.func(mode="simd"):
 #### `full`
 
 
-**源码：** [`catlass.core_api.full`](../catlass/core_api.py#L5235)
+**源码：** [`catlass.core_api.full`](../../catlass/core_api.py#L5235)
 
 功能说明：
 
@@ -1482,7 +1482,7 @@ tla.full(value: bool | int | float | Numeric, dtype: type[Numeric]) -> VectorSSA
 参数说明：
 
 - `value`（`bool | int | float | Numeric`）：填充常量。必填。
-- `dtype`（`type[Numeric]`）：向量元素类型。必填。
+- `dtype`（`type[Numeric]`）：vector 元素类型。必填。
 
 约束说明：
 
@@ -1505,7 +1505,7 @@ with tla.vec.func(mode="simd"):
 #### `arange`
 
 
-**源码：** [`catlass.core_api.arange`](../catlass/core_api.py#L5308)
+**源码：** [`catlass.core_api.arange`](../../catlass/core_api.py#L5308)
 
 功能说明：
 
@@ -1521,7 +1521,7 @@ tla.arange(base: bool | int | float | Numeric = 0, *, order: str = 'increase', d
 
 - `base`（`bool | int | float | Numeric`）：起始基数。可选，默认 `0`。
 - `order`（`str`）：`'increase'` 递增或 `'decrease'` 递减。可选，默认 `'increase'`。
-- `dtype`（`type[Numeric]`）：向量元素类型。必填。
+- `dtype`（`type[Numeric]`）：vector 元素类型。必填。
 
 约束说明：
 
@@ -1546,11 +1546,11 @@ with tla.vec.func(mode="simd"):
 #### `gather`
 
 
-**源码：** [`catlass.core_api.gather`](../catlass/core_api.py#L6682)
+**源码：** [`catlass.core_api.gather`](../../catlass/core_api.py#L6682)
 
 功能说明：
 
-按向量下标从 UB tensor gather 元素。
+按 vector 下标从 UB tensor gather 元素。
 
 函数原型：
 
@@ -1561,7 +1561,7 @@ tla.gather(x: Tensor, y: VectorSSA, *, mask: MaskSSA | None = None) -> VectorSSA
 参数说明：
 
 - `x`（`Tensor`）：被 gather 的源 tile / 表。必填。
-- `y`（`VectorSSA`）：索引向量寄存器。必填。
+- `y`（`VectorSSA`）：索引 vector 寄存器。必填。
 - `mask`（`MaskSSA | None`）：可选执行掩码；`None` 表示全有效。可选，默认 `None`。
 
 约束说明：
@@ -1587,11 +1587,11 @@ with tla.vec.func(mode="simd"):
 #### `interleave`
 
 
-**源码：** [`catlass.core_api.interleave`](../catlass/core_api.py#L5848)
+**源码：** [`catlass.core_api.interleave`](../../catlass/core_api.py#L5848)
 
 功能说明：
 
-两路向量交插，返回高低两半。
+两路 vector 交插，返回高低两半。
 
 函数原型：
 
@@ -1601,13 +1601,13 @@ tla.interleave(src0: VectorSSA, src1: VectorSSA) -> tuple[VectorSSA, VectorSSA]
 
 参数说明：
 
-- `src0`（`VectorSSA`）：偶数路输入向量寄存器。必填。
-- `src1`（`VectorSSA`）：奇数路输入向量寄存器。必填。
+- `src0`（`VectorSSA`）：偶数路输入 vector 寄存器。必填。
+- `src1`（`VectorSSA`）：奇数路输入 vector 寄存器。必填。
 
 约束说明：
 
 - 须在 `@tla.kernel` 装饰的 kernel 函数体内调用。
-- 须在 `tla.vec.func()` 内调用；两路向量的元素类型与元素个数须匹配。
+- 须在 `tla.vec.func()` 内调用；两路 vector 的元素类型与元素个数须匹配。
 
 调用示例：
 
@@ -1625,11 +1625,11 @@ with tla.vec.func(mode="simd"):
 #### `deinterleave`
 
 
-**源码：** [`catlass.core_api.deinterleave`](../catlass/core_api.py#L5902)
+**源码：** [`catlass.core_api.deinterleave`](../../catlass/core_api.py#L5902)
 
 功能说明：
 
-两路向量解交插，返回高低两半。
+两路 vector 解交插，返回高低两半。
 
 函数原型：
 
@@ -1645,7 +1645,7 @@ tla.deinterleave(src0: VectorSSA, src1: VectorSSA) -> tuple[VectorSSA, VectorSSA
 约束说明：
 
 - 须在 `@tla.kernel` 装饰的 kernel 函数体内调用。
-- 须在 `tla.vec.func()` 内调用；两路向量的元素类型与元素个数须匹配。
+- 须在 `tla.vec.func()` 内调用；两路 vector 的元素类型与元素个数须匹配。
 
 调用示例：
 
@@ -1665,7 +1665,7 @@ with tla.vec.func(mode="simd"):
 #### `squeeze`
 
 
-**源码：** [`catlass.core_api.squeeze`](../catlass/core_api.py#L6337)
+**源码：** [`catlass.core_api.squeeze`](../../catlass/core_api.py#L6337)
 
 功能说明：
 
@@ -1679,7 +1679,7 @@ tla.squeeze(src: VectorSSA, mask: MaskSSA) -> VectorSSA
 
 参数说明：
 
-- `src`（`VectorSSA`）：待压缩的源向量。必填。
+- `src`（`VectorSSA`）：待压缩的源 vector。必填。
 - `mask`（`MaskSSA`）：保留元素的掩码。必填。
 
 约束说明：
@@ -1706,7 +1706,7 @@ with tla.vec.func(mode="simd"):
 ### `flag`
 
 
-**源码：** [`catlass.core_api.flag`](../catlass/core_api.py#L4430)
+**源码：** [`catlass.core_api.flag`](../../catlass/core_api.py#L4430)
 
 功能说明：
 
@@ -1749,11 +1749,11 @@ with tla.vector():
 ### `cross_flag`
 
 
-**源码：** [`catlass.core_api.cross_flag`](../catlass/core_api.py#L4501)
+**源码：** [`catlass.core_api.cross_flag`](../../catlass/core_api.py#L4501)
 
 功能说明：
 
-物化命名跨核同步 flag。源/目的 pipe 由对应 set/wait 指定；`mode=4` 为 1:1 AIC↔AIV，并按 AIV0/AIV1 独立寻址。
+创建命名的跨核同步 flag。源/目的 pipe 由对应 set/wait 指定；`mode=4` 为 1:1 AIC↔AIV，并按 AIV0/AIV1 独立寻址。
 
 函数原型：
 
@@ -1786,7 +1786,7 @@ cf = tla.cross_flag("aic_aiv", mode=2)
 ### `cross_core_set_flag`
 
 
-**源码：** [`catlass.core_api.cross_core_set_flag`](../catlass/core_api.py#L4573)
+**源码：** [`catlass.core_api.cross_core_set_flag`](../../catlass/core_api.py#L4573)
 
 功能说明：
 
@@ -1801,7 +1801,7 @@ tla.cross_core_set_flag(cross_flag_value: CrossFlagLike, pipe: PipeLike, aiv_id:
 参数说明：
 
 - `cross_flag_value`（`CrossFlagLike`）：由 `tla.cross_flag` 得到的跨核 flag。必填。
-- `pipe`（`PipeLike`）：发射 set 的 pipe。必填。
+- `pipe`（`PipeLike`）：设置 flag 的 pipe。必填。
 - `aiv_id`（`int | None`）：目标 AIV 编号；缺省表示广播/默认路由。可选，默认 `None`。
 
 约束说明：
@@ -1826,7 +1826,7 @@ with tla.cube():
 ### `cross_core_wait_flag`
 
 
-**源码：** [`catlass.core_api.cross_core_wait_flag`](../catlass/core_api.py#L4619)
+**源码：** [`catlass.core_api.cross_core_wait_flag`](../../catlass/core_api.py#L4619)
 
 功能说明：
 
@@ -1865,7 +1865,7 @@ with tla.vector():
 ### `set_flag`
 
 
-**源码：** [`catlass.core_api.set_flag`](../catlass/core_api.py#L4664)
+**源码：** [`catlass.core_api.set_flag`](../../catlass/core_api.py#L4664)
 
 功能说明：
 
@@ -1879,7 +1879,7 @@ tla.set_flag(flag_value: FlagLike) -> None
 
 参数说明：
 
-- `flag_value`（`FlagLike`）：由 `tla.flag` 得到的管道 flag。必填。
+- `flag_value`（`FlagLike`）：由 `tla.flag` 得到的核内 pipe flag。必填。
 
 约束说明：
 
@@ -1902,7 +1902,7 @@ with tla.vector():
 ### `wait_flag`
 
 
-**源码：** [`catlass.core_api.wait_flag`](../catlass/core_api.py#L4690)
+**源码：** [`catlass.core_api.wait_flag`](../../catlass/core_api.py#L4690)
 
 功能说明：
 
@@ -1916,7 +1916,7 @@ tla.wait_flag(flag_value: FlagLike) -> None
 
 参数说明：
 
-- `flag_value`（`FlagLike`）：由 `tla.flag` 得到的管道 flag。必填。
+- `flag_value`（`FlagLike`）：由 `tla.flag` 得到的核内 pipe flag。必填。
 
 约束说明：
 
@@ -1939,7 +1939,7 @@ with tla.vector():
 ### `pipe_barrier`
 
 
-**源码：** [`catlass.core_api.pipe_barrier`](../catlass/core_api.py#L4716)
+**源码：** [`catlass.core_api.pipe_barrier`](../../catlass/core_api.py#L4716)
 
 功能说明：
 
@@ -1976,7 +1976,7 @@ with tla.vector():
 ### `mutex`
 
 
-**源码：** [`catlass.core_api.mutex`](../catlass/core_api.py#L4751)
+**源码：** [`catlass.core_api.mutex`](../../catlass/core_api.py#L4751)
 
 功能说明：
 
@@ -2013,7 +2013,7 @@ mtx = tla.mutex("l1_buf", id=0)
 ### `mutex_guard`
 
 
-**源码：** [`catlass.core_api.mutex_guard`](../catlass/core_api.py#L4799)
+**源码：** [`catlass.core_api.mutex_guard`](../../catlass/core_api.py#L4799)
 
 功能说明：
 
@@ -2032,7 +2032,7 @@ tla.mutex_guard(*mutexes: MutexLike) -> _MutexGuard
 约束说明：
 
 - 须在 `@tla.kernel` 装饰的 kernel 函数体内调用。
-- 块内须发射 `copy` 或 `mmad`；guard 内不可再显式 lock/unlock。
+- 块内须调用 `copy` 或 `mmad`；guard 内不可再显式 lock/unlock。
 
 调用示例：
 
@@ -2050,7 +2050,7 @@ with tla.mutex_guard(mtx):
 ### `mutex_lock`
 
 
-**源码：** [`catlass.core_api.mutex_lock`](../catlass/core_api.py#L4840)
+**源码：** [`catlass.core_api.mutex_lock`](../../catlass/core_api.py#L4840)
 
 功能说明：
 
@@ -2087,7 +2087,7 @@ tla.mutex_lock(mtx, pipe=tla.arch.MTE2)
 ### `mutex_unlock`
 
 
-**源码：** [`catlass.core_api.mutex_unlock`](../catlass/core_api.py#L4870)
+**源码：** [`catlass.core_api.mutex_unlock`](../../catlass/core_api.py#L4870)
 
 功能说明：
 
@@ -2124,7 +2124,7 @@ tla.mutex_unlock(mtx, pipe=tla.arch.MTE2)
 ### `local_mem_bar`
 
 
-**源码：** [`catlass.core_api.local_mem_bar`](../catlass/core_api.py#L4899)
+**源码：** [`catlass.core_api.local_mem_bar`](../../catlass/core_api.py#L4899)
 
 功能说明：
 
@@ -2165,7 +2165,7 @@ with tla.vec.func(mode="simd"):
 ### `arch`
 
 
-**源码：** [`catlass.core_api.arch`](../catlass/core_api.py#L7138)
+**源码：** [`catlass.core_api.arch`](../../catlass/core_api.py#L7138)
 
 功能说明：
 
@@ -2201,7 +2201,7 @@ tla.arch
 约束说明：
 
 - layout tag / pipe 标识 / memory-scope token 是 `tla.arch` 对象上的普通属性
-  （Python 没有 C++ 式命名空间）；它们本身不发射计算 op。
+  （Python 没有 C++ 式命名空间）；它们本身不会生成计算 op。
 - `block_idx` / `block_num` / `sub_block_idx` / `thread_idx` /
   `thread_block_dim` / `sync_threads` 为可调用对象，须在 `@tla.kernel`
   装饰的 kernel 函数体内使用。
@@ -2235,7 +2235,7 @@ ub_bytes = tla.arch.get_capacity_in_bytes(tla.arch.UB)
 ### `allocate`
 
 
-**源码：** [`catlass.core_api.allocate`](../catlass/core_api.py#L6906)
+**源码：** [`catlass.core_api.allocate`](../../catlass/core_api.py#L6906)
 
 功能说明：
 
@@ -2282,7 +2282,7 @@ kernel 内标量 / tensor 调试打印。
 ### `print`
 
 
-**源码：** [`catlass.core_api.print`](../catlass/core_api.py#L3354)
+**源码：** [`catlass.core_api.print`](../../catlass/core_api.py#L3354)
 
 功能说明：
 
@@ -2325,7 +2325,7 @@ Cube / Vector / `vec.func` 区域以及 kernel 侧循环范围。
 ### `range`
 
 
-**源码：** [`catlass.core_api.range`](../catlass/core_api.py#L4949)
+**源码：** [`catlass.core_api.range`](../../catlass/core_api.py#L4949)
 
 功能说明：
 
@@ -2366,7 +2366,7 @@ for i in tla.range(0, n, 1):
 ### `range_constexpr`
 
 
-**源码：** [`catlass.core_api.range_constexpr`](../catlass/core_api.py#L4999)
+**源码：** [`catlass.core_api.range_constexpr`](../../catlass/core_api.py#L4999)
 
 功能说明：
 
@@ -2407,11 +2407,11 @@ for k in tla.range_constexpr(0, 4):
 ### `cube`
 
 
-**源码：** [`catlass.core_api.cube`](../catlass/core_api.py#L5045)
+**源码：** [`catlass.core_api.cube`](../../catlass/core_api.py#L5045)
 
 功能说明：
 
-创建 cube 区域桩（矩阵乘与相关搬运）。
+进入 cube 核区域（矩阵乘与相关搬运）。
 
 函数原型：
 
@@ -2446,11 +2446,11 @@ with tla.cube():
 ### `vector`
 
 
-**源码：** [`catlass.core_api.vector`](../catlass/core_api.py#L5067)
+**源码：** [`catlass.core_api.vector`](../../catlass/core_api.py#L5067)
 
 功能说明：
 
-创建 vector 区域桩（向量搬运与同步）。
+进入 vector 核区域（vector 搬运与同步）。
 
 函数原型：
 
@@ -2485,11 +2485,11 @@ with tla.vector():
 ### `vec.func`
 
 
-**源码：** [`catlass.core_api._vec_func`](../catlass/core_api.py#L5101)
+**源码：** [`catlass.core_api._vec_func`](../../catlass/core_api.py#L5101)
 
 功能说明：
 
-进入寄存器矢量 / mask 计算用的矢量函数区域（`tla.vec.func`）。
+进入寄存器 vector / mask 计算用的 vector 函数区域（`tla.vec.func`）。
 
 函数原型：
 
@@ -2506,7 +2506,7 @@ tla.vec.func(*, mode: str = 'simd', thread_block_dim: int | tuple[int, int, int]
 
 - 须在 `@tla.kernel` 装饰的 kernel 函数体内调用。
 - 须嵌套在 `tla.vector()` 内。
-- 寄存器矢量 / mask API 与 `local_mem_bar` 须在此区域内调用。
+- 寄存器 vector / mask API 与 `local_mem_bar` 须在此区域内调用。
 
 调用示例：
 
