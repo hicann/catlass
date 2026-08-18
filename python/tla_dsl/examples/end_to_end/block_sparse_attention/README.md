@@ -55,9 +55,9 @@ BSA 通过将任意 mask 模式编码为块级位图、逐行边界、孔洞描�
 ### 命令行参数
 
 ```text
-block_sparse_attention.py [-h] [--device DEVICE] [--qs QS] [--ks KS]
-                          [--heads HEADS] [--kv-heads KV_HEADS]
-                          [--head-dim HEAD_DIM]
+block_sparse_attention.py [-h] [--device DEVICE] [--qseqlen QSEQLEN] [--kvseqlen KVSEQLEN]
+                          [--headnum HEADNUM] [--kvheadnum KVHEADNUM]
+                          [--head-dim HEAD_DIM] [--batch BATCH]
                           [--dtype {fp16,bf16}]
                           [--pattern {causal,doc_prefix,sliding_window,four_stage_forward}]
                           [--format {BSND,TND}]
@@ -71,9 +71,10 @@ block_sparse_attention.py [-h] [--device DEVICE] [--qs QS] [--ks KS]
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
 | `--device` | `0` | 上板执行使用的 NPU 设备号。 |
-| `--qs` / `--ks` | `128` / `128` | Q / KV 序列长度。 |
-| `--heads` / `--kv-heads` | `1` / `1` | Q / KV 头数，需满足 `heads % kv-heads == 0`。 |
+| `--qseqlen` / `--kvseqlen` | `128` / `128` | Q / KV 序列长度。 |
+| `--headnum` / `--kvheadnum` | `1` / `1` | Q / KV 头数，需满足 `headnum % kvheadnum == 0`。 |
 | `--head-dim` | `128` | head dim，当前固定为 128。 |
+| `--batch` | `1` | batch size。均匀长度下各 batch 的 Q/KV 序列长度均为 `--qseqlen` / `--kvseqlen`。 |
 | `--dtype` | `"fp16"` | 输入数据类型，可选 `"fp16"` 或 `"bf16"`。 |
 | `--pattern` | `"causal"` | mask 模式，可选 `"causal"` / `"doc_prefix"` / `"sliding_window"` / `"four_stage_forward"`。 |
 | `--format` | `"BSND"` | Tensor 格式，可选 `"BSND"`（定长）或 `"TND"`（变长）。 |
@@ -92,8 +93,8 @@ cd python/tla_dsl
 # 基础测试（默认 qs=128, ks=128, fp16, causal, BSND）
 python examples/end_to_end/block_sparse_attention/block_sparse_attention.py
 
-# 指定NPU ID、序列长度、数据类型、mask模式
-python examples/end_to_end/block_sparse_attention/block_sparse_attention.py --device 1  --qs 256 --ks 512 --dtype bf16 --pattern doc_prefix
+# 指定NPU ID、输入shape、数据类型、mask模式
+python examples/end_to_end/block_sparse_attention/block_sparse_attention.py --device 1  --batch 1 --qseqlen 256 --kvseqlen 512 --headnum 8 --kvheadnum 2 --dtype bf16 --pattern doc_prefix
 ```
 
 执行测试后，预期输出：

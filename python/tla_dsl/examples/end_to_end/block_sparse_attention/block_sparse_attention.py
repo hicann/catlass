@@ -662,10 +662,9 @@ def bsa_regular_kernel_arch35(
                         l1p_ptr = l1P_ptrs[2]
                     ubS_tile = tla.tile_view(
                             ubSTensorTla, tla.make_shape(qBaseTile_, kvBaseTile_), tla.make_coord(c0, c0))
-                    l1PTensorTla = tla.make_tensor_like(l1p_ptr, 
+                    l1PTensorTla = tla.make_tensor_like(l1p_ptr,
                                                     ubS_tile,
                                                     tla.arch.zN,
-                                                    dst_dtype=DTYPE_Q
                                                 )
                     # online Softmax
                     with tla.vector():
@@ -1427,7 +1426,6 @@ def bsa_regular_kernel_arch35(
                     l1PTensorTlaDe = tla.make_tensor_like(l1P_ptrDe,
                                                     ubSTensorTlaDe,
                                                     tla.arch.zN,
-                                                    dst_dtype=DTYPE_Q
                                                 )
                     
                 
@@ -2882,16 +2880,16 @@ def run(args: argparse.Namespace) -> int:
     spec = NAMED_SPECS[args.pattern]
 
     print(
-        f"--- qs={args.qs} ks={args.ks} heads={args.heads}/{args.kv_heads} "
+        f"--- qs={args.qseqlen} ks={args.kvseqlen} heads={args.headnum}/{args.kvheadnum} "
         f"d={args.head_dim} dtype={args.dtype} pattern={args.pattern} "
         f"fmt={args.format} ---"
     )
 
     res = run_debug(
         args, spec, args.pattern,
-        seq_q=args.qs, seq_k=args.ks,
-        batch_size=1,
-        num_heads=args.heads, kv_heads=args.kv_heads,
+        seq_q=args.qseqlen, seq_k=args.kvseqlen,
+        batch_size=args.batch,
+        num_heads=args.headnum, kv_heads=args.kvheadnum,
         head_dim=args.head_dim,
         input_format=args.format,
         op_dtype=op_dtype,
@@ -2903,11 +2901,12 @@ def run(args: argparse.Namespace) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description="BSA kernel 编译 + 运行")
     parser.add_argument("--device", type=int, default=0)
-    parser.add_argument("--qs", type=int, default=128, help="Q 序列长度")
-    parser.add_argument("--ks", type=int, default=128, help="KV 序列长度")
-    parser.add_argument("--heads", type=int, default=1, help="Q 头数")
-    parser.add_argument("--kv-heads", type=int, default=1, help="KV 头数")
+    parser.add_argument("--qseqlen", type=int, default=128, help="Q 序列长度")
+    parser.add_argument("--kvseqlen", type=int, default=128, help="KV 序列长度")
+    parser.add_argument("--headnum", type=int, default=1, help="Q 头数")
+    parser.add_argument("--kvheadnum", type=int, default=1, help="KV 头数")
     parser.add_argument("--head-dim", type=int, default=128, help="head dim")
+    parser.add_argument("--batch", type=int, default=1, help="batch size")
     parser.add_argument("--dtype", choices=("fp16", "bf16"), default="fp16")
     parser.add_argument("--pattern", default="causal", choices=list(NAMED_SPECS.keys()))
     parser.add_argument("--format", choices=("BSND", "TND"), default="BSND")
