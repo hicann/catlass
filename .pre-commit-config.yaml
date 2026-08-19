@@ -62,3 +62,11 @@ repos:
         language: pygrep
         entry: '[Aa]scend(?:910_93|950(?:DT|PR))[A-Za-z0-9_]+'
         types: [text]
+        # TLA DSL C310/hivmc 合法 target 与文档示例；运行时字符串不可改，此处按文件屏蔽。
+        exclude: |
+          (?x)^(
+            python/tla_dsl/catlass/execution\.py|
+            python/tla_dsl/csrc/mlir/lib/Passes/PassesCommon\.h|
+            python/tla_dsl/docs/zh/bc-backend-integration\.md|
+            python/tla_dsl/docs/zh/evaluation/dsl_performance_tools\.md
+          )$

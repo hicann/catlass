@@ -69,3 +69,4 @@ OPPROF*/
 oat_reports/
 log/
 **/.DS_Store
+python/tla_dsl/catlass/_version.py
