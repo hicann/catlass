@@ -1,16 +1,56 @@
 # CHANGELOG
 
-## CATLASS 1.X
+## CATLASS 2.X
 
-### CATLASS 1.6.1
+### CATLASS 2.0.0
+
+#### CATLASS DSL
+
+- 正式上线**CATLASS DSL**支持Pythonic Kernel，原生支持Tile编程。在 AscendNPU-IR 的基础上构建 TLA Dialect，将 Python 中描述的 TLA 操作降级为 MLIR，并由 AscendNPU-IR 工具链编译为可执行的核函数产物。
+  - 覆盖矩阵乘、向量计算、动态控制流等完整算子表达能力，`tla.print` 支持`GM/UB`上的格式化标量输出及动态控制流内 tensor/scalar 打印
+  - Host 侧提供统一的 tensor 构造入口 `from_dlpack` / `make_fake_tensor`，支持 `@dataclass` 结构体作为 kernel 入参
+- 样例
+  - [Basic Mmad](https://gitcode.com/cann/catlass/blob/v2.0.0/python/tla_dsl/examples/end_to_end/basic_mmad/README.md)：基础矩阵乘示例，basic_matmul、basic_matmul_atomic_add、basic_matmul_mutex、basic_matmul_mutex_with、basic_mmad_ptr（mutex / atomic_add / ptr 多路径）
+  - [Basic Mixed](https://gitcode.com/cann/catlass/blob/v2.0.0/python/tla_dsl/examples/end_to_end/basic_mixed/README.md)：基础CV算子示例，basic_mixed、basic_mixed_mutex、basic_mixed_fixpipe_nz2dn、basic_mixed_store_zN、basic_mixed_store_zNUnAlign、basic_mixed_ub2l1（混合 copy+mmad 场景）
+  - [Matmul Epilogue](https://gitcode.com/cann/catlass/blob/v2.0.0/python/tla_dsl/examples/end_to_end/basic_mmad_epilogue/README.md)：后处理类CV融合样例，matmul_add、matmul_add_ub、matmul_bias、matmul_leaky_relu、matmul_sigmoid、matmul_silu、matmul_tanh
+  - [StreamK Matmul](https://gitcode.com/cann/catlass/blob/v2.0.0/python/tla_dsl/examples/end_to_end/basic_mmad_streamk/README.md)：StreamK 调度矩阵乘，normal tile 全 K 计算 + 尾轮 tile 多核切 K 归约
+  - [Multi Core SplitK Matmul](https://gitcode.com/cann/catlass/blob/v2.0.0/python/tla_dsl/examples/end_to_end/multi_core_splitk_matmul/README.md)：多核切 K 矩阵乘，multi_core_splitk_matmul、tail_multi_core_splitk_matmul
+  - [Batched Matmul](https://gitcode.com/cann/catlass/blob/v2.0.0/python/tla_dsl/examples/end_to_end/batched_matmul/README.md)：批量矩阵乘
+  - [Grouped Matmul Slice M](https://gitcode.com/cann/catlass/blob/v2.0.0/python/tla_dsl/examples/end_to_end/grouped_matmul_slice_m/README.md)：按 M 轴切分的分组矩阵乘
+  - [Flash Attention Infer](https://gitcode.com/cann/catlass/blob/v2.0.0/python/tla_dsl/examples/end_to_end/flash_attention_infer/README.md)：推理Flash Attention样例demo，支持非Mask非Paged场景，支持对齐/非对齐输入
+- 工具支持
+  - 构建体系：基于 AscendNPU-IR 子模块构建，提供 Docker 开发镜像，支持 CANN >= 9.1.0
+- 文档资料
+  - 提供 [CATLASS DSL 文档集](https://gitcode.com/cann/catlass/tree/v2.0.0/python/tla_dsl/docs/)，包含 [Kernel API Reference](https://gitcode.com/cann/catlass/blob/v2.0.0/python/tla_dsl/docs/kernel-api-reference.md)、[DSL Python 语法指南](https://gitcode.com/cann/catlass/blob/v2.0.0/python/tla_dsl/docs/dsl_python_syntax_guide.md)、[BC 后端集成文档](https://gitcode.com/cann/catlass/blob/v2.0.0/python/tla_dsl/docs/bc-backend-integration.md)、[环境变量说明](https://gitcode.com/cann/catlass/blob/v2.0.0/python/tla_dsl/docs/environment_variables.md)及[环境搭建指南](https://gitcode.com/cann/catlass/tree/v2.0.0/python/tla_dsl/docs/dev_guide/00_environment_setup.md)等
+
+#### CATLASS C++
 
 - 关键特性
- - 新增 [`catlass_cppgen`](https://gitcode.com/cann/catlass/blob/v1.6.1/python/catlass_cppgen/README.md)，一个基于Python编写的代码生成框架，用于构建和生成 CATLASS C++ 核函数代码，支持[`EVG`](https://gitcode.com/cann/catlass/blob/v1.6.1/docs/zh/2_Design/03_evg/01_evg_design.md)特性。
+  - 新增 [CATLASS官方文档站](https://catlass.readthedocs.io/zh-cn/latest/)，为开发者提供一站式学习与开发体验
+  - 新增 [catlass_cppgen 代码生成框架](https://gitcode.com/cann/catlass/blob/v2.0.0/python/catlass_cppgen/README.md)：基于 Python 的算子代码生成框架，支持定义算子参数、选择优化策略并自动生成 C++ 核函数代码，覆盖 GEMM 与 GroupGEMM 类算子，配套 EVG、OpTensor 等 API 文档与单元测试
+- 更多样例（新增样例 9 个，其中 Ascend950 样例 6 个、AtlasA2 样例 3 个）
+  - [Ascend950 Svd Quant Matmul](https://gitcode.com/cann/catlass/blob/v2.0.0/examples/61_ascend950_svd_quant_matmul/README.md)：SVD 低秩分解量化，主通路 W4A4 量化 + 低秩旁路高精度计算
+  - [Ascend950 Dual-Level Quant MX BatchMatmul](https://gitcode.com/cann/catlass/blob/v2.0.0/examples/63_ascend950_dual_level_quant_mx_batch_matmul/README.md)：二级量化 + MXFP4 BatchMatmul
+  - [Ascend950 Grouped MXFP8 Matmul SwiGLU MX Quant](https://gitcode.com/cann/catlass/blob/v2.0.0/examples/65_ascend950_fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant/README.md)：Grouped MXFP8 矩阵乘 + SwiGLU + MXFP8 量化
+  - [Ascend950 Grouped MXFP8 Matmul Finalize Routing](https://gitcode.com/cann/catlass/blob/v2.0.0/examples/71_ascend950_fp8_mx_grouped_matmul_finalize_routing/README.md)：Grouped MXFP8 矩阵乘 + Finalize Routing 融合，提供确定性与非确定性两个版本
+  - [Ascend950 A8W4 Grouped MX Matmul](https://gitcode.com/cann/catlass/blob/v2.0.0/examples/74_ascend950_weight_quant_a8w4_grouped_mx_matmul/README.md)：伪量化场景的 A8W4 Grouped MX 矩阵乘
+  - [Ascend950 Grouped Matmul Slice M Gelu](https://gitcode.com/cann/catlass/blob/v2.0.0/examples/80_ascend950_grouped_matmul_slice_m_gelu/README.md)：Grouped Matmul SliceM + Gelu 融合
+  - [AtlasA2 Symm](https://gitcode.com/cann/catlass/blob/v2.0.0/examples/75_symm/README.md)：对称矩阵乘
+  - [AtlasA2 Trmm](https://gitcode.com/cann/catlass/blob/v2.0.0/examples/76_trmm/README.md)：三角矩阵乘
+  - [AtlasA2 Planar Complex Matmul](https://gitcode.com/cann/catlass/blob/v2.0.0/examples/77_planar_complex_matmul/README.md)：平面复数矩阵乘，输出实部与虚部两路结果
+- 工具支持
+  - [optest](https://gitcode.com/cann/catlass/blob/v2.0.0/tests/optest/README.md) 接口扩展至 72 个，新增 Symm、Trmm、PlanarComplexMatmul、GroupedMatmulSliceMGelu、A8W4GroupedMxMatmul 等 10 个接口
+  - Agent Skill 新增 [CANNBot CATLASS C++](https://gitcode.com/cann/cannbot-skills/blob/master/plugins-official/catlass-op-generator/AGENTS.md)、[CANNBot CATLASS DSL](https://gitcode.com/cann/cannbot-skills/blob/master/plugins-official/catlass-dsl-plugin)算子自动生成工具链，及[A2/A3 向 Ascend950 迁移工作流](https://gitcode.com/cann/catlass/tree/v2.0.0/.agents/skills/catlass-ascend950-migration)和[Tile 层级单元测试编写技能](https://gitcode.com/cann/catlass/tree/v2.0.0/.agents/skills/catlass-tile-level-ut)
 - 文档资料
- - 在[Tile组件单元测试文档](https://gitcode.com/cann/catlass/blob/v1.6.1/tests/unittest/catlass/gemm/tile/README.md)中添加 `gcc` <= 12.0 约束
+  - 更新 README 中 gcc 版本约束说明
+  - 更新 Gemm/Tile UT 依赖说明
 - Bugfix&优化
- - [MLA](https://gitcode.com/cann/catlass/blob/v1.6.1/examples/19_mla/README.md)加入 `AMLATp1Spec` 特化Kernel模板，采取KV-split 均衡分核策略，并修复golden类型读取错误问题
- - 修复 Ascend950MxGroupedMatmulSliceM 在 MxFp4 类型和transB场景下的精度问题
+  - MLA 算子优化：加入 `AMLATp1Spec` 特化Kernel模板，采取KV-split 均衡分核策略，并修复golden类型读取错误问题
+  - 修复 Ascend950 A8W4 MxMatmul 样例在非对齐场景下的精度问题
+  - 修复 Ascend950 MxGroupedMatmulSliceM 样例在 MxFp4 类型和transB场景下的精度问题
+  - 修复 optest下的Quant Optimized Matmul Tla 在非对齐 shape 下 JIT 编译失败的问题
+
+## CATLASS 1.X
 
 ### CATLASS 1.6.0
 
