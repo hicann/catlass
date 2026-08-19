@@ -60,7 +60,7 @@ basic_vadd.py [-h] [--device DEVICE] [--n N]
 |------|--------|------|
 | `--device` | `0` | 上板执行使用的 NPU 设备号。 |
 | `--n` | `400` | 向量长度。 |
-| `--block-num` | `-1`（依据所使用的 NPU 设备采集其满核值） | 所启用的 AI Vector 核数 |
+| `--block-num` | `-1` | 启用的核数，`-1` 表示自动探测可用核数（满核）。 |
 | `--dtype` | `"f32"` | 数据类型，可选 `"f32"`、`"f16"`、`"i8"`、`"i16"`、`"i32"`。 |
 | `--use-mutex` | `False` | 切换到显式 Mutex `lock` / `unlock` 同步（执行 `basic_vadd_mutex`）。 |
 | `--use-mutex-with` | `False` | 切换到 `with tla.mutex_guard(...)` 同步（执行 `basic_vadd_mutex_with`）。 |
@@ -125,7 +125,7 @@ tla.copy(ub_a, gm_a)
 mutex_ub_a.unlock(pipe=tla.arch.MTE2)
 ```
 
-## basic_vadd_mutex_with
+### basic_vadd_mutex_with
 
 **文件**：[`basic_vadd.py`](basic_vadd.py#L127)
 
@@ -139,7 +139,7 @@ with tla.mutex_guard(mutex_ub_a):
     tla.copy(ub_a, gm_a)
 ```
 
-## basic_vadd_atomic_add
+### basic_vadd_atomic_add
 
 **文件**：[`basic_vadd.py`](basic_vadd.py#L175)
 

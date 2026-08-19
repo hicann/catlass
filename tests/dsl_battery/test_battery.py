@@ -191,7 +191,7 @@ def _cases(device: int) -> Iterator[tuple[str, list[list[str]]]]:
             "--groups", "3", "--m", "768", "--n", "333", "--k", "333", *dev]]
     ) 
 
-    # --- basic_mmad_evg: multiple epilogue examples ---
+    # --- basic_mmad_epilogue: multiple epilogue examples ---
     for op in EVG_OPS:
         if op in ("add_ub", "tanh"):
             # f32 (dtype-c) only examples
@@ -209,9 +209,9 @@ def _cases(device: int) -> Iterator[tuple[str, list[list[str]]]]:
         for m, n, k in MMAD_SHAPES:
             for dab, dc in triples:
                 yield (
-                    f"mmad-evg-{op.replace('_', '-')}-{m}x{n}x{k}-{dab}-{dc}",
+                    f"mmad-epilogue-{op.replace('_', '-')}-{m}x{n}x{k}-{dab}-{dc}",
                     [[
-                        f"basic_mmad_evg/matmul_{op}.py",
+                        f"basic_mmad_epilogue/matmul_{op}.py",
                         "--m", m, "--n", n, "--k", k,
                         "--dtype-a", dab, "--dtype-b", dab, "--dtype-c", dc,
                         *dev

@@ -61,13 +61,14 @@ from .types import (
     _replace_flat_leaves_in_tree,
 )
 from .params import (
-    CopyParams,
-    CopyL0C2DstParams,
-    QuantMode,
-    L0C2UBMode,
     AtomicMode,
+    HF32Mode,
     ComputeOrder,
+    CopyL0C2DstParams,
+    CopyParams,
+    L0C2UBMode,
     MemType,
+    QuantMode,
 )
 
 
@@ -5180,6 +5181,7 @@ def mmad(
     init_c: bool | Bool | None = None,
     unit_flag: IndexLike | None = None,
     compute_order: ComputeOrder = ComputeOrder.M_FIRST,
+    hf32_mode: HF32Mode = HF32Mode.HF32_DISABLE,
     loc: mlir_ir.Location | None = None,
     **extra_kwargs: object,
 ) -> None:
@@ -5196,6 +5198,8 @@ def mmad(
         - `unit_flag` (`IndexLike | None`): Unit-flag control bits; defaults to `0`
           when omitted. Optional, default `None`.
         - `compute_order` (`ComputeOrder`): M/N compute-direction priority; default `M_FIRST`.
+        - `hf32_mode` (`HF32Mode`): HF32 rounding mode for FP32 operands in L0A/L0B
+          before the matrix multiply. Optional, default `HF32_DISABLE`.
 
         Constraints:
         - Must be called inside a `@tla.kernel`-decorated kernel function.
@@ -5253,9 +5257,17 @@ def mmad(
             "tla.mmad attribute 'compute_order' must be a "
             f"{ComputeOrder}, got {type(compute_order).__name__}"
         )
+    if not isinstance(hf32_mode, HF32Mode):
+        raise TlaLoweringError(
+            "tla.mmad attribute 'hf32_mode' must be a "
+            f"{HF32Mode}, got {type(hf32_mode).__name__}"
+        )
     ctx = loc.context if loc is not None else mlir_ir.Context.current
     compute_order_attr = mlir_ir.Attribute.parse(
         f"#tla.compute_order<{str(compute_order)}>", context=ctx
+    )
+    hf32_mode_attr = mlir_ir.Attribute.parse(
+        f"#tla.hf32_mode<{str(hf32_mode)}>", context=ctx
     )
 
     acc_value = _as_value(acc)
@@ -5270,6 +5282,7 @@ def mmad(
         unit_flag_value,
         loc=loc,
         compute_order=compute_order_attr,
+        hf32_mode=hf32_mode_attr,
     )
 
 

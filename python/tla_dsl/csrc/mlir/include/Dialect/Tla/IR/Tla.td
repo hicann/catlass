@@ -382,6 +382,27 @@ def Tla_ComputeOrderAttr : Tla_EnumAttr<"ComputeOrder", "compute_order"> {
   }];
 }
 
+// HF32Mode: mmad HF32 rounding mode (CTRL[46] enable, CTRL[47] rounding).
+// HF32_DISABLE(0) is the hardware default (no HF32 rounding).
+def Tla_HF32Mode_Disable : I32EnumAttrCase<"HF32_DISABLE", 0>;
+def Tla_HF32Mode_NearestZero : I32EnumAttrCase<"HF32_NEAREST_ZERO", 1>;
+def Tla_HF32Mode_NearestEven : I32EnumAttrCase<"HF32_NEAREST_EVEN", 2>;
+def Tla_HF32Mode_Enum : Tla_I32Enum<"HF32Mode",
+  "mmad HF32 rounding mode", [
+  Tla_HF32Mode_Disable, Tla_HF32Mode_NearestZero, Tla_HF32Mode_NearestEven
+]>;
+def Tla_HF32ModeAttr : Tla_EnumAttr<"HF32Mode", "hf32_mode"> {
+  let parameters = (ins EnumParameter<Tla_HF32Mode_Enum>:$value);
+  let assemblyFormat = "`<` params `>`";
+  let description = [{
+    mmad HF32 rounding mode, lowered to SPR.CTRL[46]/CTRL[47]:
+
+      - HF32_DISABLE (0): HF32 mode disabled (hardware default)
+      - HF32_NEAREST_ZERO (1): f32 rounded to HF32 towards zero
+      - HF32_NEAREST_EVEN (2): f32 rounded to HF32 to nearest even
+  }];
+}
+
 // SatMode: overflow behaviour of the cast (AVE `sat` BoolAttr).
 def Tla_SatMode_Unknown : I32EnumAttrCase<"unknown", 0>;
 def Tla_SatMode_Sat : I32EnumAttrCase<"sat", 1>;
@@ -857,10 +878,19 @@ def Tla_MmadOp : Tla_Op<"mmad", []> {
     every mmad in a function agrees on the value it is emitted once at the
     function entry; if a function mixes values it is emitted ahead of each mmad
     runtime call instead.
+
+    ``hf32_mode`` is always supplied by the frontend. The lowering emits
+    ``hivm.set_ctrl`` on ``CTRL[46]`` (enable HF32 rounding) and ``CTRL[47]``
+    (rounding mode, ``HF32_NEAREST_ZERO`` -> 1 / ``HF32_NEAREST_EVEN`` -> 0,
+    mirroring ``AscendC::SetHF32Mode`` / ``AscendC::SetHF32TransMode``): when
+    every mmad in a function agrees on the value it is emitted once at the
+    function entry; if a function mixes values it is emitted ahead of each mmad
+    runtime call instead.
   }];
   let arguments = (ins Tla_TensorType:$acc, Tla_TensorType:$lhs, Tla_TensorType:$rhs,
                        I1:$init_c, I64:$unit_flag,
-                       Tla_ComputeOrderAttr:$compute_order);
+                       Tla_ComputeOrderAttr:$compute_order,
+                       Tla_HF32ModeAttr:$hf32_mode);
   let assemblyFormat = [{
     $acc `,` $lhs `,` $rhs `,` $init_c `,` $unit_flag attr-dict `:`
     qualified(type($acc)) `,` qualified(type($lhs)) `,` qualified(type($rhs)) `,` type($init_c) `,` type($unit_flag)

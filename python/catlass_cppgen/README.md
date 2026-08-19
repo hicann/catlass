@@ -154,8 +154,8 @@ Kernel 对象（调优与特性查询）
 
 详细参考使用示例和 API 文档请参考下述文档：
  - [Kernel API 基础文档](docs/kernel_api.md)
- - OpTensor API 基础文档（文档暂缺）
- - [EVG API 基础文档](docs/evg_api.md)
+ - [`OpTensor` 基础文档](docs/optensor_api.md)
+ - [`EVG` 基础文档](docs/evg_api.md)
 
 ### 4.1 基础 GEMM
 

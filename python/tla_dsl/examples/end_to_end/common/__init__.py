@@ -10,7 +10,7 @@
 
 from .golden import compare, tolerance
 from .params import TilingParams, SwizzleParams
-from .utils import create_tla_tensor, get_block_num
+from .utils import create_tla_tensor, get_block_num, to_hf32
 
 __all__ = [
     # struct-like params
@@ -19,6 +19,7 @@ __all__ = [
     # helper function
     "create_tla_tensor",
     "get_block_num",
+    "to_hf32",
     # golden compare
     "compare",
     "tolerance",

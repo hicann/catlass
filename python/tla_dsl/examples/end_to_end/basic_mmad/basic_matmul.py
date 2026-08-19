@@ -39,6 +39,7 @@ def basic_mmad_kernel(
     gm_b: tla.Tensor,
     gm_c: tla.Tensor,
     _tiling: TilingParams,
+    hf32_mode: tla.Constexpr[tla.params.HF32Mode],
 ) -> None:
     c0 = 0
     c1 = 1
@@ -239,7 +240,21 @@ def basic_mmad_kernel(
                         else 0b10
                     )
                     init_c = True if k_l1 == 0 and k_l0 == 0 else False
-                    tla.mmad(l0_c, l0_a, l0_b, init_c=init_c, unit_flag=unit_flag)
+                    if tla.const_expr(
+                        hf32_mode != tla.params.HF32Mode.HF32_DISABLE
+                        and dtype_a == tla.Float32
+                        and dtype_b == tla.Float32
+                    ):
+                        tla.mmad(
+                            l0_c,
+                            l0_a,
+                            l0_b,
+                            init_c=init_c,
+                            unit_flag=unit_flag,
+                            hf32_mode=hf32_mode,
+                        )
+                    else:
+                        tla.mmad(l0_c, l0_a, l0_b, init_c=init_c, unit_flag=unit_flag)
                     if l0_buf_idx == c0:
                         tla.set_flag(l0a0_available)
                         tla.set_flag(l0b0_available)
@@ -271,6 +286,7 @@ def run(args: argparse.Namespace) -> int:
         get_block_num,
         create_tla_tensor,
         compare,
+        to_hf32,
     )
 
     torch.npu.set_device(args.device)
@@ -284,12 +300,23 @@ def run(args: argparse.Namespace) -> int:
     dtype_a = dtypes[args.dtype_a]
     dtype_b = dtypes[args.dtype_b]
     dtype_c = dtypes[args.dtype_c]
+
     a = torch.rand(args.m, args.k, dtype=dtype_a, device="cpu") * 10.0 - 5.0
     b = torch.rand(args.k, args.n, dtype=dtype_b, device="cpu") * 10.0 - 5.0
     c = torch.rand(args.m, args.n, dtype=dtype_c, device="cpu") * 10.0 - 5.0
-    ref = a.float() @ b.float()
-    if dtype_c in (torch.float16, torch.bfloat16):
-        ref = ref.to(dtype_c).float()
+
+    hf32_mode = tla.params.HF32Mode.HF32_NEAREST_EVEN
+    enable_hf32 = (
+        hf32_mode != tla.params.HF32Mode.HF32_DISABLE
+        and dtype_a == torch.float32
+        and dtype_b == torch.float32
+    )
+    if enable_hf32:
+        ref = to_hf32(a, hf32_mode) @ to_hf32(b, hf32_mode)
+    else:
+        ref = a.float() @ b.float()
+        if dtype_c in (torch.float16, torch.bfloat16):
+            ref = ref.to(dtype_c).float()
 
     a = (
         a.contiguous() if args.layout_a == "row" else a.permute(1, 0).contiguous()
@@ -308,13 +335,18 @@ def run(args: argparse.Namespace) -> int:
         b_tensor,
         c_tensor,
         TilingParams(),  # default tiling: L1: (256, 256, 128); L0: (256, 256, 32)
+        hf32_mode,
         options="--npu-arch 3510",
     )
     block_num = get_block_num(args.block_num, args.device, kind="cube")
     artifact(a_tensor, b_tensor, c_tensor, block_num=block_num)
     torch.npu.synchronize()
 
-    passed = compare(c.detach().cpu(), ref, args.k)
+    result = c.detach().cpu()
+    if enable_hf32:
+        passed = compare(result, ref, enable_hf32=True)
+    else:
+        passed = compare(result, ref, args.k)
     print(f"passed={passed} cache_key={artifact.cache_key}")
     print(f"kernel.o={artifact.kernel_binary_path}")
     return 0 if passed else 1

@@ -1,6 +1,6 @@
-# OpTensor 基础 Api (Python)
+# `OpTensor` 基础文档 (Python)
 
-本文档详细描述了 `catlass_cppgen` 中所有支持的`OpTensor`创建方式，及关联的基础特性，如数据类型，布局分布等。
+本文档为 `catlass_cppgen` 中 `OpTensor` 的使用说明，介绍其创建方法、基础特性（如数据类型，布局分布）等。
 
 ---
 

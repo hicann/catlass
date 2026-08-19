@@ -1,6 +1,6 @@
 # StreamK MMAD 端到端示例
 
-本目录下的样例演示 **CATLASS DSL** 下 StreamK MatMul 的实现，对齐 C++ 参考实现`examples/66_ascend950_streamk_matmul`。
+本目录下的样例演示 **CATLASS DSL** 下 StreamK MatMul 的实现。
 
 ## 功能说明
 
@@ -53,15 +53,13 @@ StreamK 通过将 K 维度的计算分摊到多个核上以均衡负载：normal
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
 | `--device` | `0` | 上板执行使用的 NPU 设备号。 |
-| `--run` | 默认开启 | 上板并校验精度。 |
 | `--m` | `256` | 矩阵乘左矩阵 A 的行数 |
 | `--n` | `256` | 矩阵乘右矩阵 B 的列数 |
 | `--k` | `512` | 矩阵乘累加轴的大小 |
 | `--layout-a` / `--layout-b` | `"row"` / `"row"` | 左、右矩阵 A、B 的数据排布格式，可选 `"row"` 或 `"col"`，表示行优先或列优先布局。 |
 | `--dtype-a` / `--dtype-b` / `--dtype-c` | `"f16"` / `"f16"` / `"f32"` | 左、右矩阵 A、B 和结果矩阵 C 的数据类型，可选范围参考约束说明。 |
-| `--block` | `None` | 启用的 AIC 核数。 |
-
-其余参数（`--sentinel`、`--atol`、`--cache-dir`、`--force-recompile`、`--no-cache` 等）详见 `--help`。
+| `--block-num` | `-1` | 启用的 AIC 核数，`-1` 表示自动探测可用核数（满核）。 |
+| `--atol` | `1e-3` | 精度比对时的绝对容差。 |
 
 ### 执行示例
 
@@ -70,18 +68,18 @@ StreamK 通过将 K 维度的计算分摊到多个核上以均衡负载：normal
 ```bash
 cd python/tla_dsl
 
-# 上板并校验（默认即 --run，精度校验默认开启）
-python examples/end_to_end/basic_mmad_streamk/basic_mmad_streamk.py --run --device 0 \
+# 上板并校验精度
+python examples/end_to_end/basic_mmad_streamk/basic_mmad_streamk.py --device 0 \
   --layout-a row --layout-b col \
   --dtype-a f16 --dtype-b f16 --dtype-c f32
 ```
 
+默认测试条件下，预期输出：
 
-
-```bash
-python examples/end_to_end/basic_mmad_streamk/basic_mmad_streamk.py --help
+```text
+--- mnk=(256,256,512) layout=row/col dtype=f16/f16/f32 ---
+passed=True cache_key=<cache_key>
+kernel.o=<cache_dir>/<cache_key>/kernel.o
 ```
 
-执行测试后，预期输出：
-
-默认运行会打印 `compile_ok=True`、`host=torch_npu`、`launch_ok=True`、`kernel.o` 路径，以及 `C unchanged?` / `C equals expected matmul?` / `first mismatch=...` 等（与 `m×n×k`、block、`--sentinel`、dtype 有关；golden 为 **Torch** 在 NPU 上的 matmul）。
+其中 `passed`结果为`True`或`False` 表明 NPU 计算结果与golden参考值精度校验是否通过；`cache_dir` 是指定的缓存目录， `cache_key` 是编译缓存的哈希值。

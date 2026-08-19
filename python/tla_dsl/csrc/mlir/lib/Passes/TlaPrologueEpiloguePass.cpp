@@ -17,6 +17,12 @@ static constexpr unsigned int MaskControlBit = 56;
 // CTRL[51] is the mmad M/N compute-direction priority bit.
 static constexpr unsigned int ComputeOrderBit = 51;
 
+// CTRL[46] is the mmad HF32 rounding-mode enable bit.
+static constexpr unsigned int HF32ModeBit = 46;
+
+// CTRL[47] is the mmad HF32 rounding-mode select bit.
+static constexpr unsigned int HF32TransModeBit = 47;
+
 class TlaPrologueEpiloguePass : public PassWrapper<TlaPrologueEpiloguePass, OperationPass<ModuleOp>> {
 public:
     MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TlaPrologueEpiloguePass)
@@ -59,10 +65,12 @@ public:
             Operation* lastBodyOp = terminator ? terminator->getPrevNode() : nullptr;
             if (auto barrier = llvm::dyn_cast_or_null<hivm::PipeBarrierOp>(lastBodyOp)) {
                 if (barrier.getPipe().getPipe() == hivm::PIPE::PIPE_ALL) {
-                    // Already has a trailing PIPE_ALL barrier: restore CTRL[51] to the
-                    // hardware default just before it.
+                    // Already has a trailing PIPE_ALL barrier: restore CTRL[51] / CTRL[46] /
+                    // CTRL[47] to the hardware defaults just before it.
                     builder.setInsertionPoint(barrier);
                     builder.create<hivm::SetCtrlOp>(loc, /*enable=*/false, ComputeOrderBit);
+                    builder.create<hivm::SetCtrlOp>(loc, /*enable=*/false, HF32ModeBit);
+                    builder.create<hivm::SetCtrlOp>(loc, /*enable=*/false, HF32TransModeBit);
                     continue;
                 }
             }
@@ -71,8 +79,11 @@ public:
                 builder.setInsertionPoint(terminator);
             else
                 builder.setInsertionPointToEnd(&entry);
-            // Restore CTRL[51] to the hardware default, then add the trailing barrier.
+            // Restore CTRL[51] / CTRL[46] / CTRL[47] to the hardware defaults, then add
+            // the trailing barrier.
             builder.create<hivm::SetCtrlOp>(loc, /*enable=*/false, ComputeOrderBit);
+            builder.create<hivm::SetCtrlOp>(loc, /*enable=*/false, HF32ModeBit);
+            builder.create<hivm::SetCtrlOp>(loc, /*enable=*/false, HF32TransModeBit);
             builder.create<hivm::PipeBarrierOp>(loc, pipeAll);
         }
     }

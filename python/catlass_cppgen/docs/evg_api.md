@@ -1,6 +1,6 @@
-# EVG API (Python)
+# `EVG` 基础文档 (Python)
 
-本节记录了 CATLASS 中 [EVG（Epilogue Visitor Graph）模块](../../../docs/zh/2_Design/03_evg/01_evg_design.md)的 Python API。EVG 将 Python 描述的 epilogue 后处理函数解析为 DAG，并生成对应的 C++ Visitor 代码。
+本文档为 `catlass_cppgen` 中 [EVG（Epilogue Visitor Graph）模块](../../../docs/zh/2_Design/03_evg/01_evg_design.md)的使用说明。EVG 将 Python 描述的 epilogue 后处理函数解析为 DAG（Directed Acyclic Graph，有向无环图），并生成对应的 C++ Visitor 代码。
 
 核心入口函数定义见 [`evg_extension.py`](../catlass_cppgen/catlass/evg_extension.py)，节点与定义见 [`evg/`](../catlass_cppgen/catlass/evg/)。
 
