@@ -30,6 +30,13 @@ class ComputeOrder(enum.IntEnum):
     def __str__(self):
         return self.name  # "M_FIRST"/"N_FIRST"
 
+class HF32Mode(enum.IntEnum):
+    HF32_DISABLE = 0
+    HF32_NEAREST_ZERO = 1
+    HF32_NEAREST_EVEN = 2
+
+    def __str__(self):
+        return self.name  # "HF32_DISABLE"/"HF32_NEAREST_ZERO"/"HF32_NEAREST_EVEN"
 
 class AtomicMode(enum.Enum):
     """Atomic operation mode"""

@@ -279,6 +279,29 @@ template <typename AncestorOp> static bool hasEnclosingRegion(mlir::Operation *o
 mlir::LogicalResult MmadOp::verify() {
   if (!hasEnclosingRegion<CubeOp>(getOperation()))
     return emitOpError("must be nested inside a tla.cube region");
+
+  // HF32 rounding only applies to f32 L0A/L0B operands; requesting it for any
+  // other source element type (f16/bf16/...) is meaningless and must be rejected.
+  HF32Mode mode = getHf32Mode().getValue();
+  if (mode != HF32Mode::HF32_DISABLE) {
+    auto checkF32SourceOperand = [&](TlaTensorType operandType,
+                                     llvm::StringRef operandName)
+        -> mlir::LogicalResult {
+      mlir::Type elementType = operandType.getPtr().getPointee();
+      if (!elementType.isF32())
+        return emitOpError()
+               << "hf32_mode " << stringifyHF32Mode(mode)
+               << " requires f32 source operands, but " << operandName
+               << " operand has element type " << elementType;
+      return mlir::success();
+    };
+
+    if (failed(checkF32SourceOperand(getLhs().getType(), "lhs")))
+      return mlir::failure();
+    if (failed(checkF32SourceOperand(getRhs().getType(), "rhs")))
+      return mlir::failure();
+  }
+
   return mlir::success();
 }
 

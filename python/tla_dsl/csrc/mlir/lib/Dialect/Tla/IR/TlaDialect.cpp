@@ -215,6 +215,20 @@ Attribute TlaDialect::parseAttribute(DialectAsmParser &parser, Type type) const 
     return ::tla::ComputeOrderAttr::get(getContext(), *symbolized);
   }
 
+  if (attrTag == "hf32_mode") {
+    if (parser.parseLess())
+      return {};
+    StringRef modeKeyword;
+    if (parser.parseKeyword(&modeKeyword) || parser.parseGreater())
+      return {};
+    auto symbolized = ::symbolizeHF32Mode(modeKeyword);
+    if (!symbolized) {
+      parser.emitError(parser.getNameLoc()) << "invalid tla.hf32_mode value: " << modeKeyword;
+      return {};
+    }
+    return ::tla::HF32ModeAttr::get(getContext(), *symbolized);
+  }
+
   StringRef mnemonic = attrTag;
   Attribute value;
   OptionalParseResult parseResult = generatedAttributeParser(parser, &mnemonic, type, value);

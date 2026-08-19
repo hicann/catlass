@@ -96,7 +96,7 @@ module {
     %init = arith.constant true
     %unit = arith.constant 0 : i64
     "tla.cube"() ({
-      tla.mmad %c, %a, %b, %init, %unit {compute_order = #tla.compute_order<M_FIRST>} : !l0c, !l0a, !l0b, i1, i64
+      tla.mmad %c, %a, %b, %init, %unit {compute_order = #tla.compute_order<M_FIRST>, hf32_mode = #tla.hf32_mode<HF32_DISABLE>} : !l0c, !l0a, !l0b, i1, i64
     }) : () -> ()
     "tla.vector"() ({
       tla.copy %t0, %gm_ub : !ub, !gm_ub

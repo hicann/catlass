@@ -20,16 +20,25 @@ namespace {
 // CTRL[51] selects the mmad M/N compute-direction priority
 static constexpr unsigned int ComputeOrderBit = 51;
 
+// CTRL[46] enables the mmad HF32 rounding mode
+static constexpr unsigned int HF32ModeBit = 46;
+
+// CTRL[47] selects the mmad HF32 rounding mode: 
+// 0 = NEAREST_EVEN (hardware default), 1 = NEAREST_ZERO
+static constexpr unsigned int HF32TransModeBit = 47;
+
   struct LowerTlaMmadPattern : public OpRewritePattern<::tla::MmadOp> {
     LowerTlaMmadPattern(MLIRContext *ctx,
                         DenseMap<Value, TensorDescriptor> &tensorDescriptorByValue,
                         SmallVectorImpl<Operation *> &toErase,
                         DenseMap<Value, Value> &loweredMemrefByValue,
-                        bool funcLevelComputeOrderSet)
+                        bool funcLevelComputeOrderSet,
+                        bool funcLevelHF32Set)
         : OpRewritePattern<::tla::MmadOp>(ctx),
           tensorDescriptorByValue(tensorDescriptorByValue), toErase(toErase),
           loweredMemrefByValue(loweredMemrefByValue),
-          funcLevelComputeOrderSet(funcLevelComputeOrderSet) {}
+          funcLevelComputeOrderSet(funcLevelComputeOrderSet),
+          funcLevelHF32Set(funcLevelHF32Set) {}
 
     LogicalResult matchAndRewrite(::tla::MmadOp op, PatternRewriter &rewriter) const override {
       if (op->getNumOperands() < 3)
@@ -193,6 +202,14 @@ static constexpr unsigned int ComputeOrderBit = 51;
         bool isNFirst = computeOrderAttr.getValue() == ComputeOrder::N_FIRST;
         rewriter.create<hivm::SetCtrlOp>(op.getLoc(), isNFirst, ComputeOrderBit);
       }
+      if (!funcLevelHF32Set) {
+        auto modeAttr = op->getAttrOfType<::tla::HF32ModeAttr>("hf32_mode");
+        HF32Mode mode = modeAttr.getValue();
+        bool enableHF32 = mode != HF32Mode::HF32_DISABLE;
+        bool nearestZero = mode == HF32Mode::HF32_NEAREST_ZERO;
+        rewriter.create<hivm::SetCtrlOp>(op.getLoc(), enableHF32, HF32ModeBit);
+        rewriter.create<hivm::SetCtrlOp>(op.getLoc(), nearestZero, HF32TransModeBit);
+      }
       rewriter.create<func::CallOp>(op.getLoc(), callee, operands);
       toErase.push_back(op.getOperation());
       return success();
@@ -203,6 +220,7 @@ static constexpr unsigned int ComputeOrderBit = 51;
     SmallVectorImpl<Operation *> &toErase;
     DenseMap<Value, Value> &loweredMemrefByValue;
     bool funcLevelComputeOrderSet;
+    bool funcLevelHF32Set;
   };
 
   struct LowerTlaCopyPattern : public OpRewritePattern<::tla::CopyOp> {
@@ -534,9 +552,37 @@ public:
       builder.create<hivm::SetCtrlOp>(funcOp.getLoc(), isNFirst, ComputeOrderBit);
       funcLevelComputeOrderSet = true;
     }
+
+    // CTRL[46]/CTRL[47] (mmad HF32 rounding mode) are global and persist once
+    // set, so when every mmad in this function agrees on hf32_mode they are set
+    // once at the function entry. If the function mixes values the per-mmad path
+    // in LowerTlaMmadPattern is used instead.
+    std::optional<HF32Mode> funcLevelHF32Mode;
+    bool HF32Conflict = false;
+    root->walk([&](::tla::MmadOp op) {
+      auto attr = op->getAttrOfType<::tla::HF32ModeAttr>("hf32_mode");
+      HF32Mode mode = attr.getValue();
+      if (funcLevelHF32Mode && *funcLevelHF32Mode != mode)
+        HF32Conflict = true;
+      else if (!funcLevelHF32Mode)
+        funcLevelHF32Mode = mode;
+    });
+    bool funcLevelHF32Set = false;
+    if (funcLevelHF32Mode && !HF32Conflict) {
+      Block &entry = funcOp.getBody().front();
+      PatternRewriter builder(funcOp.getContext());
+      builder.setInsertionPointToStart(&entry);
+      HF32Mode mode = *funcLevelHF32Mode;
+      bool enableHF32 = mode != HF32Mode::HF32_DISABLE;
+      bool nearestZero = mode == HF32Mode::HF32_NEAREST_ZERO;
+      builder.create<hivm::SetCtrlOp>(funcOp.getLoc(), enableHF32, HF32ModeBit);
+      builder.create<hivm::SetCtrlOp>(funcOp.getLoc(), nearestZero, HF32TransModeBit);
+      funcLevelHF32Set = true;
+    }
     LowerTlaMmadPattern lowerMmad(&getContext(), tensorDescriptorByValue, toErase,
                                   lowering.loweredMemrefByValue,
-                                  funcLevelComputeOrderSet);
+                                  funcLevelComputeOrderSet,
+                                  funcLevelHF32Set);
     SmallVector<Operation *, 16> mmadOps;
     root->walk([&](Operation *op) {
       if (llvm::isa<::tla::MmadOp>(op))

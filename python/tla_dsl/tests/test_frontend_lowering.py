@@ -201,6 +201,54 @@ def mmad_bad_compute_order_kernel(
         tla.mmad(acc, lhs, rhs, init_c=True, compute_order="N_FIRST")
 
 @tla.kernel
+def mmad_hf32_mode_kernel(
+    lhs: tla.Tensor, rhs: tla.Tensor, acc: tla.Tensor
+) -> None:
+    with tla.cube():
+        tla.mmad(
+            acc,
+            lhs,
+            rhs,
+            init_c=True,
+            hf32_mode=tla.params.HF32Mode.HF32_NEAREST_ZERO,
+        )
+
+@tla.kernel
+def mmad_hf32_mode_nearest_even_kernel(
+    lhs: tla.Tensor, rhs: tla.Tensor, acc: tla.Tensor
+) -> None:
+    with tla.cube():
+        tla.mmad(
+            acc,
+            lhs,
+            rhs,
+            init_c=True,
+            hf32_mode=tla.params.HF32Mode.HF32_NEAREST_EVEN,
+        )
+
+@tla.kernel
+def mmad_default_hf32_mode_kernel(
+    lhs: tla.Tensor, rhs: tla.Tensor, acc: tla.Tensor
+) -> None:
+    with tla.cube():
+        tla.mmad(acc, lhs, rhs, init_c=True)
+
+@tla.kernel
+def mmad_default_hf32_mode_kernel_v2(
+    lhs: tla.Tensor, rhs: tla.Tensor, acc: tla.Tensor
+) -> None:
+    with tla.cube():
+        tla.mmad(acc, lhs, rhs, init_c=True, hf32_mode=tla.params.HF32Mode.HF32_DISABLE)
+
+
+@tla.kernel
+def mmad_bad_hf32_mode_kernel(
+    lhs: tla.Tensor, rhs: tla.Tensor, acc: tla.Tensor
+) -> None:
+    with tla.cube():
+        tla.mmad(acc, lhs, rhs, init_c=True, hf32_mode="nearest_zero")
+
+@tla.kernel
 def make_shape_index_arg_ok(dim: "index") -> None:
     tla.make_shape(dim, 16)
 
@@ -456,6 +504,30 @@ def test_mmad_without_region_lowers() -> None:
         _skip_if_mmad_rank2_tile_view_regression(e)
         raise
     assert "tla.mmad" in mlir
+
+def test_hf32_mode_emits_attr() -> None:
+    ta, tb, tc = _mmad_tensor_args()
+    mlir = mmad_hf32_mode_kernel.dump_mlir(type_args=(ta, tb, tc))
+    assert "tla.mmad" in mlir
+    assert "hf32_mode = #tla.hf32_mode<HF32_NEAREST_ZERO>" in mlir
+
+def test_hf32_mode_nearest_even_emits_attr() -> None:
+    ta, tb, tc = _mmad_tensor_args()
+    mlir = mmad_hf32_mode_nearest_even_kernel.dump_mlir(type_args=(ta, tb, tc))
+    assert "tla.mmad" in mlir
+    assert "hf32_mode = #tla.hf32_mode<HF32_NEAREST_EVEN>" in mlir
+
+def test_default_hf32_mode_is_disable() -> None:
+    ta, tb, tc = _mmad_tensor_args()
+    for _kernel in (mmad_default_hf32_mode_kernel, mmad_default_hf32_mode_kernel_v2):
+        mlir = _kernel.dump_mlir(type_args=(ta, tb, tc))
+        assert "tla.mmad" in mlir
+        assert "hf32_mode = #tla.hf32_mode<HF32_DISABLE>" in mlir
+
+def test_rejects_invalid_hf32_mode() -> None:
+    ta, tb, tc = _mmad_tensor_args()
+    with pytest.raises(TlaLoweringError):
+        _ = mmad_bad_hf32_mode_kernel.dump_mlir(type_args=(ta, tb, tc))
 
 def test_make_shape_accepts_index_typed_components() -> None:
     """Lowering emits tla.make_shape with a dynamic dim when the component is a kernel parameter."""

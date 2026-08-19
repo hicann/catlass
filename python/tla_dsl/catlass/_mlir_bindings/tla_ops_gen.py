@@ -1830,7 +1830,7 @@ class MmadOp(_ods_ir.OpView):
 
   _ODS_REGIONS = (0, True)
 
-  def __init__(self, acc, lhs, rhs, init_c, unit_flag, compute_order, *, loc=None, ip=None):
+  def __init__(self, acc, lhs, rhs, init_c, unit_flag, compute_order, hf32_mode, *, loc=None, ip=None):
     operands = []
     results = []
     attributes = {}
@@ -1845,6 +1845,10 @@ class MmadOp(_ods_ir.OpView):
     isinstance(compute_order, _ods_ir.Attribute) or
     not _ods_ir.AttrBuilder.contains('Tla_ComputeOrderAttr')) else
       _ods_ir.AttrBuilder.get('Tla_ComputeOrderAttr')(compute_order, context=_ods_context))
+    attributes["hf32_mode"] = (hf32_mode if (
+    isinstance(hf32_mode, _ods_ir.Attribute) or
+    not _ods_ir.AttrBuilder.contains('Tla_HF32ModeAttr')) else
+      _ods_ir.AttrBuilder.get('Tla_HF32ModeAttr')(hf32_mode, context=_ods_context))
     _ods_successors = None
     super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
 
@@ -1878,8 +1882,18 @@ class MmadOp(_ods_ir.OpView):
       raise ValueError("'None' not allowed as value for mandatory attributes")
     self.operation.attributes["compute_order"] = value
 
-def mmad(acc, lhs, rhs, init_c, unit_flag, compute_order, *, loc=None, ip=None) -> _ods_ir.Operation:
-  return _get_op_result_or_op_results(MmadOp(acc=acc, lhs=lhs, rhs=rhs, init_c=init_c, unit_flag=unit_flag, compute_order=compute_order, loc=loc, ip=ip))
+  @builtins.property
+  def hf32_mode(self):
+    return self.operation.attributes["hf32_mode"]
+
+  @hf32_mode.setter
+  def hf32_mode(self, value):
+    if value is None:
+      raise ValueError("'None' not allowed as value for mandatory attributes")
+    self.operation.attributes["hf32_mode"] = value
+
+def mmad(acc, lhs, rhs, init_c, unit_flag, compute_order, hf32_mode, *, loc=None, ip=None) -> _ods_ir.Operation:
+  return _get_op_result_or_op_results(MmadOp(acc=acc, lhs=lhs, rhs=rhs, init_c=init_c, unit_flag=unit_flag, compute_order=compute_order, hf32_mode=hf32_mode, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
 class MulOp(_ods_ir.OpView):
