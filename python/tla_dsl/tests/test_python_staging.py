@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 
 import catlass.tla as tla
+from catlass import execution_lowering
 from catlass.base_dsl.ast_preprocessor import reject_user_class_value
 
 
@@ -121,6 +122,21 @@ def helper_requiring_transformation(value: int) -> None:
 @tla.kernel
 def helper_requiring_transformation_kernel(value: int) -> None:
     helper_requiring_transformation(value)
+
+
+def _make_dynamic_jit_helper(offset: int):
+    @tla.jit
+    def helper(value: int) -> None:
+        if value > 0:
+            tla.make_coord(offset, 0)
+
+    return helper
+
+
+@tla.kernel
+def dynamic_jit_helpers_kernel(value: int) -> None:
+    _make_dynamic_jit_helper(11)(value)
+    _make_dynamic_jit_helper(22)(value)
 
 
 def plain_helper_requiring_transformation(value: int) -> None:
@@ -311,11 +327,32 @@ def test_object_mutation_inside_runtime_control_flow_is_rejected() -> None:
         object_mutation_in_runtime_kernel.dump_mlir(type_args=(1,))
 
 
-def test_helper_requiring_control_flow_transformation_has_pr5_diagnostic() -> None:
-    with pytest.raises(
-        SyntaxError, match="control-flow composition is not supported yet"
-    ):
-        helper_requiring_transformation_kernel.dump_mlir(type_args=(1,))
+def test_decorated_helper_control_flow_is_transformed() -> None:
+    mlir = helper_requiring_transformation_kernel.dump_mlir(type_args=(1,))
+    assert "tla.func" in mlir
+    assert "helper_requiring_transformation_kernel" in mlir
+    assert "scf.if" in mlir
+
+
+def test_dynamic_jit_helpers_do_not_reuse_an_id_collision(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    transformed_helpers: list[object] = []
+    transform = execution_lowering._transform_jit_helper
+
+    def record_transform(helper: object) -> object:
+        transformed_helpers.append(helper)
+        return transform(helper)
+
+    monkeypatch.setattr(
+        execution_lowering, "id", lambda _helper: 0, raising=False
+    )
+    monkeypatch.setattr(execution_lowering, "_transform_jit_helper", record_transform)
+
+    dynamic_jit_helpers_kernel.dump_mlir(type_args=(1,))
+
+    assert len(transformed_helpers) == 2
+    assert transformed_helpers[0] is not transformed_helpers[1]
 
 
 def test_plain_helper_control_flow_is_not_transformed() -> None:

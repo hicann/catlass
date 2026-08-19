@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import contextlib
+import contextvars
 from dataclasses import dataclass, is_dataclass
 import inspect
 from typing import Any, Callable, Mapping, Sequence
@@ -36,6 +38,24 @@ def _get_typed_call_args(args: Sequence[Any]) -> Sequence[Any] | None:
 from .catlass_dsl.tla import KernelLauncher
 
 
+_ACTIVE_JIT_HELPER_TRANSFORMER: contextvars.ContextVar[
+    Callable[["TlaJitFunction"], Callable[..., Any]] | None
+] = contextvars.ContextVar("tla_active_jit_helper_transformer", default=None)
+
+
+@contextlib.contextmanager
+def _jit_helper_transformer(
+    transform: Callable[["TlaJitFunction"], Callable[..., Any]],
+):
+    """Use transformed ``@tla.jit`` helpers while lowering one root function."""
+
+    token = _ACTIVE_JIT_HELPER_TRANSFORMER.set(transform)
+    try:
+        yield
+    finally:
+        _ACTIVE_JIT_HELPER_TRANSFORMER.reset(token)
+
+
 @dataclass
 class TlaJitFunction:
     """Wrapper for Tla DSL JIT/kernels that can emit and execute Tla IR."""
@@ -53,6 +73,9 @@ class TlaJitFunction:
             return KernelLauncher(
                 self, launch_kwargs=dict(kwargs), launch_args=tuple(args)
             )
+        transform = _ACTIVE_JIT_HELPER_TRANSFORMER.get()
+        if transform is not None:
+            return transform(self)(*args, **kwargs)
         return self.fn(*args, **kwargs)
 
     def compile(

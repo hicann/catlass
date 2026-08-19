@@ -3218,6 +3218,7 @@ def _validate_language_boundaries(
     filename: str,
     line_offset: int,
     validated: set[int] | None = None,
+    validating: set[int] | None = None,
 ) -> None:
     """Validate the boundary between Python staging and DSL lowering.
 
@@ -3227,9 +3228,10 @@ def _validate_language_boundaries(
     """
 
     validated = validated if validated is not None else set()
+    validating = validating if validating is not None else set()
     if id(fn) in validated:
         return
-    validated.add(id(fn))
+    validating.add(id(fn))
     symbols = dict(fn.__globals__)
     try:
         closure = inspect.getclosurevars(fn)
@@ -3311,6 +3313,8 @@ def _validate_language_boundaries(
         )
 
     def validate_jit(node: ast.AST, helper: Callable[..., Any]) -> None:
+        if id(helper) in validating:
+            fail(node, "recursive @tla.jit helper calls are not supported")
         try:
             helper_lines, helper_lineno = inspect.getsourcelines(helper)
         except (OSError, IOError, TypeError):
@@ -3322,12 +3326,6 @@ def _validate_language_boundaries(
         )
         if helper_target is None:
             fail(node, "@tla.jit helper source could not be analyzed")
-        if _function_needs_frontend_transform(helper_target, helper.__globals__):
-            fail(
-                node,
-                "@tla.jit helper control-flow composition is not supported yet; "
-                "inline the helper body or move the call outside runtime control flow",
-            )
         _validate_language_boundaries(
             helper,
             target=helper_target,
@@ -3335,6 +3333,7 @@ def _validate_language_boundaries(
             filename=helper_filename,
             line_offset=int(helper_lineno) - 1,
             validated=validated,
+            validating=validating,
         )
 
     def is_supported_isinstance_type(node: ast.AST) -> bool:
@@ -3544,9 +3543,13 @@ def _validate_language_boundaries(
         def visit_Lambda(self, node: ast.Lambda) -> None:
             self.visit(node.body)
 
-    validator = Validator()
-    for statement in target.body:
-        validator.visit(statement)
+    try:
+        validator = Validator()
+        for statement in target.body:
+            validator.visit(statement)
+    finally:
+        validating.remove(id(fn))
+    validated.add(id(fn))
 
 
 _CLOSURE_FACTORY_NAME = "__tladsl_internal_closure_factory__"

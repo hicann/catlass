@@ -20,6 +20,7 @@ from .base_dsl.ast_preprocessor import (
 )
 from .base_dsl import DSLLocation
 from .base_dsl.typing import Numeric, is_constexpr_annotation
+from .dsl import _jit_helper_transformer
 from .tla.typing import Tensor
 
 
@@ -178,6 +179,27 @@ def lower_jit_to_tlair_module_by_execution(
         assume_verified=False,
     )
     return lowered
+
+
+def _transform_jit_helper(helper: Any) -> Any:
+    """Transform one genuine helper with the same frontend hooks as its root."""
+
+    return maybe_transform_for_lowering(
+        helper.fn,
+        internal_for=ast_decorators._internal_frontend_for,
+        internal_region=runtime._internal_frontend_region,
+        internal_if=ast_decorators._internal_frontend_if,
+        internal_if_expr=ast_decorators._internal_frontend_if_expr,
+        internal_bool_and=ast_decorators._internal_frontend_bool_and,
+        internal_bool_or=ast_decorators._internal_frontend_bool_or,
+        internal_bool_not=ast_decorators._internal_frontend_bool_not,
+        internal_compare=ast_decorators._internal_frontend_compare,
+        internal_any=ast_decorators._internal_frontend_any,
+        internal_all=ast_decorators._internal_frontend_all,
+        internal_bool=ast_decorators._internal_frontend_bool,
+        internal_min=ast_decorators._internal_frontend_min,
+        internal_max=ast_decorators._internal_frontend_max,
+    )
 
 
 def _prepare_call_args(
@@ -494,11 +516,45 @@ def _build_tla_func(
                     else:
                         call_args_for_fn[index] = type(instance)(**kwargs)
                 call_args_for_fn = tuple(call_args_for_fn)
+            helper_cache: dict[int, tuple[Any, Any]] = {}
+            active_jit_helpers: list[Any] = []
+
+            def transform_helper(helper: Any) -> Any:
+                key = id(helper)
+                cached = helper_cache.get(key)
+                if cached is not None and cached[0] is helper:
+                    return cached[1]
+
+                # Helpers discovered only while staging a factory or Python
+                # forwarding call have not passed the root-function boundary
+                # walk. Validate them before their first transformation.
+                validate_language_boundaries(helper.fn)
+                transformed = _transform_jit_helper(helper)
+
+                def guarded_helper(*args: Any, **kwargs: Any) -> Any:
+                    if any(active is helper for active in active_jit_helpers):
+                        raise SyntaxError(
+                            "recursive @tla.jit helper calls are not supported"
+                        )
+                    active_jit_helpers.append(helper)
+                    try:
+                        return transformed(*args, **kwargs)
+                    finally:
+                        active_jit_helpers.pop()
+
+                # Retain the wrapper alongside the guarded callable: CPython
+                # may recycle object IDs for temporary factory results.
+                helper_cache[key] = (helper, guarded_helper)
+                return guarded_helper
+
             try:
-                fn(*call_args_for_fn)
+                with _jit_helper_transformer(transform_helper):
+                    fn(*call_args_for_fn)
             except runtime.TlaCoreAPIError:
                 raise
             except TlaLoweringError:
+                raise
+            except SyntaxError:
                 raise
             except ValueError:
                 raise
