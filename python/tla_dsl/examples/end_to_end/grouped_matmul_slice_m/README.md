@@ -1,6 +1,6 @@
 # Grouped Matmul Slice-M 端到端示例
 
-本目录下的样例演示 **CATLASS DSL** 下按 M 切分的分组矩阵乘，对齐 C++ 参考实现`examples/60_ascend950_grouped_matmul_slice_m`。
+本目录下的样例演示 **CATLASS DSL** 下按 M 切分的分组矩阵乘。
 
 ## 功能说明
 
@@ -49,22 +49,29 @@ $$
 | `--k` | `256` | 矩阵乘累加轴的大小 |
 | `--groups` | `4` | 分组数 G。 |
 | `--group-mode` | `random` | 组切分模式，可选 `average` 或 `random`。 |
-| `--layout-a` / `--layout-b` | `row` / `row` | 左、右矩阵 A、B 的数据排布格式，可选 `"row"` 或 `"col"`，表示行优先或列优先布局。 |
-| `--dtype-a` / `--dtype-b` / `--dtype-c` | `f16` / `f16` / `f16` | 左、右矩阵 A、B 和结果矩阵 C 的数据类型，可选范围参考约束说明。 |
-| `--block` | `8` | 启用的核数。 |
+| `--layout-a` / `--layout-b` | `"row"` / `"row"` | 左、右矩阵 A、B 的数据排布格式，可选 `"row"` 或 `"col"`，表示行优先或列优先布局。 |
+| `--dtype-a` / `--dtype-b` / `--dtype-c` | `"f16"` / `"f16"` / `"f16"` | 左、右矩阵 A、B 和结果矩阵 C 的数据类型，可选范围参考约束说明。 |
+| `--block-num` | `-1` | 启用的核数，`-1` 表示自动探测可用核数（满核）。 |
 
 ### 执行示例
 
 在 `python/tla_dsl` 目录下执行：
 
 ```bash
-cd "${CATLASS_ROOT}/python/tla_dsl"
+cd python/tla_dsl
 
-python examples/end_to_end/grouped_matmul_slice_m/grouped_matmul_slice_m.py \
-  --run --device 4 --m 1024 --n 256 --k 256 --groups 4 --group-mode average --block 8
-
+python examples/end_to_end/grouped_matmul_slice_m/grouped_matmul_slice_m.py --device 0 \
+  --m 1024 --n 256 --k 256 --groups 4 --group-mode average
 ```
 
-执行测试后，预期输出：
+默认测试条件下，预期输出：
 
-成功时可见 `compile_ok` / `launch_ok` 与 golden 比对结果。
+```text
+--- groups=(4) mnk=(1024,256,256) layout=row/row dtype=f16/f16/f16 group_mode=average ---
+GROUP_CURRENT_M=(256, 256, 256, 256)
+GROUP_LIST_PREFIX=(0, 256, 512, 768, 1024)
+passed=True cache_key=<cache_key>
+kernel.o=<cache_dir>/<cache_key>/kernel.o
+```
+
+其中 `passed`结果为`True`或`False` 表明 NPU 计算结果与golden参考值精度校验是否通过；`cache_dir` 是指定的缓存目录， `cache_key` 是编译缓存的哈希值。

@@ -78,7 +78,7 @@ block_sparse_attention.py [-h] [--device DEVICE] [--qseqlen QSEQLEN] [--kvseqlen
 | `--dtype` | `"fp16"` | 输入数据类型，可选 `"fp16"` 或 `"bf16"`。 |
 | `--pattern` | `"causal"` | mask 模式，可选 `"causal"` / `"doc_prefix"` / `"sliding_window"` / `"four_stage_forward"`。 |
 | `--format` | `"BSND"` | Tensor 格式，可选 `"BSND"`（定长）或 `"TND"`（变长）。 |
-| `--block-num` | `-1`（依据所使用的 NPU 设备采集其满核值） | 所启用的 AI Core 核数。 |
+| `--block-num` | `-1` | 启用的核数，`-1` 表示自动探测可用核数（满核）。 |
 | `--cache-dir` | `./artifacts/runtime-cache` | 编译缓存目录。 |
 | `--force-recompile` | `False` | 强制重新编译。 |
 | `--no-cache` | `False` | 禁用编译缓存。 |

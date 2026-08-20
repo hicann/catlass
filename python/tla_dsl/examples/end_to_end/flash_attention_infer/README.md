@@ -95,7 +95,7 @@ flash_attention_infer.py [-h] [--device DEVICE] [--dtype {f16,bf16}]
 | `--kvheadnum` | `1` | KV 头数，覆盖 `KV_HEAD_NUM`。 |
 | `--qseqlen` | `117` | Q 序列长度，覆盖 `Q_SEQ`。 |
 | `--kvseqlen` | `512` | KV 序列长度，覆盖 `KV_SEQ`。 |
-| `--block-num` | `-1` | 所启用的 AI Core 核数；`-1` 表示满 AIC（`cube_core_num`）。 |
+| `--block-num` | `-1` | 启用的核数，`-1` 表示自动探测可用核数（满核）。 |
 | `--sentinel` | `-7.0` | O 的初始值，用于对比检测 kernel 是否真正写入。 |
 
 ### 执行示例

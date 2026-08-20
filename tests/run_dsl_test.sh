@@ -29,7 +29,7 @@
 # @dataclass instance unpacked into scalar kernel args).
 # python/tla_dsl/examples/end_to_end/print_tensor (print_tensor.py: all eight
 # supported GM/UB dtypes plus multi-block and multi-call cases).
-# python/tla_dsl/examples/end_to_end/basic_mmad_evg (matmul_add.py, matmul_add_ub.py,
+# python/tla_dsl/examples/end_to_end/basic_mmad_epilogue (matmul_add.py, matmul_add_ub.py,
 # matmul_bias.py, matmul_leaky_relu.py, matmul_sigmoid.py, matmul_silu.py, matmul_tanh.py).
 # python/tla_dsl/examples/end_to_end/flash_attention_infer (flash_attention_infer.py).
 # python/tla_dsl/examples/end_to_end/lazy_conditions (lazy_conditions.py).
@@ -140,13 +140,13 @@ LAZY_CONDITIONS_REL="examples/end_to_end/lazy_conditions/lazy_conditions.py"
 SIMT_VADD_REL="examples/end_to_end/simt/basic_vadd_simt.py"
 MULTI_CORE_SPLITK_REL="examples/end_to_end/multi_core_splitk_matmul/multi_core_splitk_matmul.py"
 TAIL_MULTI_CORE_SPLITK_REL="examples/end_to_end/multi_core_splitk_matmul/tail_multi_core_splitk_matmul.py"
-BASIC_MMAD_EVG_ADD_REL="examples/end_to_end/basic_mmad_evg/matmul_add.py"
-BASIC_MMAD_EVG_ADD_UB_REL="examples/end_to_end/basic_mmad_evg/matmul_add_ub.py"
-BASIC_MMAD_EVG_BIAS_REL="examples/end_to_end/basic_mmad_evg/matmul_bias.py"
-BASIC_MMAD_EVG_LEAKY_RELU_REL="examples/end_to_end/basic_mmad_evg/matmul_leaky_relu.py"
-BASIC_MMAD_EVG_SIGMOID_REL="examples/end_to_end/basic_mmad_evg/matmul_sigmoid.py"
-BASIC_MMAD_EVG_SILU_REL="examples/end_to_end/basic_mmad_evg/matmul_silu.py"
-BASIC_MMAD_EVG_TANH_REL="examples/end_to_end/basic_mmad_evg/matmul_tanh.py"
+BASIC_MMAD_EPILOGUE_ADD_REL="examples/end_to_end/basic_mmad_epilogue/matmul_add.py"
+BASIC_MMAD_EPILOGUE_ADD_UB_REL="examples/end_to_end/basic_mmad_epilogue/matmul_add_ub.py"
+BASIC_MMAD_EPILOGUE_BIAS_REL="examples/end_to_end/basic_mmad_epilogue/matmul_bias.py"
+BASIC_MMAD_EPILOGUE_LEAKY_RELU_REL="examples/end_to_end/basic_mmad_epilogue/matmul_leaky_relu.py"
+BASIC_MMAD_EPILOGUE_SIGMOID_REL="examples/end_to_end/basic_mmad_epilogue/matmul_sigmoid.py"
+BASIC_MMAD_EPILOGUE_SILU_REL="examples/end_to_end/basic_mmad_epilogue/matmul_silu.py"
+BASIC_MMAD_EPILOGUE_TANH_REL="examples/end_to_end/basic_mmad_epilogue/matmul_tanh.py"
 CAST_MULTI_REL="examples/end_to_end/vector_ops/cast_multi.py"
 GATHER_OP_REL="examples/end_to_end/vector_ops/gather_op.py"
 
@@ -201,7 +201,7 @@ Run end-to-end validation for:
     per-field scalar kernel args; constexpr + tensor + scalar fields)
   - print_tensor (print_tensor.py: all supported GM/UB dtypes with AIV/AIC
     multi-block and multi-call coverage)
-  - basic_mmad_evg (matmul_add.py, ...: CV fused examples)
+  - basic_mmad_epilogue (matmul_add.py, ...: CV fused examples)
   - flash_attention_infer (flash_attention_infer.py)
   - lazy_conditions (lazy_conditions.py)
   - simt (basic_vadd_simt.py: SIMT thread-block add)
@@ -532,32 +532,32 @@ if [[ ! -f "${CATLASS_DSL_DIR}/${GROUPED_MATMUL_SLICEM_REL}" ]]; then
     echo "error: missing ${GROUPED_MATMUL_SLICEM_REL} under ${CATLASS_DSL_DIR}" >&2
     exit 1
 fi
-if [[ ! -f "${CATLASS_DSL_DIR}/${BASIC_MMAD_EVG_ADD_REL}" ]]; then
-    echo "error: missing ${BASIC_MMAD_EVG_ADD_REL} under ${CATLASS_DSL_DIR}" >&2
+if [[ ! -f "${CATLASS_DSL_DIR}/${BASIC_MMAD_EPILOGUE_ADD_REL}" ]]; then
+    echo "error: missing ${BASIC_MMAD_EPILOGUE_ADD_REL} under ${CATLASS_DSL_DIR}" >&2
     exit 1
 fi
-if [[ ! -f "${CATLASS_DSL_DIR}/${BASIC_MMAD_EVG_ADD_UB_REL}" ]]; then
-    echo "error: missing ${BASIC_MMAD_EVG_ADD_UB_REL} under ${CATLASS_DSL_DIR}" >&2
+if [[ ! -f "${CATLASS_DSL_DIR}/${BASIC_MMAD_EPILOGUE_ADD_UB_REL}" ]]; then
+    echo "error: missing ${BASIC_MMAD_EPILOGUE_ADD_UB_REL} under ${CATLASS_DSL_DIR}" >&2
     exit 1
 fi
-if [[ ! -f "${CATLASS_DSL_DIR}/${BASIC_MMAD_EVG_BIAS_REL}" ]]; then
-    echo "error: missing ${BASIC_MMAD_EVG_BIAS_REL} under ${CATLASS_DSL_DIR}" >&2
+if [[ ! -f "${CATLASS_DSL_DIR}/${BASIC_MMAD_EPILOGUE_BIAS_REL}" ]]; then
+    echo "error: missing ${BASIC_MMAD_EPILOGUE_BIAS_REL} under ${CATLASS_DSL_DIR}" >&2
     exit 1
 fi
-if [[ ! -f "${CATLASS_DSL_DIR}/${BASIC_MMAD_EVG_LEAKY_RELU_REL}" ]]; then
-    echo "error: missing ${BASIC_MMAD_EVG_LEAKY_RELU_REL} under ${CATLASS_DSL_DIR}" >&2
+if [[ ! -f "${CATLASS_DSL_DIR}/${BASIC_MMAD_EPILOGUE_LEAKY_RELU_REL}" ]]; then
+    echo "error: missing ${BASIC_MMAD_EPILOGUE_LEAKY_RELU_REL} under ${CATLASS_DSL_DIR}" >&2
     exit 1
 fi
-if [[ ! -f "${CATLASS_DSL_DIR}/${BASIC_MMAD_EVG_SIGMOID_REL}" ]]; then
-    echo "error: missing ${BASIC_MMAD_EVG_SIGMOID_REL} under ${CATLASS_DSL_DIR}" >&2
+if [[ ! -f "${CATLASS_DSL_DIR}/${BASIC_MMAD_EPILOGUE_SIGMOID_REL}" ]]; then
+    echo "error: missing ${BASIC_MMAD_EPILOGUE_SIGMOID_REL} under ${CATLASS_DSL_DIR}" >&2
     exit 1
 fi
-if [[ ! -f "${CATLASS_DSL_DIR}/${BASIC_MMAD_EVG_SILU_REL}" ]]; then
-    echo "error: missing ${BASIC_MMAD_EVG_SILU_REL} under ${CATLASS_DSL_DIR}" >&2
+if [[ ! -f "${CATLASS_DSL_DIR}/${BASIC_MMAD_EPILOGUE_SILU_REL}" ]]; then
+    echo "error: missing ${BASIC_MMAD_EPILOGUE_SILU_REL} under ${CATLASS_DSL_DIR}" >&2
     exit 1
 fi
-if [[ ! -f "${CATLASS_DSL_DIR}/${BASIC_MMAD_EVG_TANH_REL}" ]]; then
-    echo "error: missing ${BASIC_MMAD_EVG_TANH_REL} under ${CATLASS_DSL_DIR}" >&2
+if [[ ! -f "${CATLASS_DSL_DIR}/${BASIC_MMAD_EPILOGUE_TANH_REL}" ]]; then
+    echo "error: missing ${BASIC_MMAD_EPILOGUE_TANH_REL} under ${CATLASS_DSL_DIR}" >&2
     exit 1
 fi
 if [[ ! -f "${CATLASS_DSL_DIR}/${CAST_MULTI_REL}" ]]; then
