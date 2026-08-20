@@ -720,6 +720,16 @@ std::string getCopyRouteCallee(
             return {};
         return Twine("copy_l0c_to_ub_column_major_").concat(extraDesc).concat("_").concat(suffix).str();
     }
+    // L0C (fp32 MMAD acc) -> L1 zN: dst may be f32 / f16 / bf16 (narrowing on fixpipe).
+    if (*srcSpace == hivm::AddressSpace::L0C && *dstSpace == hivm::AddressSpace::L1 &&
+        srcLayout == TensorLayoutTag::L0C && dstLayout == TensorLayoutTag::zN) {
+        if (srcElementType != "f32")
+            return {};
+        StringRef suffix = copyRuntimeElemSuffix(dstElem);
+        if (suffix.empty())
+            return {};
+        return Twine("copy_l0c_to_l1_zN_").concat(suffix).str();
+    }
     return {};
 }
 
@@ -761,7 +771,7 @@ static bool isAicTemplateRuntimeCall(StringRef name)
            name.starts_with("copy_l1_zN_to_l0a_zN_") || name.starts_with("copy_l1_nZ_to_l0a_zN_") ||
            name.starts_with("copy_l1_zN_to_l0b_nZ_") || name.starts_with("copy_l1_nZ_to_l0b_nZ_") ||
            name.starts_with("copy_l0c_to_ub_row_major_") || name.starts_with("copy_l0c_to_gm_row_major_") ||
-           name.starts_with("copy_l0c_to_ub_column_major_");
+           name.starts_with("copy_l0c_to_ub_column_major_") || name.starts_with("copy_l0c_to_l1_zN_");
 }
 
 static bool isAivTemplateRuntimeCall(StringRef name)

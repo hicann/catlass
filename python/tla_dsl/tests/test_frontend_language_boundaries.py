@@ -28,6 +28,72 @@ def _jit_calls_plain_helper(value):
     return _plain_helper(value)
 
 
+@tla.jit
+def _jit_loop_helper(limit: int) -> None:
+    for index in tla.range(limit):
+        tla.make_coord(index, 0)
+
+
+@tla.jit
+def _jit_calls_loop_helper(limit: int) -> None:
+    _jit_loop_helper(limit)
+
+
+@tla.jit
+def _jit_recursive_helper(value: int) -> None:
+    _jit_recursive_helper(value)
+
+
+@tla.jit
+def _jit_mutual_helper_a(value: int) -> None:
+    _jit_mutual_helper_b(value)
+
+
+@tla.jit
+def _jit_mutual_helper_b(value: int) -> None:
+    _jit_mutual_helper_a(value)
+
+
+def _make_recursive_jit_helper():
+    @tla.jit
+    def helper(value: int) -> None:
+        helper(value)
+
+    return helper
+
+
+def _forward_jit_helper(callback, value: int) -> None:
+    callback(value)
+
+
+@tla.jit
+def _jit_nested_forwarding_recursive_helper(value: int) -> None:
+    def invoke() -> None:
+        _jit_nested_forwarding_recursive_helper(value)
+
+    invoke()
+
+
+@tla.jit
+def _jit_bare_forwarding_recursive_helper(value: int) -> None:
+    _forward_jit_helper(_jit_bare_forwarding_recursive_helper, value)
+
+
+@tla.jit
+def _jit_tuple_recursive_helper(value: int) -> None:
+    (_jit_tuple_recursive_helper,)[0](value)
+
+
+@tla.jit
+def _jit_list_recursive_helper(value: int) -> None:
+    [_jit_list_recursive_helper][0](value)
+
+
+@tla.jit
+def _jit_dict_recursive_helper(value: int) -> None:
+    {"helper": _jit_dict_recursive_helper}["helper"](value)
+
+
 class _UserValue:
     def __init__(self, value=1):
         _CALLS.append("init")
@@ -92,6 +158,56 @@ def _bad_scope_helper_kernel(value: int) -> None:
 @tla.kernel
 def _jit_helper_kernel(value: int) -> None:
     _jit_helper(value)
+
+
+@tla.kernel
+def _jit_loop_helper_kernel(limit: int) -> None:
+    _jit_loop_helper(limit)
+
+
+@tla.kernel
+def _jit_nested_loop_helper_kernel(limit: int) -> None:
+    _jit_calls_loop_helper(limit)
+
+
+@tla.kernel
+def _jit_recursive_helper_kernel(value: int) -> None:
+    _jit_recursive_helper(value)
+
+
+@tla.kernel
+def _jit_mutual_helper_kernel(value: int) -> None:
+    _jit_mutual_helper_a(value)
+
+
+@tla.kernel
+def _factory_recursive_helper_kernel(value: int) -> None:
+    _make_recursive_jit_helper()(value)
+
+
+@tla.kernel
+def _nested_forwarding_recursive_helper_kernel(value: int) -> None:
+    _jit_nested_forwarding_recursive_helper(value)
+
+
+@tla.kernel
+def _bare_forwarding_recursive_helper_kernel(value: int) -> None:
+    _jit_bare_forwarding_recursive_helper(value)
+
+
+@tla.kernel
+def _tuple_recursive_helper_kernel(value: int) -> None:
+    _jit_tuple_recursive_helper(value)
+
+
+@tla.kernel
+def _list_recursive_helper_kernel(value: int) -> None:
+    _jit_list_recursive_helper(value)
+
+
+@tla.kernel
+def _dict_recursive_helper_kernel(value: int) -> None:
+    _jit_dict_recursive_helper(value)
 
 
 @tla.kernel
@@ -163,6 +279,38 @@ def test_allows_inspectable_helper_side_effects_during_staging() -> None:
 def test_allows_genuine_jit_helper() -> None:
     mlir = _jit_helper_kernel.dump_mlir(type_args=(1,))
     assert "tla.make_coord" in mlir
+
+
+@pytest.mark.parametrize(
+    "kernel", [_jit_loop_helper_kernel, _jit_nested_loop_helper_kernel]
+)
+def test_composes_jit_helper_control_flow(kernel) -> None:
+    mlir = kernel.dump_mlir(type_args=(2,))
+    assert "scf.for" in mlir
+
+
+@pytest.mark.parametrize(
+    "kernel", [_jit_recursive_helper_kernel, _jit_mutual_helper_kernel]
+)
+def test_rejects_recursive_jit_helpers_before_execution(kernel) -> None:
+    with pytest.raises(Exception, match="recursive @tla.jit helper"):
+        kernel.dump_mlir(type_args=(1,))
+
+
+@pytest.mark.parametrize(
+    "kernel",
+    [
+        _factory_recursive_helper_kernel,
+        _nested_forwarding_recursive_helper_kernel,
+        _bare_forwarding_recursive_helper_kernel,
+        _tuple_recursive_helper_kernel,
+        _list_recursive_helper_kernel,
+        _dict_recursive_helper_kernel,
+    ],
+)
+def test_rejects_indirect_recursive_jit_helpers(kernel) -> None:
+    with pytest.raises(SyntaxError, match="recursive @tla.jit helper"):
+        kernel.dump_mlir(type_args=(1,))
 
 
 def test_allows_straight_line_jit_helper_with_plain_staging_call() -> None:

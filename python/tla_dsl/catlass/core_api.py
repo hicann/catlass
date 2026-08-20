@@ -4231,6 +4231,7 @@ _COPY_CUBE_ROUTES = {
     ("l1", "l0a"),
     ("l1", "l0b"),
     ("l0c", "gm"),
+    ("l0c", "l1"),
     ("l0c", "ub"),
     ("l1", "ub"),
 }
@@ -4248,7 +4249,7 @@ def copy(
     """Directory: Data Movement
     Description:
         Copy data between tiles. The hardware path follows `src`/`dst` address spaces
-        (vector: GM↔UB, UB→L1; cube: GM→L1, L1→L0A/L0B, L0C→GM|UB, L1→UB).
+        (vector: GM↔UB, UB→L1; cube: GM→L1, L1→L0A/L0B, L0C→GM|UB|L1, L1→UB).
         Layout tags on the tiles select format conversion (for example ND→zN).
 
         Copy / tiling sizes follow each tile's logical `origin_shape`
@@ -4370,6 +4371,8 @@ def copy(
                 "currently copy l0c to ub only support dst [row_major, column_major],"
                 f" got {dst_layout}"
             )
+        if _route[1] == "l1" and dst_layout not in ("zn",):
+            raise TlaLoweringError(f"l0c2l1 dst layout shoud be zN, got {dst_layout}")
 
         if params is None:
             params = CopyL0C2DstParams()  # use default

@@ -3,6 +3,7 @@
 #include "catlass/gemm/tile/copy_gm_to_l1.hpp"
 #include "catlass/gemm/tile/copy_l0c_to_gm.hpp"
 #include "catlass/gemm/tile/copy_l0c_to_ub.hpp"
+#include "catlass/gemm/tile/copy_l0c_to_l1.hpp"
 #include "catlass/gemm/tile/copy_l1_to_l0a.hpp"
 #include "catlass/gemm/tile/copy_l1_to_l0b.hpp"
 #include "catlass/epilogue/tile/tile_copy.hpp"
@@ -43,6 +44,18 @@ CATLASS_DEVICE void copyL0CToGM(
     auto srcTensor = makeL0CTensor<LayoutTag::L0C, ElementSrc>(src, srcDesc);
     auto dstTensor = makeGMTensor<DstLayout, ElementDst>(dst, dstDesc);
     Catlass::Gemm::Tile::CopyL0CToGmTla<ArchTag, decltype(srcTensor), decltype(dstTensor)>{}(
+        dstTensor, srcTensor, unitFlag);
+}
+
+// L0C holds fp32 MMAD accumulator; ElementDst may be f32/f16/bf16 (Ascend950 fixpipe).
+template <class ArchTag, LayoutTag DstLayout, typename ElementSrc, typename ElementDst>
+CATLASS_DEVICE void copyL0CToL1(
+    memref_t<__cc__ ElementSrc, 1>* src, memref_t<__cbuf__ ElementDst, 1>* dst, const TensorDesc& srcDesc,
+    const TensorDesc& dstDesc, uint8_t unitFlag)
+{
+    auto srcTensor = makeL0CTensor<LayoutTag::L0C, ElementSrc>(src, srcDesc);
+    auto dstTensor = makeL1Tensor<DstLayout, ElementDst>(dst, dstDesc);
+    Catlass::Gemm::Tile::CopyL0CToL1Tla<ArchTag, decltype(srcTensor), decltype(dstTensor)>{}(
         dstTensor, srcTensor, unitFlag);
 }
 
@@ -126,6 +139,19 @@ REGISTER_L1_TO_L0B(nZ, nZ, bf16)
 REGISTER_L0C_TO_GM(float, float)
 REGISTER_L0C_TO_GM(float, half)
 REGISTER_L0C_TO_GM(float, bf16)
+
+#define REGISTER_L0C_TO_L1(DTypeSrc, DTypeDst)                                                        \
+    [aicore] __attribute__((always_inline)) void _mlir_ciface_copy_l0c_to_l1_zN_##DTypeDst(           \
+        memref_t<__cc__ DTypeSrc, 1>* src, memref_t<__cbuf__ DTypeDst, 1>* dst, DESC_ABI_PARAMS(src), \
+        DESC_ABI_PARAMS(dst), uint8_t unitFlag)                                                       \
+    {                                                                                                 \
+        copyL0CToL1<Catlass::Arch::Ascend950, LayoutTag::zN, DTypeSrc, DTypeDst>(                     \
+            src, dst, TENSOR_DESC_12(src), TENSOR_DESC_12(dst), unitFlag);                            \
+    }
+
+REGISTER_L0C_TO_L1(float, float)
+REGISTER_L0C_TO_L1(float, half)
+REGISTER_L0C_TO_L1(float, bf16)
 
 #define REGISTER_L0C_TO_UB(NameDst, EnumDst, mode, MODE, DTypeSrc, DTypeDst)                                    \
     [aicore] __attribute__((always_inline)) void _mlir_ciface_copy_l0c_to_ub_##NameDst##_##mode##_##DTypeDst(   \
