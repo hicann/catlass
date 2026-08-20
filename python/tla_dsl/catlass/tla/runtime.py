@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import ctypes
+import weakref
 from typing import Any, Iterable, Iterator
 
 from mlir import ir as mlir_ir  # type: ignore[assignment]
 
 from ..address_space import AddressSpace
-from ..base_dsl.runtime.dlpack_types import ASCEND_DEVICE_TYPES, DLTensor
+from ..base_dsl.runtime.dlpack_types import (
+    ASCEND_DEVICE_TYPES,
+    DLManagedTensor,
+)
 from ..types import (
     RuntimeTensorError,
     TlaIndexTreeType,
@@ -62,6 +66,42 @@ def export_dlpack_capsule(tensor: Any, *, stream: int | None = -1) -> Any:
     return tensor.__dlpack__()  # type: ignore[attr-defined]
 
 
+def _consume_capsule(capsule: Any) -> None:
+    """Take ownership of a ``dltensor`` capsule by renaming it to ``used_dltensor``.
+
+    A ``dltensor`` capsule's destructor calls ``DLManagedTensor.deleter`` when the
+    capsule dies unconsumed, which would release the buffer as soon as the local
+    reference goes out of scope. Renaming is the DLPack handshake that says the
+    consumer now owns the ``DLManagedTensor`` and will call the deleter itself
+    (see :func:`_release_managed_tensor`); producers key their capsule destructor
+    on the old name, so it becomes a no-op.
+    """
+    set_name = ctypes.pythonapi.PyCapsule_SetName
+    set_name.restype = ctypes.c_int
+    set_name.argtypes = [ctypes.py_object, ctypes.c_char_p]
+    # The name is borrowed by the capsule, so it must outlive it: keep the bytes
+    # object alive in a module-level constant rather than a temporary.
+    if set_name(capsule, _USED_DLTENSOR_NAME) != 0:
+        raise DlpackBridgeError("failed to rename DLPack capsule to 'used_dltensor'")
+
+
+# PyCapsule_SetName borrows the pointer; this must never be garbage-collected.
+_USED_DLTENSOR_NAME = b"used_dltensor"
+
+
+def _release_managed_tensor(managed_ptr: int) -> None:
+    """Call ``DLManagedTensor.deleter`` once, releasing the producer's allocation.
+
+    Registered through :func:`weakref.finalize` on the owning tensor, so it must
+    not close over that tensor (a strong reference would keep it alive forever).
+    """
+    managed = ctypes.cast(ctypes.c_void_p(managed_ptr), ctypes.POINTER(DLManagedTensor))
+    deleter = managed.contents.deleter
+    # A NULL deleter means the producer has nothing to release (DLPack allows it).
+    if deleter:
+        deleter(managed)
+
+
 class _Tensor(TensorABC):
     """TLA runtime host tensor with compile metadata and optional DLPack binding.
 
@@ -71,7 +111,19 @@ class _Tensor(TensorABC):
 
     @staticmethod
     def _parse_capsule(capsule: Any) -> dict[str, Any]:
-        """Parse a ``dltensor`` capsule without invoking its deleter (borrowed fields)."""
+        """Read a ``dltensor`` capsule's fields; does not consume it (see :func:`_consume_capsule`)."""
+        is_valid = ctypes.pythonapi.PyCapsule_IsValid
+        is_valid.restype = ctypes.c_int
+        is_valid.argtypes = [ctypes.py_object, ctypes.c_char_p]
+        # Check the name before reading it: PyCapsule_GetPointer on a renamed
+        # capsule returns NULL *and* sets the error indicator, which would
+        # otherwise surface later at an unrelated call site.
+        if not is_valid(capsule, b"dltensor"):
+            raise DlpackBridgeError(
+                "not a fresh 'dltensor' capsule; a DLPack capsule can only be "
+                "consumed once (an already-consumed capsule is renamed to "
+                "'used_dltensor')"
+            )
         ctypes.pythonapi.PyCapsule_GetPointer.restype = ctypes.c_void_p
         ctypes.pythonapi.PyCapsule_GetPointer.argtypes = [
             ctypes.py_object,
@@ -79,7 +131,9 @@ class _Tensor(TensorABC):
         ]
         # Capsule holds DLManagedTensor*; dl_tensor is its first member (dlpack.h).
         managed_ptr = ctypes.pythonapi.PyCapsule_GetPointer(capsule, b"dltensor")
-        dl = ctypes.cast(managed_ptr, ctypes.POINTER(DLTensor)).contents
+        dl = ctypes.cast(
+            managed_ptr, ctypes.POINTER(DLManagedTensor)
+        ).contents.dl_tensor
         ndim = int(dl.ndim)
         shape = tuple(int(dl.shape[i]) for i in range(ndim))
         if not dl.strides:
@@ -91,6 +145,7 @@ class _Tensor(TensorABC):
         strides = tuple(int(dl.strides[i]) for i in range(ndim))
         data_ptr = int(dl.data or 0) + int(dl.byte_offset)
         return {
+            "managed_ptr": int(managed_ptr),
             "data_ptr": data_ptr,
             "device_type": int(dl.device.device_type),
             "device_id": int(dl.device.device_id),
@@ -115,6 +170,11 @@ class _Tensor(TensorABC):
     ) -> None:
         self._external_binding = False
         self._assumed_align: int | None = None
+        # DLPack ownership, set by from_dlpack: the consumed DLManagedTensor is
+        # released by _dlpack_release when this tensor dies, and _dlpack_source
+        # keeps the producer object itself alive meanwhile.
+        self._dlpack_source: Any = None
+        self._dlpack_release: weakref.finalize | None = None
         self._shape_components: tuple[Any, ...] | None = None
         self._shape_tuple: tuple[int, ...] | None = None
         self._dynamic_shape_tree: Any | None = None
@@ -549,6 +609,18 @@ def from_dlpack(
     come from the logical origin and ``layout_tag`` via layout remap, not from raw
     DLPack fields. Use :meth:`_Tensor.mark_layout_dynamic` /
     :meth:`_Tensor.mark_compact_shape_dynamic` when dynamic layout metadata is required.
+
+    Ownership follows the DLPack consumer contract: the exported capsule is consumed
+    (renamed to ``used_dltensor``) and its ``DLManagedTensor`` deleter is called when
+    the returned tensor is destroyed, so the allocation lives exactly as long as the
+    tensor pointing at it. A reference to ``tensor_dlpack`` is retained as well, which
+    covers producers whose deleter is a no-op. A temporary source such as
+    ``tla.from_dlpack(x.contiguous().to(device), ...)`` is therefore safe.
+
+    Because the capsule is consumed, it cannot be handed to a second consumer: a
+    capsule is single-use, and passing an already-consumed one raises
+    :class:`RuntimeTensorError`. Call ``__dlpack__()`` again (or ``from_dlpack``
+    again on the same producer) for another binding.
     """
     from ..base_dsl.runtime.dlpack_types import DLDataTypeCode
     from ..base_dsl.typing import (
@@ -691,6 +763,19 @@ def from_dlpack(
     if assumed_align is not None:
         tensor._assumed_align = int(assumed_align)
     tensor._external_binding = True
+
+    # Take ownership of the buffer the tensor is about to point at. Everything
+    # that can reject the capsule has run by now, so a failure past this point
+    # cannot leave a consumed-but-unowned DLManagedTensor behind.
+    _consume_capsule(dlpack_data)
+    tensor._dlpack_release = weakref.finalize(
+        tensor, _release_managed_tensor, int(parsed["managed_ptr"])
+    )
+    # Also retain the producer object: its deleter may be a no-op while the
+    # object itself owns the allocation, and a temporary source (e.g.
+    # ``x.contiguous().to(device)``) would otherwise be freed on return and the
+    # kernel would silently read reused memory.
+    tensor._dlpack_source = tensor_dlpack
     return tensor
 
 

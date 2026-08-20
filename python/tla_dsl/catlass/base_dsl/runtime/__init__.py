@@ -10,6 +10,7 @@ from .dlpack_types import (
     DLDataTypeCode,
     DLDevice,
     DLDeviceType,
+    DLManagedTensor,
     DLTensor,
 )
 
@@ -19,6 +20,7 @@ __all__ = [
     "DLDataTypeCode",
     "DLDevice",
     "DLDeviceType",
+    "DLManagedTensor",
     "DLTensor",
     "launch_kernel",
     "load_binary",

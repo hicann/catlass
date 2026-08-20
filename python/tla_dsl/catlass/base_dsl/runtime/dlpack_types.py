@@ -69,3 +69,22 @@ class DLTensor(ctypes.Structure):
         ("strides", ctypes.POINTER(ctypes.c_int64)),
         ("byte_offset", ctypes.c_uint64),
     ]
+
+
+class DLManagedTensor(ctypes.Structure):
+    """Owned tensor handed over by ``__dlpack__()`` (DLPack).
+
+    The consumer that takes ownership of a ``dltensor`` capsule must call
+    ``deleter(self)`` exactly once when it is done with ``dl_tensor.data``;
+    ``manager_ctx`` is the producer's private handle to whatever backs the
+    allocation (a storage reference, an arena slice, a stream lease, ...).
+    """
+
+
+DLManagedTensorDeleter = ctypes.CFUNCTYPE(None, ctypes.POINTER(DLManagedTensor))
+
+DLManagedTensor._fields_ = [
+    ("dl_tensor", DLTensor),
+    ("manager_ctx", ctypes.c_void_p),
+    ("deleter", DLManagedTensorDeleter),
+]
