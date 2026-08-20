@@ -174,6 +174,13 @@ struct CopyL0CToGmTla {
     static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported copy l0c to gm, can not find the specialization.");
 };
 
+template <
+    class ArchTag, class TensorSrc, class TensorDst, ScaleGranularity DEQUANT_GRANULARITY = ScaleGranularity::NO_QUANT,
+    bool ReluEnable = false, class Enable = void>
+struct CopyL0CToL1Tla {
+    static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported copy l0c to l1, can not find the specialization.");
+};
+
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 enum class CopyL0CToUBMode
