@@ -21,12 +21,24 @@ mlir::Value castValueToI64(mlir::OpBuilder& builder, mlir::Location loc, mlir::V
     return value;
 }
 
+// Whether `memref.cast` can legally carry `from` to `to`. The op's own
+// predicate, so a guarded builder can never construct one the verifier rejects.
+static bool isMemrefCastCompatible(mlir::Type from, mlir::Type to)
+{
+    mlir::Type fromTypes[] = {from};
+    mlir::Type toTypes[] = {to};
+    return mlir::memref::CastOp::areCastCompatible(
+        TypeRange(ArrayRef<Type>(fromTypes)), TypeRange(ArrayRef<Type>(toTypes)));
+}
+
 mlir::FailureOr<mlir::Value> castMemrefToType(
     mlir::OpBuilder& builder, mlir::Location loc, mlir::Value value, mlir::MemRefType memrefType)
 {
     if (value.getType() == memrefType)
         return value;
     if (!isa<MemRefType>(value.getType()))
+        return failure();
+    if (!isMemrefCastCompatible(value.getType(), memrefType))
         return failure();
     return builder.create<mlir::memref::CastOp>(loc, memrefType, value).getResult();
 }
@@ -345,29 +357,41 @@ FailureOr<Value> castMemrefToExpected(PatternRewriter& rewriter, Location loc, V
                sourceType.getNumElements() == expectedType.getNumElements();
     };
 
+    // Every builder below is gated on the dialect's own legality predicate, so a
+    // shape/layout this helper cannot honestly adapt reports failure() to the
+    // caller instead of leaving an op that only the verifier will reject -- by
+    // which point the originating tensor op is no longer in the diagnostic.
+    SmallVector<ReassociationIndices> reassociation{{0, 1}};
+
     if (sourceType.getRank() == 1 && expectedType.getRank() == 2 &&
         hasSameStaticElementStorage(sourceType, expectedType)) {
-        SmallVector<ReassociationIndices> reassociation{{0, 1}};
-        Value expanded =
-            rewriter.create<mlir::memref::ExpandShapeOp>(loc, expectedType, value, reassociation).getResult();
-        return expanded;
-    }
-
-    if (sourceType.getRank() == 2 && expectedType.getRank() == 1 &&
-        hasSameStaticElementStorage(sourceType, expectedType)) {
-        SmallVector<ReassociationIndices> reassociation{{0, 1}};
-        auto collapsedLayout =
-            StridedLayoutAttr::get(rewriter.getContext(), ShapedType::kDynamic, ArrayRef<int64_t>{1});
-        auto collapsedType = MemRefType::get(
-            {sourceType.getNumElements()}, expectedType.getElementType(), collapsedLayout,
-            expectedType.getMemorySpace());
+        // Same element count is not enough: the expanded layout must be the one
+        // expand_shape actually produces from this source (an expected type with,
+        // say, a dynamic offset or a parent row pitch is not it).
+        auto expandedType =
+            mlir::memref::ExpandShapeOp::computeExpandedType(sourceType, expectedType.getShape(), reassociation);
+        if (succeeded(expandedType) && *expandedType == expectedType)
+            return rewriter.create<mlir::memref::ExpandShapeOp>(loc, expectedType, value, reassociation).getResult();
+        // Otherwise fall through to the cast guard below.
+    } else if (
+        sourceType.getRank() == 2 && expectedType.getRank() == 1 &&
+        hasSameStaticElementStorage(sourceType, expectedType) &&
+        mlir::memref::CollapseShapeOp::isGuaranteedCollapsible(sourceType, reassociation)) {
+        // A tile that keeps its parent's row pitch is not collapsible; ask the
+        // dialect rather than assuming a contiguous stride-1 result.
+        auto collapsedType = mlir::memref::CollapseShapeOp::computeCollapsedType(sourceType, reassociation);
         Value collapsed =
             rewriter.create<mlir::memref::CollapseShapeOp>(loc, collapsedType, value, reassociation).getResult();
         if (collapsed.getType() == expectedType)
             return collapsed;
-        return rewriter.create<mlir::memref::CastOp>(loc, expectedType, collapsed).getResult();
+        if (isMemrefCastCompatible(collapsed.getType(), expectedType))
+            return rewriter.create<mlir::memref::CastOp>(loc, expectedType, collapsed).getResult();
+        return failure();
     }
 
+    // Anything else has to go through memref.cast.
+    if (!isMemrefCastCompatible(sourceType, expectedType))
+        return failure();
     return rewriter.create<mlir::memref::CastOp>(loc, expectedType, value).getResult();
 }
 
