@@ -11,7 +11,7 @@ conda env create -f environment.yml
 conda activate ascend-catlass-dsl
 ```
 
-`environment.yml` 已安装 Python、CMake、Ninja、Clang、lld 和项目开发依赖，不需要再安装 `requirements.txt`。
+`environment.yml` 已安装 Python、CMake、Ninja、Clang、lld、lit 和项目开发依赖，不需要再安装 `requirements.txt`。
 
 确认工具版本：
 
@@ -21,6 +21,7 @@ cmake --version
 ninja --version
 clang --version
 clang++ --version
+lit --version
 ```
 
 ## 2. 加载 CANN

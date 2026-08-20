@@ -1,0 +1,29 @@
+// RUN: %tla_compile %s --mlir-print-ir-after=tla-vector-region -o %t 2>&1 | %filecheck %s
+
+!ivec = !tla.tensor<!tla.layout<!tla.shape<1>, !tla.stride<1>, !tla.shape<1>, row_major>, !tla.coord<0>, !tla.ptr<i8, ub, 1>>
+
+module {
+  func.func @vector_load_us_b8(
+      %src_memref: memref<1xi8, #hivm.address_space<ub>>,
+      %dst_memref: memref<1xi8, #hivm.address_space<ub>>) {
+    %src_c0 = arith.constant 0 : index
+    %src_c1 = arith.constant 1 : index
+    %src = tla.tensor_desc %src_memref shape [%src_c1, %src_c1, %src_c1, %src_c1] stride [%src_c1, %src_c1, %src_c1, %src_c1] origin_shape [%src_c1, %src_c1] coord [%src_c0, %src_c0] : memref<1xi8, #hivm.address_space<ub>> -> !ivec
+    %dst_c0 = arith.constant 0 : index
+    %dst_c1 = arith.constant 1 : index
+    %dst = tla.tensor_desc %dst_memref shape [%dst_c1, %dst_c1, %dst_c1, %dst_c1] stride [%dst_c1, %dst_c1, %dst_c1, %dst_c1] origin_shape [%dst_c1, %dst_c1] coord [%dst_c0, %dst_c0] : memref<1xi8, #hivm.address_space<ub>> -> !ivec
+    "tla.vec.func"() ({
+      %shape = "tla.make_shape"() : () -> !tla.shape<1>
+      %coord = "tla.make_coord"() : () -> !tla.coord<0>
+      %src_tile = "tla.tile_view"(%src, %shape, %coord) : (!ivec, !tla.shape<1>, !tla.coord<0>) -> !ivec
+      %dst_tile = "tla.tile_view"(%dst, %shape, %coord) : (!ivec, !tla.shape<1>, !tla.coord<0>) -> !ivec
+      %loaded = tla.load %src_tile {load_dist = #tla.load_dist<us_b8>} : !ivec -> !tla.vector<256xi8>
+      tla.store %dst_tile, %loaded : !ivec, !tla.vector<256xi8>
+    }) : () -> ()
+    return
+  }
+}
+
+// CHECK-LABEL: func.func private @vector_region_
+// CHECK: ave.hir.vload <US_B8>
+// CHECK-SAME: into vector<256xi8>

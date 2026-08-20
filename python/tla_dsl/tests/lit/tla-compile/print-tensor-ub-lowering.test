@@ -1,0 +1,49 @@
+// RUN: sed -n '/BEGIN-LOWER$/,/END-LOWER$/p' %s | %tla_compile - -o - | %filecheck %s --check-prefix=LOWER
+// RUN: sed -n '/BEGIN-LOWER$/,/END-LOWER$/p' %s | sed 's/f32/f16/g; s/0,8/0,16/g' | %tla_compile - -o - | %filecheck %s --check-prefix=F16
+// RUN: sed -n '/BEGIN-LOWER$/,/END-LOWER$/p' %s | sed 's/f32/i8/g; s/0,8/0,32/g' | %tla_compile - -o - | %filecheck %s --check-prefix=I8
+// RUN: sed -n '/BEGIN-LOWER$/,/END-LOWER$/p' %s | sed 's/f32/i16/g; s/0,8/0,16/g' | %tla_compile - -o - | %filecheck %s --check-prefix=I16
+// RUN: sed -n '/BEGIN-LOWER$/,/END-LOWER$/p' %s | sed 's/f32/i32/g' | %tla_compile - -o - | %filecheck %s --check-prefix=I32
+// RUN: sed -n '/BEGIN-LOWER$/,/END-LOWER$/p' %s | sed 's/f32/ui8/g; s/0,8/0,32/g' | %tla_compile - -o - | %filecheck %s --check-prefix=U8
+// RUN: sed -n '/BEGIN-LOWER$/,/END-LOWER$/p' %s | sed 's/f32/ui16/g; s/0,8/0,16/g' | %tla_compile - -o - | %filecheck %s --check-prefix=U16
+// RUN: sed -n '/BEGIN-LOWER$/,/END-LOWER$/p' %s | sed 's/f32/ui32/g' | %tla_compile - -o - | %filecheck %s --check-prefix=U32
+
+// BEGIN-LOWER
+module {
+  tla.func @print_tensor_ub(%input: !tla.tensor<!tla.layout<!tla.shape<4,4>, !tla.stride<4,1>, !tla.shape<4,4>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>) {
+    %raw = tla.alloc_ptr{size_bytes = 96} -> !tla.ptr<i8, ub, 32>
+    %ptr = tla.recast_ptr %raw : !tla.ptr<i8, ub, 32> -> !tla.ptr<f32, ub, 32>
+    %shape = tla.make_shape -> !tla.shape<4,4>
+    %stride = tla.make_stride -> !tla.stride<4,1>
+    %layout = tla.make_layout %shape, %stride : !tla.shape<4,4>, !tla.stride<4,1> -> !tla.layout<!tla.shape<4,4>, !tla.stride<4,1>, !tla.shape<4,4>, row_major>
+    %coord = tla.make_coord -> !tla.coord<0,8>
+    %x = tla.make_tensor %ptr, %layout, %coord : !tla.ptr<f32, ub, 32>, !tla.layout<!tla.shape<4,4>, !tla.stride<4,1>, !tla.shape<4,4>, row_major>, !tla.coord<0,8> -> !tla.tensor<!tla.layout<!tla.shape<4,4>, !tla.stride<4,1>, !tla.shape<4,4>, row_major>, !tla.coord<0,8>, !tla.ptr<f32, ub, 32>>
+    %c4 = arith.constant 4 : i64
+    %c2 = arith.constant 2 : i64
+    "tla.vector"() ({
+      tla.print_tensor %x length = %c4 shape = [4, 4] : !tla.tensor<!tla.layout<!tla.shape<4,4>, !tla.stride<4,1>, !tla.shape<4,4>, row_major>, !tla.coord<0,8>, !tla.ptr<f32, ub, 32>>, i64
+      tla.print_tensor %x length = %c2 shape = [4, 4] : !tla.tensor<!tla.layout<!tla.shape<4,4>, !tla.stride<4,1>, !tla.shape<4,4>, row_major>, !tla.coord<0,8>, !tla.ptr<f32, ub, 32>>, i64
+    }) : () -> ()
+    tla.return
+  }
+}
+// END-LOWER
+
+// LOWER-LABEL: func.func @print_tensor_ub(
+// LOWER-SAME: %[[WORKSPACE:arg0]]: i64 {{.*}}hacc.arg_type = #hacc.arg_type<workspace>{{.*}}tla.print_tensor.workspace
+// LOWER-DAG: %[[CALL0:.*]] = {{(arith\.constant 0 : i64|llvm\.mlir\.constant\(0 : i64\) : i64)}}
+// LOWER-DAG: %[[CALL1:.*]] = {{(arith\.constant 1 : i64|llvm\.mlir\.constant\(1 : i64\) : i64)}}
+// LOWER-DAG: %[[BYTE_OFFSET:.*]] = {{(arith\.constant 32 : index|llvm\.mlir\.constant\(32 : index\) : i64)}}
+// LOWER: %[[BASE_INDEX:.*]] = memref.extract_aligned_pointer_as_index
+// LOWER: %[[BASE_I64:.*]] = builtin.unrealized_conversion_cast %[[BASE_INDEX]]
+// LOWER: %[[ADDRESS:.*]] = llvm.add %[[BASE_I64]], %[[BYTE_OFFSET]]
+// LOWER: call @_mlir_ciface_tla_print_tensor_ub_f32(%[[WORKSPACE]], %[[ADDRESS]], {{.*}}, {{.*}}, %[[CALL0]])
+// LOWER: call @_mlir_ciface_tla_print_tensor_ub_f32(%[[WORKSPACE]], {{.*}}, {{.*}}, {{.*}}, %[[CALL1]])
+// LOWER-NOT: _mlir_ciface_tla_print_tensor_gm_f32
+// LOWER-NOT: tla.print_tensor
+// F16: call @_mlir_ciface_tla_print_tensor_ub_f16
+// I8: call @_mlir_ciface_tla_print_tensor_ub_i8
+// I16: call @_mlir_ciface_tla_print_tensor_ub_i16
+// I32: call @_mlir_ciface_tla_print_tensor_ub_i32
+// U8: call @_mlir_ciface_tla_print_tensor_ub_u8
+// U16: call @_mlir_ciface_tla_print_tensor_ub_u16
+// U32: call @_mlir_ciface_tla_print_tensor_ub_u32

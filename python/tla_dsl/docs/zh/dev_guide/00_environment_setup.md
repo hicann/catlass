@@ -24,6 +24,7 @@
 | Ninja | `>=1.12` |
 | Clang / Clang++ | 构建 AscendNPU-IR 时 `>=10`；推荐 19 |
 | lld | 与 Clang 配套 |
+| lit、FileCheck | 与 LLVM 配套 |
 | AscendNPU-IR | `feature/regbase@a07821269ede7a5e683ac02c8a2d291608083741` |
 
 Python 依赖约束由以下文件维护：
@@ -51,6 +52,12 @@ PYTHONPATH="${CATLASS_DSL_PREBUILT_ASCENDNPU_IR}/build/install/python_packages/m
 ```
 
 以上命令均无任何输出、退出码为 `0`，即表示环境就绪；`test` 类命令失败时退出码非零并输出错误信息。
+
+lit 测试还需要：
+
+```bash
+lit --version
+```
 
 NPU 端到端示例还需要：
 

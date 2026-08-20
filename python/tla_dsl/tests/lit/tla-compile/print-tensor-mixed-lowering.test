@@ -1,0 +1,88 @@
+// RUN: sed -n '/BEGIN-GM$/,/END-GM$/p' %s | %tla_compile - -o - | %filecheck %s --check-prefix=GM
+// RUN: sed -n '/BEGIN-UB$/,/END-UB$/p' %s | %tla_compile - -o - | %filecheck %s --check-prefix=UB
+// RUN: sed -n '/BEGIN-CUBE$/,/END-CUBE$/p' %s | %tla_compile - -o - | %filecheck %s --check-prefix=CUBE
+
+// BEGIN-GM
+module {
+  tla.func @print_tensor_mixed_gm(%x: !tla.tensor<!tla.layout<!tla.shape<4,4>, !tla.stride<4,1>, !tla.shape<4,4>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>, %tag: i32) {
+    %c4 = arith.constant 4 : i64
+    "tla.cube"() ({
+      %one = arith.constant 1 : i32
+      %unused = arith.addi %tag, %one : i32
+    }) : () -> ()
+    "tla.vector"() ({
+      tla.print_tensor %x length = %c4 shape = [4, 4] : !tla.tensor<!tla.layout<!tla.shape<4,4>, !tla.stride<4,1>, !tla.shape<4,4>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>, i64
+    }) : () -> ()
+    tla.return
+  }
+}
+// END-GM
+
+// GM-LABEL: func.func @print_tensor_mixed_gm_mix_aic(
+// GM-SAME: %arg0: memref<4x4xf32, #hivm.address_space<gm>>, %arg1: i32,
+// GM-SAME: %[[AIC_WORKSPACE:arg[0-9]+]]: i64 {{.*}}hacc.arg_type = #hacc.arg_type<workspace>{{.*}}tla.print_tensor.workspace
+// GM-LABEL: func.func @print_tensor_mixed_gm_mix_aiv(
+// GM-SAME: %arg0: memref<4x4xf32, #hivm.address_space<gm>>, %arg1: i32,
+// GM-SAME: %[[AIV_WORKSPACE:arg[0-9]+]]: i64 {{.*}}hacc.arg_type = #hacc.arg_type<workspace>{{.*}}tla.print_tensor.workspace
+// GM: call @_mlir_ciface_tla_print_tensor_gm_f32(%[[AIV_WORKSPACE]], {{.*}}, {{.*}}, {{.*}}, {{.*}})
+// GM-NOT: _mlir_ciface_tla_print_tensor_ub_f32
+// GM-NOT: tla.print_tensor
+
+// BEGIN-UB
+module {
+  tla.func @print_tensor_mixed_ub(%input: !tla.tensor<!tla.layout<!tla.shape<4,4>, !tla.stride<4,1>, !tla.shape<4,4>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>, %tag: i32) {
+    %raw = tla.alloc_ptr{size_bytes = 64} -> !tla.ptr<i8, ub, 32>
+    %ptr = tla.recast_ptr %raw : !tla.ptr<i8, ub, 32> -> !tla.ptr<f32, ub, 32>
+    %shape = tla.make_shape -> !tla.shape<4,4>
+    %stride = tla.make_stride -> !tla.stride<4,1>
+    %layout = tla.make_layout %shape, %stride : !tla.shape<4,4>, !tla.stride<4,1> -> !tla.layout<!tla.shape<4,4>, !tla.stride<4,1>, !tla.shape<4,4>, row_major>
+    %coord = tla.make_coord -> !tla.coord<0,0>
+    %x = tla.make_tensor %ptr, %layout, %coord : !tla.ptr<f32, ub, 32>, !tla.layout<!tla.shape<4,4>, !tla.stride<4,1>, !tla.shape<4,4>, row_major>, !tla.coord<0,0> -> !tla.tensor<!tla.layout<!tla.shape<4,4>, !tla.stride<4,1>, !tla.shape<4,4>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, ub, 32>>
+    %c4 = arith.constant 4 : i64
+    "tla.cube"() ({
+      %one = arith.constant 1 : i32
+      %unused = arith.addi %tag, %one : i32
+    }) : () -> ()
+    "tla.vector"() ({
+      tla.print_tensor %x length = %c4 shape = [4, 4] : !tla.tensor<!tla.layout<!tla.shape<4,4>, !tla.stride<4,1>, !tla.shape<4,4>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, ub, 32>>, i64
+    }) : () -> ()
+    tla.return
+  }
+}
+// END-UB
+
+// UB-LABEL: func.func @print_tensor_mixed_ub_mix_aic(
+// UB-SAME: %arg0: memref<4x4xf32, #hivm.address_space<gm>>, %arg1: i32,
+// UB-SAME: %[[AIC_WORKSPACE:arg[0-9]+]]: i64 {{.*}}hacc.arg_type = #hacc.arg_type<workspace>{{.*}}tla.print_tensor.workspace
+// UB-LABEL: func.func @print_tensor_mixed_ub_mix_aiv(
+// UB-SAME: %arg0: memref<4x4xf32, #hivm.address_space<gm>>, %arg1: i32,
+// UB-SAME: %[[AIV_WORKSPACE:arg[0-9]+]]: i64 {{.*}}hacc.arg_type = #hacc.arg_type<workspace>{{.*}}tla.print_tensor.workspace
+// UB: call @_mlir_ciface_tla_print_tensor_ub_f32(%[[AIV_WORKSPACE]], {{.*}}, {{.*}}, {{.*}}, {{.*}})
+// UB-NOT: _mlir_ciface_tla_print_tensor_gm_f32
+// UB-NOT: tla.print_tensor
+
+// BEGIN-CUBE
+module {
+  tla.func @print_tensor_mixed_cube(%x: !tla.tensor<!tla.layout<!tla.shape<4,4>, !tla.stride<4,1>, !tla.shape<4,4>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>, %tag: i32) {
+    %c4 = arith.constant 4 : i64
+    "tla.cube"() ({
+      tla.print_tensor %x length = %c4 shape = [4, 4] : !tla.tensor<!tla.layout<!tla.shape<4,4>, !tla.stride<4,1>, !tla.shape<4,4>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>, i64
+    }) : () -> ()
+    "tla.vector"() ({
+      %one = arith.constant 1 : i32
+      %unused = arith.addi %tag, %one : i32
+    }) : () -> ()
+    tla.return
+  }
+}
+// END-CUBE
+
+// CUBE-LABEL: func.func @print_tensor_mixed_cube_mix_aic(
+// CUBE-SAME: %arg0: memref<4x4xf32, #hivm.address_space<gm>>, %arg1: i32,
+// CUBE-SAME: %[[AIC_WORKSPACE:arg[0-9]+]]: i64 {{.*}}hacc.arg_type = #hacc.arg_type<workspace>{{.*}}tla.print_tensor.workspace
+// CUBE: call @_mlir_ciface_tla_print_tensor_gm_f32(%[[AIC_WORKSPACE]], {{.*}}, {{.*}}, {{.*}}, {{.*}})
+// CUBE-LABEL: func.func @print_tensor_mixed_cube_mix_aiv(
+// CUBE-SAME: %arg0: memref<4x4xf32, #hivm.address_space<gm>>, %arg1: i32,
+// CUBE-SAME: %[[AIV_WORKSPACE:arg[0-9]+]]: i64 {{.*}}hacc.arg_type = #hacc.arg_type<workspace>{{.*}}tla.print_tensor.workspace
+// CUBE-NOT: call @_mlir_ciface_tla_print_tensor
+// CUBE-NOT: tla.print_tensor

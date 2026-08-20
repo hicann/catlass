@@ -450,5 +450,6 @@ artifact(tiling, out)
 
 ## 5. 参考资料
 
-- 控制流使用示例：[`basic_vadd.py`](../../examples/end_to_end/basic_vadd/basic_vadd.py)、[`register_control_flow.py`](../../examples/end_to_end/vector_ops/register_control_flow.py)
+- 控制流使用示例：[`scalar_index_control_flow.py`](../../examples/end_to_end/tensor_index/scalar_index_control_flow.py)、[`basic_vadd.py`](../../examples/end_to_end/basic_vadd/basic_vadd.py)、[`register_control_flow.py`](../../examples/end_to_end/vector_ops/register_control_flow.py)
 - 控制流 AST 实现：[`ast_preprocessor.py`](../../catlass/base_dsl/ast_preprocessor.py)、[`tla_ast_decorators.py`](../../catlass/tla_ast_decorators.py)
+- 控制流测试用例参考：[`test_frontend_branching.py`](../../tests/test_frontend_branching.py)、[`test_frontend_for_range.py`](../../tests/test_frontend_for_range.py)、[`test_frontend_while.py`](../../tests/test_frontend_while.py)、[`test_frontend_with.py`](../../tests/test_frontend_with.py)

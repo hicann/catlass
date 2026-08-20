@@ -1,6 +1,6 @@
 # 手动 CMake 构建
 
-正常开发构建请使用 [`build.sh`](../01_build_and_test.md#2-构建)。本文只面向需要直接配置 `csrc/mlir`、调试 CMake 选项的开发者。
+正常开发构建请使用 [`build.sh`](../01_build_and_test.md#2-构建)。本文只面向需要直接配置 `csrc/mlir`、调试 CMake 选项或单独运行编译器回归测试的开发者。
 
 ## 1. 前置条件
 
@@ -43,6 +43,7 @@ cmake --build build/cmake/manual --target tla-compiler
 ```text
 build/cmake/manual/python/catlass/_tla_type_bridge_native*.so
 build/cmake/manual/tools/tla-compile/TlaCompile
+build/cmake/manual/tests/lit/
 ```
 
 检查产物：
@@ -52,9 +53,23 @@ test -x build/cmake/manual/tools/tla-compile/TlaCompile
 test -n "$(find build/cmake/manual/python/catlass -name '_tla_type_bridge_native*.so' -print -quit)"
 ```
 
-该构建目录不会把扩展链接到源码包。完整开发构建请使用 `./build.sh`。
+该构建目录不满足 `tests/conftest.py` 对 `csrc/mlir/build` 的固定路径检查，也不会把扩展链接到源码包。需要运行完整 pytest 时使用 `./build.sh`。
 
-## 3. CMake 配置项
+## 3. 运行 lit
+
+手动构建目录包含独立配置的 lit 测试，可通过 CMake 目标运行：
+
+```bash
+cmake --build build/cmake/manual --target check-tla-lit
+```
+
+也可以直接执行：
+
+```bash
+lit -sv build/cmake/manual/tests/lit
+```
+
+## 4. CMake 配置项
 
 以下配置项由 `csrc/mlir/CMakeLists.txt` 读取：
 
@@ -76,7 +91,7 @@ cmake -S csrc/mlir -B build/cmake/manual-release \
 
 `MLIR_DIR`、`LLVM_DIR` 和 `MLIR_TBLGEN_INCLUDE_DIR` 由 CMake 根据 `CATLASS_DSL_PREBUILT_ASCENDNPU_IR` 指向的源码树自动设置。
 
-## 4. 常见错误
+## 5. 常见错误
 
 ### 找不到 AscendNPU-IR 头文件或库
 

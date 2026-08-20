@@ -1,0 +1,27 @@
+// RUN: sed -n '/BEGIN-LOWER$/,/END-LOWER$/p' %s | %tla_compile - -o - | %filecheck %s
+// RUN: sed -n '/BEGIN-LOWER$/,/END-LOWER$/p' %s | sed 's/f32/i8/g' | %tla_compile - -o - | %filecheck %s --check-prefix=I8
+
+// BEGIN-LOWER
+module {
+  tla.func @print_tensor_aic(%x: !tla.tensor<!tla.layout<!tla.shape<4,4>, !tla.stride<4,1>, !tla.shape<4,4>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>) {
+    %c4 = arith.constant 4 : i64
+    %c2 = arith.constant 2 : i64
+    "tla.cube"() ({
+      tla.print_tensor %x length = %c4 shape = [4, 4] : !tla.tensor<!tla.layout<!tla.shape<4,4>, !tla.stride<4,1>, !tla.shape<4,4>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>, i64
+      tla.print_tensor %x length = %c2 shape = [4, 4] : !tla.tensor<!tla.layout<!tla.shape<4,4>, !tla.stride<4,1>, !tla.shape<4,4>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>, i64
+    }) : () -> ()
+    tla.return
+  }
+}
+// END-LOWER
+
+// CHECK-LABEL: func.func @print_tensor_aic(
+// CHECK-SAME: %[[WORKSPACE:arg0]]: i64 {{.*}}hacc.arg_type = #hacc.arg_type<workspace>{{.*}}tla.print_tensor.workspace
+// CHECK-DAG: %[[CALL0:.*]] = {{(arith\.constant 0 : i64|llvm\.mlir\.constant\(0 : i64\) : i64)}}
+// CHECK-DAG: %[[CALL1:.*]] = {{(arith\.constant 1 : i64|llvm\.mlir\.constant\(1 : i64\) : i64)}}
+// CHECK: call @_mlir_ciface_tla_print_tensor_gm_f32(%[[WORKSPACE]], {{.*}}, {{.*}}, {{.*}}, %[[CALL0]])
+// CHECK: call @_mlir_ciface_tla_print_tensor_gm_f32(%[[WORKSPACE]], {{.*}}, {{.*}}, {{.*}}, %[[CALL1]])
+// CHECK-NOT: _mlir_ciface_tla_printf
+// CHECK-NOT: tla.print_tensor
+// I8: call @_mlir_ciface_tla_print_tensor_gm_i8({{.*}}, {{.*}}, {{.*}}, {{.*}}, {{.*}})
+// I8: call @_mlir_ciface_tla_print_tensor_gm_i8({{.*}}, {{.*}}, {{.*}}, {{.*}}, {{.*}})

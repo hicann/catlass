@@ -296,6 +296,7 @@ llvm-link dma.aic.c310.bc mmad.aic.c310.bc mutex.aic.c310.bc ... \
 | stub 实现（vector） | [csrc/mlir/bc/Vector/dma.cpp](../../csrc/mlir/bc/Vector/dma.cpp) | - |
 | bc 构建规则 | [csrc/mlir/bc/CMakeLists.txt](../../csrc/mlir/bc/CMakeLists.txt) | `compile_single_cpp_to_bc` / `link_all_to_meta_op` |
 | bc 运行时链接 | [execution.py](../../catlass/execution.py) | `_build_hivmc_a5_command` 1832；`_resolve_hivm_template_bitcode` 2003 |
+| IR 形态样例 | [tests/lit/tla-compile/](../../tests/lit/tla-compile/) | `copy-l0c-to-gm-atomic-f32.mlir`、`make-tensor-copy-gm-l1-zn.mlir` |
 
 ---
 

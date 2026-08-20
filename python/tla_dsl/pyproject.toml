@@ -92,3 +92,7 @@ exclude = [
 "catlass/types.py" = ["E402", "F822"]
 "catlass/tla/__init__.py" = ["F401"]
 "examples/**/*.py" = ["E402", "F401", "F722", "F841"]
+"tests/lit/lit.cfg.py" = ["F821"]
+"tests/test_execution_lowering.py" = ["F841"]
+"tests/test_generated_ops_surface.py" = ["F841"]
+"tests/test_frontend_lowering.py" = ["F722", "F821"]

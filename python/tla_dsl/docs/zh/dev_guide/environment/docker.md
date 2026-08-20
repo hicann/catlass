@@ -26,7 +26,7 @@ AscendNPU-IR 构建耗时和资源占用较高。内存或磁盘 I/O 有限时�
 
 ## 2. 启动编译容器
 
-只进行 DSL 构建时，不需要挂载 NPU 设备：
+只进行 DSL 构建、pytest 或 lit 时，不需要挂载 NPU 设备：
 
 ```bash
 # 镜像名与 tag 需与第 1 节构建产物（ascend-catlass-dsl:<基础镜像 tag>）一致，此处仅为例示

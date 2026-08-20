@@ -1,0 +1,183 @@
+// RUN: split-file %s %t
+// RUN: not %tla_compile %t/manual.mlir -o - 2>&1 | %filecheck %s --check-prefix=MANUAL
+// RUN: not %tla_compile %t/flag.mlir -o - 2>&1 | %filecheck %s --check-prefix=FLAG
+// RUN: not %tla_compile %t/bare.mlir -o - 2>&1 | %filecheck %s --check-prefix=BARE
+// RUN: not %tla_compile %t/unit.mlir -o - 2>&1 | %filecheck %s --check-prefix=UNIT
+// RUN: not %tla_compile %t/unit-dynamic.mlir -o - 2>&1 | %filecheck %s --check-prefix=UNIT-DYNAMIC
+// RUN: not %tla_compile %t/unit-mixed.mlir -o - 2>&1 | %filecheck %s --check-prefix=UNIT-MIXED
+// RUN: not %tla_compile %t/scalar.mlir -o - 2>&1 | %filecheck %s --check-prefix=SCALAR
+// RUN: not %tla_compile %t/overlap.mlir -o - 2>&1 | %filecheck %s --check-prefix=OVERLAP
+// RUN: not %tla_compile %t/mode.mlir -o - 2>&1 | %filecheck %s --check-prefix=MODE
+
+// MANUAL: auto_sync='v0' cannot be combined with local mutex, mutex_guard, or local flag synchronization
+// FLAG: auto_sync='v0' cannot be combined with local mutex, mutex_guard, or local flag synchronization
+// BARE: automatic mutex requires every accessed on-chip tensor to resolve to a static tla.alloc_ptr capacity/root
+// UNIT: auto_sync='v0' supports copy unit_flag values 0 or 3
+// UNIT-DYNAMIC: auto_sync='v0' requires tla.mmad unit_flag to be provably always zero or always enabled with value 2/3
+// UNIT-MIXED: a runtime choice between zero and 2/3 cannot safely determine L0C locking
+// SCALAR: auto_sync='v0' requires UB scalar_load/scalar_store to be inside tla.vec.func
+// OVERLAP: automatic mutex found two non-identical resource selections with overlapping allocation roots in one instruction
+// MODE: unsupported tla.auto_sync version 'v1'; expected 'v0'
+
+//--- manual.mlir
+module {
+  tla.func @manual_mutex_in_auto() attributes {tla.auto_sync = "v0"} {
+    "tla.cube"() ({
+      %mutex = tla.mutex "manual" {id = 0 : i64} -> !tla.mutex
+      tla.mutex_lock %mutex [#tla.pipe<cube>] : !tla.mutex
+      tla.mutex_unlock %mutex [#tla.pipe<cube>] : !tla.mutex
+    }) : () -> ()
+    tla.return
+  }
+}
+
+//--- bare.mlir
+!layout = !tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, row_major>
+!coord = !tla.coord<0>
+!ub = !tla.tensor<!layout, !coord, !tla.ptr<f32, ub, 256>>
+!gm = !tla.tensor<!layout, !coord, !tla.ptr<f32, gm, 4>>
+module {
+  tla.func @bare_onchip_address(%gm: !gm) attributes {tla.auto_sync = "v0"} {
+    %shape = tla.make_shape -> !tla.shape<64>
+    %stride = tla.make_stride -> !tla.stride<1>
+    %layout = tla.make_layout %shape, %stride : !tla.shape<64>, !tla.stride<1> -> !layout
+    %coord = tla.make_coord -> !coord
+    %address = arith.constant 0 : i64
+    %ptr = tla.inttoptr %address : i64 -> !tla.ptr<f32, ub, 256>
+    %local = tla.make_tensor %ptr, %layout, %coord : !tla.ptr<f32, ub, 256>, !layout, !coord -> !ub
+    "tla.vector"() ({
+      tla.copy %local, %gm : !ub, !gm
+    }) : () -> ()
+    tla.return
+  }
+}
+
+//--- flag.mlir
+module {
+  tla.func @local_flag_in_auto() attributes {tla.auto_sync = "v0"} {
+    "tla.cube"() ({
+      %flag = tla.flag "local" {src_pipe = #tla.pipe<mte2>, dst_pipe = #tla.pipe<mte1>} -> !tla.flag
+      tla.set_flag %flag : !tla.flag
+      tla.wait_flag %flag : !tla.flag
+    }) : () -> ()
+    tla.return
+  }
+}
+
+//--- unit.mlir
+module {
+  tla.func @active_unit_flag() attributes {tla.auto_sync = "v0"} {
+    %params = "tla.CopyL0C2DstParams"() <{unit_flag = 1 : i64, relu_enable = false, quant_mode = #tla.quant_mode<NO_QUANT>, l0c2ub_mode = #tla.l0c2ub_mode<NO_SPLIT_VEC_0>}> : () -> !tla.copy_l0c2dst_params
+    tla.return
+  }
+}
+
+//--- mode.mlir
+module {
+  tla.func @invalid_version() attributes {tla.auto_sync = "v1"} {
+    tla.return
+  }
+}
+
+//--- scalar.mlir
+!scalar_layout = !tla.layout<!tla.shape<1>, !tla.stride<1>, !tla.shape<1>, row_major>
+!scalar_coord = !tla.coord<0>
+!scalar_ub = !tla.tensor<!scalar_layout, !scalar_coord, !tla.ptr<f32, ub, 4>>
+module {
+  tla.func @uncovered_ub_scalar() attributes {tla.auto_sync = "v0"} {
+    %ptr = tla.alloc_ptr{size_bytes = 4} -> !tla.ptr<f32, ub, 4>
+    %shape = tla.make_shape -> !tla.shape<1>
+    %stride = tla.make_stride -> !tla.stride<1>
+    %layout = tla.make_layout %shape, %stride : !tla.shape<1>, !tla.stride<1> -> !scalar_layout
+    %coord = tla.make_coord -> !scalar_coord
+    %tensor = tla.make_tensor %ptr, %layout, %coord : !tla.ptr<f32, ub, 4>, !scalar_layout, !scalar_coord -> !scalar_ub
+    %c0 = arith.constant 0 : index
+    "tla.vector"() ({
+      %value = tla.scalar_load %tensor[%c0] : !scalar_ub -> f32
+    }) : () -> ()
+    tla.return
+  }
+}
+
+//--- overlap.mlir
+!overlap_layout = !tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, row_major>
+!overlap_coord = !tla.coord<0>
+!overlap_ub = !tla.tensor<!overlap_layout, !overlap_coord, !tla.ptr<f32, ub, 256>>
+module {
+  tla.func @overlapping_dynamic_resources(%cond: i1) attributes {tla.auto_sync = "v0"} {
+    %shape = tla.make_shape -> !tla.shape<64>
+    %stride = tla.make_stride -> !tla.stride<1>
+    %layout = tla.make_layout %shape, %stride : !tla.shape<64>, !tla.stride<1> -> !overlap_layout
+    %coord = tla.make_coord -> !overlap_coord
+    %p0 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %p1 = tla.alloc_ptr{size_bytes = 256} -> !tla.ptr<f32, ub, 256>
+    %forward = scf.if %cond -> (!tla.ptr<f32, ub, 256>) {
+      scf.yield %p0 : !tla.ptr<f32, ub, 256>
+    } else {
+      scf.yield %p1 : !tla.ptr<f32, ub, 256>
+    }
+    %reverse = scf.if %cond -> (!tla.ptr<f32, ub, 256>) {
+      scf.yield %p1 : !tla.ptr<f32, ub, 256>
+    } else {
+      scf.yield %p0 : !tla.ptr<f32, ub, 256>
+    }
+    %src = tla.make_tensor %forward, %layout, %coord : !tla.ptr<f32, ub, 256>, !overlap_layout, !overlap_coord -> !overlap_ub
+    %dst = tla.make_tensor %reverse, %layout, %coord : !tla.ptr<f32, ub, 256>, !overlap_layout, !overlap_coord -> !overlap_ub
+    "tla.vector"() ({
+      "tla.vec.func"() ({
+        %value = tla.load %src : !overlap_ub -> !tla.vector<64xf32>
+        tla.store %dst, %value : !overlap_ub, !tla.vector<64xf32>
+      }) : () -> ()
+    }) : () -> ()
+    tla.return
+  }
+}
+
+//--- unit-dynamic.mlir
+!gm = !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<32,1>, !tla.shape<32,32>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>
+!l0a = !tla.tensor<!tla.layout<!tla.shape<(16,2),(8,4)>, !tla.stride<(8,128),(1,256)>, !tla.shape<32,32>, zN>, !tla.coord<0,0>, !tla.ptr<f32, l0a, 512>>
+!l0b = !tla.tensor<!tla.layout<!tla.shape<(8,4),(16,2)>, !tla.stride<(1,256),(8,128)>, !tla.shape<32,32>, nZ>, !tla.coord<0,0>, !tla.ptr<f32, l0b, 512>>
+!l0c = !tla.tensor<!tla.layout<!tla.shape<(16,2),(16,2)>, !tla.stride<(16,256),(1,512)>, !tla.shape<32,32>, L0Clayout>, !tla.coord<0,0>, !tla.ptr<f32, l0c, 512>>
+module {
+  tla.func @dynamic_unit_flag(%unit: i64, %gm: !gm) attributes {tla.auto_sync = "v0"} {
+    %pa = tla.alloc_ptr{size_bytes = 4096} -> !tla.ptr<f32, l0a, 512>
+    %pb = tla.alloc_ptr{size_bytes = 4096} -> !tla.ptr<f32, l0b, 512>
+    %pc = tla.alloc_ptr{size_bytes = 4096} -> !tla.ptr<f32, l0c, 512>
+    %a = "tla.make_tensor_like"(%pa, %gm) {layoutTag = "zN"} : (!tla.ptr<f32, l0a, 512>, !gm) -> !l0a
+    %b = "tla.make_tensor_like"(%pb, %gm) {layoutTag = "nZ"} : (!tla.ptr<f32, l0b, 512>, !gm) -> !l0b
+    %c = "tla.make_tensor_like"(%pc, %gm) {layoutTag = "L0Clayout"} : (!tla.ptr<f32, l0c, 512>, !gm) -> !l0c
+    %init = arith.constant true
+    "tla.cube"() ({
+      tla.mmad %c, %a, %b, %init, %unit {compute_order = #tla.compute_order<M_FIRST>, hf32_mode = #tla.hf32_mode<HF32_DISABLE>} : !l0c, !l0a, !l0b, i1, i64
+    }) : () -> ()
+    tla.return
+  }
+}
+
+//--- unit-mixed.mlir
+!mixed_gm = !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<32,1>, !tla.shape<32,32>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>
+!mixed_l0a = !tla.tensor<!tla.layout<!tla.shape<(16,2),(8,4)>, !tla.stride<(8,128),(1,256)>, !tla.shape<32,32>, zN>, !tla.coord<0,0>, !tla.ptr<f32, l0a, 512>>
+!mixed_l0b = !tla.tensor<!tla.layout<!tla.shape<(8,4),(16,2)>, !tla.stride<(1,256),(8,128)>, !tla.shape<32,32>, nZ>, !tla.coord<0,0>, !tla.ptr<f32, l0b, 512>>
+!mixed_l0c = !tla.tensor<!tla.layout<!tla.shape<(16,2),(16,2)>, !tla.stride<(16,256),(1,512)>, !tla.shape<32,32>, L0Clayout>, !tla.coord<0,0>, !tla.ptr<f32, l0c, 512>>
+module {
+  tla.func @mixed_unit_flag(%cond: i1, %gm: !mixed_gm) attributes {tla.auto_sync = "v0"} {
+    %pa = tla.alloc_ptr{size_bytes = 4096} -> !tla.ptr<f32, l0a, 512>
+    %pb = tla.alloc_ptr{size_bytes = 4096} -> !tla.ptr<f32, l0b, 512>
+    %pc = tla.alloc_ptr{size_bytes = 4096} -> !tla.ptr<f32, l0c, 512>
+    %a = "tla.make_tensor_like"(%pa, %gm) {layoutTag = "zN"} : (!tla.ptr<f32, l0a, 512>, !mixed_gm) -> !mixed_l0a
+    %b = "tla.make_tensor_like"(%pb, %gm) {layoutTag = "nZ"} : (!tla.ptr<f32, l0b, 512>, !mixed_gm) -> !mixed_l0b
+    %c = "tla.make_tensor_like"(%pc, %gm) {layoutTag = "L0Clayout"} : (!tla.ptr<f32, l0c, 512>, !mixed_gm) -> !mixed_l0c
+    %init = arith.constant true
+    %unit = scf.if %cond -> (i64) {
+      %zero = arith.constant 0 : i64
+      scf.yield %zero : i64
+    } else {
+      %two = arith.constant 2 : i64
+      scf.yield %two : i64
+    }
+    "tla.cube"() ({
+      tla.mmad %c, %a, %b, %init, %unit {compute_order = #tla.compute_order<M_FIRST>, hf32_mode = #tla.hf32_mode<HF32_DISABLE>} : !mixed_l0c, !mixed_l0a, !mixed_l0b, i1, i64
+    }) : () -> ()
+    tla.return
+  }
+}

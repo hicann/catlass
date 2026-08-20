@@ -19,9 +19,20 @@
 # interleave_op.py, load_dintlv_op.py, load_store_mask.py, squeeze_op.py,
 # register_control_flow.py, load_and_store_scalar_after_reduction.py, load_us_b8_op.py,
 # cast_multi.py, gather_op.py).
+# python/tla_dsl/examples/end_to_end/tensor_index (scalar_index_control_flow.py,
+# scalar_kernel_arg.py).
+# python/tla_dsl/examples/end_to_end/debug_print (debug_print.py, debug_print_mixed.py,
+# debug_print_format.py).
+# python/tla_dsl/examples/end_to_end/scalar_arg_alignment (scalar_arg_alignment.py).
+# python/tla_dsl/examples/end_to_end/dataclass_arg (dataclass_arg.py: stdlib
+# @dataclass instance unpacked into scalar kernel args).
+# python/tla_dsl/examples/end_to_end/print_tensor (print_tensor.py: all eight
+# supported GM/UB dtypes plus multi-block and multi-call cases).
 # python/tla_dsl/examples/end_to_end/basic_mmad_epilogue (matmul_add.py, matmul_add_ub.py,
 # matmul_bias.py, matmul_leaky_relu.py, matmul_sigmoid.py, matmul_silu.py, matmul_tanh.py).
 # python/tla_dsl/examples/end_to_end/flash_attention_infer (flash_attention_infer.py).
+# python/tla_dsl/examples/end_to_end/lazy_conditions (lazy_conditions.py).
+# python/tla_dsl/examples/end_to_end/simt (basic_vadd_simt.py).
 # python/tla_dsl/examples/end_to_end/multi_core_splitk_matmul (multi_core_splitk_matmul.py,
 # tail_multi_core_splitk_matmul.py).
 # python/tla_dsl/examples/end_to_end/basic_mmad_streamk (basic_mmad_streamk.py).
@@ -112,10 +123,19 @@ LOAD_STORE_MASK_REL="examples/end_to_end/vector_ops/load_store_mask.py"
 STORE_PACK_REL="examples/end_to_end/vector_ops/store_pack.py"
 SQUEEZE_OP_REL="examples/end_to_end/vector_ops/squeeze_op.py"
 REGISTER_CONTROL_FLOW_REL="examples/end_to_end/vector_ops/register_control_flow.py"
+SCALAR_INDEX_CONTROL_FLOW_REL="examples/end_to_end/tensor_index/scalar_index_control_flow.py"
+SCALAR_KERNEL_ARG_REL="examples/end_to_end/tensor_index/scalar_kernel_arg.py"
+DEBUG_PRINT_REL="examples/end_to_end/debug_print/debug_print.py"
+DEBUG_PRINT_MIXED_REL="examples/end_to_end/debug_print/debug_print_mixed.py"
+DEBUG_PRINT_FORMAT_REL="examples/end_to_end/debug_print/debug_print_format.py"
+SCALAR_ARG_ALIGNMENT_REL="examples/end_to_end/scalar_arg_alignment/scalar_arg_alignment.py"
+PRINT_TENSOR_REL="examples/end_to_end/print_tensor/print_tensor.py"
 STREAMK_OPS_REL="examples/end_to_end/basic_mmad_streamk/basic_mmad_streamk.py"
 GROUPED_MATMUL_SLICEM_REL="examples/end_to_end/grouped_matmul_slice_m/grouped_matmul_slice_m.py"
 BATCHED_MATMUL_REL="examples/end_to_end/batched_matmul/batched_matmul.py"
 FLASH_ATTENTION_INFER_REL="examples/end_to_end/flash_attention_infer/flash_attention_infer.py"
+LAZY_CONDITIONS_REL="examples/end_to_end/lazy_conditions/lazy_conditions.py"
+SIMT_VADD_REL="examples/end_to_end/simt/basic_vadd_simt.py"
 MULTI_CORE_SPLITK_REL="examples/end_to_end/multi_core_splitk_matmul/multi_core_splitk_matmul.py"
 TAIL_MULTI_CORE_SPLITK_REL="examples/end_to_end/multi_core_splitk_matmul/tail_multi_core_splitk_matmul.py"
 BASIC_MMAD_EPILOGUE_ADD_REL="examples/end_to_end/basic_mmad_epilogue/matmul_add.py"
@@ -166,8 +186,22 @@ Run end-to-end validation for:
   - squeeze_op (squeeze_op.py squeeze --all-dtypes)
   - register_control_flow (register_control_flow.py register_carriers:
     mixed VectorSSA/MaskSSA scf.for carriers and masked store)
+  - scalar_index_control_flow (scalar_index_control_flow.py: GM scalar read/write,
+    loop/dynamic-if/constexpr-if, vec.func, AST Numeric / index-vs-Int32 compare)
+  - scalar_kernel_arg (scalar_kernel_arg.py: host Numeric kernel args used in
+    same-type scalar arithmetic)
+  - debug_print (all direct scalar dtypes, supported computed values, and two-block prints on AIV and AIC)
+  - debug_print_mixed (all scalar dtypes in cube-only, vector-only, and combined regions)
+  - debug_print_format (formatted multicall and multiblock prints on AIV and AIC)
+  - scalar_arg_alignment (scalar_arg_alignment.py: tensor-i16-tensor host ABI)
+  - dataclass_arg (dataclass_arg.py: stdlib @dataclass instance unpacked into
+    per-field scalar kernel args; constexpr + tensor + scalar fields)
+  - print_tensor (print_tensor.py: all supported GM/UB dtypes with AIV/AIC
+    multi-block and multi-call coverage)
   - basic_mmad_epilogue (matmul_add.py, ...: CV fused examples)
   - flash_attention_infer (flash_attention_infer.py)
+  - lazy_conditions (lazy_conditions.py)
+  - simt (basic_vadd_simt.py: SIMT thread-block add)
   - multi_core_splitk_matmul (multi_core_splitk_matmul.py: using split-k strategy for workload balancing)
   - basic_mmad_streamk (basic_mmad_streamk.py: streamK workload balancing)
   - batched_matmul (batched_matmul.py)
@@ -435,8 +469,40 @@ if [[ ! -f "${CATLASS_DSL_DIR}/${REGISTER_CONTROL_FLOW_REL}" ]]; then
     echo "error: missing ${REGISTER_CONTROL_FLOW_REL} under ${CATLASS_DSL_DIR}" >&2
     exit 1
 fi
+if [[ ! -f "${CATLASS_DSL_DIR}/${SCALAR_INDEX_CONTROL_FLOW_REL}" ]]; then
+    echo "error: missing ${SCALAR_INDEX_CONTROL_FLOW_REL} under ${CATLASS_DSL_DIR}" >&2
+    exit 1
+fi
+if [[ ! -f "${CATLASS_DSL_DIR}/${DEBUG_PRINT_REL}" ]]; then
+    echo "error: missing ${DEBUG_PRINT_REL} under ${CATLASS_DSL_DIR}" >&2
+    exit 1
+fi
+if [[ ! -f "${CATLASS_DSL_DIR}/${DEBUG_PRINT_MIXED_REL}" ]]; then
+    echo "error: missing ${DEBUG_PRINT_MIXED_REL} under ${CATLASS_DSL_DIR}" >&2
+    exit 1
+fi
+if [[ ! -f "${CATLASS_DSL_DIR}/${DEBUG_PRINT_FORMAT_REL}" ]]; then
+    echo "error: missing ${DEBUG_PRINT_FORMAT_REL} under ${CATLASS_DSL_DIR}" >&2
+    exit 1
+fi
+if [[ ! -f "${CATLASS_DSL_DIR}/${SCALAR_ARG_ALIGNMENT_REL}" ]]; then
+    echo "error: missing ${SCALAR_ARG_ALIGNMENT_REL} under ${CATLASS_DSL_DIR}" >&2
+    exit 1
+fi
+if [[ ! -f "${CATLASS_DSL_DIR}/${PRINT_TENSOR_REL}" ]]; then
+    echo "error: missing ${PRINT_TENSOR_REL} under ${CATLASS_DSL_DIR}" >&2
+    exit 1
+fi
 if [[ ! -f "${CATLASS_DSL_DIR}/${FLASH_ATTENTION_INFER_REL}" ]]; then
     echo "error: missing ${FLASH_ATTENTION_INFER_REL} under ${CATLASS_DSL_DIR}" >&2
+    exit 1
+fi
+if [[ ! -f "${CATLASS_DSL_DIR}/${LAZY_CONDITIONS_REL}" ]]; then
+    echo "error: missing ${LAZY_CONDITIONS_REL} under ${CATLASS_DSL_DIR}" >&2
+    exit 1
+fi
+if [[ ! -f "${CATLASS_DSL_DIR}/${SIMT_VADD_REL}" ]]; then
+    echo "error: missing ${SIMT_VADD_REL} under ${CATLASS_DSL_DIR}" >&2
     exit 1
 fi
 if [[ ! -f "${CATLASS_DSL_DIR}/${MULTI_CORE_SPLITK_REL}" ]]; then

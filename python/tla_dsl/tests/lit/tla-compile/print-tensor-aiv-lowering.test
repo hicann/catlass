@@ -1,0 +1,111 @@
+// RUN: sed -n '/BEGIN-LOWER$/,/END-LOWER$/p' %s | %tla_compile - -o - | %filecheck %s --check-prefix=LOWER
+// RUN: sed -n '/BEGIN-LOWER$/,/END-LOWER$/p' %s | sed 's/f32/ui16/g' | %tla_compile - -o - | %filecheck %s --check-prefix=U16
+
+// BEGIN-LOWER
+module {
+  tla.func @print_tensor_aiv(%x: !tla.tensor<!tla.layout<!tla.shape<4,4>, !tla.stride<4,1>, !tla.shape<4,4>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>) {
+    %c4 = arith.constant 4 : i64
+    %c2 = arith.constant 2 : i64
+    "tla.vector"() ({
+      tla.print_tensor %x length = %c4 shape = [4, 4] : !tla.tensor<!tla.layout<!tla.shape<4,4>, !tla.stride<4,1>, !tla.shape<4,4>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>, i64
+      tla.print_tensor %x length = %c2 shape = [4, 4] : !tla.tensor<!tla.layout<!tla.shape<4,4>, !tla.stride<4,1>, !tla.shape<4,4>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>, i64
+    }) : () -> ()
+    tla.return
+  }
+}
+// END-LOWER
+
+// LOWER-LABEL: func.func @print_tensor_aiv(
+// LOWER-SAME: %[[WORKSPACE:arg0]]: i64 {{.*}}hacc.arg_type = #hacc.arg_type<workspace>{{.*}}tla.print_tensor.workspace
+// LOWER-DAG: %[[CALL0:.*]] = {{(arith\.constant 0 : i64|llvm\.mlir\.constant\(0 : i64\) : i64)}}
+// LOWER-DAG: %[[CALL1:.*]] = {{(arith\.constant 1 : i64|llvm\.mlir\.constant\(1 : i64\) : i64)}}
+// LOWER: call @_mlir_ciface_tla_print_tensor_gm_f32(%[[WORKSPACE]], {{.*}}, {{.*}}, {{.*}}, %[[CALL0]])
+// LOWER: call @_mlir_ciface_tla_print_tensor_gm_f32(%[[WORKSPACE]], {{.*}}, {{.*}}, {{.*}}, %[[CALL1]])
+// LOWER-NOT: _mlir_ciface_tla_printf
+// LOWER-NOT: tla.print_tensor
+// U16: call @_mlir_ciface_tla_print_tensor_gm_u16({{.*}}, {{.*}}, {{.*}}, {{.*}}, {{.*}})
+// U16: call @_mlir_ciface_tla_print_tensor_gm_u16({{.*}}, {{.*}}, {{.*}}, {{.*}}, {{.*}})
+
+// RUN: sed -n '/BEGIN-DYNAMIC$/,/END-DYNAMIC$/p' %s | %tla_compile - -o - | %filecheck %s --check-prefix=DYNAMIC
+
+// BEGIN-DYNAMIC
+module {
+  tla.func @print_tensor_dynamic(%x: !tla.tensor<!tla.layout<!tla.shape<?,4>, !tla.stride<4,1>, !tla.shape<16,4>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>) {
+    %c4 = arith.constant 4 : i64
+    "tla.vector"() ({
+      tla.print_tensor %x length = %c4 shape = [-1, 4] : !tla.tensor<!tla.layout<!tla.shape<?,4>, !tla.stride<4,1>, !tla.shape<16,4>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>, i64
+    }) : () -> ()
+    tla.return
+  }
+}
+// END-DYNAMIC
+
+// DYNAMIC-LABEL: func.func @print_tensor_dynamic(
+// DYNAMIC: %[[RUNTIME_M_INDEX:.*]] = memref.dim
+// DYNAMIC: %[[RUNTIME_M:.*]] = builtin.unrealized_conversion_cast %[[RUNTIME_M_INDEX]]
+// DYNAMIC: call @_mlir_ciface_tla_print_tensor_gm_f32({{.*}}, {{.*}}, {{.*}}, {{.*}}, {{.*}})
+// DYNAMIC-NOT: tla.print_tensor
+
+// RUN: sed -n '/BEGIN-DYNAMIC-SCF$/,/END-DYNAMIC-SCF$/p' %s | %tla_compile - -o - | %filecheck %s --check-prefix=DYNAMIC-SCF
+
+// BEGIN-DYNAMIC-SCF
+module {
+  tla.func @print_tensor_in_dynamic_scf(%cond: i1, %lb: index, %ub: index, %step: index, %x: !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>) {
+    %c0 = arith.constant 0 : index
+    %c4 = arith.constant 4 : i64
+    "tla.vector"() ({
+      scf.if %cond {
+        tla.print_tensor %x length = %c4 shape = [4] : !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>, i64
+      }
+      scf.for %i = %lb to %ub step %step {
+        tla.print_tensor %x length = %c4 shape = [4] : !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>, i64
+      }
+      %unused = scf.while (%i = %c0) : (index) -> index {
+        %continue = arith.cmpi slt, %i, %ub : index
+        scf.condition(%continue) %i : index
+      } do {
+      ^bb0(%i: index):
+        tla.print_tensor %x length = %c4 shape = [4] : !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>, i64
+        %next = arith.addi %i, %step : index
+        scf.yield %next : index
+      }
+    }) : () -> ()
+    tla.return
+  }
+}
+// END-DYNAMIC-SCF
+
+// DYNAMIC-SCF-LABEL: func.func @print_tensor_in_dynamic_scf(
+// DYNAMIC-SCF-COUNT-3: call @_mlir_ciface_tla_print_tensor_gm_f32(
+// DYNAMIC-SCF-NOT: tla.print_tensor
+
+// RUN: sed -n '/BEGIN-PACKED$/,/END-PACKED$/p' %s | %tla_compile - -o - | %filecheck %s --check-prefix=PACKED
+
+// BEGIN-PACKED
+module {
+  tla.func @print_tensor_packed(%count: i64) {
+    %raw = tla.alloc_ptr{size_bytes = 4096} -> !tla.ptr<i8, ub, 32>
+    %ptr = tla.recast_ptr %raw : !tla.ptr<i8, ub, 32> -> !tla.ptr<f32, ub, 32>
+    %shape = tla.make_shape -> !tla.shape<32,32>
+    %stride = tla.make_stride -> !tla.stride<32,1>
+    %layout = tla.make_layout %shape, %stride : !tla.shape<32,32>, !tla.stride<32,1> -> !tla.layout<!tla.shape<32,32>, !tla.stride<32,1>, !tla.shape<32,32>, row_major>
+    %coord = tla.make_coord {values = [17, 10]} -> !tla.coord<17,10>
+    %base = tla.make_tensor %ptr, %layout, %coord : !tla.ptr<f32, ub, 32>, !tla.layout<!tla.shape<32,32>, !tla.stride<32,1>, !tla.shape<32,32>, row_major>, !tla.coord<17,10> -> !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<32,1>, !tla.shape<32,32>, row_major>, !tla.coord<17,10>, !tla.ptr<f32, ub, 32>>
+    %x = tla.make_tensor_like %ptr like %base layoutTag("zN") : !tla.ptr<f32, ub, 32>, !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<32,1>, !tla.shape<32,32>, row_major>, !tla.coord<17,10>, !tla.ptr<f32, ub, 32>> -> !tla.tensor<!tla.layout<!tla.shape<(16,2),(8,4)>, !tla.stride<(8,128),(1,256)>, !tla.shape<32,32>, zN>, !tla.coord<17,10>, !tla.ptr<f32, ub, 32>>
+    "tla.vector"() ({
+      tla.print_tensor %x length = %count shape = [32, 32] : !tla.tensor<!tla.layout<!tla.shape<(16,2),(8,4)>, !tla.stride<(8,128),(1,256)>, !tla.shape<32,32>, zN>, !tla.coord<17,10>, !tla.ptr<f32, ub, 32>>, i64
+    }) : () -> ()
+    tla.return
+  }
+}
+// END-PACKED
+
+// PACKED-LABEL: func.func @print_tensor_packed(
+// PACKED-SAME: %[[WORKSPACE:arg0]]: i64
+// PACKED-SAME: %[[COUNT:arg1]]: i64
+// PACKED-DAG: %[[BYTE_OFFSET:.*]] = {{(arith\.constant 1576 : index|llvm\.mlir\.constant\(1576 : index\) : i64)}}
+// PACKED: %[[BASE_INDEX:.*]] = memref.extract_aligned_pointer_as_index
+// PACKED: %[[BASE_I64:.*]] = builtin.unrealized_conversion_cast %[[BASE_INDEX]]
+// PACKED: %[[ADDRESS:.*]] = llvm.add %[[BASE_I64]], %[[BYTE_OFFSET]]
+// PACKED: call @_mlir_ciface_tla_print_tensor_ub_f32(%[[WORKSPACE]], %[[ADDRESS]], %[[COUNT]], {{.*}}, {{.*}})
+// PACKED-NOT: tla.print_tensor

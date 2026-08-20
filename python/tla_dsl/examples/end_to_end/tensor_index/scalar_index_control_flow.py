@@ -1,0 +1,482 @@
+# -----------------------------------------------------------------------------------------------------------
+# Copyright (c) 2026 Huawei Technologies Co., Ltd.
+# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# CANN Open Software License Agreement Version 2.0 (the "License").
+# Please refer to the License for details. You may not use this file except in compliance with the License.
+# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+# See LICENSE in the root of the software repository for the full text of the License.
+# -----------------------------------------------------------------------------------------------------------
+
+"""E2E: GM tensor scalar indexing (``tensor[i]`` / ``tensor[r,c]``).
+
+Layout notes (Phase-1 ``scalar_load`` / ``scalar_store``):
+- ``RowMajor`` / ``ColumnMajor``: 2D GM tensors; address is ``i*stride0 + j*stride1``.
+- ``RowMajor`` (rank-1): contiguous 1D GM vectors (``from_dlpack(...contiguous())``).
+
+Control-flow patterns in this example:
+- Static 1D/2D scalar read + store (no loop)
+- Python scalar literal store (``out[i] = 1.1125``)
+- Built-in ``range`` loop copy lowered as a runtime loop
+- Dynamic ``if`` selecting read index (index merge, load after branch)
+- Dynamic ``if`` selecting scalar *values* (Numeric carried through ``scf.if``)
+- Scalar stores directly inside dynamic ``if`` and ``while``
+- ``tla.const_expr`` compile-time forward vs reversed indexing
+- Scalar read/store inside ``tla.vector`` / ``tla.vec.func`` (VF)
+- AST Numeric compare in ``if`` (``value < 0`` → element-typed ``cmpi``)
+- AST index-vs-Int32 compare (``i >= tile_range[0]`` → ``index_cast``)
+"""
+
+from __future__ import annotations
+
+import argparse
+from typing import TYPE_CHECKING
+
+import catlass.tla as tla
+
+if TYPE_CHECKING:
+    import torch
+
+LENGTH = 8
+COMPARE_LEN = 4
+ROW = 2
+COLS = 64
+SCALAR_COL = 5
+MARKER_LEN = 2
+
+
+@tla.kernel
+def scalar_index_static_kernel(
+    meta: tla.Tensor,
+    meta_row: tla.Tensor,
+    markers: tla.Tensor,
+) -> None:
+    """Static 1D ``RowMajor`` (rank-1) + 2D ``RowMajor`` scalar read/store."""
+    elem_1d = meta_row[0]
+    elem_2d = meta[ROW, SCALAR_COL]
+    markers[0, 0] = elem_1d
+    markers[0, 1] = elem_2d
+
+
+@tla.kernel
+def scalar_index_literal_store_kernel(out: tla.Tensor) -> None:
+    """Python float/int literals stored via scalar indexing."""
+    out[0] = 1.1125
+    out[1] = 42
+
+
+@tla.kernel
+def scalar_index_loop_kernel(meta: tla.Tensor, out: tla.Tensor) -> None:
+    for i in range(0, LENGTH, 1):
+        out[i] = meta[i]
+
+
+@tla.kernel
+def scalar_index_dynamic_if_kernel(meta: tla.Tensor, out: tla.Tensor) -> None:
+    for i in tla.range(0, LENGTH, 1):
+        read_idx = 0
+        if i == 0:
+            read_idx = i
+        else:
+            read_idx = 0
+        out[i] = meta[read_idx]
+
+
+@tla.kernel
+def scalar_index_value_through_dynamic_if_kernel(
+    out: tla.Tensor,
+    meta: tla.Tensor,
+    selector: int,
+) -> None:
+    """Dynamic ``if`` selects among scalar *values* (load on both sides), then store."""
+    value = meta[0]
+    if selector == 0:
+        value = meta[1]
+    else:
+        value = meta[2]
+    out[0] = value
+
+
+@tla.kernel
+def scalar_index_store_in_dynamic_control_flow_kernel(
+    out: tla.Tensor,
+    selector: int,
+) -> None:
+    """Store side effects stay in their selected branch and loop iteration."""
+    i = tla.as_numeric(0)
+    while i < 2:
+        if selector == 0:
+            out[i] = i + 10
+        else:
+            out[i] = i + 20
+        i = i + 1
+
+
+@tla.kernel
+def scalar_index_constexpr_if_kernel(
+    meta: tla.Tensor,
+    out: tla.Tensor,
+    reverse: tla.Constexpr[bool],
+) -> None:
+    if tla.const_expr(reverse):
+        for i in tla.range(0, LENGTH, 1):
+            out[i] = meta[LENGTH - 1 - i]
+    else:
+        for i in tla.range(0, LENGTH, 1):
+            out[i] = meta[i]
+
+
+@tla.kernel
+def scalar_index_vec_func_kernel(meta: tla.Tensor, out: tla.Tensor) -> None:
+    """GM scalar load/store nested in ``tla.vector`` / ``tla.vec.func`` (VF).
+
+    Scalar-only VF bodies are inlined by ``tla-vector-region`` (no ``tla.store``
+    to outline a helper); the frontend form still exercises the VF nesting.
+    """
+    with tla.vector():
+        with tla.vec.func(mode="simd"):
+            for i in tla.range(0, LENGTH, 1):
+                out[i] = meta[i]
+
+
+@tla.kernel
+def scalar_index_numeric_compare_if_kernel(src: tla.Tensor, out: tla.Tensor) -> None:
+    """Element-typed Numeric compare in dynamic ``if`` (``value < 0``)."""
+    for i in tla.range(0, COMPARE_LEN, 1):
+        value = src[i]
+        if value < 0:
+            value = value + 1
+        else:
+            value = value + 2
+        out[i] = value
+
+
+@tla.kernel
+def scalar_index_vs_numeric_compare_kernel(
+    tile_range: tla.Tensor,
+    out: tla.Tensor,
+) -> None:
+    """Loop index vs Int32 scalar load (``i >= tile_range[0]``)."""
+    limit = tile_range[0]
+    for i in tla.range(0, COMPARE_LEN, 1):
+        flag = tla.Int32(0)
+        if i >= limit:
+            flag = tla.Int32(1)
+        else:
+            flag = tla.Int32(0)
+        out[i] = flag
+
+
+def _require_torch_npu(device: int):
+    import torch
+
+    try:
+        import torch_npu
+    except ImportError as exc:
+        raise SystemExit("torch_npu is required for this example") from exc
+    torch_npu.npu.set_device(device)
+    return torch
+
+
+def _gm_vector_contiguous(meta_1d) -> tla.Tensor:
+    return tla.from_dlpack(meta_1d.contiguous(), layout_tag=tla.arch.RowMajor)
+
+
+def _run_static_1d_2d(args: argparse.Namespace, torch, device: str) -> int:
+    rows, cols = 4, COLS
+    base = torch.rand(rows, cols, dtype=torch.float32, device=device) * 10.0 - 5.0
+    expected_markers = torch.tensor(
+        [[base[ROW, 0].item(), base[ROW, SCALAR_COL].item()]],
+        dtype=torch.float32,
+        device=device,
+    )
+    markers = torch.full((1, MARKER_LEN), -1.0, dtype=torch.float32, device=device)
+
+    meta = tla.from_dlpack(base, layout_tag=tla.arch.RowMajor)
+    meta_row = tla.from_dlpack(base[ROW].contiguous(), layout_tag=tla.arch.RowMajor)
+    markers_t = tla.from_dlpack(markers, layout_tag=tla.arch.RowMajor)
+
+    artifact = tla.compile(
+        scalar_index_static_kernel,
+        meta,
+        meta_row,
+        markers_t,
+    )
+    artifact(meta, meta_row, markers_t, block_num=args.block_num)
+    torch.npu.synchronize()
+    if not torch.allclose(markers, expected_markers, rtol=0.0, atol=1e-4):
+        print(
+            f"static_1d_2d_failed expected={expected_markers.tolist()} actual={markers.tolist()}"
+        )
+        return 1
+    print("static_1d_2d_ok=True")
+    return 0
+
+
+def _run_literal_store(args: argparse.Namespace, torch, device: str) -> int:
+    out = torch.full((2,), -1.0, dtype=torch.float32, device=device)
+    out_t = _gm_vector_contiguous(out)
+    artifact = tla.compile(
+        scalar_index_literal_store_kernel,
+        out_t,
+    )
+    artifact(out_t, block_num=args.block_num)
+    torch.npu.synchronize()
+    expected = torch.tensor([1.1125, 42.0], dtype=torch.float32, device=device)
+    if not torch.allclose(out, expected, rtol=0.0, atol=1e-4):
+        print(
+            f"literal_store_failed expected={expected.tolist()} actual={out.tolist()}"
+        )
+        return 1
+    print("literal_store_ok=True")
+    return 0
+
+
+def _run_loop_copy(
+    args: argparse.Namespace,
+    torch,
+    meta: "torch.Tensor",
+    meta_t: tla.Tensor,
+    out_t: tla.Tensor,
+    out: "torch.Tensor",
+) -> int:
+    expected = meta.clone()
+    artifact = tla.compile(
+        scalar_index_loop_kernel,
+        meta_t,
+        out_t,
+    )
+    artifact(meta_t, out_t, block_num=args.block_num)
+    torch.npu.synchronize()
+    if not torch.allclose(out, expected, rtol=0.0, atol=1e-4):
+        print(f"loop_copy_failed expected={expected.tolist()} actual={out.tolist()}")
+        return 1
+    print("loop_copy_ok=True")
+    return 0
+
+
+def _run_dynamic_if(
+    args: argparse.Namespace,
+    torch,
+    meta: "torch.Tensor",
+    meta_t: tla.Tensor,
+    out_t: tla.Tensor,
+    out: "torch.Tensor",
+) -> int:
+    # Kernel: read_idx = i if i == 0 else 0 → every out[i] is meta[0].
+    expected = torch.full(
+        (LENGTH,), meta[0].item(), dtype=torch.float32, device=out.device
+    )
+    artifact = tla.compile(
+        scalar_index_dynamic_if_kernel,
+        meta_t,
+        out_t,
+    )
+    artifact(meta_t, out_t, block_num=args.block_num)
+    torch.npu.synchronize()
+    if not torch.allclose(out, expected, rtol=0.0, atol=1e-4):
+        print(f"dynamic_if_failed expected={expected.tolist()} actual={out.tolist()}")
+        return 1
+    print("dynamic_if_ok=True")
+    return 0
+
+
+def _run_value_through_dynamic_if(
+    args: argparse.Namespace,
+    torch,
+    device: str,
+) -> int:
+    """Numeric value selected by a dynamic host/runtime ``selector`` int."""
+    meta = torch.rand(LENGTH, dtype=torch.float32, device=device) * 10.0 - 5.0
+    out = torch.full((1,), -1.0, dtype=torch.float32, device=device)
+    meta_t = _gm_vector_contiguous(meta)
+    out_t = _gm_vector_contiguous(out)
+
+    for selector, expected_val in (
+        (0, float(meta[1].item())),
+        (1, float(meta[2].item())),
+    ):
+        out.fill_(-1.0)
+        artifact = tla.compile(
+            scalar_index_value_through_dynamic_if_kernel,
+            type_args=(out_t, meta_t, selector),
+        )
+        artifact(out_t, meta_t, selector, block_num=args.block_num)
+        torch.npu.synchronize()
+        actual = float(out[0].item())
+        if abs(actual - expected_val) > 1e-4:
+            print(
+                f"value_through_dynamic_if_failed selector={selector} "
+                f"expected={expected_val} actual={actual}"
+            )
+            return 1
+        print(f"value_through_dynamic_if_ok=True selector={selector} value={actual}")
+    return 0
+
+
+def _run_store_in_dynamic_control_flow(
+    args: argparse.Namespace,
+    torch,
+    device: str,
+) -> int:
+    out = torch.full((2,), -1, dtype=torch.int32, device=device)
+    out_t = _gm_vector_contiguous(out)
+    for selector, expected in ((0, [10, 11]), (1, [20, 21])):
+        out.fill_(-1)
+        artifact = tla.compile(
+            scalar_index_store_in_dynamic_control_flow_kernel,
+            type_args=(out_t, selector),
+        )
+        artifact(out_t, selector, block_num=args.block_num)
+        torch.npu.synchronize()
+        actual = [int(value) for value in out.cpu().tolist()]
+        if actual != expected:
+            print(
+                "store_in_dynamic_control_flow_failed "
+                f"selector={selector} expected={expected} actual={actual}"
+            )
+            return 1
+        print(
+            f"store_in_dynamic_control_flow_ok=True selector={selector} values={actual}"
+        )
+    return 0
+
+
+def _run_constexpr_if(
+    args: argparse.Namespace,
+    torch,
+    meta: "torch.Tensor",
+    meta_t: tla.Tensor,
+    out_t: tla.Tensor,
+    out: "torch.Tensor",
+) -> int:
+    for reverse in (False, True):
+        expected = meta.flip(0) if reverse else meta
+        artifact = tla.compile(
+            scalar_index_constexpr_if_kernel,
+            type_args=(meta_t, out_t, reverse),
+        )
+        artifact(meta_t, out_t, block_num=args.block_num)
+        torch.npu.synchronize()
+        if not torch.allclose(out, expected, rtol=0.0, atol=1e-4):
+            print(
+                f"constexpr_if_failed reverse={reverse} "
+                f"expected={expected.tolist()} actual={out.tolist()}"
+            )
+            return 1
+        print(f"constexpr_if_ok=True reverse={reverse}")
+    return 0
+
+
+def _run_vec_func(
+    args: argparse.Namespace,
+    torch,
+    meta: "torch.Tensor",
+    meta_t: tla.Tensor,
+    out_t: tla.Tensor,
+    out: "torch.Tensor",
+) -> int:
+    expected = meta.clone()
+    artifact = tla.compile(
+        scalar_index_vec_func_kernel,
+        meta_t,
+        out_t,
+    )
+    artifact(meta_t, out_t, block_num=args.block_num)
+    torch.npu.synchronize()
+    if not torch.allclose(out, expected, rtol=0.0, atol=1e-4):
+        print(f"vec_func_failed expected={expected.tolist()} actual={out.tolist()}")
+        return 1
+    print("vec_func_ok=True")
+    return 0
+
+
+def _run_numeric_compare_if(args: argparse.Namespace, torch, device: str) -> int:
+    # Mixed signs so both ``value < 0`` branches are covered; golden from input.
+    src = torch.randint(-5, 6, (COMPARE_LEN,), dtype=torch.int32, device=device)
+    out = torch.full((COMPARE_LEN,), -99, dtype=torch.int32, device=device)
+    src_t = _gm_vector_contiguous(src)
+    out_t = _gm_vector_contiguous(out)
+
+    artifact = tla.compile(
+        scalar_index_numeric_compare_if_kernel,
+        src_t,
+        out_t,
+    )
+    artifact(src_t, out_t, block_num=args.block_num)
+    torch.npu.synchronize()
+
+    expected = [int(v.item()) + (1 if int(v.item()) < 0 else 2) for v in src]
+    actual = [int(out[i].item()) for i in range(COMPARE_LEN)]
+    if actual != expected:
+        print(f"numeric_compare_if_failed expected={expected} actual={actual}")
+        return 1
+    print(f"numeric_compare_if_ok=True values={actual}")
+    return 0
+
+
+def _run_index_vs_numeric_compare(args: argparse.Namespace, torch, device: str) -> int:
+    limit = int(torch.randint(0, COMPARE_LEN + 1, (1,), device="cpu").item())
+    tile_range = torch.tensor([limit], dtype=torch.int32, device=device)
+    out = torch.full((COMPARE_LEN,), -99, dtype=torch.int32, device=device)
+    tile_t = _gm_vector_contiguous(tile_range)
+    out_t = _gm_vector_contiguous(out)
+
+    artifact = tla.compile(
+        scalar_index_vs_numeric_compare_kernel,
+        tile_t,
+        out_t,
+    )
+    artifact(tile_t, out_t, block_num=args.block_num)
+    torch.npu.synchronize()
+
+    expected = [1 if i >= limit else 0 for i in range(COMPARE_LEN)]
+    actual = [int(out[i].item()) for i in range(COMPARE_LEN)]
+    if actual != expected:
+        print(f"index_vs_numeric_compare_failed expected={expected} actual={actual}")
+        return 1
+    print(f"index_vs_numeric_compare_ok=True values={actual}")
+    return 0
+
+
+def run(args: argparse.Namespace) -> int:
+    torch = _require_torch_npu(args.device)
+    device = f"npu:{args.device}"
+    torch.manual_seed(0)
+    meta = torch.rand(LENGTH, dtype=torch.float32, device=device) * 10.0 - 5.0
+    out = torch.full((LENGTH,), -1.0, dtype=torch.float32, device=device)
+    meta_t = _gm_vector_contiguous(meta)
+    out_t = _gm_vector_contiguous(out)
+
+    runners = (
+        lambda: _run_static_1d_2d(args, torch, device),
+        lambda: _run_literal_store(args, torch, device),
+        lambda: _run_loop_copy(args, torch, meta, meta_t, out_t, out),
+        lambda: _run_dynamic_if(args, torch, meta, meta_t, out_t, out),
+        lambda: _run_value_through_dynamic_if(args, torch, device),
+        lambda: _run_store_in_dynamic_control_flow(args, torch, device),
+        lambda: _run_constexpr_if(args, torch, meta, meta_t, out_t, out),
+        lambda: _run_vec_func(args, torch, meta, meta_t, out_t, out),
+        lambda: _run_numeric_compare_if(args, torch, device),
+        lambda: _run_index_vs_numeric_compare(args, torch, device),
+    )
+    for runner in runners:
+        rc = runner()
+        if rc != 0:
+            return rc
+        out.fill_(-1.0)
+    print("verification_ok=True")
+    return 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="GM tensor scalar indexing E2E (1D/2D layouts, control flow, vec.func)."
+    )
+    parser.add_argument("--device", type=int, default=0)
+    parser.add_argument("--block-num", type=int, default=1)
+    return run(parser.parse_args())
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

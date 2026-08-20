@@ -1,0 +1,118 @@
+// RUN: sed -n '/BEGIN-REGION$/,/END-REGION$/p' %s | not %tla_compile - -o - 2>&1 | %filecheck %s --check-prefix=REGION
+// RUN: sed -n '/BEGIN-SHAPE-MISMATCH$/,/END-SHAPE-MISMATCH$/p' %s | not %tla_compile - -o - 2>&1 | %filecheck %s --check-prefix=SHAPE-MISMATCH
+// RUN: sed -n '/BEGIN-BF16$/,/END-BF16$/p' %s | not %tla_compile - -o - 2>&1 | %filecheck %s --check-prefix=BF16
+// RUN: sed -n '/BEGIN-BF16$/,/END-BF16$/p' %s | sed 's/bf16/i64/g' | not %tla_compile - -o - 2>&1 | %filecheck %s --check-prefix=I64
+// RUN: sed -n '/BEGIN-BF16$/,/END-BF16$/p' %s | sed 's/bf16/ui64/g' | not %tla_compile - -o - 2>&1 | %filecheck %s --check-prefix=U64
+// RUN: sed -n '/BEGIN-BF16$/,/END-BF16$/p' %s | sed 's/bf16/i1/g' | not %tla_compile - -o - 2>&1 | %filecheck %s --check-prefix=I1
+// RUN: sed -n '/BEGIN-EMPTY$/,/END-EMPTY$/p' %s | not %tla_compile - -o - 2>&1 | %filecheck %s --check-prefix=EMPTY
+// RUN: sed -n '/BEGIN-TOO-LARGE$/,/END-TOO-LARGE$/p' %s | not %tla_compile - -o - 2>&1 | %filecheck %s --check-prefix=TOO-LARGE
+// RUN: sed -n '/BEGIN-LENGTH-EXCEEDS-SHAPE$/,/END-LENGTH-EXCEEDS-SHAPE$/p' %s | not %tla_compile - -o - 2>&1 | %filecheck %s --check-prefix=LENGTH-EXCEEDS-SHAPE
+// RUN: sed -n '/BEGIN-PRIVATE$/,/END-PRIVATE$/p' %s | not %tla_compile - -o - 2>&1 | %filecheck %s --check-prefix=PRIVATE
+// RUN: sed -n '/BEGIN-CFG$/,/END-CFG$/p' %s | not %tla_compile - -o - 2>&1 | %filecheck %s --check-prefix=CFG
+
+// BEGIN-REGION
+module {
+  tla.func @regionless(%x: !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>) {
+    %c4 = arith.constant 4 : i64
+    tla.print_tensor %x length = %c4 shape = [4] : !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>, i64
+    tla.return
+  }
+}
+// END-REGION
+// REGION: 'tla.print_tensor' op must be nested inside a tla.cube or tla.vector region
+
+// BEGIN-SHAPE-MISMATCH
+module {
+  tla.func @shape_mismatch(%x: !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>) {
+    %c4 = arith.constant 4 : i64
+    "tla.vector"() ({
+      tla.print_tensor %x length = %c4 shape = [2, 2] : !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>, i64
+    }) : () -> ()
+    tla.return
+  }
+}
+// END-SHAPE-MISMATCH
+// SHAPE-MISMATCH: 'tla.print_tensor' op shape must match the logical tensor shape
+
+// BEGIN-BF16
+module {
+  tla.func @bf16(%x: !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<bf16, gm, 2>>) {
+    %c4 = arith.constant 4 : i64
+    "tla.vector"() ({
+      tla.print_tensor %x length = %c4 shape = [4] : !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<bf16, gm, 2>>, i64
+    }) : () -> ()
+    tla.return
+  }
+}
+// END-BF16
+// BF16: 'tla.print_tensor' op unsupported dtype bf16; supported dtypes: f16, f32, i8, i16, i32, u8, u16, u32
+// I64: 'tla.print_tensor' op unsupported dtype i64; supported dtypes: f16, f32, i8, i16, i32, u8, u16, u32
+// U64: 'tla.print_tensor' op unsupported dtype u64; supported dtypes: f16, f32, i8, i16, i32, u8, u16, u32
+// I1: 'tla.print_tensor' op unsupported dtype i1; supported dtypes: f16, f32, i8, i16, i32, u8, u16, u32
+
+// BEGIN-EMPTY
+module {
+  tla.func @empty(%x: !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>) {
+    %c1 = arith.constant 1 : i64
+    "tla.vector"() ({
+      tla.print_tensor %x length = %c1 shape = [] : !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>, i64
+    }) : () -> ()
+    tla.return
+  }
+}
+// END-EMPTY
+// EMPTY: 'tla.print_tensor' op shape must have rank 1 or 2
+
+// BEGIN-TOO-LARGE
+module {
+  tla.func @too_large(%x: !tla.tensor<!tla.layout<!tla.shape<262113>, !tla.stride<1>, !tla.shape<262113>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>) {
+    %count = arith.constant 262113 : i64
+    "tla.vector"() ({
+      tla.print_tensor %x length = %count shape = [262113] : !tla.tensor<!tla.layout<!tla.shape<262113>, !tla.stride<1>, !tla.shape<262113>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>, i64
+    }) : () -> ()
+    tla.return
+  }
+}
+// END-TOO-LARGE
+// TOO-LARGE: 'tla.print_tensor' op length must be between 1 and 262112 elements
+
+// BEGIN-LENGTH-EXCEEDS-SHAPE
+module {
+  tla.func @length_exceeds_shape(%x: !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>) {
+    %c5 = arith.constant 5 : i64
+    "tla.vector"() ({
+      tla.print_tensor %x length = %c5 shape = [4] : !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>, i64
+    }) : () -> ()
+    tla.return
+  }
+}
+// END-LENGTH-EXCEEDS-SHAPE
+// LENGTH-EXCEEDS-SHAPE: 'tla.print_tensor' op length must not exceed the tensor element count
+
+// BEGIN-PRIVATE
+module {
+  func.func private @private_helper(%x: !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>) {
+    %c4 = arith.constant 4 : i64
+    "tla.vector"() ({
+      tla.print_tensor %x length = %c4 shape = [4] : !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>, i64
+    }) : () -> ()
+    func.return
+  }
+}
+// END-PRIVATE
+// PRIVATE: tla.tensor function arguments are supported only on non-private device entries
+
+// BEGIN-CFG
+module {
+  func.func @cfg(%x: !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>) {
+    %c4 = arith.constant 4 : i64
+    cf.br ^bb1
+  ^bb1:
+    "tla.vector"() ({
+      tla.print_tensor %x length = %c4 shape = [4] : !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>, i64
+    }) : () -> ()
+    func.return
+  }
+}
+// END-CFG
+// CFG: error: tla.print_tensor requires a single-block kernel CFG

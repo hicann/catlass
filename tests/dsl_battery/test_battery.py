@@ -42,6 +42,22 @@ COMPARE_MASK_OPS = (
     "masked_vector_vector_lt", "cmp_masked_fused", "static_dynamic_lt",
 )
 
+#: (block-num, calls, dtype-args)
+PRINT_TENSOR_VARIANTS = (
+    ("1", "1", ("--all-dtypes",)),
+    ("2", "1", ("--dtype", "f32")),
+    ("1", "2", ("--dtype", "f32")),
+    ("2", "2", ("--all-dtypes",)),
+)
+#: (case, block-num, calls, dtype-args)
+PRINT_TENSOR_UB_VARIANTS = (
+    ("base", "1", "1", ("--all-dtypes",)),
+    ("base", "2", "1", ("--dtype", "f32")),
+    ("base", "1", "2", ("--dtype", "f32")),
+    ("base", "2", "2", ("--all-dtypes",)),
+    ("aligned-offset", "1", "1", ("--all-dtypes",)),
+)
+
 EVG_OPS = (
     "add",
     "add_ub",
@@ -159,6 +175,14 @@ def _cases(device: int) -> Iterator[tuple[str, list[list[str]]]]:
     yield (
         "flash-attention-infer",
         [["flash_attention_infer/flash_attention_infer.py", *dev]],
+    )
+    yield (
+        "lazy-conditions",
+        [["lazy_conditions/lazy_conditions.py", *dev]],
+    )
+    yield (
+        "simt-basic-vadd",
+        [["simt/basic_vadd_simt.py", "--block-num", "1", *dev]],
     )
 
     # --- multi_core_splitk_matmul and tail_multi_core_splitk_matmul ---
@@ -301,6 +325,82 @@ def _cases(device: int) -> Iterator[tuple[str, list[list[str]]]]:
         "vector-gather",
         [["vector_ops/gather_op.py", "--run", *dev]],
     )
+
+    # --- tensor_index ---
+    yield (
+        "tensor-index-scalar-control-flow",
+        [["tensor_index/scalar_index_control_flow.py", *dev]],
+    )
+    yield (
+        "tensor-index-scalar-kernel-arg",
+        [["tensor_index/scalar_kernel_arg.py", *dev]],
+    )
+
+    # --- print_tensor, GM storage ---
+    for blocks, calls, dtype_args in PRINT_TENSOR_VARIANTS:
+        yield (
+            f"print-tensor-gm-b{blocks}-c{calls}",
+            [[
+                "print_tensor/print_tensor.py", "--run", *dev,
+                "--block-num", blocks, "--calls", calls, *dtype_args,
+            ]],
+        )
+
+    # --- debug_print ---
+    yield (
+        "debug-print-matrix",
+        [[
+            "debug_print/debug_print.py", "--run", *dev,
+            "--all-dtypes", "--block-num", "2", "--expect-count", "2",
+        ]],
+    )
+    for value in ("-0.0", "nan", "inf", "-inf"):
+        yield (
+            f"debug-print-f16-{value}",
+            [[
+                "debug_print/debug_print.py", "--run", *dev,
+                "--dtype", "f16", f"--value={value}",
+            ]],
+        )
+    yield (
+        "debug-print-expression",
+        [["debug_print/debug_print.py", "--run", *dev, "--all-dtypes", "--expression"]],
+    )
+    for region in ("cube", "vector", "both"):
+        yield (
+            f"debug-print-mixed-{region}",
+            [[
+                "debug_print/debug_print_mixed.py", "--run", *dev,
+                "--all-dtypes", "--print-region", region,
+            ]],
+        )
+    yield (
+        "debug-print-format",
+        [["debug_print/debug_print_format.py", "--run", *dev, "--block-num", "2"]],
+    )
+
+    # --- scalar_arg_alignment ---
+    yield (
+        "scalar-arg-alignment",
+        [["scalar_arg_alignment/scalar_arg_alignment.py", *dev]],
+    )
+
+    # --- dataclass_arg (stdlib @dataclass unpacked into scalar kernel args) ---
+    yield (
+        "dataclass-arg",
+        [["dataclass_arg/dataclass_arg.py", *dev]],
+    )
+
+    # --- print_tensor, UB storage ---
+    for case_name, blocks, calls, dtype_args in PRINT_TENSOR_UB_VARIANTS:
+        yield (
+            f"print-tensor-ub-{case_name}-b{blocks}-c{calls}",
+            [[
+                "print_tensor/print_tensor.py", "--run", *dev, "--storage", "ub",
+                "--case", case_name, "--block-num", blocks, "--calls", calls,
+                *dtype_args,
+            ]],
+        )
 
 
 def battery_cases(device: int = 0) -> list[tuple[str, list[list[str]]]]:

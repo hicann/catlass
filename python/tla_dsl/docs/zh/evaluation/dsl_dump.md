@@ -76,9 +76,14 @@ first mismatch=None
 
 ## 单独验证张量 dump（`tla.dump_tensor` 等价用法）
 
-在 `tla.vector()` 区域内调用 `tla.print(value, 16)`，即等价于 `tla.dump_tensor`：
+如果只想单独验证张量 dump，可以使用专门的 `print_tensor` 样例 `python/tla_dsl/examples/end_to_end/print_tensor/print_tensor.py`。该样例编译并启动一个单 block kernel，从一个静态或动态 shape 的 GM `float32[8,4]` 张量中打印已知的 16 元素前缀。
+
+### 插入调试代码
+
+在 `print_tensor_aiv_kernel` 的 `tla.vector()` 区域内调用 `tla.print(value, 16)`，即等价于 `tla.dump_tensor`：
 
 ```python
+# python/tla_dsl/examples/end_to_end/print_tensor/print_tensor.py
 @tla.kernel
 def print_tensor_aiv_kernel(value: tla.Tensor) -> None:
     with tla.vector():
@@ -95,9 +100,22 @@ def print_tensor_aiv_two_calls_kernel(value: tla.Tensor) -> None:
         tla.print(value, 8)
 ```
 
+### 编译运行
+
+```bash
+cd python/tla_dsl/examples/end_to_end/print_tensor
+
+# 静态 shape：从一个 GM float32[8,4] 张量打印 16 元素前缀
+CATLASS_DSL_FORCE_RECOMPILE=1 python print_tensor.py --run --device 0 --block-num 1
+
+# 动态 shape：第一维 extent 与 print length 均作为标量 kernel 参数传入
+CATLASS_DSL_FORCE_RECOMPILE=1 python print_tensor.py --run --dynamic-shape --device 0 --block-num 1
+```
+
 ### 输出示例（仅为示例，实际输出可能因硬件和算子实现不同而有所差异）
 
-```text
+```bash
+CATLASS_DSL_FORCE_RECOMPILE=1 python print_tensor.py --run --device 0 --block-num 1
 tla.print dtype=float32 subblock=0 shape=[8,4] count=16 values=[0.0, -0.0, 1.0, -2.5, nan, inf, -inf, 3.25, 0.0, -0.0, 1.0, -2.5, nan, inf, -inf, 3.25]
 compile_ok=True
 launch_ok=True
