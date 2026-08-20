@@ -96,6 +96,8 @@ REGISTER_GM_TO_L1(row_major, zN, RowMajor, zN, bf16)
 REGISTER_GM_TO_L1(column_major, nZ, ColumnMajor, nZ, float)
 REGISTER_GM_TO_L1(column_major, nZ, ColumnMajor, nZ, half)
 REGISTER_GM_TO_L1(column_major, nZ, ColumnMajor, nZ, bf16)
+REGISTER_GM_TO_L1(row_major, zN, RowMajor, zN, int8_t)
+REGISTER_GM_TO_L1(column_major, nZ, ColumnMajor, nZ, int8_t)
 
 #define REGISTER_L1_TO_L0A(NameSrc, EnumSrc, DType)                                                                   \
     [aicore] __attribute__((always_inline)) void _mlir_ciface_copy_l1_##NameSrc##_to_l0a_zN_##DType(                  \
@@ -111,6 +113,8 @@ REGISTER_L1_TO_L0A(zN, zN, bf16)
 REGISTER_L1_TO_L0A(nZ, nZ, float)
 REGISTER_L1_TO_L0A(nZ, nZ, half)
 REGISTER_L1_TO_L0A(nZ, nZ, bf16)
+REGISTER_L1_TO_L0A(zN, zN, int8_t)
+REGISTER_L1_TO_L0A(nZ, nZ, int8_t)
 
 #define REGISTER_L1_TO_L0B(NameSrc, EnumSrc, DType)                                                                   \
     [aicore] __attribute__((always_inline)) void _mlir_ciface_copy_l1_##NameSrc##_to_l0b_nZ_##DType(                  \
@@ -126,6 +130,8 @@ REGISTER_L1_TO_L0B(zN, zN, bf16)
 REGISTER_L1_TO_L0B(nZ, nZ, float)
 REGISTER_L1_TO_L0B(nZ, nZ, half)
 REGISTER_L1_TO_L0B(nZ, nZ, bf16)
+REGISTER_L1_TO_L0B(zN, zN, int8_t)
+REGISTER_L1_TO_L0B(nZ, nZ, int8_t)
 
 #define REGISTER_L0C_TO_GM(DTypeSrc, DTypeDst)                                                      \
     [aicore] __attribute__((always_inline)) void _mlir_ciface_copy_l0c_to_gm_row_major_##DTypeDst(  \
@@ -139,6 +145,8 @@ REGISTER_L1_TO_L0B(nZ, nZ, bf16)
 REGISTER_L0C_TO_GM(float, float)
 REGISTER_L0C_TO_GM(float, half)
 REGISTER_L0C_TO_GM(float, bf16)
+// Integer route: an int8 MMAD leaves an int32 accumulator in L0C.
+REGISTER_L0C_TO_GM(int32_t, int32_t)
 
 #define REGISTER_L0C_TO_L1(DTypeSrc, DTypeDst)                                                        \
     [aicore] __attribute__((always_inline)) void _mlir_ciface_copy_l0c_to_l1_zN_##DTypeDst(           \
@@ -152,6 +160,9 @@ REGISTER_L0C_TO_GM(float, bf16)
 REGISTER_L0C_TO_L1(float, float)
 REGISTER_L0C_TO_L1(float, half)
 REGISTER_L0C_TO_L1(float, bf16)
+// Integer route: an i32 accumulator stays i32 on the way to L1, mirroring the
+// GM and UB exits.
+REGISTER_L0C_TO_L1(int32_t, int32_t)
 
 #define REGISTER_L0C_TO_UB(NameDst, EnumDst, mode, MODE, DTypeSrc, DTypeDst)                                    \
     [aicore] __attribute__((always_inline)) void _mlir_ciface_copy_l0c_to_ub_##NameDst##_##mode##_##DTypeDst(   \
@@ -172,6 +183,12 @@ REGISTER_L0C_TO_UB(row_major, RowMajor, splitn, SPLIT_N, float, float)
 REGISTER_L0C_TO_UB(column_major, ColumnMajor, nosplit, NO_SPLIT, float, float)
 REGISTER_L0C_TO_UB(column_major, ColumnMajor, nosplit, NO_SPLIT, float, half)
 REGISTER_L0C_TO_UB(column_major, ColumnMajor, nosplit, NO_SPLIT, float, bf16)
+// Integer route: fixpipe carries an i32 accumulator to UB unconverted (Catlass
+// selects QuantMode NoQuant for int32 -> int32). Mirrors the float set.
+REGISTER_L0C_TO_UB(row_major, RowMajor, nosplit, NO_SPLIT, int32_t, int32_t)
+REGISTER_L0C_TO_UB(column_major, ColumnMajor, nosplit, NO_SPLIT, int32_t, int32_t)
+REGISTER_L0C_TO_UB(row_major, RowMajor, splitm, SPLIT_M, int32_t, int32_t)
+REGISTER_L0C_TO_UB(row_major, RowMajor, splitn, SPLIT_N, int32_t, int32_t)
 
 #endif
 }

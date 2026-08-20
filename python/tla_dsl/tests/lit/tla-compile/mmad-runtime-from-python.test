@@ -3,6 +3,8 @@
 // RUN: %python %S/Inputs/generate_mmad_ir.py f16 | %tla_compile - -o - | %filecheck %s --check-prefix=F16
 // RUN: %python %S/Inputs/generate_mmad_ir.py bf16 | %tla_compile - -o - | %filecheck %s --check-prefix=BF16
 // RUN: %python %S/Inputs/generate_mmad_ir.py f32 | %tla_compile - -o - | %filecheck %s --check-prefix=F32
+// RUN: %python %S/Inputs/generate_mmad_ir.py i8 | %tla_compile - -o - | %filecheck %s --check-prefix=I8
+// RUN: %python %S/Inputs/generate_mmad_ir.py i8-fixpipe | %tla_compile - -o - | %filecheck %s --check-prefix=I8FIX
 // RUN: %python %S/Inputs/generate_mmad_ir.py dynamic-init | %tla_compile - -o - | %filecheck %s --check-prefix=DYN-INIT
 // RUN: %python %S/Inputs/generate_mmad_ir.py dynamic-unit | %tla_compile - -o - | %filecheck %s --check-prefix=DYN-UNIT
 // RUN: %python %S/Inputs/generate_mmad_ir.py dynamic-both | %tla_compile - -o - | %filecheck %s --check-prefix=DYN-BOTH
@@ -37,6 +39,31 @@
 // F32-COUNT-1: hivm.hir.set_ctrl true at ctrl[48]
 // F32: call @mmad_float_float_float({{%.*}}, {{%.*}}, {{%.*}}, [[MN]], [[MN]], [[MN]], [[INIT]], [[UNIT]])
 // F32-NOT: tla.mmad
+
+// I8-COUNT-1: func.func private @mmad_int8_int8_int32(
+// I8-SAME: hacc.always_inline
+// I8-SAME: hivm.func_core_type = #hivm.func_core_type<AIC>
+// I8-SAME: llvm.emit_c_interface
+// I8-LABEL: func.func @_static_i8_mmad_kernel(
+// I8-DAG: [[INIT:%.*]] = llvm.mlir.constant(true) : i1
+// I8-DAG: [[UNIT:%.*]] = llvm.mlir.constant(3 : i8) : i8
+// I8-DAG: [[M:%.*]] = llvm.mlir.constant(128 : i64) : i64
+// I8-DAG: [[K:%.*]] = llvm.mlir.constant(64 : i64) : i64
+// I8: call @mmad_int8_int8_int32({{%.*}}, {{%.*}}, {{%.*}}, [[M]], [[M]], [[K]], [[INIT]], [[UNIT]])
+// I8-NOT: tla.mmad
+
+// Every way out of an i32 accumulator. An i32 L0C has no narrowing path, so each
+// copy must resolve to an int32_t -> int32_t callee, never an fp32 one.
+// I8FIX-DAG: func.func private @mmad_int8_int8_int32(
+// I8FIX-DAG: func.func private @copy_l0c_to_gm_row_major_int32_t(
+// I8FIX-DAG: func.func private @copy_l0c_to_ub_row_major_splitm_int32_t(
+// I8FIX-DAG: func.func private @copy_l0c_to_l1_zN_int32_t(
+// I8FIX: call @mmad_int8_int8_int32(
+// I8FIX-DAG: call @copy_l0c_to_gm_row_major_int32_t(
+// I8FIX-DAG: call @copy_l0c_to_ub_row_major_splitm_int32_t(
+// I8FIX-DAG: call @copy_l0c_to_l1_zN_int32_t(
+// I8FIX-NOT: tla.mmad
+// I8FIX-NOT: tla.copy
 
 // DYN-INIT-COUNT-1: func.func private @mmad_float_float_float(
 // DYN-INIT-LABEL: func.func @_dynamic_init_mmad_kernel(

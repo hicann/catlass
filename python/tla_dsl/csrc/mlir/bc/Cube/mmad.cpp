@@ -62,4 +62,15 @@ __aicore__ __attribute__((always_inline)) void _mlir_ciface_mmad_bf16_bf16_float
     Catlass::Gemm::Mmad<bfloat16_t, bfloat16_t, float>(
         a->aligned + a->offset, b->aligned + b->offset, c->aligned + c->offset, m, n, k, initC, unitFlag);
 }
+
+// Integer route: int8 operands accumulate into an int32 L0C (not fp32). This is
+// the non-MX `mad` path, same intrinsic as the float routes -- only the L0C
+// element type differs.
+__aicore__ __attribute__((always_inline)) void _mlir_ciface_mmad_int8_int8_int32(
+    memref_t<__ca__ int8_t, 1>* a, memref_t<__cb__ int8_t, 1>* b, memref_t<__cc__ int32_t, 1>* c, int64_t m, int64_t n,
+    int64_t k, bool initC = true, uint8_t unitFlag = 0)
+{
+    Catlass::Gemm::Mmad<int8_t, int8_t, int32_t>(
+        a->aligned + a->offset, b->aligned + b->offset, c->aligned + c->offset, m, n, k, initC, unitFlag);
+}
 }

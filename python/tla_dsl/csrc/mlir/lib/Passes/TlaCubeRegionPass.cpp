@@ -83,9 +83,13 @@ struct LowerTlaMmadPattern : public OpRewritePattern<::tla::MmadOp> {
             lhsInfo->elementType == "bf16" && rhsInfo->elementType == "bf16" && accInfo->elementType == "f32";
         bool supportedF32Route =
             lhsInfo->elementType == "f32" && rhsInfo->elementType == "f32" && accInfo->elementType == "f32";
-        if (!supportedF16Route && !supportedBf16Route && !supportedF32Route) {
+        // Integer route: unlike the float routes, the L0C accumulator is i32.
+        bool supportedI8Route =
+            lhsInfo->elementType == "i8" && rhsInfo->elementType == "i8" && accInfo->elementType == "i32";
+        if (!supportedF16Route && !supportedBf16Route && !supportedF32Route && !supportedI8Route) {
             op.emitError() << "unsupported tla.mmad element types; expected f16,f16 -> f32, bf16,bf16 "
-                              "-> f32, or f32,f32 -> f32 (L0C accumulator is fp32)";
+                              "-> f32, f32,f32 -> f32 (fp32 L0C accumulator), or i8,i8 -> i32 (i32 L0C "
+                              "accumulator)";
             return failure();
         }
 
@@ -187,6 +191,7 @@ struct LowerTlaMmadPattern : public OpRewritePattern<::tla::MmadOp> {
                                              i8Type};
         StringRef calleeName = supportedF16Route  ? "mmad_half_half_float" :
                                supportedBf16Route ? "mmad_bf16_bf16_float" :
+                               supportedI8Route   ? "mmad_int8_int8_int32" :
                                                     "mmad_float_float_float";
         auto callee = ::tla::getOrCreateRuntimeCall(op->getParentOfType<ModuleOp>(), calleeName, operandTypes);
         SmallVector<Value, 8> operands = {*lhsRuntime, *rhsRuntime, *accRuntime, mI64,

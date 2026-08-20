@@ -40,6 +40,7 @@ def basic_mmad_kernel(
     gm_c: tla.Tensor,
     _tiling: TilingParams,
     hf32_mode: tla.Constexpr[tla.params.HF32Mode],
+    acc_is_int: tla.Constexpr[bool],
 ) -> None:
     c0 = 0
     c1 = 1
@@ -92,8 +93,10 @@ def basic_mmad_kernel(
         _tiling.l0_tk * _tiling.l0_tn, dtype_b, tla.AddressSpace.l0b, 512
     )
 
+    # Integer route: an i8 x i8 MMAD accumulates into an i32 L0C, not fp32.
+    acc_dtype = tla.Int32 if acc_is_int else tla.Float32
     l0c_ptr = tla.allocate(
-        _tiling.l0_tm * _tiling.l0_tn, tla.Float32, tla.AddressSpace.l0c, 512
+        _tiling.l0_tm * _tiling.l0_tn, acc_dtype, tla.AddressSpace.l0c, 512
     )
 
     grid_m = (m + _tiling.l1_tm - 1) // _tiling.l1_tm
@@ -296,27 +299,49 @@ def run(args: argparse.Namespace) -> int:
         f"dtype={args.dtype_a}/{args.dtype_b}/{args.dtype_c} ---"
     )
     torch.manual_seed(0)
-    dtypes = {"f16": torch.float16, "bf16": torch.bfloat16, "f32": torch.float32}
+    dtypes = {
+        "f16": torch.float16,
+        "bf16": torch.bfloat16,
+        "f32": torch.float32,
+        "i8": torch.int8,
+        "i32": torch.int32,
+    }
     dtype_a = dtypes[args.dtype_a]
     dtype_b = dtypes[args.dtype_b]
     dtype_c = dtypes[args.dtype_c]
 
-    a = torch.rand(args.m, args.k, dtype=dtype_a, device="cpu") * 10.0 - 5.0
-    b = torch.rand(args.k, args.n, dtype=dtype_b, device="cpu") * 10.0 - 5.0
-    c = torch.rand(args.m, args.n, dtype=dtype_c, device="cpu") * 10.0 - 5.0
-
     hf32_mode = tla.params.HF32Mode.HF32_NEAREST_EVEN
-    enable_hf32 = (
-        hf32_mode != tla.params.HF32Mode.HF32_DISABLE
-        and dtype_a == torch.float32
-        and dtype_b == torch.float32
-    )
-    if enable_hf32:
-        ref = to_hf32(a, hf32_mode) @ to_hf32(b, hf32_mode)
+
+    # i8,i8 -> i32 is the integer MMAD route; the accumulator in L0C is i32.
+    # It is exact and never takes the hf32 path, which is fp32-only.
+    is_int_route = args.dtype_a == "i8"
+    enable_hf32 = False
+    if is_int_route:
+        if args.dtype_b != "i8" or args.dtype_c != "i32":
+            raise SystemExit(
+                "the integer mmad route requires --dtype-a i8 --dtype-b i8 --dtype-c i32"
+            )
+        a = torch.randint(-8, 8, (args.m, args.k), dtype=dtype_a, device="cpu")
+        b = torch.randint(-8, 8, (args.k, args.n), dtype=dtype_b, device="cpu")
+        c = torch.zeros(args.m, args.n, dtype=dtype_c, device="cpu")
+        # Small magnitudes keep the exact int32 product inside float64.
+        ref = (a.double() @ b.double()).to(torch.int32)
     else:
-        ref = a.float() @ b.float()
-        if dtype_c in (torch.float16, torch.bfloat16):
-            ref = ref.to(dtype_c).float()
+        a = torch.rand(args.m, args.k, dtype=dtype_a, device="cpu") * 10.0 - 5.0
+        b = torch.rand(args.k, args.n, dtype=dtype_b, device="cpu") * 10.0 - 5.0
+        c = torch.rand(args.m, args.n, dtype=dtype_c, device="cpu") * 10.0 - 5.0
+
+        enable_hf32 = (
+            hf32_mode != tla.params.HF32Mode.HF32_DISABLE
+            and dtype_a == torch.float32
+            and dtype_b == torch.float32
+        )
+        if enable_hf32:
+            ref = to_hf32(a, hf32_mode) @ to_hf32(b, hf32_mode)
+        else:
+            ref = a.float() @ b.float()
+            if dtype_c in (torch.float16, torch.bfloat16):
+                ref = ref.to(dtype_c).float()
 
     a = (
         a.contiguous() if args.layout_a == "row" else a.permute(1, 0).contiguous()
@@ -336,6 +361,7 @@ def run(args: argparse.Namespace) -> int:
         c_tensor,
         TilingParams(),  # default tiling: L1: (256, 256, 128); L0: (256, 256, 32)
         hf32_mode,
+        is_int_route,
         options="--npu-arch 3510",
     )
     block_num = get_block_num(args.block_num, args.device, kind="cube")
@@ -343,7 +369,11 @@ def run(args: argparse.Namespace) -> int:
     torch.npu.synchronize()
 
     result = c.detach().cpu()
-    if enable_hf32:
+    if is_int_route:
+        # Integer MMAD is exact, so no tolerance: compare() falls back to
+        # element-wise equality for integer dtypes.
+        passed = compare(result, ref)
+    elif enable_hf32:
         passed = compare(result, ref, enable_hf32=True)
     else:
         passed = compare(result, ref, args.k)
@@ -360,9 +390,15 @@ def main() -> int:
     parser.add_argument("--k", type=int, default=1024)
     parser.add_argument("--layout-a", choices=("row", "col"), default="row")
     parser.add_argument("--layout-b", choices=("row", "col"), default="row")
-    parser.add_argument("--dtype-a", choices=("f16", "bf16", "f32"), default="f16")
-    parser.add_argument("--dtype-b", choices=("f16", "bf16", "f32"), default="f16")
-    parser.add_argument("--dtype-c", choices=("f16", "bf16", "f32"), default="f32")
+    parser.add_argument(
+        "--dtype-a", choices=("f16", "bf16", "f32", "i8"), default="f16"
+    )
+    parser.add_argument(
+        "--dtype-b", choices=("f16", "bf16", "f32", "i8"), default="f16"
+    )
+    parser.add_argument(
+        "--dtype-c", choices=("f16", "bf16", "f32", "i32"), default="f32"
+    )
     parser.add_argument("--block-num", type=int, default=-1)
     try:
         return run(parser.parse_args())

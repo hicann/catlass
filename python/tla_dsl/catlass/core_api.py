@@ -2169,10 +2169,12 @@ def _validate_mmad_contract(
         ("f16", "f16", "f32"),
         ("bf16", "bf16", "f32"),
         ("f32", "f32", "f32"),
+        # Integer route: the L0C accumulator is i32, not fp32.
+        ("i8", "i8", "i32"),
     }:
         raise TlaLoweringError(
             "unsupported tla.mmad element types; expected f16,f16 -> f32, bf16,bf16 -> f32, "
-            "or f32,f32 -> f32 (L0C accumulator is fp32)"
+            "f32,f32 -> f32 (fp32 L0C accumulator), or i8,i8 -> i32 (i32 L0C accumulator)"
         )
 
     lhs_m, lhs_k = _flat_dim_pair_from_tree(lhs_desc.origin_shape)
@@ -4354,9 +4356,15 @@ def copy(
             raise TlaLoweringError(
                 f"L0C layout_tag only support l0clayout, got {src_layout}"
             )
-        if src_dtype != "f32":
+        if src_dtype not in ("f32", "i32"):
             raise NotImplementedError(
-                f"currently l0c dtype only support f32, got {src_dtype}"
+                f"currently l0c dtype only support [f32, i32], got {src_dtype}"
+            )
+        # Integer route: an i32 accumulator (the i8,i8 -> i32 mmad) has no
+        # narrowing path on fixpipe and must land as i32.
+        if src_dtype == "i32" and dst_dtype != "i32":
+            raise TlaLoweringError(
+                f"i32 fixpipe dst dtype only support [i32], got {dst_dtype}"
             )
         if src_dtype == "f32" and dst_dtype not in ("f32", "f16", "bf16"):
             raise TlaLoweringError(

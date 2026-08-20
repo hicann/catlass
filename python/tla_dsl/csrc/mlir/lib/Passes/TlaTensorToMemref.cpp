@@ -584,6 +584,17 @@ static StringRef copyRuntimeElemSuffix(StringRef elementType)
     return {};
 }
 
+// Whether fixpipe can carry this L0C element type out to the given destination
+// type. An fp32 accumulator (the float MMAD routes) may be narrowed to f16/bf16
+// on the way out; an i32 accumulator (the int8 MMAD route) has no narrowing path
+// and must land as i32.
+static bool isLegalFixpipeElementType(StringRef srcElementType, StringRef dstElementType)
+{
+    if (srcElementType == "f32")
+        return true;
+    return srcElementType == "i32" && dstElementType == "i32";
+}
+
 std::string getCopyRouteCallee(
     MLIRContext* ctx, StringRef srcAddrspace, StringRef dstAddrspace, TensorLayoutTag srcLayout,
     TensorLayoutTag dstLayout, StringRef srcElementType, StringRef dstElementType, StringRef extraDesc)
@@ -690,40 +701,44 @@ std::string getCopyRouteCallee(
             return {};
         return Twine("copy_l1_nZ_to_l0b_nZ_").concat(suffix).str();
     }
-    // L0C (fp32 MMAD acc) -> GM row-major: dst may be f32 / f16 / bf16 (narrowing on fixpipe).
+    // L0C -> GM row-major: an fp32 acc may narrow to f32 / f16 / bf16 on fixpipe;
+    // an i32 acc (int8 MMAD) stays i32.
     if (*srcSpace == hivm::AddressSpace::L0C && *dstSpace == hivm::AddressSpace::GM &&
         srcLayout == TensorLayoutTag::L0C && dstLayout == TensorLayoutTag::RowMajor) {
-        if (srcElementType != "f32")
+        if (!isLegalFixpipeElementType(srcElementType, dstElem))
             return {};
         StringRef suffix = copyRuntimeElemSuffix(dstElem);
         if (suffix.empty())
             return {};
         return Twine("copy_l0c_to_gm_row_major_").concat(suffix).str();
     }
-    // L0C (fp32 MMAD acc) -> UB row-major: dst may be f32 / f16 / bf16 (narrowing on fixpipe).
+    // L0C -> UB row-major: an fp32 acc may narrow to f32 / f16 / bf16 on fixpipe;
+    // an i32 acc (int8 MMAD) stays i32.
     if (*srcSpace == hivm::AddressSpace::L0C && *dstSpace == hivm::AddressSpace::UB &&
         srcLayout == TensorLayoutTag::L0C && dstLayout == TensorLayoutTag::RowMajor) {
-        if (srcElementType != "f32")
+        if (!isLegalFixpipeElementType(srcElementType, dstElem))
             return {};
         StringRef suffix = copyRuntimeElemSuffix(dstElem);
         if (suffix.empty())
             return {};
         return Twine("copy_l0c_to_ub_row_major_").concat(extraDesc).concat("_").concat(suffix).str();
     }
-    // L0C (fp32 MMAD acc) -> UB col-major: dst may be f32 / f16 / bf16 (narrowing on fixpipe).
+    // L0C -> UB col-major: an fp32 acc may narrow to f32 / f16 / bf16 on fixpipe;
+    // an i32 acc (int8 MMAD) stays i32.
     if (*srcSpace == hivm::AddressSpace::L0C && *dstSpace == hivm::AddressSpace::UB &&
         srcLayout == TensorLayoutTag::L0C && dstLayout == TensorLayoutTag::ColumnMajor) {
-        if (srcElementType != "f32")
+        if (!isLegalFixpipeElementType(srcElementType, dstElem))
             return {};
         StringRef suffix = copyRuntimeElemSuffix(dstElem);
         if (suffix.empty())
             return {};
         return Twine("copy_l0c_to_ub_column_major_").concat(extraDesc).concat("_").concat(suffix).str();
     }
-    // L0C (fp32 MMAD acc) -> L1 zN: dst may be f32 / f16 / bf16 (narrowing on fixpipe).
+    // L0C -> L1 zN: an fp32 acc may narrow to f32 / f16 / bf16 on fixpipe; an i32
+    // acc (int8 MMAD) stays i32.
     if (*srcSpace == hivm::AddressSpace::L0C && *dstSpace == hivm::AddressSpace::L1 &&
         srcLayout == TensorLayoutTag::L0C && dstLayout == TensorLayoutTag::zN) {
-        if (srcElementType != "f32")
+        if (!isLegalFixpipeElementType(srcElementType, dstElem))
             return {};
         StringRef suffix = copyRuntimeElemSuffix(dstElem);
         if (suffix.empty())
@@ -761,11 +776,13 @@ SmallVector<Value, 24> buildCopyPayloadForRoute(
 
 static bool isAicTemplateRuntimeCall(StringRef name)
 {
-    if (name == "mmad_float_float_float" || name == "mmad_half_half_float" || name == "mmad_bf16_bf16_float")
+    if (name == "mmad_float_float_float" || name == "mmad_half_half_float" || name == "mmad_bf16_bf16_float" ||
+        name == "mmad_int8_int8_int32")
         return true;
     if (!(name.starts_with("copy_")))
         return false;
-    if (!(name.ends_with("_float") || name.ends_with("_half") || name.ends_with("_bf16")))
+    if (!(name.ends_with("_float") || name.ends_with("_half") || name.ends_with("_bf16") || name.ends_with("_int8_t") ||
+          name.ends_with("_int32_t")))
         return false;
     return name.starts_with("copy_gm_row_major_to_l1_zN_") || name.starts_with("copy_gm_column_major_to_l1_nZ_") ||
            name.starts_with("copy_l1_zN_to_l0a_zN_") || name.starts_with("copy_l1_nZ_to_l0a_zN_") ||
