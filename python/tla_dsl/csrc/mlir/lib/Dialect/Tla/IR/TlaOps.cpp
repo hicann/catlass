@@ -533,6 +533,11 @@ mlir::LogicalResult GatherOp::verify()
 {
     if (!hasEnclosingRegion<VecFuncOp>(getOperation()))
         return emitOpError("must be nested inside a tla.vec.func region");
+    auto indexType = mlir::dyn_cast<VectorSSAType>(getY().getType());
+    auto indexElementType = indexType.getElementType();
+    auto integerType = mlir::dyn_cast<mlir::IntegerType>(indexElementType);
+    if (!integerType || !integerType.isSignless() || integerType.getWidth() != 32)
+        return emitOpError() << "gather indices must be i32, got " << indexElementType;
     return verifyMaskMatchesVector(getOperation(), getMask(), getResult().getType());
 }
 

@@ -6812,26 +6812,12 @@ def gather(
             f"{', '.join(sorted(_GATHER_SUPPORTED_X_ELEM_TYPES))}",
         )
 
-    # validate y element type
-    _GATHER_SUPPORTED_Y_ELEM_TYPES = frozenset(
-        {
-            "i1",
-            "i8",
-            "u8",
-            "i16",
-            "u16",
-            "i32",
-            "u32",
-            "i64",
-            "u64",
-        }
-    )
-    if y_desc.element_type.lower() not in _GATHER_SUPPORTED_Y_ELEM_TYPES:
+    # Gather hardware consumes one i32 index per lane.
+    if y_desc.element_type.lower() != "i32":
         _op_error(
             "gather",
-            f"invalid argument 'y' (position 1): unsupported element type "
-            f"{y_desc.element_type}; supported types are "
-            f"{', '.join(sorted(_GATHER_SUPPORTED_Y_ELEM_TYPES))}",
+            f"invalid argument 'y' (position 1): gather indices must be i32, got "
+            f"{y_desc.element_type}",
         )
     if mask is not None:
         _require_category("gather", "mask", mask, "mask_ssa", 2)

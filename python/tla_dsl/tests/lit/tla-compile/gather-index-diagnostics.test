@@ -1,0 +1,53 @@
+// RUN: sed -n '/^\/\/ BEGIN_I16$/,/^\/\/ END_I16$/p' %s | sed '1d;$d;s|^// ||' > %t.i16.mlir && not %tla_compile %t.i16.mlir -o %t 2>&1 | %filecheck %s --check-prefix=I16
+// RUN: sed -n '/^\/\/ BEGIN_I64$/,/^\/\/ END_I64$/p' %s | sed '1d;$d;s|^// ||' > %t.i64.mlir && not %tla_compile %t.i64.mlir -o %t 2>&1 | %filecheck %s --check-prefix=I64
+
+// I16: error:
+// I16-SAME: 'tla.gather' op gather indices must be i32, got 'i16'
+// I64: error:
+// I64-SAME: 'tla.gather' op gather indices must be i32, got 'i64'
+
+// BEGIN_I16
+// !src = !tla.tensor<!tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, row_major>, !tla.coord<0>, !tla.ptr<f32, ub, 4>>
+// !idx = !tla.tensor<!tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, row_major>, !tla.coord<0>, !tla.ptr<i16, ub, 4>>
+// module {
+//   func.func @gather_i16(%src_memref: memref<64xf32, #hivm.address_space<ub>>, %idx_memref: memref<64xi16, #hivm.address_space<ub>>) {
+//     %c0 = arith.constant 0 : index
+//     %c1 = arith.constant 1 : index
+//     %c64 = arith.constant 64 : index
+//     %src_desc = tla.tensor_desc %src_memref shape [%c1, %c64, %c1, %c1] stride [%c64, %c1, %c1, %c1] origin_shape [%c1, %c64] coord [%c0, %c0] : memref<64xf32, #hivm.address_space<ub>> -> !src
+//     %idx_desc = tla.tensor_desc %idx_memref shape [%c1, %c64, %c1, %c1] stride [%c64, %c1, %c1, %c1] origin_shape [%c1, %c64] coord [%c0, %c0] : memref<64xi16, #hivm.address_space<ub>> -> !idx
+//     "tla.vec.func"() ({
+//       %shape = "tla.make_shape"() : () -> !tla.shape<64>
+//       %coord = "tla.make_coord"() : () -> !tla.coord<0>
+//       %src_tile = "tla.tile_view"(%src_desc, %shape, %coord) : (!src, !tla.shape<64>, !tla.coord<0>) -> !src
+//       %idx_tile = "tla.tile_view"(%idx_desc, %shape, %coord) : (!idx, !tla.shape<64>, !tla.coord<0>) -> !idx
+//       %indices = tla.load %idx_tile : !idx -> !tla.vector<64xi16>
+//       %gathered = tla.gather %src_tile, %indices : !src, !tla.vector<64xi16> -> !tla.vector<64xf32>
+//     }) : () -> ()
+//     return
+//   }
+// }
+// END_I16
+
+// BEGIN_I64
+// !src = !tla.tensor<!tla.layout<!tla.shape<32>, !tla.stride<1>, !tla.shape<32>, row_major>, !tla.coord<0>, !tla.ptr<f32, ub, 4>>
+// !idx = !tla.tensor<!tla.layout<!tla.shape<32>, !tla.stride<1>, !tla.shape<32>, row_major>, !tla.coord<0>, !tla.ptr<i64, ub, 4>>
+// module {
+//   func.func @gather_i64(%src_memref: memref<32xf32, #hivm.address_space<ub>>, %idx_memref: memref<32xi64, #hivm.address_space<ub>>) {
+//     %c0 = arith.constant 0 : index
+//     %c1 = arith.constant 1 : index
+//     %c32 = arith.constant 32 : index
+//     %src_desc = tla.tensor_desc %src_memref shape [%c1, %c32, %c1, %c1] stride [%c32, %c1, %c1, %c1] origin_shape [%c1, %c32] coord [%c0, %c0] : memref<32xf32, #hivm.address_space<ub>> -> !src
+//     %idx_desc = tla.tensor_desc %idx_memref shape [%c1, %c32, %c1, %c1] stride [%c32, %c1, %c1, %c1] origin_shape [%c1, %c32] coord [%c0, %c0] : memref<32xi64, #hivm.address_space<ub>> -> !idx
+//     "tla.vec.func"() ({
+//       %shape = "tla.make_shape"() : () -> !tla.shape<32>
+//       %coord = "tla.make_coord"() : () -> !tla.coord<0>
+//       %src_tile = "tla.tile_view"(%src_desc, %shape, %coord) : (!src, !tla.shape<32>, !tla.coord<0>) -> !src
+//       %idx_tile = "tla.tile_view"(%idx_desc, %shape, %coord) : (!idx, !tla.shape<32>, !tla.coord<0>) -> !idx
+//       %indices = tla.load %idx_tile : !idx -> !tla.vector<32xi64>
+//       %gathered = tla.gather %src_tile, %indices : !src, !tla.vector<32xi64> -> !tla.vector<32xf32>
+//     }) : () -> ()
+//     return
+//   }
+// }
+// END_I64

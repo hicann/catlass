@@ -356,7 +356,7 @@ dst = tla.make_tensor_like(ptr, like=src_tile, layoutTag=tla.arch.RowMajor)
 
 ### `make_ptr`
 
-**Source:** [`catlass.core_api.make_ptr`](../../catlass/core_api.py#L7056)
+**Source:** [`catlass.core_api.make_ptr`](../../catlass/core_api.py#L7042)
 
 Description:
 
@@ -391,7 +391,7 @@ ptr = tla.make_ptr(tla.Float16, addr, mem_space=tla.AddressSpace.gm)
 
 ### `recast_ptr`
 
-**Source:** [`catlass.core_api.recast_ptr`](../../catlass/core_api.py#L7110)
+**Source:** [`catlass.core_api.recast_ptr`](../../catlass/core_api.py#L7096)
 
 Description:
 
@@ -645,7 +645,7 @@ Mask creation and tail-mask updates.
 
 #### `create_mask`
 
-**Source:** [`catlass.core_api.create_mask`](../../catlass/core_api.py#L7368)
+**Source:** [`catlass.core_api.create_mask`](../../catlass/core_api.py#L7354)
 
 Description:
 
@@ -701,7 +701,7 @@ with tla.vec.func(mode="simd"):
 
 #### `update_mask`
 
-**Source:** [`catlass.core_api.update_mask`](../../catlass/core_api.py#L7432)
+**Source:** [`catlass.core_api.update_mask`](../../catlass/core_api.py#L7418)
 
 Description:
 
@@ -1959,7 +1959,7 @@ Architecture attributes on `tla.arch` (layout tags, pipe identifiers, block help
 
 ### `arch`
 
-**Source:** [`catlass.core_api.arch`](../../catlass/core_api.py#L7226)
+**Source:** [`catlass.core_api.arch`](../../catlass/core_api.py#L7212)
 
 Description:
 
@@ -2030,7 +2030,7 @@ On-chip scratch allocation via `allocate`.
 
 ### `allocate`
 
-**Source:** [`catlass.core_api.allocate`](../../catlass/core_api.py#L6996)
+**Source:** [`catlass.core_api.allocate`](../../catlass/core_api.py#L6982)
 
 Description:
 
