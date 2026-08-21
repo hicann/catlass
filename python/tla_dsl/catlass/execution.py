@@ -1984,12 +1984,12 @@ def _stamp_hivm_template_bitcode_attrs(mlir_path: Path, template_bitcode: str) -
 
 
 def _mlir_build_dirs() -> list[Path]:
-    # .../python/tla_dsl/catlass/execution.py -> .../python/tla_dsl/csrc/mlir/build
+    # dev: CMake build tree; release wheels fall back to the packaged lib dir.
     dsl_root = Path(__file__).resolve().parents[1]
     nested = dsl_root / "csrc" / "mlir" / "build"
-    # Legacy ascend-catlass-DSL: .../python/tla_dsl/execution.py -> repo/mlir/build
     legacy = Path(__file__).resolve().parents[2] / "mlir" / "build"
-    return [nested, legacy]
+    packaged = Path(__file__).resolve().parent / "lib"
+    return [nested, legacy, packaged]
 
 
 def _resolve_hivm_template_bitcode(runtime: TlaRuntimeOptions) -> str:

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-# 默认用宿主 sysroot(conda 自带 glibc 2.28 缺 LLVM 所需符号);显式传入时保留
+# Use the host sysroot by default (conda glibc 2.28 lacks LLVM symbols); keep explicit overrides.
 if(NOT DEFINED CMAKE_SYSROOT OR "${CMAKE_SYSROOT}" STREQUAL "")
   set(CMAKE_SYSROOT "/")
 endif()
@@ -169,9 +169,11 @@ if(NOT CATLASS_DSL_MLIR_PYBIND_ADAPTORS)
   message(FATAL_ERROR
           "MLIR Python PybindAdaptors.h is required for the typed Python bridge.")
 endif()
+set(CATLASS_DSL_MLIR_PYTHON_DIR
+    ${CATLASS_DSL_ASCENDNPU_IR_ROOT}/build/install/python_packages/mlir_core)
 execute_process(
   COMMAND ${CMAKE_COMMAND} -E env
-          "PYTHONPATH=${TLA_REPO_ROOT}/.artifacts/pydeps:$ENV{PYTHONPATH}"
+          "PYTHONPATH=${CATLASS_DSL_MLIR_PYTHON_DIR}:${TLA_REPO_ROOT}/.artifacts/pydeps:$ENV{PYTHONPATH}"
           ${Python3_EXECUTABLE} -c
           "import pathlib; import mlir._mlir_libs as libs; root = pathlib.Path(libs.__file__).resolve().parent; candidates = [root / 'libMLIRPythonCAPI.so', *root.glob('libMLIRPythonCAPI.so.*')]; print(next(str(p) for p in candidates if p.exists()))"
   OUTPUT_VARIABLE CATLASS_DSL_MLIR_PYTHON_CAPI_LIBRARY

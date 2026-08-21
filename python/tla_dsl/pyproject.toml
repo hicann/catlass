@@ -65,6 +65,9 @@ dev = [
 [tool.setuptools]
 packages = ["catlass"]
 
+[tool.setuptools.package-data]
+"catlass" = ["lib/bc/**/*.bc"]
+
 [tool.setuptools_scm]
 write_to = "catlass/_version.py"
 fallback_version = "0.0.0"

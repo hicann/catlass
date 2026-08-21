@@ -101,7 +101,7 @@ echo "==> MLIR_TBLGEN_INCLUDE_DIR=${MLIR_TBLGEN_INCLUDE_DIR}"
 echo "==> MLIR_DIR=${MLIR_DIR}"
 
 # ============================================================================
-# 3. 检查 C++ 源文件是否过期（仅 dev 模式，自动触发 cmake 重新配置）
+# 3. Check whether C++ sources are stale (dev mode only; triggers cmake reconfiguration)
 # ============================================================================
 
 if [[ "$mode" == "debug" ]]; then
@@ -122,6 +122,9 @@ fi
 
 if [[ "$mode" == "release" ]]; then
   export CMAKE_BUILD_TYPE="Release"
+  # pip isolated envs are removed after each build; clear the reused CMake
+  # fingerprint dir so a stale ninja path in CMakeCache cannot be hit.
+  rm -rf build/cmake build/lib.*
   python -m pip wheel . -w dist/
   echo "Release build complete."
   echo "Wheels: ${repo_root}/dist/"

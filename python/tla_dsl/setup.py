@@ -38,10 +38,10 @@ def generate_tla_bindings() -> None:
 
 
 def _detect_compiler() -> dict[str, str]:
-    """自动检测 clang/clang++，若版本为 19.1.7 则设置 CMAKE_C/CXX_COMPILER。
+    """Detect clang/clang++ and pin the CMake compilers to clang 19.x.
 
-    用户可通过 CC/CXX 环境变量显式覆盖检测结果。
-    若仅检测到 GCC 或无 clang，打印 warning 但不阻塞构建。
+    The CC/CXX environment variables take precedence over auto-detection.
+    A missing clang or a non-19.x version only prints a warning.
     """
     env: dict[str, str] = {}
 
@@ -111,8 +111,24 @@ class CMakeBuild(build_ext):
         if shutil.which("cmake") is None:
             raise RuntimeError("CMake was not found. Install CMake or add it to PATH.")
 
+        self._inplace = self.inplace
         generate_tla_bindings()
         super().run()
+
+    def copy_extensions_to_source(self) -> None:
+        pass
+
+    def _install(self, src: Path, dst: Path) -> None:
+        if dst.exists():
+            if dst.is_dir():
+                shutil.rmtree(dst)
+            else:
+                dst.unlink()
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        if src.is_dir():
+            shutil.copytree(src, dst)
+        else:
+            shutil.copy2(src, dst)
 
     def build_extension(self, ext: Extension) -> None:
         if not isinstance(ext, CMakeExtension):
@@ -148,8 +164,7 @@ class CMakeBuild(build_ext):
             str(build_dir),
             f"-DPython3_EXECUTABLE={sys.executable}",
             f"-DCMAKE_BUILD_TYPE={build_type}",
-            # 使用宿主系统根目录作为 sysroot（容器/交叉构建时的关键护栏）。
-            # 放在 CMAKE_ARGS 之前追加，用户可通过 CMAKE_ARGS 显式覆盖。
+            # Use the host sysroot; CMAKE_ARGS appended later can override it.
             "-DCMAKE_SYSROOT=/",
         ]
 
@@ -201,17 +216,17 @@ class CMakeBuild(build_ext):
                 f"  generated files:\n{generated_files or '  <none>'}"
             )
 
-        if self.inplace:
-            if extension_path.is_symlink() or extension_path.exists():
-                extension_path.unlink()
-            os.symlink(produced[0], extension_path)
-        else:
-            shutil.copy2(produced[0], extension_path)
-
-        if not extension_path.is_file():
-            raise RuntimeError(
-                f"Failed to relocate CMake extension to {extension_path}"
-            )
+        if not self._inplace:
+            # release: copy runtime artifacts into the wheel staging dir.
+            self._install(produced[0], extension_path)
+            bc_dir = build_dir / "bc"
+            if bc_dir.is_dir():
+                self._install(bc_dir, extension_dir / "lib" / "bc")
+            if not extension_path.is_file():
+                raise RuntimeError(
+                    f"Failed to relocate CMake extension to {extension_path}"
+                )
+        # dev: artifacts stay in the CMake build tree; runtime resolves them there.
 
     def _get_build_directory(
         self,
