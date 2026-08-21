@@ -188,8 +188,6 @@ public:
         uint32_t firstTileIdx = startTileIdx % kTileCount;
         uint32_t lastTileIdx = (startTileIdx + kTileCount - 1) % kTileCount;
         uint32_t kActual = (firstTileIdx < kTileCount - 1) ? L1_TILE_K : (kBlockActual - firstTileIdx * L1_TILE_K);
-        uint32_t kTileCountNext = CeilDiv<L1_TILE_K>(kNextBlockActual);
-        uint32_t firstTileIdxNext = startTileIdx % kTileCountNext;
 
         if (isFirstBlock) {
             // load first matrix A tile from GM to L1
@@ -243,6 +241,8 @@ public:
 
             // preload next tile from GM to L1
             if (shuffleKIdx == lastTileIdx && hasNextBlock) {
+                uint32_t kTileCountNext = CeilDiv<L1_TILE_K>(kNextBlockActual);
+                uint32_t firstTileIdxNext = startTileIdx % kTileCountNext;
                 kActualNext = (firstTileIdxNext < kTileCountNext - 1) ?
                                   L1_TILE_K :
                                   (kNextBlockActual - firstTileIdxNext * L1_TILE_K);

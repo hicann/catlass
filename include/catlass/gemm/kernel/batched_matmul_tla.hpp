@@ -119,9 +119,9 @@ public:
         uint32_t m = problemShape.m();
         uint32_t n = problemShape.n();
         uint32_t k = problemShape.k();
-        int64_t strideA = m * k;
-        int64_t strideB = k * n;
-        int64_t strideC = m * n;
+        int64_t strideA = static_cast<int64_t>(m) * k;
+        int64_t strideB = static_cast<int64_t>(k) * n;
+        int64_t strideC = static_cast<int64_t>(m) * n;
         Params params{args.batchCount, problemShape, args.ptrA, args.layoutA, strideA, args.ptrB,
                       args.layoutB,    strideB,      args.ptrC, args.layoutC, strideC};
         return params;
@@ -293,9 +293,9 @@ public:
         uint32_t m = problemShape.m();
         uint32_t n = problemShape.n();
         uint32_t k = problemShape.k();
-        int64_t strideA = m * k;
-        int64_t strideB = k * n;
-        int64_t strideC = m * n;
+        int64_t strideA = static_cast<int64_t>(m) * k;
+        int64_t strideB = static_cast<int64_t>(k) * n;
+        int64_t strideC = static_cast<int64_t>(m) * n;
         Params params{args.batchCount, problemShape, args.ptrA, args.layoutA, strideA, args.ptrB,
                       args.layoutB,    strideB,      args.ptrC, args.layoutC, strideC};
         return params;

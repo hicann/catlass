@@ -147,7 +147,6 @@ public:
         auto layoutInL0C = LayoutCInL0::MakeLayoutInL0C(MakeCoord(mRound, nRound));
 
         uint32_t kTileCount = CeilDiv<L1TileShape::K>(actualShape.k());
-        uint32_t kTileCountNext = CeilDiv<L1TileShape::K>(actualShapeNext.k());
 
         if constexpr (!ENABLE_UNIT_FLAG) {
             AscendC::WaitFlag<AscendC::HardEvent::FIX_M>(EVENT_ID0);
@@ -160,7 +159,6 @@ public:
         uint32_t lastTileIdx = (startTileIdx + kTileCount - 1) % kTileCount;
         uint32_t kActual =
             (firstTileIdx < kTileCount - 1) ? L1TileShape::K : (actualShape.k() - firstTileIdx * L1TileShape::K);
-        uint32_t firstTileIdxNext = startTileIdx % kTileCountNext;
 
         uint32_t mPartLoop = CeilDiv<L0TileShape::M>(mRound);
         uint32_t nPartLoop = CeilDiv<L0TileShape::N>(nRound);
@@ -217,6 +215,8 @@ public:
                 AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListIdNext]);
             }
             if (shuffleKIdx == lastTileIdx && hasNextBlock) {
+                uint32_t kTileCountNext = CeilDiv<L1TileShape::K>(actualShapeNext.k());
+                uint32_t firstTileIdxNext = startTileIdx % kTileCountNext;
                 // Get L1 tensor for next stage
                 auto l1ATensor = l1ATensorList[l1ListIdNext];
                 auto l1BTensor = l1BTensorList[l1ListIdNext];
