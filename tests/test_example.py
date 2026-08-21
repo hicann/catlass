@@ -755,6 +755,36 @@ def test_80_ascned950_grouped_matmul_slice_m_gelu(build_env):
     run_case(build_env, "80_ascend950_grouped_matmul_slice_m_gelu", case_cpp)
 
 
+@only_on_3510
+def test_81_ascend950_rain_fusion_attention(build_env):
+    case_py = [str(i) for i in [2, 128, 512, 2, 1, 128, 128, 256]] + ["bf16", "BNSD", "BNSD", "0"]
+    subprocess.run(
+        [
+            "python",
+            os.path.join(
+                CMAKE_EXAMPLES_PATH,
+                "81_ascend950_rain_fusion_attention",
+                "gen_data.py",
+            ),
+        ]
+        + case_py,
+        check=False,
+    )
+    #  args: batch qSeqlen kvSeqlen numHeads kvHeads headSize blockShapeX blockShapeY
+    #        dtype qInputLayout kvInputLayout isVariedLen --datapath ... --device ...
+    case_cpp = [str(i) for i in [2, 128, 512, 2, 1, 128, 128, 256]] + [
+        "bf16",
+        "BNSD",
+        "BNSD",
+        "0",
+        "--datapath",
+        os.path.join(CMAKE_EXAMPLES_PATH, "81_ascend950_rain_fusion_attention", "data"),
+        "--device",
+        DEVICE_ID,
+    ]
+    run_case(build_env, "81_ascend950_rain_fusion_attention", case_cpp)
+
+
 # ---------------------------------------------------------------------------
 # normal cases: generated via parametrize
 # ---------------------------------------------------------------------------

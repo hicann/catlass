@@ -95,6 +95,30 @@ struct FlashAttentionChunkPrefillParams : public PrebuiltParams {
 };
 
 /**
+ * @brief Runtime parameters for example 81_ascend950_rain_fusion_attention.
+ */
+struct RainFusionAttentionParams : public PrebuiltParams {
+    uint32_t batch = 0;
+    uint32_t numHeads = 0;
+    uint32_t kvHeads = 0;
+    uint32_t embeddingSize = 0;
+    uint32_t blockShapeX = 128;
+    uint32_t blockShapeY = 128;
+    uint32_t maxKvBlockNum = 0;
+    uint32_t totalQsBlockNum = 0;
+    uint32_t maxQSeqlen = 0;
+    uint32_t maxKvSeqlen = 0;
+    uint32_t maskType = 0;
+    float scaleValue = 0.0f;
+    uint32_t qInputLayout = 0;
+    uint32_t kvInputLayout = 0;
+    uint32_t isVariedLen = 0;
+    aclDataType dataType = ACL_FLOAT16;
+    std::vector<int64_t> qSeqHost;
+    std::vector<int64_t> kvSeqHost;
+};
+
+/**
  * @brief Reserved prebuilt interface for example 19_mla.
  */
 __attribute__((weak)) void Mla(const uint32_t blockNum, aclrtStream stream, const MlaParams& params);
@@ -157,6 +181,12 @@ extern "C" __attribute__((weak)) void A2Fp8E4M3Matmul(
  */
 __attribute__((weak)) void FlashAttentionChunkPrefill(
     const uint32_t blockNum, aclrtStream stream, const FlashAttentionChunkPrefillParams& params);
+
+/**
+ * @brief Reserved prebuilt interface for example 81_ascend950_rain_fusion_attention.
+ */
+__attribute__((weak)) void RainFusionAttention(
+    const uint32_t blockNum, aclrtStream stream, const RainFusionAttentionParams& params);
 
 /**
  * @brief Broadcast MatMul with Per-Block Quantization（Ascend 950 TLA）。

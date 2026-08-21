@@ -521,6 +521,24 @@ struct MmadSvd3 : public MmadBase<ArchTag_, false> {
     static constexpr uint32_t L1_SCALE_FACTOR_K = L1_SCALE_FACTOR_K_;
 };
 
+template <class ArchTag_>
+struct MmadAtlasA5RainQK : public MmadBase<ArchTag_, false> {
+    static constexpr uint32_t L0_STAGES = 2;
+    // Q: persistent in L1
+    static constexpr uint32_t L1A_STAGES = 1;
+    // K: double buffer
+    static constexpr uint32_t L1B_STAGES = 2;
+};
+
+template <class ArchTag_>
+struct MmadAtlasA5RainPV : public MmadBase<ArchTag_, false> {
+    static constexpr uint32_t L0_STAGES = 2;
+    // P: PRE_LAUNCH+1 pipeline buffers
+    static constexpr uint32_t L1A_STAGES = 3;
+    // V: double buffer
+    static constexpr uint32_t L1B_STAGES = 2;
+};
+
 template <
     class ArchTag_, bool PAGED_CACHE_FLAG_ = false, bool NZ_LAYOUT_FLAG_ = false, bool PA_BNNBSD_FLAG_ = 0,
     bool ENABLE_DN_ = false>

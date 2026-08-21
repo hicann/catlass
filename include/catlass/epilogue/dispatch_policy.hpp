@@ -191,6 +191,24 @@ struct EpilogueAscend950FinalizeRouting {
     static constexpr uint32_t UB_STAGES = UB_STAGES_;
 };
 
+// For Ascend950, rain_fusion_attention online Softmax
+struct EpilogueAtlasA5OnlineSoftmax {
+    using ArchTag = Arch::Ascend950;
+};
+
+enum class LseMode
+{
+    NONE = 0,
+    LSE_OUT = 1
+};
+
+// For Ascend950, rain_fusion_attention RescaleO
+template <LseMode LSE_MODE_ = LseMode::NONE>
+struct EpilogueAtlasA5RescaleO {
+    using ArchTag = Arch::Ascend950;
+    static constexpr LseMode LSE_MODE = LSE_MODE_;
+};
+
 // For Ascend950, flash_attention_chunk_prefill softmax
 struct EpilogueFAOnlineSoftmax {
     using ArchTag = Arch::Ascend950;

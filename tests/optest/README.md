@@ -90,6 +90,7 @@ Python API (`torch_catlass.ops.*`)
 - [ ] 33_basic_conv2d
 - [ ] 56_ascend950_basic_conv2d_tla
 - [ ] 70_ascend950_flash_attention_chunk_prefill (Ascend950)
+- [ ] 81_ascend950_rain_fusion_attention (Ascend950)
 - [ ] 102_dynamic_optimized_matmul
 - [ ] 103_dynamic_optimized_quant_matmul_per_token_basic
 

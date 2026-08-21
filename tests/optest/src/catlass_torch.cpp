@@ -23,6 +23,7 @@
 #include "template/batched_matmul.h"
 #include "template/flash_attention.h"
 #include "template/flash_attention_chunk_prefill.h"
+#include "template/rain_fusion_attention.h"
 #include "template/grouped_matmul.h"
 #include "template/grouped_quant_matmul.h"
 #include "template/matmul.h"
@@ -402,6 +403,9 @@ REGISTER_TORCH_FUNC(ascend950_fp8_mx_grouped_matmul_finalize_routing_no_deter);
 
 static auto& ascend950_flash_attention_chunk_prefill = Ascend950FlashAttentionChunkPrefillOp::Run;
 REGISTER_TORCH_FUNC(ascend950_flash_attention_chunk_prefill);
+
+static auto& ascend950_rain_fusion_attention = Ascend950RainFusionAttentionOp::Run;
+REGISTER_TORCH_FUNC(ascend950_rain_fusion_attention);
 
 static auto& ascend950_basic_conv2d_tla = Ascend950BasicConv2dTLAOp::Run;
 REGISTER_TORCH_FUNC(ascend950_basic_conv2d_tla);

@@ -82,6 +82,7 @@ __all__ = [
     "ascend950_multi_core_splitk_matmul",
     "ascend950_tail_multi_core_splitk_matmul",
     "ascend950_flash_attention_chunk_prefill",
+    "ascend950_rain_fusion_attention",
     "clear_jit_cache",
     "symm",
     "__version__",

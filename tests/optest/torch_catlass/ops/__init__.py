@@ -17,6 +17,9 @@ from .ascend950_batched_matmul import ascend950_batched_matmul  # example 67
 from .ascend950_flash_attention_chunk_prefill import (
     ascend950_flash_attention_chunk_prefill,  # example 70
 )
+from .ascend950_rain_fusion_attention import (
+    ascend950_rain_fusion_attention,  # example 76
+)
 from .ascend950_flash_attention_infer import ascend950_flash_attention_infer  # example 49
 from .ascend950_fp8_mx_flash_attention_infer import (
     ascend950_fp8_mx_flash_attention_infer,  # example 65
@@ -193,6 +196,7 @@ __all__ = [
     "ascend950_multi_core_splitk_matmul",  # example 68
     "ascend950_tail_multi_core_splitk_matmul",  # example 69
     "ascend950_flash_attention_chunk_prefill",  # example 70
+    "ascend950_rain_fusion_attention",  # example 76
     "ascend950_fp8_mx_grouped_matmul_finalize_routing",  # example 71
     "ascend950_fp8_mx_grouped_matmul_finalize_routing_no_deter",  # example 71 no_deter
     "ascend950_basic_conv2d_tla",  # example 56

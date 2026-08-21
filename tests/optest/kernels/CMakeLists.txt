@@ -282,6 +282,7 @@ add_subdirectory(76_trmm)
 add_subdirectory(77_planar_complex_matmul)
 add_subdirectory(78_matrix_inverse)
 add_subdirectory(80_grouped_matmul_slice_m_gelu)
+add_subdirectory(81_ascend950_rain_fusion_attention)
 
 if(_JIT_KERNEL_ENTRIES)
     set(_JIT_TARGET catlass_kernel_jit)
