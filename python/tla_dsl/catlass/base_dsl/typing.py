@@ -1070,18 +1070,17 @@ def is_constexpr_annotation(annotation: Any) -> bool:
 
     String annotations (``from __future__ import annotations``) like
     ``"tla.Constexpr[int]"`` are matched textually since they cannot be resolved
-    without module globals here.
+    without module globals here. Any qualifier is accepted — ``Constexpr``,
+    ``tla.Constexpr``, ``catlass.tla.Constexpr``, or whatever alias the module
+    imported it under — because an unrecognized qualifier would silently demote
+    the parameter to a runtime argument.
     """
     if Constexpr.is_constexpr_annotation(annotation):
         return True
     if isinstance(annotation, str):
         compact = annotation.replace(" ", "")
-        return (
-            compact == "Constexpr"
-            or compact.startswith("Constexpr[")
-            or compact == "tla.Constexpr"
-            or compact.startswith("tla.Constexpr[")
-        )
+        head = compact.split("[", 1)[0]
+        return head == "Constexpr" or head.endswith(".Constexpr")
     return False
 
 

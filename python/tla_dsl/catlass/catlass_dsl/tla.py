@@ -6,7 +6,11 @@ import inspect
 from typing import TYPE_CHECKING, Any, Sequence
 
 from .. import runtime as _runtime
-from ..dsl import _get_typed_call_args
+from ..dsl import (
+    _bind_kernel_call_args,
+    _get_typed_call_args,
+    _strip_constexpr_launch_args,
+)
 from ..execution import TlaExecutionResult, TlaUnsupportedAbiError
 
 if TYPE_CHECKING:
@@ -28,12 +32,18 @@ class KernelLauncher:
         launch_args: Sequence[Any] | None = None,
     ) -> None:
         self._fn = fn
-        self._launch_kwargs = dict(launch_kwargs or {})
-        self._launch_args = tuple(launch_args or ())
+        # Kernel args passed by name arrive mixed in with the runtime options.
+        bound_args, bound_kwargs = _bind_kernel_call_args(
+            fn.fn, tuple(launch_args or ()), launch_kwargs or {}
+        )
+        self._launch_kwargs = bound_kwargs
+        self._launch_args = bound_args
         self._runtime = None
         self._artifact = None
         type_args = (
-            _get_typed_call_args(self._launch_args) if self._launch_args else None
+            _get_typed_call_args(self._launch_args, self._fn.fn)
+            if self._launch_args
+            else None
         )
         should_eager_compile = (
             type_args is not None or not inspect.signature(self._fn.fn).parameters
@@ -72,7 +82,7 @@ class KernelLauncher:
                 raise TlaUnsupportedAbiError("`args` specified multiple times.")
             launch_args = tuple(args)
         if type_args is None and launch_args:
-            type_args = _get_typed_call_args(launch_args)
+            type_args = _get_typed_call_args(launch_args, self._fn.fn)
         launch_kwargs["block_num"] = int(block_num)
         if (
             self._runtime is not None
@@ -100,7 +110,7 @@ class KernelLauncher:
         return _runtime.execute_kernel(
             artifact,
             runtime=runtime,
-            launch_args=launch_args,
+            launch_args=_strip_constexpr_launch_args(launch_args, self._fn.fn),
             launch_kwargs=launch_kwargs,
         )
 

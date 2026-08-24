@@ -141,6 +141,8 @@ def lower_jit_to_tlair_module_by_execution(
     params = list(sig.parameters.values())
     arg_names = [p.name for p in params]
     constexpr_names = {p.name for p in params if _is_constexpr_annotation(p.annotation)}
+    kw_only = inspect.Parameter.KEYWORD_ONLY
+    keyword_only_names = {p.name for p in params if p.kind is kw_only}
     call_args = _prepare_call_args(arg_names=arg_names, type_args=type_args)
     for name, value in zip(arg_names, call_args, strict=False):
         reject_user_class_value(value, context=f"kernel argument {name!r}")
@@ -156,6 +158,7 @@ def lower_jit_to_tlair_module_by_execution(
             if call_args
             else None,
             ctx=ctx,
+            constexpr_names=constexpr_names,
         )
         with mlir_ir.Location.unknown(ctx):
             module = mlir_ir.Module.create()
@@ -167,6 +170,7 @@ def lower_jit_to_tlair_module_by_execution(
                     fn_name=fn.__name__,
                     arg_names=arg_names,
                     constexpr_names=constexpr_names,
+                    keyword_only_names=keyword_only_names,
                     arg_types=arg_types,
                     call_args=call_args,
                     ctx=ctx,
@@ -226,6 +230,7 @@ def _build_tla_func(
     fn_name: str,
     arg_names: Sequence[str],
     constexpr_names: set[str],
+    keyword_only_names: set[str],
     arg_types: Mapping[str, Any],
     call_args: Sequence[Any],
     ctx: mlir_ir.Context,
@@ -274,7 +279,22 @@ def _build_tla_func(
             block_slots[name] = tuple(range(start, start + len(group_types)))
         else:
             start = len(mlir_arg_types)
-            mlir_arg_types.append(_coerce_type(ctx, resolved_arg_types.get(name)))
+            spec = resolved_arg_types.get(name)
+            if spec is None:
+                # Name the parameter and its host value: the generic "could not
+                # resolve a concrete runtime argument type" from ``_coerce_type``
+                # gives no clue which argument is at fault, and the usual cause
+                # is a compile-time-only value that was not marked Constexpr.
+                host = next(
+                    (call_args[i] for i, n in enumerate(arg_names) if n == name), None
+                )
+                raise TlaLoweringError(
+                    f"kernel argument {name!r} has no runtime type: a "
+                    f"{type(host).__name__} value cannot be a kernel argument. "
+                    "Annotate it ``tla.Constexpr[...]`` to pass it as a "
+                    "compile-time constant, or pass a tensor / numeric value."
+                )
+            mlir_arg_types.append(_coerce_type(ctx, spec))
             block_slots[name] = (start,)
 
     fn_type = mlir_ir.FunctionType.get(mlir_arg_types, [])
@@ -547,7 +567,23 @@ def _build_tla_func(
 
             try:
                 with _jit_helper_transformer(transform_helper):
-                    fn(*call_args_for_fn)
+                    if keyword_only_names:
+                        # Keyword-only params (``def k(*, sel: Constexpr[str])``)
+                        # are ordinary entries in ``arg_names``; passing them
+                        # positionally would raise before the body ever runs.
+                        _pos = [
+                            v
+                            for n, v in zip(arg_names, call_args_for_fn, strict=False)
+                            if n not in keyword_only_names
+                        ]
+                        _kw = {
+                            n: v
+                            for n, v in zip(arg_names, call_args_for_fn, strict=False)
+                            if n in keyword_only_names
+                        }
+                        fn(*_pos, **_kw)
+                    else:
+                        fn(*call_args_for_fn)
             except runtime.TlaCoreAPIError:
                 raise
             except TlaLoweringError:
@@ -618,10 +654,18 @@ def _resolve_execution_arg_types(
     arg_names: Sequence[str],
     arg_values: Mapping[str, Any] | None,
     ctx: mlir_ir.Context,
+    constexpr_names: set[str] | None = None,
 ) -> Mapping[str, Any]:
     resolved: dict[str, Any] = {}
+    skip = constexpr_names or set()
     if arg_values is not None:
         for name, value in arg_values.items():
+            # Constexpr params are host values with no MLIR type. Probing them
+            # is not just wasted work: a dtype constexpr (``tla.Float32``) is a
+            # class whose unbound ``__get_mlir_types__`` is callable, so the
+            # probe below would call it with the context as ``self``.
+            if name in skip:
+                continue
             mlir_types_getter = getattr(value, "__get_mlir_types__", None)
             if callable(mlir_types_getter):
                 resolved_types = mlir_types_getter(ctx)

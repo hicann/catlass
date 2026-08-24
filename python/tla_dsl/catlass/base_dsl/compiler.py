@@ -45,7 +45,11 @@ class CompileCallable:
 
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> TlaJitExecutor:
         from ..execution import TlaUnsupportedAbiError
-        from ..dsl import TlaJitFunction, _get_typed_call_args
+        from ..dsl import (
+            TlaJitFunction,
+            _bind_kernel_call_args,
+            _get_typed_call_args,
+        )
         from ..catlass_dsl.tla import KernelLauncher
 
         if func is None:
@@ -58,8 +62,10 @@ class CompileCallable:
                 "tla.compile expects a @tla.jit or @tla.kernel function."
             )
         type_args = kwargs.pop("type_args", None)
+        # Kernel args passed by name arrive mixed in with the compile options.
+        args, kwargs = _bind_kernel_call_args(func.fn, args, kwargs)
         if type_args is None and args:
-            inferred = _get_typed_call_args(args)
+            inferred = _get_typed_call_args(args, func.fn)
             if inferred is not None:
                 type_args = inferred
         return TlaJitExecutor(func.compile(type_args=type_args, **kwargs))

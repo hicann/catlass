@@ -10,13 +10,127 @@ from typing import Any, Callable, Mapping, Sequence
 
 from . import runtime as _runtime
 from .base_dsl import BaseDSL, DSLLocation
+from .base_dsl.typing import is_constexpr_annotation
 from .base_dsl.compiler import CompileCallable, compile
 from .execution import TlaKernelArtifact
 
 
-def _get_typed_call_args(args: Sequence[Any]) -> Sequence[Any] | None:
+def _kernel_signature(fn: Callable[..., Any] | None) -> inspect.Signature | None:
+    if fn is None:
+        return None
+    try:
+        return inspect.signature(fn)
+    except (TypeError, ValueError):
+        return None
+
+
+#: Compile/launch kwargs consumed by the runtime rather than by the kernel
+#: signature. A kernel parameter sharing one of these names is ambiguous, so
+#: ``_bind_kernel_call_args`` reports the clash instead of guessing.
+_RESERVED_CALL_KWARGS = frozenset(
+    {"options", "block_num", "device", "stream", "cache", "cache_dir", "type_args"}
+)
+
+
+def _bind_kernel_call_args(
+    fn: Callable[..., Any] | None,
+    args: Sequence[Any],
+    kwargs: Mapping[str, Any] | None = None,
+) -> tuple[tuple[Any, ...], dict[str, Any]]:
+    """Resolve a call into one positional host value per kernel parameter.
+
+    Lowering takes host values positionally, but callers write ordinary Python
+    calls — by name, out of order, relying on defaults — and kernel arguments
+    share one ``**kwargs`` with the runtime options. Binding is delegated to
+    ``Signature.bind_partial`` so keyword, keyword-only and defaulted parameters
+    follow the same rules they would in a plain Python call.
+
+    Returns the bound values and the kwargs left over for the runtime.
+    """
+    sig = _kernel_signature(fn)
+    if sig is None:
+        return tuple(args), dict(kwargs or {})
+    params = list(sig.parameters.values())
+    variadic = (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
+    if any(p.kind in variadic for p in params):
+        # No fixed parameter list to bind against; leave the call untouched.
+        return tuple(args), dict(kwargs or {})
+
+    remaining = dict(kwargs or {})
+    by_name = {}
+    for param in params[len(args) :]:
+        if param.name not in remaining:
+            continue
+        if param.name in _RESERVED_CALL_KWARGS:
+            raise TypeError(
+                f"kernel parameter {param.name!r} collides with the runtime "
+                f"option of the same name; pass it positionally or rename the "
+                f"parameter"
+            )
+        by_name[param.name] = remaining.pop(param.name)
+
+    try:
+        bound = sig.bind_partial(*args, **by_name)
+    except TypeError:
+        # Not a call this signature accepts; let the arity check report it.
+        return tuple(args), dict(kwargs or {})
+    bound.apply_defaults()
+
+    # Values are positional from here on, so stop at the first parameter the
+    # call left unbound rather than shifting every later value left.
+    values: list[Any] = []
+    for param in params:
+        if param.name not in bound.arguments:
+            break
+        values.append(bound.arguments[param.name])
+    # Hand back anything the truncation dropped, so it is not silently lost.
+    for name, value in by_name.items():
+        if name not in {p.name for p in params[: len(values)]}:
+            remaining[name] = value
+    return tuple(values), remaining
+
+
+def _constexpr_param_mask(fn: Callable[..., Any] | None) -> tuple[bool, ...]:
+    """One flag per kernel parameter: is it annotated ``tla.Constexpr[...]``?"""
+    sig = _kernel_signature(fn)
+    if sig is None:
+        return ()
+    return tuple(is_constexpr_annotation(p.annotation) for p in sig.parameters.values())
+
+
+def _strip_constexpr_launch_args(
+    args: Sequence[Any], fn: Callable[..., Any] | None
+) -> tuple[Any, ...]:
+    """Drop ``Constexpr`` params from a launch arg list.
+
+    Constexpr params are baked into the compiled kernel and have no ABI slot, so
+    they must not reach the launch payload — mirrors how ``get_rectified_args``
+    skips ``Constexpr`` dataclass fields.
+    """
+    mask = _constexpr_param_mask(fn)
+    if not any(mask):
+        return tuple(args)
+    return tuple(a for i, a in enumerate(args) if not (i < len(mask) and mask[i]))
+
+
+def _get_typed_call_args(
+    args: Sequence[Any], fn: Callable[..., Any] | None = None
+) -> Sequence[Any] | None:
+    # ``Constexpr`` params are compile-time host values with no MLIR type and no
+    # kernel block arg, so they are passed through verbatim whatever their type
+    # (``str``, tuple, enum, …). Without this they would fall into the ``None``
+    # branch below and the kernel body would silently see ``None`` instead of the
+    # value — and every variant would collapse onto one cached kernel.
+    mask = _constexpr_param_mask(fn)
+    args, _ = _bind_kernel_call_args(fn, args)
     inferred: list[Any] = []
-    for arg in args:
+    has_constexpr_value = False
+    for pos, arg in enumerate(args):
+        if pos < len(mask) and mask[pos]:
+            inferred.append(arg)
+            if arg is not None:
+                has_constexpr_value = True
+            continue
         resolver = getattr(arg, "__get_mlir_types__", None)
         if callable(resolver):
             inferred.append(arg)
@@ -30,7 +144,7 @@ def _get_typed_call_args(args: Sequence[Any]) -> Sequence[Any] | None:
             inferred.append(arg)
         else:
             inferred.append(None)
-    if all(item is None for item in inferred):
+    if not has_constexpr_value and all(item is None for item in inferred):
         return None
     return tuple(inferred)
 
