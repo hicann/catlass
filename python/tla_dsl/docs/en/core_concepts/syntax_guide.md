@@ -18,7 +18,7 @@ At compile time, kernels and helpers may also use ordinary Python functions, lam
 
 Compile-time values are ordinary Python values known while a specialized kernel is built, including literals and parameters or dataclass fields annotated with `tla.Constexpr[T]`. A `Constexpr` annotation classifies that input as compile-time-only: it has no device ABI slot.
 
-Device-time values are available when the kernel executes, including tensor elements, `tla.arch.block_idx()`, `tla.arch.block_dim()`, and values derived from them. A device-time predicate has type such as `tla.Bool`; a counted-loop induction value has type `tla.Int32`.
+Device-time values are available when the kernel executes, including tensor elements, `tla.arch.block_idx()`, `tla.arch.block_num()`, and values derived from them. A device-time predicate has type such as `tla.Bool`; a counted-loop induction value has type `tla.Int32`.
 
 `tla.const_expr(value)` is a function for a control-flow condition. It requires a compile-time Python value and returns a Python `bool`; it rejects device-time values. It is separate from `tla.Constexpr[T]`: the annotation classifies an input, while the function makes a condition explicitly compile-time. A literal `if True` or `if False` is already compile-time and needs neither form.
 

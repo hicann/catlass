@@ -40,6 +40,7 @@ _INTERNAL_RUNTIME_BINDING_IS_COMPILETIME = (
 )
 _INTERNAL_RUNTIME_WRITE_CHECK = "__tladsl_internal_runtime_write_check__"
 _INTERNAL_STATIC_LOOP_ITERATION = "__tladsl_internal_static_loop_iteration__"
+_INTERNAL_RANGE_CONSTEXPR = "__tladsl_internal_range_constexpr__"
 _INTERNAL_LAZY_ATTRIBUTE = "__tladsl_internal_lazy_attribute__"
 _INTERNAL_LAZY_SUBSCRIPT = "__tladsl_internal_lazy_subscript__"
 _INTERNAL_LAZY_BINOP = "__tladsl_internal_lazy_binop__"
@@ -1777,7 +1778,7 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
                 if isinstance(node.iter.func, ast.Call)
                 else _cf_symbol_check_stmts(node.iter)
             )
-            node.iter = _builtin_range_call_from_range_constexpr(node.iter)
+            node.iter = _static_range_call_from_range_constexpr(node.iter)
             self._scope_manager.add_names_to_scope(_assigned_names(node.target))
             self._range_alias_stack.append(set())
             try:
@@ -3124,9 +3125,15 @@ def maybe_transform_for_lowering(
     exec_globals[_INTERNAL_LAZY_SUBSCRIPT] = _internal_lazy_subscript
     exec_globals[_INTERNAL_LAZY_BINOP] = _internal_lazy_binop
     exec_globals[_INTERNAL_LAZY_UNARY] = _internal_lazy_unary
-    from .ast_helpers import _warn_static_loop, while_executor, while_selector
+    from .ast_helpers import (
+        _warn_static_loop,
+        range_constexpr,
+        while_executor,
+        while_selector,
+    )
 
     exec_globals[_INTERNAL_STATIC_LOOP_ITERATION] = _warn_static_loop
+    exec_globals[_INTERNAL_RANGE_CONSTEXPR] = range_constexpr
 
     exec_globals[_WHILE_EXECUTOR] = while_executor
     exec_globals[_WHILE_SELECTOR] = while_selector
@@ -3868,13 +3875,9 @@ def _cf_symbol_check_expression_stmt(expression: ast.expr) -> ast.stmt:
     return ast.copy_location(check_stmt, expression)
 
 
-def _builtin_range_call_from_range_constexpr(node: ast.Call) -> ast.Call:
+def _static_range_call_from_range_constexpr(node: ast.Call) -> ast.Call:
     rewritten = ast.Call(
-        func=ast.Attribute(
-            value=ast.Name(id="__tladsl_builtins__", ctx=ast.Load()),
-            attr="range",
-            ctx=ast.Load(),
-        ),
+        func=ast.Name(id=_INTERNAL_RANGE_CONSTEXPR, ctx=ast.Load()),
         args=node.args,
         keywords=node.keywords,
     )

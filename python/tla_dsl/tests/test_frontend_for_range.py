@@ -4,6 +4,7 @@ import ast
 import builtins
 import inspect
 import re
+import warnings
 from dataclasses import dataclass
 from typing import Any
 
@@ -12,6 +13,7 @@ import pytest
 import catlass.tla as tla
 import catlass.core_api as core_api_mod
 from catlass.base_dsl import BaseDSL
+from catlass.base_dsl import ast_helpers
 from catlass.base_dsl.ast_preprocessor import (
     _FrontendControlFlowTransformer,
     _FunctionAnalyzer,
@@ -209,6 +211,51 @@ def range_constexpr_function_alias_kernel(mem_a: tla.Tensor) -> None:
 def bare_range_constexpr_kernel(mem_a: tla.Tensor) -> None:
     for i in range_constexpr(0, 2):
         tla.tile_view(mem_a, tla.make_shape(4, 4), tla.make_coord(i, 0))
+
+
+@tla.kernel
+def range_constexpr_warning_kernel(limit: tla.Constexpr[int]) -> None:
+    for i in tla.range_constexpr(limit):
+        tla.make_coord(i, 0)
+
+
+@tla.kernel
+def range_constexpr_warning_module_alias_kernel(
+    limit: tla.Constexpr[int],
+) -> None:
+    for i in tla_alias.range_constexpr(limit):
+        tla.make_coord(i, 0)
+
+
+@tla.kernel
+def range_constexpr_warning_function_alias_kernel(
+    limit: tla.Constexpr[int],
+) -> None:
+    for i in tla_range_constexpr(limit):
+        tla.make_coord(i, 0)
+
+
+@tla.kernel
+def range_constexpr_warning_bare_alias_kernel(
+    limit: tla.Constexpr[int],
+) -> None:
+    for i in range_constexpr(limit):
+        tla.make_coord(i, 0)
+
+
+@tla.kernel
+def range_constexpr_warning_negative_step_kernel() -> None:
+    for i in tla.range_constexpr(64, 0, -1):
+        tla.make_coord(i, 0)
+
+
+@tla.kernel
+def range_constexpr_warning_as_numeric_kernel(
+    limit: tla.Constexpr[int],
+) -> None:
+    numeric_limit = tla.as_numeric(limit)
+    for i in tla.range_constexpr(numeric_limit):
+        tla.make_coord(i, 0)
 
 
 @tla.kernel
@@ -556,6 +603,71 @@ def test_imported_bare_range_constexpr_unrolls_as_python_loop() -> None:
     assert "tla.range" not in mlir
     assert "tla.for" not in mlir
     assert mlir.count("tla.tile_view") == 2
+
+
+@pytest.mark.parametrize(
+    ("limit", "warns"),
+    [
+        pytest.param(63, False, id="below-threshold"),
+        pytest.param(64, True, id="at-threshold"),
+        pytest.param(65, True, id="above-threshold"),
+    ],
+)
+def test_range_constexpr_kernel_warning_boundary(limit: int, warns: bool) -> None:
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        mlir = range_constexpr_warning_kernel.dump_mlir(type_args=(limit,))
+
+    optimization_warnings = [
+        warning
+        for warning in caught
+        if issubclass(warning.category, ast_helpers.DSLOptimizationWarning)
+    ]
+    assert bool(optimization_warnings) is warns
+    assert "scf.for" not in mlir
+    assert mlir.count("tla.make_coord") == limit
+    if warns:
+        assert len(optimization_warnings) == 1
+        assert f"This static loop has {limit} iterations" in str(
+            optimization_warnings[0].message
+        )
+        assert optimization_warnings[0].filename == __file__
+        source_lines, source_start = inspect.getsourcelines(
+            range_constexpr_warning_kernel.fn
+        )
+        loop_offset = next(
+            offset
+            for offset, line in enumerate(source_lines)
+            if "for i in tla.range_constexpr" in line
+        )
+        assert optimization_warnings[0].lineno == source_start + loop_offset
+
+
+@pytest.mark.parametrize(
+    "kernel",
+    [
+        pytest.param(range_constexpr_warning_kernel, id="qualified"),
+        pytest.param(
+            range_constexpr_warning_module_alias_kernel, id="module-alias"
+        ),
+        pytest.param(
+            range_constexpr_warning_function_alias_kernel, id="function-alias"
+        ),
+        pytest.param(range_constexpr_warning_bare_alias_kernel, id="bare-alias"),
+        pytest.param(range_constexpr_warning_negative_step_kernel, id="negative-step"),
+        pytest.param(range_constexpr_warning_as_numeric_kernel, id="as-numeric-bound"),
+    ],
+)
+def test_range_constexpr_kernel_warning_covers_legal_forms(kernel) -> None:
+    type_args = () if kernel is range_constexpr_warning_negative_step_kernel else (64,)
+    with pytest.warns(
+        ast_helpers.DSLOptimizationWarning,
+        match="This static loop has 64 iterations",
+    ):
+        mlir = kernel.dump_mlir(type_args=type_args)
+
+    assert "scf.for" not in mlir
+    assert mlir.count("tla.make_coord") == 64
 
 
 def test_range_negative_step_rewrites_at_ast_level() -> None:
