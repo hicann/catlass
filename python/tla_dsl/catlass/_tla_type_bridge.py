@@ -43,7 +43,7 @@ def layout_type_get(
     shape: Any,
     stride: Any,
     origin_shape: Any | None = None,
-    layout: str = "row_major",
+    layout: str = "RowMajor",
 ) -> mlir_ir.Type:
     origin = None if origin_shape is None else list(_encode_index_tree(origin_shape))
     return _load_bridge_extension().layout_type_get(
@@ -121,7 +121,7 @@ def layout_type_from_components_get(
     shape_type: mlir_ir.Type,
     stride_type: mlir_ir.Type,
     origin_shape_type: mlir_ir.Type | None = None,
-    layout: str = "row_major",
+    layout: str = "RowMajor",
 ) -> mlir_ir.Type:
     return _load_bridge_extension().layout_type_from_components_get(
         context, shape_type, stride_type, origin_shape_type, str(layout)

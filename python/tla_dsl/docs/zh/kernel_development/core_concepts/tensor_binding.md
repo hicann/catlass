@@ -94,7 +94,7 @@ y = from_dlpack(x.contiguous(), layout_tag=tla.arch.RowMajor)
 print(y.shape)         # 逻辑 shape
 print(y.stride)        # stride 树
 print(y.origin_shape)  # 逻辑 origin
-print(y.layout_tag)    # 如 'row_major'
+print(y.layout_tag)    # 如 'RowMajor'
 print(y.dtype)         # 如 'f32'
 print(y.addrspace)     # 如 'gm'
 print(y.data_ptr)      # 设备地址
@@ -129,7 +129,7 @@ fake = make_fake_tensor(
     (128, 1),
 )
 assert fake.data_ptr == 0
-assert fake.layout_tag == "row_major"
+assert fake.layout_tag == "RowMajor"
 
 # zN 等嵌套布局：自行传入嵌套 shape/stride（逻辑 origin 仍为二维）
 zn = make_fake_tensor(

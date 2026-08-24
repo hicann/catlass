@@ -1,7 +1,7 @@
 // RUN: %tla_compile %s -o %t --mlir-print-ir-after=tla-split-mixed-func 2>&1 | %filecheck %s
 
-!ub = !tla.tensor<!tla.layout<!tla.shape<1>, !tla.stride<1>, !tla.shape<1>, row_major>, !tla.coord<0>, !tla.ptr<f32, ub, 4>>
-!gm = !tla.tensor<!tla.layout<!tla.shape<1>, !tla.stride<1>, !tla.shape<1>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>
+!ub = !tla.tensor<!tla.layout<!tla.shape<1>, !tla.stride<1>, !tla.shape<1>, RowMajor>, !tla.coord<0>, !tla.ptr<f32, ub, 4>>
+!gm = !tla.tensor<!tla.layout<!tla.shape<1>, !tla.stride<1>, !tla.shape<1>, RowMajor>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>
 
 module {
   // UB scalar accesses live in a vector scope, so combining them with cube work
@@ -13,11 +13,11 @@ module {
     %stride = tla.make_stride -> !tla.stride<1>
     %layout = tla.make_layout %shape, %stride
       : !tla.shape<1>, !tla.stride<1>
-        -> !tla.layout<!tla.shape<1>, !tla.stride<1>, !tla.shape<1>, row_major>
+        -> !tla.layout<!tla.shape<1>, !tla.stride<1>, !tla.shape<1>, RowMajor>
     %coord = tla.make_coord -> !tla.coord<0>
     %tensor = tla.make_tensor %ptr, %layout, %coord
       : !tla.ptr<f32, ub, 256>,
-        !tla.layout<!tla.shape<1>, !tla.stride<1>, !tla.shape<1>, row_major>,
+        !tla.layout<!tla.shape<1>, !tla.stride<1>, !tla.shape<1>, RowMajor>,
         !tla.coord<0> -> !ub
     %c0 = arith.constant 0 : index
     "tla.vector"() ({

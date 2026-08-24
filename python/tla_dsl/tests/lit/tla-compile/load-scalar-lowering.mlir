@@ -16,8 +16,8 @@
 // HELPER-NEXT: ave.hir.membar %[[BARRIER_KIND]]
 // HELPER-NOT: tla.local_mem_bar
 
-!vec64 = !tla.tensor<!tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, row_major>, !tla.coord<0>, !tla.ptr<f32, ub, 4>>
-!vec1 = !tla.tensor<!tla.layout<!tla.shape<1>, !tla.stride<1>, !tla.shape<1>, row_major>, !tla.coord<0>, !tla.ptr<f32, ub, 4>>
+!vec64 = !tla.tensor<!tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, RowMajor>, !tla.coord<0>, !tla.ptr<f32, ub, 4>>
+!vec1 = !tla.tensor<!tla.layout<!tla.shape<1>, !tla.stride<1>, !tla.shape<1>, RowMajor>, !tla.coord<0>, !tla.ptr<f32, ub, 4>>
 
 module {
   func.func @scalar_load_lowering(

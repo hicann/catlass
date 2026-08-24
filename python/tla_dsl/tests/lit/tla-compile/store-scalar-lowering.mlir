@@ -30,9 +30,9 @@
 // CHECK-NOT: tla.scalar_load
 // CHECK-NOT: tla.scalar_store
 
-!vec64 = !tla.tensor<!tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, row_major>, !tla.coord<0>, !tla.ptr<f32, ub, 4>>
-!tile8 = !tla.tensor<!tla.layout<!tla.shape<8>, !tla.stride<1>, !tla.shape<64>, row_major>, !tla.coord<16>, !tla.ptr<f32, ub, 4>>
-!matrix = !tla.tensor<!tla.layout<!tla.shape<2,4>, !tla.stride<4,1>, !tla.shape<2,4>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, ub, 4>>
+!vec64 = !tla.tensor<!tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, RowMajor>, !tla.coord<0>, !tla.ptr<f32, ub, 4>>
+!tile8 = !tla.tensor<!tla.layout<!tla.shape<8>, !tla.stride<1>, !tla.shape<64>, RowMajor>, !tla.coord<16>, !tla.ptr<f32, ub, 4>>
+!matrix = !tla.tensor<!tla.layout<!tla.shape<2,4>, !tla.stride<4,1>, !tla.shape<2,4>, RowMajor>, !tla.coord<0,0>, !tla.ptr<f32, ub, 4>>
 
 module {
   func.func @scalar_store_lowering(

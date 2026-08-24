@@ -32,51 +32,51 @@ CATLASS_DEVICE void copyUBToL1(
 extern "C" {
 #if ((defined(__NPU_ARCH__) && __NPU_ARCH__ == 3510) || (defined(CATLASS_ARCH) && CATLASS_ARCH == 3510))
 
-#define REGISTER_GM_TO_UB(NameSrc, NameDst, EnumSrc, EnumDst, DType)                                                  \
-    [aicore] __attribute__((always_inline)) void _mlir_ciface_copy_gm_##NameSrc##_to_ub_##NameDst##_##DType(          \
+#define REGISTER_GM_TO_UB(LayoutSrc, LayoutDst, DType)                                                                \
+    [aicore] __attribute__((always_inline)) void _mlir_ciface_copy_gm_##LayoutSrc##_to_ub_##LayoutDst##_##DType(      \
         memref_t<__gm__ DType, 2>* src, memref_t<__ubuf__ DType, 1>* dst, DESC_ABI_PARAMS(src), DESC_ABI_PARAMS(dst)) \
     {                                                                                                                 \
-        copyGMToUB<Catlass::Arch::Ascend950, LayoutTag::EnumSrc, LayoutTag::EnumDst, DType>(                          \
+        copyGMToUB<Catlass::Arch::Ascend950, LayoutTag::LayoutSrc, LayoutTag::LayoutDst, DType>(                      \
             src, dst, TENSOR_DESC_12(src), TENSOR_DESC_12(dst));                                                      \
     }
 
-#define REGISTER_UB_TO_GM(NameSrc, NameDst, EnumSrc, EnumDst, DType)                                                  \
-    [aicore] __attribute__((always_inline)) void _mlir_ciface_copy_ub_##NameSrc##_to_gm_##NameDst##_##DType(          \
+#define REGISTER_UB_TO_GM(LayoutSrc, LayoutDst, DType)                                                                \
+    [aicore] __attribute__((always_inline)) void _mlir_ciface_copy_ub_##LayoutSrc##_to_gm_##LayoutDst##_##DType(      \
         memref_t<__ubuf__ DType, 1>* src, memref_t<__gm__ DType, 2>* dst, DESC_ABI_PARAMS(src), DESC_ABI_PARAMS(dst)) \
     {                                                                                                                 \
-        copyUBToGM<Catlass::Arch::Ascend950, LayoutTag::EnumSrc, LayoutTag::EnumDst, DType>(                          \
+        copyUBToGM<Catlass::Arch::Ascend950, LayoutTag::LayoutSrc, LayoutTag::LayoutDst, DType>(                      \
             src, dst, TENSOR_DESC_12(src), TENSOR_DESC_12(dst));                                                      \
     }
 
-#define REGISTER_UB_TO_L1(NameSrc, NameDst, EnumSrc, EnumDst, DType)                                         \
-    [aicore] __attribute__((always_inline)) void _mlir_ciface_copy_ub_##NameSrc##_to_l1_##NameDst##_##DType( \
-        memref_t<__ubuf__ DType, 1>* src, memref_t<__cbuf__ DType, 1>* dst, DESC_ABI_PARAMS(src),            \
-        DESC_ABI_PARAMS(dst))                                                                                \
-    {                                                                                                        \
-        copyUBToL1<Catlass::Arch::Ascend950, LayoutTag::EnumSrc, LayoutTag::EnumDst, DType>(                 \
-            src, dst, TENSOR_DESC_12(src), TENSOR_DESC_12(dst));                                             \
+#define REGISTER_UB_TO_L1(LayoutSrc, LayoutDst, DType)                                                           \
+    [aicore] __attribute__((always_inline)) void _mlir_ciface_copy_ub_##LayoutSrc##_to_l1_##LayoutDst##_##DType( \
+        memref_t<__ubuf__ DType, 1>* src, memref_t<__cbuf__ DType, 1>* dst, DESC_ABI_PARAMS(src),                \
+        DESC_ABI_PARAMS(dst))                                                                                    \
+    {                                                                                                            \
+        copyUBToL1<Catlass::Arch::Ascend950, LayoutTag::LayoutSrc, LayoutTag::LayoutDst, DType>(                 \
+            src, dst, TENSOR_DESC_12(src), TENSOR_DESC_12(dst));                                                 \
     }
 
-REGISTER_GM_TO_UB(row_major, row_major, RowMajor, RowMajor, float)
-REGISTER_GM_TO_UB(row_major, row_major, RowMajor, RowMajor, half)
-REGISTER_GM_TO_UB(row_major, row_major, RowMajor, RowMajor, bf16)
-REGISTER_GM_TO_UB(row_major, row_major, RowMajor, RowMajor, int32_t)
-REGISTER_GM_TO_UB(row_major, row_major, RowMajor, RowMajor, int16_t)
-REGISTER_GM_TO_UB(row_major, row_major, RowMajor, RowMajor, int8_t)
+REGISTER_GM_TO_UB(RowMajor, RowMajor, float)
+REGISTER_GM_TO_UB(RowMajor, RowMajor, half)
+REGISTER_GM_TO_UB(RowMajor, RowMajor, bf16)
+REGISTER_GM_TO_UB(RowMajor, RowMajor, int32_t)
+REGISTER_GM_TO_UB(RowMajor, RowMajor, int16_t)
+REGISTER_GM_TO_UB(RowMajor, RowMajor, int8_t)
 
-REGISTER_UB_TO_GM(row_major, row_major, RowMajor, RowMajor, float)
-REGISTER_UB_TO_GM(row_major, row_major, RowMajor, RowMajor, half)
-REGISTER_UB_TO_GM(row_major, row_major, RowMajor, RowMajor, bf16)
-REGISTER_UB_TO_GM(row_major, row_major, RowMajor, RowMajor, int32_t)
-REGISTER_UB_TO_GM(row_major, row_major, RowMajor, RowMajor, int16_t)
-REGISTER_UB_TO_GM(row_major, row_major, RowMajor, RowMajor, int8_t)
+REGISTER_UB_TO_GM(RowMajor, RowMajor, float)
+REGISTER_UB_TO_GM(RowMajor, RowMajor, half)
+REGISTER_UB_TO_GM(RowMajor, RowMajor, bf16)
+REGISTER_UB_TO_GM(RowMajor, RowMajor, int32_t)
+REGISTER_UB_TO_GM(RowMajor, RowMajor, int16_t)
+REGISTER_UB_TO_GM(RowMajor, RowMajor, int8_t)
 
-REGISTER_UB_TO_L1(row_major, zN, RowMajor, zN, float)
-REGISTER_UB_TO_L1(row_major, zN, RowMajor, zN, half)
-REGISTER_UB_TO_L1(row_major, zN, RowMajor, zN, bf16)
-REGISTER_UB_TO_L1(zN, zN, zN, zN, float)
-REGISTER_UB_TO_L1(zN, zN, zN, zN, half)
-REGISTER_UB_TO_L1(zN, zN, zN, zN, bf16)
+REGISTER_UB_TO_L1(RowMajor, zN, float)
+REGISTER_UB_TO_L1(RowMajor, zN, half)
+REGISTER_UB_TO_L1(RowMajor, zN, bf16)
+REGISTER_UB_TO_L1(zN, zN, float)
+REGISTER_UB_TO_L1(zN, zN, half)
+REGISTER_UB_TO_L1(zN, zN, bf16)
 
 #endif
 }

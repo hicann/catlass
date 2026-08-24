@@ -3,7 +3,7 @@
 // The frontend rejects malformed SIMT geometry, but hand-written IR reaches the
 // verifier directly -- which is the only check that always runs.
 
-!fscalar = !tla.tensor<!tla.layout<!tla.shape<1>, !tla.stride<1>, !tla.shape<1>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>
+!fscalar = !tla.tensor<!tla.layout<!tla.shape<1>, !tla.stride<1>, !tla.shape<1>, RowMajor>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>
 
 module {
   func.func @too_many_threads(%src_memref: memref<1xf32, #hivm.address_space<gm>>) {
@@ -13,7 +13,7 @@ module {
     "tla.vector"() ({
       "tla.vec.func"() ({
         %i = arith.constant 0 : index
-        %x = tla.simt_load %src[%i] : <!tla.layout<!tla.shape<1>, !tla.stride<1>, !tla.shape<1>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>> -> f32
+        %x = tla.simt_load %src[%i] : <!tla.layout<!tla.shape<1>, !tla.stride<1>, !tla.shape<1>, RowMajor>, !tla.coord<0>, !tla.ptr<f32, gm, 4>> -> f32
       }) {mode = "simt", thread_block_dim = array<i64: 64, 64, 1>} : () -> ()
     }) : () -> ()
     return

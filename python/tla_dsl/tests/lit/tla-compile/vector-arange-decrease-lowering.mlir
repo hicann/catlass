@@ -3,7 +3,7 @@
 // CHECK: ave.hir.vci
 // CHECK-SAME: 1
 
-!t = !tla.tensor<!tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, row_major>, !tla.coord<0>, !tla.ptr<i32, ub, 4>>
+!t = !tla.tensor<!tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, RowMajor>, !tla.coord<0>, !tla.ptr<i32, ub, 4>>
  	 
 module {
 func.func @vector_arange_decrease_lowering(

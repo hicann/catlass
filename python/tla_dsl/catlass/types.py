@@ -128,7 +128,7 @@ class LayoutType(mlir_ir.Type):
         stride_val: mlir_ir.Value,
         origin_shape_val: mlir_ir.Value | None = None,
         *,
-        layout_tag: str = "row_major",
+        layout_tag: str = "RowMajor",
         context: mlir_ir.Context | None = None,
     ) -> "LayoutType":
         """Construct a structured ``!tla.layout`` from shape/stride SSA values."""
@@ -295,7 +295,7 @@ class TlaLayoutDescriptor:
     shape: TlaIndexTreeType
     stride: TlaIndexTreeType
     origin_shape: TlaIndexTreeType | None = None
-    layout_tag: str = "row_major"
+    layout_tag: str = "RowMajor"
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "layout_tag", str(self.layout_tag).strip())
@@ -541,7 +541,7 @@ class TlaStride:
 
 
 class TlaLayout:
-    """Marker for ``make_layout(shape, stride, *, origin_shape=...)`` / ``!tla.layout<!tla.shape<…>, !tla.stride<…>, !tla.shape<…>, row_major>``."""
+    """Marker for ``make_layout(shape, stride, *, origin_shape=...)`` / ``!tla.layout<!tla.shape<…>, !tla.stride<…>, !tla.shape<…>, RowMajor>``."""
 
 
 class TlaRegion:
@@ -628,7 +628,7 @@ def _try_remap_stride_coord_trees(
     from .core_api import _remap_tensor_like_prefix_fields_for_layout_trees
 
     if (
-        layout_token.strip() == "row_major"
+        layout_token.strip() == "RowMajor"
         and len(comp) == 1
         and len(origin_components) == 1
         and not isinstance(comp[0], (tuple, list))

@@ -11,9 +11,9 @@ module {
     %ptr = "tla.recast_ptr"(%raw) : (!tla.ptr<i8, ub, 256>) -> !tla.ptr<f32, ub, 256>
     %shape = "tla.make_shape"(%extent) : (index) -> !tla.shape<?>
     %stride = "tla.make_stride"() : () -> !tla.stride<1>
-    %layout = "tla.make_layout"(%shape, %stride) : (!tla.shape<?>, !tla.stride<1>) -> !tla.layout<!tla.shape<?>, !tla.stride<1>, !tla.shape<?>, row_major>
+    %layout = "tla.make_layout"(%shape, %stride) : (!tla.shape<?>, !tla.stride<1>) -> !tla.layout<!tla.shape<?>, !tla.stride<1>, !tla.shape<?>, RowMajor>
     %coord = "tla.make_coord"() : () -> !tla.coord<0>
-    %tensor = "tla.make_tensor"(%ptr, %layout, %coord) : (!tla.ptr<f32, ub, 256>, !tla.layout<!tla.shape<?>, !tla.stride<1>, !tla.shape<?>, row_major>, !tla.coord<0>) -> !tla.tensor<!tla.layout<!tla.shape<?>, !tla.stride<1>, !tla.shape<?>, row_major>, !tla.coord<0>, !tla.ptr<f32, ub, 256>>
+    %tensor = "tla.make_tensor"(%ptr, %layout, %coord) : (!tla.ptr<f32, ub, 256>, !tla.layout<!tla.shape<?>, !tla.stride<1>, !tla.shape<?>, RowMajor>, !tla.coord<0>) -> !tla.tensor<!tla.layout<!tla.shape<?>, !tla.stride<1>, !tla.shape<?>, RowMajor>, !tla.coord<0>, !tla.ptr<f32, ub, 256>>
     "tla.return"() : () -> ()
   }
 }

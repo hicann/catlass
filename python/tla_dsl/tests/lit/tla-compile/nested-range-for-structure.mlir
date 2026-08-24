@@ -3,7 +3,7 @@
 
 module {
   "tla.func"() ({
-  ^bb0(%arg0: !tla.tensor<!tla.layout<!tla.shape<8192,8192>, !tla.stride<8192,1>, !tla.shape<8192,8192>, row_major>, !tla.coord<0,0>, !tla.ptr<f16, gm, 2>>, %arg1: !tla.tensor<!tla.layout<!tla.shape<8192,8192>, !tla.stride<8192,1>, !tla.shape<8192,8192>, row_major>, !tla.coord<0,0>, !tla.ptr<f16, gm, 2>>, %arg2: !tla.tensor<!tla.layout<!tla.shape<8192,8192>, !tla.stride<8192,1>, !tla.shape<8192,8192>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>, %out: memref<1xindex>):
+  ^bb0(%arg0: !tla.tensor<!tla.layout<!tla.shape<8192,8192>, !tla.stride<8192,1>, !tla.shape<8192,8192>, RowMajor>, !tla.coord<0,0>, !tla.ptr<f16, gm, 2>>, %arg1: !tla.tensor<!tla.layout<!tla.shape<8192,8192>, !tla.stride<8192,1>, !tla.shape<8192,8192>, RowMajor>, !tla.coord<0,0>, !tla.ptr<f16, gm, 2>>, %arg2: !tla.tensor<!tla.layout<!tla.shape<8192,8192>, !tla.stride<8192,1>, !tla.shape<8192,8192>, RowMajor>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>, %out: memref<1xindex>):
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c2 = arith.constant 2 : index
@@ -24,7 +24,7 @@ module {
       }
     }
     "tla.return"() : () -> ()
-  }) {function_type = (!tla.tensor<!tla.layout<!tla.shape<8192,8192>, !tla.stride<8192,1>, !tla.shape<8192,8192>, row_major>, !tla.coord<0,0>, !tla.ptr<f16, gm, 2>>, !tla.tensor<!tla.layout<!tla.shape<8192,8192>, !tla.stride<8192,1>, !tla.shape<8192,8192>, row_major>, !tla.coord<0,0>, !tla.ptr<f16, gm, 2>>, !tla.tensor<!tla.layout<!tla.shape<8192,8192>, !tla.stride<8192,1>, !tla.shape<8192,8192>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>, memref<1xindex>) -> (), sym_name = "nested_range_for_structure"} : () -> ()
+  }) {function_type = (!tla.tensor<!tla.layout<!tla.shape<8192,8192>, !tla.stride<8192,1>, !tla.shape<8192,8192>, RowMajor>, !tla.coord<0,0>, !tla.ptr<f16, gm, 2>>, !tla.tensor<!tla.layout<!tla.shape<8192,8192>, !tla.stride<8192,1>, !tla.shape<8192,8192>, RowMajor>, !tla.coord<0,0>, !tla.ptr<f16, gm, 2>>, !tla.tensor<!tla.layout<!tla.shape<8192,8192>, !tla.stride<8192,1>, !tla.shape<8192,8192>, RowMajor>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>, memref<1xindex>) -> (), sym_name = "nested_range_for_structure"} : () -> ()
 }
 
 // CHECK-LABEL: func.func @nested_range_for_structure

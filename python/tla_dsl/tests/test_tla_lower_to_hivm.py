@@ -889,7 +889,7 @@ def test_cube_dynamic_on_chip_pointer_uses_zero_extents() -> None:
         output,
     ), output
 
-    assert "call @copy_gm_row_major_to_l1_zN_half" in output
+    assert "call @copy_gm_RowMajor_to_l1_zN_half" in output
     assert "memref<0xf16" not in output
     assert '"tla.copy"' not in output
 

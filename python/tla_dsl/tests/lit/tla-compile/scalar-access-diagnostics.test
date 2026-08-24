@@ -13,7 +13,7 @@
 // STORE-SCOPE-SAME: 'tla.scalar_store' op UB scalar access must be nested inside a tla.vector region
 
 // BEGIN_LOAD
-// !slot = !tla.tensor<!tla.layout<!tla.shape<1>, !tla.stride<1>, !tla.shape<1>, row_major>, !tla.coord<0>, !tla.ptr<f32, ub, 4>>
+// !slot = !tla.tensor<!tla.layout<!tla.shape<1>, !tla.stride<1>, !tla.shape<1>, RowMajor>, !tla.coord<0>, !tla.ptr<f32, ub, 4>>
 // module {
 //   func.func @scalar_load_past_end(%slot_memref: memref<1xf32, #hivm.address_space<ub>>) {
 //     %slot = builtin.unrealized_conversion_cast %slot_memref : memref<1xf32, #hivm.address_space<ub>> to !slot
@@ -27,7 +27,7 @@
 // END_LOAD
 
 // BEGIN_STORE
-// !slot = !tla.tensor<!tla.layout<!tla.shape<1>, !tla.stride<1>, !tla.shape<1>, row_major>, !tla.coord<0>, !tla.ptr<f32, ub, 4>>
+// !slot = !tla.tensor<!tla.layout<!tla.shape<1>, !tla.stride<1>, !tla.shape<1>, RowMajor>, !tla.coord<0>, !tla.ptr<f32, ub, 4>>
 // module {
 //   func.func @scalar_store_past_end(%slot_memref: memref<1xf32, #hivm.address_space<ub>>) {
 //     %slot = builtin.unrealized_conversion_cast %slot_memref : memref<1xf32, #hivm.address_space<ub>> to !slot
@@ -42,7 +42,7 @@
 // END_STORE
 
 // BEGIN_LOAD_SCOPE
-// !slot = !tla.tensor<!tla.layout<!tla.shape<1>, !tla.stride<1>, !tla.shape<1>, row_major>, !tla.coord<0>, !tla.ptr<f32, ub, 4>>
+// !slot = !tla.tensor<!tla.layout<!tla.shape<1>, !tla.stride<1>, !tla.shape<1>, RowMajor>, !tla.coord<0>, !tla.ptr<f32, ub, 4>>
 // module {
 //   func.func @scalar_load_outside_vector(%slot_memref: memref<1xf32, #hivm.address_space<ub>>) {
 //     %slot = builtin.unrealized_conversion_cast %slot_memref : memref<1xf32, #hivm.address_space<ub>> to !slot
@@ -54,7 +54,7 @@
 // END_LOAD_SCOPE
 
 // BEGIN_STORE_SCOPE
-// !slot = !tla.tensor<!tla.layout<!tla.shape<1>, !tla.stride<1>, !tla.shape<1>, row_major>, !tla.coord<0>, !tla.ptr<f32, ub, 4>>
+// !slot = !tla.tensor<!tla.layout<!tla.shape<1>, !tla.stride<1>, !tla.shape<1>, RowMajor>, !tla.coord<0>, !tla.ptr<f32, ub, 4>>
 // module {
 //   func.func @scalar_store_outside_vector(%slot_memref: memref<1xf32, #hivm.address_space<ub>>) {
 //     %slot = builtin.unrealized_conversion_cast %slot_memref : memref<1xf32, #hivm.address_space<ub>> to !slot

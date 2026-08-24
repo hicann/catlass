@@ -529,7 +529,7 @@ class _Tensor(TensorABC):
         """Phase-1 GM/UB scalar access preconditions."""
         if self.addrspace not in ("gm", "ub"):
             raise ValueError(f"{self!r} doesn't support scalar_load/store")
-        if self.layout_tag not in ("row_major", "column_major"):
+        if self.layout_tag not in ("RowMajor", "ColumnMajor"):
             raise ValueError(
                 f"{self!r} doesn't support scalar_load/store (layout={self.layout_tag!r})"
             )
@@ -619,9 +619,9 @@ class _Tensor(TensorABC):
                     "Sub-byte scalar dereference not supported for type "
                     f"{elem_numeric.__name__}"
                 )
-        if parent.layout_tag not in ("row_major", "column_major"):
+        if parent.layout_tag not in ("RowMajor", "ColumnMajor"):
             raise TlaLoweringError(
-                "tla.scalar_load currently supports row_major/column_major only"
+                "tla.scalar_load currently supports RowMajor/ColumnMajor only"
             )
 
         index_values = _Tensor._prepare_scalar_indices(
@@ -710,9 +710,9 @@ class _Tensor(TensorABC):
                     "Sub-byte scalar dereference not supported for type "
                     f"{elem_numeric.__name__}"
                 )
-        if parent.layout_tag not in ("row_major", "column_major"):
+        if parent.layout_tag not in ("RowMajor", "ColumnMajor"):
             raise TlaLoweringError(
-                "tla.scalar_store currently supports row_major/column_major only"
+                "tla.scalar_store currently supports RowMajor/ColumnMajor only"
             )
 
         index_values = _Tensor._prepare_scalar_indices(

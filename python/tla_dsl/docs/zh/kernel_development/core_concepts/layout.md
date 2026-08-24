@@ -105,7 +105,7 @@ Tensor.mark_layout_dynamic(leading_dim: int | None = None) -> Tensor
 
 | 参数 | 含义 |
 |------|------|
-| `leading_dim` | 该维 stride 固定为 `1`。`None` 时按 `layout_tag` 推断：`row_major` → 最内维；`column_major` → 维 0；其它标签则按紧凑布局推导 unit-stride 维 |
+| `leading_dim` | 该维 stride 固定为 `1`。`None` 时按 `layout_tag` 推断：`RowMajor` → 最内维；`ColumnMajor` → 维 0；其它标签则按紧凑布局推导 unit-stride 维 |
 
 `leading_dim` 对应维的具体 stride 必须为 `1`，否则报错。
 

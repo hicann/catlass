@@ -100,14 +100,14 @@ static bool tryGmOriginLayout(
         return false;
     if (info->addressSpace != ::AddressSpace::gm)
         return false;
-    if (info->layoutTag != "row_major" && info->layoutTag != "column_major")
+    if (info->layoutTag != "RowMajor" && info->layoutTag != "ColumnMajor")
         return false;
     if (llvm::any_of(info->originShape, [](int64_t d) { return d == ShapedType::kDynamic; }))
         return false;
     unsigned rank = info->originShape.size();
     originDims.assign(info->originShape.begin(), info->originShape.end());
     contigStrides.assign(rank, 1);
-    if (info->layoutTag == "row_major") {
+    if (info->layoutTag == "RowMajor") {
         int64_t acc = 1;
         for (int i = rank - 1; i >= 0; --i) {
             contigStrides[i] = acc;
@@ -639,7 +639,7 @@ std::string getCopyRouteCallee(
         StringRef suffix = copyRuntimeElemSuffix(srcElementType);
         if (suffix.empty())
             return {};
-        return Twine("copy_ub_row_major_to_l1_zN_").concat(suffix).str();
+        return Twine("copy_ub_RowMajor_to_l1_zN_").concat(suffix).str();
     }
     if (*srcSpace == hivm::AddressSpace::UB && *dstSpace == hivm::AddressSpace::L1 &&
         (srcLayout == TensorLayoutTag::zN || srcLayout == TensorLayoutTag::zNUnAlign) &&
@@ -659,7 +659,7 @@ std::string getCopyRouteCallee(
         StringRef suffix = copyRuntimeElemSuffix(srcElementType);
         if (suffix.empty())
             return {};
-        return Twine("copy_gm_row_major_to_ub_row_major_").concat(suffix).str();
+        return Twine("copy_gm_RowMajor_to_ub_RowMajor_").concat(suffix).str();
     }
     // UB (row-major) -> GM (row-major): vector-core staging store.
     if (*srcSpace == hivm::AddressSpace::UB && *dstSpace == hivm::AddressSpace::GM &&
@@ -669,7 +669,7 @@ std::string getCopyRouteCallee(
         StringRef suffix = copyRuntimeElemSuffix(srcElementType);
         if (suffix.empty())
             return {};
-        return Twine("copy_ub_row_major_to_gm_row_major_").concat(suffix).str();
+        return Twine("copy_ub_RowMajor_to_gm_RowMajor_").concat(suffix).str();
     }
     if (*srcSpace == hivm::AddressSpace::GM && *dstSpace == hivm::AddressSpace::L1 &&
         srcLayout == TensorLayoutTag::RowMajor && dstLayout == TensorLayoutTag::zN) {
@@ -678,7 +678,7 @@ std::string getCopyRouteCallee(
         StringRef suffix = copyRuntimeElemSuffix(srcElementType);
         if (suffix.empty())
             return {};
-        return Twine("copy_gm_row_major_to_l1_zN_").concat(suffix).str();
+        return Twine("copy_gm_RowMajor_to_l1_zN_").concat(suffix).str();
     }
     if (*srcSpace == hivm::AddressSpace::GM && *dstSpace == hivm::AddressSpace::L1 &&
         srcLayout == TensorLayoutTag::ColumnMajor && dstLayout == TensorLayoutTag::nZ) {
@@ -687,7 +687,7 @@ std::string getCopyRouteCallee(
         StringRef suffix = copyRuntimeElemSuffix(srcElementType);
         if (suffix.empty())
             return {};
-        return Twine("copy_gm_column_major_to_l1_nZ_").concat(suffix).str();
+        return Twine("copy_gm_ColumnMajor_to_l1_nZ_").concat(suffix).str();
     }
     if (*srcSpace == hivm::AddressSpace::L1 && *dstSpace == hivm::AddressSpace::L0A &&
         srcLayout == TensorLayoutTag::zN && dstLayout == TensorLayoutTag::zN) {
@@ -734,7 +734,7 @@ std::string getCopyRouteCallee(
         StringRef suffix = copyRuntimeElemSuffix(dstElem);
         if (suffix.empty())
             return {};
-        return Twine("copy_l0c_to_gm_row_major_").concat(suffix).str();
+        return Twine("copy_l0c_to_gm_RowMajor_").concat(suffix).str();
     }
     // L0C -> UB row-major: an fp32 acc may narrow to f32 / f16 / bf16 on fixpipe;
     // an i32 acc (int8 MMAD) stays i32.
@@ -745,7 +745,7 @@ std::string getCopyRouteCallee(
         StringRef suffix = copyRuntimeElemSuffix(dstElem);
         if (suffix.empty())
             return {};
-        return Twine("copy_l0c_to_ub_row_major_").concat(extraDesc).concat("_").concat(suffix).str();
+        return Twine("copy_l0c_to_ub_RowMajor_").concat(extraDesc).concat("_").concat(suffix).str();
     }
     // L0C -> UB col-major: an fp32 acc may narrow to f32 / f16 / bf16 on fixpipe;
     // an i32 acc (int8 MMAD) stays i32.
@@ -756,7 +756,7 @@ std::string getCopyRouteCallee(
         StringRef suffix = copyRuntimeElemSuffix(dstElem);
         if (suffix.empty())
             return {};
-        return Twine("copy_l0c_to_ub_column_major_").concat(extraDesc).concat("_").concat(suffix).str();
+        return Twine("copy_l0c_to_ub_ColumnMajor_").concat(extraDesc).concat("_").concat(suffix).str();
     }
     // L0C -> L1 zN: an fp32 acc may narrow to f32 / f16 / bf16 on fixpipe; an i32
     // acc (int8 MMAD) stays i32.
@@ -808,18 +808,17 @@ static bool isAicTemplateRuntimeCall(StringRef name)
     if (!(name.ends_with("_float") || name.ends_with("_half") || name.ends_with("_bf16") || name.ends_with("_int8_t") ||
           name.ends_with("_int32_t")))
         return false;
-    return name.starts_with("copy_gm_row_major_to_l1_zN_") || name.starts_with("copy_gm_column_major_to_l1_nZ_") ||
+    return name.starts_with("copy_gm_RowMajor_to_l1_zN_") || name.starts_with("copy_gm_ColumnMajor_to_l1_nZ_") ||
            name.starts_with("copy_l1_zN_to_l0a_zN_") || name.starts_with("copy_l1_nZ_to_l0a_zN_") ||
            name.starts_with("copy_l1_zN_to_l0b_nZ_") || name.starts_with("copy_l1_nZ_to_l0b_nZ_") ||
-           name.starts_with("copy_l0c_to_ub_row_major_") || name.starts_with("copy_l0c_to_gm_row_major_") ||
-           name.starts_with("copy_l0c_to_ub_column_major_") || name.starts_with("copy_l0c_to_l1_zN_");
+           name.starts_with("copy_l0c_to_ub_RowMajor_") || name.starts_with("copy_l0c_to_gm_RowMajor_") ||
+           name.starts_with("copy_l0c_to_ub_ColumnMajor_") || name.starts_with("copy_l0c_to_l1_zN_");
 }
 
 static bool isAivTemplateRuntimeCall(StringRef name)
 {
-    return name.starts_with("copy_ub_row_major_to_l1_zN_") || name.starts_with("copy_ub_zN_to_l1_zN_") ||
-           name.starts_with("copy_gm_row_major_to_ub_row_major_") ||
-           name.starts_with("copy_ub_row_major_to_gm_row_major_");
+    return name.starts_with("copy_ub_RowMajor_to_l1_zN_") || name.starts_with("copy_ub_zN_to_l1_zN_") ||
+           name.starts_with("copy_gm_RowMajor_to_ub_RowMajor_") || name.starts_with("copy_ub_RowMajor_to_gm_RowMajor_");
 }
 
 static void annotateAicTemplateRuntimeCall(func::FuncOp func)

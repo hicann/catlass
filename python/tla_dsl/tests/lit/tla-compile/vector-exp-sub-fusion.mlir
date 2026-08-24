@@ -1,7 +1,7 @@
 // RUN: %tla_compile %s --mlir-print-ir-after=combine-ave-ops -o %t 2>&1 | %filecheck %s
 // RUN: %tla_compile %s --mlir-print-ir-after=convert-hivmave-to-ave-intrin -o %t 2>&1 | %filecheck %s --check-prefix=INTRIN
 
-!fvec = !tla.tensor<!tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, row_major>, !tla.coord<0>, !tla.ptr<f32, ub, 4>>
+!fvec = !tla.tensor<!tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, RowMajor>, !tla.coord<0>, !tla.ptr<f32, ub, 4>>
 
 module {
   func.func @vector_exp_sub_fusion(

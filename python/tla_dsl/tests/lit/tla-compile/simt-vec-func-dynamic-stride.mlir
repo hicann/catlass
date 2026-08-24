@@ -12,7 +12,7 @@
 // Before this, a dynamic stride was neither provably 1 nor provably anything
 // else, so the index was emitted unscaled and t[1] silently addressed t[0]+1.
 
-!ub_dyn = !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<?>, !tla.shape<16>, row_major>, !tla.coord<0>, !tla.ptr<f32, ub, 4>>
+!ub_dyn = !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<?>, !tla.shape<16>, RowMajor>, !tla.coord<0>, !tla.ptr<f32, ub, 4>>
 
 module {
   func.func @simt_dynamic_stride(%ub_memref: memref<16xf32, #hivm.address_space<ub>>,
@@ -25,8 +25,8 @@ module {
     %v = tla.tensor_desc %ub_memref shape [%c1, %c4, %c1, %c1] stride [%c16, %stride, %c1, %c1] origin_shape [%c1, %c16] coord [%c0, %c0] : memref<16xf32, #hivm.address_space<ub>> -> !ub_dyn
     "tla.vector"() ({
       "tla.vec.func"() ({
-        %x = tla.simt_load %v[%c2] : <!tla.layout<!tla.shape<4>, !tla.stride<?>, !tla.shape<16>, row_major>, !tla.coord<0>, !tla.ptr<f32, ub, 4>> -> f32
-        tla.simt_store %v[%c2], %x : <!tla.layout<!tla.shape<4>, !tla.stride<?>, !tla.shape<16>, row_major>, !tla.coord<0>, !tla.ptr<f32, ub, 4>>, f32
+        %x = tla.simt_load %v[%c2] : <!tla.layout<!tla.shape<4>, !tla.stride<?>, !tla.shape<16>, RowMajor>, !tla.coord<0>, !tla.ptr<f32, ub, 4>> -> f32
+        tla.simt_store %v[%c2], %x : <!tla.layout<!tla.shape<4>, !tla.stride<?>, !tla.shape<16>, RowMajor>, !tla.coord<0>, !tla.ptr<f32, ub, 4>>, f32
       }) {mode = "simt", thread_block_dim = array<i64: 4, 1, 1>} : () -> ()
     }) : () -> ()
     return

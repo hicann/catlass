@@ -129,8 +129,8 @@ class Tla_I32Enum<string name, string description, list<I32EnumAttrCase> cases>
     : I32EnumAttr<name, description, cases> {
 }
 
-def Tla_LayoutTag_RowMajor : I32EnumAttrCase<"row_major", 0>;
-def Tla_LayoutTag_ColumnMajor : I32EnumAttrCase<"column_major", 1>;
+def Tla_LayoutTag_RowMajor : I32EnumAttrCase<"RowMajor", 0>;
+def Tla_LayoutTag_ColumnMajor : I32EnumAttrCase<"ColumnMajor", 1>;
 def Tla_LayoutTag_zN : I32EnumAttrCase<"zN", 2>;
 def Tla_LayoutTag_nZ : I32EnumAttrCase<"nZ", 3>;
 def Tla_LayoutTag_zZ : I32EnumAttrCase<"zZ", 4>;

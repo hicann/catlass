@@ -23,7 +23,7 @@
 // CHECK-NOT: tla.scalar_load
 // CHECK-NOT: tla.scalar_store
 
-!vec64 = !tla.tensor<!tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, row_major>, !tla.coord<0>, !tla.ptr<f32, ub, 4>>
+!vec64 = !tla.tensor<!tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, RowMajor>, !tla.coord<0>, !tla.ptr<f32, ub, 4>>
 
 module {
   func.func @ub_scalar_access_in_vec_func(

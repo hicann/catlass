@@ -1,9 +1,9 @@
 // RUN: %tla_compile %s --mlir-print-ir-after=tla-vector-region -o %t 2>&1 | %filecheck %s --implicit-check-not=tla.load_mask --implicit-check-not=tla.store_mask
 
-!mask_b8 = !tla.tensor<!tla.layout<!tla.shape<8>, !tla.stride<1>, !tla.shape<8>, row_major>, !tla.coord<0>, !tla.ptr<i8, ub, 1>>
-!mask_b16 = !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<i16, ub, 2>>
-!mask_b32 = !tla.tensor<!tla.layout<!tla.shape<2>, !tla.stride<1>, !tla.shape<2>, row_major>, !tla.coord<0>, !tla.ptr<i32, ub, 4>>
-!fvec = !tla.tensor<!tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, row_major>, !tla.coord<0>, !tla.ptr<f32, ub, 4>>
+!mask_b8 = !tla.tensor<!tla.layout<!tla.shape<8>, !tla.stride<1>, !tla.shape<8>, RowMajor>, !tla.coord<0>, !tla.ptr<i8, ub, 1>>
+!mask_b16 = !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, RowMajor>, !tla.coord<0>, !tla.ptr<i16, ub, 2>>
+!mask_b32 = !tla.tensor<!tla.layout<!tla.shape<2>, !tla.stride<1>, !tla.shape<2>, RowMajor>, !tla.coord<0>, !tla.ptr<i32, ub, 4>>
+!fvec = !tla.tensor<!tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, RowMajor>, !tla.coord<0>, !tla.ptr<f32, ub, 4>>
 
 module {
   func.func @load_store_mask_b8(

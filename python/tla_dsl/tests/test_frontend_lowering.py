@@ -621,7 +621,7 @@ def test_constexpr_param_is_excluded_from_runtime_function_type(compiler_tlair) 
     mlir = compiler_tlair(constexpr_alloc_kernel, type_args=(32, mem))
     assert 'sym_name = "constexpr_alloc_kernel"' in mlir
     assert (
-        "%arg0: !tla.tensor<!tla.layout<!tla.shape<1,2>, !tla.stride<2,1>, !tla.shape<1,2>, row_major>, !tla.coord<0,0>, !tla.ptr<f16, gm, 2>>)"
+        "%arg0: !tla.tensor<!tla.layout<!tla.shape<1,2>, !tla.stride<2,1>, !tla.shape<1,2>, RowMajor>, !tla.coord<0,0>, !tla.ptr<f16, gm, 2>>)"
         in mlir
     )
     assert "%arg1" not in mlir

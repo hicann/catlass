@@ -28,7 +28,7 @@ def test_make_fake_tensor_host_sample() -> None:
 
 def test_make_fake_tensor_defaults_layout_tag_to_row_major() -> None:
     host = make_fake_tensor(tla.Float32, (4, 8), (8, 1))
-    assert host.layout_tag == "row_major"
+    assert host.layout_tag == "RowMajor"
     assert host.origin_shape == (4, 8)
 
 

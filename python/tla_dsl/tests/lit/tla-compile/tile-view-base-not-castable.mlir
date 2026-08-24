@@ -8,8 +8,8 @@
 // ("operand type 'memref<16xi32,...>' and result type 'memref<8xi32, strided...>'
 // are cast incompatible") from an op the user never wrote.
 
-!full  = !tla.tensor<!tla.layout<!tla.shape<16>, !tla.stride<1>, !tla.shape<16>, row_major>, !tla.coord<0>, !tla.ptr<i32, ub, 4>>
-!chunk = !tla.tensor<!tla.layout<!tla.shape<8>, !tla.stride<1>, !tla.shape<8>, row_major>, !tla.coord<8>, !tla.ptr<i32, ub, 4>>
+!full  = !tla.tensor<!tla.layout<!tla.shape<16>, !tla.stride<1>, !tla.shape<16>, RowMajor>, !tla.coord<0>, !tla.ptr<i32, ub, 4>>
+!chunk = !tla.tensor<!tla.layout<!tla.shape<8>, !tla.stride<1>, !tla.shape<8>, RowMajor>, !tla.coord<8>, !tla.ptr<i32, ub, 4>>
 
 module {
   func.func @tile_view_base_not_castable(%ub: memref<16xi32, #hivm.address_space<ub>>) {

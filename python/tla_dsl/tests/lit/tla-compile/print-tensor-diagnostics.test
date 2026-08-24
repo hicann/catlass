@@ -12,9 +12,9 @@
 
 // BEGIN-REGION
 module {
-  tla.func @regionless(%x: !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>) {
+  tla.func @regionless(%x: !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, RowMajor>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>) {
     %c4 = arith.constant 4 : i64
-    tla.print_tensor %x length = %c4 shape = [4] : !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>, i64
+    tla.print_tensor %x length = %c4 shape = [4] : !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, RowMajor>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>, i64
     tla.return
   }
 }
@@ -23,10 +23,10 @@ module {
 
 // BEGIN-SHAPE-MISMATCH
 module {
-  tla.func @shape_mismatch(%x: !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>) {
+  tla.func @shape_mismatch(%x: !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, RowMajor>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>) {
     %c4 = arith.constant 4 : i64
     "tla.vector"() ({
-      tla.print_tensor %x length = %c4 shape = [2, 2] : !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>, i64
+      tla.print_tensor %x length = %c4 shape = [2, 2] : !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, RowMajor>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>, i64
     }) : () -> ()
     tla.return
   }
@@ -36,10 +36,10 @@ module {
 
 // BEGIN-BF16
 module {
-  tla.func @bf16(%x: !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<bf16, gm, 2>>) {
+  tla.func @bf16(%x: !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, RowMajor>, !tla.coord<0>, !tla.ptr<bf16, gm, 2>>) {
     %c4 = arith.constant 4 : i64
     "tla.vector"() ({
-      tla.print_tensor %x length = %c4 shape = [4] : !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<bf16, gm, 2>>, i64
+      tla.print_tensor %x length = %c4 shape = [4] : !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, RowMajor>, !tla.coord<0>, !tla.ptr<bf16, gm, 2>>, i64
     }) : () -> ()
     tla.return
   }
@@ -52,10 +52,10 @@ module {
 
 // BEGIN-EMPTY
 module {
-  tla.func @empty(%x: !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>) {
+  tla.func @empty(%x: !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, RowMajor>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>) {
     %c1 = arith.constant 1 : i64
     "tla.vector"() ({
-      tla.print_tensor %x length = %c1 shape = [] : !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>, i64
+      tla.print_tensor %x length = %c1 shape = [] : !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, RowMajor>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>, i64
     }) : () -> ()
     tla.return
   }
@@ -65,10 +65,10 @@ module {
 
 // BEGIN-TOO-LARGE
 module {
-  tla.func @too_large(%x: !tla.tensor<!tla.layout<!tla.shape<262113>, !tla.stride<1>, !tla.shape<262113>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>) {
+  tla.func @too_large(%x: !tla.tensor<!tla.layout<!tla.shape<262113>, !tla.stride<1>, !tla.shape<262113>, RowMajor>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>) {
     %count = arith.constant 262113 : i64
     "tla.vector"() ({
-      tla.print_tensor %x length = %count shape = [262113] : !tla.tensor<!tla.layout<!tla.shape<262113>, !tla.stride<1>, !tla.shape<262113>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>, i64
+      tla.print_tensor %x length = %count shape = [262113] : !tla.tensor<!tla.layout<!tla.shape<262113>, !tla.stride<1>, !tla.shape<262113>, RowMajor>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>, i64
     }) : () -> ()
     tla.return
   }
@@ -78,10 +78,10 @@ module {
 
 // BEGIN-LENGTH-EXCEEDS-SHAPE
 module {
-  tla.func @length_exceeds_shape(%x: !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>) {
+  tla.func @length_exceeds_shape(%x: !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, RowMajor>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>) {
     %c5 = arith.constant 5 : i64
     "tla.vector"() ({
-      tla.print_tensor %x length = %c5 shape = [4] : !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>, i64
+      tla.print_tensor %x length = %c5 shape = [4] : !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, RowMajor>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>, i64
     }) : () -> ()
     tla.return
   }
@@ -91,10 +91,10 @@ module {
 
 // BEGIN-PRIVATE
 module {
-  func.func private @private_helper(%x: !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>) {
+  func.func private @private_helper(%x: !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, RowMajor>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>) {
     %c4 = arith.constant 4 : i64
     "tla.vector"() ({
-      tla.print_tensor %x length = %c4 shape = [4] : !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>, i64
+      tla.print_tensor %x length = %c4 shape = [4] : !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, RowMajor>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>, i64
     }) : () -> ()
     func.return
   }
@@ -104,12 +104,12 @@ module {
 
 // BEGIN-CFG
 module {
-  func.func @cfg(%x: !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>) {
+  func.func @cfg(%x: !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, RowMajor>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>) {
     %c4 = arith.constant 4 : i64
     cf.br ^bb1
   ^bb1:
     "tla.vector"() ({
-      tla.print_tensor %x length = %c4 shape = [4] : !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>, i64
+      tla.print_tensor %x length = %c4 shape = [4] : !tla.tensor<!tla.layout<!tla.shape<4>, !tla.stride<1>, !tla.shape<4>, RowMajor>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>, i64
     }) : () -> ()
     func.return
   }

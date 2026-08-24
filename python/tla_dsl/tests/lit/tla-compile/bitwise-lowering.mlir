@@ -20,8 +20,8 @@
 // CHECK-NOT: tla.bitwise_or
 // CHECK-NOT: tla.bitwise_xor
 
-!vec = !tla.tensor<!tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, row_major>, !tla.coord<0>, !tla.ptr<i32, ub, 4>>
-!vec_alt = !tla.tensor<!tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, row_major>, !tla.coord<1>, !tla.ptr<i32, ub, 4>>
+!vec = !tla.tensor<!tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, RowMajor>, !tla.coord<0>, !tla.ptr<i32, ub, 4>>
+!vec_alt = !tla.tensor<!tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, RowMajor>, !tla.coord<1>, !tla.ptr<i32, ub, 4>>
 
 module {
   func.func @bitwise_lowering(

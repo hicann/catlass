@@ -37,7 +37,7 @@ extern "C" {
 __aicore__
     __attribute__((always_inline))
     // MLIR lowering passes memref<?xT, strided<[?], offset:?>, #ca/cb/cc> (rank 1); only GM uses rank 2.
-    // Cube MMAD on dav-c310 uses fp32 L0C (__cc__); f16/bf16 outputs use copy_l0c_to_gm_row_major_* stubs.
+    // Cube MMAD on dav-c310 uses fp32 L0C (__cc__); f16/bf16 outputs use copy_l0c_to_gm_RowMajor_* stubs.
     void
     _mlir_ciface_mmad_float_float_float(
         memref_t<__ca__ float, 1>* a, memref_t<__cb__ float, 1>* b, memref_t<__cc__ float, 1>* c, int64_t m, int64_t n,

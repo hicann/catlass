@@ -30,9 +30,9 @@ llvm::StringRef stringifyTensorLayoutTag(TensorLayoutTag layoutTag)
         case TensorLayoutTag::Unknown:
             return "unknown";
         case TensorLayoutTag::RowMajor:
-            return "row_major";
+            return "RowMajor";
         case TensorLayoutTag::ColumnMajor:
-            return "column_major";
+            return "ColumnMajor";
         case TensorLayoutTag::zN:
             return "zN";
         case TensorLayoutTag::zZ:
@@ -50,9 +50,9 @@ llvm::StringRef stringifyTensorLayoutTag(TensorLayoutTag layoutTag)
 mlir::FailureOr<TensorLayoutTag> convertTlaLayoutTag(::LayoutTag layoutTag)
 {
     switch (layoutTag) {
-        case LayoutTag::row_major:
+        case LayoutTag::RowMajor:
             return TensorLayoutTag::RowMajor;
-        case LayoutTag::column_major:
+        case LayoutTag::ColumnMajor:
             return TensorLayoutTag::ColumnMajor;
         case LayoutTag::zN:
             return TensorLayoutTag::zN;

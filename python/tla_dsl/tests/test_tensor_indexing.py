@@ -230,7 +230,7 @@ def test_tensor_scalar_load_emits_tla_scalar_load_1d() -> None:
     meta = _gm_tensor_1d(8)
     mlir = _kernel_scalar_load_1d.dump_mlir(type_args=(meta,))
     assert "tla.scalar_load" in mlir
-    assert "row_major" in mlir
+    assert "RowMajor" in mlir
     assert "tla.load" not in mlir.replace("tla.scalar_load", "")
 
 

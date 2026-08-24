@@ -10,8 +10,8 @@
 //   * their relative order is preserved between launch and callee.
 // Getting the order wrong silently swaps two same-typed values at runtime.
 
-!gm_f32 = !tla.tensor<!tla.layout<!tla.shape<128>, !tla.stride<1>, !tla.shape<128>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>
-!gm_i32 = !tla.tensor<!tla.layout<!tla.shape<128>, !tla.stride<1>, !tla.shape<128>, row_major>, !tla.coord<0>, !tla.ptr<i32, gm, 4>>
+!gm_f32 = !tla.tensor<!tla.layout<!tla.shape<128>, !tla.stride<1>, !tla.shape<128>, RowMajor>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>
+!gm_i32 = !tla.tensor<!tla.layout<!tla.shape<128>, !tla.stride<1>, !tla.shape<128>, RowMajor>, !tla.coord<0>, !tla.ptr<i32, gm, 4>>
 
 module {
   func.func @simt_scalar_capture(%gm_memref: memref<128xf32, #hivm.address_space<gm>>,
@@ -29,10 +29,10 @@ module {
         // before it ever reaches the ABI, which would silently weaken the
         // ordering check below to a single i32.
         %i2 = tla.simt_add %si, %sj : i32
-        tla.simt_store %gi[%c0], %i2 : <!tla.layout<!tla.shape<128>, !tla.stride<1>, !tla.shape<128>, row_major>, !tla.coord<0>, !tla.ptr<i32, gm, 4>>, i32
-        %f = tla.simt_load %gm[%c0] : <!tla.layout<!tla.shape<128>, !tla.stride<1>, !tla.shape<128>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>> -> f32
+        tla.simt_store %gi[%c0], %i2 : <!tla.layout<!tla.shape<128>, !tla.stride<1>, !tla.shape<128>, RowMajor>, !tla.coord<0>, !tla.ptr<i32, gm, 4>>, i32
+        %f = tla.simt_load %gm[%c0] : <!tla.layout<!tla.shape<128>, !tla.stride<1>, !tla.shape<128>, RowMajor>, !tla.coord<0>, !tla.ptr<f32, gm, 4>> -> f32
         %f2 = tla.simt_add %f, %sf : f32
-        tla.simt_store %gm[%c0], %f2 : <!tla.layout<!tla.shape<128>, !tla.stride<1>, !tla.shape<128>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>, f32
+        tla.simt_store %gm[%c0], %f2 : <!tla.layout<!tla.shape<128>, !tla.stride<1>, !tla.shape<128>, RowMajor>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>, f32
       }) {mode = "simt", thread_block_dim = array<i64: 64, 1, 1>} : () -> ()
     }) : () -> ()
     return

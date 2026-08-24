@@ -55,12 +55,12 @@
 // Every way out of an i32 accumulator. An i32 L0C has no narrowing path, so each
 // copy must resolve to an int32_t -> int32_t callee, never an fp32 one.
 // I8FIX-DAG: func.func private @mmad_int8_int8_int32(
-// I8FIX-DAG: func.func private @copy_l0c_to_gm_row_major_int32_t(
-// I8FIX-DAG: func.func private @copy_l0c_to_ub_row_major_splitm_int32_t(
+// I8FIX-DAG: func.func private @copy_l0c_to_gm_RowMajor_int32_t(
+// I8FIX-DAG: func.func private @copy_l0c_to_ub_RowMajor_splitm_int32_t(
 // I8FIX-DAG: func.func private @copy_l0c_to_l1_zN_int32_t(
 // I8FIX: call @mmad_int8_int8_int32(
-// I8FIX-DAG: call @copy_l0c_to_gm_row_major_int32_t(
-// I8FIX-DAG: call @copy_l0c_to_ub_row_major_splitm_int32_t(
+// I8FIX-DAG: call @copy_l0c_to_gm_RowMajor_int32_t(
+// I8FIX-DAG: call @copy_l0c_to_ub_RowMajor_splitm_int32_t(
 // I8FIX-DAG: call @copy_l0c_to_l1_zN_int32_t(
 // I8FIX-NOT: tla.mmad
 // I8FIX-NOT: tla.copy

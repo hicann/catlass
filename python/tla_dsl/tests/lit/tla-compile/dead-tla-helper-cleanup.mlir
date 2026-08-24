@@ -7,7 +7,7 @@ module {
     %coord = "tla.make_coord"() : () -> !tla.coord<0,0>
     %stride = "tla.make_stride"() : () -> !tla.stride<4,1>
     %layout = "tla.make_layout"(%shape, %stride)
-        : (!tla.shape<4,4>, !tla.stride<4,1>) -> !tla.layout<!tla.shape<4,4>, !tla.stride<4,1>, !tla.shape<4,4>, row_major>
+        : (!tla.shape<4,4>, !tla.stride<4,1>) -> !tla.layout<!tla.shape<4,4>, !tla.stride<4,1>, !tla.shape<4,4>, RowMajor>
     func.return
   }
 }

@@ -21,9 +21,9 @@ static LogicalResult validateKernelTensorArg(Operation* funcOp, unsigned argInde
         return funcOp->emitError() << "kernel tensor argument " << argIndex << " has malformed tensor metadata";
     if (info->addressSpace != ::AddressSpace::gm)
         return funcOp->emitError() << "kernel tensor argument " << argIndex << " must use gm address space";
-    if (info->layoutTag != "row_major" && info->layoutTag != "column_major")
+    if (info->layoutTag != "RowMajor" && info->layoutTag != "ColumnMajor")
         return funcOp->emitError() << "kernel tensor argument " << argIndex
-                                   << " must use row_major or column_major layout";
+                                   << " must use RowMajor or ColumnMajor layout";
 
     size_t rank = info->shape.size();
     if ((rank != 1 && rank != 2) || info->strides.size() != rank || info->coord.size() != rank ||
@@ -57,7 +57,7 @@ static LogicalResult validateKernelTensorArg(Operation* funcOp, unsigned argInde
     // Preserve padded and otherwise strided row-major ABI layouts, but reject
     // static metadata whose adjacent rows overlap. Dynamic metadata is carried
     // by the memref ABI and cannot be compared at compile time.
-    if (info->layoutTag == "row_major" && rank == 2) {
+    if (info->layoutTag == "RowMajor" && rank == 2) {
         int64_t rows = info->shape[0];
         int64_t columns = info->shape[1];
         int64_t rowStride = info->strides[0];
@@ -65,7 +65,7 @@ static LogicalResult validateKernelTensorArg(Operation* funcOp, unsigned argInde
         bool isStatic = columns != ShapedType::kDynamic && rowStride != ShapedType::kDynamic &&
                         columnStride != ShapedType::kDynamic;
         if (rows != 1 && isStatic && (rowStride - 1) / columnStride < columns - 1)
-            return funcOp->emitError() << "row_major kernel tensor argument " << argIndex
+            return funcOp->emitError() << "RowMajor kernel tensor argument " << argIndex
                                        << " must have non-overlapping rows: stride[0] must exceed "
                                           "(shape[1] - 1) * stride[1]";
     }
@@ -73,22 +73,22 @@ static LogicalResult validateKernelTensorArg(Operation* funcOp, unsigned argInde
     // Column-major buffers are physically contiguous row-major buffers over the
     // transposed shape. Their logical strides are therefore recoverable only for
     // the compact column-major form.
-    if (info->layoutTag == "column_major") {
+    if (info->layoutTag == "ColumnMajor") {
         if (rank == 1) {
             if (info->strides[0] != 1)
                 return funcOp->emitError()
-                       << "rank-1 column_major kernel tensor argument " << argIndex << " must have compact stride 1";
+                       << "rank-1 ColumnMajor kernel tensor argument " << argIndex << " must have compact stride 1";
         } else {
             if (info->strides[0] != 1)
                 return funcOp->emitError()
-                       << "column_major kernel tensor argument " << argIndex << " must have compact leading stride 1";
+                       << "ColumnMajor kernel tensor argument " << argIndex << " must have compact leading stride 1";
             int64_t rows = info->shape[0];
             int64_t columnStride = info->strides[1];
             bool recoverable =
                 rows == ShapedType::kDynamic ? columnStride == ShapedType::kDynamic : columnStride == rows;
             if (!recoverable)
                 return funcOp->emitError()
-                       << "column_major kernel tensor argument " << argIndex << " must have compact stride [1, rows]";
+                       << "ColumnMajor kernel tensor argument " << argIndex << " must have compact stride [1, rows]";
         }
     }
 
@@ -161,13 +161,13 @@ static FailureOr<Value> materializeRootTensorDescriptor(
     }
 
     SmallVector<Value, 2> abiStrides;
-    if (rawInfo->layoutTag == "row_major" && llvm::is_contained(rawInfo->strides, ShapedType::kDynamic)) {
+    if (rawInfo->layoutTag == "RowMajor" && llvm::is_contained(rawInfo->strides, ShapedType::kDynamic)) {
         auto metadata = builder.create<mlir::memref::ExtractStridedMetadataOp>(loc, base);
         abiStrides.append(metadata.getStrides().begin(), metadata.getStrides().end());
     }
 
     SmallVector<Value, 2> stride;
-    if (rawInfo->layoutTag == "row_major") {
+    if (rawInfo->layoutTag == "RowMajor") {
         for (auto [axis, value] : llvm::enumerate(rawInfo->strides))
             stride.push_back(value == ShapedType::kDynamic ? abiStrides[axis] : constant(value));
     } else if (rawInfo->shape.size() == 1) {

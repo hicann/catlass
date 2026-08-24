@@ -244,7 +244,7 @@ LogicalResult LayoutType::verify(function_ref<InFlightDiagnostic()> emitError, S
   SmallVector<int64_t, 8> originLeaves;
   if (failed(flattenIndexTree(origin.getTree(), originLeaves)))
     return emitError() << "tla.layout origin must be valid and non-empty";
-  if ((layoutTag == LayoutTag::row_major || layoutTag == LayoutTag::column_major) &&
+  if ((layoutTag == LayoutTag::RowMajor || layoutTag == LayoutTag::ColumnMajor) &&
       originLeaves.size() != shapeLeaves.size())
     return emitError() << "tla.layout linear origin must match shape leaf count";
   return success();

@@ -32,7 +32,7 @@ module {
 }
 
 //--- bare.mlir
-!layout = !tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, row_major>
+!layout = !tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, RowMajor>
 !coord = !tla.coord<0>
 !ub = !tla.tensor<!layout, !coord, !tla.ptr<f32, ub, 256>>
 !gm = !tla.tensor<!layout, !coord, !tla.ptr<f32, gm, 4>>
@@ -80,7 +80,7 @@ module {
 }
 
 //--- scalar.mlir
-!scalar_layout = !tla.layout<!tla.shape<1>, !tla.stride<1>, !tla.shape<1>, row_major>
+!scalar_layout = !tla.layout<!tla.shape<1>, !tla.stride<1>, !tla.shape<1>, RowMajor>
 !scalar_coord = !tla.coord<0>
 !scalar_ub = !tla.tensor<!scalar_layout, !scalar_coord, !tla.ptr<f32, ub, 4>>
 module {
@@ -100,7 +100,7 @@ module {
 }
 
 //--- overlap.mlir
-!overlap_layout = !tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, row_major>
+!overlap_layout = !tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, RowMajor>
 !overlap_coord = !tla.coord<0>
 !overlap_ub = !tla.tensor<!overlap_layout, !overlap_coord, !tla.ptr<f32, ub, 256>>
 module {
@@ -134,7 +134,7 @@ module {
 }
 
 //--- unit-dynamic.mlir
-!gm = !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<32,1>, !tla.shape<32,32>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>
+!gm = !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<32,1>, !tla.shape<32,32>, RowMajor>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>
 !l0a = !tla.tensor<!tla.layout<!tla.shape<(16,2),(8,4)>, !tla.stride<(8,128),(1,256)>, !tla.shape<32,32>, zN>, !tla.coord<0,0>, !tla.ptr<f32, l0a, 512>>
 !l0b = !tla.tensor<!tla.layout<!tla.shape<(8,4),(16,2)>, !tla.stride<(1,256),(8,128)>, !tla.shape<32,32>, nZ>, !tla.coord<0,0>, !tla.ptr<f32, l0b, 512>>
 !l0c = !tla.tensor<!tla.layout<!tla.shape<(16,2),(16,2)>, !tla.stride<(16,256),(1,512)>, !tla.shape<32,32>, L0Clayout>, !tla.coord<0,0>, !tla.ptr<f32, l0c, 512>>
@@ -155,7 +155,7 @@ module {
 }
 
 //--- unit-mixed.mlir
-!mixed_gm = !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<32,1>, !tla.shape<32,32>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>
+!mixed_gm = !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<32,1>, !tla.shape<32,32>, RowMajor>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>
 !mixed_l0a = !tla.tensor<!tla.layout<!tla.shape<(16,2),(8,4)>, !tla.stride<(8,128),(1,256)>, !tla.shape<32,32>, zN>, !tla.coord<0,0>, !tla.ptr<f32, l0a, 512>>
 !mixed_l0b = !tla.tensor<!tla.layout<!tla.shape<(8,4),(16,2)>, !tla.stride<(1,256),(8,128)>, !tla.shape<32,32>, nZ>, !tla.coord<0,0>, !tla.ptr<f32, l0b, 512>>
 !mixed_l0c = !tla.tensor<!tla.layout<!tla.shape<(16,2),(16,2)>, !tla.stride<(16,256),(1,512)>, !tla.shape<32,32>, L0Clayout>, !tla.coord<0,0>, !tla.ptr<f32, l0c, 512>>

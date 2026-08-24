@@ -1,7 +1,7 @@
 // RUN: %tla_compile %s -o %t --mlir-print-ir-after=tla-insert-auto-mutex 2>&1 | %filecheck %s
 
-!layout = !tla.layout<!tla.shape<?>, !tla.stride<1>, !tla.shape<?>, row_major>
-!gm_layout = !tla.layout<!tla.shape<?>, !tla.stride<1>, !tla.shape<256>, row_major>
+!layout = !tla.layout<!tla.shape<?>, !tla.stride<1>, !tla.shape<?>, RowMajor>
+!gm_layout = !tla.layout<!tla.shape<?>, !tla.stride<1>, !tla.shape<256>, RowMajor>
 !coord = !tla.coord<0>
 !ub = !tla.tensor<!layout, !coord, !tla.ptr<f32, ub, 256>>
 !gm = !tla.tensor<!gm_layout, !coord, !tla.ptr<f32, gm, 4>>

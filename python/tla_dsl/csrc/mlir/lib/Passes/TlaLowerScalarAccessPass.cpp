@@ -27,7 +27,7 @@ static FailureOr<Value> materializeScalarView(
     if (desc.addrspace != "gm" && desc.addrspace != "ub")
         return diagnosticOp->emitError("scalar access requires a GM or UB tensor descriptor"), failure();
     if (!isLinearLayout(desc.layoutTag))
-        return diagnosticOp->emitError("scalar access supports only linear row_major/column_major descriptors"),
+        return diagnosticOp->emitError("scalar access supports only linear RowMajor/ColumnMajor descriptors"),
                failure();
     size_t logicalRank = rawInfo->shape.size();
     if (logicalRank != 1 && logicalRank != 2)

@@ -12,11 +12,11 @@
 
 //--- per-core.mlir
 
-!gm = !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<32,1>, !tla.shape<32,32>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>
+!gm = !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<32,1>, !tla.shape<32,32>, RowMajor>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>
 !l0a = !tla.tensor<!tla.layout<!tla.shape<(16,2),(8,4)>, !tla.stride<(8,128),(1,256)>, !tla.shape<32,32>, zN>, !tla.coord<0,0>, !tla.ptr<f32, l0a, 512>>
 !l0b = !tla.tensor<!tla.layout<!tla.shape<(8,4),(16,2)>, !tla.stride<(1,256),(8,128)>, !tla.shape<32,32>, nZ>, !tla.coord<0,0>, !tla.ptr<f32, l0b, 512>>
 !l0c = !tla.tensor<!tla.layout<!tla.shape<(16,2),(16,2)>, !tla.stride<(16,256),(1,512)>, !tla.shape<32,32>, L0Clayout>, !tla.coord<0,0>, !tla.ptr<f32, l0c, 512>>
-!ub_layout = !tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, row_major>
+!ub_layout = !tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, RowMajor>
 !ub_coord = !tla.coord<0>
 !ub = !tla.tensor<!ub_layout, !ub_coord, !tla.ptr<f32, ub, 256>>
 !gm_ub = !tla.tensor<!ub_layout, !ub_coord, !tla.ptr<f32, gm, 4>>
@@ -138,7 +138,7 @@ module {
 // and Vector=30, so both independent ID spaces are valid.
 
 //--- id-limit.mlir
-!limit_layout = !tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, row_major>
+!limit_layout = !tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, RowMajor>
 !limit_coord = !tla.coord<0>
 !limit_ub = !tla.tensor<!limit_layout, !limit_coord, !tla.ptr<f32, ub, 256>>
 !limit_gm = !tla.tensor<!limit_layout, !limit_coord, !tla.ptr<f32, gm, 4>>

@@ -9,8 +9,8 @@
 // general path (coord[0]*stride[0] + coord[1]*stride[1], in elements); the two
 // must agree or a tensor means different things inside and outside the region.
 
-!ub_full = !tla.tensor<!tla.layout<!tla.shape<16>, !tla.stride<1>, !tla.shape<16>, row_major>, !tla.coord<0>, !tla.ptr<f32, ub, 4>>
-!ub_tail = !tla.tensor<!tla.layout<!tla.shape<8>, !tla.stride<1>, !tla.shape<16>, row_major>, !tla.coord<4>, !tla.ptr<f32, ub, 4>>
+!ub_full = !tla.tensor<!tla.layout<!tla.shape<16>, !tla.stride<1>, !tla.shape<16>, RowMajor>, !tla.coord<0>, !tla.ptr<f32, ub, 4>>
+!ub_tail = !tla.tensor<!tla.layout<!tla.shape<8>, !tla.stride<1>, !tla.shape<16>, RowMajor>, !tla.coord<4>, !tla.ptr<f32, ub, 4>>
 
 module {
   func.func @simt_offset_view(%ub_memref: memref<16xf32, #hivm.address_space<ub>>) {
@@ -23,8 +23,8 @@ module {
     %tail = tla.tensor_desc %ub_memref shape [%c1, %c8, %c1, %c1] stride [%c16, %c1, %c1, %c1] origin_shape [%c1, %c16] coord [%c0, %c4] : memref<16xf32, #hivm.address_space<ub>> -> !ub_tail
     "tla.vector"() ({
       "tla.vec.func"() ({
-        %v = tla.simt_load %full[%c0] : <!tla.layout<!tla.shape<16>, !tla.stride<1>, !tla.shape<16>, row_major>, !tla.coord<0>, !tla.ptr<f32, ub, 4>> -> f32
-        tla.simt_store %tail[%c0], %v : <!tla.layout<!tla.shape<8>, !tla.stride<1>, !tla.shape<16>, row_major>, !tla.coord<4>, !tla.ptr<f32, ub, 4>>, f32
+        %v = tla.simt_load %full[%c0] : <!tla.layout<!tla.shape<16>, !tla.stride<1>, !tla.shape<16>, RowMajor>, !tla.coord<0>, !tla.ptr<f32, ub, 4>> -> f32
+        tla.simt_store %tail[%c0], %v : <!tla.layout<!tla.shape<8>, !tla.stride<1>, !tla.shape<16>, RowMajor>, !tla.coord<4>, !tla.ptr<f32, ub, 4>>, f32
       }) {mode = "simt", thread_block_dim = array<i64: 1, 1, 1>} : () -> ()
     }) : () -> ()
     return

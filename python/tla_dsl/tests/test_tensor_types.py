@@ -34,7 +34,7 @@ def test_tla_type_descriptors_construct_native_mlir_types() -> None:
         assert str(stride.to_mlir_type(ctx)) == "!tla.stride<(16,1),128>"
         assert str(coord.to_mlir_type(ctx)) == "!tla.coord<0,0>"
         assert str(layout.to_mlir_type(ctx)) == (
-            "!tla.layout<!tla.shape<(?,16),8>, !tla.stride<(16,1),128>, !tla.shape<(32,16),8>, row_major>"
+            "!tla.layout<!tla.shape<(?,16),8>, !tla.stride<(16,1),128>, !tla.shape<(32,16),8>, RowMajor>"
         )
         assert str(tensor.to_mlir_type(ctx)) == (
             "!tla.tensor<!tla.layout<!tla.shape<(?,16),8>, !tla.stride<(16,1),128>, !tla.shape<(32,16),8>, zN>, !tla.coord<0,0,0>, !tla.ptr<f16, gm, 2>>"
@@ -178,7 +178,7 @@ def test_deep_nested_tensor_metadata_is_rejected() -> None:
 def test_tensor_string_metadata_is_rejected() -> None:
     tensor_type: object = (
         "!tla.tensor<!tla.shape<1,2>, !tla.stride<2,1>, "
-        "!tla.coord<0,0>, !tla.shape<1,2>, f16, gm, row_major>"
+        "!tla.coord<0,0>, !tla.shape<1,2>, f16, gm, RowMajor>"
     )
     with pytest.raises(TlaLoweringError, match="TlaTensorTypeDescriptor"):
         core_api_mod._tla_tensor_descriptor_from_type_or_value(tensor_type)
@@ -234,6 +234,6 @@ def test_from_dlpack_row_major_npu_tensor() -> None:
     buf = torch.empty((2, 3), dtype=torch.float32, device="npu").contiguous()
     tensor = from_dlpack(buf, layout_tag=tla.arch.RowMajor)
     assert tensor._shape_tuple == (2, 3)
-    assert tensor.layout_tag == "row_major"
+    assert tensor.layout_tag == "RowMajor"
     assert tensor.addrspace == "gm"
     assert tensor.data_ptr != 0

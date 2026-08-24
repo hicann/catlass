@@ -2,35 +2,35 @@
 
 // Tensor.ptr() + tla.ptr_add (element-count offset) feeding make_tensor /
 // make_tensor_like, lowered end-to-end through the cube (TlaLowerToStd) path.
-//   gm_off = tile.ptr() + 4   -> make_tensor (row_major GM)
+//   gm_off = tile.ptr() + 4   -> make_tensor (RowMajor GM)
 //   l1_off = alloc_ptr + 8    -> make_tensor_like (zN L1)
-//   tla.copy(l1_dst, gm_src)  -> copy_gm_row_major_to_l1_zN_float
+//   tla.copy(l1_dst, gm_src)  -> copy_gm_RowMajor_to_l1_zN_float
 // After lowering, tla.tensor_ptr / tla.ptr_add / tla.make_tensor[_like] are gone.
 // Element offsets are scaled by pointee byte width into the i64 address before
 // consumer-local pointer_cast descriptors are built.
 
 "builtin.module"() ({
-  "tla.func"() <{function_type = (!tla.tensor<!tla.layout<!tla.shape<16,16>, !tla.stride<16,1>, !tla.shape<16,16>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>) -> (), sym_name = "ptr_extract_kernel"}> ({
-  ^bb0(%arg0: !tla.tensor<!tla.layout<!tla.shape<16,16>, !tla.stride<16,1>, !tla.shape<16,16>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>):
+  "tla.func"() <{function_type = (!tla.tensor<!tla.layout<!tla.shape<16,16>, !tla.stride<16,1>, !tla.shape<16,16>, RowMajor>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>) -> (), sym_name = "ptr_extract_kernel"}> ({
+  ^bb0(%arg0: !tla.tensor<!tla.layout<!tla.shape<16,16>, !tla.stride<16,1>, !tla.shape<16,16>, RowMajor>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>):
     %0 = "tla.make_shape"() : () -> !tla.shape<16,16>
     %1 = "tla.make_coord"() : () -> !tla.coord<0,0>
     %2 = "tla.make_coord"() : () -> !tla.coord<0,0>
-    %3 = "tla.tile_view"(%arg0, %0, %2) : (!tla.tensor<!tla.layout<!tla.shape<16,16>, !tla.stride<16,1>, !tla.shape<16,16>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>, !tla.shape<16,16>, !tla.coord<0,0>) -> !tla.tensor<!tla.layout<!tla.shape<16,16>, !tla.stride<16,1>, !tla.shape<16,16>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>
+    %3 = "tla.tile_view"(%arg0, %0, %2) : (!tla.tensor<!tla.layout<!tla.shape<16,16>, !tla.stride<16,1>, !tla.shape<16,16>, RowMajor>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>, !tla.shape<16,16>, !tla.coord<0,0>) -> !tla.tensor<!tla.layout<!tla.shape<16,16>, !tla.stride<16,1>, !tla.shape<16,16>, RowMajor>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>
     %4 = "tla.alloc_ptr"() <{size_bytes = 1024 : i64}> : () -> !tla.ptr<i8, l1, 256>
     %5 = "tla.recast_ptr"(%4) : (!tla.ptr<i8, l1, 256>) -> !tla.ptr<f32, l1, 256>
-    %6 = "tla.tensor_ptr"(%3) : (!tla.tensor<!tla.layout<!tla.shape<16,16>, !tla.stride<16,1>, !tla.shape<16,16>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>) -> !tla.ptr<f32, gm, 4>
+    %6 = "tla.tensor_ptr"(%3) : (!tla.tensor<!tla.layout<!tla.shape<16,16>, !tla.stride<16,1>, !tla.shape<16,16>, RowMajor>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>) -> !tla.ptr<f32, gm, 4>
     %7 = "arith.constant"() <{value = 4 : index}> : () -> index
     %8 = "tla.ptr_add"(%6, %7) : (!tla.ptr<f32, gm, 4>, index) -> !tla.ptr<f32, gm, 4>
     %9 = "tla.make_shape"() : () -> !tla.shape<8,8>
     %10 = "tla.make_stride"() : () -> !tla.stride<8,1>
-    %11 = "tla.make_layout"(%9, %10) : (!tla.shape<8,8>, !tla.stride<8,1>) -> !tla.layout<!tla.shape<8,8>, !tla.stride<8,1>, !tla.shape<8,8>, row_major>
+    %11 = "tla.make_layout"(%9, %10) : (!tla.shape<8,8>, !tla.stride<8,1>) -> !tla.layout<!tla.shape<8,8>, !tla.stride<8,1>, !tla.shape<8,8>, RowMajor>
     %12 = "tla.make_coord"() : () -> !tla.coord<0,0>
-    %13 = "tla.make_tensor"(%8, %11, %12) : (!tla.ptr<f32, gm, 4>, !tla.layout<!tla.shape<8,8>, !tla.stride<8,1>, !tla.shape<8,8>, row_major>, !tla.coord<0,0>) -> !tla.tensor<!tla.layout<!tla.shape<8,8>, !tla.stride<8,1>, !tla.shape<8,8>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>
+    %13 = "tla.make_tensor"(%8, %11, %12) : (!tla.ptr<f32, gm, 4>, !tla.layout<!tla.shape<8,8>, !tla.stride<8,1>, !tla.shape<8,8>, RowMajor>, !tla.coord<0,0>) -> !tla.tensor<!tla.layout<!tla.shape<8,8>, !tla.stride<8,1>, !tla.shape<8,8>, RowMajor>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>
     %14 = "arith.constant"() <{value = 8 : index}> : () -> index
     %15 = "tla.ptr_add"(%5, %14) : (!tla.ptr<f32, l1, 256>, index) -> !tla.ptr<f32, l1, 256>
-    %16 = "tla.make_tensor_like"(%15, %13) <{layoutTag = "zN"}> : (!tla.ptr<f32, l1, 256>, !tla.tensor<!tla.layout<!tla.shape<8,8>, !tla.stride<8,1>, !tla.shape<8,8>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>) -> !tla.tensor<!tla.layout<!tla.shape<(16,1),(8,1)>, !tla.stride<(8,128),(1,128)>, !tla.shape<8,8>, zN>, !tla.coord<0,0>, !tla.ptr<f32, l1, 256>>
+    %16 = "tla.make_tensor_like"(%15, %13) <{layoutTag = "zN"}> : (!tla.ptr<f32, l1, 256>, !tla.tensor<!tla.layout<!tla.shape<8,8>, !tla.stride<8,1>, !tla.shape<8,8>, RowMajor>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>) -> !tla.tensor<!tla.layout<!tla.shape<(16,1),(8,1)>, !tla.stride<(8,128),(1,128)>, !tla.shape<8,8>, zN>, !tla.coord<0,0>, !tla.ptr<f32, l1, 256>>
     "tla.cube"() ({
-      "tla.copy"(%16, %13) : (!tla.tensor<!tla.layout<!tla.shape<(16,1),(8,1)>, !tla.stride<(8,128),(1,128)>, !tla.shape<8,8>, zN>, !tla.coord<0,0>, !tla.ptr<f32, l1, 256>>, !tla.tensor<!tla.layout<!tla.shape<8,8>, !tla.stride<8,1>, !tla.shape<8,8>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>) -> ()
+      "tla.copy"(%16, %13) : (!tla.tensor<!tla.layout<!tla.shape<(16,1),(8,1)>, !tla.stride<(8,128),(1,128)>, !tla.shape<8,8>, zN>, !tla.coord<0,0>, !tla.ptr<f32, l1, 256>>, !tla.tensor<!tla.layout<!tla.shape<8,8>, !tla.stride<8,1>, !tla.shape<8,8>, RowMajor>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>) -> ()
     }) : () -> ()
     "tla.return"() : () -> ()
   }) : () -> ()
@@ -50,4 +50,4 @@
 // CHECK-NOT: "tla.ptr_add"
 // CHECK-NOT: "tla.make_tensor"
 // CHECK-NOT: "tla.make_tensor_like"
-// CHECK: call @copy_gm_row_major_to_l1_zN_float
+// CHECK: call @copy_gm_RowMajor_to_l1_zN_float

@@ -1,8 +1,8 @@
 // RUN: %tla_compile %s -o %t --mlir-print-ir-after=tla-split-mixed-func 2>&1 | %filecheck %s
 
-!gm = !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<32,1>, !tla.shape<32,32>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>
+!gm = !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<32,1>, !tla.shape<32,32>, RowMajor>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>
 !l1 = !tla.tensor<!tla.layout<!tla.shape<(16,2),(8,4)>, !tla.stride<(8,128),(1,256)>, !tla.shape<32,32>, zN>, !tla.coord<0,0>, !tla.ptr<f32, l1, 512>>
-!ub = !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<32,1>, !tla.shape<32,32>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, ub, 256>>
+!ub = !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<32,1>, !tla.shape<32,32>, RowMajor>, !tla.coord<0,0>, !tla.ptr<f32, ub, 256>>
 
 module {
   tla.func @auto_mutex_mixed_split(%gm: !gm) attributes {tla.auto_sync = "v0"} {
@@ -10,7 +10,7 @@ module {
     %l1_ptr = tla.alloc_ptr{size_bytes = 4096} -> !tla.ptr<f32, l1, 512>
     %ub_ptr = tla.alloc_ptr{size_bytes = 4096} -> !tla.ptr<f32, ub, 256>
     %l1 = "tla.make_tensor_like"(%l1_ptr, %gm) {layoutTag = "zN"} : (!tla.ptr<f32, l1, 512>, !gm) -> !l1
-    %ub = "tla.make_tensor_like"(%ub_ptr, %gm) {layoutTag = "row_major"} : (!tla.ptr<f32, ub, 256>, !gm) -> !ub
+    %ub = "tla.make_tensor_like"(%ub_ptr, %gm) {layoutTag = "RowMajor"} : (!tla.ptr<f32, ub, 256>, !gm) -> !ub
     "tla.cube"() ({
       tla.copy %l1, %gm : !l1, !gm
       tla.cross_core_set_flag %ready {pipe = #tla.pipe<fix>} : !tla.cross_flag<2>

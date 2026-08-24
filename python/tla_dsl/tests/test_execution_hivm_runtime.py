@@ -1883,7 +1883,7 @@ def test_print_tensor_metadata_reads_generic_tlair_shape() -> None:
         '"tla.print_tensor"(%value, %length) '
         "<{shape = array<i64: 2, 3>}> : "
         "(!tla.tensor<!tla.layout<!tla.shape<2,3>, !tla.stride<3,1>, "
-        "!tla.shape<2,3>, row_major>, !tla.coord<0,0>, "
+        "!tla.shape<2,3>, RowMajor>, !tla.coord<0,0>, "
         "!tla.ptr<f32, gm, 4>>, i64) -> ()"
     )
 
@@ -1899,7 +1899,7 @@ def test_print_tensor_metadata_reads_ub_storage() -> None:
         '"tla.print_tensor"(%value, %length) '
         "<{shape = array<i64: 2, 3>}> : "
         "(!tla.tensor<!tla.layout<!tla.shape<2,3>, !tla.stride<3,1>, "
-        "!tla.shape<2,3>, row_major>, !tla.coord<0,0>, "
+        "!tla.shape<2,3>, RowMajor>, !tla.coord<0,0>, "
         "!tla.ptr<f32, ub, 32>>, i64) -> ()"
     )
 
@@ -1915,7 +1915,7 @@ def test_print_tensor_metadata_reads_dynamic_shape_pattern() -> None:
         '"tla.print_tensor"(%value, %length) '
         "<{shape = array<i64: -1, 4>}> : "
         "(!tla.tensor<!tla.layout<!tla.shape<?,4>, !tla.stride<4,1>, "
-        "!tla.shape<16,4>, row_major>, !tla.coord<0,0>, "
+        "!tla.shape<16,4>, RowMajor>, !tla.coord<0,0>, "
         "!tla.ptr<f32, gm, 4>>, i64) -> ()"
     )
 

@@ -3,7 +3,7 @@
 // CHECK: error: 'tla.vec.func' op cannot outline scalar access because its base memref does not dominate the vector helper call site; materialize dynamic pointer-backed storage outside tla.vec.func
 // CHECK-NOT: operand #0 does not dominate this use
 
-!vec64 = !tla.tensor<!tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, row_major>, !tla.coord<0>, !tla.ptr<f32, ub, 256>>
+!vec64 = !tla.tensor<!tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, RowMajor>, !tla.coord<0>, !tla.ptr<f32, ub, 256>>
 
 module {
   "tla.func"() ({
@@ -13,11 +13,11 @@ module {
     %stride = tla.make_stride -> !tla.stride<1>
     %layout = tla.make_layout %shape, %stride
       : !tla.shape<64>, !tla.stride<1>
-        -> !tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, row_major>
+        -> !tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, RowMajor>
     %coord = tla.make_coord -> !tla.coord<0>
     %tensor = tla.make_tensor %ptr, %layout, %coord
       : !tla.ptr<f32, ub, 256>,
-        !tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, row_major>,
+        !tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, RowMajor>,
         !tla.coord<0> -> !vec64
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index

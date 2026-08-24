@@ -82,59 +82,59 @@ CATLASS_DEVICE void copyL0CToUB(
 extern "C" {
 #if ((defined(__NPU_ARCH__) && __NPU_ARCH__ == 3510) || (defined(CATLASS_ARCH) && CATLASS_ARCH == 3510))
 
-#define REGISTER_GM_TO_L1(NameSrc, NameDst, EnumSrc, EnumDst, DType)                                                  \
-    [aicore] __attribute__((always_inline)) void _mlir_ciface_copy_gm_##NameSrc##_to_l1_##NameDst##_##DType(          \
+#define REGISTER_GM_TO_L1(LayoutSrc, LayoutDst, DType)                                                                \
+    [aicore] __attribute__((always_inline)) void _mlir_ciface_copy_gm_##LayoutSrc##_to_l1_##LayoutDst##_##DType(      \
         memref_t<__gm__ DType, 2>* src, memref_t<__cbuf__ DType, 1>* dst, DESC_ABI_PARAMS(src), DESC_ABI_PARAMS(dst)) \
     {                                                                                                                 \
-        copyGMToL1<Catlass::Arch::Ascend950, LayoutTag::EnumSrc, LayoutTag::EnumDst, DType>(                          \
+        copyGMToL1<Catlass::Arch::Ascend950, LayoutTag::LayoutSrc, LayoutTag::LayoutDst, DType>(                      \
             src, dst, TENSOR_DESC_12(src), TENSOR_DESC_12(dst));                                                      \
     }
 
-REGISTER_GM_TO_L1(row_major, zN, RowMajor, zN, float)
-REGISTER_GM_TO_L1(row_major, zN, RowMajor, zN, half)
-REGISTER_GM_TO_L1(row_major, zN, RowMajor, zN, bf16)
-REGISTER_GM_TO_L1(column_major, nZ, ColumnMajor, nZ, float)
-REGISTER_GM_TO_L1(column_major, nZ, ColumnMajor, nZ, half)
-REGISTER_GM_TO_L1(column_major, nZ, ColumnMajor, nZ, bf16)
-REGISTER_GM_TO_L1(row_major, zN, RowMajor, zN, int8_t)
-REGISTER_GM_TO_L1(column_major, nZ, ColumnMajor, nZ, int8_t)
+REGISTER_GM_TO_L1(RowMajor, zN, float)
+REGISTER_GM_TO_L1(RowMajor, zN, half)
+REGISTER_GM_TO_L1(RowMajor, zN, bf16)
+REGISTER_GM_TO_L1(RowMajor, zN, int8_t)
+REGISTER_GM_TO_L1(ColumnMajor, nZ, float)
+REGISTER_GM_TO_L1(ColumnMajor, nZ, half)
+REGISTER_GM_TO_L1(ColumnMajor, nZ, bf16)
+REGISTER_GM_TO_L1(ColumnMajor, nZ, int8_t)
 
-#define REGISTER_L1_TO_L0A(NameSrc, EnumSrc, DType)                                                                   \
-    [aicore] __attribute__((always_inline)) void _mlir_ciface_copy_l1_##NameSrc##_to_l0a_zN_##DType(                  \
+#define REGISTER_L1_TO_L0A(LayoutSrc, DType)                                                                          \
+    [aicore] __attribute__((always_inline)) void _mlir_ciface_copy_l1_##LayoutSrc##_to_l0a_zN_##DType(                \
         memref_t<__cbuf__ DType, 1>* src, memref_t<__ca__ DType, 1>* dst, DESC_ABI_PARAMS(src), DESC_ABI_PARAMS(dst)) \
     {                                                                                                                 \
-        copyL1ToL0A<Catlass::Arch::Ascend950, LayoutTag::EnumSrc, DType>(                                             \
+        copyL1ToL0A<Catlass::Arch::Ascend950, LayoutTag::LayoutSrc, DType>(                                           \
             src, dst, TENSOR_DESC_12(src), TENSOR_DESC_12(dst));                                                      \
     }
 
-REGISTER_L1_TO_L0A(zN, zN, float)
-REGISTER_L1_TO_L0A(zN, zN, half)
-REGISTER_L1_TO_L0A(zN, zN, bf16)
-REGISTER_L1_TO_L0A(nZ, nZ, float)
-REGISTER_L1_TO_L0A(nZ, nZ, half)
-REGISTER_L1_TO_L0A(nZ, nZ, bf16)
-REGISTER_L1_TO_L0A(zN, zN, int8_t)
-REGISTER_L1_TO_L0A(nZ, nZ, int8_t)
+REGISTER_L1_TO_L0A(zN, float)
+REGISTER_L1_TO_L0A(zN, half)
+REGISTER_L1_TO_L0A(zN, bf16)
+REGISTER_L1_TO_L0A(zN, int8_t)
+REGISTER_L1_TO_L0A(nZ, float)
+REGISTER_L1_TO_L0A(nZ, half)
+REGISTER_L1_TO_L0A(nZ, bf16)
+REGISTER_L1_TO_L0A(nZ, int8_t)
 
-#define REGISTER_L1_TO_L0B(NameSrc, EnumSrc, DType)                                                                   \
-    [aicore] __attribute__((always_inline)) void _mlir_ciface_copy_l1_##NameSrc##_to_l0b_nZ_##DType(                  \
+#define REGISTER_L1_TO_L0B(LayoutSrc, DType)                                                                          \
+    [aicore] __attribute__((always_inline)) void _mlir_ciface_copy_l1_##LayoutSrc##_to_l0b_nZ_##DType(                \
         memref_t<__cbuf__ DType, 1>* src, memref_t<__cb__ DType, 1>* dst, DESC_ABI_PARAMS(src), DESC_ABI_PARAMS(dst)) \
     {                                                                                                                 \
-        copyL1ToL0B<Catlass::Arch::Ascend950, LayoutTag::EnumSrc, DType>(                                             \
+        copyL1ToL0B<Catlass::Arch::Ascend950, LayoutTag::LayoutSrc, DType>(                                           \
             src, dst, TENSOR_DESC_12(src), TENSOR_DESC_12(dst));                                                      \
     }
 
-REGISTER_L1_TO_L0B(zN, zN, float)
-REGISTER_L1_TO_L0B(zN, zN, half)
-REGISTER_L1_TO_L0B(zN, zN, bf16)
-REGISTER_L1_TO_L0B(nZ, nZ, float)
-REGISTER_L1_TO_L0B(nZ, nZ, half)
-REGISTER_L1_TO_L0B(nZ, nZ, bf16)
-REGISTER_L1_TO_L0B(zN, zN, int8_t)
-REGISTER_L1_TO_L0B(nZ, nZ, int8_t)
+REGISTER_L1_TO_L0B(zN, float)
+REGISTER_L1_TO_L0B(zN, half)
+REGISTER_L1_TO_L0B(zN, bf16)
+REGISTER_L1_TO_L0B(zN, int8_t)
+REGISTER_L1_TO_L0B(nZ, float)
+REGISTER_L1_TO_L0B(nZ, half)
+REGISTER_L1_TO_L0B(nZ, bf16)
+REGISTER_L1_TO_L0B(nZ, int8_t)
 
 #define REGISTER_L0C_TO_GM(DTypeSrc, DTypeDst)                                                      \
-    [aicore] __attribute__((always_inline)) void _mlir_ciface_copy_l0c_to_gm_row_major_##DTypeDst(  \
+    [aicore] __attribute__((always_inline)) void _mlir_ciface_copy_l0c_to_gm_RowMajor_##DTypeDst(   \
         memref_t<__cc__ DTypeSrc, 1>* src, memref_t<__gm__ DTypeDst, 2>* dst, DESC_ABI_PARAMS(src), \
         DESC_ABI_PARAMS(dst), uint8_t unitFlag)                                                     \
     {                                                                                               \
@@ -164,31 +164,31 @@ REGISTER_L0C_TO_L1(float, bf16)
 // GM and UB exits.
 REGISTER_L0C_TO_L1(int32_t, int32_t)
 
-#define REGISTER_L0C_TO_UB(NameDst, EnumDst, mode, MODE, DTypeSrc, DTypeDst)                                    \
-    [aicore] __attribute__((always_inline)) void _mlir_ciface_copy_l0c_to_ub_##NameDst##_##mode##_##DTypeDst(   \
-        memref_t<__cc__ DTypeSrc, 1>* src, memref_t<__ubuf__ DTypeDst, 1>* dst, DESC_ABI_PARAMS(src),           \
-        DESC_ABI_PARAMS(dst), uint8_t unitFlag, uint8_t subBlockId)                                             \
-    {                                                                                                           \
-        copyL0CToUB<                                                                                            \
-            Catlass::Arch::Ascend950, LayoutTag::EnumDst, Catlass::Gemm::Tile::CopyL0CToUBMode::MODE, DTypeSrc, \
-            DTypeDst>(src, dst, TENSOR_DESC_12(src), TENSOR_DESC_12(dst), unitFlag, subBlockId);                \
+#define REGISTER_L0C_TO_UB(LayoutDst, mode, MODE, DTypeSrc, DTypeDst)                                             \
+    [aicore] __attribute__((always_inline)) void _mlir_ciface_copy_l0c_to_ub_##LayoutDst##_##mode##_##DTypeDst(   \
+        memref_t<__cc__ DTypeSrc, 1>* src, memref_t<__ubuf__ DTypeDst, 1>* dst, DESC_ABI_PARAMS(src),             \
+        DESC_ABI_PARAMS(dst), uint8_t unitFlag, uint8_t subBlockId)                                               \
+    {                                                                                                             \
+        copyL0CToUB<                                                                                              \
+            Catlass::Arch::Ascend950, LayoutTag::LayoutDst, Catlass::Gemm::Tile::CopyL0CToUBMode::MODE, DTypeSrc, \
+            DTypeDst>(src, dst, TENSOR_DESC_12(src), TENSOR_DESC_12(dst), unitFlag, subBlockId);                  \
     }
 
-REGISTER_L0C_TO_UB(row_major, RowMajor, nosplit, NO_SPLIT, float, float)
-REGISTER_L0C_TO_UB(row_major, RowMajor, nosplit, NO_SPLIT, float, half)
-REGISTER_L0C_TO_UB(row_major, RowMajor, nosplit, NO_SPLIT, float, bf16)
+REGISTER_L0C_TO_UB(RowMajor, nosplit, NO_SPLIT, float, float)
+REGISTER_L0C_TO_UB(RowMajor, nosplit, NO_SPLIT, float, half)
+REGISTER_L0C_TO_UB(RowMajor, nosplit, NO_SPLIT, float, bf16)
 // split mode src=dst
-REGISTER_L0C_TO_UB(row_major, RowMajor, splitm, SPLIT_M, float, float)
-REGISTER_L0C_TO_UB(row_major, RowMajor, splitn, SPLIT_N, float, float)
-REGISTER_L0C_TO_UB(column_major, ColumnMajor, nosplit, NO_SPLIT, float, float)
-REGISTER_L0C_TO_UB(column_major, ColumnMajor, nosplit, NO_SPLIT, float, half)
-REGISTER_L0C_TO_UB(column_major, ColumnMajor, nosplit, NO_SPLIT, float, bf16)
+REGISTER_L0C_TO_UB(RowMajor, splitm, SPLIT_M, float, float)
+REGISTER_L0C_TO_UB(RowMajor, splitn, SPLIT_N, float, float)
+REGISTER_L0C_TO_UB(ColumnMajor, nosplit, NO_SPLIT, float, float)
+REGISTER_L0C_TO_UB(ColumnMajor, nosplit, NO_SPLIT, float, half)
+REGISTER_L0C_TO_UB(ColumnMajor, nosplit, NO_SPLIT, float, bf16)
 // Integer route: fixpipe carries an i32 accumulator to UB unconverted (Catlass
 // selects QuantMode NoQuant for int32 -> int32). Mirrors the float set.
-REGISTER_L0C_TO_UB(row_major, RowMajor, nosplit, NO_SPLIT, int32_t, int32_t)
-REGISTER_L0C_TO_UB(column_major, ColumnMajor, nosplit, NO_SPLIT, int32_t, int32_t)
-REGISTER_L0C_TO_UB(row_major, RowMajor, splitm, SPLIT_M, int32_t, int32_t)
-REGISTER_L0C_TO_UB(row_major, RowMajor, splitn, SPLIT_N, int32_t, int32_t)
+REGISTER_L0C_TO_UB(RowMajor, nosplit, NO_SPLIT, int32_t, int32_t)
+REGISTER_L0C_TO_UB(ColumnMajor, nosplit, NO_SPLIT, int32_t, int32_t)
+REGISTER_L0C_TO_UB(RowMajor, splitm, SPLIT_M, int32_t, int32_t)
+REGISTER_L0C_TO_UB(RowMajor, splitn, SPLIT_N, int32_t, int32_t)
 
 #endif
 }

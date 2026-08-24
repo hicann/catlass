@@ -705,10 +705,10 @@ PYBIND11_MODULE(_tla_type_bridge_native, m)
 
     m.def(
         "layout_type_get", &layoutTypeGet, py::arg("context"), py::arg("shape_tree"), py::arg("stride_tree"),
-        py::arg("origin_tree") = py::none(), py::arg("layout") = "row_major");
+        py::arg("origin_tree") = py::none(), py::arg("layout") = "RowMajor");
     m.def(
         "layout_type_from_components_get", &layoutTypeFromComponentsGet, py::arg("context"), py::arg("shape_type"),
-        py::arg("stride_type"), py::arg("origin_shape_type") = py::none(), py::arg("layout") = "row_major");
+        py::arg("stride_type"), py::arg("origin_shape_type") = py::none(), py::arg("layout") = "RowMajor");
     m.def(
         "tensor_type_get", &tensorTypeGet, py::arg("context"), py::arg("shape_tree"), py::arg("stride_tree"),
         py::arg("coord_tree"), py::arg("origin_shape_tree"), py::arg("element_type"), py::arg("addrspace"),

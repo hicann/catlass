@@ -295,10 +295,10 @@ class _Tensor(TensorABC):
         shape_tuple = self._shape_tuple or ()
         if leading_dim is None:
             # Prefer layout-tag semantics when unit strides are ambiguous
-            # (e.g. column_major with shape[0]==1 → strides (1,1)).
-            if self.layout_tag == "column_major":
+            # (e.g. ColumnMajor with shape[0]==1 → strides (1,1)).
+            if self.layout_tag == "ColumnMajor":
                 leading_dim = 0
-            elif self.layout_tag == "row_major":
+            elif self.layout_tag == "RowMajor":
                 leading_dim = len(flat_strides) - 1
             else:
                 leading_dim = _deduce_compact_stride_order(
@@ -603,7 +603,7 @@ def from_dlpack(
     When ``origin_shape`` is omitted, logical ``origin_shape`` is derived from the
     DLPack physical shape/strides and ``layout_tag``. For dense 2-D buffers the
     physical storage must match ``basic_matmul`` preparation: ``tensor.contiguous()``
-    for ``row_major``, or ``tensor.permute(1, 0).contiguous()`` for ``column_major``
+    for ``RowMajor``, or ``tensor.permute(1, 0).contiguous()`` for ``ColumnMajor``
     (row-major physical on the permuted shape). When ``origin_shape`` is provided
     it is used directly and DLPack stride derivation is skipped. Shape / stride metadata
     come from the logical origin and ``layout_tag`` via layout remap, not from raw
@@ -708,18 +708,18 @@ def from_dlpack(
         )
         if (
             len(phys_shape) == 2
-            and layout_token in ("row_major", "column_major")
+            and layout_token in ("RowMajor", "ColumnMajor")
             and (
-                (layout_token == "row_major" and not row_major_compact)
+                (layout_token == "RowMajor" and not row_major_compact)
                 or (
-                    layout_token == "column_major"
+                    layout_token == "ColumnMajor"
                     and (phys_strides[1] != 1 or phys_strides[0] != phys_shape[1])
                 )
             )
         ):
             torch_hint = (
                 "tensor.contiguous()"
-                if layout_token == "row_major"
+                if layout_token == "RowMajor"
                 else "tensor.permute(1, 0).contiguous()"
             )
             raise RuntimeTensorError(
@@ -728,7 +728,7 @@ def from_dlpack(
             )
         logical_origin = (
             (phys_shape[1], phys_shape[0])
-            if len(phys_shape) == 2 and layout_token == "column_major"
+            if len(phys_shape) == 2 and layout_token == "ColumnMajor"
             else phys_shape
         )
     else:

@@ -414,7 +414,7 @@ static llvm::Function* getOrCreateRank2CopyWrapper(
 
 static llvm::Function* getOrCreateCopyTileGmToCbufWrapper(llvm::Module& module, llvm::Function& callee)
 {
-    constexpr llvm::StringLiteral wrapperName = "copy_tile_gm_row_major_to_cbuf_zn_c310";
+    constexpr llvm::StringLiteral wrapperName = "copy_tile_gm_RowMajor_to_cbuf_zn_c310";
     return getOrCreateRank2CopyWrapper(
         module, callee, wrapperName,
         /*srcAddrspace=*/1, /*dstAddrspace=*/2);
@@ -438,7 +438,7 @@ static llvm::Function* getOrCreateCopyTileCbufToCbWrapper(llvm::Module& module, 
 
 static llvm::Function* getOrCreateCopyTileCcToGmWrapper(llvm::Module& module, llvm::Function& callee)
 {
-    constexpr llvm::StringLiteral wrapperName = "copy_tile_cc_l0c_to_gm_row_major_c310";
+    constexpr llvm::StringLiteral wrapperName = "copy_tile_cc_l0c_to_gm_RowMajor_c310";
     return getOrCreateRank2CopyWrapper(
         module, callee, wrapperName,
         /*srcAddrspace=*/5, /*dstAddrspace=*/1);
@@ -595,7 +595,7 @@ static bool rewriteCifaceCallsWithWrappers(llvm::Module& module, std::string& er
             /*droppedTrailingArgs=*/0))
         return false;
     if (!rewriteCallUsers(
-            "_mlir_ciface_copy_tile_gm_row_major_to_cbuf_zn_c310", getOrCreateCopyTileGmToCbufWrapper,
+            "_mlir_ciface_copy_tile_gm_RowMajor_to_cbuf_zn_c310", getOrCreateCopyTileGmToCbufWrapper,
             /*droppedTrailingArgs=*/0))
         return false;
     if (!rewriteCallUsers(
@@ -607,7 +607,7 @@ static bool rewriteCifaceCallsWithWrappers(llvm::Module& module, std::string& er
             /*droppedTrailingArgs=*/0))
         return false;
     if (!rewriteCallUsers(
-            "_mlir_ciface_copy_tile_cc_l0c_to_gm_row_major_c310", getOrCreateCopyTileCcToGmWrapper,
+            "_mlir_ciface_copy_tile_cc_l0c_to_gm_RowMajor_c310", getOrCreateCopyTileCcToGmWrapper,
             /*droppedTrailingArgs=*/0))
         return false;
     deleteDeadDescriptorTraffic(module);

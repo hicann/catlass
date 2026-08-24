@@ -14,7 +14,7 @@
 // RANK: error:
 // RANK-SAME: kernel tensor argument 0 must have matching rank-1 or rank-2
 // LAYOUT: error:
-// LAYOUT-SAME: kernel tensor argument 0 must use row_major or column_major layout
+// LAYOUT-SAME: kernel tensor argument 0 must use RowMajor or ColumnMajor layout
 // COORD: error:
 // COORD-SAME: kernel tensor argument 0 cannot have dynamic coordinates
 // ORIGIN: error:
@@ -22,22 +22,22 @@
 // DYNAMIC-ORIGIN: error:
 // DYNAMIC-ORIGIN-SAME: kernel tensor argument 0 cannot have dynamic origin_shape
 // ROW-STRIDE: error:
-// ROW-STRIDE-SAME: row_major kernel tensor argument 0 must have non-overlapping rows
+// ROW-STRIDE-SAME: RowMajor kernel tensor argument 0 must have non-overlapping rows
 // COL-STRIDE: error:
-// COL-STRIDE-SAME: column_major kernel tensor argument 0 must have compact stride [1, rows]
+// COL-STRIDE-SAME: ColumnMajor kernel tensor argument 0 must have compact stride [1, rows]
 // RESULT: error:
 // RESULT-SAME: kernel tensor results are not supported by the device ABI
 
 //--- non-gm.mlir
 module {
-  tla.func @bad_non_gm(%arg0: !tla.tensor<!tla.layout<!tla.shape<8,8>, !tla.stride<8,1>, !tla.shape<8,8>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, ub, 4>>) {
+  tla.func @bad_non_gm(%arg0: !tla.tensor<!tla.layout<!tla.shape<8,8>, !tla.stride<8,1>, !tla.shape<8,8>, RowMajor>, !tla.coord<0,0>, !tla.ptr<f32, ub, 4>>) {
     tla.return
   }
 }
 
 //--- rank.mlir
 module {
-  tla.func @bad_rank(%arg0: !tla.tensor<!tla.layout<!tla.shape<2,3,4>, !tla.stride<12,4,1>, !tla.shape<2,3,4>, row_major>, !tla.coord<0,0,0>, !tla.ptr<f32, gm, 4>>) {
+  tla.func @bad_rank(%arg0: !tla.tensor<!tla.layout<!tla.shape<2,3,4>, !tla.stride<12,4,1>, !tla.shape<2,3,4>, RowMajor>, !tla.coord<0,0,0>, !tla.ptr<f32, gm, 4>>) {
     tla.return
   }
 }
@@ -51,7 +51,7 @@ module {
 
 //--- coord.mlir
 module {
-  tla.func @bad_coord(%arg0: !tla.tensor<!tla.layout<!tla.shape<8,8>, !tla.stride<8,1>, !tla.shape<8,8>, row_major>, !tla.coord<?,0>, !tla.ptr<f32, gm, 4>>) {
+  tla.func @bad_coord(%arg0: !tla.tensor<!tla.layout<!tla.shape<8,8>, !tla.stride<8,1>, !tla.shape<8,8>, RowMajor>, !tla.coord<?,0>, !tla.ptr<f32, gm, 4>>) {
     tla.return
   }
 }
@@ -59,7 +59,7 @@ module {
 //--- origin.mlir
 module {
   // Reject non-positive static origin extents.
-  tla.func @bad_origin(%arg0: !tla.tensor<!tla.layout<!tla.shape<8,8>, !tla.stride<8,1>, !tla.shape<0,8>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>) {
+  tla.func @bad_origin(%arg0: !tla.tensor<!tla.layout<!tla.shape<8,8>, !tla.stride<8,1>, !tla.shape<0,8>, RowMajor>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>) {
     tla.return
   }
 }
@@ -67,26 +67,26 @@ module {
 //--- dynamic-origin.mlir
 module {
   // Dynamic origin on !tla.tensor entry requires the frontend dynamic GM ABI.
-  tla.func @bad_dynamic_origin(%arg0: !tla.tensor<!tla.layout<!tla.shape<?,8>, !tla.stride<8,1>, !tla.shape<?,8>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>) {
+  tla.func @bad_dynamic_origin(%arg0: !tla.tensor<!tla.layout<!tla.shape<?,8>, !tla.stride<8,1>, !tla.shape<?,8>, RowMajor>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>) {
     tla.return
   }
 }
 
 //--- row-stride.mlir
 module {
-  tla.func @bad_row_stride(%arg0: !tla.tensor<!tla.layout<!tla.shape<8,16>, !tla.stride<9,1>, !tla.shape<8,16>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>) {
+  tla.func @bad_row_stride(%arg0: !tla.tensor<!tla.layout<!tla.shape<8,16>, !tla.stride<9,1>, !tla.shape<8,16>, RowMajor>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>) {
     tla.return
   }
 }
 
 //--- column-stride.mlir
 module {
-  tla.func @bad_column_stride(%arg0: !tla.tensor<!tla.layout<!tla.shape<8,16>, !tla.stride<1,9>, !tla.shape<8,16>, column_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>) {
+  tla.func @bad_column_stride(%arg0: !tla.tensor<!tla.layout<!tla.shape<8,16>, !tla.stride<1,9>, !tla.shape<8,16>, ColumnMajor>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>) {
     tla.return
   }
 }
 
 //--- result.mlir
 module {
-  func.func private @bad_result() -> !tla.tensor<!tla.layout<!tla.shape<8>, !tla.stride<1>, !tla.shape<8>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>
+  func.func private @bad_result() -> !tla.tensor<!tla.layout<!tla.shape<8>, !tla.stride<1>, !tla.shape<8>, RowMajor>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>
 }

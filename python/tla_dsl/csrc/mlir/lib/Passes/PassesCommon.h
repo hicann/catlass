@@ -254,7 +254,7 @@ inline FailureOr<MemRefType> bridgeTlaTensorStorageType(Type tlaTensorType)
         addressSpace.empty() || layoutTag.empty())
         return failure();
 
-    if (layoutTag != "row_major" && originShape.size() == coords.size() && shape.size() != originShape.size()) {
+    if (layoutTag != "RowMajor" && originShape.size() == coords.size() && shape.size() != originShape.size()) {
         shape = originShape;
     }
     if (strides.size() != shape.size())
@@ -276,7 +276,7 @@ inline FailureOr<MemRefType> bridgeTlaTensorStorageType(Type tlaTensorType)
     if (failed(memorySpaceOr))
         return failure();
 
-    if (layoutTag == "row_major" && !(hasZeroStaticCoords(coords) && hasDefaultRowMajorStrides(shape, strides))) {
+    if (layoutTag == "RowMajor" && !(hasZeroStaticCoords(coords) && hasDefaultRowMajorStrides(shape, strides))) {
         auto layout = StridedLayoutAttr::get(ctx, ShapedType::kDynamic, strides);
         return MemRefType::get(shape, elementType, layout, *memorySpaceOr);
     }

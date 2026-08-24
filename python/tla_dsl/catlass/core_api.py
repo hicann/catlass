@@ -1465,7 +1465,7 @@ def _materialize_dynamic_gm_root_tensor_descriptor(
             shape_vals.append(_const_index(int(extent), loc=loc))
 
     abi_strides: list[mlir_ir.Value] | None = None
-    if (layout_tag == "row_major" or is_nz_family) and any(
+    if (layout_tag == "RowMajor" or is_nz_family) and any(
         leaf is None for leaf in stride_leaves
     ):
         meta = memref.ExtractStridedMetadataOp(memref_arg, loc=loc)
@@ -1479,7 +1479,7 @@ def _materialize_dynamic_gm_root_tensor_descriptor(
         abi_strides = list(results[stride_start : stride_start + abi_rank])
 
     stride_vals: list[mlir_ir.Value] = []
-    if layout_tag == "row_major" or is_nz_family:
+    if layout_tag == "RowMajor" or is_nz_family:
         for axis, leaf in enumerate(stride_leaves):
             if leaf is None:
                 if abi_strides is None:
@@ -1628,7 +1628,7 @@ def _require_resolved_metadata_leaves(
 # Layout constants aligned with ``catlass/catlass.hpp`` and ``tla/layout.hpp``.
 _CATLASS_BYTE_PER_C0 = 32
 _CATLASS_C0_NUM_PER_FRACTAL = 16
-_LINEAR_LAYOUT_TOKENS = frozenset({"row_major", "column_major"})
+_LINEAR_LAYOUT_TOKENS = frozenset({"RowMajor", "ColumnMajor"})
 _NZ_FAMILY_LAYOUT_TOKENS = frozenset({"zN", "nZ", "zZ", "L0Clayout", "zNUnAlign"})
 _MAKE_TENSOR_LIKE_ON_CHIP_ADDRSPACES = frozenset({"l1", "l0a", "l0b", "l0c", "ub"})
 
@@ -1744,7 +1744,7 @@ def _validate_static_make_tensor_layout(
     if layout_tag in _LINEAR_LAYOUT_TOKENS:
         if len(shape_const_tree) == 1:
             checks = ((stride_const_tree[0], 1),)
-        elif layout_tag == "row_major":
+        elif layout_tag == "RowMajor":
             checks = ((stride_const_tree[1], 1),)
         else:
             checks = ((stride_const_tree[0], 1),)
@@ -1878,14 +1878,14 @@ def _materialize_layout_trees_from_origin(
     linear_alignment_elements = _linear_stride_alignment_elements(
         element_bytes, _CATLASS_BYTE_PER_C0
     )
-    if layout == "row_major":
+    if layout == "RowMajor":
         return (
             (rows, cols),
             (_round_up_expr(cols, linear_alignment_elements), 1),
             coord,
             origin_shape,
         )
-    if layout == "column_major":
+    if layout == "ColumnMajor":
         return (
             (rows, cols),
             (1, _round_up_expr(rows, linear_alignment_elements)),
@@ -1959,7 +1959,7 @@ def _remap_tensor_like_prefix_fields_for_layout_trees(
 
     ``origin_shape`` must be a flat ``(N,)`` or ``(M, N)`` Tla index tree with ``int`` or
     ``None`` leaves. ``None`` represents an unknown dimension, spelled ``?`` in MLIR.
-    Rank-1 ``row_major`` uses ``(N):(1)``, ``coord=(0,)``. Rank-2 **coord** is always
+    Rank-1 ``RowMajor`` uses ``(N):(1)``, ``coord=(0,)``. Rank-2 **coord** is always
     ``(0, 0)``. Naming follows ``tla::GetTileLayout`` / fractal ``MakeLayout``
     (``rows`` / ``cols`` / ``ELE_NUM_PER_C0`` / ``C0_NUM_PER_FRACTAL``).
     """
@@ -1968,7 +1968,7 @@ def _remap_tensor_like_prefix_fields_for_layout_trees(
         if isinstance(length, tuple):
             return None
         layout_tag = layout.strip()
-        if layout_tag == "row_major":
+        if layout_tag == "RowMajor":
             return ((length,), (1,), (0,), (length,))
         return None
 
@@ -1992,12 +1992,12 @@ def _remap_tensor_like_prefix_fields_for_layout_trees(
         element_bytes, linear_stride_alignment_bytes
     )
 
-    if layout_tag == "row_major":
+    if layout_tag == "RowMajor":
         leading_stride = (
             None if cols is None else _round_up(cols, linear_alignment_elements)
         )
         return ((rows, cols), (leading_stride, 1), coord_tree, origin_shape_tree)
-    if layout_tag == "column_major":
+    if layout_tag == "ColumnMajor":
         leading_stride = (
             None if rows is None else _round_up(rows, linear_alignment_elements)
         )
@@ -3726,7 +3726,7 @@ def make_layout(
     if origin_shape is not None and origin_shape._shape_value is not shape_val:
         origin_ssa = origin_shape._shape_value
     attrs: dict[str, mlir_ir.Attribute] = {}
-    if layout_token != "row_major":
+    if layout_token != "RowMajor":
         attrs["layoutTag"] = mlir_ir.StringAttr.get(layout_token)
     operands: list[mlir_ir.Value] = [shape_val, stride_val]
     if origin_ssa is not None:
@@ -4120,9 +4120,9 @@ def make_tensor_like(
         elif addr == "l0c":
             layout = "L0Clayout"
         elif addr == "l1":
-            if like_type.layout_tag in ("row_major", "zN"):
+            if like_type.layout_tag in ("RowMajor", "zN"):
                 layout = "zN"
-            elif like_type.layout_tag in ("column_major", "nZ"):
+            elif like_type.layout_tag in ("ColumnMajor", "nZ"):
                 layout = "nZ"
             else:
                 raise TlaLoweringError(
@@ -4348,13 +4348,13 @@ def copy(
     src_dtype = src_desc.element_type.lower()
     dst_dtype = dst_desc.element_type.lower()
     same_dtype = src_dtype == dst_dtype
-    src_layout = src_desc.layout_tag.lower()
-    dst_layout = dst_desc.layout_tag.lower()
+    src_layout = src_desc.layout_tag
+    dst_layout = dst_desc.layout_tag
 
     if _route[0] == "l0c":
-        if src_layout != "l0clayout":
+        if src_layout != "L0Clayout":
             raise TlaLoweringError(
-                f"L0C layout_tag only support l0clayout, got {src_layout}"
+                f"L0C layout_tag only support L0Clayout, got {src_layout}"
             )
         if src_dtype not in ("f32", "i32"):
             raise NotImplementedError(
@@ -4370,16 +4370,16 @@ def copy(
             raise TlaLoweringError(
                 f"f32 fixpipe dst dtype only support [f32, f16, bf16], got {dst_dtype}"
             )
-        if _route[1] == "gm" and dst_layout != "row_major":
+        if _route[1] == "gm" and dst_layout != "RowMajor":
             raise NotImplementedError(
-                f"currently copy l0c to gm only support dst row_major, got {dst_layout}"
+                f"currently copy l0c to gm only support dst RowMajor, got {dst_layout}"
             )
-        if _route[1] == "ub" and dst_layout not in ("row_major", "column_major"):
+        if _route[1] == "ub" and dst_layout not in ("RowMajor", "ColumnMajor"):
             raise NotImplementedError(
-                "currently copy l0c to ub only support dst [row_major, column_major],"
+                "currently copy l0c to ub only support dst [RowMajor, ColumnMajor],"
                 f" got {dst_layout}"
             )
-        if _route[1] == "l1" and dst_layout not in ("zn",):
+        if _route[1] == "l1" and dst_layout not in ("zN",):
             raise TlaLoweringError(f"l0c2l1 dst layout shoud be zN, got {dst_layout}")
 
         if params is None:
@@ -4405,14 +4405,14 @@ def copy(
                 )
             if (
                 (_route[1] == "ub")
-                and (dst_layout == "column_major")
+                and (dst_layout == "ColumnMajor")
                 and (
                     params.l0c2ub_mode
                     not in (L0C2UBMode.NO_SPLIT_VEC_0, L0C2UBMode.NO_SPLIT_VEC_1)
                 )
             ):
                 raise TlaLoweringError(
-                    f"When copy l0c to ub and dst layout_tag is column_major, only support `NO_SPLIT` mode,"
+                    f"When copy l0c to ub and dst layout_tag is ColumnMajor, only support `NO_SPLIT` mode,"
                     f"got {params.l0c2ub_mode}"
                 )
 
@@ -7286,8 +7286,8 @@ arch._set("zN", _LayoutTag("zN"))
 arch._set("nZ", _LayoutTag("nZ"))
 arch._set("zZ", _LayoutTag("zZ"))
 arch._set("nN", _LayoutTag("nN"))
-arch._set("RowMajor", _LayoutTag("row_major"))
-arch._set("ColumnMajor", _LayoutTag("column_major"))
+arch._set("RowMajor", _LayoutTag("RowMajor"))
+arch._set("ColumnMajor", _LayoutTag("ColumnMajor"))
 arch._set("L0Clayout", _LayoutTag("L0Clayout"))
 arch._set("zNUnAlign", _LayoutTag("zNUnAlign"))
 

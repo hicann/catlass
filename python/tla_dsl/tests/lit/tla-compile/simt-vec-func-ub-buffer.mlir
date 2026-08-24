@@ -7,8 +7,8 @@
 // spaces must appear on the launch's !llvm.ptr operands, or hivmc-a5 rejects the
 // call signature.
 
-!gm_f32 = !tla.tensor<!tla.layout<!tla.shape<128>, !tla.stride<1>, !tla.shape<128>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>
-!ub_f32 = !tla.tensor<!tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, row_major>, !tla.coord<0>, !tla.ptr<f32, ub, 4>>
+!gm_f32 = !tla.tensor<!tla.layout<!tla.shape<128>, !tla.stride<1>, !tla.shape<128>, RowMajor>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>
+!ub_f32 = !tla.tensor<!tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, RowMajor>, !tla.coord<0>, !tla.ptr<f32, ub, 4>>
 
 module {
   func.func @simt_ub_buffer(%gm_memref: memref<128xf32, #hivm.address_space<gm>>,
@@ -22,11 +22,11 @@ module {
     "tla.vector"() ({
       "tla.vec.func"() ({
         // Read GM, publish into the shared UB buffer, read it back and store.
-        %g = tla.simt_load %gm[%c0] : <!tla.layout<!tla.shape<128>, !tla.stride<1>, !tla.shape<128>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>> -> f32
-        tla.simt_store %ub[%c0], %g : <!tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, row_major>, !tla.coord<0>, !tla.ptr<f32, ub, 4>>, f32
-        %s = tla.simt_load %ub[%c0] : <!tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, row_major>, !tla.coord<0>, !tla.ptr<f32, ub, 4>> -> f32
+        %g = tla.simt_load %gm[%c0] : <!tla.layout<!tla.shape<128>, !tla.stride<1>, !tla.shape<128>, RowMajor>, !tla.coord<0>, !tla.ptr<f32, gm, 4>> -> f32
+        tla.simt_store %ub[%c0], %g : <!tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, RowMajor>, !tla.coord<0>, !tla.ptr<f32, ub, 4>>, f32
+        %s = tla.simt_load %ub[%c0] : <!tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, RowMajor>, !tla.coord<0>, !tla.ptr<f32, ub, 4>> -> f32
         %sum = tla.simt_add %g, %s : f32
-        tla.simt_store %gm[%c0], %sum : <!tla.layout<!tla.shape<128>, !tla.stride<1>, !tla.shape<128>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>, f32
+        tla.simt_store %gm[%c0], %sum : <!tla.layout<!tla.shape<128>, !tla.stride<1>, !tla.shape<128>, RowMajor>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>, f32
       }) {mode = "simt", thread_block_dim = array<i64: 64, 1, 1>} : () -> ()
     }) : () -> ()
     return

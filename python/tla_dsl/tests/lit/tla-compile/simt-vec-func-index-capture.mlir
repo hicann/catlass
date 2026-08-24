@@ -6,7 +6,7 @@
 // therefore rejected here, where the message can say what to do about it,
 // rather than surfacing as an opaque backend failure.
 
-!gm_f32 = !tla.tensor<!tla.layout<!tla.shape<128>, !tla.stride<1>, !tla.shape<128>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>
+!gm_f32 = !tla.tensor<!tla.layout<!tla.shape<128>, !tla.stride<1>, !tla.shape<128>, RowMajor>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>
 
 module {
   func.func @simt_index_capture(%gm_memref: memref<128xf32, #hivm.address_space<gm>>,
@@ -17,8 +17,8 @@ module {
     %gm = tla.tensor_desc %gm_memref shape [%c1, %c128, %c1, %c1] stride [%c128, %c1, %c1, %c1] origin_shape [%c1, %c128] coord [%c0, %c0] : memref<128xf32, #hivm.address_space<gm>> -> !gm_f32
     "tla.vector"() ({
       "tla.vec.func"() ({
-        %v = tla.simt_load %gm[%sx] : <!tla.layout<!tla.shape<128>, !tla.stride<1>, !tla.shape<128>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>> -> f32
-        tla.simt_store %gm[%c0], %v : <!tla.layout<!tla.shape<128>, !tla.stride<1>, !tla.shape<128>, row_major>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>, f32
+        %v = tla.simt_load %gm[%sx] : <!tla.layout<!tla.shape<128>, !tla.stride<1>, !tla.shape<128>, RowMajor>, !tla.coord<0>, !tla.ptr<f32, gm, 4>> -> f32
+        tla.simt_store %gm[%c0], %v : <!tla.layout<!tla.shape<128>, !tla.stride<1>, !tla.shape<128>, RowMajor>, !tla.coord<0>, !tla.ptr<f32, gm, 4>>, f32
       }) {mode = "simt", thread_block_dim = array<i64: 64, 1, 1>} : () -> ()
     }) : () -> ()
     return

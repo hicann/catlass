@@ -74,8 +74,8 @@ def test_frontend_copy_gm_to_l1_lowers_to_runtime_call(tmp_path) -> None:
         raise
 
     lowered = result.stdout
-    assert "copy_gm_row_major_to_l1_zN_float" in lowered
-    assert "_mlir_ciface_copy_gm_row_major_to_l1_zN_float" not in lowered
+    assert "copy_gm_RowMajor_to_l1_zN_float" in lowered
+    assert "_mlir_ciface_copy_gm_RowMajor_to_l1_zN_float" not in lowered
     assert "hacc.always_inline" in lowered
     assert "hivm.func_core_type = #hivm.func_core_type<AIC>" in lowered
     assert "llvm.emit_c_interface" in lowered
@@ -129,7 +129,7 @@ def test_kernel_gm_arg_copies_directly_to_ub(tmp_path) -> None:
     )
     assert descriptor_match.group("descriptor") in lowered_copy
     assert "%arg0" not in lowered_copy
-    assert "copy_gm_row_major_to_ub_row_major_float" in result.stdout
+    assert "copy_gm_RowMajor_to_ub_RowMajor_float" in result.stdout
     assert "tla.copy" not in result.stdout
 
 
@@ -185,7 +185,7 @@ def copy_dynamic_l0c_to_ub_split_m_kernel(gm_c: tla.Tensor) -> None:
             )
 
 
-def test_split_m_dynamic_row_major_stride_uses_child_n_extent(tmp_path) -> None:
+def test_split_m_dynamic_RowMajor_stride_uses_child_n_extent(tmp_path) -> None:
     """Split-M destination stride0 must be aligned N, not the L0C packing stride."""
     tla_compile = _require_hivm_tla_compile()
     gm_c = make_fake_tensor(
@@ -210,7 +210,7 @@ def test_split_m_dynamic_row_major_stride_uses_child_n_extent(tmp_path) -> None:
     )
 
     call_match = re.search(
-        r"call @copy_l0c_to_ub_row_major_splitm_float\(([^)]*)\)",
+        r"call @copy_l0c_to_ub_RowMajor_splitm_float\(([^)]*)\)",
         result.stdout,
     )
     assert call_match is not None, result.stdout
@@ -227,8 +227,8 @@ def test_split_m_dynamic_row_major_stride_uses_child_n_extent(tmp_path) -> None:
 # Keep this list aligned with the MLIR LayoutTag enum. tla.arch.nN is exported
 # by Python but is not currently supported by TLA tensor types or descriptors.
 _MAKE_TENSOR_LIKE_LAYOUT_CASES = (
-    ("row_major", tla.arch.RowMajor),
-    ("column_major", tla.arch.ColumnMajor),
+    ("RowMajor", tla.arch.RowMajor),
+    ("ColumnMajor", tla.arch.ColumnMajor),
     ("zN", tla.arch.zN),
     ("nZ", tla.arch.nZ),
     ("zZ", tla.arch.zZ),
@@ -415,13 +415,13 @@ def test_make_tensor_like_supports_every_layout_pair(
     assert len(origin) == 2
     assert len(coord) == 2
 
-    if child_name == "row_major":
+    if child_name == "RowMajor":
         assert shape[:2] == origin
         assert shape[2:] == stride[2:]
         _assert_f32_dynamic_stride_is_32b_aligned(
             result.stderr, extent=shape[1], stride=stride[0]
         )
-    elif child_name == "column_major":
+    elif child_name == "ColumnMajor":
         assert shape[:2] == origin
         assert shape[2:] == stride[2:]
         _assert_f32_dynamic_stride_is_32b_aligned(
@@ -474,8 +474,8 @@ def test_nested_ub_subtile_copy_lowers(tmp_path) -> None:
     lowered = result.stdout
     # The kernel issues both a GM->UB and a UB->GM staging copy; each lowers to its
     # own inlinable AIV cifax runtime template (bc/Vector/dma.cpp).
-    assert "copy_gm_row_major_to_ub_row_major_float" in lowered
-    assert "copy_ub_row_major_to_gm_row_major_float" in lowered
+    assert "copy_gm_RowMajor_to_ub_RowMajor_float" in lowered
+    assert "copy_ub_RowMajor_to_gm_RowMajor_float" in lowered
     assert "hivm.func_core_type = #hivm.func_core_type<AIV>" in lowered
     assert '"tla.copy"' not in lowered
 
@@ -527,7 +527,7 @@ def test_ptradd_ub_subtile_copy_applies_ptr_offset(tmp_path) -> None:
     )
     out = result.stdout + result.stderr  # print-ir-after goes to stderr
     # GM->UB staging copy lowers to the AIV cifax runtime template.
-    assert "copy_gm_row_major_to_ub_row_major_float" in out
+    assert "copy_gm_RowMajor_to_ub_RowMajor_float" in out
     assert "hivm.func_core_type = #hivm.func_core_type<AIV>" in out
     # ptr_add contributes 64 bytes (16 f32 elements) to the UB base pointer_cast;
     # the UB sub-tile (coord (1,1) of a 64-wide buffer) carries stride0=64 and
@@ -539,7 +539,7 @@ def test_ptradd_ub_subtile_copy_applies_ptr_offset(tmp_path) -> None:
 
 @tla.kernel
 def copy_l0c_to_ub_split_m_col_major_dst_kernel(gm_c: tla.Tensor) -> None:
-    """L0C(f32)->UB(f32) with SPLIT_M and column_major dst must be rejected."""
+    """L0C(f32)->UB(f32) with SPLIT_M and ColumnMajor dst must be rejected."""
     l0c_ptr = tla.allocate(32 * 32, tla.Float32, tla.AddressSpace.l0c, 512)
     l0c = tla.make_tensor_like(l0c_ptr, gm_c, tla.arch.L0Clayout)
     ub_ptr = tla.allocate(32 * 32, tla.Float32, tla.AddressSpace.ub, 256)
@@ -552,7 +552,7 @@ def copy_l0c_to_ub_split_m_col_major_dst_kernel(gm_c: tla.Tensor) -> None:
 
 
 def test_copy_l0c_to_ub_split_m_col_major_dst_raises() -> None:
-    """L0C->UB copy with SPLIT_M + column_major dst must raise TlaLoweringError."""
+    """L0C->UB copy with SPLIT_M + ColumnMajor dst must raise TlaLoweringError."""
     gm_c = make_fake_tensor(
                tla.Float32,
                (32, 32),
@@ -562,6 +562,6 @@ def test_copy_l0c_to_ub_split_m_col_major_dst_raises() -> None:
            )
     with pytest.raises(
         TlaLoweringError,
-        match=r"When copy l0c to ub and dst layout_tag is column_major, only support `NO_SPLIT` mode",
+        match=r"When copy l0c to ub and dst layout_tag is ColumnMajor, only support `NO_SPLIT` mode",
     ):
         copy_l0c_to_ub_split_m_col_major_dst_kernel.dump_mlir(type_args=(gm_c,))
