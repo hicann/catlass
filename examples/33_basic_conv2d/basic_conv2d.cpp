@@ -122,6 +122,21 @@ struct Options {
     }
 };
 
+template <typename T>
+void NC1HWC0_to_NCHW(std::vector<T>& in, std::vector<T>& out, uint32_t N, uint32_t C, uint32_t HW, uint32_t C0)
+{
+    auto C1 = (C + C0 - 1) / C0;
+    for (auto n = 0; n < N; n++) {
+        for (auto c = 0; c < C; c++) {
+            auto c1 = c / C0;
+            auto c0 = c % C0;
+            for (auto hw = 0; hw < HW; hw++) {
+                out[n * C * HW + c * HW + hw] = in[n * C1 * HW * C0 + c1 * HW * C0 + hw * C0 + c0];
+            }
+        }
+    }
+}
+
 static void Run(Options const& options)
 {
     if (!options.CanImplement()) {
@@ -248,7 +263,12 @@ static void Run(Options const& options)
     golden::ComputeConv2d(
         options.problemParams, hostFmap, layoutFmap, hostFilter, layoutFilter, hostGolden, layoutOutput);
 
-    std::vector<uint64_t> errorIndices = golden::CompareData(hostOutput, hostGolden, cin1 * kh * kw * c0);
+    std::vector<fp16_t> hostOutputCut(batch * ho * wo * cout);
+    std::vector<float> hostGoldenCut(batch * ho * wo * cout);
+    NC1HWC0_to_NCHW(hostOutput, hostOutputCut, batch, cout, ho * wo, c0);
+    NC1HWC0_to_NCHW(hostGolden, hostGoldenCut, batch, cout, ho * wo, c0);
+
+    std::vector<uint64_t> errorIndices = golden::CompareData(hostOutputCut, hostGoldenCut, cin1 * kh * kw * c0);
     if (errorIndices.empty()) {
         std::cout << "Compare success." << std::endl;
     } else {

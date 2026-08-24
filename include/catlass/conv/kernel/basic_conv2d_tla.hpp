@@ -149,13 +149,17 @@ public:
             int32_t hiStart = hoStart * params.problemShape.strideH() - params.problemShape.padTop();
             int32_t hiEnd = hiStart + (actualBlockShape.h() - 1) * params.problemShape.strideH() +
                             (params.problemShape.kh() - 1) * params.problemShape.dilationH();
+            int32_t hiLast = params.problemShape.hi() - 1;
+            if (hiStart > hiLast || hiEnd < 0) {
+                continue;
+            }
             if (hiStart < 0) {
                 blockPadTop = 0 - hiStart;
                 hiStart = 0;
             }
-            if (hiEnd > params.problemShape.hi() - 1) {
-                blockPadBottom = hiEnd - (params.problemShape.hi() - 1);
-                hiEnd = params.problemShape.hi() - 1;
+            if (hiEnd > hiLast) {
+                blockPadBottom = hiEnd - hiLast;
+                hiEnd = hiLast;
             }
             uint32_t hiActual = hiEnd - hiStart + 1;
 
@@ -164,13 +168,17 @@ public:
             int32_t wiStart = woStart * params.problemShape.strideW() - params.problemShape.padLeft();
             int32_t wiEnd = wiStart + (actualBlockShape.w() - 1) * params.problemShape.strideW() +
                             (params.problemShape.kw() - 1) * params.problemShape.dilationW();
+            int32_t wiLast = params.problemShape.wi() - 1;
+            if (wiStart > wiLast || wiEnd < 0) {
+                continue;
+            }
             if (wiStart < 0) {
                 blockPadLeft = 0 - wiStart;
                 wiStart = 0;
             }
-            if (wiEnd > params.problemShape.wi() - 1) {
-                blockPadRight = wiEnd - (params.problemShape.wi() - 1);
-                wiEnd = params.problemShape.wi() - 1;
+            if (wiEnd > wiLast) {
+                blockPadRight = wiEnd - wiLast;
+                wiEnd = wiLast;
             }
             uint32_t wiActual = wiEnd - wiStart + 1;
 
