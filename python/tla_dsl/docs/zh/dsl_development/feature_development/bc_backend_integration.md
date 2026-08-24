@@ -1,10 +1,14 @@
-# 调用 bc 接入整个 DSL 后端 -- 以 `tla.copy` 为例
+---
+nav_order: 30
+---
+
+# 调用 bc 接入整个 DSL 后端 —— 以 tla.copy 为例
 
 ---
 
-## 1. 背景
+## 背景
 
-### 1.1 常规的 lowering 路径
+### 常规的 lowering 路径
 
 在一个纯 MLIR 编译器里，`tla.copy` 的标准 lowering 路径是在 conversion pass 里用 RewritePattern 把它**直接展开**成 HIVM DMA op：
 
@@ -25,9 +29,9 @@ kernel.o
 
 **搬运的"怎么做"完全由 MLIR C++ lowering pattern 决定**--每多支持一种 `(源 layout, 目标 layout, 元素类型)` 组合，就要在 pass 里多写一段构造逻辑。
 
-### 1.2 C++ 版本已实现这些搬运特化
+### C++ 版本已实现这些搬运特化
 
-CATLASS C++ 模板库（仓库根目录 `include/catlass`）本就是为高性能 matmul 类算子打造的，数据搬运是其核心能力之一。以 GM->L1 为例，[copy_gm_to_l1.hpp](../../../../include/catlass/gemm/tile/ascend950/copy_gm_to_l1.hpp) 里的 `TileCopyTla` 是一个按 `(Arch, 源 Tensor, 目标 Tensor)` 多维偏特化的模板：
+CATLASS C++ 模板库（仓库根目录 `include/catlass`）本就是为高性能 matmul 类算子打造的，数据搬运是其核心能力之一。以 GM->L1 为例，[copy_gm_to_l1.hpp](../../../../../../include/catlass/gemm/tile/ascend950/copy_gm_to_l1.hpp) 里的 `TileCopyTla` 是一个按 `(Arch, 源 Tensor, 目标 Tensor)` 多维偏特化的模板：
 
 ```cpp
 // 偏特化 #1：RowMajor 输入 -> zN 输出，走 Nd2Nz
@@ -53,22 +57,22 @@ struct TileCopyTla<
 
 光这一个文件就有 **8+ 个偏特化**，分别处理 RowMajor->zN、zN->zN、column_major->nZ、float4 窄精度打包、混合元素类型等组合，每个特化都精确构造 `Nd2NzParams` / `DataCopyParams`，处理 C0 大小、对齐、stride 换算。此外还有一批同类模板：
 
-- [copy_l0c_to_gm.hpp](../../../../include/catlass/gemm/tile/ascend950/copy_l0c_to_gm.hpp)（`CopyL0CToGmTla`，走 `AscendC::Fixpipe`，支持 f32->f16/bf16 量化、`unit_flag` 特性）
-- [copy_l0c_to_ub.hpp](../../../../include/catlass/gemm/tile/ascend950/copy_l0c_to_ub.hpp)（`CopyL0CToUBTla`，带 split_m / split_n）
-- [copy_l1_to_l0a.hpp](../../../../include/catlass/gemm/tile/ascend950/copy_l1_to_l0a.hpp) / [copy_l1_to_l0b.hpp](../../../../include/catlass/gemm/tile/ascend950/copy_l1_to_l0b.hpp)（L1 -> L0A/L0B）
-- vector 侧 [copy_gm_to_ub_tla.hpp](../../../../include/catlass/epilogue/tile/copy_gm_to_ub_tla.hpp) / [copy_ub_to_gm_tla.hpp](../../../../include/catlass/epilogue/tile/copy_ub_to_gm_tla.hpp) / [copy_ub_to_l1_tla.hpp](../../../../include/catlass/epilogue/tile/copy_ub_to_l1_tla.hpp)
+- [copy_l0c_to_gm.hpp](../../../../../../include/catlass/gemm/tile/ascend950/copy_l0c_to_gm.hpp)（`CopyL0CToGmTla`，走 `AscendC::Fixpipe`，支持 f32->f16/bf16 量化、`unit_flag` 特性）
+- [copy_l0c_to_ub.hpp](../../../../../../include/catlass/gemm/tile/ascend950/copy_l0c_to_ub.hpp)（`CopyL0CToUBTla`，带 split_m / split_n）
+- [copy_l1_to_l0a.hpp](../../../../../../include/catlass/gemm/tile/ascend950/copy_l1_to_l0a.hpp) / [copy_l1_to_l0b.hpp](../../../../../../include/catlass/gemm/tile/ascend950/copy_l1_to_l0b.hpp)（L1 -> L0A/L0B）
+- vector 侧 [copy_gm_to_ub_tla.hpp](../../../../../../include/catlass/epilogue/tile/copy_gm_to_ub_tla.hpp) / [copy_ub_to_gm_tla.hpp](../../../../../../include/catlass/epilogue/tile/copy_ub_to_gm_tla.hpp) / [copy_ub_to_l1_tla.hpp](../../../../../../include/catlass/epilogue/tile/copy_ub_to_l1_tla.hpp)
 
 这些模板是 C++ 库调优的成果，编码了大量硬件细节（C0 stride、Nd2Nz vs DataCopy 的选择、Fixpipe 的量化/ReLU/unit_flag）。**若 DSL 在 MLIR pass 里重新实现一遍，既是巨大的重复劳动，又容易和 C++ 库的实现产生分歧--同一个搬运算子存在两套逻辑，长期维护成本极高。**
 
-### 1.3 复用思路：契约在 MLIR，实现在 C++ 模板，bc 是桥梁
+### 复用思路：契约在 MLIR，实现在 C++ 模板，bc 是桥梁
 
 TLA DSL 的选择是 **不重新实现，而是复用**。复用的机制就是把"调用什么"和"怎么实现"解耦：
 
 | 层 | 职责 | 所在位置 |
 |----|------|---------|
-| MLIR lowering | 只决定"调用哪个 stub、传什么 payload"（**契约**） | [TlaCubeRegionPass.cpp](../../csrc/mlir/lib/Passes/TlaCubeRegionPass.cpp) 等 pass |
-| C++ stub | 把 payload 拆包，调对应的 `TileCopyTla` 模板（**实现入口**） | [csrc/mlir/bc/Cube/dma.cpp](../../csrc/mlir/bc/Cube/dma.cpp) 等 |
-| C++ 模板 | 真正构造 DataCopyParams、调 AscendC（**实现本体**） | [include/catlass/gemm/tile/ascend950/](../../../../include/catlass/gemm/tile/ascend950/) |
+| MLIR lowering | 只决定"调用哪个 stub、传什么 payload"（**契约**） | [TlaCubeRegionPass.cpp](../../../../csrc/mlir/lib/Passes/TlaCubeRegionPass.cpp) 等 pass |
+| C++ stub | 把 payload 拆包，调对应的 `TileCopyTla` 模板（**实现入口**） | [csrc/mlir/bc/Cube/dma.cpp](../../../../csrc/mlir/bc/Cube/dma.cpp) 等 |
+| C++ 模板 | 真正构造 DataCopyParams、调 AscendC（**实现本体**） | [include/catlass/gemm/tile/ascend950/](../../../../../../include/catlass/gemm/tile/ascend950/) |
 | bc | 把 stub 编译成可链接的 bitcode（**桥梁**） | `meta_op.*.c310.bc` |
 | hivmc | 运行时把 bc 链接进 kernel（**焊接**） | `--link-aicore-bitcode` |
 
@@ -78,7 +82,7 @@ MLIR 侧只需为每种 `(路由, layout, 元素类型)` 起一个确定的 stub
 
 ---
 
-## 2. 全景图：bc 在编译链路中的位置
+## 全景图：bc 在编译链路中的位置
 
 ```
 Python kernel fn
@@ -100,11 +104,11 @@ LLVM IR   (call @_mlir_ciface_copy_<route>_<dtype>)
 kernel.o   (stub 被 always_inline 内联展开为 DMA intrinsic)
 ```
 
-**核心认知**：`tla.copy` 在 TlaCompile 阶段**不会** lower 成单个 HIVM datacopy op，而是 lower 成一条 `func.call`，去调用一个名字形如 `copy_gm_row_major_to_l1_zN_float` 的 runtime stub。这个 stub 的函数体写在 C++ 里（[csrc/mlir/bc/Cube/dma.cpp](../../csrc/mlir/bc/Cube/dma.cpp)），由 Bisheng 编译器 `bisheng` 预编译成 `.bc`，再由 `hivmc` 在编译时链接进 kernel。**bc 就是填上那道裂缝的胶水。**
+**核心认知**：`tla.copy` 在 TlaCompile 阶段**不会** lower 成单个 HIVM datacopy op，而是 lower 成一条 `func.call`，去调用一个名字形如 `copy_gm_row_major_to_l1_zN_float` 的 runtime stub。这个 stub 的函数体写在 C++ 里（[csrc/mlir/bc/Cube/dma.cpp](../../../../csrc/mlir/bc/Cube/dma.cpp)），由 Bisheng 编译器 `bisheng` 预编译成 `.bc`，再由 `hivmc` 在编译时链接进 kernel。**bc 就是填上那道裂缝的胶水。**
 
 ---
 
-## 3. 什么是 bc
+## 什么是 bc
 
 "bc" 即 LLVM **bitcode**（`.bc` 文件）：
 
@@ -117,11 +121,11 @@ kernel.o   (stub 被 always_inline 内联展开为 DMA intrinsic)
 
 ---
 
-## 4. 以 `tla.copy` 为线索贯穿全流程
+## 以 `tla.copy` 为线索贯穿全流程
 
-### 4.1 用户侧：写一行 `tla.copy`
+### 用户侧：写一行 `tla.copy`
 
-以 [examples/end_to_end/basic_mmad/basic_matmul.py](../../examples/end_to_end/basic_mmad/basic_matmul.py) 为例，一个 cube kernel 里典型的三段 copy：
+以 [examples/end_to_end/basic_mmad/basic_matmul.py](../../../../examples/end_to_end/basic_mmad/basic_matmul.py) 为例，一个 cube kernel 里典型的三段 copy：
 
 ```python
 with tla.cube():
@@ -133,9 +137,9 @@ with tla.cube():
     tla.copy(gm_c_by_core, l0_c, tla.params.CopyL0C2DstParams(unit_flag=0b11))
 ```
 
-`tla.copy` 的 Python 构造函数在 [core_api.py](../../catlass/core_api.py)（`copy` 函数，3803–3914 行）。关键设计：
+`tla.copy` 的 Python 构造函数在 [core_api.py](../../../../catlass/core_api.py)（`copy` 函数，3803–3914 行）。关键设计：
 
-- **路由由 tensor 类型上的地址空间隐式决定**，不是 copy 的独立参数。`dst`/`src` 的 `!tla.ptr<dtype, addrspace, align>` 里携带 `gm`/`l1`/`l0a`/`l0b`/`l0c`/`ub`，前端读出 `(src_as, dst_as)` 二元组查路由表（[core_api.py](../../catlass/core_api.py) 3796–3800 行）。
+- **路由由 tensor 类型上的地址空间隐式决定**，不是 copy 的独立参数。`dst`/`src` 的 `!tla.ptr<dtype, addrspace, align>` 里携带 `gm`/`l1`/`l0a`/`l0b`/`l0c`/`ub`，前端读出 `(src_as, dst_as)` 二元组查路由表（[core_api.py](../../../../catlass/core_api.py) 3796–3800 行）。
 - **合法路由表**（前端软检查 + C++ verifier 双重锁死）：
 
   | 路由 | 归属 region | 类型 |
@@ -143,9 +147,9 @@ with tla.cube():
   | GM->L1, L1->L0A, L1->L0B, L0C->GM, L0C->UB, L1->UB | `tla.cube` | cube 数据通路 |
   | GM->UB, UB->GM, UB->L1 | `tla.vector` | vector 数据通路 |
 
-- **可选 `params`**：仅 L0C 源路由才物化成第三个 IR operand（`!tla.copy_l0c2dst_params`），承载 `unit_flag` / `quant_mode` / `l0c2ub_mode` 等；非 L0C 源省略。`atomic_mode` 一律从 `params.atomic_mode` 读出，作为 op attribute emit。详见 [params.py](../../catlass/params.py) 的 `CopyL0C2DstParams` / `CopyUbToGmParams`。
+- **可选 `params`**：仅 L0C 源路由才物化成第三个 IR operand（`!tla.copy_l0c2dst_params`），承载 `unit_flag` / `quant_mode` / `l0c2ub_mode` 等；非 L0C 源省略。`atomic_mode` 一律从 `params.atomic_mode` 读出，作为 op attribute emit。详见 [params.py](../../../../catlass/params.py) 的 `CopyL0C2DstParams` / `CopyUbToGmParams`。
 
-### 4.2 前端 emit 的 tla IR
+### 前端 emit 的 tla IR
 
 上面 `tla.copy(l1_a, gm_a_by_l1)`（GM->L1）生成的 IR 形如：
 
@@ -154,19 +158,19 @@ with tla.cube():
                                             !tla.tensor<..., !tla.ptr<f32, gm, 4>>) -> ()
 ```
 
-op 定义在 [Tla.td](../../csrc/mlir/include/Dialect/Tla/IR/Tla.td)（`Tla_CopyOp`，583–601 行）。
+op 定义在 [Tla.td](../../../../csrc/mlir/include/Dialect/Tla/IR/Tla.td)（`Tla_CopyOp`，583–601 行）。
 
-### 4.3 Lowering：`tla.copy` -> `func.call` stub
+### Lowering：`tla.copy` -> `func.call` stub
 
 这是 bc 接入的关键一步。`tla.copy` 在两个 pass 里被消除（cube 路由 / vector 路由各一个，逻辑对称）：
 
-- **cube 端**：[TlaCubeRegionPass.cpp](../../csrc/mlir/lib/Passes/TlaCubeRegionPass.cpp) 的 `LowerTlaCopyPattern`（197–400 行）
-- **vector 端**：[TlaVectorRegionPass.cpp](../../csrc/mlir/lib/Passes/TlaVectorRegionPass.cpp) 的 `LowerCopyPattern`（2531–2622 行）
+- **cube 端**：[TlaCubeRegionPass.cpp](../../../../csrc/mlir/lib/Passes/TlaCubeRegionPass.cpp) 的 `LowerTlaCopyPattern`（197–400 行）
+- **vector 端**：[TlaVectorRegionPass.cpp](../../../../csrc/mlir/lib/Passes/TlaVectorRegionPass.cpp) 的 `LowerCopyPattern`（2531–2622 行）
 
 它们做的事：
 
 1. 从 `tla.tensor_desc`（由更早的 `tla-lower-tensor-desc` 物化）取 src/dst 的 `TensorDescriptor`。
-2. 读出 `(srcAddrspace, dstAddrspace, srcLayout, dstLayout, elemType)`，调 `getCopyRouteCallee()`（[TlaTensorToMemref.cpp](../../csrc/mlir/lib/Passes/TlaTensorToMemref.cpp) 606–733 行）查表得到 stub 名，例如 `copy_gm_row_major_to_l1_zN_float`、`copy_l0c_to_gm_row_major_float`。
+2. 读出 `(srcAddrspace, dstAddrspace, srcLayout, dstLayout, elemType)`，调 `getCopyRouteCallee()`（[TlaTensorToMemref.cpp](../../../../csrc/mlir/lib/Passes/TlaTensorToMemref.cpp) 606–733 行）查表得到 stub 名，例如 `copy_gm_row_major_to_l1_zN_float`、`copy_l0c_to_gm_row_major_float`。
 3. `buildCopyPayloadForRoute()`（同文件 767–782 行）把 shape/stride/coord 拼成一串 `i64` payload（linear layout 8 个、packed layout 12 个，src+dst 各一份）。
 4. 生成 `func.call @copy_<route>_<dtype>(srcMemref, dstMemref, ...payload)`，原 `tla.copy` 删除。
 
@@ -179,9 +183,9 @@ func.func private @copy_gm_row_major_to_l1_zN_float
 call @copy_gm_row_major_to_l1_zN_float(...)
 ```
 
-### 4.4 bc 侧：stub 的函数体长什么样
+### bc 侧：stub 的函数体长什么样
 
-stub 实现在 [csrc/mlir/bc/Cube/dma.cpp](../../csrc/mlir/bc/Cube/dma.cpp)（cube 端）和 [csrc/mlir/bc/Vector/dma.cpp](../../csrc/mlir/bc/Vector/dma.cpp)（vector 端）。以 GM->L1 的 stub 为例（Cube/dma.cpp:131）：
+stub 实现在 [csrc/mlir/bc/Cube/dma.cpp](../../../../csrc/mlir/bc/Cube/dma.cpp)（cube 端）和 [csrc/mlir/bc/Vector/dma.cpp](../../../../csrc/mlir/bc/Vector/dma.cpp)（vector 端）。以 GM->L1 的 stub 为例（Cube/dma.cpp:131）：
 
 ```cpp
 void _mlir_ciface_copy_gm_row_major_to_l1_zN_float(
@@ -211,12 +215,12 @@ CATLASS_DEVICE void copyGMRowMajorToL1zN(
 
 - **命名约定**：stub 名是 `_mlir_ciface_` + MLIR 里的 call 目标。`_mlir_ciface_` 前缀是 MLIR 的 C ABI 约定（`func.emit_c_interface`），让 memref descriptor 按字段展开成 C 函数参数。
 - **参数布局**：前两个是 src/dst 的 memref descriptor 指针（按地址空间 `__gm__` / `__cbuf__` / `__ca__` / `__cb__` / `__ub__` 标注），后面跟一串 `int64_t` payload--正是 4.3 节 `buildCopyPayloadForRoute` 拼出来的那些 shape/stride/coord。
-- **实现委托**：stub 把 payload 重新组装成 `TensorDesc2D`/`TensorDesc4D`，调 `Catlass::Gemm::Tile::TileCopyTla`（[copy_gm_to_l1.hpp](../../../../include/catlass/gemm/tile/ascend950/copy_gm_to_l1.hpp)），模板内部最终落到 `AscendC::DataCopy`。L0C->GM 走 `CopyL0CToGmTla` -> `AscendC::Fixpipe`。**这一步就是把第 1 节的 C++ 模板特化"接"进来。**
+- **实现委托**：stub 把 payload 重新组装成 `TensorDesc2D`/`TensorDesc4D`，调 `Catlass::Gemm::Tile::TileCopyTla`（[copy_gm_to_l1.hpp](../../../../../../include/catlass/gemm/tile/ascend950/copy_gm_to_l1.hpp)），模板内部最终落到 `AscendC::DataCopy`。L0C->GM 走 `CopyL0CToGmTla` -> `AscendC::Fixpipe`。**这一步就是把第 1 节的 C++ 模板特化"接"进来。**
 - **`bisheng` 的角色**：Bisheng 编译器在编译这个 `.cpp` 时，会把 `AscendC::DataCopy`/`Fixpipe` 内联展开成 DMA intrinsic（LLVM IR 形式）。所以 `.bc` 里存的不是 C++ 源码语义，而是已经展开到硬件 intrinsic 的 IR。
 
-### 4.5 链接：`hivmc --link-aicore-bitcode` 把 bc 接进 kernel
+### 链接：`hivmc --link-aicore-bitcode` 把 bc 接进 kernel
 
-最后一步在 Python 完成。[execution.py](../../catlass/execution.py) 的 `_build_hivmc_a5_command`（1832 行）拼出 hivmc 命令：
+最后一步在 Python 完成。[execution.py](../../../../catlass/execution.py) 的 `_build_hivmc_a5_command`（1832 行）拼出 hivmc 命令：
 
 ```python
 command = [
@@ -232,9 +236,9 @@ command = [
 
 ---
 
-## 5. bc 的构建流程（`bisheng` + `llvm-link`）
+## bc 的构建流程（`bisheng` + `llvm-link`）
 
-bc 的构建规则在 [csrc/mlir/bc/CMakeLists.txt](../../csrc/mlir/bc/CMakeLists.txt)，分两步：
+bc 的构建规则在 [csrc/mlir/bc/CMakeLists.txt](../../../../csrc/mlir/bc/CMakeLists.txt)，分两步：
 
 **第一步：每个 `.cpp` -> 单个 `.bc`**（`compile_single_cpp_to_bc`）
 
@@ -264,39 +268,39 @@ llvm-link dma.aic.c310.bc mmad.aic.c310.bc mutex.aic.c310.bc ... \
 
 ---
 
-## 6. 如何扩展：新增一条 copy 路由
+## 如何扩展：新增一条 copy 路由
 
 理解了 bc 接入机制，加一条新路由（比如一个新的 layout 组合）就是"三处对齐"：
 
-1. **路由表**：在 [TlaTensorToMemref.cpp](../../csrc/mlir/lib/Passes/TlaTensorToMemref.cpp) 的 `getCopyRouteCallee`（606–733 行）加一条匹配，返回新 stub 名 `copy_<src>_<slayout>_to_<dst>_<dlayout>_<elemSuffix>`。
-2. **stub 实现**：在 [csrc/mlir/bc/Cube/dma.cpp](../../csrc/mlir/bc/Cube/dma.cpp)（或 Vector/dma.cpp）加 `void _mlir_ciface_copy_<...>(...)`，委托给对应的 `Catlass::Gemm::Tile::*Tla` 模板；若模板不存在则先在 [include/catlass/gemm/tile/ascend950/](../../../../include/catlass/gemm/tile/ascend950/) 下实现--**这正是 C++ 库复用价值所在：多数情况模板已存在，只需加一层 stub 包装。**
+1. **路由表**：在 [TlaTensorToMemref.cpp](../../../../csrc/mlir/lib/Passes/TlaTensorToMemref.cpp) 的 `getCopyRouteCallee`（606–733 行）加一条匹配，返回新 stub 名 `copy_<src>_<slayout>_to_<dst>_<dlayout>_<elemSuffix>`。
+2. **stub 实现**：在 [csrc/mlir/bc/Cube/dma.cpp](../../../../csrc/mlir/bc/Cube/dma.cpp)（或 Vector/dma.cpp）加 `void _mlir_ciface_copy_<...>(...)`，委托给对应的 `Catlass::Gemm::Tile::*Tla` 模板；若模板不存在则先在 [include/catlass/gemm/tile/ascend950/](../../../../../../include/catlass/gemm/tile/ascend950/) 下实现--**这正是 C++ 库复用价值所在：多数情况模板已存在，只需加一层 stub 包装。**
 3. **重建 bc**：`ninja -C csrc/mlir/build bishengir_template_bitcode`（或 `./build.sh` 全量），让 `meta_op.*.c310.bc` 包含新 stub。
 
-前端 [core_api.py](../../catlass/core_api.py) 的路由表（3796–3800 行）和 [TlaOps.cpp](../../csrc/mlir/lib/Dialect/Tla/IR/TlaOps.cpp) 的 `CopyOp::verify`（594–638 行）如果路由属于已有合法集合则无需改动；若是全新地址空间对，需同步更新这两处。
+前端 [core_api.py](../../../../catlass/core_api.py) 的路由表（3796–3800 行）和 [TlaOps.cpp](../../../../csrc/mlir/lib/Dialect/Tla/IR/TlaOps.cpp) 的 `CopyOp::verify`（594–638 行）如果路由属于已有合法集合则无需改动；若是全新地址空间对，需同步更新这两处。
 
 > **命名一致性是命门**：MLIR `func.call` 的目标符号、`getCopyRouteCallee` 返回的字符串、bc 里 `_mlir_ciface_` stub 的 C 函数名，三者必须完全对齐，否则 hivmc 链接时会报 undefined symbol。这也是为什么 stub 都用 `always_inline` + `emit_c_interface`--既保证符号可见用于链接，又保证链接后能内联消除调用开销。
 
 ---
 
-## 7. 关键文件索引
+## 关键文件索引
 
 | 环节 | 文件 | 关键位置 |
 |------|------|---------|
-| op 定义 | [Tla.td](../../csrc/mlir/include/Dialect/Tla/IR/Tla.td) | `Tla_CopyOp` 583–601 |
-| 前端构造 | [core_api.py](../../catlass/core_api.py) | `copy` 3803–3914；路由表 3796–3800 |
-| 参数定义 | [params.py](../../catlass/params.py) | `CopyL0C2DstParams` 163–204 |
-| 地址空间 | [address_space.py](../../catlass/address_space.py) | 17–29 |
-| C++ verifier | [TlaOps.cpp](../../csrc/mlir/lib/Dialect/Tla/IR/TlaOps.cpp) | `CopyOp::verify` 594–638 |
-| pass pipeline | [PassRegistry.cpp](../../csrc/mlir/lib/Passes/PassRegistry.cpp) | `buildTlaPipeline` 42–82 |
-| cube copy lowering | [TlaCubeRegionPass.cpp](../../csrc/mlir/lib/Passes/TlaCubeRegionPass.cpp) | `LowerTlaCopyPattern` 197–400 |
-| vector copy lowering | [TlaVectorRegionPass.cpp](../../csrc/mlir/lib/Passes/TlaVectorRegionPass.cpp) | `LowerCopyPattern` 2531–2622 |
-| 路由选择/payload | [TlaTensorToMemref.cpp](../../csrc/mlir/lib/Passes/TlaTensorToMemref.cpp) | `getCopyRouteCallee` 606–733 |
-| C++ 搬运模板 | [include/catlass/gemm/tile/ascend950/](../../../../include/catlass/gemm/tile/ascend950/) | `copy_gm_to_l1.hpp`、`copy_l0c_to_gm.hpp` 等 |
-| stub 实现（cube） | [csrc/mlir/bc/Cube/dma.cpp](../../csrc/mlir/bc/Cube/dma.cpp) | GM->L1 stub 131 行起 |
-| stub 实现（vector） | [csrc/mlir/bc/Vector/dma.cpp](../../csrc/mlir/bc/Vector/dma.cpp) | - |
-| bc 构建规则 | [csrc/mlir/bc/CMakeLists.txt](../../csrc/mlir/bc/CMakeLists.txt) | `compile_single_cpp_to_bc` / `link_all_to_meta_op` |
-| bc 运行时链接 | [execution.py](../../catlass/execution.py) | `_build_hivmc_a5_command` 1832；`_resolve_hivm_template_bitcode` 2003 |
-| IR 形态样例 | [tests/lit/tla-compile/](../../tests/lit/tla-compile/) | `copy-l0c-to-gm-atomic-f32.mlir`、`make-tensor-copy-gm-l1-zn.mlir` |
+| op 定义 | [Tla.td](../../../../csrc/mlir/include/Dialect/Tla/IR/Tla.td) | `Tla_CopyOp` 583–601 |
+| 前端构造 | [core_api.py](../../../../catlass/core_api.py) | `copy` 3803–3914；路由表 3796–3800 |
+| 参数定义 | [params.py](../../../../catlass/params.py) | `CopyL0C2DstParams` 163–204 |
+| 地址空间 | [address_space.py](../../../../catlass/address_space.py) | 17–29 |
+| C++ verifier | [TlaOps.cpp](../../../../csrc/mlir/lib/Dialect/Tla/IR/TlaOps.cpp) | `CopyOp::verify` 594–638 |
+| pass pipeline | [PassRegistry.cpp](../../../../csrc/mlir/lib/Passes/PassRegistry.cpp) | `buildTlaPipeline` 42–82 |
+| cube copy lowering | [TlaCubeRegionPass.cpp](../../../../csrc/mlir/lib/Passes/TlaCubeRegionPass.cpp) | `LowerTlaCopyPattern` 197–400 |
+| vector copy lowering | [TlaVectorRegionPass.cpp](../../../../csrc/mlir/lib/Passes/TlaVectorRegionPass.cpp) | `LowerCopyPattern` 2531–2622 |
+| 路由选择/payload | [TlaTensorToMemref.cpp](../../../../csrc/mlir/lib/Passes/TlaTensorToMemref.cpp) | `getCopyRouteCallee` 606–733 |
+| C++ 搬运模板 | [include/catlass/gemm/tile/ascend950/](../../../../../../include/catlass/gemm/tile/ascend950/) | `copy_gm_to_l1.hpp`、`copy_l0c_to_gm.hpp` 等 |
+| stub 实现（cube） | [csrc/mlir/bc/Cube/dma.cpp](../../../../csrc/mlir/bc/Cube/dma.cpp) | GM->L1 stub 131 行起 |
+| stub 实现（vector） | [csrc/mlir/bc/Vector/dma.cpp](../../../../csrc/mlir/bc/Vector/dma.cpp) | - |
+| bc 构建规则 | [csrc/mlir/bc/CMakeLists.txt](../../../../csrc/mlir/bc/CMakeLists.txt) | `compile_single_cpp_to_bc` / `link_all_to_meta_op` |
+| bc 运行时链接 | [execution.py](../../../../catlass/execution.py) | `_build_hivmc_a5_command` 1832；`_resolve_hivm_template_bitcode` 2003 |
+| IR 形态样例 | [tests/lit/tla-compile/](../../../../tests/lit/tla-compile/) | `copy-l0c-to-gm-atomic-f32.mlir`、`make-tensor-copy-gm-l1-zn.mlir` |
 
 ---
 

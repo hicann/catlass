@@ -1,6 +1,10 @@
-# 静态 Layout 与动态 Layout
+---
+nav_order: 30
+---
 
-本文介绍静态与动态 layout 的含义、如何把 Host tensor 设成动态 layout，以及在 Kernel 中如何编程。`from_dlpack` 等接入方式见 [Host Tensor 接入](framework_integration.md)。
+# DSL Layout
+
+本文介绍静态与动态 layout 的含义、如何把 Host tensor 设成动态 layout，以及在 Kernel 中如何编程。`from_dlpack` 等接入方式见 [DSL Tensor 接入](tensor_binding.md)。
 
 ---
 
@@ -9,15 +13,15 @@
 Host 侧的框架张量（如 PyTorch）接入后，会得到可供 `tla.compile` / launch 使用的 `tla.Tensor`。除了数据指针，编译器还会把该 tensor 的 **layout**——主要是各维的 shape、stride——写进 kernel 的编译类型。按这些尺寸是否在**编译期**就固定，分成两类：
 
 - **静态 layout**：shape / stride 在编译期就是具体数字（例如 `(4, 8)`）。编译产物针对这一组数字特化；换一组尺寸通常需要重新编译。
-- **动态 layout**：选定维在类型里写作 `?`（表示「编译期不确定」），真实长度在每次 launch 时再填入。同一份编译产物可以服务多种具体 shape。
+- **动态 layout**：选定维在类型里写作 `?`（表示“编译期不确定”），真实长度在每次 launch 时再填入。同一份编译产物可以服务多种具体 shape。
 
-`from_dlpack` 默认只写入**当前**张量的具体 shape / stride，得到静态 layout；DLPack 也不描述「哪些维可变」。若要跨 shape 复用编译产物，须在转换之后用 `mark_layout_dynamic` / `mark_compact_shape_dynamic` 显式标记动态维：对应维在编译类型中变为 `?`，真实尺寸在 launch 时填入。
+`from_dlpack` 默认只写入**当前**张量的具体 shape / stride，得到静态 layout；DLPack 也不描述“哪些维可变”。若要跨 shape 复用编译产物，须在转换之后用 `mark_layout_dynamic` / `mark_compact_shape_dynamic` 显式标记动态维：对应维在编译类型中变为 `?`，真实尺寸在 launch 时填入。
 
 下文先给静态 layout 的完整示例，再说明如何标记并在 Kernel 中使用动态 layout。
 
 ---
 
-## 1. 静态 Layout
+## 静态 Layout
 
 `from_dlpack` 默认把当前具体 shape / stride / origin 写进 Host 元数据；这些数字进入编译类型，在编译期已知。
 
@@ -54,7 +58,7 @@ artifact_5(tb, block_num=1)
 
 ---
 
-## 2. 动态 Layout
+## 动态 Layout
 
 在 `from_dlpack` 之后调用 `mark_layout_dynamic` / `mark_compact_shape_dynamic`，即可得到动态 layout。二者均原地修改并返回 `self`，可链式调用；须作用于覆盖整块缓冲、各维 `coord` 为 0 的根 Host tensor，不能对已切片的子视图调用。Kernel 侧写法与静态相同：用 `origin_shape[i]` 等读取尺寸；区别在于这些值在动态维上是运行时填入的。
 
@@ -88,7 +92,7 @@ tb = from_dlpack(b.contiguous(), layout_tag=tla.arch.RowMajor).mark_layout_dynam
 artifact(tb, block_num=1)  # 同一份编译产物可服务不同具体 shape
 ```
 
-### 2.1 `mark_layout_dynamic`
+### `mark_layout_dynamic`
 
 ```python
 Tensor.mark_layout_dynamic(leading_dim: int | None = None) -> Tensor
@@ -116,7 +120,7 @@ tb = from_dlpack(
 # stride 示意：<1,?>
 ```
 
-### 2.2 `mark_compact_shape_dynamic`
+### `mark_compact_shape_dynamic`
 
 ```python
 Tensor.mark_compact_shape_dynamic(
@@ -159,7 +163,7 @@ t.mark_compact_shape_dynamic(mode=1, stride_order=(0, 1))
 
 ---
 
-## 3. 小结
+## 小结
 
 综上：静态 layout 按具体数字特化编译；动态 layout 用 `?` 描述可变维，同一份编译可覆盖多种具体 shape。
 

@@ -67,6 +67,6 @@ repos:
           (?x)^(
             python/tla_dsl/catlass/execution\.py|
             python/tla_dsl/csrc/mlir/lib/Passes/PassesCommon\.h|
-            python/tla_dsl/docs/zh/bc-backend-integration\.md|
+            python/tla_dsl/docs/zh/dsl_development/feature_development/bc_backend_integration\.md|
             python/tla_dsl/docs/zh/evaluation/dsl_performance_tools\.md
           )$

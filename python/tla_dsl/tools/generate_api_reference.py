@@ -3,7 +3,7 @@
 
 API docstrings carry ``Directory:`` plus Description / Parameters / Constraints /
 Example. Section order and blurbs live in ``DIRECTORY_SECTIONS`` below.
-Writes English Markdown to ``docs/en/kernel_api_reference.md`` only.
+Writes English Markdown to ``docs/en/api/kernel_api_reference.md`` only.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from textwrap import dedent
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]  # python/tla_dsl
 CORE_API_PATH = PACKAGE_ROOT / "catlass" / "core_api.py"
 TENSOR_API_PATH = PACKAGE_ROOT / "catlass" / "tla" / "tensor.py"
-OUTPUT_PATH = PACKAGE_ROOT / "docs" / "en" / "kernel_api_reference.md"
+OUTPUT_PATH = PACKAGE_ROOT / "docs" / "en" / "api" / "kernel_api_reference.md"
 
 # Drop from prototypes: MLIR location plumbing, not a user-facing API argument.
 HIDDEN_PARAMETERS = frozenset({"loc"})
@@ -585,9 +585,9 @@ def _anchor(title: str) -> str:
 
 
 def _numbered_title(number: str | None, title: str) -> str:
-    if not number:
-        return title
-    return f"{number} {title}" if "." in number else f"{number}. {title}"
+    # Numbering is intentionally omitted: the site relies on frontmatter
+    # nav_order for ordering and keeps headings clean without manual indices.
+    return title
 
 
 def render_entry(entry: APIEntry, heading_level: int, docs_dir: Path) -> str:
@@ -709,7 +709,7 @@ def generate(*, docs_dir: Path | None = None) -> str:
         "This document describes the **TLA DSL kernel-side Core APIs** "
         "(typically imported as `import catlass.tla as tla`). "
         "It covers data structures, compute / sync helpers, on-chip resources, "
-        "and debug printing. See `docs/zh/framework_integration.md` for Host "
+        "and debug printing. See `docs/zh/kernel_development/core_concepts/tensor_binding.md` for Host "
         "tensor binding.",
         "",
         "Interface descriptions and examples come from each op's source docstring "

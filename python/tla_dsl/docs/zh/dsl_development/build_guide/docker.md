@@ -1,10 +1,14 @@
-# Docker 安装
+---
+nav_order: 30
+---
+
+# 使用 Docker 构建开发环境
 
 Docker 配置基于与目标设备、驱动和 Python 版本匹配的 CANN 基础镜像。
 
 项目镜像会安装 LLVM 工具链、Python 依赖、`torch`、`torch-npu` 和 AscendNPU-IR。镜像不包含 CATLASS 源码，启动时从宿主机挂载。
 
-## 1. 构建镜像
+## 构建镜像
 
 ```bash
 # /path/to/catlass 需替换为你 clone 的 CATLASS 仓库实际路径
@@ -24,7 +28,7 @@ bash build_docker_image.sh swr.cn-south-1.myhuaweicloud.com/ascendhub/cann:9.1.0
 
 AscendNPU-IR 构建耗时和资源占用较高。内存或磁盘 I/O 有限时，通过 `--build-jobs` 降低并发数。
 
-## 2. 启动编译容器
+## 启动编译容器
 
 只进行 DSL 构建、pytest 或 lit 时，不需要挂载 NPU 设备：
 
@@ -49,9 +53,9 @@ test -f "${CATLASS_DSL_PREBUILT_ASCENDNPU_IR}/build/install/lib/cmake/mlir/MLIRC
 python -c "import mlir"
 ```
 
-[编译与测试](../01_build_and_test.md)说明项目构建和各类测试入口。
+[编译与测试](index.md)说明项目构建和各类测试入口。
 
-## 3. 启动上板容器
+## 启动上板容器
 
 运行 NPU 端到端示例时，需要透传设备节点和宿主机驱动文件：
 
@@ -72,4 +76,4 @@ docker run \
     -it ascend-catlass-dsl:9.1.0-950-ubuntu22.04-py3.12 bash
 ```
 
-设备节点和驱动路径以宿主机的 CANN/驱动安装为准。容器内可通过 `npu-smi info` 检查设备，再运行 [NPU 端到端示例](../01_build_and_test.md#5-npu-端到端示例)。
+设备节点和驱动路径以宿主机的 CANN/驱动安装为准。容器内可通过 `npu-smi info` 检查设备，再运行 [NPU 端到端示例](index.md#完整的端到端测试)。

@@ -1,10 +1,14 @@
-# Host tensor 接入
+---
+nav_order: 40
+---
 
-本文说明如何在 Host 侧得到可供 `tla.compile` / 启动使用的 `tla.Tensor`：用 [DLPack](https://github.com/dmlc/dlpack) 的 `from_dlpack`（`torch` / `torch_npu`）绑定真实缓冲，或用 `make_fake_tensor` 造不带设备指针的类型样本。静态 / 动态 layout 见 [静态 Layout 与动态 Layout](dsl_dynamic_layout.md)。
+# DSL Tensor 接入
+
+本文说明如何在 Host 侧得到可供 `tla.compile` / 启动使用的 `tla.Tensor`：用 [DLPack](https://github.com/dmlc/dlpack) 的 `from_dlpack`（`torch` / `torch_npu`）绑定真实缓冲，或用 `make_fake_tensor` 造不带设备指针的类型样本。静态 / 动态 layout 见 [DSL Layout](layout.md)。
 
 ---
 
-## 1. 使用 `from_dlpack` 显式转换
+## 使用 `from_dlpack` 显式转换
 
 运行时提供将兼容 DLPack 的 tensor 转为 `tla.Tensor` 的接口。下面从 torch 开始，经 `from_dlpack` 绑定，一直到 `compile` / launch：
 
@@ -37,7 +41,7 @@ torch.npu.synchronize()
 
 其中 `x` 须实现 `__dlpack__`（通常为 NPU 上的 `torch` tensor，如经 `torch_npu`）。转换**零拷贝**：返回的 `tla.Tensor` 与源 tensor 共享同一块设备内存；源 tensor 生命周期须覆盖后续 `tla.compile` / launch，否则指针失效。
 
-默认得到**静态 layout**（具体 shape / stride / origin 写进编译类型）。要得到动态或混合静态/动态 layout，须在转换后调用 `mark_layout_dynamic` / `mark_compact_shape_dynamic`（见 [静态 Layout 与动态 Layout](dsl_dynamic_layout.md)）。
+默认得到**静态 layout**（具体 shape / stride / origin 写进编译类型）。要得到动态或混合静态/动态 layout，须在转换后调用 `mark_layout_dynamic` / `mark_compact_shape_dynamic`（见 [DSL Layout](layout.md)）。
 
 完整签名如下：
 
@@ -60,7 +64,7 @@ def from_dlpack(
 | `assumed_align` | **预留参数**。当前传入值不影响实际行为 |
 | `stream` | 传给框架的 `__dlpack__(stream=...)`，只影响转换时框架侧是否做流同步；默认 `-1` 表示不做同步 |
 
-### 1.1 布局与物理存储
+### 布局与物理存储
 
 未传 `origin_shape` 时，二维 `RowMajor` / `ColumnMajor` 须满足下列物理布局约定：
 
@@ -73,7 +77,7 @@ def from_dlpack(
 
 若显式传入 `origin_shape`，则使用该逻辑 origin，且不再按上表校验物理布局。`zN` 等嵌套布局下，逻辑 origin 为二维 `(M, N)`，对应的 shape / stride 为嵌套四元组。
 
-### 1.2 代码示例
+### 代码示例
 
 下面演示如何用 `from_dlpack` 将 PyTorch tensor 转为 `tla.Tensor`，并查看转换结果：
 
@@ -109,7 +113,7 @@ print(y)               # 编译类型字符串
 
 ---
 
-## 2. 使用 `make_fake_tensor` 造不带 ptr 的 fake tensor
+## 使用 `make_fake_tensor` 造不带 ptr 的 fake tensor
 
 仅需给 `tla.compile` 提供类型 / layout 样本、不绑定真实 NPU 缓冲时，用 `make_fake_tensor`。它始终返回未绑定 Host tensor（`data_ptr == 0`）；真实 buffer 请走 `from_dlpack`。
 

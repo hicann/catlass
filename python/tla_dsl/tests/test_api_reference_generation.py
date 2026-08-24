@@ -6,9 +6,9 @@ import sys
 
 
 def test_generated_api_reference_is_current() -> None:
-    """Fail when docs/en/kernel_api_reference.md is stale relative to core_api.py / generator."""
+    """Fail when docs/en/api/kernel_api_reference.md is stale relative to core_api.py / generator."""
     package_root = pathlib.Path(__file__).resolve().parents[1]
-    doc = package_root / "docs" / "en" / "kernel_api_reference.md"
+    doc = package_root / "docs" / "en" / "api" / "kernel_api_reference.md"
     assert doc.is_file(), f"missing checked-in API reference: {doc}"
 
     sys.path.insert(0, str(package_root / "tools"))
@@ -29,7 +29,7 @@ def test_generated_api_reference_is_current() -> None:
         )
     )
     raise AssertionError(
-        "docs/en/kernel_api_reference.md is out of date. Regenerate with:\n"
+        "docs/en/api/kernel_api_reference.md is out of date. Regenerate with:\n"
         "  cd python/tla_dsl && python3 tools/generate_api_reference.py\n"
         f"{diff}"
     )

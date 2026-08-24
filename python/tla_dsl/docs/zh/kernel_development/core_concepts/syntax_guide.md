@@ -1,19 +1,23 @@
-# Catlass DSL 语法约束
+---
+nav_order: 10
+---
 
-CATLASS DSL 采用python作为kernel描述语言，但由于NPU架构、性能考虑等因素，DSL并不支持完整的python语言特性。只有部分的python描述能够被映射为有意义的NPU指令。本文将对这些限制进行介绍。
+# DSL 语法约束
 
-## 1. 基本概念
+CATLASS DSL 采用Python作为kernel描述语言，但由于NPU架构、性能考虑等因素，DSL并不支持完整的Python语言特性。只有部分的Python描述能够被映射为有意义的NPU指令。本文将对这些限制进行介绍。
 
-### 1.1 `@tla.kernel` 与 `@tla.jit` 装饰器
+## 基本概念
 
-并非所有python代码都会被CATLASS DSL翻译成NPU指令，只有被 `@tla.kernel` 或 `@tla.jit` 装饰的函数才会被前端处理，转换为对应的NPU指令。
+### `@tla.kernel` 与 `@tla.jit` 装饰器
+
+并非所有Python代码都会被CATLASS DSL翻译成NPU指令，只有被 `@tla.kernel` 或 `@tla.jit` 装饰的函数才会被前端处理，转换为对应的NPU指令。
 
 - `@tla.kernel`：NPU kernel 入口，调用它返回启动器，在NPU上启动。
 - `@tla.jit`：kernel 中可调用的子函数。
 
-两者装饰的python函数遵循统一的降级——编译路径，以下的语法约束对两者同样适用。
+两者装饰的Python函数遵循统一的降级——编译路径，以下的语法约束对两者同样适用。
 
-### 1.2 值、分支与循环的动态与静态
+### 值、分支与循环的动态与静态
 
 编译、运行两个步骤将DSL中的值、分支与循环区分为动态与静态。判断一个值、分支或循环是动态还是静态，看它的值或条件是否依赖运行时才确定的数值。
 
@@ -29,7 +33,7 @@ CATLASS DSL 采用python作为kernel描述语言，但由于NPU架构、性能�
 
 循环的动静判断：边界编译期已知用 `range`/`range_constexpr`（编译期展开）；边界依赖运行时变量用 `tla.range`（动态循环）。
 
-### 1.3 编译期求值
+### 编译期求值
 
 kernel 中出现的普通 Python 函数（模块级函数、不在白名单里的内置函数）不会被编译成 NPU 指令。它们在翻译阶段按普通 Python 直接执行——参数都是编译期常数时，结果会代入后续代码（如 `for i in range(4)` 在翻译时直接展开成 4 条语句）；参数是运行时变量时，该调用不会产生 NPU 上的计算，不可用于设备操作。
 
@@ -67,7 +71,7 @@ kernel 中出现的普通 Python 函数（模块级函数、不在白名单里�
         tla.make_coord(8, 0)
     ```
 
-### 1.4 规划中的语义变更
+### 规划中的语义变更
 
 以下语义变更已在评审中确认，合入代码后本文档相应章节将同步更新。当前编写 kernel 时建议直接采用目标写法，避免后续迁移：
 
@@ -75,9 +79,9 @@ kernel 中出现的普通 Python 函数（模块级函数、不在白名单里�
 - **编译期展开显式化**：需要编译期展开的循环将统一显式写 `tla.range_constexpr`（见 2.1），不再依赖内建 `range`。
 - **`@tla.jit` 要求**：进入 kernel 的普通 Python 函数将要求显式加 `@tla.jit` 装饰（见 1.3），不再允许裸模块级函数隐式参与。
 
-## 2. 控制流限制
+## 控制流限制
 
-### 2.1 三种 for
+### 三种 for
 
 | 写法 | 语义 | 适用场景 |
 | --- | --- | --- |
@@ -87,7 +91,7 @@ kernel 中出现的普通 Python 函数（模块级函数、不在白名单里�
 
 约束：循环目标须为简单局部变量名；循环变量在循环结束后不可使用；`tla.range` 支持 `start`/`stop`/`step` 三参数与负步长。
 
-### 2.2 动态 if 与 while
+### 动态 if 与 while
 
 - 条件依赖运行时变量时，`if`/`while` 编译为NPU分支/循环；两个分支、循环体与条件区域都会生成NPU代码。
 - 动态 if/while 体内的赋值目标受限，按出现位置区分：
@@ -105,21 +109,21 @@ kernel 中出现的普通 Python 函数（模块级函数、不在白名单里�
 
 注：动态 for 体内对属性赋值、`del` 等不做前端校验，缺少诊断不代表支持。
 
-### 2.3 提前退出与 else
+### 提前退出与 else
 
 动态区域内 `return`/`break`/`continue`/`raise` 均不支持；动态 `for`/`while` 不支持 `else` 子句。NPU循环没有跳出指令与调用栈，提前退出改用条件跳过，或用标志变量记录结果、循环结束后读取。
 
-### 2.4 变量作用域与携带状态
+### 变量作用域与携带状态
 
 - 区域外使用的变量须在进入区域前初始化。
 - 循环变量在循环结束后不可使用。
 - 在分支或循环之间传递的变量（携带变量），各路径赋值的结构与类型须一致；支持的容器为 tuple/list/dict/dataclass 等。
 
-### 2.5 编译期分支
+### 编译期分支
 
 条件为字面量 `True`/`False` 或 `tla.const_expr(...)` 时，`if` 在编译期选择分支，不生成NPU分支；两侧分支体仍会被检查。配合 `tla.Constexpr[T]` 参数用于编译期分发。
 
-### 2.6 with 区域
+### with 区域
 
 NPU 中存在cube核与vector核，在DSL中被抽象为两个可使用`with`进入的区域。
 
@@ -133,9 +137,9 @@ NPU 中存在cube核与vector核，在DSL中被抽象为两个可使用`with`进
 - 区域内定义的临时值不可在区域外使用。
 - 区域内对外层变量的重新绑定由前端自动处理（生成 `nonlocal`），无需手写。
 
-## 3. 常用内容速查
+## 常用内容速查
 
-### 3.1 表达式运算符支持
+### 表达式运算符支持
 
 | 运算符 | 支持情况 |
 | --- | --- |
@@ -145,9 +149,9 @@ NPU 中存在cube核与vector核，在DSL中被抽象为两个可使用`with`进
 | `is`/`is not`/`in`/`not in` | 部分支持（仅适用于 host 值） |
 | `and or not`（短路）、条件表达式 `x if c else y` | 支持 |
 | `**`（幂） | 部分支持（仅浮点类型） |
-| 下标读取 `meta[i]` | 部分支持：张量/元组等运行时变量支持动态下标；**python list 不支持动态下标**（下标为NPU上的数值时），仅支持编译期常数下标（由 `range`/`tla.range`/`tla.range_constexpr` 创建的列表表达式同理） |
+| 下标读取 `meta[i]` | 部分支持：张量/元组等运行时变量支持动态下标；**Python list 不支持动态下标**（下标为NPU上的数值时），仅支持编译期常数下标（由 `range`/`tla.range`/`tla.range_constexpr` 创建的列表表达式同理） |
 
-### 3.2 内置关键字支持
+### 内置关键字支持
 
 Python 的 36 个内置关键字全部列出如下，按功能分类。两个支持列的通用约定（动静定义见 1.2）：
 
@@ -232,7 +236,7 @@ Python 的 36 个内置关键字全部列出如下，按功能分类。两个支
 | `pass` | 支持 | 支持 | 空操作，不产生任何指令，可用于占位 |
 | `del` | 部分支持 | 不支持 | 动态 if/while/for 体内报 "does not support deletion"；区域外按 host 语义执行（删除编译期局部变量） |
 
-### 3.3 内置函数支持
+### 内置函数支持
 
 对内置函数的支持可以看成一种白名单：只有下表列出的内置函数会进入 kernel 编译，其余不进入编译、按上面的 host 函数规则在降级时求值。完整清单与语义见 [Python 内置函数官方文档](https://docs.python.org/zh-cn/3.13/library/functions.html#import__)。
 
@@ -244,11 +248,11 @@ Python 的 36 个内置关键字全部列出如下，按功能分类。两个支
 | `pow(x, y)` | 部分支持（仅浮点，同 `**`） | 经 `__pow__` 生成NPU运算 | `typing.py:861` |
 | `range()` | 部分支持（边界须为编译期常数） | 参与编译期循环展开 | `ast_preprocessor.py:305-474` |
 
-## 4. 实例
+## 实例
 
 示例取自 `examples/end_to_end` 并精简，完整可运行版本见对应文件。
 
-### 4.1 动态 if：分支内改变量须先初始化
+### 动态 if：分支内改变量须先初始化
 
 动态 `if` 中，分支外要使用的变量须先初始化、再在分支内重新赋值。
 
@@ -273,7 +277,7 @@ def dynamic_if_kernel(limit: int) -> None:
         tla.make_coord(coord, 0)      # SyntaxError: ... must be initialized before the if
 ```
 
-### 4.2 动态 if：分支间传值
+### 动态 if：分支间传值
 
 各分支给同一组变量赋不同值，分支结束后统一使用。
 
@@ -292,7 +296,7 @@ def select_kernel(limit: int) -> None:
         tla.make_coord(coord, offset) # 分支结束后使用
 ```
 
-### 4.3 动态 for：携带状态跨迭代
+### 动态 for：携带状态跨迭代
 
 动态循环不支持提前退出；循环内重新赋值的变量在迭代间自动传递，各次赋值的类型须一致。
 
@@ -321,7 +325,7 @@ def carried_state_kernel(mem_src: tla.Tensor, mem_out: tla.Tensor) -> None:
             break                     # SyntaxError: ... does not support return, break, continue, or raise
 ```
 
-### 4.4 动态 for：按分块循环
+### 动态 for：按分块循环
 
 按 tile 分块循环，每次迭代处理一个分块。
 
@@ -342,7 +346,7 @@ def tile_loop_kernel(mem: tla.Tensor, out: tla.Tensor) -> None:
         tla.copy(out, dst_ub)
 ```
 
-### 4.5 编译期分支
+### 编译期分支
 
 条件编译期已知时，编译期直接选择一侧，不生成NPU分支。
 
@@ -355,7 +359,7 @@ def constexpr_if_kernel(flag: tla.Constexpr[bool]) -> None:
         tla.make_coord(2, 0)
 ```
 
-### 4.6 with 区域
+### with 区域
 
 NPU操作放在 `tla.vector()` 区域内，vector 计算包在 `tla.vec.func(mode="simd")` 中。
 
@@ -377,7 +381,7 @@ def vec_region_kernel(mem_a: tla.Tensor, mem_b: tla.Tensor, mem_c: tla.Tensor) -
         tla.pipe_barrier(tla.pipes.ALL)
 ```
 
-### 4.7 struct-like args
+### struct-like args
 
 用`@dataclass`创建的类实例可以作为kernel入参，也可以在kernel内创建。
 
@@ -392,7 +396,7 @@ class TilingData:
     tiling_gm_out: tla.Tensor     # 支持tla.Tensor入参
     tiling_int16: tla.Int16       # Int16 标量
     tiling_float: tla.Float32     # Float32 标量
-    tiling_int: int               # python int, 编译期为int，运行期为tla.Int32
+    tiling_int: int               # Python int, 编译期为int，运行期为tla.Int32
 
 @dataclass(frozen=True)
 class Info:
@@ -416,6 +420,7 @@ artifact(tiling, out)
 ```
 
 **实例使用范围**:
+
 - 在host侧创建实例，作为kernel入参, 字段类型支持标量和tensor
 - 在kernel侧创建实例
 
@@ -434,7 +439,7 @@ artifact(tiling, out)
 
 **注意**：字段实际类型由**字段值**决定（与 Python 动态语义一致），构造 dataclass 时不会强制转换成注解类型。
 
-### 4.8 错误信息速查
+### 错误信息速查
 
 | 错误信息（关键词） | 原因 | 处理 |
 | --- | --- | --- |
@@ -448,8 +453,8 @@ artifact(tiling, out)
 | `structure`/`expected i32` | 各分支或迭代间变量结构或类型不一致 | 各路径保持结构与类型一致 |
 | `'**' is only supported for float types` | 整型幂运算 | 使用乘法 |
 
-## 5. 参考资料
+## 参考资料
 
-- 控制流使用示例：[`scalar_index_control_flow.py`](../../examples/end_to_end/tensor_index/scalar_index_control_flow.py)、[`basic_vadd.py`](../../examples/end_to_end/basic_vadd/basic_vadd.py)、[`register_control_flow.py`](../../examples/end_to_end/vector_ops/register_control_flow.py)
-- 控制流 AST 实现：[`ast_preprocessor.py`](../../catlass/base_dsl/ast_preprocessor.py)、[`tla_ast_decorators.py`](../../catlass/tla_ast_decorators.py)
-- 控制流测试用例参考：[`test_frontend_branching.py`](../../tests/test_frontend_branching.py)、[`test_frontend_for_range.py`](../../tests/test_frontend_for_range.py)、[`test_frontend_while.py`](../../tests/test_frontend_while.py)、[`test_frontend_with.py`](../../tests/test_frontend_with.py)
+- 控制流使用示例：[`scalar_index_control_flow.py`](../../../../examples/end_to_end/tensor_index/scalar_index_control_flow.py)、[`basic_vadd.py`](../../../../examples/end_to_end/basic_vadd/basic_vadd.py)、[`register_control_flow.py`](../../../../examples/end_to_end/vector_ops/register_control_flow.py)
+- 控制流 AST 实现：[`ast_preprocessor.py`](../../../../catlass/base_dsl/ast_preprocessor.py)、[`tla_ast_decorators.py`](../../../../catlass/tla_ast_decorators.py)
+- 控制流测试用例参考：[`test_frontend_branching.py`](../../../../tests/test_frontend_branching.py)、[`test_frontend_for_range.py`](../../../../tests/test_frontend_for_range.py)、[`test_frontend_while.py`](../../../../tests/test_frontend_while.py)、[`test_frontend_with.py`](../../../../tests/test_frontend_with.py)

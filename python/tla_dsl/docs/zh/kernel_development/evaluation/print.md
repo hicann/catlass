@@ -1,11 +1,15 @@
+---
+nav_order: 30
+---
+
 # 在 CATLASS DSL 中使用打印调试接口
 
 CATLASS DSL 提供 `tla.print` 接口，用于在 kernel 内部进行调试打印。`tla.print` 有两类用法：
 
-| 用法        | 形态                                                     | 说明                                 |
-| ----------- | -------------------------------------------------------- | ------------------------------------ |
-| 标量打印    | `tla.print(value)` / `tla.print(fmt, *args)`             | 打印单个标量、纯字符串或格式化字符串 |
-| Tensor 打印 | `tla.print(tensor)` / `tla.print(tensor, length)`        | 打印整个 Tensor 或其物理前缀         |
+| 用法        | 形态                                              | 说明                                 |
+| ----------- | ------------------------------------------------- | ------------------------------------ |
+| 标量打印    | `tla.print(value)` / `tla.print(fmt, *args)`      | 打印单个标量、纯字符串或格式化字符串 |
+| Tensor 打印 | `tla.print(tensor)` / `tla.print(tensor, length)` | 打印整个 Tensor 或前`length`个元素   |
 
 `tla.print` 只接受位置参数。Tensor 打印中的 `length` 表示元素个数而不是字节数；静态 shape 的 Tensor 可以省略 `length`，动态 shape 的 Tensor 必须显式传入 `length`。
 

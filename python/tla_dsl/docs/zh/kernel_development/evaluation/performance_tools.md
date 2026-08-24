@@ -1,8 +1,12 @@
-# 在CATLASS_DSL样例工程进行性能调优
+---
+nav_order: 20
+---
 
-下述文档介绍使用 CATLASS_DSL （以下简称为DSL）工具链的端到端编译、功能测试及性能维测的完整流程。
+# 对 CATLASS DSL 算子进行性能调优
 
-## 性能调优工具简介：
+下述文档介绍使用 CATLASS DSL （以下简称为DSL）工具链的端到端编译、功能测试及性能维测的完整流程。
+
+## 性能调优工具简介
 
 ### msProf简介
 
@@ -22,8 +26,8 @@
 
 ### 基础依赖使能
 
-在进行 DSL 开发与测试前，请先行确认基础环境已准备完毕。详细步骤请参考 [快速上手](../../../../../docs/zh/1_Practice/01_quick_start.md)，完成 CANN 的下载安装与环境变量使能。
-DSL 的底层编译依赖于 AscendNPU-IR。在执行后续编译操作前，请参阅 [tla_dsl README](../../../../tla_dsl/README) 并按该文档指引完成至2.7章[运行测试](../../../../tla_dsl/README.md#27-运行测试)相关内容。
+在进行 DSL 开发与测试前，请先行确认基础环境已准备完毕。详细步骤请参考 [快速上手](../../../../../../docs/zh/1_Practice/01_quick_start.md)，完成 CANN 的下载安装与环境变量使能。
+DSL 的底层编译依赖于 AscendNPU-IR。在执行后续编译操作前，请参阅 [tla_dsl README](../../../../../tla_dsl/README) 并按该文档指引完成至 [运行测试](../../../../../tla_dsl/README.md#快速开始) 相关内容。
 
 ## 用msProf进行单算子性能分析
 
@@ -33,28 +37,29 @@ DSL 的底层编译依赖于 AscendNPU-IR。在执行后续编译操作前，请
 
 通过上板性能采集，可以直接测定算子在NPU卡上的运行时间，可判断性能是否初步达到预期标准。
 
-### msprof op 使用示例：
+### msprof op 使用示例
 
 ```bash
 msprof op --application="python examples/end_to_end/basic_mixed/basic_mixed.py"
 ```
+
 以下列举一些常用参数，获取完整参数信息请参考[msopprof模式用户指南](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/latest/devaids/optool/docs/zh/user_guide/msopprof_user_guide.md)：
 
 | 参数 | 说明 | 示例 |
-|---|---|---|
+| --- | --- | --- |
 | `-h`, `--help` | 显示帮助信息并退出 | `msprof op -h` |
 | `--application` | 指定在Device上执行的应用。指定可执行文件/执行指令。 | `msprof op --application="python examples/end_to_end/basic_mixed/basic_mixed.py"`
-| `--launch-count` | 可选参数，表示循环执行特定数量的特定kernel进行性能数据采集并计算平均值。(*需配合 --kernel-name 参数指定目标算子使用。如果不配置该参数，只会采集一组数据。*)| `msprof op --application="python examples/end_to_end/basic_mixed/basic_mixed.py" --kernel-name=basic_mixed --launch-count=10` |
+| `--launch-count` | 可选参数，表示循环执行特定数量的特定kernel进行性能数据采集并计算平均值。(*需配合 --kernel-name 参数指定目标算子使用。如果不配置该参数，只会采集一组数据。*) | `msprof op --application="python examples/end_to_end/basic_mixed/basic_mixed.py" --kernel-name=basic_mixed --launch-count=10` |
 | `--warm-up` | 可选参数，表示预热次数（解决芯片未提频问题）<br>如果不配置该参数，默认预热次数值为5。 | `msprof op --application="python examples/end_to_end/basic_mixed/basic_mixed.py" --warm-up=20` |
 | `--replay-mode` | 可选参数，指定算子数据采集的重放模式，默认为 kernel。<br>kernel：核函数级重放，对指定采集范围的单个算子核函数多次重放。<br>application：应用级重放，整个应用进行多次重放。<br>range：范围级重放，指定范围内的多算子整体多次重放（需配合 --mstx=on 使用）。 | `msprof op --application="python examples/end_to_end/basic_mixed/basic_mixed.py" --replay-mode=kernel` |
 
-- ⚠ 注意事项
-  - 工具默认会读取执行序列中第一个算子的性能数据。在使用官方 example 进行独立调测时，通常可直接获取到目标结果；但若接入其他复杂工程，即使只跑某一个算子的用例，底层也可能伴随着框架（如 PyTorch）其他的初始化或前置算子执行。
+* ⚠ 注意事项
+  * 工具默认会读取执行序列中第一个算子的性能数据。在使用官方 example 进行独立调测时，通常可直接获取到目标结果；但若接入其他复杂工程，即使只跑某一个算子的用例，底层也可能伴随着框架（如 PyTorch）其他的初始化或前置算子执行。
 
     为了避免读取不到目标算子的结果，强烈建议性能分析时通过 --kernel-name 精准指定算子名称。对于使用 DSL（如 Catlass / TLA）开发的算子，对应的算子名称即为 Python 代码中被 @tla.kernel 装饰器修饰的函数名（例如，在 basic_mixed.py 脚本中，对应的参数应配置为 --kernel-name=basic_mixed）。
-  - 可设置环境变量`ASCEND_RT_VISIBLE_DEVICES`指定上板调测的Device Id号
+  * 可设置环境变量`ASCEND_RT_VISIBLE_DEVICES`指定上板调测的Device Id号
 
-### 性能数据说明：
+### 性能数据说明
 
 运行结束后，当前目录下会生成以 `OPPROF_` 开头的性能分析数据目录，其性能数据文件夹结构如下：
 
@@ -71,36 +76,39 @@ msprof op --application="python examples/end_to_end/basic_mixed/basic_mixed.py"
 ```
 
 同时，终端会输出简要的 Performance Summary Report，开发者可借此初步评估硬件利用率与算子瓶颈，例如：
+
 * `MTE2 bandwidth utilization lower than 80% when active.`：提示内存搬运通道利用率偏低。
 * `aicore compute usage lower than 20%.`：提示矩阵计算核心算力未充分释放。
 
-获取更多数据解析相关内容，请参考 [用msProf进行单算子性能分析](../../../../../docs/zh/1_Practice/evaluation/performance_tools.md#用msprof进行单算子性能分析)。
+获取更多数据解析相关内容，请参考 [用msProf进行单算子性能分析](../../../../../../docs/zh/1_Practice/evaluation/performance_tools.md#用msprof进行单算子性能分析)。
 
 ### 性能流水仿真
 
 通过仿真，可以获得**流水图**、**指令与代码行映射**、**代码热点图**、**内存热点图**等可视化数据，以便进一步分析优化算子计算瓶颈。
 
-### msprof op simulator使用示例：
+### msprof op simulator使用示例
 
 首先将 CANN 工具包中的仿真器 `lib` 目录加载到 `LD_LIBRARY_PATH` 中。请确保在执行时所处的相对路径正确，或根据实际情况将其替换为您的用户目录与对应的版本。
 
 ```bash
 export LD_LIBRARY_PATH=/usr/local/Ascend/ascend-toolkit/latest/tools/simulator/Ascendxxxyy/lib:$LD_LIBRARY_PATH
 ```
+
 接下来执行下面这条命令（以basic_mixed算子为例）：
+
 ```bash
 
-msprof op simulator --soc-version=Ascend950PR_9599 --core-id=0 --kernel-name=basic_mixed python3 ./examples/end_to_end/basic_mixed/basic_mixed.py --run
+msprof op simulator --soc-version=${SOC_VERSION} --core-id=0 --kernel-name=basic_mixed python3 ./examples/end_to_end/basic_mixed/basic_mixed.py --run
 ```
 
 * **关键参数解析**：
-  * --soc-version：必填。明确指定目标 NPU 的芯片版本（如 Ascend950PR_9599），仿真器将据此加载对应的硬件时钟周期与内存带宽模型。
+  * --soc-version：必填。通过 `SOC_VERSION` 明确指定目标 NPU 的芯片版本，仿真器将据此加载对应的硬件时钟周期与内存带宽模型。
 
   * --core-id：必填。指定仿真的目标核心编号（通常单核验证指定为 0 即可）。
 
   * --kernel-name：强烈建议配置。由于一个 Python 脚本中可能触发大量系统底层的 Kernel 运行，使用该参数可以通过名称前缀匹配（如指定 basic_mixed）精准抓取目标算子。这不仅能过滤掉无关算子的噪音，还能大幅缩短仿真所需的等待时间。
 
-- ⚠ 注意事项。
+* ⚠ 注意事项。
   * **命令结构简化**：在当前版本中，推荐直接将需要执行的脚本及参数追加在 msprof 完整命令的最末尾，无需再使用 --application 参数进行包裹。
 
      *说明：这是因为目前 msprof 的底层解析行为已全面优化为“原生直传”机制：工具在解析完自身设定的配置选项（options）后，会自动将剩余的全部字符串视作用户的目标程序及其附属参数。这种方式不仅在终端敲击时更符合直觉，也从根本上规避了繁琐的字符转义风险。*
@@ -109,7 +117,7 @@ msprof op simulator --soc-version=Ascend950PR_9599 --core-id=0 --kernel-name=bas
 
     *说明：这是因为如果在脚本中未严格隔离计算设备，比如直接调用框架原生的 NPU 算子来计算预期结果，会给最终生成的流水图引入海量的干扰噪音，使原本几分钟即可出结果的仿真耗时膨胀，导致工具长时间空转，甚至难以推进到实际需要采集的自定义目标算子上。*
 
-### 仿真数据说明：
+### 仿真数据说明
 
 仿真运行结束后，性能数据目录结构示例如下：
 
@@ -124,14 +132,14 @@ msprof op simulator --soc-version=Ascend950PR_9599 --core-id=0 --kernel-name=bas
 ```
 
 获取仿真输出文件夹simulator下的visualize_data.bin，通过[MindStudio Insight](https://www.hiascend.com/document/detail/zh/mindstudio/latest/GUI_baseddevelopmenttool/MindStudioInsight/docs/zh/user_guide/overview.md)工具加载bin文件查看代码热点图。
-关于如何对仿真数据进行深度解析，请参考 [性能流水仿真](../../../../../docs/zh/1_Practice/evaluation/performance_tools.md#性能流水仿真)；
+关于如何对仿真数据进行深度解析，请参考 [性能流水仿真](../../../../../../docs/zh/1_Practice/evaluation/performance_tools.md#性能流水仿真)；
 关于如何将数据导出并进行图形化深度解析，请参考 [MindStudio Insight](https://www.hiascend.com/document/detail/zh/mindstudio/latest/GUI_baseddevelopmenttool/MindStudioInsight/docs/zh/user_guide/overview.md)。
 
 ## 用Profiling进行整网性能分析
 
 虽然CATLASS只提供单算子的调用示例，但单算子调用示例也可使用[Profiling](https://www.hiascend.com/document/detail/zh/mindstudio/2600/msTT_msIT/msProf/docs/zh/quick_start.md)工具进行性能分析。
 
-### msprof 使用示例：
+### msprof 使用示例
 
 ```bash
 msprof --application="python examples/end_to_end/basic_mixed/basic_mixed.py"
@@ -141,11 +149,11 @@ msprof --application="python examples/end_to_end/basic_mixed/basic_mixed.py"
 | --- | --- | --- |
 | `-h`, `--help` | 显示帮助信息并退出 | `msprof -h` |
 | `--application` | 场景相关，通过参数方式传入二进制执行程序或执行脚本及参数。 | `msprof --application="python examples/end_to_end/basic_mixed/basic_mixed.py"` |
-| `--output=<path>` | 可选参数，收集到的性能数据的存放路径。| `msprof --output=/home/projects/output /home/projects/main`
+| `--output=<path>` | 可选参数，收集到的性能数据的存放路径。 | `msprof --output=/home/projects/output /home/projects/main`
 
 更多参数参考[msprof采集命令](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/latest/devaids/Profiling/atlasprofiling_16_0010.html)
 
-### 性能数据说明：
+### 性能数据说明
 
 运行结束后，性能数据目录结构示例如下（仅展示性能数据）：
 
@@ -166,6 +174,7 @@ msprof --application="python examples/end_to_end/basic_mixed/basic_mixed.py"
 ```
 
 *表示{timestamp}时间戳。
+
 * device_{id}目录主要保存各个Device运行昇腾AI应用的性能原始数据和AI处理器系统原始数据。
 * host目录主要保存上层应用接口（msproftx）的昇腾AI应用运行性能原始数据和Host系统原始数据。
 关于如何对数据进行深度解析，请参考 [性能数据文件](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/devaids/Profiling/atlasprofiling_16_0057.html)。

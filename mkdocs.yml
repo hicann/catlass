@@ -60,6 +60,7 @@ plugins:
             1 Practice: 开发实践
             2 Design: 模块设计
             3 API: API文档
+            4 CATLASS DSL: CATLASS DSL
             Evaluation: 调测与分析
             Others: 专题实践
             01 kernel design: Kernel 设计
@@ -74,6 +75,7 @@ plugins:
             1 Practice: Practices
             2 Design: Design
             3 API: API
+            4 CATLASS DSL: CATLASS DSL
             Evaluation: Evaluation
             Others: Topics
             01 kernel design: Kernel Design

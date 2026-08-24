@@ -1,8 +1,12 @@
-# CATLASS DSL Syntax Constraints
+---
+nav_order: 10
+---
 
-## 1. Basic Concepts
+# DSL Syntax Constraints
 
-### 1.1 `@tla.kernel` and `@tla.jit`
+## Basic Concepts
+
+### `@tla.kernel` and `@tla.jit`
 
 `@tla.kernel` is the device-kernel entry point. `@tla.jit` is a DSL helper callable from a kernel and is preprocessed before lowering.
 
@@ -10,7 +14,7 @@ Bare Python helpers may also be called while a kernel is emitting device-time co
 
 At compile time, kernels and helpers may also use ordinary Python functions, lambdas, nested functions, closures, class constructors, properties, and bound methods to derive compile-time configuration.
 
-### 1.2 Compile-time and device-time values
+### Compile-time and device-time values
 
 Compile-time values are ordinary Python values known while a specialized kernel is built, including literals and parameters or dataclass fields annotated with `tla.Constexpr[T]`. A `Constexpr` annotation classifies that input as compile-time-only: it has no device ABI slot.
 
@@ -30,7 +34,7 @@ Device-time values are available when the kernel executes, including tensor elem
 
 `range(...)` and `tla.range(...)` are device-time loops even when their bounds are Python integers. `tla.range_constexpr(...)` is the explicit compile-time expansion form.
 
-### 1.3 Expressions and Operators at a Glance
+### Expressions and Operators at a Glance
 
 | Operator | Support |
 | --- | --- |
@@ -42,7 +46,7 @@ Device-time values are available when the kernel executes, including tensor elem
 | `**` (power) | Partially supported (float types only) |
 | Subscript read `meta[i]` | Supported as documented by the value type |
 
-### 1.4 Compile-time expansion
+### Compile-time expansion
 
 Use `tla.range_constexpr(...)` for small, intentional compile-time expansion. Its bounds must be compile-time integers and Python executes the loop while building the kernel. CATLASS emits one `DSLOptimizationWarning` before expanding a loop with 64 or more iterations, but continues the expansion. Prefer `range(...)` or `tla.range(...)` when expansion is not needed.
 
@@ -55,7 +59,7 @@ def static_stages(count: tla.Constexpr[int]) -> None:
 
 Compile-time `while` uses `while tla.const_expr(condition):`. It has the same warning behavior, but an incorrect condition can prevent compilation from terminating; prefer `tla.range_constexpr(...)` for bounded compile-time repetition.
 
-### 1.5 Glossary
+### Glossary
 
 | Term | Meaning |
 | --- | --- |
@@ -64,13 +68,13 @@ Compile-time `while` uses `while tla.const_expr(condition):`. It has the same wa
 | Carried value | Existing device-time state updated across a branch or loop |
 | Device-time region | An `if`, `for`, `while`, or documented TLA `with` scope controlled at device time |
 
-## 2. Control-Flow Constraints
+## Control-Flow Constraints
 
-### 2.1 Counted `for` loops
+### Counted `for` loops
 
 Both `range` forms accept one, two, or three bounds, including a device-time or negative step. Loop-tuning keywords are not part of the supported contract. The target must be one simple local name and is local to the loop; it cannot be used afterward. Device-time `for-else` is unsupported.
 
-### 2.2 Device-time `if` and `while`
+### Device-time `if` and `while`
 
 Device-time `if`, `elif`, and `else` are supported. An `if` without `else` preserves an incoming carried device-time value on the false path. Device-time `while` carries compatible values updated by its condition and body; nested supported control flow is allowed. `while-else` is unsupported.
 
@@ -78,11 +82,11 @@ Read an outer compile-time value freely. An assignment to an existing compile-ti
 
 Supported tensor and pointer subscript stores are device-time side effects. Attribute assignment, `del`, and starred or chained assignment are unsupported.
 
-### 2.3 Early Exit and `else`
+### Early Exit and `else`
 
 `return`, `break`, `continue`, and `raise` are unsupported in device-time control-flow bodies. Rewrite early exit as a condition or carried flag. Device-time `for-else` and `while-else` are unsupported.
 
-### 2.4 Variable Scope and Carried State
+### Variable Scope and Carried State
 
 An existing device-time value may be rebound across branches and loops when every path preserves compatible leaf types and the same collection layout. Tensors, pointers, and documented CATLASS values may be carried.
 
@@ -92,11 +96,11 @@ Dataclass values whose fields are supported device-time values may be constructe
 
 `tla.as_numeric(...)` promotes a scalar, not an arbitrary object. `set`, `frozenset`, and ordinary user classes cannot be promoted; do not mutate unpromoted Python containers or object attributes in device-time control flow.
 
-### 2.5 Compile-Time Branches
+### Compile-Time Branches
 
 A literal Boolean condition is compile-time directly. Use `tla.const_expr(...)` when an otherwise Python expression should be explicitly evaluated as a compile-time condition. `tla.Constexpr[T]` parameters and fields are common sources of those values, but are not required by either form. Only the selected path becomes device code.
 
-### 2.6 `with` Regions
+### `with` Regions
 
 The Huawei NPU has two compute regions; device operations must be placed in their corresponding region:
 
@@ -105,7 +109,7 @@ The Huawei NPU has two compute regions; device operations must be placed in thei
 
 Only documented TLA context managers are supported. One `with` may have one context manager. Device-time `with` scopes follow the same promotion and carried-state rules above; newly defined names do not escape the scope.
 
-## 3. Keywords at a Glance
+## Keywords at a Glance
 
 | Keyword | Support | Notes |
 | --- | --- | --- |
@@ -124,11 +128,11 @@ Only documented TLA context managers are supported. One `with` may have one cont
 | `async`/`await` | Not supported | — |
 | `yield`/`yield from` | Not supported | — |
 
-## 4. Examples
+## Examples
 
 The examples below are trimmed from `examples/end_to_end`; see the corresponding files for complete runnable versions.
 
-### 4.1 Dynamic if: initialize before rebinding in the branch
+### Dynamic if: initialize before rebinding in the branch
 
 Dynamic `if` branches are converted into standalone functions, so a variable must be initialized first and then rebound inside the branch.
 
@@ -153,7 +157,7 @@ Incorrect:
         tla.make_coord(coord, 0)      # SyntaxError: ... must be initialized before the if
 ```
 
-### 4.2 Dynamic if: passing values between branches
+### Dynamic if: passing values between branches
 
 Each branch assigns different values to the same set of variables, which are used after the branch.
 
@@ -172,7 +176,7 @@ def select_kernel(limit: int) -> None:
         tla.make_coord(coord, offset) # used after the branch
 ```
 
-### 4.3 Dynamic for: carrying state across iterations
+### Dynamic for: carrying state across iterations
 
 Dynamic loops do not support early exit; variables rebound inside the loop are passed across iterations automatically, and the type must stay the same on every assignment.
 
@@ -201,7 +205,7 @@ Incorrect:
             break                     # SyntaxError: ... does not support return, break, continue, or raise
 ```
 
-### 4.4 Dynamic for: tiled loops
+### Dynamic for: tiled loops
 
 Loop over tiles, processing one tile per iteration.
 
@@ -222,7 +226,7 @@ def tile_loop_kernel(mem: tla.Tensor, out: tla.Tensor) -> None:
         tla.copy(out, dst_ub)
 ```
 
-### 4.5 Compile-time branch
+### Compile-time branch
 
 When the condition is known at compile time, the branch is selected at compile time and no device branch is generated.
 
@@ -235,7 +239,7 @@ def constexpr_if_kernel(flag: tla.Constexpr[bool]) -> None:
         tla.make_coord(2, 0)
 ```
 
-### 4.6 with regions
+### with regions
 
 Device operations are placed inside a `tla.vector()` region, with vector computation wrapped in `tla.vec.func(mode="simd")`.
 
@@ -257,7 +261,7 @@ def vec_region_kernel(mem_a: tla.Tensor, mem_b: tla.Tensor, mem_c: tla.Tensor) -
         tla.pipe_barrier(tla.pipes.ALL)
 ```
 
-### 4.7 struct-like args
+### struct-like args
 
 Class instances created with `@dataclass` can be used as kernel arguments, and can also be created inside the kernel.
 
@@ -334,7 +338,7 @@ def struct_arg_kernel(tiling: TilingData, out: tla.Tensor) -> None:
 
 **Note**: the actual field type is determined by the **field value** (consistent with Python's dynamic semantics); constructing the dataclass does not coerce values to the annotated type.
 
-### 4.8 Error Reference
+### Error Reference
 
 | Error message (keyword) | Cause | Fix |
 | --- | --- | --- |
@@ -348,7 +352,7 @@ def struct_arg_kernel(tiling: TilingData, out: tla.Tensor) -> None:
 | `structure`/`expected i32` (TlaCoreAPIError) | Carried state structure or type differs across branches/iterations | Keep the structure and leaf types identical on every path |
 | `'**' is only supported for float types` | Integer power | Use multiplication |
 
-## 5. References
+## References
 
 - Control-flow examples: `examples/end_to_end/tensor_index/scalar_index_control_flow.py`, `examples/end_to_end/basic_vadd/basic_vadd.py`, `examples/end_to_end/vector_ops/register_control_flow.py`
 - Control-flow frontend implementation: `catlass/base_dsl/ast_preprocessor.py`, `catlass/tla_ast_decorators.py`

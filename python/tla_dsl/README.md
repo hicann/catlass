@@ -6,49 +6,15 @@ CATLASS DSL 是 CATLASS 的 Python 前端。它在 AscendNPU-IR 的基础上构�
 
 ## 文档
 
-- [环境准备](docs/zh/dev_guide/00_environment_setup.md)：环境要求及安装入口。
-- [编译与测试](docs/zh/dev_guide/01_build_and_test.md)：构建、pytest、lit 和端到端用例。
-- [API 文档](docs/zh/dev_guide/02_api_docs.md)：生成并预览 API 文档。
-- [AscendNPU-IR 构建](docs/zh/dev_guide/advanced/ascend_npu_ir.md)：手动构建AscendNPU-IR。
-- [手动 CMake 构建](docs/zh/dev_guide/advanced/manual_cmake_build.md)：直接配置 `csrc/mlir` 的进阶用法。
+- [环境准备](docs/zh/dsl_development/build_guide/index.md)：环境要求及安装入口。
+- [编译与测试](docs/zh/dsl_development/build_guide/index.md)：构建、pytest、lit 和端到端用例。
+- [API 文档](docs/zh/api/generate_api_docs.md)：生成并预览 API 文档。
+- [AscendNPU-IR 构建](docs/zh/dsl_development/build_guide/ascend_npu_ir.md)：手动构建AscendNPU-IR。
+- [手动 CMake 构建](docs/zh/dsl_development/advanced/manual_cmake_build.md)：直接配置 `csrc/mlir` 的进阶用法。
 
 ## 快速开始
 
-先按照[环境准备](docs/zh/dev_guide/00_environment_setup.md)完成安装，并按[构建 AscendNPU-IR](docs/zh/dev_guide/advanced/ascend_npu_ir.md)预先构建依赖，同时设置 `CATLASS_DSL_PREBUILT_ASCENDNPU_IR`。`build.sh` 本身**不会**构建 AscendNPU-IR。
-
-下文命令均在 DSL 子项目根目录执行，其中 `/path/to/catlass` 需替换为你 clone 的 CATLASS 仓库根目录：
-
-```bash
-cd /path/to/catlass/python/tla_dsl
-```
-
-### 1. 构建
-
-```bash
-./build.sh
-```
-
-`build.sh` 默认执行 Debug 开发构建：检查 AscendNPU-IR 构建产物、生成 TLA Python op 绑定、在 `csrc/mlir/build` 构建 `TlaCompile` 与类型桥接动态库，并以 editable 模式安装 `ascend-catlass-dsl`。
-
-### 2. pytest（DSL 单元测试）
-
-```bash
-python -m pytest -q tests
-```
-
-### 3. lit（编译器回归测试）
-
-```bash
-lit -sv csrc/mlir/build/tests/lit
-```
-
-### 4. NPU 端到端示例（需要 NPU）
-
-```bash
-python examples/end_to_end/basic_mmad/basic_matmul.py --device 0
-```
-
-更多构建选项（Release wheel、清理重建）、单测入口与仓库级回归的说明见[编译与测试](docs/zh/dev_guide/01_build_and_test.md)。
+安装 CATLASS DSL 并运行首个算子示例，请参阅[快速开始](docs/zh/quick_start.md)。
 
 ## 兼容性
 
@@ -64,7 +30,7 @@ CATLASS DSL 各版本支持的硬件平台及所需的最低 CANN 版本如下�
 - 系统：CANN 支持的 Linux
 - 软件依赖：Python `>= 3.10, < 3.14`、CMake `>= 3.28, < 4.0`、Ninja `>= 1.12`、Clang / Clang++ `>= 10`（构建 AscendNPU-IR 时；推荐 19）、lld、lit、FileCheck 与 LLVM 配套、AscendNPU-IR `feature/regbase@a07821269…`
 
-完整的环境要求与安装方式见[环境准备](docs/zh/dev_guide/00_environment_setup.md#1-环境要求)。
+完整的环境要求与安装方式见[环境准备](docs/zh/dsl_development/build_guide/index.md#构建环境要求)。
 
 ## 目录概览
 

@@ -1,4 +1,8 @@
-# Python Staging and Runtime Control Flow
+---
+nav_order: 20
+---
+
+# DSL 控制流
 
 TLA kernel bodies are executed by Python while the frontend builds device IR.
 This makes ordinary, inspectable Python staging code useful for deriving static
