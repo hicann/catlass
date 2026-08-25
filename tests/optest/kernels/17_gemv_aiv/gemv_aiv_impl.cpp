@@ -26,6 +26,40 @@
 #endif
 
 using namespace Catlass;
+
+static uint32_t getSplitNum(bool trans, uint32_t M, uint32_t N, uint32_t M1, uint32_t N1, uint32_t maxSplict) {
+    uint32_t CORENUM = 20;
+    uint32_t splitNum = 1;
+    uint32_t maxOccupancy = 0;
+    uint32_t blockNum = (M - 1) / M1 + 1;
+    if (!trans) {
+        splitNum = 1;
+    } else {
+        uint32_t splitNum1 = 1, splitNum2 = 1;
+        for (uint32_t i = 1; i <= maxSplict; i += 1) {
+            uint32_t occupancy = (i * blockNum) % (CORENUM * 2);
+            if (!occupancy)
+                occupancy = (CORENUM * 2);
+            if (occupancy > maxOccupancy) {
+                maxOccupancy = occupancy;
+                splitNum1 = i;
+            }
+        }
+        maxOccupancy = 0;
+        for (uint32_t i = 1; i <= maxSplict; i <<= 1) {
+            uint32_t occupancy = (i * blockNum) % (CORENUM * 2);
+            if (!occupancy)
+                occupancy = (CORENUM * 2);
+            if (occupancy > maxOccupancy) {
+                maxOccupancy = occupancy;
+                splitNum2 = i;
+            }
+        }
+        splitNum = (splitNum1 - splitNum2) > 4 ? splitNum1 : splitNum2;
+    }
+    return splitNum;
+}
+
 using LayoutA = layout::CATLASS_JIT_LAYOUT_A;
 using LayoutX = layout::VectorLayout;
 using LayoutY = layout::VectorLayout;
@@ -42,24 +76,20 @@ using TileVmuls = Gemv::Tile::TileVmuls<typename DispatchPolicy::ArchTag, XType>
 using GemvBlock = Gemv::Block::BlockGemv<DispatchPolicy, UBTileShape, AType, XType, YType, BiasType, TileCopy, TileVmad, TileVmuls>;
 using GemvKernel = Gemv::Kernel::KernelGemvAiv<GemvBlock, void>;
 
-static uint32_t getSplitNum(uint32_t m, uint32_t n, uint32_t M1, uint32_t N1, uint32_t maxSplit)
-{
-    (void)n;(void)N1;
-    uint32_t bn=(m-1)/M1+1, s1=1, s2=1, mo=0;
-    for(uint32_t i=1; i<=maxSplit; i+=1){uint32_t o=(i*bn)%40; if(!o) o=40; if(o>mo){mo=o;s1=i;}}
-    mo=0;
-    for(uint32_t i=1; i<=maxSplit; i<<=1){uint32_t o=(i*bn)%40; if(!o) o=40; if(o>mo){mo=o;s2=i;}}
-    return (s1-s2)>4?s1:s2;
-}
-
 extern "C" void run(uint32_t blockNum, aclrtStream stream, const CatlassKernel::GemmParams* params)
 {
-    uint32_t m = params->m, k = params->k;
-    uint32_t split = getSplitNum(m, k, UBTileShape::M, UBTileShape::N, 20);
+    uint32_t m = params->m;
+    uint32_t n = params->n;
+    uint32_t k = params->k;
+    // Aligned with example: gemv_aiv uses trans=false, split is always 1
+    uint32_t maxSplict = 20;
+    uint32_t const split = getSplitNum(false, m, n, UBTileShape::M, UBTileShape::N, maxSplict);
 
+    // Arguments order: {shape, A, X, Y_read, Z_write, alpha, beta, split}
+    // inputAddr[2] = Y (read), outputAddr[0] = output (write)
     typename GemvKernel::Arguments arguments{
-        GemvCoord{m, k}, params->inputAddr[0], params->inputAddr[1],
-        params->outputAddr[0], params->outputAddr[0], params->alpha, params->beta, split};
+        GemvCoord{m, n}, params->inputAddr[0], params->inputAddr[1],
+        params->inputAddr[2], params->outputAddr[0], params->alpha, params->beta, split};
 
     Catlass::RunKernel<GemvKernel>(arguments, stream, blockNum);
 }

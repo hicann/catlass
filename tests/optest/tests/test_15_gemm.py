@@ -11,6 +11,7 @@ pytestmark = [only_on_2201, pytest.mark.skipif(
 
 
 def test_gemm():
+    """Basic GEMM: D = 1.0 * A @ B + 0.0 * C."""
     import torch_catlass
 
     m, n, k = 128, 128, 128
@@ -18,8 +19,9 @@ def test_gemm():
 
     a = torch.randn(m, k, dtype=dtype, device="npu")
     b = torch.randn(k, n, dtype=dtype, device="npu")
+    c = torch.zeros(m, n, dtype=dtype, device="npu")
 
-    result = torch_catlass.gemm(a, b, "float32", 1.0, 0.0, False, False, False, False)
+    result = torch_catlass.gemm(a, b, c, "float32", 1.0, 0.0, False, False, False, False)
     expected = torch.matmul(a, b)
 
     assert result.shape == (m, n)

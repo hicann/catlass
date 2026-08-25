@@ -54,7 +54,8 @@ using GemvKernel = Gemv::Kernel::KernelGemvAic<BlockGemv, BlockEpilogue>;
 
 extern "C" void run(uint32_t blockNum, aclrtStream stream, const CatlassKernel::GemmParams* params)
 {
-    uint32_t m = params->m, n = params->n;
+    uint32_t m = params->m;
+    uint32_t n = params->n;
     typename GemvKernel::Arguments arguments{
         GemvCoord{m, n}, params->alpha, params->beta, sizeof(float),
         params->inputAddr[1], params->inputAddr[0], params->outputAddr[0]};

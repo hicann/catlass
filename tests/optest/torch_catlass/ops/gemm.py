@@ -4,6 +4,7 @@ from torch import Tensor
 def gemm(
     mat1: Tensor,
     mat2: Tensor,
+    matC: Tensor,
     outDType: str | torch.dtype = torch.float32,
     alpha: float = 1.0,
     beta: float = 0.0,
@@ -16,15 +17,15 @@ def gemm(
 
     Source: example 15_gemm.
 
-    Computes ``D = alpha * A * B + beta * C`` where ``C`` is the output tensor
-    pre-filled with zeros (or an initial value provided by the caller).
+    Computes ``D = alpha * mat1 @ mat2 + beta * matC``.
 
     Args:
         mat1: Left input matrix ``(M, K)`` unless ``transA`` is true.
         mat2: Right input matrix ``(K, N)`` unless ``transB`` is true.
+        matC: Residual matrix ``(M, N)`` used in the epilogue.
         outDType: Output dtype. Accepted strings are ``float16``, ``float32``.
         alpha: Scaling factor for matrix product.
-        beta: Scaling factor for the output (residual) term.
+        beta: Scaling factor for the residual matrix C.
         transA: Whether to read ``mat1`` as transposed.
         transB: Whether to read ``mat2`` as transposed.
         formatA: Whether ``mat1`` is in CATLASS NZ block format.
@@ -39,5 +40,5 @@ def gemm(
     if outDType is None:
         raise ValueError(f"{outDType} is not a data type of torch")
     return torch.ops.catlass.gemm(
-        mat1, mat2, outDType, alpha, beta, transA, transB, formatA, formatB
+        mat1, mat2, matC, outDType, alpha, beta, transA, transB, formatA, formatB
     )

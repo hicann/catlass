@@ -17,6 +17,7 @@ template <GemmKernelFn KernelFunc, bool IsGemv = false>
 struct GemmLike {
     using OutputType = at::Tensor;
     static OutputType Run(const at::Tensor& mat1, const at::Tensor& mat2,
+        const at::Tensor& matC,
         const c10::ScalarType& outDType, double alpha, double beta,
         bool transA = false, bool transB = false, bool formatA = false, bool formatB = false)
     {
@@ -50,13 +51,19 @@ struct GemmLike {
             params.n = static_cast<uint32_t>(n);
         }
 
-        params.inputAddr.resize(2);
+        params.inputAddr.resize(3);
         params.inputAddr[0] = static_cast<uint8_t*>(const_cast<void*>(mat1.storage().data()));
         params.inputAddr[1] = static_cast<uint8_t*>(const_cast<void*>(mat2.storage().data()));
 
-        OutputType output = GetOutputTensor(
-            IsGemv ? std::vector<int64_t>{params.m} : std::vector<int64_t>{params.m, params.n},
-            AclDtypeToTorchDtype(tParams.elem("C")));
+        // Matrix C for epilogue: D = alpha * (A*B) + beta * C
+        // inputAddr[2] holds the residual matrix C; the kernel copies it into outputAddr[0]
+        // internally before using outputAddr[0] as the epilogue input/output.
+        auto torchDtype = AclDtypeToTorchDtype(tParams.elem("C"));
+        auto outShape = IsGemv ? std::vector<int64_t>{params.m} : std::vector<int64_t>{params.m, params.n};
+        params.inputAddr[2] = static_cast<uint8_t*>(const_cast<void*>(matC.storage().data()));
+
+        // Output tensor: the kernel copies inputAddr[2] → outputAddr[0] then writes D there
+        OutputType output = GetOutputTensor(outShape, torchDtype);
         params.outputAddr.resize(1);
         params.outputAddr[0] = static_cast<uint8_t*>(const_cast<void*>(output.storage().data()));
 

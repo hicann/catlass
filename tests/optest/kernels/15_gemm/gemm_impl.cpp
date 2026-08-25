@@ -73,19 +73,84 @@ using TileCp = Epilogue::Tile::TileCopy<ArchTag, CType, XType, DType>;
 using EpiBlock = Epilogue::Block::BlockEpilogue<EpiBlockDP, CType, XType, DType, TileAdd, TileMul, TileCast, TileCp>;
 using Kernel = Gemm::Kernel::KernelGemm<GemmBlock, EpiBlock>;
 
+// ----------------------------------------------------------------------
+// Non-aligned shape workspace helpers (mimicking gemm.cpp L69-96)
+// ----------------------------------------------------------------------
+
+inline layout::RowMajor GetWorkspaceLayout(const layout::RowMajor& layout, uint32_t align) {
+    if (align == 0) return layout;
+    return layout::RowMajor(layout.shape(0), layout.shape(1), RoundUp(layout.shape(1), align));
+}
+
+inline layout::ColumnMajor GetWorkspaceLayout(const layout::ColumnMajor& layout, uint32_t align) {
+    if (align == 0) return layout;
+    return layout::ColumnMajor(layout.shape(0), layout.shape(1), RoundUp(layout.shape(0), align));
+}
+
+inline size_t GetWorkspaceLen(const layout::RowMajor& layout) {
+    return layout.shape(0) * layout.stride(0);
+}
+
+inline size_t GetWorkspaceLen(const layout::ColumnMajor& layout) {
+    return layout.shape(1) * layout.stride(1);
+}
+
+inline bool IsSameStride(const layout::RowMajor& l1, const layout::RowMajor& l2) {
+    return l1.stride(0) == l2.stride(0);
+}
+
+inline bool IsSameStride(const layout::ColumnMajor& l1, const layout::ColumnMajor& l2) {
+    return l1.stride(1) == l2.stride(1);
+}
+
+// ----------------------------------------------------------------------
+
 extern "C" void run(uint32_t blockNum, aclrtStream stream, const CatlassKernel::GemmParams* params)
 {
     uint32_t m = params->m, n = params->n, k = params->k;
     float alpha = params->alpha, beta = params->beta;
 
+    const uint32_t align = 128;  // matching gemm.cpp L126
+
+    // Create layouts (matching gemm.cpp L130-132)
+    LayoutA layoutA{m, k};
+    LayoutB layoutB{k, n};
     LayoutX layoutX{m, n};
-    typename EpiBlock::Params epilogueParams{alpha, beta, params->outputAddr[0], layoutX, params->outputAddr[0], layoutX};
 
-    uint8_t* gws = g_catlassWorkspaceAlloc((size_t)m * n * sizeof(float));
+    // Create workspace layouts with aligned strides (matching gemm.cpp L133-134)
+    LayoutA layoutWA = GetWorkspaceLayout(layoutA, align);
+    LayoutB layoutWB = GetWorkspaceLayout(layoutB, align);
 
-    typename Kernel::Arguments args{GemmCoord{m,n,k}, 128,
+    // Compute workspace sizes (matching gemm.cpp L135-136)
+    size_t sizeWA = GetWorkspaceLen(layoutWA) * sizeof(ElementA);
+    size_t sizeWB = GetWorkspaceLen(layoutWB) * sizeof(ElementB);
+
+    // Allocate workspace buffers for non-aligned strides
+    // (matching gemm.cpp L147-164: deviceWA / deviceWB)
+    uint8_t* deviceWA = params->inputAddr[0];
+    uint8_t* deviceWB = params->inputAddr[1];
+    if (!IsSameStride(layoutWA, layoutA)) {
+        deviceWA = g_catlassWorkspaceAlloc(sizeWA);
+    }
+    if (!IsSameStride(layoutWB, layoutB)) {
+        deviceWB = g_catlassWorkspaceAlloc(sizeWB);
+    }
+
+    // Matrix C: inputAddr[2] holds the residual matrix C data.
+    // Copy C into outputAddr[0] (deviceX) to initialize the epilogue input.
+    // Then use outputAddr[0] as both epilogue X input and output destination.
+    uint8_t* deviceX = params->outputAddr[0];
+    size_t sizeX = (size_t)m * n * sizeof(ElementC);
+    aclrtMemcpy(deviceX, sizeX, params->inputAddr[2], sizeX, ACL_MEMCPY_DEVICE_TO_DEVICE);
+
+    // Epilogue: D = alpha * (A*B) + beta * X
+    typename EpiBlock::Params epilogueParams{alpha, beta, deviceX, layoutX, deviceX, layoutX};
+
+    uint8_t* gws = g_catlassWorkspaceAlloc((size_t)m * n * sizeof(ElementC));
+
+    typename Kernel::Arguments args{GemmCoord{m,n,k}, align,
         params->inputAddr[0], params->inputAddr[1],
-        gws, params->inputAddr[0], params->inputAddr[1], epilogueParams};
+        gws, deviceWA, deviceWB, epilogueParams};
 
     Catlass::RunKernel<Kernel>(args, stream, blockNum);
 }
