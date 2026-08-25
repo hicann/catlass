@@ -1,0 +1,97 @@
+api: pytorch
+api_type: executeBasicMatmul
+version: v2.1
+name: 00_basic_matmul
+dtype_numbers: 50
+generate: generator_00_basic_matmul
+standard:
+  acc: mixed_tolerance_bm
+  perf: not_key
+
+inputs:
+  - name: inputs
+    type: tensor
+    required: true
+    dtypes:
+      values: [ fp16, bf16 ]
+    ranges:
+      valid:
+        values: [ [ -5,5 ] ]
+      invalid:
+        values: [ [ -5,5 ] ]
+    shapes:
+      dim_numbers:
+          values: [2]
+      dim_values:
+          values: [1,128,512, 2560,4096,5120,131073, [ 1,65535 ] ]
+      max_length: 4294967295
+
+  - name: weights
+    type: tensor
+    required: true
+    dtypes:
+      values: [ fp16, bf16 ]
+    ranges:
+      valid:
+        values: [ [ -5,5 ] ]
+      invalid:
+        values: [ [ -5,5 ] ]
+    shapes:
+      dim_numbers:
+          values: [2]
+      dim_values:
+          values: [1,128,512, 2560,4096,5120,131073, [ 1,65535 ] ]
+      max_length: 4294967295
+
+  - name: out_dtype
+    type: attr
+    required: true
+    dtypes:
+      values: [ string ]
+    ranges:
+      valid:
+        values: [ [ "float16", "bfloat16" ] ]
+      invalid:
+        values: [ [ "float16", "bfloat16" ] ]
+
+  - name: transA
+    type: attr
+    required: true
+    dtypes:
+      values: [ attr_bool ]
+    ranges:
+      valid:
+        values: [ false ,true]
+      invalid:
+        values: [ false,true]
+  - name: transB
+    type: attr
+    required: true
+    dtypes:
+      values: [ attr_bool ]
+    ranges:
+      valid:
+        values: [ false ,true]
+      invalid:
+        values: [ false,true]
+  - name: formatA
+    type: attr
+    required: true
+    dtypes:
+      values: [ attr_bool ]
+    ranges:
+      valid:
+        values: [ false ]
+      invalid:
+        values: [ false ]
+  - name: formatB
+    type: attr
+    required: true
+    dtypes:
+      values: [ attr_bool ]
+    ranges:
+      valid:
+        values: [ false ]
+      invalid:
+        values: [ false ]
+
