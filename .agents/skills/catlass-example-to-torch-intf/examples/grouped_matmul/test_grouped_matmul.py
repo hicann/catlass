@@ -69,10 +69,10 @@ for i, tc in enumerate(test_cases):
 
     group_desc = ", ".join([f"({m},{k})" for m, k in groups])
     print(
-        f"Case {i}: groups=[{group_desc}], K={K}, N={N}: " f"max_diff={
-            max_diff:.4f}, mean_diff={
-            mean_diff:.4f} {
-                'PASS' if passed else 'FAIL'}")
+        f"Case {i}: groups=[{group_desc}], K={K}, N={N}: "
+        f"max_diff={max_diff:.4f}, mean_diff={mean_diff:.4f}, "
+        f"{'PASS' if passed else 'FAIL'}"
+        )
     if not passed:
         all_passed = False
 
