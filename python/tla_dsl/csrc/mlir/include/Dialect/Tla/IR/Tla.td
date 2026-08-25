@@ -201,18 +201,6 @@ def Tla_TensorType : TypeDef<TlaDialect, "TlaTensor", []> {
   let genVerifyDecl = 1;
 }
 
-def Tla_CrossMode_Npu : I32EnumAttrCase<"npu", 0>;
-def Tla_CrossMode_VectorsCore : I32EnumAttrCase<"vectors_core", 1>;
-def Tla_CrossMode_SingleCore : I32EnumAttrCase<"single_core", 2>;
-def Tla_CrossModeEnum : Tla_I32Enum<"CrossMode", "Cross-core synchronization mode for tla.cross_flag.", [Tla_CrossMode_Npu, Tla_CrossMode_VectorsCore, Tla_CrossMode_SingleCore]>;
-def Tla_CrossModeAttr : Tla_EnumAttr<"CrossMode", "cross_mode"> {
-  let parameters = (ins EnumParameter<Tla_CrossModeEnum>:$cross_mode);
-  let assemblyFormat = "`<` params `>`";
-  let description = [{
-    Cross-core synchronization mode for tla.cross_flag.
-  }];
-}
-
 def Tla_Pipe_Scalar : I32EnumAttrCase<"scalar", 0>;
 def Tla_Pipe_Vector : I32EnumAttrCase<"vector", 1>;
 def Tla_Pipe_Cube : I32EnumAttrCase<"cube", 2>;

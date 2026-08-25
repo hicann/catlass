@@ -82,7 +82,6 @@ _PARENT_EXPORTS = (
     "BFloat16",
     "utils",
     "pipes",
-    "cross_modes",
     "arch",
     "fp16",
     "bf16",

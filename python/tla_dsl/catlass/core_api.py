@@ -88,7 +88,6 @@ _PIPE_VALUES = {
     "virtual_mte2_l1b",
     "num",
 }
-_CROSS_MODE_VALUES = {"npu", "vectors_core", "single_core"}
 _MISSING = object()
 _SUPPORTED_COMPARE_ELEMENT_TYPES = frozenset({"f16", "f32", "i32", "u32"})
 _MASK_CMP_MODES = ("lt", "le", "gt", "ge", "eq", "ne")
@@ -221,7 +220,6 @@ FlagLike: TypeAlias = mlir_ir.Value
 CrossFlagLike: TypeAlias = mlir_ir.Value
 MutexLike: TypeAlias = mlir_ir.Value
 PipeLike: TypeAlias = str | _Sentinel
-CrossModeLike: TypeAlias = str | _Sentinel
 AddressSpaceLike: TypeAlias = AddressSpace | _Sentinel
 DTypeLike: TypeAlias = mlir_ir.Type | type[Numeric]
 LiteralLike: TypeAlias = bool | int | float | str | mlir_ir.Type
@@ -2978,15 +2976,6 @@ def _infer_mutex_guard_pipe(body_ops: Sequence[Any]) -> str:
         pipes = ", ".join(sorted(unique))
         raise TlaLoweringError(f"tla.mutex_guard body inferred multiple pipes: {pipes}")
     return inferred[0]
-
-
-def _require_cross_mode(op_name: str, value: Any, position: int) -> None:
-    token = _token(value)
-    if token is None or token not in _CROSS_MODE_VALUES:
-        _op_error(
-            op_name,
-            f"invalid argument 'mode' (position {position}): expected cross_mode, got {_type_name(value)}",
-        )
 
 
 def _require_pointer_addrspace(op_name: str, value: Any, position: int) -> str:

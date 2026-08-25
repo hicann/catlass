@@ -218,12 +218,6 @@ class _Pipes:
     FIX = _Sentinel("FIX")
 
 
-class _CrossModes:
-    NPU = _Sentinel("NPU")
-    VECTORS_CORE = _Sentinel("VECTORS_CORE")
-    SINGLE_CORE = _Sentinel("SINGLE_CORE")
-
-
 class _RegionStub:
     def __init__(self, display_name: str) -> None:
         self._display_name = display_name
@@ -398,7 +392,6 @@ def _internal_frontend_region(
 
 
 pipes = _Pipes()
-cross_modes = _CrossModes()
 _CORE_API_EXPORTS = (
     "dsl_user_op",
     "arch",

@@ -126,20 +126,6 @@ Attribute TlaDialect::parseAttribute(DialectAsmParser& parser, Type type) const
         return ::tla::PipeAttr::get(getContext(), *symbolized);
     }
 
-    if (attrTag == "cross_mode") {
-        if (parser.parseLess())
-            return {};
-        StringRef modeKeyword;
-        if (parser.parseKeyword(&modeKeyword) || parser.parseGreater())
-            return {};
-        auto symbolized = ::symbolizeCrossMode(modeKeyword);
-        if (!symbolized) {
-            parser.emitError(parser.getNameLoc()) << "invalid tla.cross_mode value: " << modeKeyword;
-            return {};
-        }
-        return ::tla::CrossModeAttr::get(getContext(), *symbolized);
-    }
-
     if (attrTag == "quant_mode") {
         if (parser.parseLess())
             return {};
@@ -252,10 +238,6 @@ void TlaDialect::printAttribute(Attribute attr, DialectAsmPrinter& printer) cons
 {
     if (auto pipeAttr = llvm::dyn_cast<::tla::PipeAttr>(attr)) {
         printer << "pipe<" << ::stringifyPipe(pipeAttr.getPipe()) << ">";
-        return;
-    }
-    if (auto modeAttr = llvm::dyn_cast<::tla::CrossModeAttr>(attr)) {
-        printer << "cross_mode<" << ::stringifyCrossMode(modeAttr.getCrossMode()) << ">";
         return;
     }
     if (succeeded(generatedAttributePrinter(attr, printer)))
