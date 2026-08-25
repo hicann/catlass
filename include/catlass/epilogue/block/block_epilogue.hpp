@@ -22,6 +22,10 @@ class BlockEpilogue {
 
 } // namespace Catlass::Epilogue::Block
 
+#include "catlass/epilogue/block/block_epilogue_fa_unshared_softmax.hpp"
+#include "catlass/epilogue/block/block_epilogue_rescale_o_no_div_rowsum.hpp"
+#include "catlass/epilogue/block/block_epilogue_combine_scale.hpp"
+#include "catlass/epilogue/block/block_epilogue_online_softmax_copy_glm.hpp"
 #include "catlass/epilogue/block/block_epilogue_elemwise_no_source.hpp"
 #include "catlass/epilogue/block/block_epilogue_elemwise_one_source.hpp"
 #include "catlass/epilogue/block/block_epilogue_fa_softmax.hpp"
@@ -40,7 +44,10 @@ class BlockEpilogue {
 #include "catlass/epilogue/block/block_epilogue_online_softmax_no_mask.hpp"
 #include "catlass/epilogue/block/block_epilogue_rescale_o_no_split_row.hpp"
 #include "catlass/epilogue/block/block_epilogue_w4a4_per_token_per_channel_dequant.hpp"
-
+#include "catlass/epilogue/block/block_epilogue_online_softmax_FD.hpp"
+#include "catlass/epilogue/block/block_epilogue_rescale_o_FD.hpp"
+#include "catlass/epilogue/block/block_epilogue_xfai_online_softmax.hpp"
+#include "catlass/epilogue/block/block_epilogue_xfai_rescale_o.hpp"
 #if (defined(CATLASS_ARCH) && CATLASS_ARCH == 3510)
 #include "catlass/epilogue/block/block_epilogue_fa_softmax_ascend950.hpp"
 #include "catlass/epilogue/block/block_epilogue_fa_rescale_o_ascend950.hpp"
@@ -59,6 +66,10 @@ class BlockEpilogue {
 #include "catlass/epilogue/block/block_epilogue_flash_attention_online_softmax_low_prec.hpp"
 #include "catlass/epilogue/block/block_epilogue_flash_attention_rescale_o.hpp"
 #include "catlass/epilogue/block/block_epilogue_elemwise_no_source_from_ub.hpp"
+#include "catlass/epilogue/block/block_epilogue_xa_shared_softmax_ascend950.hpp"
+#include "catlass/epilogue/block/block_epilogue_xa_shared_rescale_ascend950.hpp"
+#include "catlass/epilogue/block/block_epilogue_xa_unshared_softmax_ascend950.hpp"
+#include "catlass/epilogue/block/block_epilogue_xa_combine_scale_ascend950.hpp"
 #endif
 
 #endif // CATLASS_EPILOGUE_BLOCK_BLOCK_EPILOGUE_HPP

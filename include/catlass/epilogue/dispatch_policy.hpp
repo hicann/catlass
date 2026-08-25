@@ -16,6 +16,40 @@
 
 namespace Catlass::Epilogue {
 
+// For AtlasA2, FA Infer RescaleO without div rowsum
+struct EpilogueAtlasA2RescaleOWithoutDivSum {
+    using ArchTag = Arch::AtlasA2;
+};
+
+// For AtlasA2, FA Infer OnlineSoftmaxCopySumMax
+struct EpilogueAtlasA2OnlineSoftmaxCopySumMax {
+    using ArchTag = Arch::AtlasA2;
+};
+
+// For Ascend950, FA Infer OnlineSoftmaxCopySumMax
+struct EpilogueAscend950OnlineSoftmaxCopySumMax {
+    using ArchTag = Arch::Ascend950;
+};
+
+// For AtlasA2, FA Unshared Softmax
+struct EpilogueAtlasA2FAUnsharedSoftmax {
+    using ArchTag = Arch::AtlasA2;
+};
+
+// For Ascend950, FA Unshared Softmax
+struct EpilogueAscend950FAUnsharedSoftmax {
+    using ArchTag = Arch::Ascend950;
+};
+
+// For AtlasA2, FA Infer CombineScale
+struct EpilogueAtlasA2CombineScale {
+    using ArchTag = Arch::AtlasA2;
+};
+
+// For Ascend950, FA Infer CombineScale
+struct EpilogueAscend950CombineScale {
+    using ArchTag = Arch::Ascend950;
+};
 // For AtlasA2, an element wise epilogue of the form D = C + X, where X is an additional source
 struct EpilogueAtlasA2ElemWiseOneSource {
     using ArchTag = Arch::AtlasA2;
@@ -64,6 +98,26 @@ struct EpilogueAscend950FASoftmax {
 
 // For Ascend950, FA Infer RescaleO
 struct EpilogueAscend950FARescaleO {
+    using ArchTag = Arch::Ascend950;
+};
+
+// For Ascend950, XA Shared Infer online Softmax
+struct EpilogueAscend950XASharedSoftmax {
+    using ArchTag = Arch::Ascend950;
+};
+
+// For Ascend950, XA unshared KV infer softmax
+struct EpilogueAscend950XAUnsharedSoftmax {
+    using ArchTag = Arch::Ascend950;
+};
+
+// For Ascend950, XA Shared Infer RescaleO
+struct EpilogueAscend950XASharedRescaleO {
+    using ArchTag = Arch::Ascend950;
+};
+
+// For Ascend950, XA Combine scale
+struct EpilogueAscend950XACombineScale {
     using ArchTag = Arch::Ascend950;
 };
 
@@ -224,6 +278,37 @@ struct EpilogueElemWiseNoSourceFromUB {
     // Number of operands. Including Src, Dst 2 operands
     static constexpr uint32_t OPERANDS_NUM = 2;
     static constexpr uint32_t UB_STAGES = 2;
+};
+
+template <LseMode LSE_MODE_>
+struct EpilogueAtlasA2XFAIOnlineSoftmax {
+    using ArchTag = Arch::AtlasA2;
+    static constexpr LseMode LSE_MODE = LSE_MODE_;
+};
+
+template <LseMode LSE_MODE_>
+struct EpilogueAtlasA2OnlineSoftmax_FD {
+    using ArchTag = Arch::AtlasA2;
+    static constexpr LseMode LSE_MODE = LSE_MODE_;
+};
+
+// For Ascend950, FA Infer online Softmax FD
+template <LseMode LSE_MODE_>
+struct EpilogueAscend950OnlineSoftmax_FD {
+    using ArchTag = Arch::Ascend950;
+    static constexpr LseMode LSE_MODE = LSE_MODE_;
+};
+
+template <LseMode LSE_MODE_>
+struct EpilogueAtlasA2XFAIRescaleO {
+    using ArchTag = Arch::AtlasA2;
+    static constexpr LseMode LSE_MODE = LSE_MODE_;
+};
+
+template <LseMode LSE_MODE_>
+struct EpilogueAtlasA2RescaleO_FD {
+    using ArchTag = Arch::AtlasA2;
+    static constexpr LseMode LSE_MODE = LSE_MODE_;
 };
 } // namespace Catlass::Epilogue
 

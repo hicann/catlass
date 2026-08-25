@@ -89,6 +89,11 @@ struct BlockPrologue {
 } // namespace Catlass::Gemm::Block
 
 #if (defined(CATLASS_ARCH) && CATLASS_ARCH == 2201)
+#include "catlass/gemm/block/block_mmad_unshared_fa_pv.hpp"
+#include "catlass/gemm/block/block_mmad_unshared_fa_qk.hpp"
+#include "catlass/gemm/block/block_mmad_pingpong.hpp"
+#include "catlass/gemm/block/block_mmad_fai_qk_split_row.hpp"
+#include "catlass/gemm/block/block_mmad_fai_pv_split_row.hpp"
 #include "catlass/gemm/block/block_mmad_fa_qk.hpp"
 #include "catlass/gemm/block/block_mmad_fa_pv.hpp"
 #include "catlass/gemm/block/block_mmad_mla_qk.hpp"
@@ -159,5 +164,11 @@ struct BlockPrologue {
 #include "catlass/gemm/block/block_mmad_flash_attention_qk.hpp"
 #include "catlass/gemm/block/block_mmad_flash_attention_qk_DN.hpp"
 #include "catlass/gemm/block/block_mmad_preload_async_with_callback_tla_l0c_to_ub.hpp"
+#include "catlass/gemm/block/block_mmad_xa_shared_qk_tla.hpp"
+#include "catlass/gemm/block/block_mmad_xa_unshared_qk_tla.hpp"
+#include "catlass/gemm/block/block_mmad_xa_shared_pv_tla.hpp"
+#include "catlass/gemm/block/block_mmad_xa_unshared_pv_tla.hpp"
 #endif
+#include "catlass/gemm/block/block_mmad_xfai_qk.hpp"
+#include "catlass/gemm/block/block_mmad_xfai_pv.hpp"
 #endif // CATLASS_GEMM_BLOCK_BLOCK_MMAD_HPP
