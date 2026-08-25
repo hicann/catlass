@@ -4235,7 +4235,7 @@ _COPY_CUBE_ROUTES = {
     ("l0c", "gm"),
     ("l0c", "l1"),
     ("l0c", "ub"),
-    ("l1", "ub"),
+    # L1 -> UB has no supported frontend copy route.
 }
 _COPY_VECTOR_ROUTES = {("gm", "ub"), ("ub", "gm"), ("ub", "l1")}
 
@@ -4251,7 +4251,7 @@ def copy(
     """Directory: Data Movement
     Description:
         Copy data between tiles. The hardware path follows `src`/`dst` address spaces
-        (vector: GM↔UB, UB→L1; cube: GM→L1, L1→L0A/L0B, L0C→GM|UB|L1, L1→UB).
+        (vector: GM↔UB, UB→L1; cube: GM→L1, L1→L0A/L0B, L0C→GM|UB|L1).
         Layout tags on the tiles select format conversion (for example ND→zN).
 
         Copy / tiling sizes follow each tile's logical `origin_shape`
@@ -4328,7 +4328,7 @@ def copy(
     src_desc = _tla_tensor_type_for_mlir_value(src_value)
     dst_desc = _tla_tensor_type_for_mlir_value(dst_value)
 
-    # Cube data-path copies (GM->L1, L1->L0A/L0B, L0C->GM, L0C->UB, L1->UB) must
+    # Cube data-path copies (GM->L1, L1->L0A/L0B, L0C->GM, L0C->UB) must
     # live in a tla.cube region; vector staging copies (GM<->UB, UB->L1) must
     # live in a tla.vector region. Mirrors tla.copy's MLIR verifier. Reading .addrspace
     # needs registered tensor metadata, which is unavailable for values carried

@@ -42,6 +42,28 @@ def copy_kernel_arg_directly_to_ub_kernel(mem_in: tla.Tensor) -> None:
         tla.copy(ub, mem_in)
 
 
+@tla.kernel
+def copy_l1_to_ub_kernel(mem_in: tla.Tensor) -> None:
+    l1_ptr = tla.allocate((32, 32), tla.Float32, tla.AddressSpace.l1, 512)
+    l1 = tla.make_tensor_like(l1_ptr, mem_in, tla.arch.zN)
+    ub_ptr = tla.allocate((32, 32), tla.Float32, tla.AddressSpace.ub, 256)
+    ub = tla.make_tensor_like(ub_ptr, mem_in, tla.arch.RowMajor)
+    with tla.cube():
+        tla.copy(ub, l1)
+
+
+def test_frontend_rejects_copy_l1_to_ub() -> None:
+    mem = make_fake_tensor(
+        tla.Float32,
+        (32, 32),
+        (32, 1),
+        origin_shape=(32, 32),
+        layout_tag=tla.arch.RowMajor,
+    )
+    with pytest.raises(TlaLoweringError, match=r"unsupported copy route \('l1', 'ub'\)"):
+        copy_l1_to_ub_kernel.dump_mlir(type_args=(mem,))
+
+
 def test_frontend_copy_gm_to_l1_lowers_to_runtime_call(tmp_path) -> None:
     tla_compile = _require_hivm_tla_compile()
     mem = make_fake_tensor(

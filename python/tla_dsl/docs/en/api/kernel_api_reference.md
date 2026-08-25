@@ -432,7 +432,7 @@ Tensor copies between on-chip and global memory, and UB register load/store.
 Description:
 
 Copy data between tiles. The hardware path follows `src`/`dst` address spaces
-(vector: GM↔UB, UB→L1; cube: GM→L1, L1→L0A/L0B, L0C→GM|UB|L1, L1→UB).
+(vector: GM↔UB, UB→L1; cube: GM→L1, L1→L0A/L0B, L0C→GM|UB|L1).
 Layout tags on the tiles select format conversion (for example ND→zN).
 
 Copy / tiling sizes follow each tile's logical `origin_shape`
