@@ -5778,7 +5778,125 @@ def _make_unary_op(mnemonic: str, *, doc: str) -> Callable[..., VectorSSA]:
     return _unary
 
 
-exp = _make_unary_op(
+# Scalar counterparts of the vector unaries, for use inside a SIMT region. The
+# public names below dispatch on the operand: a VectorSSA keeps the whole-vector
+# AVE op, a per-thread Numeric gets the tla.simt_* op.
+_SIMT_UNARY_OPS = {
+    "exp": "tla.simt_exp",
+    "sqrt": "tla.simt_sqrt",
+    "abs": "tla.simt_abs",
+    "log": "tla.simt_log",
+}
+
+
+@dsl_user_op
+def _emit_simt_unary(
+    mnemonic: str, operand: Any, *, loc: mlir_ir.Location | None = None
+) -> Any:
+    _require_frontend_state(mnemonic)
+    if not _runtime._in_simt_vec_func():
+        _op_error(
+            mnemonic,
+            "on a scalar is only available inside a tla.vec.func with mode='simt'; "
+            "pass a VectorSSA for the whole-vector form",
+        )
+    num = operand if isinstance(operand, Numeric) else as_numeric(operand)
+    if not type(num).is_float:
+        _op_error(mnemonic, f"is float-only; got {type(num).__name__}")
+    value = num.ir_value(loc=loc)
+    result = mlir_ir.Operation.create(
+        _SIMT_UNARY_OPS[mnemonic], operands=[value], results=[value.type], loc=loc
+    ).results[0]
+    return type(num)(result)
+
+
+def _make_scalar_aware_unary_op(
+    mnemonic: str, doc: str | None = None
+) -> Callable[..., Any]:
+    vector_form = _make_unary_op(mnemonic, doc=doc)
+
+    @dsl_user_op
+    def _unary(
+        operand: Any, *, mask: Any = None, loc: mlir_ir.Location | None = None
+    ) -> Any:
+        if not isinstance(operand, VectorSSA):
+            if mask is not None:
+                _op_error(
+                    mnemonic, "mask is not supported for the per-thread scalar form"
+                )
+            return _emit_simt_unary(mnemonic, operand, loc=loc)
+        return vector_form(operand, mask=mask, loc=loc)
+
+    _unary.__name__ = mnemonic
+    _unary.__doc__ = doc
+    return _unary
+
+
+_SIMT_BINARY_OPS = {"max": "tla.simt_max", "min": "tla.simt_min"}
+
+
+@dsl_user_op
+def _emit_simt_binary(
+    mnemonic: str, lhs: Any, rhs: Any, *, loc: mlir_ir.Location | None = None
+) -> Any:
+    _require_frontend_state(mnemonic)
+    if not _runtime._in_simt_vec_func():
+        _op_error(
+            mnemonic,
+            "on scalars is only available inside a tla.vec.func with mode='simt'; "
+            "pass VectorSSA values for the whole-vector form",
+        )
+    left = lhs if isinstance(lhs, Numeric) else as_numeric(lhs)
+    right = rhs if isinstance(rhs, Numeric) else as_numeric(rhs)
+    if type(left) is not type(right):
+        _op_error(
+            mnemonic,
+            f"needs both operands of the same type; got {type(left).__name__} "
+            f"and {type(right).__name__}",
+        )
+    if type(left) is Bool or (type(left).is_integer and not type(left).signed):
+        _op_error(
+            mnemonic,
+            "does not support unsigned integers or Bool operands; use signed "
+            "integers or floats",
+        )
+    value = left.ir_value(loc=loc)
+    result = mlir_ir.Operation.create(
+        _SIMT_BINARY_OPS[mnemonic],
+        operands=[value, right.ir_value(loc=loc)],
+        results=[value.type],
+        loc=loc,
+    ).results[0]
+    return type(left)(result)
+
+
+def _make_scalar_aware_binary_op(mnemonic: str, vector_form: Callable[..., Any]):
+    # dsl_user_op captures the caller's frame, so it has to sit on the public
+    # name: without it the location recorded for tla.max/tla.min would point at
+    # this wrapper instead of the user's kernel line.
+    @dsl_user_op
+    def _binary(
+        lhs: Any, rhs: Any, *, mask: Any = None, loc: mlir_ir.Location | None = None
+    ) -> Any:
+        scalars = not isinstance(lhs, VectorSSA) and not isinstance(rhs, VectorSSA)
+        # Only a SIMT region takes the per-thread op; elsewhere scalars keep
+        # reaching the existing scalar form of the vector op.
+        if scalars and _runtime._in_simt_vec_func():
+            if mask is not None:
+                _op_error(
+                    mnemonic, "mask is not supported for the per-thread scalar form"
+                )
+            return _emit_simt_binary(mnemonic, lhs, rhs, loc=loc)
+        return vector_form(lhs, rhs, mask=mask, loc=loc)
+
+    _binary.__name__ = mnemonic
+    # Keep the vector form's documentation on the public name: the wrapper only
+    # adds per-thread dispatch, so the docs still describe what callers get.
+    _binary.__doc__ = vector_form.__doc__
+    return _binary
+
+
+exp = _make_scalar_aware_unary_op(
     "exp",
     doc="""Directory: Vector Compute / Basic Arithmetic
 
@@ -5800,7 +5918,7 @@ Description:
     ```
     """,
 )
-log = _make_unary_op(
+log = _make_scalar_aware_unary_op(
     "log",
     doc="""Directory: Vector Compute / Basic Arithmetic
 
@@ -5822,7 +5940,7 @@ Description:
     ```
     """,
 )
-sqrt = _make_unary_op(
+sqrt = _make_scalar_aware_unary_op(
     "sqrt",
     doc="""Directory: Vector Compute / Basic Arithmetic
 
@@ -5844,7 +5962,7 @@ Description:
     ```
     """,
 )
-abs = _make_unary_op(
+abs = _make_scalar_aware_unary_op(
     "abs",
     doc="""Directory: Vector Compute / Basic Arithmetic
 
@@ -6173,7 +6291,7 @@ def mul(
 
 
 @dsl_user_op
-def max(
+def _vector_max(
     lhs: VectorSSA | Numeric | bool | int | float,
     rhs: VectorSSA | Numeric | bool | int | float,
     *,
@@ -6213,7 +6331,7 @@ def max(
 
 
 @dsl_user_op
-def min(
+def _vector_min(
     lhs: VectorSSA | Numeric | bool | int | float,
     rhs: VectorSSA | Numeric | bool | int | float,
     *,
@@ -6250,6 +6368,10 @@ def min(
         loc=loc,
         commutative=True,
     )
+
+
+max = _make_scalar_aware_binary_op("max", _vector_max)
+min = _make_scalar_aware_binary_op("min", _vector_min)
 
 
 @dsl_user_op
@@ -6336,8 +6458,7 @@ def _emit_vector_reduce(
     return VectorSSA(result)
 
 
-@dsl_user_op
-def where(
+def _vector_where(
     mask: MaskSSA,
     x: VectorSSA,
     y: VectorSSA,
@@ -6388,6 +6509,70 @@ def where(
         loc=loc,
     )
     return VectorSSA(result)
+
+
+def _emit_simt_where(
+    condition: Any, x: Any, y: Any, *, loc: mlir_ir.Location | None = None
+) -> Any:
+    """Per-thread select: `x` where the condition holds, `y` otherwise."""
+    _require_frontend_state("where")
+    if not _runtime._in_simt_vec_func():
+        _op_error(
+            "where",
+            "on scalars is only available inside a tla.vec.func with mode='simt'; "
+            "pass a MaskSSA and VectorSSA values for the whole-vector form",
+        )
+    cond = condition if isinstance(condition, Numeric) else as_numeric(condition)
+    if not isinstance(cond, Bool):
+        _op_error(
+            "where",
+            f"condition must be a Bool (from a comparison); got {type(cond).__name__}",
+        )
+    left = x if isinstance(x, Numeric) else as_numeric(x)
+    right = y if isinstance(y, Numeric) else as_numeric(y)
+    if type(left) is not type(right):
+        _op_error(
+            "where",
+            f"needs both arms of the same type; got {type(left).__name__} "
+            f"and {type(right).__name__}",
+        )
+    x_value = left.ir_value(loc=loc)
+    result = mlir_ir.Operation.create(
+        "tla.simt_where",
+        operands=[cond.ir_value(loc=loc), x_value, right.ir_value(loc=loc)],
+        results=[x_value.type],
+        loc=loc,
+    ).results[0]
+    return type(left)(result)
+
+
+@dsl_user_op
+def where(mask: Any, x: Any, y: Any, *, loc: mlir_ir.Location | None = None) -> Any:
+    """Directory: Vector Compute / Compare and Select
+
+    Description:
+        Select between two vectors under a mask, or between two per-thread scalars
+        inside a SIMT region.
+
+        Parameters:
+        - `mask` (`MaskSSA | Bool`): Select mask; true selects `x`, false selects `y`. A MaskSSA whole-vector, or the Bool from a comparison inside a SIMT region. Required.
+        - `x` (`VectorSSA | Numeric`): Value when the mask is true. Required.
+        - `y` (`VectorSSA | Numeric`): Value when the mask is false. Required.
+
+        Constraints:
+        - Must be called inside a `@tla.kernel`-decorated kernel function.
+        - Must be called inside `tla.vec.func()`; `mask`/`x`/`y` lane layouts must match.
+        - The per-thread form requires `mode="simt"` and emits `tla.simt_where`.
+
+        Example:
+        ```python
+        with tla.vec.func(mode="simd"):
+            z = tla.where(m, x_reg, y_reg)
+        ```
+    """
+    if not isinstance(mask, MaskSSA) and _runtime._in_simt_vec_func():
+        return _emit_simt_where(mask, x, y, loc=loc)
+    return _vector_where(mask, x, y, loc=loc)
 
 
 @dsl_user_op
@@ -7187,6 +7372,13 @@ _require_generated("arch_block_num")
 _require_generated("arch_thread_block_dim")
 _require_generated("arch_thread_idx")
 _require_generated("simt_add")
+_require_generated("simt_sub")
+_require_generated("simt_mul")
+_require_generated("simt_div")
+_require_generated("simt_abs")
+_require_generated("simt_exp")
+_require_generated("simt_sqrt")
+_require_generated("simt_pow")
 _require_generated("simt_load")
 _require_generated("simt_store")
 _require_generated("arch_sync_threads")

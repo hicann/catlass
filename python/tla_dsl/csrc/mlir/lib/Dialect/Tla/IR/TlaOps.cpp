@@ -809,6 +809,23 @@ mlir::LogicalResult CopyOp::verify()
     return mlir::success();
 }
 
+mlir::LogicalResult SimtCastOp::verify()
+{
+    static constexpr ::llvm::StringLiteral kKinds[] = {"extsi",  "extui",  "trunci", "extf",  "truncf",
+                                                       "sitofp", "uitofp", "fptosi", "fptoui"};
+    for (::llvm::StringLiteral kind : kKinds)
+        if (getKind() == kind)
+            return mlir::success();
+    return emitOpError() << "unsupported cast kind \"" << getKind() << "\"";
+}
+
+mlir::LogicalResult SimtCmpOp::verify()
+{
+    if (!isSupportedCmpMode(getMode()))
+        return emitOpError() << "mode must be one of lt, le, gt, ge, eq, ne, got \"" << getMode() << "\"";
+    return mlir::success();
+}
+
 mlir::LogicalResult CmpOp::verify()
 {
     if (!hasEnclosingRegion<VecFuncOp>(getOperation()))

@@ -2422,6 +2422,34 @@ def set_flag(flag, *, loc=None, ip=None) -> _ods_ir.Operation:
   return _get_op_result_or_op_results(SetFlagOp(flag=flag, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
+class SimtAbsOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.simt_abs"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, result, operand, *, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    operands.append(_get_op_result_or_value(operand))
+    _ods_context = _ods_get_default_loc_context(loc)
+    results.append(result)
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def operand(self):
+    return self.operation.operands[0]
+
+  @builtins.property
+  def result(self):
+    return self.operation.results[0]
+
+def simt_abs(result, operand, *, loc=None, ip=None) -> _ods_ir.Value:
+  return _get_op_result_or_op_results(SimtAbsOp(result=result, operand=operand, loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
 class SimtAddOp(_ods_ir.OpView):
   OPERATION_NAME = "tla.simt_add"
 
@@ -2453,6 +2481,173 @@ class SimtAddOp(_ods_ir.OpView):
 
 def simt_add(result, lhs, rhs, *, loc=None, ip=None) -> _ods_ir.Value:
   return _get_op_result_or_op_results(SimtAddOp(result=result, lhs=lhs, rhs=rhs, loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
+class SimtCastOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.simt_cast"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, result, source, kind, *, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    operands.append(_get_op_result_or_value(source))
+    _ods_context = _ods_get_default_loc_context(loc)
+    attributes["kind"] = (kind if (
+    isinstance(kind, _ods_ir.Attribute) or
+    not _ods_ir.AttrBuilder.contains('StrAttr')) else
+      _ods_ir.AttrBuilder.get('StrAttr')(kind, context=_ods_context))
+    results.append(result)
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def source(self):
+    return self.operation.operands[0]
+
+  @builtins.property
+  def kind(self):
+    return self.operation.attributes["kind"]
+
+  @kind.setter
+  def kind(self, value):
+    if value is None:
+      raise ValueError("'None' not allowed as value for mandatory attributes")
+    self.operation.attributes["kind"] = value
+
+  @builtins.property
+  def result(self):
+    return self.operation.results[0]
+
+def simt_cast(result, source, kind, *, loc=None, ip=None) -> _ods_ir.Value:
+  return _get_op_result_or_op_results(SimtCastOp(result=result, source=source, kind=kind, loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
+class SimtCmpOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.simt_cmp"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, result, lhs, rhs, mode, *, isUnsigned=None, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    operands.append(_get_op_result_or_value(lhs))
+    operands.append(_get_op_result_or_value(rhs))
+    _ods_context = _ods_get_default_loc_context(loc)
+    attributes["mode"] = (mode if (
+    isinstance(mode, _ods_ir.Attribute) or
+    not _ods_ir.AttrBuilder.contains('StrAttr')) else
+      _ods_ir.AttrBuilder.get('StrAttr')(mode, context=_ods_context))
+    if bool(isUnsigned): attributes["isUnsigned"] = _ods_ir.UnitAttr.get(
+      _ods_get_default_loc_context(loc))
+    results.append(result)
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def lhs(self):
+    return self.operation.operands[0]
+
+  @builtins.property
+  def rhs(self):
+    return self.operation.operands[1]
+
+  @builtins.property
+  def mode(self):
+    return self.operation.attributes["mode"]
+
+  @mode.setter
+  def mode(self, value):
+    if value is None:
+      raise ValueError("'None' not allowed as value for mandatory attributes")
+    self.operation.attributes["mode"] = value
+
+  @builtins.property
+  def isUnsigned(self):
+    return "isUnsigned" in self.operation.attributes
+
+  @isUnsigned.setter
+  def isUnsigned(self, value):
+    if bool(value):
+      self.operation.attributes["isUnsigned"] = _ods_ir.UnitAttr.get()
+    elif "isUnsigned" in self.operation.attributes:
+      del self.operation.attributes["isUnsigned"]
+
+  @isUnsigned.deleter
+  def isUnsigned(self):
+    del self.operation.attributes["isUnsigned"]
+
+  @builtins.property
+  def result(self):
+    return self.operation.results[0]
+
+def simt_cmp(result, lhs, rhs, mode, *, is_unsigned=None, loc=None, ip=None) -> _ods_ir.Value:
+  return _get_op_result_or_op_results(SimtCmpOp(result=result, lhs=lhs, rhs=rhs, mode=mode, isUnsigned=is_unsigned, loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
+class SimtDivOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.simt_div"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, result, lhs, rhs, *, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    operands.append(_get_op_result_or_value(lhs))
+    operands.append(_get_op_result_or_value(rhs))
+    _ods_context = _ods_get_default_loc_context(loc)
+    results.append(result)
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def lhs(self):
+    return self.operation.operands[0]
+
+  @builtins.property
+  def rhs(self):
+    return self.operation.operands[1]
+
+  @builtins.property
+  def result(self):
+    return self.operation.results[0]
+
+def simt_div(result, lhs, rhs, *, loc=None, ip=None) -> _ods_ir.Value:
+  return _get_op_result_or_op_results(SimtDivOp(result=result, lhs=lhs, rhs=rhs, loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
+class SimtExpOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.simt_exp"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, result, operand, *, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    operands.append(_get_op_result_or_value(operand))
+    _ods_context = _ods_get_default_loc_context(loc)
+    results.append(result)
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def operand(self):
+    return self.operation.operands[0]
+
+  @builtins.property
+  def result(self):
+    return self.operation.results[0]
+
+def simt_exp(result, operand, *, loc=None, ip=None) -> _ods_ir.Value:
+  return _get_op_result_or_op_results(SimtExpOp(result=result, operand=operand, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
 class SimtLoadOp(_ods_ir.OpView):
@@ -2489,6 +2684,194 @@ def simt_load(result, source, indices, *, loc=None, ip=None) -> _ods_ir.Value:
   return _get_op_result_or_op_results(SimtLoadOp(result=result, source=source, indices=indices, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
+class SimtLogOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.simt_log"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, result, operand, *, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    operands.append(_get_op_result_or_value(operand))
+    _ods_context = _ods_get_default_loc_context(loc)
+    results.append(result)
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def operand(self):
+    return self.operation.operands[0]
+
+  @builtins.property
+  def result(self):
+    return self.operation.results[0]
+
+def simt_log(result, operand, *, loc=None, ip=None) -> _ods_ir.Value:
+  return _get_op_result_or_op_results(SimtLogOp(result=result, operand=operand, loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
+class SimtMaxOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.simt_max"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, result, lhs, rhs, *, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    operands.append(_get_op_result_or_value(lhs))
+    operands.append(_get_op_result_or_value(rhs))
+    _ods_context = _ods_get_default_loc_context(loc)
+    results.append(result)
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def lhs(self):
+    return self.operation.operands[0]
+
+  @builtins.property
+  def rhs(self):
+    return self.operation.operands[1]
+
+  @builtins.property
+  def result(self):
+    return self.operation.results[0]
+
+def simt_max(result, lhs, rhs, *, loc=None, ip=None) -> _ods_ir.Value:
+  return _get_op_result_or_op_results(SimtMaxOp(result=result, lhs=lhs, rhs=rhs, loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
+class SimtMinOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.simt_min"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, result, lhs, rhs, *, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    operands.append(_get_op_result_or_value(lhs))
+    operands.append(_get_op_result_or_value(rhs))
+    _ods_context = _ods_get_default_loc_context(loc)
+    results.append(result)
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def lhs(self):
+    return self.operation.operands[0]
+
+  @builtins.property
+  def rhs(self):
+    return self.operation.operands[1]
+
+  @builtins.property
+  def result(self):
+    return self.operation.results[0]
+
+def simt_min(result, lhs, rhs, *, loc=None, ip=None) -> _ods_ir.Value:
+  return _get_op_result_or_op_results(SimtMinOp(result=result, lhs=lhs, rhs=rhs, loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
+class SimtMulOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.simt_mul"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, result, lhs, rhs, *, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    operands.append(_get_op_result_or_value(lhs))
+    operands.append(_get_op_result_or_value(rhs))
+    _ods_context = _ods_get_default_loc_context(loc)
+    results.append(result)
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def lhs(self):
+    return self.operation.operands[0]
+
+  @builtins.property
+  def rhs(self):
+    return self.operation.operands[1]
+
+  @builtins.property
+  def result(self):
+    return self.operation.results[0]
+
+def simt_mul(result, lhs, rhs, *, loc=None, ip=None) -> _ods_ir.Value:
+  return _get_op_result_or_op_results(SimtMulOp(result=result, lhs=lhs, rhs=rhs, loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
+class SimtPowOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.simt_pow"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, result, lhs, rhs, *, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    operands.append(_get_op_result_or_value(lhs))
+    operands.append(_get_op_result_or_value(rhs))
+    _ods_context = _ods_get_default_loc_context(loc)
+    results.append(result)
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def lhs(self):
+    return self.operation.operands[0]
+
+  @builtins.property
+  def rhs(self):
+    return self.operation.operands[1]
+
+  @builtins.property
+  def result(self):
+    return self.operation.results[0]
+
+def simt_pow(result, lhs, rhs, *, loc=None, ip=None) -> _ods_ir.Value:
+  return _get_op_result_or_op_results(SimtPowOp(result=result, lhs=lhs, rhs=rhs, loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
+class SimtSqrtOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.simt_sqrt"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, result, operand, *, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    operands.append(_get_op_result_or_value(operand))
+    _ods_context = _ods_get_default_loc_context(loc)
+    results.append(result)
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def operand(self):
+    return self.operation.operands[0]
+
+  @builtins.property
+  def result(self):
+    return self.operation.results[0]
+
+def simt_sqrt(result, operand, *, loc=None, ip=None) -> _ods_ir.Value:
+  return _get_op_result_or_op_results(SimtSqrtOp(result=result, operand=operand, loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
 class SimtStoreOp(_ods_ir.OpView):
   OPERATION_NAME = "tla.simt_store"
 
@@ -2522,6 +2905,77 @@ class SimtStoreOp(_ods_ir.OpView):
 
 def simt_store(dest, indices, value, *, loc=None, ip=None) -> _ods_ir.Operation:
   return _get_op_result_or_op_results(SimtStoreOp(dest=dest, indices=indices, value=value, loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
+class SimtSubOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.simt_sub"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, result, lhs, rhs, *, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    operands.append(_get_op_result_or_value(lhs))
+    operands.append(_get_op_result_or_value(rhs))
+    _ods_context = _ods_get_default_loc_context(loc)
+    results.append(result)
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def lhs(self):
+    return self.operation.operands[0]
+
+  @builtins.property
+  def rhs(self):
+    return self.operation.operands[1]
+
+  @builtins.property
+  def result(self):
+    return self.operation.results[0]
+
+def simt_sub(result, lhs, rhs, *, loc=None, ip=None) -> _ods_ir.Value:
+  return _get_op_result_or_op_results(SimtSubOp(result=result, lhs=lhs, rhs=rhs, loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
+class SimtWhereOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.simt_where"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, result, condition, x, y, *, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    operands.append(_get_op_result_or_value(condition))
+    operands.append(_get_op_result_or_value(x))
+    operands.append(_get_op_result_or_value(y))
+    _ods_context = _ods_get_default_loc_context(loc)
+    results.append(result)
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def condition(self):
+    return self.operation.operands[0]
+
+  @builtins.property
+  def x(self):
+    return self.operation.operands[1]
+
+  @builtins.property
+  def y(self):
+    return self.operation.operands[2]
+
+  @builtins.property
+  def result(self):
+    return self.operation.results[0]
+
+def simt_where(result, condition, x, y, *, loc=None, ip=None) -> _ods_ir.Value:
+  return _get_op_result_or_op_results(SimtWhereOp(result=result, condition=condition, x=x, y=y, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
 class SqrtOp(_ods_ir.OpView):

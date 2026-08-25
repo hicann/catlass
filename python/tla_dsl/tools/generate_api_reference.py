@@ -300,7 +300,7 @@ def _collect_unary_aliases(
         if not (
             isinstance(value, ast.Call)
             and isinstance(value.func, ast.Name)
-            and value.func.id == "_make_unary_op"
+            and value.func.id in ("_make_unary_op", "_make_scalar_aware_unary_op")
         ):
             continue
         name = target.id
@@ -385,12 +385,47 @@ def _collect_tensor_methods(path: Path) -> dict[str, APIEntry]:
     return entries
 
 
+def _collect_scalar_aware_binary_aliases(
+    tree: ast.Module, exported: set[str]
+) -> dict[str, APIEntry]:
+    """Public names bound to _make_scalar_aware_binary_op(<name>, <vector form>).
+
+    The wrapper only adds per-thread dispatch, so the entry is the wrapped
+    vector form's signature and docstring filed under the public name.
+    """
+    funcs = {node.name: node for node in tree.body if isinstance(node, ast.FunctionDef)}
+    entries: dict[str, APIEntry] = {}
+    for node in tree.body:
+        if not (isinstance(node, ast.Assign) and len(node.targets) == 1):
+            continue
+        target, value = node.targets[0], node.value
+        if not isinstance(target, ast.Name) or target.id not in exported:
+            continue
+        if not (
+            isinstance(value, ast.Call)
+            and isinstance(value.func, ast.Name)
+            and value.func.id == "_make_scalar_aware_binary_op"
+            and len(value.args) >= 2
+            and isinstance(value.args[1], ast.Name)
+        ):
+            continue
+        wrapped = funcs.get(value.args[1].id)
+        if wrapped is None:
+            continue
+        entry = _function_entry(target.id, wrapped)
+        entry.qualified_name = f"catlass.core_api.{target.id}"
+        entry.source_line = node.lineno
+        entries[target.id] = entry
+    return entries
+
+
 def parse_core_api(path: Path) -> dict[str, APIEntry]:
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     exported = _parse_all_names(tree)
     entries: dict[str, APIEntry] = {}
     entries.update(_collect_core_functions(tree, exported))
     entries.update(_collect_unary_aliases(tree, exported, _unary_op_template(tree)))
+    entries.update(_collect_scalar_aware_binary_aliases(tree, exported))
     entries.update(_collect_arch_namespace(tree, exported))
     entries.update(_collect_tensor_methods(TENSOR_API_PATH))
     return entries

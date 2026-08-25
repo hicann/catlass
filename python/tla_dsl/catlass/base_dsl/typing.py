@@ -26,7 +26,6 @@ from .op import (
     _bind_frontend_category,
     _bind_frontend_value,
     _current_frontend_state,
-    _in_simt_vec_func,
 )
 
 _T = TypeVar("_T")
@@ -111,6 +110,33 @@ def _binary_op(
             lhs_ir, rhs_ir = rhs_ir, lhs_ir
 
         if op in _COMPARE_OPS:
+            # Inside a SIMT region a comparison is a TLA op like the arithmetic
+            # ones; tla-vector-region lowers it back to the arith op below.
+            _SIMT_CMP_MODES = {
+                operator.eq: "eq",
+                operator.ne: "ne",
+                operator.lt: "lt",
+                operator.le: "le",
+                operator.gt: "gt",
+                operator.ge: "ge",
+            }
+            from ..runtime import _in_simt_vec_func
+
+            if _in_simt_vec_func():
+                attributes = {
+                    "mode": mlir_ir.StringAttr.get(_SIMT_CMP_MODES[op]),
+                }
+                if not type(lhs).is_float and not type(lhs).signed:
+                    attributes["isUnsigned"] = mlir_ir.UnitAttr.get()
+                result = mlir_ir.Operation.create(
+                    "tla.simt_cmp",
+                    operands=[lhs_ir, rhs_ir],
+                    results=[mlir_ir.IntegerType.get_signless(1)],
+                    attributes=attributes,
+                    loc=loc,
+                ).results[0]
+                return Bool(result)
+
             fpred, ipred = {
                 operator.eq: ("OEQ", "eq"),
                 operator.ne: ("ONE", "ne"),
@@ -137,18 +163,43 @@ def _binary_op(
             return Bool(result)
 
         unsigned = not res_type.signed
-        if op is operator.add:
-            # Inside a SIMT region a scalar '+' is a TLA op in its own right --
-            # tla.simt_add -- so the per-thread body stays recognisable as TLA IR;
-            # tla-vector-region lowers it back to the arith op below.
-            if _in_simt_vec_func():
+        # Inside a SIMT region the scalar arithmetic operators are TLA ops in
+        # their own right, so the per-thread body stays recognisable as TLA IR;
+        # tla-vector-region lowers them back to the arith ops below. This
+        # generalises the base's add-only routing to the whole set.
+        _SIMT_OPS = {
+            operator.add: "tla.simt_add",
+            operator.sub: "tla.simt_sub",
+            operator.mul: "tla.simt_mul",
+            operator.truediv: "tla.simt_div",
+            operator.floordiv: "tla.simt_div",
+            operator.pow: "tla.simt_pow",
+        }
+        if op in _SIMT_OPS:
+            from ..runtime import _in_simt_vec_func
+
+            # tla.simt_div lowers integers to arith.divsi, so an unsigned '//'
+            # keeps the general path and its arith.divui.
+            simt_eligible = not (
+                op is operator.floordiv and not res_type.is_float and unsigned
+            )
+            if _in_simt_vec_func() and simt_eligible:
+                if op is operator.truediv and not res_type.is_float:
+                    raise TypeError(
+                        "Numeric '/' is only supported for float types; use '//' for integers"
+                    )
+                if op is operator.floordiv and res_type.is_float:
+                    raise TypeError(
+                        "Numeric '//' is only supported for integer types; use '/' for floats"
+                    )
                 result = mlir_ir.Operation.create(
-                    "tla.simt_add",
+                    _SIMT_OPS[op],
                     operands=[lhs_ir, rhs_ir],
                     results=[res_type.mlir_type()],
                     loc=loc,
                 ).results[0]
                 return res_type(result)
+        if op is operator.add:
             name = "arith.addf" if res_type.is_float else "arith.addi"
         elif op is operator.sub:
             name = "arith.subf" if res_type.is_float else "arith.subi"
@@ -298,6 +349,26 @@ class DslType(type):
     @property
     def is_abstract(cls) -> bool:
         return cls._is_abstract
+
+
+def _emit_scalar_cast(cast_name, src, dst_ty, loc):
+    """Emit a scalar conversion, as tla.simt_cast inside a SIMT region.
+
+    Outside one this stays a plain arith op, the way it always was.
+    """
+    from ..runtime import _in_simt_vec_func
+
+    if _in_simt_vec_func():
+        return mlir_ir.Operation.create(
+            "tla.simt_cast",
+            operands=[src],
+            results=[dst_ty],
+            attributes={"kind": mlir_ir.StringAttr.get(cast_name.split(".")[1])},
+            loc=loc,
+        ).results[0]
+    return mlir_ir.Operation.create(
+        cast_name, operands=[src], results=[dst_ty], loc=loc
+    ).results[0]
 
 
 class NumericMeta(DslType):
@@ -698,27 +769,19 @@ class Numeric(metaclass=NumericMeta, is_abstract=True):
                 if dtype.width > src_ty.width
                 else "arith.trunci"
             )
-            result = mlir_ir.Operation.create(
-                cast_name, operands=[src], results=[dst_ty], loc=loc
-            ).results[0]
+            result = _emit_scalar_cast(cast_name, src, dst_ty, loc)
             return dtype(result)
         if src_ty.is_float and dtype.is_float:
             cast_name = "arith.extf" if dtype.width > src_ty.width else "arith.truncf"
-            result = mlir_ir.Operation.create(
-                cast_name, operands=[src], results=[dst_ty], loc=loc
-            ).results[0]
+            result = _emit_scalar_cast(cast_name, src, dst_ty, loc)
             return dtype(result)
         if src_ty.is_integer and dtype.is_float:
             cast_name = "arith.uitofp" if not src_ty.signed else "arith.sitofp"
-            result = mlir_ir.Operation.create(
-                cast_name, operands=[src], results=[dst_ty], loc=loc
-            ).results[0]
+            result = _emit_scalar_cast(cast_name, src, dst_ty, loc)
             return dtype(result)
         if src_ty.is_float and dtype.is_integer:
             cast_name = "arith.fptoui" if not dtype.signed else "arith.fptosi"
-            result = mlir_ir.Operation.create(
-                cast_name, operands=[src], results=[dst_ty], loc=loc
-            ).results[0]
+            result = _emit_scalar_cast(cast_name, src, dst_ty, loc)
             return dtype(result)
         raise TypeError(
             f"unsupported Numeric.to({dtype.__name__}) from {type(self).__name__}"
@@ -834,8 +897,11 @@ class Numeric(metaclass=NumericMeta, is_abstract=True):
             raise RuntimeError("Numeric.__abs__ on SSA requires frontend context")
         v = self.ir_value(loc=loc)
         if type(self).is_float:
+            from ..runtime import _in_simt_vec_func
+
+            name = "tla.simt_abs" if _in_simt_vec_func() else "math.absf"
             result = mlir_ir.Operation.create(
-                "math.absf", operands=[v], results=[v.type], loc=loc
+                name, operands=[v], results=[v.type], loc=loc
             ).results[0]
         else:
             result = mlir_ir.Operation.create(

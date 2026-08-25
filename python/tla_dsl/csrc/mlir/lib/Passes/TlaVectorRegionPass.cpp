@@ -7,6 +7,7 @@
 #include "llvm/ADT/StringSwitch.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
 #include "mlir/IR/Dominance.h"
@@ -2387,21 +2388,231 @@ static std::optional<int> simtAddressSpaceFor(StringRef addrspace)
     return std::nullopt;
 }
 
-// tla.simt_add is the per-thread scalar counterpart of tla.add: no vector SSA,
-// no AVE instruction, just one element plus one element. It carries its own op
-// so the SIMT body is recognisable as TLA IR rather than raw arith; here it
-// becomes the arith op for its element type.
-static void lowerSimtAddIn(func::FuncOp vf)
+// The per-thread scalar arithmetic ops carry their own identity through the TLA
+// pipeline so a SIMT body reads as TLA IR rather than raw arith; here each one
+// becomes the arith op for its element type. Integer division uses the signed
+// form: the frontend only emits tla.simt_div for floats (Numeric '/' rejects
+// integers), so an integer divide can only arrive from hand-written TLA IR.
+// tla.simt_cast -> the arith conversion its `kind` names.
+static void lowerSimtCastIn(func::FuncOp vf)
 {
-    SmallVector<::tla::SimtAddOp, 8> ops;
-    vf.walk([&](::tla::SimtAddOp op) { ops.push_back(op); });
-    for (::tla::SimtAddOp op : ops) {
+    SmallVector<::tla::SimtCastOp, 8> ops;
+    vf.walk([&](::tla::SimtCastOp op) { ops.push_back(op); });
+    for (::tla::SimtCastOp op : ops) {
         OpBuilder builder(op);
         Location loc = op.getLoc();
-        Value sum = isa<FloatType>(op.getResult().getType()) ?
-                        builder.create<arith::AddFOp>(loc, op.getLhs(), op.getRhs()).getResult() :
-                        builder.create<arith::AddIOp>(loc, op.getLhs(), op.getRhs()).getResult();
-        op.getResult().replaceAllUsesWith(sum);
+        Type resultType = op.getResult().getType();
+        Value src = op.getSource();
+        StringRef kind = op.getKind();
+        Value lowered;
+        if (kind == "extsi")
+            lowered = builder.create<arith::ExtSIOp>(loc, resultType, src);
+        else if (kind == "extui")
+            lowered = builder.create<arith::ExtUIOp>(loc, resultType, src);
+        else if (kind == "trunci")
+            lowered = builder.create<arith::TruncIOp>(loc, resultType, src);
+        else if (kind == "extf")
+            // llvm.fpext / llvm.fptrunc rather than the arith ops: for bf16
+            // convert-hivm-to-std rewrites those into vcast_*_1d_with_mode
+            // vector-template calls that the c310 bitcode does not export.
+            lowered = builder.create<LLVM::FPExtOp>(loc, resultType, src);
+        else if (kind == "truncf")
+            lowered = builder.create<LLVM::FPTruncOp>(loc, resultType, src);
+        else if (kind == "sitofp")
+            lowered = builder.create<arith::SIToFPOp>(loc, resultType, src);
+        else if (kind == "uitofp")
+            lowered = builder.create<arith::UIToFPOp>(loc, resultType, src);
+        else if (kind == "fptosi")
+            lowered = builder.create<arith::FPToSIOp>(loc, resultType, src);
+        else
+            lowered = builder.create<arith::FPToUIOp>(loc, resultType, src);
+        op.getResult().replaceAllUsesWith(lowered);
+        op.erase();
+    }
+}
+
+// tla.simt_where -> arith.select. The condition is already an i1, so the
+// operands carry the result type and the plain builder suffices.
+static void lowerSimtWhereIn(func::FuncOp vf)
+{
+    SmallVector<::tla::SimtWhereOp, 8> ops;
+    vf.walk([&](::tla::SimtWhereOp op) { ops.push_back(op); });
+    for (::tla::SimtWhereOp op : ops) {
+        OpBuilder builder(op);
+        Value lowered =
+            builder.create<arith::SelectOp>(op.getLoc(), op.getCondition(), op.getX(), op.getY()).getResult();
+        op.getResult().replaceAllUsesWith(lowered);
+        op.erase();
+    }
+}
+
+// tla.simt_cmp -> arith.cmpf (ordered) / arith.cmpi, picking the signed or
+// unsigned integer predicate the frontend recorded.
+static void lowerSimtCmpIn(func::FuncOp vf)
+{
+    SmallVector<::tla::SimtCmpOp, 8> ops;
+    vf.walk([&](::tla::SimtCmpOp op) { ops.push_back(op); });
+    for (::tla::SimtCmpOp op : ops) {
+        OpBuilder builder(op);
+        Location loc = op.getLoc();
+        StringRef mode = op.getMode();
+        Value lowered;
+        if (isa<FloatType>(op.getLhs().getType())) {
+            arith::CmpFPredicate pred = llvm::StringSwitch<arith::CmpFPredicate>(mode)
+                                            .Case("lt", arith::CmpFPredicate::OLT)
+                                            .Case("le", arith::CmpFPredicate::OLE)
+                                            .Case("gt", arith::CmpFPredicate::OGT)
+                                            .Case("ge", arith::CmpFPredicate::OGE)
+                                            .Case("eq", arith::CmpFPredicate::OEQ)
+                                            .Default(arith::CmpFPredicate::ONE);
+            lowered = builder.create<arith::CmpFOp>(loc, pred, op.getLhs(), op.getRhs()).getResult();
+        } else {
+            bool isUnsigned = op.getIsUnsigned();
+            arith::CmpIPredicate pred =
+                llvm::StringSwitch<arith::CmpIPredicate>(mode)
+                    .Case("lt", isUnsigned ? arith::CmpIPredicate::ult : arith::CmpIPredicate::slt)
+                    .Case("le", isUnsigned ? arith::CmpIPredicate::ule : arith::CmpIPredicate::sle)
+                    .Case("gt", isUnsigned ? arith::CmpIPredicate::ugt : arith::CmpIPredicate::sgt)
+                    .Case("ge", isUnsigned ? arith::CmpIPredicate::uge : arith::CmpIPredicate::sge)
+                    .Case("eq", arith::CmpIPredicate::eq)
+                    .Default(arith::CmpIPredicate::ne);
+            lowered = builder.create<arith::CmpIOp>(loc, pred, op.getLhs(), op.getRhs()).getResult();
+        }
+        op.getResult().replaceAllUsesWith(lowered);
+        op.erase();
+    }
+}
+
+// Same as lowerSimtBinaryIn, but for LLVM intrinsic ops, whose builders need
+// the result type spelled out.
+template <typename TlaOpTy, typename FloatOpTy, typename IntOpTy>
+static void lowerSimtIntrinBinaryIn(func::FuncOp vf)
+{
+    SmallVector<TlaOpTy, 8> ops;
+    vf.walk([&](TlaOpTy op) { ops.push_back(op); });
+    for (TlaOpTy op : ops) {
+        OpBuilder builder(op);
+        Location loc = op.getLoc();
+        Type resultType = op.getResult().getType();
+        Value lowered = isa<FloatType>(resultType) ?
+                            builder.create<FloatOpTy>(loc, resultType, op.getLhs(), op.getRhs()).getResult() :
+                            builder.create<IntOpTy>(loc, resultType, op.getLhs(), op.getRhs()).getResult();
+        op.getResult().replaceAllUsesWith(lowered);
+        op.erase();
+    }
+}
+
+template <typename TlaOpTy, typename FloatOpTy, typename IntOpTy>
+static void lowerSimtBinaryIn(func::FuncOp vf)
+{
+    SmallVector<TlaOpTy, 8> ops;
+    vf.walk([&](TlaOpTy op) { ops.push_back(op); });
+    for (TlaOpTy op : ops) {
+        OpBuilder builder(op);
+        Location loc = op.getLoc();
+        Value lowered = isa<FloatType>(op.getResult().getType()) ?
+                            builder.create<FloatOpTy>(loc, op.getLhs(), op.getRhs()).getResult() :
+                            builder.create<IntOpTy>(loc, op.getLhs(), op.getRhs()).getResult();
+        op.getResult().replaceAllUsesWith(lowered);
+        op.erase();
+    }
+}
+
+// The math ops are float-only, so they need no int/float dispatch -- one op in,
+// one op out.
+// The target has no bf16 transcendental unit -- exp, log, sqrt and pow
+// all fail to select -- so those are computed in f32 and rounded back. For
+// every other type the compute type is the source type and both casts below
+// are omitted, so this costs nothing. The f32 intermediate is strictly more
+// accurate than a native bf16 evaluation would be.
+static Type simtMathComputeType(Type type)
+{
+    if (isa<BFloat16Type>(type))
+        return Float32Type::get(type.getContext());
+    return type;
+}
+
+static Value promoteForSimtMath(OpBuilder& builder, Location loc, Value value)
+{
+    Type computeType = simtMathComputeType(value.getType());
+    if (computeType == value.getType())
+        return value;
+    // llvm.fpext, not arith.extf: convert-hivm-to-std rewrites the arith form
+    // into a vcast_bfloat16_t_to_float_1d_with_mode vector-template call that the
+    // c310 bitcode does not export.
+    return builder.create<LLVM::FPExtOp>(loc, computeType, value);
+}
+
+static Value demoteAfterSimtMath(OpBuilder& builder, Location loc, Value value, Type resultType)
+{
+    if (value.getType() == resultType)
+        return value;
+    return builder.create<LLVM::FPTruncOp>(loc, resultType, value);
+}
+
+template <typename TlaOpTy, typename MathOpTy>
+static void lowerSimtUnaryIn(func::FuncOp vf, bool promoteBF16 = true)
+{
+    SmallVector<TlaOpTy, 8> ops;
+    vf.walk([&](TlaOpTy op) { ops.push_back(op); });
+    for (TlaOpTy op : ops) {
+        OpBuilder builder(op);
+        Location loc = op.getLoc();
+        Type resultType = op.getResult().getType();
+        Value operand = promoteBF16 ? promoteForSimtMath(builder, loc, op.getOperand()) : op.getOperand();
+        Value computed = builder.create<MathOpTy>(loc, operand).getResult();
+        Value lowered = promoteBF16 ? demoteAfterSimtMath(builder, loc, computed, resultType) : computed;
+        op.getResult().replaceAllUsesWith(lowered);
+        op.erase();
+    }
+}
+
+// Lower every tla.simt_* arithmetic op in the outlined vector function.
+static void lowerSimtArithmeticIn(func::FuncOp vf)
+{
+    lowerSimtBinaryIn<::tla::SimtAddOp, arith::AddFOp, arith::AddIOp>(vf);
+    lowerSimtBinaryIn<::tla::SimtSubOp, arith::SubFOp, arith::SubIOp>(vf);
+    lowerSimtBinaryIn<::tla::SimtMulOp, arith::MulFOp, arith::MulIOp>(vf);
+    lowerSimtBinaryIn<::tla::SimtDivOp, arith::DivFOp, arith::DivSIOp>(vf);
+    // fmin/fmax semantics: the NaN-propagating forms have no instruction here.
+    lowerSimtIntrinBinaryIn<::tla::SimtMaxOp, LLVM::MaxNumOp, LLVM::SMaxOp>(vf);
+    lowerSimtIntrinBinaryIn<::tla::SimtMinOp, LLVM::MinNumOp, LLVM::SMinOp>(vf);
+    lowerSimtCmpIn(vf);
+    lowerSimtWhereIn(vf);
+    lowerSimtCastIn(vf);
+
+    SmallVector<::tla::SimtPowOp, 4> powOps;
+    vf.walk([&](::tla::SimtPowOp op) { powOps.push_back(op); });
+    for (::tla::SimtPowOp op : powOps) {
+        OpBuilder builder(op);
+        Location powLoc = op.getLoc();
+        Type powResultType = op.getResult().getType();
+        Value powLhs = promoteForSimtMath(builder, powLoc, op.getLhs());
+        Value powRhs = promoteForSimtMath(builder, powLoc, op.getRhs());
+        Value lowered = demoteAfterSimtMath(
+            builder, powLoc, builder.create<math::PowFOp>(powLoc, powLhs, powRhs).getResult(), powResultType);
+        op.getResult().replaceAllUsesWith(lowered);
+        op.erase();
+    }
+
+    lowerSimtUnaryIn<::tla::SimtSqrtOp, math::SqrtOp>(vf);
+    lowerSimtUnaryIn<::tla::SimtExpOp, math::ExpOp>(vf);
+    lowerSimtUnaryIn<::tla::SimtAbsOp, math::AbsFOp>(vf, /*promoteBF16=*/false);
+
+    // log goes straight to the LLVM intrinsic: math.log would be expanded by
+    // convert-hivm-to-std into a vln_1d_float call that the c310 bitcode does
+    // not export.
+    SmallVector<::tla::SimtLogOp, 4> logOps;
+    vf.walk([&](::tla::SimtLogOp op) { logOps.push_back(op); });
+    for (::tla::SimtLogOp op : logOps) {
+        OpBuilder builder(op);
+        Location logLoc = op.getLoc();
+        Type logResultType = op.getResult().getType();
+        Value logOperand = promoteForSimtMath(builder, logLoc, op.getOperand());
+        Value lowered = demoteAfterSimtMath(
+            builder, logLoc, builder.create<LLVM::LogOp>(logLoc, logOperand.getType(), logOperand).getResult(),
+            logResultType);
+        op.getResult().replaceAllUsesWith(lowered);
         op.erase();
     }
 }
@@ -2774,7 +2985,7 @@ public:
         lowerSimtTripleOpsIn<
             ::tla::ThreadBlockDimOp, hivm_regbaseintrins::BlockDimXOp, hivm_regbaseintrins::BlockDimYOp,
             hivm_regbaseintrins::BlockDimZOp>(vf);
-        lowerSimtAddIn(vf);
+        lowerSimtArithmeticIn(vf);
         lowerSimtSyncThreadsIn(vf);
 
         // ---- the launch ----
@@ -3466,7 +3677,7 @@ public:
     {
         registry.insert<
             arith::ArithDialect, func::FuncDialect, mlir::memref::MemRefDialect, hivm::HIVMDialect, hivmave::AVEDialect,
-            vector::VectorDialect, hivm_regbaseintrins::HIVMRegbaseIntrinsDialect, LLVM::LLVMDialect,
+            vector::VectorDialect, hivm_regbaseintrins::HIVMRegbaseIntrinsDialect, LLVM::LLVMDialect, math::MathDialect,
             ::tla::TlaDialect>();
     }
 
