@@ -693,38 +693,34 @@ def test_71_ascend950_fp8_mx_grouped_matmul_finalize_routing(build_env):
     )
     ret_check(ret)
 
-
 @only_on_3510
 def test_74_ascend950_weight_quant_a8w4_grouped_mx_matmul(build_env):
-    # gen_data args: expect_m_per_group, m_per_group, batch, m, n, k, device_id
-    case_py = [
-        "expect_m_per_group",
-        "48",
-        "64",
-        "3072",
-        "2048",
-        "4096",
-        DEVICE_ID,
-    ]
-    ret = subprocess.run(
-        [
-            "python3",
-            os.path.join(
-                CMAKE_EXAMPLES_PATH,
-                "74_ascend950_weight_quant_a8w4_grouped_mx_matmul",
-                "gen_data.py",
-            ),
-        ]
-        + case_py,
-        capture_output=True,
-        check=False,
+    # gen_data args:
+    # (Explicit) group_list group_m_list m n k isNz
+    # (average mode) expect_m_per_group group_num expect_m_per_group m n k isNz
+    case_groups = (
+        (["expect_m_per_group", "48", "64", "3072", "2048", "4096", "1"], ["48", "3072", "2048", "4096"]),
+        (["group_list", "33,64,128", "256", "2048", "4096", "1"], ["3", "256", "2048", "4096"]),
     )
-    ret_check(ret)
+    for case_py, case_cpp in case_groups:
+        ret = subprocess.run(
+                [
+                    "python3",
+                    os.path.join(
+                        CMAKE_EXAMPLES_PATH,
+                        "74_ascend950_weight_quant_a8w4_grouped_mx_matmul",
+                        "gen_data.py",
+                    ),
+                ]
+                + case_py,
+                capture_output=True,
+                check=False,
+            )
 
-    # example args: m, n, k, batch, device_id
-    case_cpp = ["48", "3072", "2048", "4096", DEVICE_ID]
-    run_case(build_env, "74_ascend950_weight_quant_a8w4_grouped_mx_matmul", case_cpp)
+        ret_check(ret)
 
+        # example args: group_num, m, n, k, device_id
+        run_case(build_env, "74_ascend950_weight_quant_a8w4_grouped_mx_matmul", case_cpp + [DEVICE_ID])
 
 @only_on_3510
 def test_80_ascned950_grouped_matmul_slice_m_gelu(build_env):
@@ -757,7 +753,7 @@ def test_80_ascned950_grouped_matmul_slice_m_gelu(build_env):
 
 @only_on_3510
 def test_81_ascend950_rain_fusion_attention(build_env):
-    case_py = [str(i) for i in [2, 128, 512, 2, 1, 128, 128, 256]] + ["bf16", "BNSD", "BNSD", "0"]
+    case_py = [str(i) for i in [2, 128, 512, 2, 1, 128, 128, 256]] + ["half", "BNSD", "BNSD", "0"]
     subprocess.run(
         [
             "python",
@@ -773,7 +769,7 @@ def test_81_ascend950_rain_fusion_attention(build_env):
     #  args: batch qSeqlen kvSeqlen numHeads kvHeads headSize blockShapeX blockShapeY
     #        dtype qInputLayout kvInputLayout isVariedLen --datapath ... --device ...
     case_cpp = [str(i) for i in [2, 128, 512, 2, 1, 128, 128, 256]] + [
-        "bf16",
+        "half",
         "BNSD",
         "BNSD",
         "0",

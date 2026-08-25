@@ -170,11 +170,11 @@ def parse_cli_args(argv: List[str]) -> Tuple[List[int], int, int, int, int]:
 
     raise ValueError(
         "Usage:\n"
-        "  python gen_data.py group_list group_m_list m n k\n"
-        "  python gen_data.py expect_m_per_group group_num expect_m_per_group m n k\n"
+        "  python gen_data.py group_list group_m_list m n k isNz\n"
+        "  python gen_data.py expect_m_per_group group_num expect_m_per_group m n k isNz\n"
         "Example:\n"
-        "  python gen_data.py group_list 64,128,96 400 256 128\n"
-        "  python gen_data.py expect_m_per_group 4 100 400 256 128"
+        "  python gen_data.py group_list 64,128,96 400 256 128 1 \n"
+        "  python gen_data.py expect_m_per_group 4 100 400 256 128 1"
     )
 
 
