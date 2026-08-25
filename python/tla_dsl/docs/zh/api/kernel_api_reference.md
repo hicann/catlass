@@ -2146,7 +2146,7 @@ tla.arch
   `nN`、`L0Clayout`、`zNUnAlign`。
 - Pipe 标识（供 `flag` / `pipe_barrier` / `mutex_*` / 跨核同步使用）：
   `SCALAR`、`VECTOR`、`CUBE`、`MTE1`、`MTE2`、`MTE3`、`FIX`。
-- Memory-scope token（供 `local_mem_bar` 等相关接口使用）：`L1`、`L0A`、`L0B`、`L0C`、`UB`、`BIASBUF`、`FIXBUF`。
+- Memory-scope token（供 `local_mem_bar` 等相关接口使用）：`L1`、`L0A`、`L0B`、`L0C`、`UB`。
 - 可调用接口（返回 `Int32` 或如下注明的三元组）：
   - `block_idx()`：当前 AI 核在本次 launch 中的 block 索引。
   - `block_num()`：本次 launch 的 block（AI 核）数量。
@@ -2157,7 +2157,7 @@ tla.arch
     `tla.vec.func(mode="simt")` 内使用）。
   - `sync_threads()`：对当前 SIMT `tla.vec.func` 内线程做 barrier（仅
     `mode="simt"`）。
-  - `get_capacity_in_bytes(mem_scope)`：返回编译目标上某片上存储空间的字节容量。入参为 `tla.arch` 的 memory-scope token（`L1` / `L0A` / `L0B` / `L0C` / `UB` / `BIASBUF` / `FIXBUF`）。返回普通 `int`；host 侧与kernel 内均可使用（kernel 内会折叠为常量）。
+  - `get_capacity_in_bytes(mem_scope)`：返回编译目标上某片上存储空间的字节容量。入参为 `tla.arch` 的 memory-scope token（`L1` / `L0A` / `L0B` / `L0C` / `UB`）。返回普通 `int`；host 侧与kernel 内均可使用（kernel 内会折叠为常量）。
 
 约束说明：
 
@@ -2180,8 +2180,8 @@ pipe = tla.arch.MTE2
 bid = tla.arch.block_idx()
 nblocks = tla.arch.block_num()
 # 片上存储容量（host 侧或 kernel 内均可）：
-l1_bytes = tla.arch.get_capacity_in_bytes(tla.arch.L1)
-ub_bytes = tla.arch.get_capacity_in_bytes(tla.arch.UB)
+l1_bytes = tla.arch.get_capacity_in_bytes(tla.AddressSpace.l1)
+ub_bytes = tla.arch.get_capacity_in_bytes(tla.AddressSpace.ub)
 ```
 
 ---

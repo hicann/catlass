@@ -184,7 +184,6 @@ def test_public_api_exports_representative_helpers() -> None:
     assert callable(tla.mutex_guard)
     assert callable(tla.make_tensor_like)
     assert "dst_dtype" not in inspect.signature(tla.make_tensor_like).parameters
-    assert not hasattr(tla.utils, "LocalmemAllocator")
     assert callable(tla.const_expr)
     assert hasattr(tla, "Constexpr")
     assert callable(tla.range_constexpr)

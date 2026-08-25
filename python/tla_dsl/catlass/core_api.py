@@ -6919,63 +6919,59 @@ def arch_thread_block_dim(
     return (Int32(values[0]), Int32(values[1]), Int32(values[2]))
 
 
-def arch_get_capacity_in_bytes(mem_scope: object) -> int:
+def arch_get_capacity_in_bytes(mem_scope: AddressSpace) -> int:
     """Directory: System Variable Access
     Description:
-        Return the byte size of an on-chip memory space (L1 / L0A / L0B / L0C / UB /
-        BIASBUF / FIXBUF) for the compile target architecture.
+        Return the byte size of an on-chip memory space (l1 / l0a / l0b / l0c / ub )
+        for the compile target architecture.
 
     Parameters:
-    - `mem_scope`: the memory-scope token to query. Only ``tla.arch`` tokens are
-      accepted: `tla.arch.L1`, `tla.arch.L0A`, `tla.arch.L0B`, `tla.arch.L0C`,
-      `tla.arch.UB`, `tla.arch.BIASBUF`, `tla.arch.FIXBUF`.
+    - `mem_scope`: the memory-scope token to query. Only ``tla.AddressSpace`` tokens are
+      accepted: `tla.AddressSpace.l1`, `tla.AddressSpace.l0a`, `tla.AddressSpace.l0b`, `tla.AddressSpace.l0c`,
+      `tla.AddressSpace.ub`.
 
     Returns:
-    - `int`: capacity in bytes (e.g. `512 * 1024` for `tla.arch.L1` on
+    - `int`: capacity in bytes (e.g. `512 * 1024` for `tla.AddressSpace.l1` on
       3510/Ascend950).
 
     Constraints:
-    - Strings, `AddressSpace` members, and `tla.arch.GM` (global memory has no
-      fixed on-chip capacity) are rejected.
+    - Only on-chip `AddressSpace` members are accepted; `AddressSpace.generic` /
+      `AddressSpace.gm` (global memory has no fixed on-chip capacity).
     - This is a host-time constant query: it is legal both outside and inside a
       `@tla.kernel`-decorated kernel function. Inside a kernel it is evaluated at
       trace time and folds into a compile-time constant (no runtime op is emitted).
 
     Example:
     ```python
-    l1_bytes = tla.arch.get_capacity_in_bytes(tla.arch.L1)    # 512 * 1024 (host side)
-    ub_bytes = tla.arch.get_capacity_in_bytes(tla.arch.UB)    # 248 * 1024
+    l1_bytes = tla.arch.get_capacity_in_bytes(tla.AddressSpace.l1)    # 512 * 1024 (host side)
+    ub_bytes = tla.arch.get_capacity_in_bytes(tla.AddressSpace.ub)    # 248 * 1024
 
     @tla.kernel
     def k(...):
         # kernel side: folds to the same constant
-        tiles = tla.arch.get_capacity_in_bytes(tla.arch.L1) // block_bytes
+        tiles = tla.arch.get_capacity_in_bytes(tla.AddressSpace.l1) // block_bytes
     ```
     """
     from .base_dsl.arch import get_localmem_capacity_bytes
 
-    utils = _runtime.utils
-    tokens = {
-        utils.L1: "L1",
-        utils.L0A: "L0A",
-        utils.L0B: "L0B",
-        utils.L0C: "L0C",
-        utils.UB: "UB",
-        utils.BIASBUF: "BIASBUF",
-        utils.FIXBUF: "FIXBUF",
-    }
-    try:
-        name = tokens.get(mem_scope)
-    except TypeError:
-        name = None
-    if name is None:
-        supported = ", ".join(f"tla.arch.{token}" for token in tokens.values())
+    _ON_CHIP_SCOPES: tuple[AddressSpace, ...] = (
+        AddressSpace.l1,
+        AddressSpace.l0a,
+        AddressSpace.l0b,
+        AddressSpace.l0c,
+        AddressSpace.ub,
+    )
+
+    if not isinstance(mem_scope, AddressSpace) or mem_scope not in _ON_CHIP_SCOPES:
+        supported = ", ".join(
+            f"tla.AddressSpace.{scope.name.upper()}" for scope in _ON_CHIP_SCOPES
+        )
         _op_error(
             "arch.get_capacity_in_bytes",
             f"expected a tla.arch memory-scope token ({supported}); got "
             f"{_type_name(mem_scope)}",
         )
-    return get_localmem_capacity_bytes(name)
+    return get_localmem_capacity_bytes(mem_scope.name.upper())
 
 
 @dsl_user_op
@@ -7221,7 +7217,7 @@ Parameters:
 - Pipe identifiers (used by `flag` / `pipe_barrier` / `mutex_*` /
   cross-core sync): `SCALAR`, `VECTOR`, `CUBE`, `MTE1`, `MTE2`, `MTE3`, `FIX`.
 - Memory-scope tokens (used by `local_mem_bar` and related APIs): `L1`,
-  `L0A`, `L0B`, `L0C`, `UB`, `BIASBUF`, `FIXBUF`.
+  `L0A`, `L0B`, `L0C`, `UB`.
 - Callables (return `Int32` or `tuple[Int32, Int32, Int32]` as noted):
   - `block_idx()`: Block index for the current AI core in the launch.
   - `block_num()`: Number of blocks (AI cores) in the launch.
@@ -7234,7 +7230,7 @@ Parameters:
     `tla.vec.func` (only inside `mode="simt"`).
   - `get_capacity_in_bytes(mem_scope)`: Byte capacity of an on-chip memory
     space for the compile target. Takes a `tla.arch` memory-scope token (`L1` /
-    `L0A` / `L0B` / `L0C` / `UB` / `BIASBUF` / `FIXBUF`). Returns a plain `int`;
+    `L0A` / `L0B` / `L0C` / `UB`). Returns a plain `int`;
     valid on host and inside a kernel (folds to a constant).
 
 Constraints:
@@ -7257,8 +7253,8 @@ pipe = tla.arch.MTE2
 bid = tla.arch.block_idx()
 nblocks = tla.arch.block_num()
 # On-chip memory capacity (host or kernel side):
-l1_bytes = tla.arch.get_capacity_in_bytes(tla.arch.L1)
-ub_bytes = tla.arch.get_capacity_in_bytes(tla.arch.UB)
+l1_bytes = tla.arch.get_capacity_in_bytes(tla.AddressSpace.l1)
+ub_bytes = tla.arch.get_capacity_in_bytes(tla.AddressSpace.ub)
 ```
 """
 arch._set("block_idx", arch_block_idx)
@@ -7268,13 +7264,6 @@ arch._set("thread_block_dim", arch_thread_block_dim)
 arch._set("thread_idx", arch_thread_idx)
 arch._set("sync_threads", arch_sync_threads)
 arch._set("get_capacity_in_bytes", arch_get_capacity_in_bytes)
-arch._set("L1", _runtime.utils.L1)
-arch._set("L0A", _runtime.utils.L0A)
-arch._set("L0B", _runtime.utils.L0B)
-arch._set("L0C", _runtime.utils.L0C)
-arch._set("UB", _runtime.utils.UB)
-arch._set("BIASBUF", _runtime.utils.BIASBUF)
-arch._set("FIXBUF", _runtime.utils.FIXBUF)
 arch._set("SCALAR", _runtime.pipes.SCALAR)
 arch._set("VECTOR", _runtime.pipes.VECTOR)
 arch._set("CUBE", _runtime.pipes.CUBE)

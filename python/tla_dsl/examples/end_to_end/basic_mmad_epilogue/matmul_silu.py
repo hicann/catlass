@@ -30,7 +30,7 @@ from catlass.types import dtype_size_bytes
 from examples.end_to_end.common import TilingParams, SwizzleParams
 
 # ---- kernel constants + @tla.kernel ----
-UB_SIZE = tla.arch.get_capacity_in_bytes(tla.arch.UB)
+UB_SIZE = tla.arch.get_capacity_in_bytes(tla.AddressSpace.ub)
 BYTE_PER_C0 = 32
 VECTOR_ELE = 256
 

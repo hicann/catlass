@@ -204,17 +204,6 @@ class _Sentinel:
         return self.name
 
 
-class _Utils:
-    GM = _Sentinel("GM")
-    L1 = _Sentinel("L1")
-    L0A = _Sentinel("L0A")
-    L0B = _Sentinel("L0B")
-    L0C = _Sentinel("L0C")
-    UB = _Sentinel("UB")
-    BIASBUF = _Sentinel("BIASBUF")
-    FIXBUF = _Sentinel("FIXBUF")
-
-
 class _Pipes:
     SCALAR = _Sentinel("SCALAR")
     VECTOR = _Sentinel("VECTOR")
@@ -408,7 +397,6 @@ def _internal_frontend_region(
                     state.vec_func_modes.pop()
 
 
-utils = _Utils()
 pipes = _Pipes()
 cross_modes = _CrossModes()
 _CORE_API_EXPORTS = (
@@ -543,6 +531,5 @@ __all__ = [
     "jit",
     "kernel",
     "pipes",
-    "utils",
     *_CORE_API_EXPORTS,
 ]

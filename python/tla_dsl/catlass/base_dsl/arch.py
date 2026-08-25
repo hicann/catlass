@@ -67,8 +67,6 @@ _LOCALMEM_CAPACITY_BYTES_c310 = {
     "L0B": 64 * 1024,
     "L0C": 256 * 1024,
     "UB": 248 * 1024,
-    "BIASBUF": 4 * 1024,
-    "FIXBUF": 4 * 1024,
 }
 
 LOCALMEM_CAPACITY_BYTES: dict[Arch, dict[str, int]] = {

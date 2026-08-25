@@ -6,24 +6,22 @@ import catlass.tla as tla
 
 
 def test_get_capacity_in_bytes_host_side_accepts_arch_tokens() -> None:
-    assert tla.arch.get_capacity_in_bytes(tla.arch.L1) == 512 * 1024
-    assert tla.arch.get_capacity_in_bytes(tla.arch.L0A) == 64 * 1024
-    assert tla.arch.get_capacity_in_bytes(tla.arch.L0B) == 64 * 1024
-    assert tla.arch.get_capacity_in_bytes(tla.arch.L0C) == 256 * 1024
-    assert tla.arch.get_capacity_in_bytes(tla.arch.UB) == 248 * 1024
-    assert tla.arch.get_capacity_in_bytes(tla.arch.BIASBUF) == 4 * 1024
-    assert tla.arch.get_capacity_in_bytes(tla.arch.FIXBUF) == 4 * 1024
+    assert tla.arch.get_capacity_in_bytes(tla.AddressSpace.l1) == 512 * 1024
+    assert tla.arch.get_capacity_in_bytes(tla.AddressSpace.l0a) == 64 * 1024
+    assert tla.arch.get_capacity_in_bytes(tla.AddressSpace.l0b) == 64 * 1024
+    assert tla.arch.get_capacity_in_bytes(tla.AddressSpace.l0c) == 256 * 1024
+    assert tla.arch.get_capacity_in_bytes(tla.AddressSpace.ub) == 248 * 1024
 
 
 def test_get_capacity_in_bytes_rejects_non_token_input() -> None:
-    for bad in ("L1", "gm", tla.AddressSpace.l1, tla.AddressSpace.gm, 1024, None):
+    for bad in ("gm", tla.AddressSpace.gm, 1024, None):
         with pytest.raises(tla.TlaCoreAPIError, match="tla.arch memory-scope token"):
             tla.arch.get_capacity_in_bytes(bad)
 
 
 @tla.kernel
 def capacity_in_bytes_range_kernel() -> None:
-    ub_blocks = tla.arch.get_capacity_in_bytes(tla.arch.UB) // (62 * 1024)
+    ub_blocks = tla.arch.get_capacity_in_bytes(tla.AddressSpace.ub) // (62 * 1024)
     for i in tla.range(ub_blocks):
         tla.make_coord(i, 0)
 
