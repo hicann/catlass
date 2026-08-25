@@ -6,7 +6,7 @@ import dataclasses
 import inspect
 import linecache
 from dataclasses import dataclass
-from typing import Any, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
 from mlir import ir as mlir_ir  # type: ignore[assignment]
 
@@ -22,6 +22,9 @@ from .base_dsl import DSLLocation
 from .base_dsl.typing import Numeric, is_constexpr_annotation
 from .dsl import _jit_helper_transformer
 from .tla.typing import Tensor
+
+if TYPE_CHECKING:
+    from .tla.ffi import ExternFunction
 
 
 class TlaLoweringError(RuntimeError):
@@ -72,6 +75,8 @@ class LoweredTlaIR:
     module: mlir_ir.Module
     generic: bool = False
     _asm: str | None = None
+    extern_function: ExternFunction | None = None
+    extern_core_types: frozenset[str] = frozenset()
 
     def asm(self, *, generic: bool | None = None) -> str:
         emit_generic = self.generic if generic is None else bool(generic)
@@ -164,7 +169,7 @@ def lower_jit_to_tlair_module_by_execution(
             module = mlir_ir.Module.create()
             with mlir_ir.InsertionPoint(module.body):
                 fn_loc = _coerce_location(ctx, location)
-                _build_tla_func(
+                extern_function, extern_core_types = _build_tla_func(
                     fn=fn,
                     module=module,
                     fn_name=fn.__name__,
@@ -177,7 +182,13 @@ def lower_jit_to_tlair_module_by_execution(
                     fn_loc=fn_loc,
                     auto_sync=auto_sync,
                 )
-    lowered = LoweredTlaIR(context=ctx, module=module, generic=bool(generic))
+    lowered = LoweredTlaIR(
+        context=ctx,
+        module=module,
+        generic=bool(generic),
+        extern_function=extern_function,
+        extern_core_types=extern_core_types,
+    )
     lowered._asm = module.operation.get_asm(
         print_generic_op_form=bool(generic),
         assume_verified=False,
@@ -236,7 +247,7 @@ def _build_tla_func(
     ctx: mlir_ir.Context,
     fn_loc: mlir_ir.Location,
     auto_sync: str | None,
-) -> None:
+) -> tuple[ExternFunction | None, frozenset[str]]:
     runtime_arg_names = [name for name in arg_names if name not in constexpr_names]
 
     # Dynamic GM host tensors enter as unified GM memref + originShape0/1 index args.
@@ -492,7 +503,7 @@ def _build_tla_func(
             category_bindings=category_bindings,
             tensor_host_by_value=tensor_host_by_value,
             module=module,
-        ):
+        ) as frontend_state:
             from .core_api import (
                 _register_tla_tensor_metadata,
                 _register_tla_tensor_type,
@@ -599,7 +610,10 @@ def _build_tla_func(
                 if message is None:
                     message = f"Execution-mode lowering failed while running `{fn.__name__}`: {exc}"
                 raise UnsupportedExecutionLowering(message) from exc
+            extern_function = frontend_state.extern_function
+            extern_core_types = frozenset(frontend_state.extern_core_types)
         mlir_ir.Operation.create("tla.return", loc=fn_loc)
+    return extern_function, extern_core_types
 
 
 def _coerce_location(

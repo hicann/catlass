@@ -7,6 +7,7 @@ namespace tla {
 
 std::unique_ptr<mlir::Pass> createTlaLowerDebugPrintPass();
 std::unique_ptr<mlir::Pass> createTlaLowerPtrPass();
+std::unique_ptr<mlir::Pass> createTlaLowerExternCallPass();
 std::unique_ptr<mlir::Pass> createTlaCubeRegionPass();
 std::unique_ptr<mlir::Pass> createTlaFinalizeMemrefPass();
 std::unique_ptr<mlir::Pass> createTlaLowerFlagBarrierToHivmPass();

@@ -30,6 +30,7 @@ void registerTlaPasses()
     registerTlaVectorRegionPass();
     registerTlaLowerFlagBarrierToHivmPass();
     registerTlaLowerPtrPass();
+    registerTlaLowerExternCallPass();
     registerTlaLowerMutexToStdPass();
     registerTlaCubeRegionPass();
     registerTlaFinalizeMemrefPass();
@@ -47,6 +48,7 @@ void buildTlaPipeline(OpPassManager& pm)
     // HACC machinery and the mixed-func split both consume.
     pm.addPass(createTlaLowerFuncPass());
     pm.addPass(createTlaInsertAutoMutexPass());
+    pm.addPass(createTlaLowerExternCallPass());
     pm.addPass(createTlaLowerPtrPass());
     pm.addPass(createTlaSplitMixedFuncPass());
     // Materialize tensor-view producer chains as tla.tensor_desc before region

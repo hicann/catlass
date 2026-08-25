@@ -302,6 +302,22 @@ mlir::LogicalResult MmadOp::verify()
     return mlir::success();
 }
 
+mlir::LogicalResult CallExternOp::verify()
+{
+    bool inVector = hasEnclosing<VectorOp>(getOperation());
+    bool inCube = hasEnclosing<CubeOp>(getOperation());
+    if (inVector == inCube)
+        return emitOpError("must be nested inside exactly one tla.vector or tla.cube region");
+    if (inVector && hasEnclosing<VecFuncOp>(getOperation()))
+        return emitOpError("must be outside tla.vec.func");
+    for (mlir::Type type : getOperandTypes()) {
+        if (mlir::isa<PtrType, mlir::IntegerType, mlir::FloatType>(type))
+            continue;
+        return emitOpError("operands must be !tla.ptr or scalar integer/float (not index), got ") << type;
+    }
+    return mlir::success();
+}
+
 // One thread block may hold at most this many threads on the supported targets.
 // The lowering packs the product into hivm_regbaseintrins::SIMT_EntryAttr, whose
 // value is a uint32_t, so an unchecked product would also truncate.

@@ -6,6 +6,7 @@ import ctypes
 import operator
 import struct
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import (
     Any,
     Callable,
@@ -21,6 +22,7 @@ from typing import (
 import numpy as np
 from mlir import ir as mlir_ir  # type: ignore[assignment]
 
+from ..address_space import AddressSpace
 from .op import (
     dsl_user_op,
     _bind_frontend_category,
@@ -1167,8 +1169,50 @@ class JitArgument(Protocol):
         raise NotImplementedError
 
 
+@dataclass(frozen=True)
+class TypedPointer:
+    """Type descriptor for a pointer element type and memory space.
+
+    ``Pointer[dtype, space]`` returns a ``TypedPointer`` for APIs that need a
+    compile-time pointer type, such as an external function ABI. It is not a
+    runtime or SSA pointer value.
+
+    Args:
+        dtype: Concrete :class:`Numeric` element type.
+        space: Target memory space as a
+            :class:`~catlass.address_space.AddressSpace` member.
+    """
+
+    dtype: type[Numeric]
+    space: AddressSpace
+
+    def __post_init__(self) -> None:
+        # Validate `dtype` and `space`
+        if (
+            not isinstance(self.dtype, type)
+            or not issubclass(self.dtype, Numeric)
+            or not self.dtype.dtype
+        ):
+            raise TypeError(
+                "TypedPointer dtype must be a concrete Numeric type, "
+                f"got {self.dtype!r}"
+            )
+        if not isinstance(self.space, AddressSpace):
+            raise TypeError(
+                f"TypedPointer memory space must be AddressSpace, got {self.space!r}"
+            )
+
+    def __repr__(self) -> str:
+        return f"TypedPointer[{self.dtype}, {self.space}]"
+
+
 class Pointer(ABC):
     """Abstract JIT pointer (typed ``Pointer`` protocol)."""
+
+    def __class_getitem__(cls, args: Any) -> TypedPointer:
+        if not isinstance(args, tuple) or len(args) != 2:
+            raise TypeError("Pointer[...] expects (dtype, memory_space)")
+        return TypedPointer(*args)
 
     @property
     @abstractmethod
@@ -1211,6 +1255,7 @@ __all__ = [
     "BFloat16",
     "Float32",
     "Pointer",
+    "TypedPointer",
     "Constexpr",
     "JitArgument",
 ]

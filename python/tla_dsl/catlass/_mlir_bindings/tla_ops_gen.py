@@ -404,6 +404,44 @@ def arch_block_num(num, *, loc=None, ip=None) -> _ods_ir.Value:
   return _get_op_result_or_op_results(BlockNumOp(num=num, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
+class CallExternOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.call_extern"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, callee, operands_, *, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    operands.extend(_get_op_results_or_values(operands_))
+    _ods_context = _ods_get_default_loc_context(loc)
+    attributes["callee"] = (callee if (
+    isinstance(callee, _ods_ir.Attribute) or
+    not _ods_ir.AttrBuilder.contains('FlatSymbolRefAttr')) else
+      _ods_ir.AttrBuilder.get('FlatSymbolRefAttr')(callee, context=_ods_context))
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def operands_(self):
+    _ods_variadic_group_length = len(self.operation.operands) - 1 + 1
+    return self.operation.operands[0:0 + _ods_variadic_group_length]
+
+  @builtins.property
+  def callee(self):
+    return self.operation.attributes["callee"]
+
+  @callee.setter
+  def callee(self, value):
+    if value is None:
+      raise ValueError("'None' not allowed as value for mandatory attributes")
+    self.operation.attributes["callee"] = value
+
+def call_extern(callee, operands_, *, loc=None, ip=None) -> _ods_ir.Operation:
+  return _get_op_result_or_op_results(CallExternOp(callee=callee, operands_=operands_, loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
 class CastOp(_ods_ir.OpView):
   OPERATION_NAME = "tla.cast"
 

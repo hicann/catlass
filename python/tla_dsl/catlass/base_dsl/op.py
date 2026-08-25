@@ -38,6 +38,10 @@ class _FrontendEmitState:
     active_regions: list[str] = field(default_factory=list)
     #: Stack of ``mode`` values for the enclosing ``tla.vec.func`` regions.
     vec_func_modes: list[str] = field(default_factory=list)
+    #: The one external function used by this kernel in the v1 implementation.
+    extern_function: Any | None = None
+    #: Core types from call sites of ``extern_function``.
+    extern_core_types: set[str] = field(default_factory=set)
 
 
 _FRONTEND_EMIT_STATE: contextvars.ContextVar[_FrontendEmitState | None] = (

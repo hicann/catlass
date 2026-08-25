@@ -11,6 +11,7 @@ add_library(TlaPasses
   TlaLowerBlockIdxPass.cpp
   TlaScratchAllocation.cpp
   TlaLowerPtrPass.cpp
+  TlaLowerExternCallPass.cpp
   TlaLowerMutexToStdPass.cpp
   TlaFinalizeMemrefPass.cpp
   TlaCubeRegionPass.cpp

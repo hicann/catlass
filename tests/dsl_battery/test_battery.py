@@ -150,6 +150,16 @@ def _cases(device: int) -> Iterator[tuple[str, list[list[str]]]]:
                 ]],
             )
 
+    # --- extern_op: user-provided Ascend C functions called from TLA kernels ---
+    yield (
+        "extern-vecadd",
+        [["extern_op/extern_vecadd.py", *dev]],
+    )
+    yield (
+        "extern-dual-core",
+        [["extern_op/extern_dual_core.py", *dev]],
+    )
+
     # --- basic_mixed ---
     # One test on purpose: the second invocation exercises cache reuse and is
     # only meaningful straight after the one that populates the cache.

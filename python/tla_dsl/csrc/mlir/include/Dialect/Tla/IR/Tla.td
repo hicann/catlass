@@ -1059,6 +1059,21 @@ def Tla_DebugPrintOp : Tla_Op<"debug_print", [MemoryEffects<[MemWrite]>]> {
   let hasVerifier = 1;
 }
 
+def Tla_CallExternOp : Tla_Op<"call_extern", [MemoryEffects<[MemRead, MemWrite]>]> {
+  let summary = "Call a user-provided device function";
+  let description = [{
+    Calls one C ABI device function supplied by user LLVM bitcode. Pointer
+    operands remain !tla.ptr until tla-lower-ptr converts them to i64 byte
+    addresses. v1 has no results and conservatively models unknown memory
+    reads and writes.
+  }];
+  let arguments = (ins FlatSymbolRefAttr:$callee, Variadic<AnyType>:$operands);
+  let assemblyFormat = [{
+    $callee `(` $operands `)` attr-dict `:` functional-type($operands, results)
+  }];
+  let hasVerifier = 1;
+}
+
 def Tla_PrintTensorOp : Tla_Op<"print_tensor", [MemoryEffects<[MemWrite]>]> {
   let summary = "Print a prefix of one contiguous supported GM or UB tensor";
   let description = [{

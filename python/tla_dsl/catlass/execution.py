@@ -16,7 +16,7 @@ import sys
 import tempfile
 import threading
 from pathlib import Path
-from typing import Any, Callable, Iterable, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Iterable, Mapping, Sequence
 
 from .base_dsl.arch import (
     DEFAULT_NPU_ARCH,
@@ -43,6 +43,9 @@ from .compiler_bridge import (
     resolve_bridge_extension_path,
 )
 from .types import dtype_size_bytes
+
+if TYPE_CHECKING:
+    from .tla.ffi import ExternFunction
 
 # CATLASS_DSL_KEEP tokens: ir / ir-debug / kernel.
 _KEEP_ALL_TOKENS: frozenset[str] = frozenset({"ir", "ir-debug", "kernel"})
@@ -324,11 +327,18 @@ def compile_kernel(
         type_args=type_args,
         location=decorator_location,
     )
+    extern_function = lowered.extern_function
+    extern_core_types = lowered.extern_core_types
     tlair_mlir = lowered.asm(generic=True)
     entrypoint = _extract_entrypoint(tlair_mlir)
     compiler_bridge_path = resolve_bridge_extension_path()
     hivmc = _resolve_hivmc_a5()
     target = _resolve_kernel_target(runtime)
+    extern_targets = _resolve_extern_targets(
+        extern_function,
+        extern_core_types=extern_core_types,
+        target_arch=target.target_arch,
+    )
     cache_dir = runtime.cache_dir or _default_cache_dir()
     cache_key = _cache_key(
         tlair_mlir=tlair_mlir,
@@ -337,6 +347,8 @@ def compile_kernel(
         compiler_bridge_path=compiler_bridge_path,
         hivmc=hivmc,
         target=target,
+        extern_function=extern_function,
+        extern_targets=extern_targets,
     )
     artifact_dir = cache_dir / cache_key
     manifest = artifact_dir / "manifest.json"
@@ -445,6 +457,17 @@ def compile_kernel(
     hivmc_mlir_path, template_bitcode = _create_stamped_hivmc_input(
         mlir_path, runtime_for_hivmc
     )
+    if extern_function is not None:
+        user_bitcodes = _compile_ascendc_extern_function(
+            extern_function,
+            artifact_dir=artifact_dir,
+            targets=extern_targets,
+        )
+        if template_bitcode is None:
+            template_bitcode = _resolve_hivm_template_bitcode(runtime_for_hivmc)
+        template_bitcode = ",".join(
+            (template_bitcode, *(str(path) for path in user_bitcodes))
+        )
     try:
         _run_checked(
             _build_hivmc_a5_command(
@@ -1648,7 +1671,12 @@ def _cache_key(
     compiler_bridge_path: Path | None,
     hivmc: Path,
     target: TlaKernelTarget,
+    extern_function: ExternFunction | None = None,
+    extern_targets: Sequence[TlaKernelTarget] = (),
 ) -> str:
+    extern_compile = (
+        None if extern_function is None else _ascendc_extern_compile_identity()
+    )
     key_payload = {
         "debug_print_workspace_abi_revision": _DEBUG_PRINT_WORKSPACE_ABI_REVISION,
         "print_tensor_workspace_abi_revision": _PRINT_TENSOR_WORKSPACE_ABI_REVISION,
@@ -1664,6 +1692,13 @@ def _cache_key(
         "hivmc_fingerprint": _tool_fingerprint(hivmc),
         "mlir": tlair_mlir,
         "print_ir": runtime.print_ir,
+        "extern_source_sha256": (
+            None
+            if extern_function is None
+            else hashlib.sha256(extern_function.source.encode("utf-8")).hexdigest()
+        ),
+        "extern_targets": [target.arch_scope for target in extern_targets],
+        "extern_compile": extern_compile,
     }
     return hashlib.sha256(
         json.dumps(key_payload, sort_keys=True).encode("utf-8")
@@ -1818,6 +1853,162 @@ def _resolve_hivmc_a5() -> Path:
     )
 
 
+def _resolve_ccec() -> Path:
+    """Resolve ``ccec`` from PATH / ``ASCEND_HOME_PATH`` after ``set_env.sh``."""
+    which = shutil.which("ccec")
+    if which:
+        return Path(which).resolve()
+    ascend_home = os.getenv("ASCEND_HOME_PATH")
+    if ascend_home:
+        candidate = Path(ascend_home).expanduser().resolve() / "bin" / "ccec"
+        if candidate.exists():
+            return candidate.resolve()
+    raise TlaBackendCompilerNotFoundError(
+        "ccec not found on PATH. Source the CANN toolkit set_env.sh so user "
+        "Ascend C external functions can be compiled."
+    )
+
+
+def _ascendc_include_dirs(ascend_home: Path) -> list[Path]:
+    asc_root = (ascend_home / "asc").resolve()
+    highlevel_api = asc_root.parent / "ascendc" / "include" / "highlevel_api"
+    return [
+        path.resolve()
+        for path in (
+            asc_root,
+            asc_root / "impl" / "adv_api",
+            asc_root / "impl" / "basic_api",
+            asc_root / "impl" / "basic_api" / "reg_compute",
+            asc_root / "impl" / "c_api",
+            asc_root / "impl" / "micro_api",
+            asc_root / "impl" / "simt_api",
+            asc_root / "impl" / "utils",
+            asc_root / "include",
+            asc_root / "include" / "adv_api",
+            asc_root / "include" / "aicpu_api",
+            asc_root / "include" / "basic_api",
+            asc_root / "include" / "basic_api" / "reg_compute",
+            asc_root / "include" / "c_api",
+            asc_root / "include" / "interface",
+            asc_root / "include" / "micro_api",
+            asc_root / "include" / "simt_api",
+            asc_root / "include" / "tiling",
+            asc_root / "include" / "utils",
+            highlevel_api,
+            Path(__file__).resolve().parents[3] / "include",
+        )
+        if path.is_dir()
+    ]
+
+
+def _ascendc_compiler_inputs() -> tuple[Path, list[Path]]:
+    compiler = _resolve_ccec()
+    ascend_home_env = os.getenv("ASCEND_HOME_PATH")
+    if not ascend_home_env:
+        raise TlaBackendCompilerNotFoundError(
+            "ASCEND_HOME_PATH is not set. Source the CANN toolkit set_env.sh so "
+            "Ascend C headers can be found."
+        )
+    ascend_home = Path(ascend_home_env).expanduser().resolve()
+    return compiler, _ascendc_include_dirs(ascend_home)
+
+
+def _resolve_extern_targets(
+    extern_function: ExternFunction | None,
+    *,
+    extern_core_types: Iterable[str],
+    target_arch: str,
+) -> tuple[TlaKernelTarget, ...]:
+    if extern_function is None:
+        return ()
+
+    core_types = frozenset(extern_core_types)
+    if not core_types:
+        raise TlaKernelCompileError(
+            f"external function {extern_function.symbol!r} has no call target"
+        )
+    unsupported = core_types.difference(("aic", "aiv"))
+    if unsupported:
+        raise TlaKernelCompileError(
+            f"unsupported external function core types: {sorted(unsupported)}"
+        )
+
+    targets = tuple(
+        _get_kernel_target(target_arch=target_arch, core_type=core_type)
+        for core_type in ("aic", "aiv")
+        if core_type in core_types
+    )
+    return targets
+
+
+def _ascendc_extern_compile_identity() -> dict[str, object]:
+    """Return the resolved compiler configuration tracked by the kernel cache."""
+
+    compiler, include_dirs = _ascendc_compiler_inputs()
+    return {
+        "ccec": str(compiler),
+        "ccec_version": _tool_version(compiler),
+        "ccec_fingerprint": _tool_fingerprint(compiler),
+        "include_dirs": [str(path) for path in include_dirs],
+    }
+
+
+def _compile_ascendc_extern_function(
+    extern_function: ExternFunction,
+    *,
+    artifact_dir: Path,
+    targets: Sequence[TlaKernelTarget],
+) -> tuple[Path, ...]:
+    # ``targets`` is produced by ``_resolve_extern_targets`` in the compile path.
+    targets = tuple(targets)
+    assert 1 <= len(targets) <= 2
+    source = artifact_dir / "extern.cpp"
+    source.write_text(extern_function.source, encoding="utf-8")
+    compiler, include_dirs = _ascendc_compiler_inputs()
+    command = [
+        str(compiler),
+        "-O2",
+        "-x",
+        "cce",
+        "--cce-auto-sync=off",
+        "--cce-aicore-only",
+        "--cce-generic-addrspace=off",
+        str(source),
+        "-emit-llvm",
+        "-c",
+        "-mllvm",
+        "-disable-llvm-optzns",
+        "-DCATLASS_ARCH=3510",
+        "-DTILING_KEY_VAR",
+        "-Wno-ignored-attributes",
+        "-std=c++17",
+    ]
+    for include_dir in include_dirs:
+        command.extend(["-I", str(include_dir)])
+
+    outputs = tuple(
+        artifact_dir / f"extern.{target.arch_scope}.bc" for target in targets
+    )
+    for target, output in zip(targets, outputs, strict=True):
+        target_command = [
+            *command,
+            f"--cce-aicore-arch={target.cce_arch}",
+            "-o",
+            str(output),
+        ]
+        _run_checked(
+            target_command,
+            label=f"ccec external function {extern_function.symbol}",
+            cwd=artifact_dir,
+        )
+        if not output.exists():
+            raise TlaKernelCompileError(
+                "ccec completed but external function bitcode was not created at "
+                f"{output}"
+            )
+    return tuple(output.resolve() for output in outputs)
+
+
 def _build_hivmc_a5_command(
     *,
     compiler: Path,
@@ -1860,10 +2051,10 @@ def _create_stamped_hivmc_input(
 ) -> tuple[Path, str | None]:
     """Stamp a private HIVMC input only when debug-print helpers are present.
 
-    Ordinary kernels rely on ``--link-aicore-bitcode`` alone. Debug /
-    ``print_tensor`` helpers also need module attrs ``hivm.aiv_bitcode`` /
-    ``hivm.aic_bitcode`` (and optionally helper bitcode), so copy+stamp a
-    private ``*.hivmc-input.mlir`` in those cases only.
+    Ordinary and external-function kernels rely on ``--link-aicore-bitcode``.
+    Debug / ``print_tensor`` helpers also need module attrs
+    ``hivm.aiv_bitcode`` / ``hivm.aic_bitcode`` (and optionally helper bitcode),
+    so copy and stamp a private ``*.hivmc-input.mlir`` only for those kernels.
     """
     compiler_text = mlir_path.read_text()
     if (

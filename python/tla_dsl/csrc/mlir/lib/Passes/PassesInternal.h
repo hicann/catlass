@@ -23,6 +23,7 @@ void registerTlaLowerBlockIdxPass();
 void registerTlaVectorRegionPass();
 void registerTlaLowerFlagBarrierToHivmPass();
 void registerTlaLowerPtrPass();
+void registerTlaLowerExternCallPass();
 void registerTlaLowerMutexToStdPass();
 void registerTlaCubeRegionPass();
 void registerTlaFinalizeMemrefPass();

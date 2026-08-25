@@ -12,6 +12,7 @@
 # End-to-end validation for python/tla_dsl/examples/end_to_end/basic_mmad (basic_matmul*.py, basic_mmad_ptr.py,
 # basic_matmul_l0c2l1.py),
 # python/tla_dsl/examples/end_to_end/basic_vadd (basic_vadd.py),
+# python/tla_dsl/examples/end_to_end/extern_op (extern_vecadd.py, extern_dual_core.py),
 # python/tla_dsl/examples/end_to_end/basic_mixed (basic_mixed.py), python/tla_dsl/examples/end_to_end/basic_mixed_mutex (basic_mixed_mutex.py) and
 # python/tla_dsl/examples/end_to_end/basic_mixed (basic_mixed_ub2l1.py, basic_mixed_store_zN.py,
 # basic_mixed_store_zNUnAlign.py, basic_mixed_fixpipe_nz2dn.py).
@@ -99,6 +100,8 @@ BASIC_MMAD_AUTO_SYNC_REL="examples/end_to_end/basic_mmad/basic_matmul_auto_sync.
 BASIC_MMAD_PTR_REL="examples/end_to_end/basic_mmad/basic_mmad_ptr.py"
 BASIC_MMAD_L0C2L1_REL="examples/end_to_end/basic_mmad/basic_matmul_l0c2l1.py"
 BASIC_VADD_REL="examples/end_to_end/basic_vadd/basic_vadd.py"
+EXTERN_VECADD_REL="examples/end_to_end/extern_op/extern_vecadd.py"
+EXTERN_DUAL_CORE_REL="examples/end_to_end/extern_op/extern_dual_core.py"
 BASIC_MIXED_REL="examples/end_to_end/basic_mixed/basic_mixed.py"
 BASIC_MIXED_MUTEX_REL="examples/end_to_end/basic_mixed/basic_mixed_mutex.py"
 BASIC_MIXED_UB2L1_REL="examples/end_to_end/basic_mixed/basic_mixed_ub2l1.py"
@@ -168,6 +171,7 @@ Run end-to-end validation for:
   - basic_mmad_ptr (basic_mmad_ptr.py)
   - basic_mmad_l0c2l1 (basic_matmul_l0c2l1.py: cube-only E=(A@B)@D with L0C->L1 staging)
   - basic_vadd (basic_vadd.py with per-dtype CLI invocations, plus mutex variants)
+  - extern_op (extern_vecadd.py and extern_dual_core.py)
   - basic_mixed (basic_mixed.py with dynamic GM mnk list, including --use-mutex; basic_mixed_ub2l1.py,
     basic_mixed_store_zN.py, basic_mixed_store_zNUnAlign.py for m=64/m=50)
   - binary_op (binary_op.py <op> --all-dtypes for add/sub/mul/div/max/min/add_unalign/add_brc_b32)
@@ -410,6 +414,14 @@ if [[ ! -f "${CATLASS_DSL_DIR}/${BASIC_MMAD_L0C2L1_REL}" ]]; then
 fi
 if [[ ! -f "${CATLASS_DSL_DIR}/${BASIC_VADD_REL}" ]]; then
     echo "error: missing ${BASIC_VADD_REL} under ${CATLASS_DSL_DIR}" >&2
+    exit 1
+fi
+if [[ ! -f "${CATLASS_DSL_DIR}/${EXTERN_VECADD_REL}" ]]; then
+    echo "error: missing ${EXTERN_VECADD_REL} under ${CATLASS_DSL_DIR}" >&2
+    exit 1
+fi
+if [[ ! -f "${CATLASS_DSL_DIR}/${EXTERN_DUAL_CORE_REL}" ]]; then
+    echo "error: missing ${EXTERN_DUAL_CORE_REL} under ${CATLASS_DSL_DIR}" >&2
     exit 1
 fi
 if [[ ! -f "${CATLASS_DSL_DIR}/${BASIC_MIXED_REL}" ]]; then

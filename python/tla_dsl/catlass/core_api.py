@@ -8,7 +8,7 @@ import math
 import sys
 from enum import Enum
 from itertools import chain
-from typing import Any, Callable, Iterable, NoReturn, Sequence, TypeAlias
+from typing import TYPE_CHECKING, Any, Callable, Iterable, NoReturn, Sequence, TypeAlias
 
 from mlir import ir as mlir_ir  # type: ignore[assignment]
 from mlir._mlir_libs._mlir import (  # type: ignore[import-not-found]
@@ -26,7 +26,7 @@ from ._mlir_bindings import tla_ops_gen as _tla_ops_gen
 from .base_dsl import ast_helpers as _ast_helpers
 from .base_dsl.op import dsl_user_op, _capture_user_loc
 from .base_dsl.typing import Bool, Float32, Int8, Int32, Numeric, as_numeric
-from .base_dsl.typing import Pointer
+from .base_dsl.typing import Pointer, TypedPointer
 from .tla.tensor import normalize_tile_view_coord
 from .tla.typing import Tensor
 from . import runtime as _runtime
@@ -7622,6 +7622,124 @@ def update_mask(
         mask_ty, index_ty, true_shape_value, mlir_ir.TypeAttr.get(elem_type), loc=loc
     )
     return MaskSSA(mask_value), as_numeric(new_true_shape)
+
+
+# Keep this type-only: tla.ffi lazily calls back into core_api, so a
+# runtime import here would add an unnecessary reverse dependency.
+if TYPE_CHECKING:
+    from .tla.ffi import ExternFunction
+
+
+def _emit_extern_call(
+    extern_function: ExternFunction,
+    args: tuple[object, ...],
+    *,
+    loc: mlir_ir.Location | None = None,
+) -> None:
+    """Validate and emit a call to a declared external function."""
+
+    _require_frontend_state("extern")
+    in_vector = _runtime._has_enclosing_region("vector")
+    in_cube = _runtime._has_enclosing_region("cube")
+    # Validate: scope, args count.
+    if in_vector == in_cube:
+        _op_error(
+            "extern",
+            "call must be nested inside exactly one of tla.vector() or tla.cube()",
+        )
+    if in_vector and _runtime._has_enclosing_region("vec.func"):
+        _op_error("extern", "call must be outside tla.vec.func()")
+    core_type = "aiv" if in_vector else "aic"
+    if len(args) != len(extern_function.arg_types):
+        _op_error(
+            "extern",
+            f"{extern_function.symbol} expects {len(extern_function.arg_types)} arguments, got {len(args)}",
+        )
+
+    state = _runtime._current_frontend_state()
+    # Validate: only 1 external function per kernel; same function can be called multiple times.
+    assert state is not None
+    if state.extern_function is None:
+        state.extern_function = extern_function
+    elif state.extern_function is not extern_function:
+        _op_error(
+            "extern",
+            "v1 supports at most one external function per kernel; "
+            "the same function may be called multiple times",
+        )
+    state.extern_core_types.add(core_type)
+
+    operands: list[mlir_ir.Value] = []
+    for position, (arg, expected) in enumerate(
+        zip(args, extern_function.arg_types, strict=True)
+    ):
+        if isinstance(expected, TypedPointer):
+            # Pointer case: get and validate ptr type, pointee type and address space.
+            resolved = _resolve_bound_value(arg)
+            if isinstance(arg, Tensor) or (
+                isinstance(resolved, mlir_ir.Value)
+                and _tla_type_bridge.type_is_tensor(resolved.type)
+            ):
+                _op_error(
+                    "extern",
+                    f"argument {position} of {extern_function.symbol} expects a Pointer, "
+                    "but received a Tensor; pass tensor.ptr explicitly",
+                )
+            value = _as_value(arg)
+            ptr_type = PtrType.try_cast(value.type)
+            if ptr_type is None:
+                _op_error(
+                    "extern",
+                    f"argument {position} of {extern_function.symbol} must be "
+                    f"!tla.ptr<{expected.dtype.dtype}, {expected.space.name}, ...>; "
+                    f"got {value.type}",
+                )
+            actual_dtype = Numeric.from_mlir_type(ptr_type.pointee)
+            actual_space = AddressSpace.from_mlir_token(ptr_type.addrspace)
+            if actual_dtype is not expected.dtype or actual_space is not expected.space:
+                _op_error(
+                    "extern",
+                    f"argument {position} of {extern_function.symbol} expects pointer "
+                    f"to {expected.dtype.__name__} in {expected.space.name}, "
+                    f"got {actual_dtype.__name__} in {actual_space.name}",
+                )
+        else:
+            # Numeric case: get and validate numeric type.
+            resolved = _resolve_bound_value(arg)
+            if isinstance(resolved, Numeric):
+                value = resolved.ir_value(loc=loc)
+            elif isinstance(resolved, mlir_ir.Value):
+                value = resolved
+            elif isinstance(resolved, (bool, int, float)):
+                value = expected(resolved).ir_value(loc=loc)
+            else:
+                _op_error(
+                    "extern",
+                    f"argument {position} of {extern_function.symbol} must be "
+                    f"{expected.__name__}, got {_type_name(arg)}",
+                )
+            if isinstance(value.type, mlir_ir.IndexType):
+                _op_error(
+                    "extern",
+                    f"argument {position} of {extern_function.symbol} must not be index; "
+                    f"declare and pass Int32 or Int64 explicitly",
+                )
+            try:
+                actual_dtype = Numeric.from_mlir_type(value.type)
+            except TypeError:
+                _op_error(
+                    "extern",
+                    f"argument {position} of {extern_function.symbol} must be {expected.__name__}, got {value.type}",
+                )
+            if actual_dtype is not expected:
+                _op_error(
+                    "extern",
+                    f"argument {position} of {extern_function.symbol} expects "
+                    f"{expected.__name__}, got {actual_dtype.__name__}",
+                )
+        operands.append(value)
+
+    _tla_ops_gen.call_extern(extern_function.symbol, operands, loc=loc)
 
 
 _mask_namespace = _Namespace()

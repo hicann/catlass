@@ -57,8 +57,10 @@ _PARENT_EXPORTS = (
     "const_expr",
     "Constexpr",
     "Pointer",
+    "TypedPointer",
     "JitArgument",
     "AddressSpace",
+    "extern",
     "Numeric",
     "Integer",
     "Float",
@@ -120,6 +122,7 @@ def __getattr__(name: str) -> Any:
 
     if name == "Constexpr" or name in (
         "Pointer",
+        "TypedPointer",
         "JitArgument",
         "as_numeric",
         "cast",
@@ -136,6 +139,11 @@ def __getattr__(name: str) -> Any:
         from ..address_space import AddressSpace
 
         return AddressSpace
+
+    if name == "extern":
+        from .ffi import extern
+
+        return extern
 
     if name in (
         "Numeric",

@@ -351,6 +351,23 @@ static LogicalResult validateNoManualLocalSync(func::FuncOp func)
         "or local flag synchronization; cross_core_* remains explicit");
 }
 
+// In TLA DSL extern op support v1, the user is responsible for ensuring that
+// external calls are properly synchronized. we do not attempt to automatically
+// synchronize them.
+static LogicalResult validateNoExternCalls(func::FuncOp func)
+{
+    ::tla::CallExternOp invalid;
+    func.walk([&](::tla::CallExternOp op) {
+        if (!invalid)
+            invalid = op;
+    });
+    if (!invalid)
+        return success();
+    return invalid.emitError(
+        "auto_sync='v0' cannot be combined with tla.call_extern; "
+        "external calls require explicit synchronization in v1");
+}
+
 static LogicalResult validateCopyUnitFlags(func::FuncOp func)
 {
     LogicalResult result = success();
@@ -929,7 +946,8 @@ public:
                 func->removeAttr(kAutoSyncAttrName);
                 continue;
             }
-            if (failed(validateNoManualLocalSync(func)) || failed(validateCopyUnitFlags(func))) {
+            if (failed(validateNoExternCalls(func)) || failed(validateNoManualLocalSync(func)) ||
+                failed(validateCopyUnitFlags(func))) {
                 signalPassFailure();
                 return;
             }
