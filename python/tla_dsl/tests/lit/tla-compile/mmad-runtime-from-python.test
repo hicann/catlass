@@ -5,6 +5,8 @@
 // RUN: %python %S/Inputs/generate_mmad_ir.py f32 | %tla_compile - -o - | %filecheck %s --check-prefix=F32
 // RUN: %python %S/Inputs/generate_mmad_ir.py i8 | %tla_compile - -o - | %filecheck %s --check-prefix=I8
 // RUN: %python %S/Inputs/generate_mmad_ir.py i8-fixpipe | %tla_compile - -o - | %filecheck %s --check-prefix=I8FIX
+// RUN: %python %S/Inputs/generate_mmad_ir.py fp8 | %tla_compile - -o - | %filecheck %s --check-prefix=FP8
+// RUN: %python %S/Inputs/generate_mmad_ir.py fp8-mixed | %tla_compile - -o - | %filecheck %s --check-prefix=FP8MIX
 // RUN: %python %S/Inputs/generate_mmad_ir.py dynamic-init | %tla_compile - -o - | %filecheck %s --check-prefix=DYN-INIT
 // RUN: %python %S/Inputs/generate_mmad_ir.py dynamic-unit | %tla_compile - -o - | %filecheck %s --check-prefix=DYN-UNIT
 // RUN: %python %S/Inputs/generate_mmad_ir.py dynamic-both | %tla_compile - -o - | %filecheck %s --check-prefix=DYN-BOTH
@@ -79,3 +81,15 @@
 // DYN-BOTH-LABEL: func.func @_dynamic_init_unit_mmad_kernel(
 // DYN-BOTH: call @mmad_float_float_float({{%.*}}, {{%.*}}, {{%.*}}, {{%.*}}, {{%.*}}, {{%.*}}, {{%.*}}, {{%.*}})
 // DYN-BOTH-NOT: tla.mmad
+
+// FP8-COUNT-1: func.func private @mmad_fp8_e4m3fn_t_fp8_e4m3fn_t_float(
+// FP8-SAME: hivm.func_core_type = #hivm.func_core_type<AIC>
+// FP8-DAG: [[M:%.*]] = llvm.mlir.constant(128 : i64) : i64
+// FP8-DAG: [[K:%.*]] = llvm.mlir.constant(64 : i64) : i64
+// FP8: call @mmad_fp8_e4m3fn_t_fp8_e4m3fn_t_float({{%.*}}, {{%.*}}, {{%.*}}, [[M]], [[M]], [[K]]
+// FP8-NOT: tla.mmad
+
+// The two fp8 formats mix, so the callee name is per-operand.
+// FP8MIX-COUNT-1: func.func private @mmad_fp8_e4m3fn_t_fp8_e5m2_t_float(
+// FP8MIX: call @mmad_fp8_e4m3fn_t_fp8_e5m2_t_float(
+// FP8MIX-NOT: tla.mmad

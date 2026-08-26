@@ -588,6 +588,19 @@ def _mlir_f32() -> mlir_ir.Type:
     return mlir_ir.F32Type.get()
 
 
+def _mlir_f8e4m3fn() -> mlir_ir.Type:
+    # OCP E4M3 with finite-only encoding -- the format CANN calls fp8_e4m3fn_t.
+    # Deliberately Float8E4M3FNType, not Float8E4M3Type: MLIR carries both, and
+    # they are different formats. The FN ("finite only") variant has no
+    # infinities and a single NaN encoding; the plain E4M3 has infinities and
+    # several NaN encodings, and is not what the cube implements.
+    return mlir_ir.Float8E4M3FNType.get()
+
+
+def _mlir_f8e5m2() -> mlir_ir.Type:
+    return mlir_ir.Float8E5M2Type.get()
+
+
 class Numeric(metaclass=NumericMeta, is_abstract=True):
     """Numeric type and value (``DslType`` / ``NumericMeta`` first-class).
 
@@ -685,6 +698,10 @@ class Numeric(metaclass=NumericMeta, is_abstract=True):
             token = "bf16"
         elif isinstance(ty, mlir_ir.F32Type):
             token = "f32"
+        elif isinstance(ty, mlir_ir.Float8E4M3FNType):
+            token = "f8e4m3fn"
+        elif isinstance(ty, mlir_ir.Float8E5M2Type):
+            token = "f8e5m2"
         elif isinstance(ty, mlir_ir.F64Type):
             raise TypeError(f"unsupported element type for Numeric: {ty!r}")
         elif isinstance(ty, mlir_ir.IntegerType):
@@ -1120,6 +1137,24 @@ class Float32(Float, metaclass=FloatMeta, width=32, dtype="f32", mlir_type=_mlir
     @staticmethod
     def _host_bits(value: float) -> int:
         return struct.unpack("I", struct.pack("f", float(value)))[0]
+
+
+class Float8E4M3FN(
+    Float, metaclass=FloatMeta, width=8, dtype="f8e4m3fn", mlir_type=_mlir_f8e4m3fn
+):
+    """OCP E4M3 with finite-only encoding, the cube's 8-bit float operand format.
+
+    Named for MLIR's ``Float8E4M3FN``, which is the type this maps to. MLIR also
+    has a plain ``Float8E4M3`` -- a *different* format, with infinities and
+    several NaN encodings -- that the cube does not implement, so the ``FN``
+    suffix is load-bearing rather than decoration.
+    """
+
+
+class Float8E5M2(
+    Float, metaclass=FloatMeta, width=8, dtype="f8e5m2", mlir_type=_mlir_f8e5m2
+):
+    """OCP E5M2, the wider-exponent 8-bit float operand format."""
 
 
 class Constexpr(Generic[_T]):

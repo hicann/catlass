@@ -593,6 +593,7 @@ def from_dlpack(
     origin_shape: Any | None = None,
     assumed_align: int | None = None,
     stream: int | None = -1,
+    element_type: type | None = None,
 ) -> _Tensor:
     """Convert a DLPack object to a TLA runtime tensor (zero-copy).
 
@@ -621,6 +622,12 @@ def from_dlpack(
     capsule is single-use, and passing an already-consumed one raises
     :class:`RuntimeTensorError`. Call ``__dlpack__()`` again (or ``from_dlpack``
     again on the same producer) for another binding.
+
+    ``element_type`` overrides the element type derived from the DLPack dtype,
+    for formats DLPack cannot describe. The override must have the same storage
+    width as the exported dtype, so shape and stride derivation is unaffected.
+    torch cannot export fp8 over DLPack at all, so an fp8 buffer is handed over
+    as its ``int8`` view plus ``element_type=tla.Float8E4M3FN`` / ``Float8E5M2``.
     """
     from ..base_dsl.runtime.dlpack_types import DLDataTypeCode
     from ..base_dsl.typing import (
@@ -691,6 +698,26 @@ def from_dlpack(
         raise RuntimeTensorError(
             f"unsupported DLPack dtype code={dtype_code} bits={dtype_bits} lanes={lanes}"
         )
+
+    if element_type is not None:
+        # Read the widths directly rather than through a defaulted getattr: a
+        # missing `width` would make both sides compare equal and turn the check
+        # below into a no-op, which is exactly when it is most needed.
+        try:
+            exported_width = int(dtype.width)
+            override_width = int(element_type.width)
+        except (AttributeError, TypeError) as exc:
+            raise RuntimeTensorError(
+                "from_dlpack element_type override requires both the exported dtype and the "
+                f"override to declare a storage width; got {dtype!r} and {element_type!r}"
+            ) from exc
+        if override_width != exported_width:
+            raise RuntimeTensorError(
+                f"from_dlpack element_type override {element_type.__name__} is "
+                f"{override_width}-bit but the exported buffer is {exported_width}-bit; "
+                "the override must not change the element storage width"
+            )
+        dtype = element_type
 
     if layout_tag is None:
         raise RuntimeTensorError(

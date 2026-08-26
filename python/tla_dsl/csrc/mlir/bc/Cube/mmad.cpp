@@ -73,4 +73,24 @@ __aicore__ __attribute__((always_inline)) void _mlir_ciface_mmad_int8_int8_int32
     Catlass::Gemm::Mmad<int8_t, int8_t, int32_t>(
         a->aligned + a->offset, b->aligned + b->offset, c->aligned + c->offset, m, n, k, initC, unitFlag);
 }
+
+// fp8 routes (Ascend950 only). These are the PLAIN fp8 types: MmadCal only takes
+// the mad_mx path for mx_fp8_*/fp4 operands, so these land on the same `mad`
+// intrinsic as the f16/bf16/f32 routes and need no MX scale setup. A and B
+// formats are independent, hence four symbols.
+#if ((defined(__NPU_ARCH__) && __NPU_ARCH__ == 3510) || (defined(CATLASS_ARCH) && CATLASS_ARCH == 3510))
+#define REGISTER_MMAD_FP8(TypeA, TypeB)                                                                        \
+    __aicore__ __attribute__((always_inline)) void _mlir_ciface_mmad_##TypeA##_##TypeB##_float(                \
+        memref_t<__ca__ TypeA, 1>* a, memref_t<__cb__ TypeB, 1>* b, memref_t<__cc__ float, 1>* c, int64_t m,   \
+        int64_t n, int64_t k, bool initC = true, uint8_t unitFlag = 0)                                         \
+    {                                                                                                          \
+        Catlass::Gemm::Mmad<TypeA, TypeB, float>(                                                              \
+            a->aligned + a->offset, b->aligned + b->offset, c->aligned + c->offset, m, n, k, initC, unitFlag); \
+    }
+
+REGISTER_MMAD_FP8(fp8_e4m3fn_t, fp8_e4m3fn_t)
+REGISTER_MMAD_FP8(fp8_e5m2_t, fp8_e5m2_t)
+REGISTER_MMAD_FP8(fp8_e4m3fn_t, fp8_e5m2_t)
+REGISTER_MMAD_FP8(fp8_e5m2_t, fp8_e4m3fn_t)
+#endif
 }

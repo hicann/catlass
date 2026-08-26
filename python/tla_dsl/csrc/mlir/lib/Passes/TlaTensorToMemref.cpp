@@ -605,17 +605,49 @@ static StringRef copyRuntimeElemSuffix(StringRef elementType)
         return "int16_t";
     if (elementType == "i32")
         return "int32_t";
+    if (elementType == "f8E4M3FN")
+        return "fp8_e4m3fn_t";
+    if (elementType == "f8E5M2")
+        return "fp8_e5m2_t";
     return {};
+}
+
+// fp8 is a cube *operand* format. The bc layer registers it only for the routes
+// that feed the cube (GM->L1 and L1->L0A/L0B); there is no vector-path wrapper
+// for it, and fixpipe cannot produce it. Element types are therefore not
+// route-agnostic, and a route must ask for a suffix it can actually implement.
+static bool isCubeOperandOnlyElementType(StringRef elementType)
+{
+    return elementType == "f8E4M3FN" || elementType == "f8E5M2";
+}
+
+// Suffix for the vector staging routes (GM<->UB, UB->L1). Spelling a cube-operand
+// type here would name a symbol the bc layer never defines, which surfaces as a
+// link failure instead of a diagnostic; an empty suffix rejects the route where
+// it is chosen.
+static StringRef vectorPathElemSuffix(StringRef elementType)
+{
+    if (isCubeOperandOnlyElementType(elementType))
+        return {};
+    return copyRuntimeElemSuffix(elementType);
 }
 
 // Whether fixpipe can carry this L0C element type out to the given destination
 // type. An fp32 accumulator (the float MMAD routes) may be narrowed to f16/bf16
-// on the way out; an i32 accumulator (the int8 MMAD route) has no narrowing path
-// and must land as i32.
+// on the way out, or land unchanged as f32; an i32 accumulator (the int8 MMAD
+// route) has no narrowing path and must land as i32.
+//
+// Both sides are enumerated deliberately. Accepting any destination for an f32
+// accumulator would be safe only for as long as copyRuntimeElemSuffix had no
+// mapping for the other types: the route would resolve to an empty suffix and be
+// rejected further down. Once a new element type gains a suffix -- as fp8 does --
+// that accidental guard disappears and the route instead resolves to a callee
+// name with no REGISTER_L0C_TO_* behind it, which fails at link time rather than
+// as a diagnostic here.
 static bool isLegalFixpipeElementType(StringRef srcElementType, StringRef dstElementType)
 {
     if (srcElementType == "f32")
-        return true;
+        return dstElementType == "f32" || dstElementType == "f16" || dstElementType == "bf16";
     return srcElementType == "i32" && dstElementType == "i32";
 }
 
@@ -636,7 +668,7 @@ std::string getCopyRouteCallee(
         srcLayout == TensorLayoutTag::RowMajor && dstLayout == TensorLayoutTag::zN) {
         if (srcElementType != dstElem)
             return {};
-        StringRef suffix = copyRuntimeElemSuffix(srcElementType);
+        StringRef suffix = vectorPathElemSuffix(srcElementType);
         if (suffix.empty())
             return {};
         return Twine("copy_ub_RowMajor_to_l1_zN_").concat(suffix).str();
@@ -646,7 +678,7 @@ std::string getCopyRouteCallee(
         dstLayout == TensorLayoutTag::zN) {
         if (srcElementType != dstElem)
             return {};
-        StringRef suffix = copyRuntimeElemSuffix(srcElementType);
+        StringRef suffix = vectorPathElemSuffix(srcElementType);
         if (suffix.empty())
             return {};
         return Twine("copy_ub_zN_to_l1_zN_").concat(suffix).str();
@@ -656,7 +688,7 @@ std::string getCopyRouteCallee(
         srcLayout == TensorLayoutTag::RowMajor && dstLayout == TensorLayoutTag::RowMajor) {
         if (srcElementType != dstElem)
             return {};
-        StringRef suffix = copyRuntimeElemSuffix(srcElementType);
+        StringRef suffix = vectorPathElemSuffix(srcElementType);
         if (suffix.empty())
             return {};
         return Twine("copy_gm_RowMajor_to_ub_RowMajor_").concat(suffix).str();
@@ -666,7 +698,7 @@ std::string getCopyRouteCallee(
         srcLayout == TensorLayoutTag::RowMajor && dstLayout == TensorLayoutTag::RowMajor) {
         if (srcElementType != dstElem)
             return {};
-        StringRef suffix = copyRuntimeElemSuffix(srcElementType);
+        StringRef suffix = vectorPathElemSuffix(srcElementType);
         if (suffix.empty())
             return {};
         return Twine("copy_ub_RowMajor_to_gm_RowMajor_").concat(suffix).str();
@@ -803,10 +835,15 @@ static bool isAicTemplateRuntimeCall(StringRef name)
     if (name == "mmad_float_float_float" || name == "mmad_half_half_float" || name == "mmad_bf16_bf16_float" ||
         name == "mmad_int8_int8_int32")
         return true;
+    // FP8 MMAD: one symbol per operand-format pairing (the two formats can mix).
+    // The BC symbols are named after the C++ element type the wrapper
+    // instantiates, so the operands read fp8_e4m3fn_t / fp8_e5m2_t.
+    if (name.starts_with("mmad_fp8_e") && name.ends_with("_float"))
+        return true;
     if (!(name.starts_with("copy_")))
         return false;
     if (!(name.ends_with("_float") || name.ends_with("_half") || name.ends_with("_bf16") || name.ends_with("_int8_t") ||
-          name.ends_with("_int32_t")))
+          name.ends_with("_int32_t") || name.ends_with("_fp8_e4m3fn_t") || name.ends_with("_fp8_e5m2_t")))
         return false;
     return name.starts_with("copy_gm_RowMajor_to_l1_zN_") || name.starts_with("copy_gm_ColumnMajor_to_l1_nZ_") ||
            name.starts_with("copy_l1_zN_to_l0a_zN_") || name.starts_with("copy_l1_nZ_to_l0a_zN_") ||

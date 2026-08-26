@@ -582,6 +582,8 @@ _TENSOR_DTYPE_SIZES: dict[str, int] = {
     "f16": 2,
     "bf16": 2,
     "f32": 4,
+    "f8e4m3fn": 1,
+    "f8e5m2": 1,
 }
 
 
@@ -772,6 +774,8 @@ from .base_dsl.typing import (
     Float16,
     BFloat16,
     Float32,
+    Float8E4M3FN,
+    Float8E5M2,
 )
 
 __all__ = [
@@ -817,6 +821,8 @@ __all__ = [
     "Float32",
     "Float16",
     "BFloat16",
+    "Float8E4M3FN",
+    "Float8E5M2",
     "annotation_to_category",
     "dtype_size_bytes",
 ]

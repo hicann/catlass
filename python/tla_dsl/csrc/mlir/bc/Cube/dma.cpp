@@ -98,6 +98,10 @@ REGISTER_GM_TO_L1(ColumnMajor, nZ, float)
 REGISTER_GM_TO_L1(ColumnMajor, nZ, half)
 REGISTER_GM_TO_L1(ColumnMajor, nZ, bf16)
 REGISTER_GM_TO_L1(ColumnMajor, nZ, int8_t)
+REGISTER_GM_TO_L1(RowMajor, zN, fp8_e4m3fn_t)
+REGISTER_GM_TO_L1(ColumnMajor, nZ, fp8_e4m3fn_t)
+REGISTER_GM_TO_L1(RowMajor, zN, fp8_e5m2_t)
+REGISTER_GM_TO_L1(ColumnMajor, nZ, fp8_e5m2_t)
 
 #define REGISTER_L1_TO_L0A(LayoutSrc, DType)                                                                          \
     [aicore] __attribute__((always_inline)) void _mlir_ciface_copy_l1_##LayoutSrc##_to_l0a_zN_##DType(                \
@@ -115,6 +119,10 @@ REGISTER_L1_TO_L0A(nZ, float)
 REGISTER_L1_TO_L0A(nZ, half)
 REGISTER_L1_TO_L0A(nZ, bf16)
 REGISTER_L1_TO_L0A(nZ, int8_t)
+REGISTER_L1_TO_L0A(zN, fp8_e4m3fn_t)
+REGISTER_L1_TO_L0A(nZ, fp8_e4m3fn_t)
+REGISTER_L1_TO_L0A(zN, fp8_e5m2_t)
+REGISTER_L1_TO_L0A(nZ, fp8_e5m2_t)
 
 #define REGISTER_L1_TO_L0B(LayoutSrc, DType)                                                                          \
     [aicore] __attribute__((always_inline)) void _mlir_ciface_copy_l1_##LayoutSrc##_to_l0b_nZ_##DType(                \
@@ -132,6 +140,10 @@ REGISTER_L1_TO_L0B(nZ, float)
 REGISTER_L1_TO_L0B(nZ, half)
 REGISTER_L1_TO_L0B(nZ, bf16)
 REGISTER_L1_TO_L0B(nZ, int8_t)
+REGISTER_L1_TO_L0B(zN, fp8_e4m3fn_t)
+REGISTER_L1_TO_L0B(nZ, fp8_e4m3fn_t)
+REGISTER_L1_TO_L0B(zN, fp8_e5m2_t)
+REGISTER_L1_TO_L0B(nZ, fp8_e5m2_t)
 
 #define REGISTER_L0C_TO_GM(DTypeSrc, DTypeDst)                                                      \
     [aicore] __attribute__((always_inline)) void _mlir_ciface_copy_l0c_to_gm_RowMajor_##DTypeDst(   \

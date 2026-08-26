@@ -30,6 +30,9 @@ inline int64_t getByteSizeOfFixedWidthScalarType(::mlir::Type type)
         return 4;
     if (type.isF64())
         return 8;
+    // fp8 cube operand formats (f8E4M3FN / f8E5M2) are byte-sized.
+    if (::llvm::isa<::mlir::Float8E4M3FNType, ::mlir::Float8E5M2Type>(type))
+        return 1;
     if (auto intTy = ::llvm::dyn_cast<::mlir::IntegerType>(type)) {
         if (intTy.getWidth() % 8 == 0)
             return intTy.getWidth() / 8;

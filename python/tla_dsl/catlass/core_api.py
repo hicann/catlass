@@ -92,7 +92,22 @@ _MISSING = object()
 _SUPPORTED_COMPARE_ELEMENT_TYPES = frozenset({"f16", "f32", "i32", "u32"})
 _MASK_CMP_MODES = ("lt", "le", "gt", "ge", "eq", "ne")
 _MAKE_TENSOR_SUPPORTED_ELEMENT_TYPES = frozenset(
-    {"f16", "bf16", "f32", "i32", "u32", "i16", "u16", "i1", "i8", "u8"}
+    # fp8 is a cube operand format only: it can be held in a tile and moved
+    # through the copy machinery, but no vector op consumes it.
+    {
+        "f16",
+        "bf16",
+        "f32",
+        "i32",
+        "u32",
+        "i16",
+        "u16",
+        "i1",
+        "i8",
+        "u8",
+        "f8e4m3fn",
+        "f8e5m2",
+    }
 )
 
 
@@ -2169,10 +2184,17 @@ def _validate_mmad_contract(
         ("f32", "f32", "f32"),
         # Integer route: the L0C accumulator is i32, not fp32.
         ("i8", "i8", "i32"),
+        # fp8 routes accumulate into fp32. The two formats mix freely, so all
+        # four operand combinations are valid.
+        ("f8e4m3fn", "f8e4m3fn", "f32"),
+        ("f8e5m2", "f8e5m2", "f32"),
+        ("f8e4m3fn", "f8e5m2", "f32"),
+        ("f8e5m2", "f8e4m3fn", "f32"),
     }:
         raise TlaLoweringError(
             "unsupported tla.mmad element types; expected f16,f16 -> f32, bf16,bf16 -> f32, "
-            "f32,f32 -> f32 (fp32 L0C accumulator), or i8,i8 -> i32 (i32 L0C accumulator)"
+            "f32,f32 -> f32, any f8e4m3fn/f8e5m2 pair -> f32 (fp32 L0C accumulator), "
+            "or i8,i8 -> i32 (i32 L0C accumulator)"
         )
 
     lhs_m, lhs_k = _flat_dim_pair_from_tree(lhs_desc.origin_shape)
@@ -3895,7 +3917,7 @@ def make_tensor(
     ptr_ty = PtrType(ptr_value.type)
     addr = ptr_ty.addrspace
     try:
-        dtype = _dtype_to_str(ptr_ty.pointee).lower()
+        dtype = _dtype_to_str(ptr_ty.pointee)
     except TypeError as exc:
         raise TlaLoweringError(
             f"tla.make_tensor cannot derive element type from ptr pointee {ptr_ty.pointee}"
@@ -4081,7 +4103,7 @@ def make_tensor_like(
     # Keep frontend MLIR pointer spelling aligned with the pointer operand.
     ptr_ty = PtrType(ptr_value.type)
     try:
-        dtype = _dtype_to_str(ptr_ty.pointee).lower()
+        dtype = _dtype_to_str(ptr_ty.pointee)
     except TypeError as exc:
         raise TlaLoweringError(
             "tla.make_tensor_like cannot derive element type from ptr pointee "

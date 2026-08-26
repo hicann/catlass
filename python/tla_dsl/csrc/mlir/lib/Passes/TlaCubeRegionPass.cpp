@@ -86,10 +86,17 @@ struct LowerTlaMmadPattern : public OpRewritePattern<::tla::MmadOp> {
         // Integer route: unlike the float routes, the L0C accumulator is i32.
         bool supportedI8Route =
             lhsInfo->elementType == "i8" && rhsInfo->elementType == "i8" && accInfo->elementType == "i32";
-        if (!supportedF16Route && !supportedBf16Route && !supportedF32Route && !supportedI8Route) {
+        // fp8 routes: element types print as the MLIR spellings f8E4M3FN / f8E5M2.
+        // The two formats mix freely on the cube, so all four operand pairings are
+        // legal; each accumulates into fp32.
+        auto isFp8 = [](StringRef elem) { return elem == "f8E4M3FN" || elem == "f8E5M2"; };
+        bool supportedFp8Route =
+            isFp8(lhsInfo->elementType) && isFp8(rhsInfo->elementType) && accInfo->elementType == "f32";
+        if (!supportedF16Route && !supportedBf16Route && !supportedF32Route && !supportedI8Route &&
+            !supportedFp8Route) {
             op.emitError() << "unsupported tla.mmad element types; expected f16,f16 -> f32, bf16,bf16 "
-                              "-> f32, f32,f32 -> f32 (fp32 L0C accumulator), or i8,i8 -> i32 (i32 L0C "
-                              "accumulator)";
+                              "-> f32, f32,f32 -> f32, any f8E4M3FN/f8E5M2 pair -> f32 (fp32 L0C "
+                              "accumulator), or i8,i8 -> i32 (i32 L0C accumulator)";
             return failure();
         }
 
@@ -189,9 +196,20 @@ struct LowerTlaMmadPattern : public OpRewritePattern<::tla::MmadOp> {
                                              i64Type,
                                              i1Type,
                                              i8Type};
+        // FP8 needs a per-operand name because the two formats can be mixed.
+        // MLIR prints the type as f8E4M3FN / f8E5M2; the BC runtime symbols are
+        // named after the C++ element type the wrapper instantiates, which is the
+        // CANN builtin fp8_e4m3fn_t / fp8_e5m2_t.
+        auto fp8Tag = [](StringRef elem) -> StringRef { return elem == "f8E4M3FN" ? "fp8_e4m3fn_t" : "fp8_e5m2_t"; };
+        std::string fp8CalleeStorage;
+        if (supportedFp8Route) {
+            fp8CalleeStorage =
+                ("mmad_" + fp8Tag(lhsInfo->elementType) + "_" + fp8Tag(rhsInfo->elementType) + "_float").str();
+        }
         StringRef calleeName = supportedF16Route  ? "mmad_half_half_float" :
                                supportedBf16Route ? "mmad_bf16_bf16_float" :
                                supportedI8Route   ? "mmad_int8_int8_int32" :
+                               supportedFp8Route  ? StringRef(fp8CalleeStorage) :
                                                     "mmad_float_float_float";
         auto callee = ::tla::getOrCreateRuntimeCall(op->getParentOfType<ModuleOp>(), calleeName, operandTypes);
         SmallVector<Value, 8> operands = {*lhsRuntime, *rhsRuntime, *accRuntime, mI64,

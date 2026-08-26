@@ -284,6 +284,14 @@ def basic_mmad_kernel(
         tla.wait_flag(l0c_available)
 
 
+# torch cannot export fp8 over DLPack, so fp8 buffers go through
+# create_tla_tensor's element_type override.
+_FP8_TLA_TYPES = {
+    "f8e4m3fn": tla.Float8E4M3FN,
+    "f8e5m2": tla.Float8E5M2,
+}
+
+
 def run(args: argparse.Namespace) -> int:
     from examples.end_to_end.common import (
         get_block_num,
@@ -305,6 +313,8 @@ def run(args: argparse.Namespace) -> int:
         "f32": torch.float32,
         "i8": torch.int8,
         "i32": torch.int32,
+        "f8e4m3fn": torch.float8_e4m3fn,
+        "f8e5m2": torch.float8_e5m2,
     }
     dtype_a = dtypes[args.dtype_a]
     dtype_b = dtypes[args.dtype_b]
@@ -315,7 +325,9 @@ def run(args: argparse.Namespace) -> int:
     # i8,i8 -> i32 is the integer MMAD route; the accumulator in L0C is i32.
     # It is exact and never takes the hf32 path, which is fp32-only.
     is_int_route = args.dtype_a == "i8"
+    # hf32 is an fp32-only rounding mode; every other route leaves it off.
     enable_hf32 = False
+    is_fp8_route = args.dtype_a in ("f8e4m3fn", "f8e5m2")
     if is_int_route:
         if args.dtype_b != "i8" or args.dtype_c != "i32":
             raise SystemExit(
@@ -326,6 +338,18 @@ def run(args: argparse.Namespace) -> int:
         c = torch.zeros(args.m, args.n, dtype=dtype_c, device="cpu")
         # Small magnitudes keep the exact int32 product inside float64.
         ref = (a.double() @ b.double()).to(torch.int32)
+    elif is_fp8_route:
+        if args.dtype_b not in ("f8e4m3fn", "f8e5m2") or args.dtype_c != "f32":
+            raise SystemExit(
+                "the fp8 mmad route requires f8e4m3fn/f8e5m2 operands and --dtype-c f32"
+            )
+        # Round the operands through the fp8 format on the host, so the reference
+        # multiplies exactly the values the device sees. Only the accumulation
+        # order then differs, which is what the tolerance below covers.
+        a = (torch.rand(args.m, args.k, device="cpu") * 4.0 - 2.0).to(dtype_a)
+        b = (torch.rand(args.k, args.n, device="cpu") * 4.0 - 2.0).to(dtype_b)
+        c = torch.zeros(args.m, args.n, dtype=dtype_c, device="cpu")
+        ref = a.float() @ b.float()
     else:
         a = torch.rand(args.m, args.k, dtype=dtype_a, device="cpu") * 10.0 - 5.0
         b = torch.rand(args.k, args.n, dtype=dtype_b, device="cpu") * 10.0 - 5.0
@@ -350,9 +374,9 @@ def run(args: argparse.Namespace) -> int:
         b.contiguous() if args.layout_b == "row" else b.permute(1, 0).contiguous()
     ).npu()
     c = c.contiguous().npu()
-    a_tensor = create_tla_tensor(a, args.layout_a)
-    b_tensor = create_tla_tensor(b, args.layout_b)
-    c_tensor = create_tla_tensor(c, "row")
+    a_tensor = create_tla_tensor(a, args.layout_a, _FP8_TLA_TYPES.get(args.dtype_a))
+    b_tensor = create_tla_tensor(b, args.layout_b, _FP8_TLA_TYPES.get(args.dtype_b))
+    c_tensor = create_tla_tensor(c, "row", _FP8_TLA_TYPES.get(args.dtype_c))
 
     artifact = tla.compile(
         basic_mmad_kernel,
@@ -390,12 +414,9 @@ def main() -> int:
     parser.add_argument("--k", type=int, default=1024)
     parser.add_argument("--layout-a", choices=("row", "col"), default="row")
     parser.add_argument("--layout-b", choices=("row", "col"), default="row")
-    parser.add_argument(
-        "--dtype-a", choices=("f16", "bf16", "f32", "i8"), default="f16"
-    )
-    parser.add_argument(
-        "--dtype-b", choices=("f16", "bf16", "f32", "i8"), default="f16"
-    )
+    dtypes_ab = ("f16", "bf16", "f32", "i8", "f8e4m3fn", "f8e5m2")
+    parser.add_argument("--dtype-a", choices=dtypes_ab, default="f16")
+    parser.add_argument("--dtype-b", choices=dtypes_ab, default="f16")
     parser.add_argument(
         "--dtype-c", choices=("f16", "bf16", "f32", "i32"), default="f32"
     )

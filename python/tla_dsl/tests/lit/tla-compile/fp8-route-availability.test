@@ -1,0 +1,22 @@
+// fp8 is a cube *operand* format: the bc layer registers it for GM->L1 and
+// L1->L0A/L0B only. Every other route must reject it during route resolution.
+//
+// This is not a theoretical guard. Element types are shared across all copy
+// routes, so giving fp8 a runtime-symbol suffix -- which the cube routes need --
+// simultaneously makes every other route able to spell a name for it. Those
+// names have no REGISTER_* behind them, so an unguarded route resolves to a
+// well-formed callee that fails at link time rather than as a diagnostic here.
+//
+// Both cases below are emitted by legal Python @tla.kernel programs: the
+// frontend has no reason to reject either, which is precisely why the compiler
+// must.
+
+// The vector staging path (GM <-> UB, UB -> L1) has no fp8 wrappers.
+//
+// The vector pass reports an unsupported route through notifyMatchFailure, which
+// is a pattern-dispatch signal rather than a user diagnostic, so what surfaces is
+// the generic legalization failure below rather than a message naming fp8. The
+// route is correctly rejected either way; only the wording is unhelpful.
+// RUN: %python %S/Inputs/generate_mmad_ir.py fp8-vector-copy | not %tla_compile - -o - 2>&1 | %filecheck %s --check-prefix=VECCOPY
+
+// VECCOPY: failed to legalize operation 'tla.copy' that was explicitly marked illegal

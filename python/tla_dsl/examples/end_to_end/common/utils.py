@@ -35,9 +35,37 @@ def get_block_num(block_num: int, device: int = 0, *, kind: str = "vector") -> i
     raise ValueError(f"Unsupported kernel kind for block_num default: {kind!r}")
 
 
-def create_tla_tensor(buf, layout: str):
+# Signed integer view types by storage width, for handing a buffer over as plain
+# storage when DLPack cannot describe its real format.
+_STORAGE_VIEW_BY_WIDTH = {
+    8: torch.int8,
+    16: torch.int16,
+    32: torch.int32,
+    64: torch.int64,
+}
+
+
+def create_tla_tensor(buf, layout: str, element_type=None):
+    """Wrap a device buffer as a TLA tensor.
+
+    ``element_type`` overrides the element type derived from the DLPack dtype.
+    torch cannot export fp8 over DLPack at all, so an fp8 buffer is handed over
+    as a same-width integer view with the real type supplied here.
+    """
     tag = tla.arch.RowMajor if layout == "row" else tla.arch.ColumnMajor
-    return from_dlpack(buf.contiguous(), layout_tag=tag).mark_layout_dynamic()
+    if element_type is not None:
+        # Derive the view from the override's own width rather than assuming one
+        # byte: from_dlpack accepts any same-width override, and viewing through
+        # the wrong width silently reshapes the buffer.
+        width = element_type.width
+        if width not in _STORAGE_VIEW_BY_WIDTH:
+            raise ValueError(
+                f"no storage view for a {width}-bit element type {element_type.__name__}"
+            )
+        buf = buf.view(_STORAGE_VIEW_BY_WIDTH[width])
+    return from_dlpack(
+        buf.contiguous(), layout_tag=tag, element_type=element_type
+    ).mark_layout_dynamic()
 
 
 def to_hf32(
