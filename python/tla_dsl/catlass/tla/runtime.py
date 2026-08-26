@@ -272,14 +272,33 @@ class _Tensor(TensorABC):
             raise RuntimeError("Tensor buffer is not bound; use from_dlpack first.")
 
     def mark_layout_dynamic(self, leading_dim: int | None = None) -> "_Tensor":
-        """Mark shape/stride layout metadata dynamic.
+        """Directory: Host Tensor / Dynamic Layout
+        Description:
+            Mark every shape mode dynamic so one compiled artifact can run at
+            different extents. Strides become dynamic except the leading dimension
+            (stride stays `1`). Broadcast strides of `0` are kept. Matching
+            `origin_shape` leaves become dynamic so the compile type no longer
+            depends on concrete DLPack extents.
 
-        All shape modes become dynamic. Strides become dynamic except the leading
-        dimension, which keeps stride ``1``. Broadcast strides of ``0`` are
-        preserved. Matching ``origin_shape`` leaves become dynamic as well so the
-        compile type no longer depends on concrete DLPack extents. For NZFamily
-        layouts, each two-leaf physical shape group maps to one logical
-        ``origin_shape`` axis.
+            Parameters:
+            - *`leading_dim`* (`int | None`): Index of the unit-stride (leading)
+              dimension. Optional; default `None` (inferred from `layout_tag` or
+              compact stride order).
+
+            Constraints:
+            - In-place; returns `self` (chainable).
+            - All `coord` leaves must be `0`; sliced views are rejected.
+            - `leading_dim` must have stride `1`.
+            - For NZFamily layouts, each two-leaf physical shape group maps to one
+              logical `origin_shape` axis.
+
+            Example:
+            ```python
+            ta = from_dlpack(a.contiguous(), layout_tag=tla.arch.RowMajor)
+            ta = ta.mark_layout_dynamic()
+            artifact = tla.compile(my_kernel, ta, options="--npu-arch 3510")
+            ```
+
         """
         # Dynamic GM ABI hard-codes root coord/offset 0 (same rule as
         # TlaLowerFuncPass::validateKernelTensorArg).
@@ -329,15 +348,32 @@ class _Tensor(TensorABC):
         mode: int,
         stride_order: tuple[int, ...] | None = None,
     ) -> "_Tensor":
-        """Mark one compact shape mode dynamic.
+        """Directory: Host Tensor / Dynamic Layout
+        Description:
+            Mark one compact shape mode dynamic. Strides of modes major to `mode`
+            (whose compact stride product includes that extent) become dynamic as
+            well. Matching `origin_shape` leaves are marked so the compile type does
+            not depend on the concrete size.
 
-        Propagates dynamic extents to strides of modes that are major to ``mode``
-        (their stride is a product that includes the marked extent).
+            Parameters:
+            - *`mode`* (`int`): Flattened shape-leaf index to mark dynamic
+              (0-based). Required.
+            - *`stride_order`* (`tuple[int, ...] | None`): Compact stride order
+              (outer → inner). Optional; inferred from current strides when omitted.
 
-        Matching ``origin_shape`` leaves become dynamic with the shape modes so
-        the compile type stays independent of concrete problem sizes. For
-        NZFamily layouts, physical modes 0/1 map to logical M and modes 2/3 map
-        to logical N.
+            Constraints:
+            - In-place; returns `self`.
+            - All `coord` leaves must be `0`.
+            - `stride_order` must be a permutation of `range(rank)`.
+            - For NZFamily layouts, physical modes 0/1 map to logical M and modes
+              2/3 map to logical N.
+
+            Example:
+            ```python
+            ta = from_dlpack(a.contiguous(), layout_tag=tla.arch.RowMajor)
+            ta = ta.mark_compact_shape_dynamic(mode=0)
+            ```
+
         """
         coord_leaves = _flat_layout_leaves(self.coord, allow_dynamic=True)
         if any(leaf is None for leaf in coord_leaves) or not all(
@@ -595,39 +631,52 @@ def from_dlpack(
     stream: int | None = -1,
     element_type: type | None = None,
 ) -> _Tensor:
-    """Convert a DLPack object to a TLA runtime tensor (zero-copy).
+    """Directory: Host Tensor / Binding
+    Description:
+        Bind a DLPack NPU tensor to a TLA Host tensor (zero-copy). The returned
+        object shares the device buffer of `tensor_dlpack`.
 
-    ``tensor_dlpack`` must export an Ascend/NPU tensor (e.g. ``torch_npu``). CPU /
-    NumPy buffers are not supported. ``layout_tag`` must be a ``tla.arch`` layout tag
-    (e.g. ``tla.arch.ColumnMajor``).
+        Parameters:
+        - *`tensor_dlpack`* (`object`): Object implementing `__dlpack__()`. Must
+          be an Ascend/NPU buffer (e.g. `torch_npu`). CPU / NumPy are rejected.
+          Required.
+        - *`layout_tag`* (`tla.arch.*`): Layout tag such as `tla.arch.RowMajor`,
+          `tla.arch.ColumnMajor`, `tla.arch.zN`. Required.
+        - *`origin_shape`* (`tuple | int | None`): Logical origin as a Python int
+          tree. Optional; derived from the DLPack physical shape and `layout_tag`
+          when omitted. Not a Kernel `tla.make_shape`.
+        - *`assumed_align`* (`int | None`): Reserved; currently unused.
+        - *`stream`* (`int | None`): Passed to `__dlpack__(stream=...)`. Default
+          `-1` (no stream sync). `None` omits the `stream` argument.
+        - *`element_type`* (`type | None`): Optional override for the element
+          type inferred from DLPack. Default `None` keeps the DLPack type.
+          Use when DLPack cannot express the real type (e.g. fp8): pass
+          `tla.Float8E4M3FN` / `Float8E5M2`. Must have the same per-element
+          bit width as the exported buffer.
 
-    When ``origin_shape`` is omitted, logical ``origin_shape`` is derived from the
-    DLPack physical shape/strides and ``layout_tag``. For dense 2-D buffers the
-    physical storage must match ``basic_matmul`` preparation: ``tensor.contiguous()``
-    for ``RowMajor``, or ``tensor.permute(1, 0).contiguous()`` for ``ColumnMajor``
-    (row-major physical on the permuted shape). When ``origin_shape`` is provided
-    it is used directly and DLPack stride derivation is skipped. Shape / stride metadata
-    come from the logical origin and ``layout_tag`` via layout remap, not from raw
-    DLPack fields. Use :meth:`_Tensor.mark_layout_dynamic` /
-    :meth:`_Tensor.mark_compact_shape_dynamic` when dynamic layout metadata is required.
+        Constraints:
+        - Ownership follows the DLPack consumer contract: the capsule is consumed
+          and its deleter runs when the returned tensor is destroyed. A reference
+          to `tensor_dlpack` is also retained, so a temporary source such as
+          `from_dlpack(x.contiguous().to(device), ...)` is safe.
+        - A capsule is single-use; passing an already-consumed capsule raises
+          `RuntimeTensorError`. Call `from_dlpack` again for another binding.
+        - 2-D `RowMajor` requires `tensor.contiguous()`. 2-D `ColumnMajor`
+          requires `tensor.permute(1, 0).contiguous()`. A mismatch raises
+          `RuntimeTensorError`. Providing `origin_shape` skips that check.
+        - Default layout is static. Call `mark_layout_dynamic` /
+          `mark_compact_shape_dynamic` for dynamic extents.
+        - When `element_type` is set, its per-element bit width must match the
+          exported DLPack buffer.
 
-    Ownership follows the DLPack consumer contract: the exported capsule is consumed
-    (renamed to ``used_dltensor``) and its ``DLManagedTensor`` deleter is called when
-    the returned tensor is destroyed, so the allocation lives exactly as long as the
-    tensor pointing at it. A reference to ``tensor_dlpack`` is retained as well, which
-    covers producers whose deleter is a no-op. A temporary source such as
-    ``tla.from_dlpack(x.contiguous().to(device), ...)`` is therefore safe.
-
-    Because the capsule is consumed, it cannot be handed to a second consumer: a
-    capsule is single-use, and passing an already-consumed one raises
-    :class:`RuntimeTensorError`. Call ``__dlpack__()`` again (or ``from_dlpack``
-    again on the same producer) for another binding.
-
-    ``element_type`` overrides the element type derived from the DLPack dtype,
-    for formats DLPack cannot describe. The override must have the same storage
-    width as the exported dtype, so shape and stride derivation is unaffected.
-    torch cannot export fp8 over DLPack at all, so an fp8 buffer is handed over
-    as its ``int8`` view plus ``element_type=tla.Float8E4M3FN`` / ``Float8E5M2``.
+        Example:
+        ```python
+        tx = from_dlpack(x.contiguous(), layout_tag=tla.arch.RowMajor)
+        ty = from_dlpack(
+            y.permute(1, 0).contiguous(),
+            layout_tag=tla.arch.ColumnMajor,
+        )
+        ```
     """
     from ..base_dsl.runtime.dlpack_types import DLDataTypeCode
     from ..base_dsl.typing import (
@@ -817,18 +866,43 @@ def make_fake_tensor(
     coord: Iterable[Any] | None = None,
     assumed_align: int | None = None,
 ) -> _Tensor:
-    """Create a metadata-only Host fake tensor (no device buffer).
+    """Directory: Host Tensor / Binding
+    Description:
+        Build a metadata-only Host tensor with no device buffer (`data_ptr == 0`).
+        Use this as a `tla.compile` type sample when no NPU is needed. Bind real
+        buffers with `from_dlpack`.
 
-    Always unbound: ``data_ptr`` is forced to ``0`` and the tensor is not
-    externally bound. Use :func:`from_dlpack` for real NPU buffers.
+        Parameters:
+        - *`dtype`*: Element type such as `tla.Float16` / `tla.Float32`. Required.
+        - *`shape`* (`int | tuple`): Logical shape tree (nested tuples for zN
+          physical layouts). Required.
+        - *`stride`* (`int | tuple`): Stride tree; structure must match `shape`.
+          Required.
+        - *`layout_tag`*: `tla.arch` tag. Optional; default `tla.arch.RowMajor`.
+        - *`addrspace`*: Address space. Optional; default `AddressSpace.gm`.
+        - *`origin_shape`* (`int | tuple | None`): Logical origin. Optional;
+          defaults to `shape`.
+        - *`coord`* (`int | tuple | None`): Coordinate tree. Optional; derived
+          from the layout when omitted (typically zeros).
+        - *`assumed_align`* (`int | None`): Reserved; currently unused.
 
-    Positional arguments are ``(dtype, shape, stride)``. ``layout_tag`` defaults
-    to ``tla.arch.RowMajor``. Explicit ``shape`` / ``stride`` are kept as given
-    (no layout remap). ``origin_shape`` defaults to ``shape`` when omitted.
+        Constraints:
+        - `shape` / `stride` / `origin_shape` / `coord` are Python int trees,
+          not Kernel `tla.make_shape` / `tla.make_stride` / `tla.make_coord`.
+        - Always unbound; cannot be launched until replaced by `from_dlpack`.
+        - Explicit `shape` / `stride` are kept as given (no layout remap).
 
-    Opens an internal capture session so callers only use this helper.
-    Host args are int / nested-int trees (not Kernel ``make_shape`` /
-    ``make_coord`` / ``make_stride``).
+        Example:
+        ```python
+        fa = make_fake_tensor(tla.Float16, (128, 64), (64, 1))
+        fzn = make_fake_tensor(
+            tla.Float16,
+            ((16, 2), (16, 4)),
+            ((16, 256), (1, 512)),
+            layout_tag=tla.arch.zN,
+            origin_shape=(32, 64),
+        )
+        ```
     """
     from ..runtime import _eager_capture
 

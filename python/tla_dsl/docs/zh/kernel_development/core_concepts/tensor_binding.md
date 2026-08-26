@@ -4,7 +4,7 @@ nav_order: 40
 
 # DSL Tensor 接入
 
-本文说明如何在 Host 侧得到可供 `tla.compile` / 启动使用的 `tla.Tensor`：用 [DLPack](https://github.com/dmlc/dlpack) 的 `from_dlpack`（`torch` / `torch_npu`）绑定真实缓冲，或用 `make_fake_tensor` 造不带设备指针的类型样本。静态 / 动态 layout 见 [DSL Layout](layout.md)。
+本文说明如何在 Host 侧得到可供 `tla.compile` / 启动使用的 `tla.Tensor`：用 [DLPack](https://github.com/dmlc/dlpack) 的 `from_dlpack`（`torch` / `torch_npu`）绑定真实缓冲，或用 `make_fake_tensor` 造不带设备指针的类型样本。静态 / 动态 layout 见 [DSL Layout](layout.md)。接口完整说明见 [Host API 参考](../../api/host_api_reference.md)。
 
 ---
 

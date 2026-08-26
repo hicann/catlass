@@ -1158,7 +1158,12 @@ class Float8E5M2(
 
 
 class Constexpr(Generic[_T]):
-    """Type marker for compile-time-only frontend parameters."""
+    """Annotation marker for compile-time-only kernel / dataclass fields.
+
+    Written as ``tla.Constexpr[T]``. Semantics live in the Python syntax guide
+    and the ``kernel`` / ``dataclass`` Host API type tables — not a callable
+    Host entry.
+    """
 
     @classmethod
     def is_constexpr_annotation(cls, annotation: Any) -> bool:

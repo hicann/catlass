@@ -195,6 +195,36 @@ class TlaJitFunction:
     def compile(
         self, *, type_args: Sequence[Any] | None = None, **kwargs: Any
     ) -> TlaKernelArtifact:
+        """Directory: Compile and Launch / Compile
+        Description:
+            Compile this `@tla.kernel` function and return a `TlaKernelArtifact`.
+            Use `tla.compile(fn, *args, options=...)` as the usual Host entry; call
+            `.compile()` only when you already hold a `TlaJitFunction` and need the
+            raw `TlaKernelArtifact`.
+
+            Parameters:
+            - *`type_args`* (`Sequence[Any] | None`): Host tensors / scalars used as
+              compile type samples. Optional; default `None` (no tensor
+              specialization).
+            - *`kwargs`*: Host compile kwargs. Pass `options="--npu-arch 3510"` to
+              select the public chip name. Cache / IR-dump knobs use `CATLASS_DSL_*`
+              environment variables.
+
+            Constraints:
+            - `type_args` are compile-time type samples; they need not be bound NPU
+              buffers (`make_fake_tensor` is valid).
+            - Pass the public chip name with `options="--npu-arch 3510"`;
+              unsupported tokens raise at compile time.
+
+            Example:
+            ```python
+            artifact = my_kernel.compile(
+                type_args=[tx, ty],
+                options="--npu-arch 3510",
+            )
+            ```
+
+        """
         runtime = _runtime.runtime_options_from_kwargs(kwargs)
         return _runtime.compile_kernel(
             self.fn,
@@ -221,6 +251,27 @@ class TlaJitFunction:
         return self._mlir
 
     def dump_mlir(self, *, type_args: Sequence[Any] | None = None) -> str:
+        """Directory: Compile and Launch / Inspect
+        Description:
+            Return the TLA IR (`tlair`) MLIR text for this kernel. Does not compile
+            to a device binary and does not launch.
+
+            Parameters:
+            - *`type_args`* (`Sequence[Any] | None`): Host tensors / scalars used as
+              type samples, same as `.compile()`. Optional; default `None`.
+
+            Constraints:
+            - `type_args` follow the same rules as `.compile()`.
+            - The returned string is frontend TLA IR (`tlair`), not the HIVM/LLVM
+              form stored on `TlaKernelArtifact.lowered_llvm`.
+
+            Example:
+            ```python
+            text = my_kernel.dump_mlir(type_args=[fa, fb])
+            print(text[:500])
+            ```
+
+        """
         base_dsl = self._base_dsl or BaseDSL()
         if type_args is None and self._mlir is not None:
             return self._mlir
@@ -256,10 +307,48 @@ def kernel(
     *,
     auto_sync: str | None = None,
 ) -> TlaJitFunction | Callable[[Callable[..., Any]], TlaJitFunction]:
-    """Decorate a Tla kernel entry point.
+    """Directory: Decorators
+    Description:
+        Mark a Python function as a TLA kernel entry. The function body is not
+        executed on the Host. Returns a `TlaJitFunction`. Calling that object
+        returns a `KernelLauncher` without launching; call the launcher or
+        `.launch(...)` to compile and run.
 
-    By default, local synchronization remains explicit. ``auto_sync="v0"``
-    enables the first version of automatic local mutex insertion.
+        Parameters:
+        - *`fn`* (`Callable[..., Any] | None`): The function being decorated.
+          Use `@tla.kernel` or `@tla.kernel(auto_sync=...)`; call `tla.kernel(fn)`
+          only when decorator syntax is unavailable.
+        - *`auto_sync`* (`str | None`): Optional. `"v0"` inserts automatic local
+          mutexes. Default `None` (synchronization stays explicit).
+
+        Constraints:
+        - The decorated function must not be defined with Python `async def`.
+        - `auto_sync` must be `"v0"` or `None`.
+        - Kernel parameter types:
+
+          | Kind | Types |
+          | --- | --- |
+          | Tensor | `tla.Tensor` |
+          | Python scalars | `bool` / `int` / `float` |
+          | `tla` scalars | `Bool`, `Int8/16/32/64`, `UInt8/16/32/64`, `Float16/32`, `BFloat16` |
+          | Compile-time | `tla.Constexpr[...]` |
+          | Struct | `@dataclass` whose fields are among the above |
+
+        Example:
+        ```python
+        @tla.kernel
+        def vadd(src: tla.Tensor, dst: tla.Tensor) -> None:
+            with tla.vector():
+                tla.copy(src, dst)
+
+        @tla.kernel(auto_sync="v0")
+        def vadd_auto(src: tla.Tensor, dst: tla.Tensor) -> None:
+            with tla.vector():
+                tla.copy(src, dst)
+
+        vadd(tx, ty, options="--npu-arch 3510")(block_num=1)
+        ```
+
     """
 
     if auto_sync not in (None, "v0"):

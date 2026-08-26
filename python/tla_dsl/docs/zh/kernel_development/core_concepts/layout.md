@@ -4,7 +4,7 @@ nav_order: 30
 
 # DSL Layout
 
-本文介绍静态与动态 layout 的含义、如何把 Host tensor 设成动态 layout，以及在 Kernel 中如何编程。`from_dlpack` 等接入方式见 [DSL Tensor 接入](tensor_binding.md)。
+本文介绍静态与动态 layout 的含义、如何把 Host tensor 设成动态 layout，以及在 Kernel 中如何编程。`from_dlpack` 等接入方式见 [DSL Tensor 接入](tensor_binding.md)；`mark_*_dynamic` 等接口见 [Host API 参考](../../api/host_api_reference.md)。
 
 ---
 

@@ -24,7 +24,7 @@ CATLASS DSL 采用Python作为kernel描述语言，但由于NPU架构、性能�
 | 类别 | 判定 | 例子 |
 | --- | --- | --- |
 | 静态 | 编译期确定 | 字面量、`tla.Constexpr[T]` 参数、`tla.const_expr(...)` 的值 |
-| 动态 | 运行时确定 | 张量元素、`tla.arch.block_idx()`、动态循环的循环变量及其运算结果（运行时变量类型为 `tla.Int32`/`tla.Bool` 等 `tla.*` 标量类型） |
+| 动态 | 运行时确定 | 张量元素、`tla.arch.block_idx()`、`tla.arch.block_num()`、动态循环的循环变量及其运算结果（运行时变量类型为 `tla.Int32`/`tla.Bool` 等 `tla.*` 标量类型） |
 
 由此区分两类控制流：
 
@@ -70,6 +70,19 @@ kernel 中出现的普通 Python 函数（模块级函数、不在白名单里�
         tla.make_coord(7, 0)
         tla.make_coord(8, 0)
     ```
+
+### 编译期展开
+
+需要小规模、有意的编译期展开时，使用 `tla.range_constexpr(...)`。边界须为编译期 Python 整数（也可来自 `tla.as_numeric(...)` 等编译期 Numeric 值）；Python 在构建 kernel 时执行循环并展开循环体。迭代次数达到 64 次及以上时，CATLASS 会在展开前发出一条 `DSLOptimizationWarning`，但**仍会继续展开**。不需要展开时应优先使用 `range(...)` 或 `tla.range(...)`。
+
+```python
+@tla.kernel
+def static_stages(count: tla.Constexpr[int]) -> None:
+    for stage in tla.range_constexpr(count):
+        emit_stage(stage)
+```
+
+编译期 `while` 使用 `while tla.const_expr(condition):`，告警行为相同；条件写错可能导致编译无法终止，有界重复更推荐 `tla.range_constexpr(...)`。
 
 ### 规划中的语义变更
 

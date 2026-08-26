@@ -8,7 +8,9 @@ CATLASS DSL 是 CATLASS 的 Python 前端。它在 AscendNPU-IR 的基础上构�
 
 - [环境准备](docs/zh/dsl_development/build_guide/index.md)：环境要求及安装入口。
 - [编译与测试](docs/zh/dsl_development/build_guide/index.md)：构建、pytest、lit 和端到端用例。
-- [API 文档](docs/zh/api/generate_api_docs.md)：生成并预览 API 文档。
+- [Host API 参考](docs/zh/api/host_api_reference.md)：Host 侧 `@tla.kernel`、`tla.compile` / 启动、Host tensor。
+- [Kernel API 参考](docs/zh/api/kernel_api_reference.md)：Kernel 侧 Core API。
+- [API 文档生成](docs/zh/api/generate_api_docs.md)：从源码 docstring 重新生成英文 API 参考。
 - [AscendNPU-IR 构建](docs/zh/dsl_development/build_guide/ascend_npu_ir.md)：手动构建AscendNPU-IR。
 - [手动 CMake 构建](docs/zh/dsl_development/advanced/manual_cmake_build.md)：直接配置 `csrc/mlir` 的进阶用法。
 

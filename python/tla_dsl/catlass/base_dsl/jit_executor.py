@@ -103,6 +103,43 @@ class TlaJitExecutor:
         args: Sequence[Any] | None = None,
         **kwargs: Any,
     ) -> TlaExecutionResult:
+        """Directory: Compile and Launch / Launch
+        Description:
+            Launch a compiled kernel on the NPU after `tla.compile`, passing runtime
+            kernel arguments and launch options (for example `block_num`, `stream`).
+
+        Parameters:
+            - *`launch_args`* (`Any`): Positional runtime kernel arguments matching
+              the `@tla.kernel` signature (bound Host tensors, scalars, or
+              `@dataclass` instances). Mutually exclusive with `args=`.
+            - *`block_num`* (`int | None`): Number of blocks to launch. Optional;
+              default `1`. Must be an `int` when provided.
+            - *`args`* (`Sequence[Any] | None`): Explicit runtime argument sequence.
+              Optional; default `None`. Cannot be combined with non-empty
+              `*launch_args`.
+            - *`stream`* (`Any`, via `**kwargs`): Optional ACL stream handle (often
+              an `int`). When omitted, uses `torch.npu.current_stream` if available;
+              otherwise set `stream=` explicitly or `CATLASS_DSL_NPU_DEVICE`.
+
+        Constraints:
+            - `artifact(...)` and `.launch(...)` share the same runtime rules.
+            - `*launch_args` and `args=` must not both be non-empty
+              (`TlaUnsupportedAbiError`).
+            - Launch args must be bound NPU buffers for tensors (`from_dlpack`);
+              `make_fake_tensor` samples are for compile only.
+            - `block_num` must be an `int` (default `1`).
+
+        Example:
+        ```python
+        artifact = tla.compile(vadd, tx, ty, options="--npu-arch 3510")
+        artifact(tx, ty, block_num=1)
+        # same as:
+        artifact.launch(tx, ty, block_num=1)
+        # or pass args explicitly:
+        artifact.launch(args=(tx, ty), block_num=1)
+        ```
+
+        """
         from ..execution import (
             TlaRuntimeUnavailableError,
             TlaUnsupportedAbiError,

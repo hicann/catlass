@@ -5074,6 +5074,11 @@ def range_constexpr(
         Constraints:
         - Must be called inside a `@tla.kernel`-decorated kernel function.
         - Bounds and step must be compile-time constants for unrollable loops.
+        - Bounds may come from compile-time Numeric values (for example via
+          `tla.as_numeric(...)`).
+        - Emits `DSLOptimizationWarning` when the loop has 64 or more
+          iterations; expansion continues. Prefer `tla.range(...)` for large
+          counted loops.
 
         Example:
         ```python
@@ -5226,6 +5231,8 @@ def mmad(
         Constraints:
         - Must be called inside a `@tla.kernel`-decorated kernel function.
         - Must be called inside `tla.cube()`; `acc`/`lhs`/`rhs` must be matching L0 tiles.
+        - Supported element-type routes include `f16`/`bf16`/`f32` pairs and any
+          `f8e4m3fn` / `f8e5m2` operand pairing, all accumulating into fp32 on L0C.
         - `init_c` accepts only a Python `bool` or an `i1` SSA value.
         - Unknown keyword arguments are not accepted; passing any raises an error.
 
@@ -7432,9 +7439,9 @@ Parameters:
   - `sync_threads()`: Barrier across threads of the enclosing SIMT
     `tla.vec.func` (only inside `mode="simt"`).
   - `get_capacity_in_bytes(mem_scope)`: Byte capacity of an on-chip memory
-    space for the compile target. Takes a `tla.arch` memory-scope token (`L1` /
-    `L0A` / `L0B` / `L0C` / `UB`). Returns a plain `int`;
-    valid on host and inside a kernel (folds to a constant).
+    space for the compile target. Takes a `tla.AddressSpace` token
+    (`tla.AddressSpace.l1` / `l0a` / `l0b` / `l0c` / `ub`). Returns a plain
+    `int`; valid on host and inside a kernel (folds to a constant).
 
 Constraints:
 - Layout tags / pipe identifiers / memory-scope tokens are ordinary attributes

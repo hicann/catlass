@@ -771,11 +771,52 @@ _DATACLASS_DEFAULT_ONLY_PARAMS: tuple[tuple[str, object], ...] = (
 
 
 def _validate_dataclass_kernel_arg(instance: Any) -> None:
-    """Reject dataclasses whose stdlib options were customized beyond frozen/kw_only.
+    """Directory: Decorators
+    Description:
+        Pack Host-side kernel arguments with the Python stdlib `@dataclass`.
+        Instances created on the Host can be passed to `tla.compile` / launch;
+        fields may also be constructed inside a kernel.
 
-    The TLA frontend unpacks dataclass fields as kernel arguments and assumes the
-    default dataclass semantics; options such as ``slots=True`` or ``init=False``
-    would silently diverge from that, so they are rejected at compile time.
+    Parameters:
+        - *`frozen`* (`bool`): If `True`, instances are immutable. Default
+          `False`.
+        - *`kw_only`* (`bool`): If `True`, fields must be passed by keyword.
+          Default `False`.
+
+    Constraints:
+        - For kernel arguments, only `frozen` / `kw_only` may be set; other
+          stdlib options such as `slots=True` or `init=False` raise at compile
+          time.
+        - Supported field types:
+
+          | Kind | Types | Constraints |
+          | --- | --- | --- |
+          | Tensor | `tla.Tensor` | No dynamic-GM; use a static tensor field or a top-level tensor argument |
+          | Python scalars | `bool` / `int` / `float` | — |
+          | `tla` scalars | `Bool`, `Int8/16/32/64`, `UInt8/16/32/64`, `Float16/32`, `BFloat16` | — |
+          | Compile-time | `tla.Constexpr[...]` | Not in kernel ABI / IR; read-only inside the kernel |
+
+    Example:
+    ```python
+    from dataclasses import dataclass
+    import catlass.tla as tla
+
+    @dataclass(frozen=True, kw_only=True)
+    class TilingData:
+        TILE_M: tla.Constexpr[int]
+        tiling_int: int
+        out: tla.Tensor
+
+    @tla.kernel
+    def struct_arg_kernel(tiling: TilingData) -> None:
+        # TILE_M is a compile-time constant; tiling_int is a runtime scalar.
+        ...
+
+    tiling = TilingData(TILE_M=128, tiling_int=64, out=tout)
+    artifact = tla.compile(struct_arg_kernel, tiling, options="--npu-arch 3510")
+    artifact(tiling, block_num=1)
+    ```
+
     """
     cls = type(instance)
     params = getattr(cls, "__dataclass_params__", None)
