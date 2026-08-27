@@ -50,7 +50,6 @@ SymmMatmul 所涉及的关键模板参数如下：
 | `LayoutC` | 输出矩阵排布方式 | `layout::RowMajor` |
 | `ArchTag` | 目标架构 | `Arch::AtlasA2` |
 
-
 ## 3. 约束说明
 
  - 输入矩阵均为 fp32，对称矩阵的无效三角区域在 host 侧通过镜像补全。
@@ -71,7 +70,6 @@ m, n, k, device_id, symm_side, symm_fill
 ```
 
 原因是对称矩阵乘不仅有矩阵乘本身的 shape，还需要描述：
-
 
 1. 对称矩阵在左边还是右边；
 2. 对称矩阵有效存储区域是上三角还是下三角。
@@ -117,7 +115,6 @@ C: M x N
 
 - upper 模式：保留上三角，用上三角补下三角；
 - lower 模式：保留下三角，用下三角补上三角。
-
 
 ### 4.2 Kernel 层
 
@@ -265,7 +262,8 @@ Gemm::Block::BlockMmadPingpongSymmRightTla
    虽然判断逻辑形式相似，但实际涉及的 buffer、layout、copy primitive、MMAD operand 类型不同。因此 block 层保留两个实现更清晰，也更便于分别调试和优化。
 
 ### 4.4 DispatchPolicy 设计
-#### MmadPingpongSymmLeft/Right模板参数含义：
+
+#### MmadPingpongSymmLeft/Right模板参数含义
 
 | 参数 | 说明 | 当前样例取值 |
 |---|---|---|
@@ -301,6 +299,7 @@ l0BTensorList[STAGES]    l0BEventList[STAGES]
 ```
 
 event 按流水方向配对，实现阶段间同步与切换：
+
 - `l1AEvent` / `l1BEvent`：MTE2 ↔ MTE1（GM→L1 完成后通知 L1→L0 可消费）
 - `l0AEvent` / `l0BEvent`：M ↔ MTE1（L1→L0 完成后通知 MMAD 可消费，MMAD 完成后通知可写下一轮）
 - 对角 tile 在 L1 补全完成后才释放 event 给 MTE1，确保 MTE1 消费的是完整对称 tile。
@@ -358,12 +357,11 @@ using L0TileShape = Shape<256, 128, 32>;
 
 此外，对称矩阵乘只将上三角（或下三角）作为有效数据来源：direct 路径从有效三角区域直读，transpose 路径将位于无效三角区域的 tile 重定向到转置后的有效三角位置读取。这意味着 GM 中对称矩阵的实际 "热数据" 仅集中在有效三角区域（约为完整矩阵的一半），缩小了 GM→L1 搬运时的数据工作集，提高了 L2 cache 的命中率。
 
-
 ## 6. 使用示例
 
 ### 6.1 编译
 
-```
+```bash
 bash scripts/build.sh 75_symm
 ```
 
