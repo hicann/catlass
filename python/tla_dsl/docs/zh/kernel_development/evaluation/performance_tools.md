@@ -27,7 +27,7 @@ nav_order: 20
 ### 基础依赖使能
 
 在进行 DSL 开发与测试前，请先行确认基础环境已准备完毕。详细步骤请参考 [快速上手](../../../../../../docs/zh/1_Practice/01_quick_start.md)，完成 CANN 的下载安装与环境变量使能。
-DSL 的底层编译依赖于 AscendNPU-IR。在执行后续编译操作前，请参阅 [tla_dsl README](../../../../../tla_dsl/README) 并按该文档指引完成至 [运行测试](../../../../../tla_dsl/README.md#快速开始) 相关内容。
+DSL 的底层编译依赖于 AscendNPU-IR。在执行后续编译操作前，请参阅 [环境准备](../../../../docs/zh/dsl_development/build_guide/index.md) 并按该文档指引完成至 [运行测试用例](../../../../docs/zh/dsl_development/build_guide/index.md#运行测试用例) 相关内容。
 
 ## 用msProf进行单算子性能分析
 
@@ -49,7 +49,7 @@ msprof op --application="python examples/end_to_end/basic_mixed/basic_mixed.py"
 | --- | --- | --- |
 | `-h`, `--help` | 显示帮助信息并退出 | `msprof op -h` |
 | `--application` | 指定在Device上执行的应用。指定可执行文件/执行指令。 | `msprof op --application="python examples/end_to_end/basic_mixed/basic_mixed.py"`
-| `--launch-count` | 可选参数，表示循环执行特定数量的特定kernel进行性能数据采集并计算平均值。(*需配合 --kernel-name 参数指定目标算子使用。如果不配置该参数，只会采集一组数据。*) | `msprof op --application="python examples/end_to_end/basic_mixed/basic_mixed.py" --kernel-name=basic_mixed --launch-count=10` |
+| `--launch-count` | 可选参数，表示循环执行特定数量的特定kernel进行性能数据采集并计算平均值（需配合 --kernel-name 参数指定目标算子使用。如果不配置该参数，只会采集一组数据）。| `msprof op --application="python examples/end_to_end/basic_mixed/basic_mixed.py" --kernel-name=basic_mixed --launch-count=10` |
 | `--warm-up` | 可选参数，表示预热次数（解决芯片未提频问题）<br>如果不配置该参数，默认预热次数值为5。 | `msprof op --application="python examples/end_to_end/basic_mixed/basic_mixed.py" --warm-up=20` |
 | `--replay-mode` | 可选参数，指定算子数据采集的重放模式，默认为 kernel。<br>kernel：核函数级重放，对指定采集范围的单个算子核函数多次重放。<br>application：应用级重放，整个应用进行多次重放。<br>range：范围级重放，指定范围内的多算子整体多次重放（需配合 --mstx=on 使用）。 | `msprof op --application="python examples/end_to_end/basic_mixed/basic_mixed.py" --replay-mode=kernel` |
 
@@ -93,22 +93,30 @@ msprof op --application="python examples/end_to_end/basic_mixed/basic_mixed.py"
 ```bash
 export LD_LIBRARY_PATH=/usr/local/Ascend/ascend-toolkit/latest/tools/simulator/Ascendxxxyy/lib:$LD_LIBRARY_PATH
 ```
+* ⚠ 注意事项:
+  * 上述命令中提到的 Ascendxxxyy 为版本占位符，实际可通过执行以下命令获取（*预期输出为具体的 SoC 版本名称*）：
+    ```bash
+    python3 -c "import acl; print(acl.get_soc_name())"
+    ```
 
-接下来执行下面这条命令（以basic_mixed算子为例）：
+  * 例如，当输出显示 Ascendxxxyy 时，上述指令正确写法为：
+    ```bash
+    export LD_LIBRARY_PATH=/usr/local/Ascend/ascend-toolkit/latest/tools/simulator/Ascendxxxyy/lib:$LD_LIBRARY_PATH
+    ```
 
+接下来执行下面这条命令（以下以basic_mixed算子为例）：
 ```bash
-
-msprof op simulator --soc-version=${SOC_VERSION} --core-id=0 --kernel-name=basic_mixed python3 ./examples/end_to_end/basic_mixed/basic_mixed.py --run
+msprof op simulator --soc-version=Ascendxxxyy --core-id=0 --kernel-name=basic_mixed python3 ./examples/end_to_end/basic_mixed/basic_mixed.py
 ```
 
 * **关键参数解析**：
-  * --soc-version：必填。通过 `SOC_VERSION` 明确指定目标 NPU 的芯片版本，仿真器将据此加载对应的硬件时钟周期与内存带宽模型。
+  * --soc-version：必填。明确指定目标版本（如 Ascendxxxyy，获取方式同上），仿真器将据此加载对应的硬件时钟周期与内存带宽模型。
 
   * --core-id：必填。指定仿真的目标核心编号（通常单核验证指定为 0 即可）。
 
   * --kernel-name：强烈建议配置。由于一个 Python 脚本中可能触发大量系统底层的 Kernel 运行，使用该参数可以通过名称前缀匹配（如指定 basic_mixed）精准抓取目标算子。这不仅能过滤掉无关算子的噪音，还能大幅缩短仿真所需的等待时间。
 
-* ⚠ 注意事项。
+* ⚠ 注意事项
   * **命令结构简化**：在当前版本中，推荐直接将需要执行的脚本及参数追加在 msprof 完整命令的最末尾，无需再使用 --application 参数进行包裹。
 
      *说明：这是因为目前 msprof 的底层解析行为已全面优化为“原生直传”机制：工具在解析完自身设定的配置选项（options）后，会自动将剩余的全部字符串视作用户的目标程序及其附属参数。这种方式不仅在终端敲击时更符合直觉，也从根本上规避了繁琐的字符转义风险。*
