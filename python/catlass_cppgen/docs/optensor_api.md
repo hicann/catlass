@@ -35,6 +35,7 @@ OpTensor(
 ```
 
 **参数说明：**
+
 - `dtype`: tensor 的数据类型（`DataType` 枚举）
 - `layout`: tensor 的布局（`Layout` 对象，如 `RowMajor`、`ColumnMajor`）
 - `shape`: 可选的完整形状。如果不提供，则使用 `layout.shape`。对于 batched tensor，需要显式指定包含 batch 维度的完整 shape
@@ -99,11 +100,13 @@ OpTensor.from_shape_stride(
 ```
 
 **参数说明：**
+
 - `shape`: tensor 的形状（可以是 2D 或 3D，支持 batched）
 - `stride`: tensor 的步长
 - `dtype`: tensor 的数据类型
 
 **说明：**
+
 - 该方法会自动从 `shape` 和 `stride` 推断 `Layout` 类型
 - 对于 batched tensor（3D），只推断内层矩阵的布局
 - 适合在已知 shape 和 stride 但不想实例化实际 tensor 的场景使用
@@ -159,11 +162,13 @@ OpTensor.from_tensor(
 ```
 
 **参数说明：**
+
 - `tensor`: `torch.Tensor` 或 `np.ndarray` 对象
 - `layout`: 可选的 Layout，如果不提供则从 tensor 的 stride 自动推断
 - `dtype`: 可选的 DataType，如果不提供则从 tensor 的 dtype 自动推断
 
 **说明：**
+
 - 该方法会从实际的 tensor 对象中提取 shape、stride、dtype 等信息
 - 如果提供了 `layout` 或 `dtype`，会覆盖从 tensor 推断的值
 - 适合从已有的 tensor 对象创建 `OpTensor`

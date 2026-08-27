@@ -25,7 +25,7 @@ def evg(
 **返回值 `(callback_name, evg_args, evg_str, arg_renames)`：**
 
 | 字段 | 类型 | 说明 |
-|------|------|------|
+| ------ | ------ | ------ |
 | `callback_name` | `str` | 生成的 epilogue callback 名称（固定为 `"EVGResult"`） |
 | `evg_args` | `str` | EVG 参数结构体声明 C++ 代码，包含 `Arguments` 和 `computeLength` |
 | `evg_str` | `str` | EVG Visitor 类型定义 C++ 代码，包含 `VisitorAccLoad`、`VisitorAuxLoad`、`VisitorCompute`、`TreeVisitor`、`TopologicalVisitor` 等 |
@@ -61,7 +61,7 @@ print(evg_str)        # using Result = Catlass::Epilogue::Fusion::VisitorAuStore
 在 `fn_src` 的 `epilogue` 函数中，可使用以下算子：
 
 | 类别 | 写法 | 说明 |
-|------|------|------|
+| ------ | ------ | ------ |
 | add | `accum + bias` | 二元加法 |
 | sub | `accum - bias` | 二元减法 |
 | mul | `accum * scale` | 二元乘法 |
@@ -86,7 +86,7 @@ print(evg_str)        # using Result = Catlass::Epilogue::Fusion::VisitorAuStore
 
 在`catlass_cppgen`中，要使用 EVG 特性，有下述三种办法：
 
- - 在创建kernel时直接通过 `Gemm(evg_config=...)` 传入，参考示例：
+- 在创建kernel时直接通过 `Gemm(evg_config=...)` 传入，参考示例：
 
 ```python
 evg_config = {
@@ -96,7 +96,8 @@ evg_config = {
 gemm = Gemm(..., evg_config=evg_config, A=a, B=b)
 
 ```
- - 对已有 Kernel 直接调用 `to_evg(evg_config)`，参考示例：
+
+- 对已有 Kernel 直接调用 `to_evg(evg_config)`，参考示例：
 
 ```python
 gemm = Gemm(...)
@@ -104,4 +105,4 @@ gemm = Gemm(...)
 gemm = gemm.to_evg(evg_config=evg_config)
 ```
 
- - 直接调用`evg(fn_src, example_inputs)` 生成 EVG 定义，如上述[使用示例](#使用示例)所示。
+- 直接调用`evg(fn_src, example_inputs)` 生成 EVG 定义，如上述[使用示例](#使用示例)所示。
