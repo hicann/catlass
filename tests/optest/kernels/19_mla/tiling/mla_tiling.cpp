@@ -154,10 +154,17 @@ void GetTilingHead(const MLAInfo &mlaInfo, uint32_t *tilingHost, const uint32_t 
 
 uint32_t GetKVSplitParam(const MLAInfo &mlaInfo, uint32_t &blockDim, uint32_t *tilingHost, const std::vector<uint32_t>& sortedIndices)
 {
-    bool isKVSplit = (tilingHost[TILING_BATCH] <= blockDim * SPLITKV_RATION && tilingHost[TILING_MAX_QSEQLEN] == 1);
+    // Only split KV when the longest sequence is long enough to be worth distributing across
+    // cores (>= blockDim * KV_SEQLEN_SLICE * 2). For short sequences, splitting adds extra
+    // flash-decoding accumulation that degrades the max/mean relative error (MARE/MERE) on
+    // near-zero output elements without any performance benefit. This matches the reference
+    // implementation's split decision (blockDim = AIC core count = 20 here).
+    bool isKVSplit = (tilingHost[TILING_MAX_KVSEQLEN] >= blockDim * KV_SEQLEN_SLICE * NUM2) &&
+                     (tilingHost[TILING_BATCH] <= blockDim * SPLITKV_RATION && tilingHost[TILING_MAX_QSEQLEN] == 1);
 
     if (!isKVSplit) {
         tilingHost[TILING_KVCORENUM] = 1;
+        tilingHost[TILING_PROCESSNUM] = 0;
         for (int32_t seqIdx = 0; seqIdx < mlaInfo.batch; seqIdx++) {
             uint32_t sortSeqIdx = sortedIndices[seqIdx];
             uint32_t kvSeqLen = *(mlaInfo.kvSeqLen + sortSeqIdx);
@@ -168,22 +175,82 @@ uint32_t GetKVSplitParam(const MLAInfo &mlaInfo, uint32_t &blockDim, uint32_t *t
         return tilingHost[TILING_BATCH];
     }
 
-    uint32_t MAX_KV_SPLIT_NUM = 20;
-    for (int32_t seqIdx = 0; seqIdx < mlaInfo.batch; seqIdx++) {
+    // T+1-style balanced KV split: distribute available cores among the (q==1) decode tasks
+    // by repeatedly splitting the currently heaviest task, with a minimum tokens-per-split floor.
+    // Each batch is one task here (split path requires maxQseqlen == 1).
+    const uint32_t MIN_TOKENS_PER_SPLIT = static_cast<uint32_t>(mlaInfo.blockSize * NUM4);
+    // Cap the per-task split count to a proven-safe value (the original common path always
+    // used 8). This keeps each task's kvSplitCoreNum within the range the flash-decoding
+    // reduction handles correctly, and together with totalAllocated <= blockDim guarantees
+    // sum(kvSplitCoreNum) <= blockDim (i.e. at most one task per core).
+    const uint32_t MAX_SPLIT_PER_TASK = 8;
+    uint32_t taskCount = static_cast<uint32_t>(mlaInfo.batch);
+
+    std::vector<uint32_t> alignedKvLens(taskCount);
+    for (uint32_t seqIdx = 0; seqIdx < taskCount; seqIdx++) {
+        uint32_t sortSeqIdx = sortedIndices[seqIdx];
+        uint32_t kvSeqLen = *(mlaInfo.kvSeqLen + sortSeqIdx);
+        alignedKvLens[seqIdx] = RoundUp(kvSeqLen, static_cast<uint32_t>(mlaInfo.blockSize));
+    }
+
+    std::vector<uint32_t> batchSplitNum(taskCount, 1);
+    uint32_t totalAllocated = taskCount;
+    while (totalAllocated < blockDim) {
+        int32_t maxLoadIdx = -1;
+        uint32_t maxLoad = 0;
+        for (uint32_t i = 0; i < taskCount; i++) {
+            uint32_t currentLoad = alignedKvLens[i] / batchSplitNum[i];
+            uint32_t nextLoad = alignedKvLens[i] / (batchSplitNum[i] + 1);
+            if (batchSplitNum[i] < MAX_SPLIT_PER_TASK && nextLoad >= MIN_TOKENS_PER_SPLIT && currentLoad > maxLoad) {
+                maxLoad = currentLoad;
+                maxLoadIdx = static_cast<int32_t>(i);
+            }
+        }
+        if (maxLoadIdx == -1) {
+            break;
+        }
+        batchSplitNum[maxLoadIdx]++;
+        totalAllocated++;
+    }
+
+    uint32_t MAX_KV_SPLIT_NUM = 1;
+    for (uint32_t num : batchSplitNum) {
+        if (num > MAX_KV_SPLIT_NUM) {
+            MAX_KV_SPLIT_NUM = num;
+        }
+    }
+
+    // Build the cumulative-task prefix sum so the kernel can map process -> (task, kvIdx) tightly.
+    uint32_t cuTaskVal = 0;
+    int32_t cuTaskIdx = 0;
+    tilingHost[CUTASK_START_OFFSET + cuTaskIdx++] = cuTaskVal;
+    for (uint32_t seqIdx = 0; seqIdx < taskCount; seqIdx++) {
         int32_t tilingOffset = seqIdx * TILING_PARA_SIZE + TILING_HEAD_SIZE;
         uint32_t sortSeqIdx = sortedIndices[seqIdx];
         uint32_t kvSeqLen = *(mlaInfo.kvSeqLen + sortSeqIdx);
 
-        uint32_t kvSeqAlign = RoundUp(kvSeqLen, static_cast<uint32_t>(mlaInfo.blockSize));
-        uint32_t kvSeqBlockNum = kvSeqAlign / mlaInfo.blockSize;
-        uint32_t kvBlockPerCore = CeilDiv(kvSeqBlockNum, MAX_KV_SPLIT_NUM);
-        uint32_t kvSplitPerCore = kvBlockPerCore * mlaInfo.blockSize;
-        uint32_t kvSplitCoreNum = CeilDiv(kvSeqLen, kvSplitPerCore);
+        uint32_t kvSplitPerCore;
+        uint32_t kvSplitCoreNum;
+        if (kvSeqLen == 0) {
+            kvSplitPerCore = static_cast<uint32_t>(mlaInfo.blockSize);
+            kvSplitCoreNum = 1;
+        } else {
+            uint32_t allocSplit = batchSplitNum[seqIdx];
+            uint32_t kvSeqAlign = RoundUp(kvSeqLen, static_cast<uint32_t>(mlaInfo.blockSize));
+            uint32_t kvSeqBlockNum = kvSeqAlign / mlaInfo.blockSize;
+            uint32_t kvBlockPerCore = CeilDiv(kvSeqBlockNum, allocSplit);
+            kvSplitPerCore = kvBlockPerCore * mlaInfo.blockSize;
+            kvSplitCoreNum = CeilDiv(kvSeqLen, kvSplitPerCore);
+        }
         tilingHost[tilingOffset + NUM15] = kvSplitPerCore;
         tilingHost[tilingOffset + NUM16] = kvSplitCoreNum;
+        cuTaskVal += kvSplitCoreNum;
+        tilingHost[CUTASK_START_OFFSET + cuTaskIdx++] = cuTaskVal;
     }
+    tilingHost[TILING_PROCESSNUM] = cuTaskVal;
     tilingHost[TILING_KVCORENUM] = MAX_KV_SPLIT_NUM;
     std::cout << "TILING_MAX_KVCORENUM = " << tilingHost[TILING_KVCORENUM] << std::endl;
+    std::cout << "TILING_PROCESSNUM = " << tilingHost[TILING_PROCESSNUM] << std::endl;
 
     // Set lOffsetInfo and OfdOffsetInfo
     AddrOffsets addrOffsets;
@@ -201,7 +268,7 @@ uint32_t GetKVSplitParam(const MLAInfo &mlaInfo, uint32_t &blockDim, uint32_t *t
         addrOffsets.addrOFdSeqOffset += static_cast<uint64_t>(mlaInfo.numHeads * qSeqlen * mlaInfo.embeddingSize);
     }
 
-    return mlaInfo.batch * MAX_KV_SPLIT_NUM;
+    return cuTaskVal;
 }
 
 uint32_t GetKVSplitParamSpec(const MLAInfo &mlaInfo, uint32_t &blockDim, uint32_t *tilingHost, const std::vector<uint32_t>& sortedIndices)
