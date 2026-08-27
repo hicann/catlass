@@ -19,7 +19,6 @@ $$
 
   其中 `A_real`、`A_imag` 是形如 `(m, k)` 的左矩阵实部和虚部，`B_real`、`B_imag` 是形如 `(k, n)` 的右矩阵实部和虚部，`C_real`、`C_imag` 是形如 `(m, n)` 的输出矩阵实部和虚部。
 
-
 ## 2. 参数说明
 
 以下是本样例可执行文件的运行参数：
@@ -31,7 +30,6 @@ $$
 | `k` | 复数矩阵乘中左矩阵 A 的列，也即右矩阵 B 的行 | 正整数 |
 | `deviceId` | 使用的 NPU 卡 ID（默认 0） | 在设备 NPU 有效范围内 |
 | `--datapath` | 输入数据与输出数据目录 | 可选；未指定时仅随机生成输入并统计 kernel 耗时 |
-
 
 ## 3. 代码组织
 
@@ -65,13 +63,13 @@ $$
 
 1. 编译样例代码，并生成相应的算子可执行文件。
 
-    ```
+    ```bash
     bash scripts/build.sh 77_planar_complex_matmul
     ```
 
 2. 切换到可执行文件的编译目录 `output/bin` 下，执行算子样例程序。该方式随机生成输入数据，只输出 kernel 调度路径与平均耗时，不做精度比对。
 
-    ```
+    ```bash
     cd output/bin
     ./77_planar_complex_matmul 256 512 1024 0
     ```
@@ -86,7 +84,7 @@ $$
 
     执行结果中包含如下信息，说明样例执行成功。
 
-    ```
+    ```text
     PlanarComplexGemm dispatch: M=256 N=512 K=1024 ... -> Fused ...
     PlanarComplexGemm: M=256 N=512 K=1024 variant=Fused gemm=... ms (20 iters)
     No --datapath provided, skipping validation.
@@ -94,13 +92,13 @@ $$
 
 3. 在`catlass`目录下，使用 `gen_data_compare.py` 生成输入数据、运行 NPU 可执行文件并与 NumPy golden 结果进行比对。脚本默认从仓库根目录自动定位 `output/bin/77_planar_complex_matmul`，默认在当前目录下生成 `data`、`golden` 目录并在结束后删除；如需指定保存路径可使用 `--save_path`，如需保留可指定 `--clean false`。
 
-    ```
+    ```bash
     python examples/77_planar_complex_matmul/gen_data_compare.py 256 512 1024
     ```
 
     执行结果如下，说明精度比对成功。
 
-    ```
+    ```text
     Data generated: M=256, N=512, K=1024, BLAS threads=8
     ------计算npu------
     ------ 计算相对误差 -----

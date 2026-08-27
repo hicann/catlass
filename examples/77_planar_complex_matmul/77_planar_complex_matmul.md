@@ -17,7 +17,6 @@ $$
 
   其中 `A_real`、`A_imag` 是形如 `(m, k)` 的左矩阵实部和虚部，`B_real`、`B_imag` 是形如 `(k, n)` 的右矩阵实部和虚部，`C_real`、`C_imag` 是形如 `(m, n)` 的输出矩阵实部和虚部。
 
-
 ## 2. 参数说明
 
 以下是本样例可执行文件的运行参数：
@@ -145,7 +144,7 @@ AIV 路径在 Mix kernel prologue 阶段执行取负，AIC 路径通过 `ptrAIma
 
 ```text
 pass1: C_real  = A_real * B_real              (无 atomic)
-pass2: C_real += signed_imag_cross_term    		(atomic add)
+pass2: C_real += signed_imag_cross_term       (atomic add)
 pass3: C_imag  = A_imag * B_real              (无 atomic)
 pass4: C_imag += A_real * B_imag              (atomic add)
 ```
