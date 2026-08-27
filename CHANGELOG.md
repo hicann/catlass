@@ -21,7 +21,7 @@
 - 工具支持
   - 构建体系：基于 AscendNPU-IR 子模块构建，提供 Docker 开发镜像，支持 CANN >= 9.1.0
 - 文档资料
-  - 提供 [CATLASS DSL 文档集](https://gitcode.com/cann/catlass/tree/v2.0.0/python/tla_dsl/docs/)，包含 [Kernel API Reference](https://gitcode.com/cann/catlass/blob/v2.0.0/python/tla_dsl/docs/kernel-api-reference.md)、[DSL Python 语法指南](https://gitcode.com/cann/catlass/blob/v2.0.0/python/tla_dsl/docs/dsl_python_syntax_guide.md)、[BC 后端集成文档](https://gitcode.com/cann/catlass/blob/v2.0.0/python/tla_dsl/docs/bc-backend-integration.md)、[环境变量说明](https://gitcode.com/cann/catlass/blob/v2.0.0/python/tla_dsl/docs/environment_variables.md)及[环境搭建指南](https://gitcode.com/cann/catlass/tree/v2.0.0/python/tla_dsl/docs/dev_guide/00_environment_setup.md)等
+  - 提供 [CATLASS DSL 文档集](https://gitcode.com/cann/catlass/tree/v2.0.0/python/tla_dsl/docs/)，包含 [Kernel API Reference](https://gitcode.com/cann/catlass/blob/v2.0.0/python/tla_dsl/docs/zh/kernel_api_reference.md)、[DSL Python 语法指南](https://gitcode.com/cann/catlass/blob/v2.0.0/python/tla_dsl/docs/zh/dsl_python_syntax_guide.md)、[BC 后端集成文档](https://gitcode.com/cann/catlass/blob/v2.0.0/python/tla_dsl/docs/zh/bc-backend-integration.md)、[环境变量说明](https://gitcode.com/cann/catlass/blob/v2.0.0/python/tla_dsl/docs/zh/environment_variables.md)及[环境搭建指南](https://gitcode.com/cann/catlass/tree/v2.0.0/python/tla_dsl/docs/dev_guide/00_environment_setup.md)等
 
 #### CATLASS C++
 
@@ -81,7 +81,7 @@
 - 工具支持
   - 新增 [算子级测试框架（optest）](https://gitcode.com/cann/catlass/blob/v1.6.0/tests/optest/README.md)，支持 JIT 与 Prebuilt 两种模式，使用弱符号机制统一 prebuilt kernel 加载，并完成 63 个存量及新增样例的 torch_catlass 测试接口接入，覆盖 Matmul、GroupedMatmul、FlashAttention等算子类型
   - [msTuner 工具增强](https://gitcode.com/cann/catlass/blob/v1.6.0/tools/tuner/README.md)：支持 -xasc 编译及 Ascend950 架构寻优
-  - 新增 [Agent Skill 开发工具](https://gitcode.com/cann/catlass/blob/v1.6.0/.agents)，当前具备支持生成样例torch接口、生成样例optest交付件等场景的自动化功能
+  - 新增 [Agent Skill 开发工具](https://gitcode.com/cann/catlass/tree/v1.6.0/.agents)，当前具备支持生成样例torch接口、生成样例optest交付件等场景的自动化功能
   - 新增 CI/构建辅助设施：pre-commit 脚本、依赖描述文件等
 - 文档资料
   - 新增 [EVG 声明式后处理框架文档](https://gitcode.com/cann/catlass/tree/v1.6.0/docs/zh/2_Design/03_evg/01_evg_design.md)
