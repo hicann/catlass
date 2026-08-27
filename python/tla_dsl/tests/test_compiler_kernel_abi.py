@@ -559,17 +559,17 @@ def test_compile_artifact_propagates_and_persists_kernel_abi(
 
     monkeypatch.setattr(execution, "_run_checked", fake_run_checked)
 
-    artifact = execution.compile_kernel(
+    compiled = execution._compile_kernel(
         lambda: None,
         kind="kernel",
         options={},
-        runtime=execution.TlaRuntimeOptions(
+        compile_option=execution.TlaCompileOption(
             cache_enabled=False, cache_dir=tmp_path / "cache"
         ),
     )
-    manifest = json.loads((artifact.cache_dir / "manifest.json").read_text())
+    manifest = json.loads((compiled.artifacts.cache_dir / "manifest.json").read_text())
 
-    assert artifact.kernel_abi == layout
+    assert compiled.execution_args.kernel_abi == layout
     assert manifest["kernel_abi"] == {
         "schema_version": 3,
         "entrypoint": "artifact_kernel",

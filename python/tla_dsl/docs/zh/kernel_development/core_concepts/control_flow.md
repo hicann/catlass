@@ -58,4 +58,7 @@ state = [tla.as_numeric(value) for value in (0, 1)]
 
 ## `@tla.jit`
 
-在 Python 作用域内，`@tla.jit` 是一个普通的编排包装器：它可以调用一个或多个 `@tla.kernel` 启动器，并且不创建 host MLIR、host ABI 或 host 编译缓存条目。`@tla.kernel` 仍然是设备编译入口。
+`@tla.jit` 是 kernel lowering 期间使用的 DSL 辅助函数，可以从
+`@tla.kernel` 中调用，但当前不支持调用或启动 `@tla.kernel`。当前不支持直接调用
+`@tla.kernel`；须先通过 `tla.compile(kernel, *sample_args)` 显式编译，
+再调用返回的编译函数。

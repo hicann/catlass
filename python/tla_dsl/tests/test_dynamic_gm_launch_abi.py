@@ -12,6 +12,9 @@ compiler_bridge = pytest.importorskip(
 )
 execution = pytest.importorskip("catlass.execution", exc_type=ImportError)
 tla = pytest.importorskip("catlass.tla", exc_type=ImportError)
+jit_executor = pytest.importorskip(
+    "catlass.base_dsl.jit_executor", exc_type=ImportError
+)
 
 _UNIFIED_FIELDS = (
     "allocated",
@@ -189,7 +192,9 @@ def _two_tensor_memref_field_layout() -> compiler_bridge.KernelAbiLayout:
     )
 
 
-def test_mixed_handoff_uses_logical_abi_count_for_dynamic_gm(tmp_path) -> None:
+def test_mixed_handoff_uses_logical_abi_count_for_dynamic_gm(
+    monkeypatch, tmp_path
+) -> None:
     """Device split funcs expand each dynamic GM to memref+origins; host still
     passes one Tensor per logical arg. Packing must follow ABI logical_index."""
 
@@ -215,28 +220,61 @@ def test_mixed_handoff_uses_logical_abi_count_for_dynamic_gm(tmp_path) -> None:
         "%b: memref<?x?x?x?xf32>, %bo0: index, %bo1: index"
         ') attributes {mix_mode = "mix"} }'
     )
-    artifact = execution.TlaKernelArtifact(
+    kernel_abi = _two_tensor_memref_field_layout()
+    metadata = execution._analyze_artifact_static_metadata("module {}", lowered)
+    assert metadata.logical_mixed_handoff is not None
+    abi_packer = execution._prepare_abi_packer(
+        kernel_abi,
+        expected_entrypoint=metadata.logical_mixed_handoff.entrypoint,
+    )
+    compile_option = execution.TlaCompileOption(kernel_mode="mix")
+    compiled = execution._new_jit_compiled_function(
         cache_key="cache",
         cache_dir=tmp_path,
         tlair_mlir="module {}",
         lowered_llvm=lowered,
-        entrypoint="ignored",
+        entrypoint="basic_mixed",
         compiler_bridge_path=None,
         hivmc_path=tmp_path / "hivmc-a5",
         kernel_binary_path=tmp_path / "kernel.o",
-        kernel_abi=_two_tensor_memref_field_layout(),
+        kernel_abi=kernel_abi,
+        abi_packer=abi_packer,
+        uses_scalar_print=metadata.uses_scalar_print,
+        uses_tensor_print=metadata.uses_tensor_print,
+        logical_mixed_handoff=metadata.logical_mixed_handoff,
+        compile_option=compile_option,
+        pass_ir_dump="",
     )
+    from catlass.base_dsl.runtime import ascend_stream_adapter as stream_mod
 
-    plan = execution._build_kernel_launch_plan(
-        artifact=artifact,
-        runtime=execution.TlaRuntimeOptions(kernel_mode="mix"),
-        launch_args=[_make_tensor(0x1000, 32, 16), _make_tensor(0x2000, 16, 32)],
+    monkeypatch.setattr(stream_mod, "current_device", lambda: 0)
+    monkeypatch.setattr(execution, "load_acl", lambda: None)
+    loads = []
+    monkeypatch.setattr(
+        execution,
+        "load_binary",
+        lambda **kwargs: loads.append(kwargs) or (11, 12),
+    )
+    module = compiled.jit_module
+    assert isinstance(module, jit_executor.JitModule)
+    launches = []
+    monkeypatch.setattr(
+        execution,
+        "launch_kernel",
+        lambda **kwargs: launches.append(kwargs),
+    )
+    compiled(
+        args=[_make_tensor(0x1000, 32, 16), _make_tensor(0x2000, 16, 32)],
         block_num=1,
+        stream=0,
     )
 
-    assert plan.entrypoint == "basic_mixed"
-    assert plan.kernel_mode == "mix"
-    assert len(plan.payload) == 208
-    values = struct.unpack("<26Q", plan.payload)
+    assert module.entrypoint == "basic_mixed"
+    assert module.kernel_mode == "mix"
+    assert loads[0]["kernel_mode"] == "mix"
+    assert len(launches) == 1
+    payload = launches[0]["payload"]
+    assert len(payload) == 208
+    values = struct.unpack("<26Q", payload)
     assert values[0:13] == (0x1000, 0x1000, 0, 32, 16, 1, 1, 16, 1, 1, 1, 32, 16)
     assert values[13:26] == (0x2000, 0x2000, 0, 16, 32, 1, 1, 32, 1, 1, 1, 16, 32)

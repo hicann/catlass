@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import ctypes
 from dataclasses import replace
 from pathlib import Path
 import importlib.util
@@ -9,7 +8,6 @@ import os
 import re
 import struct
 import sys
-import threading
 import types
 
 import pytest
@@ -20,6 +18,9 @@ base_dsl_mod = pytest.importorskip("catlass.base_dsl", exc_type=ImportError)
 compiler_bridge = pytest.importorskip("catlass.compiler_bridge", exc_type=ImportError)
 ascend_runtime = pytest.importorskip(
     "catlass.base_dsl.runtime.ascend", exc_type=ImportError
+)
+jit_executor_mod = pytest.importorskip(
+    "catlass.base_dsl.jit_executor", exc_type=ImportError
 )
 
 
@@ -197,7 +198,7 @@ def test_prepare_hivmc_input_selects_aic_print_tensor_helper(
 
     compiler_input, selected = execution._create_stamped_hivmc_input(
         mlir_path,
-        execution.TlaRuntimeOptions(
+        execution.TlaCompileOption(
             kernel_mode="aic", arch_scope="aic.c310"
         ),
     )
@@ -225,7 +226,7 @@ def test_prepare_hivmc_input_rejects_outdated_print_tensor_helper(
     with pytest.raises(execution.TlaRuntimeUnavailableError, match="ABI marker"):
         execution._create_stamped_hivmc_input(
             mlir_path,
-            execution.TlaRuntimeOptions(
+            execution.TlaCompileOption(
                 kernel_mode="aiv", arch_scope="aiv.c310"
             ),
         )
@@ -271,7 +272,7 @@ def test_prepare_hivmc_input_selects_mixed_split_print_tensor_helper(
 
     _, selected = execution._create_stamped_hivmc_input(
         mlir_path,
-        execution.TlaRuntimeOptions(kernel_mode="mix"),
+        execution.TlaCompileOption(kernel_mode="mix"),
     )
 
     assert selected == (
@@ -706,30 +707,32 @@ def test_public_compile_dry_run_invokes_typed_bridge_and_hivmc_a5(
     monkeypatch.setenv("CATLASS_DSL_CACHE", "0")
     monkeypatch.setenv("CATLASS_DSL_CACHE_DIR", str(tmp_path / "cache"))
 
-    artifact = tla.compile(
+    compiled = tla.compile(
         _zero_arg_tla_kernel,
         options="--npu-arch 3510",
     )
 
-    assert artifact.compiler_bridge_path == bridge_path
-    assert artifact.lowered_llvm == "module { func.func @zero_arg_kernel() }\n"
-    assert artifact.expects_print_tensor is False
-    assert artifact.expects_debug_fifo is False
-    assert artifact.logical_mixed_handoff is None
-    assert artifact._abi_packer is not None
-    assert not (artifact.cache_dir / "lowered.hivmc-input.mlir").exists()
+    assert compiled.artifacts.compiler_bridge_path == bridge_path
+    assert compiled.artifacts.LLVM == "module { func.func @zero_arg_kernel() }\n"
+    assert compiled.jit_module.uses_tensor_print is False
+    assert compiled.jit_module.uses_scalar_print is False
+    assert compiled.jit_module.is_mixed is False
+    assert compiled.execution_args.abi_packer is not None
+    cache_dir = compiled.artifacts.cache_dir
+    assert cache_dir is not None
+    assert not (cache_dir / "lowered.hivmc-input.mlir").exists()
     assert recorded == [
         (
             "hivmc-a5",
             [
                 str(hivm_compile),
-                str(artifact.cache_dir / "lowered.mlir"),
+                str(cache_dir / "lowered.mlir"),
                 "--target=Ascend950PR_9589",
                 "--disable-ffts",
                 "--enable-hivm-compile=False",
                 f"--link-aicore-bitcode={template_bc.resolve()}",
                 "-o",
-                str(artifact.kernel_binary_path),
+                str(compiled.kernel_binary_path),
             ],
         )
     ]
@@ -749,7 +752,7 @@ def test_prepare_hivmc_input_stamps_only_debug_print_mlir(
 
     compiler_input, template_bitcode = execution._create_stamped_hivmc_input(
         mlir_path,
-        execution.TlaRuntimeOptions(kernel_mode="aic", arch_scope="aic.c310"),
+        execution.TlaCompileOption(kernel_mode="aic", arch_scope="aic.c310"),
     )
 
     assert compiler_input != mlir_path
@@ -797,11 +800,11 @@ def test_generated_kernel_bridge_lowers_live_module(monkeypatch, tmp_path) -> No
 
     monkeypatch.setattr(execution, "_run_checked", fake_run_checked)
 
-    execution.compile_kernel(
+    execution.compile_and_cache(
         _zero_arg_kernel,
         kind="kernel",
         options={},
-        runtime=execution.TlaRuntimeOptions(
+        compile_option=execution.TlaCompileOption(
             cache_enabled=False, cache_dir=tmp_path / "cache"
         ),
         type_args=None,
@@ -869,7 +872,7 @@ def test_force_recompile_refreshes_launched_artifact_in_memory_cache(
     _install_fake_launch_context(monkeypatch, device=0, stream=90)
 
     def fake_load_binary(**kwargs):
-        loaded_binaries.append(kwargs["kernel_path"].read_bytes())
+        loaded_binaries.append(kwargs["kernel_binary_path"].read_bytes())
         sequence = len(loaded_binaries)
         return 100 + sequence, 200 + sequence
 
@@ -877,43 +880,59 @@ def test_force_recompile_refreshes_launched_artifact_in_memory_cache(
     monkeypatch.setattr(
         execution,
         "launch_kernel",
-        lambda **kwargs: launched_functions.append(kwargs["function"]),
+        lambda **kwargs: launched_functions.append(kwargs["function_handle"]),
     )
 
-    runtime = execution.TlaRuntimeOptions(
+    compile_option = execution.TlaCompileOption(
         cache_enabled=True, cache_dir=tmp_path / "cache"
     )
-    first = execution.compile_kernel(
+    first = execution.compile_and_cache(
         _zero_arg_kernel,
         kind="kernel",
         options={},
-        runtime=runtime,
+        compile_option=compile_option,
     )
-    execution.execute_kernel(
+    assert isinstance(first.jit_module, jit_executor_mod.JitModule)
+    assert loaded_binaries == []
+    _execute_kernel_with_new_context(
         first,
-        runtime=runtime,
+        compile_option=compile_option,
         launch_args=[],
         launch_kwargs={"block_num": 1},
     )
+    assert execution._MEMORY_COMPILE_CACHE[first.cache_key] is first
 
-    recompiled = execution.compile_kernel(
+    memory_hit = execution.compile_and_cache(
         _zero_arg_kernel,
         kind="kernel",
         options={},
-        runtime=replace(runtime, force_recompile=True),
+        compile_option=compile_option,
     )
-    cached = execution.compile_kernel(
+    assert memory_hit is not first
+    assert memory_hit.artifacts == first.artifacts
+    assert memory_hit.kernel_mode == first.kernel_mode
+    assert memory_hit.jit_module is first.jit_module
+    assert memory_hit._executor is None
+    assert execution._MEMORY_COMPILE_CACHE[first.cache_key] is memory_hit
+
+    recompiled = execution.compile_and_cache(
         _zero_arg_kernel,
         kind="kernel",
         options={},
-        runtime=runtime,
+        compile_option=replace(compile_option, force_recompile=True),
     )
-    assert cached is recompiled
-    assert cached is not first
+    cached = execution.compile_and_cache(
+        _zero_arg_kernel,
+        kind="kernel",
+        options={},
+        compile_option=compile_option,
+    )
+    assert cached is not recompiled
+    assert cached.artifacts == recompiled.artifacts
 
-    execution.execute_kernel(
+    _execute_kernel_with_new_context(
         cached,
-        runtime=runtime,
+        compile_option=compile_option,
         launch_args=[],
         launch_kwargs={"block_num": 1},
     )
@@ -954,26 +973,28 @@ def test_compile_rejects_invalid_kernel_abi_before_hivmc(
     )
 
     with pytest.raises(execution.TlaKernelCompileError, match="does not match"):
-        execution.compile_kernel(
+        execution.compile_and_cache(
             _zero_arg_kernel,
             kind="kernel",
             options={},
-            runtime=execution.TlaRuntimeOptions(
+            compile_option=execution.TlaCompileOption(
                 cache_enabled=False, cache_dir=tmp_path / "cache"
             ),
         )
 
 
-def test_runtime_options_npu_arch_defaults_core_until_mlir() -> None:
-    options = execution.runtime_options_from_kwargs({"options": "--npu-arch 3510"})
+def test_compile_option_npu_arch_defaults_core_until_mlir() -> None:
+    compile_option = execution.compile_option_from_kwargs(
+        {"options": "--npu-arch 3510"}
+    )
     # AIC/AIV is inferred later from lowered MLIR; Host only selects chip arch.
-    assert options.arch_scope == "aiv.c310"
-    assert options.kernel_mode == "aiv"
+    assert compile_option.arch_scope == "aiv.c310"
+    assert compile_option.kernel_mode == "aiv"
 
 
-def test_runtime_options_reject_unknown_npu_arch() -> None:
+def test_compile_option_rejects_unknown_npu_arch() -> None:
     with pytest.raises(ValueError, match="Unsupported --npu-arch"):
-        execution.runtime_options_from_kwargs({"options": "--npu-arch sm_100"})
+        execution.compile_option_from_kwargs({"options": "--npu-arch sm_100"})
 
 
 def test_typed_bridge_raises_without_live_module(tmp_path) -> None:
@@ -1100,7 +1121,7 @@ def test_run_tla_lowering_to_mlir_falls_back_to_tla_compile(
         lowered_module=object(),
         tlair_mlir="module { tla.func @k() { tla.return } }\n",
         mlir_path=lowered_path,
-        runtime=execution.TlaRuntimeOptions(),
+        compile_option=execution.TlaCompileOption(),
     )
 
     assert result.lowered_mlir == "module { func.func @fallback() }\n"
@@ -1141,14 +1162,14 @@ def test_tla_compile_cli_preserves_ir_dump_on_failure(monkeypatch, tmp_path) -> 
         )
 
     monkeypatch.setattr(execution.subprocess, "run", fake_run)
-    runtime = execution.TlaRuntimeOptions(print_ir=True)
+    compile_option = execution.TlaCompileOption(print_ir=True)
 
     with pytest.raises(execution.TlaKernelCompileError) as exc_info:
         execution._run_tla_compile_cli_to_mlir(
             tla_compile=tla_compile,
             tlair_mlir="module { tla.func @k() { tla.return } }\n",
             mlir_path=lowered_path,
-            runtime=runtime,
+            compile_option=compile_option,
         )
 
     assert exc_info.value.pass_ir_dump == pass_ir_dump
@@ -1176,15 +1197,15 @@ def test_run_tla_lowering_to_mlir_raises_when_no_fallback_exists(
             lowered_module=object(),
             tlair_mlir="module {}\n",
             mlir_path=tmp_path / "lowered.mlir",
-            runtime=execution.TlaRuntimeOptions(),
+            compile_option=execution.TlaCompileOption(),
         )
 
 
-def test_runtime_options_from_lowered_mlir_updates_kernel_mode() -> None:
-    runtime = execution.TlaRuntimeOptions()
+def test_resolve_compile_option_from_lowered_mlir_updates_kernel_mode() -> None:
+    compile_option = execution.TlaCompileOption()
 
-    updated = execution._runtime_options_from_lowered_mlir(
-        runtime,
+    updated = execution._resolve_compile_option_from_lowered_mlir(
+        compile_option,
         "module { func.func @kernel() { vector.transfer_read %arg0[%c0], %cst : memref<1xf32>, vector<1xf32> } }",
         has_logical_mixed_handoff=False,
     )
@@ -1198,7 +1219,7 @@ def test_build_hivmc_a5_command_links_template_bitcode_for_aic(
 ) -> None:
     compiler = tmp_path / "hivmc-a5"
     mlir_path = tmp_path / "kernel.mlir"
-    kernel_path = tmp_path / "kernel.o"
+    kernel_binary_path = tmp_path / "kernel.o"
     template_bc = tmp_path / "meta_op.aic.c310.bc"
     template_bc.write_bytes(b"bc")
     monkeypatch.setattr(execution, "_mlir_build_dirs", lambda: [tmp_path])
@@ -1206,8 +1227,8 @@ def test_build_hivmc_a5_command_links_template_bitcode_for_aic(
     command = execution._build_hivmc_a5_command(
         compiler=compiler,
         mlir_path=mlir_path,
-        kernel_path=kernel_path,
-        runtime=execution.TlaRuntimeOptions(
+        kernel_binary_path=kernel_binary_path,
+        compile_option=execution.TlaCompileOption(
             kernel_mode="aic", arch_scope="aic.c310"
         ),
     )
@@ -1220,7 +1241,7 @@ def test_build_hivmc_a5_command_links_template_bitcode_for_aic(
         "--enable-hivm-compile=False",
         f"--link-aicore-bitcode={template_bc.resolve()}",
         "-o",
-        str(kernel_path),
+        str(kernel_binary_path),
     ]
 
 
@@ -1229,7 +1250,7 @@ def test_build_hivmc_a5_command_links_template_bitcode_for_aiv(
 ) -> None:
     compiler = tmp_path / "hivmc-a5"
     mlir_path = tmp_path / "kernel.mlir"
-    kernel_path = tmp_path / "kernel.o"
+    kernel_binary_path = tmp_path / "kernel.o"
     template_bc = tmp_path / "bc" / "meta_op.aiv.c310.bc"
     template_bc.parent.mkdir(parents=True)
     template_bc.write_bytes(b"bc")
@@ -1238,8 +1259,10 @@ def test_build_hivmc_a5_command_links_template_bitcode_for_aiv(
     command = execution._build_hivmc_a5_command(
         compiler=compiler,
         mlir_path=mlir_path,
-        kernel_path=kernel_path,
-        runtime=execution.TlaRuntimeOptions(kernel_mode="aiv", arch_scope="aiv.c310"),
+        kernel_binary_path=kernel_binary_path,
+        compile_option=execution.TlaCompileOption(
+            kernel_mode="aiv", arch_scope="aiv.c310"
+        ),
     )
 
     assert command == [
@@ -1250,7 +1273,7 @@ def test_build_hivmc_a5_command_links_template_bitcode_for_aiv(
         "--enable-hivm-compile=False",
         f"--link-aicore-bitcode={template_bc.resolve()}",
         "-o",
-        str(kernel_path),
+        str(kernel_binary_path),
     ]
 
 
@@ -1288,10 +1311,72 @@ def _debug_kernel_abi(launch_args, *, entrypoint: str):
     )
 
 
+def _prepared_test_compiled_function(
+    **compiled_fields,
+) -> jit_executor_mod.JitCompiledFunction:
+    compiled_fields = dict(compiled_fields)
+    compile_option = compiled_fields.pop("compile_option", None)
+    kernel_mode = compiled_fields.pop("kernel_mode", None)
+    if compile_option is None:
+        kernel_mode = kernel_mode or "aiv"
+        core_type = "aic" if kernel_mode == "aic" else "aiv"
+        compile_option = execution.TlaCompileOption(
+            kernel_mode=kernel_mode,
+            arch_scope=f"{core_type}.c310",
+        )
+    tlair_mlir = compiled_fields.pop("tlair_mlir")
+    lowered_llvm = compiled_fields.pop("lowered_llvm")
+    entrypoint = compiled_fields.pop("entrypoint")
+    kernel_abi = compiled_fields.pop("kernel_abi")
+    pass_ir_dump = compiled_fields.pop("pass_ir_dump", "")
+    metadata = execution._analyze_artifact_static_metadata(tlair_mlir, lowered_llvm)
+    expected_entrypoint = (
+        metadata.logical_mixed_handoff.entrypoint
+        if metadata.logical_mixed_handoff is not None
+        else entrypoint
+    )
+    abi_packer = execution._prepare_abi_packer(
+        kernel_abi, expected_entrypoint=expected_entrypoint
+    )
+    return execution._new_jit_compiled_function(
+        **compiled_fields,
+        tlair_mlir=tlair_mlir,
+        lowered_llvm=lowered_llvm,
+        entrypoint=entrypoint,
+        kernel_abi=kernel_abi,
+        abi_packer=abi_packer,
+        uses_scalar_print=metadata.uses_scalar_print,
+        uses_tensor_print=metadata.uses_tensor_print,
+        logical_mixed_handoff=metadata.logical_mixed_handoff,
+        compile_option=compile_option,
+        pass_ir_dump=pass_ir_dump,
+    )
+
+
+def _replace_prepared_test_compiled_function(
+    compiled: jit_executor_mod.JitCompiledFunction, **changes
+) -> jit_executor_mod.JitCompiledFunction:
+    fields = {
+        "cache_key": compiled.cache_key,
+        "cache_dir": compiled.artifacts.cache_dir,
+        "tlair_mlir": compiled.artifacts.MLIR,
+        "lowered_llvm": compiled.artifacts.LLVM,
+        "entrypoint": compiled.entrypoint,
+        "compiler_bridge_path": compiled.artifacts.compiler_bridge_path,
+        "hivmc_path": compiled.artifacts.hivmc_path,
+        "kernel_binary_path": compiled.kernel_binary_path,
+        "kernel_abi": compiled.execution_args.kernel_abi,
+        "kernel_mode": compiled.kernel_mode,
+        "pass_ir_dump": compiled.artifacts.PASS_IR_DUMP or "",
+    }
+    fields.update(changes)
+    return _prepared_test_compiled_function(**fields)
+
+
 def _debug_print_artifact(
     tmp_path, *, entrypoint: str = "debug", launch_args=(tla.Int32(7),)
 ):
-    return execution.TlaKernelArtifact(
+    return _prepared_test_compiled_function(
         cache_key="cache",
         cache_dir=tmp_path,
         tlair_mlir="module {}",
@@ -1320,7 +1405,7 @@ def _print_tensor_artifact(
     length_attribute = (
         f"length = {static_length} : i64, " if static_length is not None else ""
     )
-    return execution.TlaKernelArtifact(
+    return _prepared_test_compiled_function(
         cache_key="cache",
         cache_dir=tmp_path,
         tlair_mlir=(
@@ -1377,9 +1462,70 @@ def _two_print_tensor_artifact(tmp_path, *, storage: str = "gm"):
         "<{shape = array<i64: 2, 2>}> : "
         f"(!tla.tensor<!tla.ptr<f32, {storage}, 4>>, i64) -> ()"
     )
-    return replace(
+    return _replace_prepared_test_compiled_function(
         artifact,
         tlair_mlir=f"module {{ func.func @dump() {{ {first} {second} }} }}",
+    )
+
+
+def _launch_and_capture(
+    *,
+    artifact,
+    compile_option,
+    launch_args,
+    block_num,
+):
+    """Run the real executor and expose the captured low-level launch."""
+    compiled = (
+        artifact
+        if artifact.kernel_mode == compile_option.kernel_mode
+        else _replace_prepared_test_compiled_function(
+            artifact, compile_option=compile_option
+        )
+    )
+    launches = []
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        _install_fake_launch_context(monkeypatch, device=0, stream=0)
+        monkeypatch.setattr(execution, "load_binary", lambda **_kwargs: (11, 12))
+        monkeypatch.setattr(
+            execution,
+            "launch_kernel",
+            lambda **kwargs: launches.append(kwargs),
+        )
+        module = compiled.jit_module
+        assert isinstance(module, jit_executor_mod.JitModule)
+        if module.print_metadata is not None:
+
+            def _capture_launch(launch):
+                launch()
+                return ""
+
+            monkeypatch.setattr(
+                execution,
+                "_capture_c_stdout",
+                _capture_launch,
+            )
+            monkeypatch.setattr(
+                execution,
+                "_decode_native_print_tensor_records",
+                lambda *_args, **_kwargs: (),
+            )
+        compiled(
+            args=launch_args,
+            block_num=block_num,
+            stream=0,
+        )
+
+    assert len(launches) == 1
+    launch = launches[0]
+    return types.SimpleNamespace(
+        entrypoint=module.entrypoint,
+        kernel_mode=module.kernel_mode,
+        block_num=launch["block_num"],
+        payload=launch["payload"],
+        uses_scalar_print=launch["uses_scalar_print"],
+        uses_tensor_print=launch["uses_tensor_print"],
+        is_mixed=launch["is_mixed"],
     )
 
 
@@ -1388,9 +1534,9 @@ def test_print_tensor_workspace_preserves_user_argument_and_uses_abi_marker(
 ) -> None:
     artifact = _print_tensor_artifact(tmp_path)
 
-    plan = execution._build_kernel_launch_plan(
+    plan = _launch_and_capture(
         artifact=artifact,
-        runtime=execution.TlaRuntimeOptions(),
+        compile_option=execution.TlaCompileOption(),
         launch_args=[_TypedPointer(0x1000)],
         block_num=1,
     )
@@ -1398,7 +1544,7 @@ def test_print_tensor_workspace_preserves_user_argument_and_uses_abi_marker(
     assert plan.payload == struct.pack(
         "<QQ", 0x1000, execution._PRINT_TENSOR_WORKSPACE_SENTINEL
     )
-    assert plan.expects_print_tensor is True
+    assert plan.uses_tensor_print is True
 
 
 def _install_fake_launch_context(monkeypatch, *, device: int = 7, stream: int = 99) -> None:
@@ -1408,8 +1554,26 @@ def _install_fake_launch_context(monkeypatch, *, device: int = 7, stream: int = 
 
     monkeypatch.setattr(stream_mod, "current_device", lambda: device)
     monkeypatch.setattr(stream_mod, "current_stream", lambda _device: stream)
-    # Early ACL availability check in execute_kernel.
+    # Early ACL availability check while constructing an execute context.
     monkeypatch.setattr(execution, "load_acl", lambda: ModuleType("fake_acl"))
+
+
+def _execute_kernel_with_new_context(
+    artifact,
+    *,
+    compile_option,
+    launch_args,
+    launch_kwargs,
+):
+    """Exercise the low-level launch path through the compiled function."""
+    compiled = (
+        artifact
+        if artifact.kernel_mode == compile_option.kernel_mode
+        else _replace_prepared_test_compiled_function(
+            artifact, compile_option=compile_option
+        )
+    )
+    return compiled(args=launch_args, **launch_kwargs)
 
 
 def _install_print_tensor_loader(monkeypatch, output: str) -> None:
@@ -1419,7 +1583,7 @@ def _install_print_tensor_loader(monkeypatch, output: str) -> None:
     )
 
     def _launch_kernel(**kwargs) -> None:
-        assert kwargs["expects_print_tensor"] in (True, 2)
+        assert kwargs["uses_tensor_print"] is True
         os.write(1, output.encode())
 
     monkeypatch.setattr(execution, "launch_kernel", _launch_kernel)
@@ -1435,9 +1599,9 @@ def test_execute_kernel_decodes_and_formats_native_print_tensor_for_ordinary_cal
         "position=GM, shape=[2,2] dump_size=4 [0, 1.5, -2, 3]\n",
     )
 
-    execution.execute_kernel(
+    _execute_kernel_with_new_context(
         _print_tensor_artifact(tmp_path, shape=(2, 2)),
-        runtime=execution.TlaRuntimeOptions(
+        compile_option=execution.TlaCompileOption(
             kernel_mode="aic", arch_scope="aic.c310"
         ),
         launch_args=[_TypedPointer(0x1000)],
@@ -1465,9 +1629,9 @@ def test_execute_kernel_formats_combined_calls_and_blocks_in_arrival_order(
         f"position={position}, shape=[2,2] dump_size=4 [0, 1, 2, 3]\n",
     )
 
-    execution.execute_kernel(
+    _execute_kernel_with_new_context(
         _two_print_tensor_artifact(tmp_path, storage=storage),
-        runtime=execution.TlaRuntimeOptions(
+        compile_option=execution.TlaCompileOption(
             kernel_mode="aic", arch_scope="aic.c310"
         ),
         launch_args=[_TypedPointer(0x1000)],
@@ -1507,9 +1671,9 @@ def test_execute_aiv_kernel_formats_calls_blocks_and_subblocks_in_arrival_order(
     )
     _install_print_tensor_loader(monkeypatch, output)
 
-    execution.execute_kernel(
+    _execute_kernel_with_new_context(
         _two_print_tensor_artifact(tmp_path),
-        runtime=execution.TlaRuntimeOptions(),
+        compile_option=execution.TlaCompileOption(),
         launch_args=[_TypedPointer(0x1000)],
         launch_kwargs={"block_num": 2},
     )
@@ -1665,9 +1829,9 @@ def test_print_tensor_record_set_rejects_invalid_output_without_public_lines(
     _install_print_tensor_loader(monkeypatch, output)
 
     with pytest.raises(execution.TlaExecutionError, match=match):
-        execution.execute_kernel(
+        _execute_kernel_with_new_context(
             _two_print_tensor_artifact(tmp_path),
-            runtime=execution.TlaRuntimeOptions(
+            compile_option=execution.TlaCompileOption(
                 kernel_mode="aic", arch_scope="aic.c310"
             ),
             launch_args=[_TypedPointer(0x1000)],
@@ -1780,18 +1944,20 @@ def test_print_tensor_workspace_uses_fixed_one_mib_core_records(
         else _two_print_tensor_artifact(tmp_path)
     )
 
-    plan = execution._build_kernel_launch_plan(
+    plan = _launch_and_capture(
         artifact=artifact,
-        runtime=execution.TlaRuntimeOptions(kernel_mode=core_type, arch_scope=f"{core_type}.c310"),
+        compile_option=execution.TlaCompileOption(
+            kernel_mode=core_type, arch_scope=f"{core_type}.c310"
+        ),
         launch_args=[_TypedPointer(0x1000)],
         block_num=max_blocks,
     )
     assert plan.block_num == max_blocks
 
     with pytest.raises(execution.TlaExecutionError, match="fixed 1 MiB"):
-        execution._build_kernel_launch_plan(
+        _launch_and_capture(
             artifact=artifact,
-            runtime=execution.TlaRuntimeOptions(
+            compile_option=execution.TlaCompileOption(
                 kernel_mode=core_type, arch_scope=f"{core_type}.c310"
             ),
             launch_args=[_TypedPointer(0x1000)],
@@ -1803,18 +1969,18 @@ def test_mixed_aiv_print_tensor_capacity_counts_both_subblocks(
     tmp_path,
 ) -> None:
     artifact = _print_tensor_artifact(tmp_path, storage="ub", mixed=True)
-    accepted = execution._build_kernel_launch_plan(
+    accepted = _launch_and_capture(
         artifact=artifact,
-        runtime=execution.TlaRuntimeOptions(kernel_mode="mix"),
+        compile_option=execution.TlaCompileOption(kernel_mode="mix"),
         launch_args=[_TypedPointer(0x1000)],
         block_num=execution._PRINT_TENSOR_CORE_RECORDS // 2,
     )
 
     assert accepted.block_num == 54
     with pytest.raises(execution.TlaExecutionError, match="core records"):
-        execution._build_kernel_launch_plan(
+        _launch_and_capture(
             artifact=artifact,
-            runtime=execution.TlaRuntimeOptions(kernel_mode="mix"),
+            compile_option=execution.TlaCompileOption(kernel_mode="mix"),
             launch_args=[_TypedPointer(0x1000)],
             block_num=55,
         )
@@ -1824,9 +1990,9 @@ def test_print_tensor_capacity_allows_multiple_static_calls_within_each_core_rec
     tmp_path,
 ) -> None:
     artifact = _two_print_tensor_artifact(tmp_path)
-    artifact = replace(
+    artifact = _replace_prepared_test_compiled_function(
         artifact,
-        tlair_mlir=artifact.tlair_mlir.replace(
+        tlair_mlir=artifact.artifacts.MLIR.replace(
             "value = 4 : i64", "value = 262112 : i64"
         )
         .replace("value = 2 : i64", "value = 262112 : i64")
@@ -1836,9 +2002,9 @@ def test_print_tensor_capacity_allows_multiple_static_calls_within_each_core_rec
         ),
     )
 
-    plan = execution._build_kernel_launch_plan(
+    plan = _launch_and_capture(
         artifact=artifact,
-        runtime=execution.TlaRuntimeOptions(),
+        compile_option=execution.TlaCompileOption(),
         launch_args=[_TypedPointer(0x1000)],
         block_num=1,
     )
@@ -1850,22 +2016,22 @@ def test_print_tensor_capacity_allows_partial_dynamic_output(
     tmp_path,
 ) -> None:
     artifact = _two_print_tensor_artifact(tmp_path)
-    artifact = replace(
+    artifact = _replace_prepared_test_compiled_function(
         artifact,
-        tlair_mlir=artifact.tlair_mlir.replace(
+        tlair_mlir=artifact.artifacts.MLIR.replace(
             '%length0 = "arith.constant"() <{value = 4 : i64}> : () -> i64 ',
             "",
             1,
         ),
     )
     metadata = execution._print_tensor_static_metadata_records(
-        artifact.tlair_mlir, entrypoint=artifact.entrypoint
+        artifact.artifacts.MLIR, entrypoint=artifact.entrypoint
     )
     assert [record.count for record in metadata] == [None, 2]
 
-    plan = execution._build_kernel_launch_plan(
+    plan = _launch_and_capture(
         artifact=artifact,
-        runtime=execution.TlaRuntimeOptions(),
+        compile_option=execution.TlaCompileOption(),
         launch_args=[_TypedPointer(0x1000)],
         block_num=1,
     )
@@ -1961,15 +2127,60 @@ def test_print_tensor_metadata_and_decode_are_scoped_to_second_entrypoint() -> N
 
 @pytest.mark.parametrize("core_type", ("aic", "aiv"))
 def test_print_tensor_launch_accepts_multiblock_block_num(tmp_path, core_type) -> None:
-    plan = execution._build_kernel_launch_plan(
+    plan = _launch_and_capture(
         artifact=_print_tensor_artifact(tmp_path),
-        runtime=execution.TlaRuntimeOptions(kernel_mode=core_type, arch_scope=f"{core_type}.c310"),
+        compile_option=execution.TlaCompileOption(
+            kernel_mode=core_type, arch_scope=f"{core_type}.c310"
+        ),
         launch_args=[_TypedPointer(0x1000)],
         block_num=2,
     )
 
     assert plan.block_num == 2
-    assert plan.expects_print_tensor is True
+    assert plan.uses_tensor_print is True
+
+
+def test_compiled_function_prepares_print_metadata_once(monkeypatch, tmp_path) -> None:
+    calls: list[str] = []
+    original = execution._print_tensor_static_metadata_records
+
+    def _record_metadata_analysis(*args, **kwargs):
+        calls.append(kwargs["entrypoint"])
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(
+        execution,
+        "_print_tensor_static_metadata_records",
+        _record_metadata_analysis,
+    )
+    compiled = _print_tensor_artifact(tmp_path)
+    _install_fake_launch_context(monkeypatch, device=0, stream=0)
+    monkeypatch.setattr(execution, "load_binary", lambda **_kwargs: (11, 12))
+    monkeypatch.setattr(execution, "launch_kernel", lambda **_kwargs: None)
+
+    def _capture_launch(launch):
+        launch()
+        return ""
+
+    monkeypatch.setattr(
+        execution,
+        "_capture_c_stdout",
+        _capture_launch,
+    )
+    monkeypatch.setattr(
+        execution,
+        "_decode_native_print_tensor_records",
+        lambda *_args, **_kwargs: (),
+    )
+
+    for _ in range(2):
+        compiled(
+            args=[_TypedPointer(0x1000)],
+            block_num=1,
+            stream=0,
+        )
+
+    assert calls == ["dump"]
 
 
 @pytest.mark.parametrize(
@@ -1990,9 +2201,9 @@ def test_print_tensor_launch_checks_16_bit_block_identity(block_num, accepted) -
 
 
 def test_mixed_print_tensor_workspace_keeps_trailing_marker(tmp_path) -> None:
-    plan = execution._build_kernel_launch_plan(
+    plan = _launch_and_capture(
         artifact=_print_tensor_artifact(tmp_path, storage="ub", mixed=True),
-        runtime=execution.TlaRuntimeOptions(kernel_mode="mix"),
+        compile_option=execution.TlaCompileOption(kernel_mode="mix"),
         launch_args=[_TypedPointer(0x1000)],
         block_num=1,
     )
@@ -2001,7 +2212,8 @@ def test_mixed_print_tensor_workspace_keeps_trailing_marker(tmp_path) -> None:
     assert plan.payload == struct.pack(
         "<QQ", 0x1000, execution._PRINT_TENSOR_WORKSPACE_SENTINEL
     )
-    assert plan.expects_print_tensor == 2
+    assert plan.uses_tensor_print is True
+    assert plan.is_mixed is True
 
 
 def test_execute_mixed_aiv_print_preserves_position_and_subblocks(
@@ -2015,9 +2227,9 @@ def test_execute_mixed_aiv_print_preserves_position_and_subblocks(
         ),
     )
 
-    execution.execute_kernel(
+    _execute_kernel_with_new_context(
         _print_tensor_artifact(tmp_path, shape=(2, 2), storage="ub", mixed=True),
-        runtime=execution.TlaRuntimeOptions(kernel_mode="mix"),
+        compile_option=execution.TlaCompileOption(kernel_mode="mix"),
         launch_args=[_TypedPointer(0x1000)],
         launch_kwargs={"block_num": 1},
     )
@@ -2032,7 +2244,7 @@ def test_execute_mixed_aiv_print_preserves_position_and_subblocks(
 
 def test_execute_mixed_aic_print_omits_subblock(monkeypatch, tmp_path, capfd) -> None:
     _install_print_tensor_loader(monkeypatch, _identified_print_tensor_record())
-    artifact = replace(
+    artifact = _replace_prepared_test_compiled_function(
         _print_tensor_artifact(tmp_path, shape=(2, 2), mixed=True),
         lowered_llvm=(
             "module {\n"
@@ -2048,9 +2260,9 @@ def test_execute_mixed_aic_print_omits_subblock(monkeypatch, tmp_path, capfd) ->
         ),
     )
 
-    execution.execute_kernel(
+    _execute_kernel_with_new_context(
         artifact,
-        runtime=execution.TlaRuntimeOptions(kernel_mode="mix"),
+        compile_option=execution.TlaCompileOption(kernel_mode="mix"),
         launch_args=[_TypedPointer(0x1000)],
         launch_kwargs={"block_num": 1},
     )
@@ -2082,9 +2294,9 @@ def test_debug_print_workspace_preserves_normal_user_argument_slots(
 ) -> None:
     artifact = _debug_print_artifact(tmp_path, launch_args=launch_args)
 
-    plan = execution._build_kernel_launch_plan(
+    plan = _launch_and_capture(
         artifact=artifact,
-        runtime=execution.TlaRuntimeOptions(),
+        compile_option=execution.TlaCompileOption(),
         launch_args=launch_args,
         block_num=1,
     )
@@ -2092,12 +2304,12 @@ def test_debug_print_workspace_preserves_normal_user_argument_slots(
     assert plan.payload == expected_user_payload + struct.pack(
         "<Q", int.from_bytes(b"TLA_PRNT", byteorder="big")
     )
-    assert plan.expects_debug_fifo is True
+    assert plan.uses_scalar_print is True
 
 
 def test_non_print_kernel_keeps_normal_pointer_payload(tmp_path) -> None:
     launch_args = [_TypedPointer(0x1000), _TypedPointer(0x2000)]
-    artifact = execution.TlaKernelArtifact(
+    artifact = _prepared_test_compiled_function(
         cache_key="cache",
         cache_dir=tmp_path,
         tlair_mlir="module { func.func @plain() }",
@@ -2109,15 +2321,15 @@ def test_non_print_kernel_keeps_normal_pointer_payload(tmp_path) -> None:
         kernel_abi=_debug_kernel_abi(launch_args, entrypoint="plain"),
     )
 
-    plan = execution._build_kernel_launch_plan(
+    plan = _launch_and_capture(
         artifact=artifact,
-        runtime=execution.TlaRuntimeOptions(),
+        compile_option=execution.TlaCompileOption(),
         launch_args=launch_args,
         block_num=1,
     )
 
     assert plan.payload == struct.pack("<QQ", 0x1000, 0x2000)
-    assert plan.expects_debug_fifo is False
+    assert plan.uses_scalar_print is False
 
 
 def test_cache_key_uses_ir_and_debug_print_workspace_abi_revision(
@@ -2125,14 +2337,14 @@ def test_cache_key_uses_ir_and_debug_print_workspace_abi_revision(
 ) -> None:
     hivmc = tmp_path / "hivmc-a5"
     target = execution.TlaKernelTarget("aiv.c310", "c310", "aiv", "dav-c310-vec")
-    runtime = execution.TlaRuntimeOptions()
+    compile_option = execution.TlaCompileOption()
     monkeypatch.setattr(execution, "_tool_version", lambda _path: "test")
     monkeypatch.setattr(execution, "_tool_fingerprint", lambda _path: "test")
 
     plain_key = execution._cache_key(
         tlair_mlir="module { func.func @kernel() }",
         entrypoint="kernel",
-        runtime=runtime,
+        compile_option=compile_option,
         compiler_bridge_path=None,
         hivmc=hivmc,
         target=target,
@@ -2140,7 +2352,7 @@ def test_cache_key_uses_ir_and_debug_print_workspace_abi_revision(
     same_plain_key = execution._cache_key(
         tlair_mlir="module { func.func @kernel() }",
         entrypoint="kernel",
-        runtime=runtime,
+        compile_option=compile_option,
         compiler_bridge_path=None,
         hivmc=hivmc,
         target=target,
@@ -2148,7 +2360,7 @@ def test_cache_key_uses_ir_and_debug_print_workspace_abi_revision(
     debug_key = execution._cache_key(
         tlair_mlir="module { tla.debug_print %value : i32 }",
         entrypoint="kernel",
-        runtime=runtime,
+        compile_option=compile_option,
         compiler_bridge_path=None,
         hivmc=hivmc,
         target=target,
@@ -2165,7 +2377,7 @@ def test_cache_key_uses_ir_and_debug_print_workspace_abi_revision(
         execution._cache_key(
             tlair_mlir="module { func.func @kernel() }",
             entrypoint="kernel",
-            runtime=runtime,
+            compile_option=compile_option,
             compiler_bridge_path=None,
             hivmc=hivmc,
             target=target,
@@ -2179,7 +2391,7 @@ def test_cache_key_uses_print_tensor_workspace_abi_revision(
 ) -> None:
     hivmc = tmp_path / "hivmc-a5"
     target = execution.TlaKernelTarget("aiv.c310", "c310", "aiv", "dav-c310-vec")
-    runtime = execution.TlaRuntimeOptions()
+    compile_option = execution.TlaCompileOption()
     monkeypatch.setattr(execution, "_tool_version", lambda _path: "test")
     monkeypatch.setattr(execution, "_tool_fingerprint", lambda _path: "test")
     kwargs = {
@@ -2189,7 +2401,7 @@ def test_cache_key_uses_print_tensor_workspace_abi_revision(
             ": (!tla.tensor, i64) -> () }"
         ),
         "entrypoint": "kernel",
-        "runtime": runtime,
+        "compile_option": compile_option,
         "compiler_bridge_path": None,
         "hivmc": hivmc,
         "target": target,
@@ -2310,11 +2522,11 @@ def test_online_cache_key_serializes_kernel_abi_version(monkeypatch, tmp_path) -
     monkeypatch.setattr(execution, "_tool_fingerprint", lambda _path: "fingerprint")
     monkeypatch.setattr(execution, "_tool_version", lambda _path: "version")
 
-    runtime = execution.TlaRuntimeOptions()
+    compile_option = execution.TlaCompileOption()
     execution._cache_key(
         tlair_mlir="module {}",
         entrypoint="kernel",
-        runtime=runtime,
+        compile_option=compile_option,
         compiler_bridge_path=tmp_path / "bridge.so",
         hivmc=tmp_path / "hivmc-a5",
         target=execution.TlaKernelTarget(
@@ -2796,7 +3008,7 @@ def test_build_kernel_launch_plan_uses_logical_mixed_handoff(tmp_path) -> None:
         def data_ptr(self) -> int:
             return self._ptr
 
-    artifact = execution.TlaKernelArtifact(
+    artifact = _prepared_test_compiled_function(
         cache_key="cache",
         cache_dir=tmp_path,
         tlair_mlir="module {}",
@@ -2811,7 +3023,7 @@ def test_build_kernel_launch_plan_uses_logical_mixed_handoff(tmp_path) -> None:
             "%arg2: memref<32x32xf32>, %arg3: memref<32x32xf32>"
             ') attributes {mix_mode = "mix"} }'
         ),
-        entrypoint="ignored",
+        entrypoint="basic_mixed",
         compiler_bridge_path=None,
         hivmc_path=tmp_path / "hivmc-a5",
         kernel_binary_path=tmp_path / "kernel.o",
@@ -2825,9 +3037,9 @@ def test_build_kernel_launch_plan_uses_logical_mixed_handoff(tmp_path) -> None:
         ),
     )
 
-    plan = execution._build_kernel_launch_plan(
+    plan = _launch_and_capture(
         artifact=artifact,
-        runtime=execution.TlaRuntimeOptions(kernel_mode="mix"),
+        compile_option=execution.TlaCompileOption(kernel_mode="mix"),
         launch_args=[
             _Tensor(0x1000, (32, 32)),
             _Tensor(0x2000, (32, 32)),
@@ -2855,7 +3067,7 @@ def test_mixed_handoff_payload_follows_split_signature_not_fixed_four_args(
         def data_ptr(self) -> int:
             return self._ptr
 
-    artifact = execution.TlaKernelArtifact(
+    artifact = _prepared_test_compiled_function(
         cache_key="cache",
         cache_dir=tmp_path,
         tlair_mlir="module {}",
@@ -2872,7 +3084,7 @@ def test_mixed_handoff_payload_follows_split_signature_not_fixed_four_args(
             "%arg4: memref<16x48xf32>"
             ') attributes {mix_mode = "mix"} }'
         ),
-        entrypoint="ignored",
+        entrypoint="custom",
         compiler_bridge_path=None,
         hivmc_path=tmp_path / "hivmc-a5",
         kernel_binary_path=tmp_path / "kernel.o",
@@ -2887,9 +3099,9 @@ def test_mixed_handoff_payload_follows_split_signature_not_fixed_four_args(
         ),
     )
 
-    plan = execution._build_kernel_launch_plan(
+    plan = _launch_and_capture(
         artifact=artifact,
-        runtime=execution.TlaRuntimeOptions(kernel_mode="mix"),
+        compile_option=execution.TlaCompileOption(kernel_mode="mix"),
         launch_args=[
             tla.Int32(7),
             _Tensor(0x1000, (16, 64)),
@@ -2916,7 +3128,7 @@ def test_mixed_handoff_payload_follows_split_signature_not_fixed_four_args(
 def test_mixed_handoff_supplies_debug_workspace_without_public_argument(
     tmp_path,
 ) -> None:
-    artifact = execution.TlaKernelArtifact(
+    artifact = _prepared_test_compiled_function(
         cache_key="cache",
         cache_dir=tmp_path,
         tlair_mlir="module {}",
@@ -2933,7 +3145,7 @@ def test_mixed_handoff_supplies_debug_workspace_without_public_argument(
             "{hacc.arg_type = #hacc.arg_type<workspace>, "
             'tla.debug_print.workspace}) attributes {mix_mode = "mix"} }'
         ),
-        entrypoint="ignored",
+        entrypoint="debug_mixed",
         compiler_bridge_path=None,
         hivmc_path=tmp_path / "hivmc-a5",
         kernel_binary_path=tmp_path / "kernel.o",
@@ -2945,9 +3157,9 @@ def test_mixed_handoff_supplies_debug_workspace_without_public_argument(
         ),
     )
 
-    plan = execution._build_kernel_launch_plan(
+    plan = _launch_and_capture(
         artifact=artifact,
-        runtime=execution.TlaRuntimeOptions(kernel_mode="mix"),
+        compile_option=execution.TlaCompileOption(kernel_mode="mix"),
         launch_args=[tla.Float32(1.0), tla.Float32(0.25)],
         block_num=1,
     )
@@ -2955,7 +3167,7 @@ def test_mixed_handoff_supplies_debug_workspace_without_public_argument(
     sentinel = int.from_bytes(b"TLA_PRNT", byteorder="big")
     assert plan.entrypoint == "debug_mixed"
     assert plan.payload == struct.pack("<ffQ", 1.0, 0.25, sentinel)
-    assert plan.expects_debug_fifo is True
+    assert plan.uses_scalar_print is True
 
 
 def test_execute_kernel_uses_typed_launch_payload(monkeypatch, tmp_path) -> None:
@@ -2972,7 +3184,7 @@ def test_execute_kernel_uses_typed_launch_payload(monkeypatch, tmp_path) -> None
     monkeypatch.setattr(execution, "load_binary", _load_binary)
     monkeypatch.setattr(execution, "launch_kernel", _launch_kernel)
 
-    artifact = execution.TlaKernelArtifact(
+    artifact = _prepared_test_compiled_function(
         cache_key="cache",
         cache_dir=tmp_path,
         tlair_mlir=(
@@ -2989,31 +3201,32 @@ def test_execute_kernel_uses_typed_launch_payload(monkeypatch, tmp_path) -> None
             total_size=8,
         ),
     )
-    runtime = execution.TlaRuntimeOptions()
+    compile_option = execution.TlaCompileOption()
 
-    result = execution.execute_kernel(
+    result = _execute_kernel_with_new_context(
         artifact,
-        runtime=runtime,
+        compile_option=compile_option,
         launch_args=[tla.Int32(123)],
         launch_kwargs={"block_num": 1},
     )
 
-    assert result.module_handle == 11
+    assert result.binary_handle == 11
     assert result.function_handle == 12
     assert (
         "flat",
         {
-            "function": 12,
+            "function_handle": 12,
             "stream": 99,
             "block_num": 1,
-            "args": struct.pack("<I4x", 123),
-            "expects_debug_fifo": False,
-            "expects_print_tensor": False,
+            "payload": struct.pack("<I4x", 123),
+            "uses_scalar_print": False,
+            "uses_tensor_print": False,
+            "is_mixed": False,
         },
     ) in launches
 
 
-def test_execute_kernel_conveys_debug_fifo_intent_to_loader(
+def test_execute_kernel_conveys_scalar_print_intent_to_loader(
     monkeypatch, tmp_path
 ) -> None:
     launches: list[dict[str, object]] = []
@@ -3025,21 +3238,22 @@ def test_execute_kernel_conveys_debug_fifo_intent_to_loader(
     )
     artifact = _debug_print_artifact(tmp_path, entrypoint="debug")
 
-    execution.execute_kernel(
+    _execute_kernel_with_new_context(
         artifact,
-        runtime=execution.TlaRuntimeOptions(),
+        compile_option=execution.TlaCompileOption(),
         launch_args=[tla.Int32(7)],
         launch_kwargs={"block_num": 1},
     )
 
     assert launches == [
         {
-            "function": 12,
+            "function_handle": 12,
             "stream": 99,
             "block_num": 1,
-            "args": struct.pack("<QQ", 7, int.from_bytes(b"TLA_PRNT", byteorder="big")),
-            "expects_debug_fifo": True,
-            "expects_print_tensor": False,
+            "payload": struct.pack("<QQ", 7, int.from_bytes(b"TLA_PRNT", byteorder="big")),
+            "uses_scalar_print": True,
+            "uses_tensor_print": False,
+            "is_mixed": False,
         }
     ]
 
@@ -3058,7 +3272,7 @@ def test_execute_kernel_uses_empty_payload_for_zero_arg(monkeypatch, tmp_path) -
     monkeypatch.setattr(execution, "load_binary", _load_binary)
     monkeypatch.setattr(execution, "launch_kernel", _launch_kernel)
 
-    artifact = execution.TlaKernelArtifact(
+    artifact = _prepared_test_compiled_function(
         cache_key="cache",
         cache_dir=tmp_path,
         tlair_mlir='module { "tla.func"() ({}) {function_type = () -> (), sym_name = "kernel"} : () -> () }',
@@ -3069,45 +3283,36 @@ def test_execute_kernel_uses_empty_payload_for_zero_arg(monkeypatch, tmp_path) -
         kernel_binary_path=tmp_path / "kernel.o",
         kernel_abi=_kernel_abi(total_size=0),
     )
-    runtime = execution.TlaRuntimeOptions()
+    compile_option = execution.TlaCompileOption()
 
-    result = execution.execute_kernel(
+    result = _execute_kernel_with_new_context(
         artifact,
-        runtime=runtime,
+        compile_option=compile_option,
         launch_args=[],
         launch_kwargs={"block_num": 1},
     )
 
-    assert result.module_handle == 11
+    assert result.binary_handle == 11
     assert result.function_handle == 12
     # Plan-level payload stays empty; ``launch_kernel`` pads to 8 bytes
     # before PyACL launch_kernel.
     assert (
         "flat",
         {
-            "function": 12,
+            "function_handle": 12,
             "stream": 99,
             "block_num": 1,
-            "args": b"",
-            "expects_debug_fifo": False,
-            "expects_print_tensor": False,
+            "payload": b"",
+            "uses_scalar_print": False,
+            "uses_tensor_print": False,
+            "is_mixed": False,
         },
     ) in launches
 
 
 def test_ascend_runtime_load_binary_does_not_cache(monkeypatch, tmp_path) -> None:
     calls: list[tuple[Path, str, str]] = []
-    set_device_calls: list[int] = []
     resolve_calls: list[Path] = []
-
-    class _FakeRt:
-        @staticmethod
-        def set_device(device):
-            set_device_calls.append(device)
-            return 0
-
-    fake_acl = types.SimpleNamespace(rt=_FakeRt())
-    monkeypatch.setitem(sys.modules, "acl", fake_acl)
     original_resolve = Path.resolve
 
     def _resolve(path, *args, **kwargs):
@@ -3116,29 +3321,36 @@ def test_ascend_runtime_load_binary_does_not_cache(monkeypatch, tmp_path) -> Non
 
     monkeypatch.setattr(Path, "resolve", _resolve)
 
-    def _register(*, kernel_path, fn_name, kernel_mode):
-        calls.append((kernel_path, fn_name, kernel_mode))
+    def _register(*, kernel_binary_path, entrypoint, kernel_mode):
+        calls.append((kernel_binary_path, entrypoint, kernel_mode))
         sequence = len(calls)
         return ascend_runtime._LoadedKernel(
-            100 + sequence, 200 + sequence, kernel_path
+            100 + sequence, 200 + sequence, kernel_binary_path
         )
 
     monkeypatch.setattr(ascend_runtime, "_register_kernel_binary", _register)
     kwargs = {
-        "name": "kernel aiv",
-        "kernel_path": tmp_path / "kernel.o",
-        "device": 0,
+        "entrypoint": "kernel",
+        "kernel_mode": "aiv",
+        "kernel_binary_path": tmp_path / "kernel.o",
     }
 
     assert ascend_runtime.load_binary(**kwargs) == (101, 201)
     assert ascend_runtime.load_binary(**kwargs) == (102, 202)
     assert len(calls) == 2
-    assert set_device_calls == [0, 0]
     assert resolve_calls == [tmp_path / "kernel.o", tmp_path / "kernel.o"]
+    assert ascend_runtime.__all__ == [
+        "load_acl",
+        "check_acl_errors",
+        "load_binary",
+        "launch_kernel",
+    ]
 
 
-def _runtime_cached_artifact(tmp_path, *, cache_key: str) -> execution.TlaKernelArtifact:
-    return execution.TlaKernelArtifact(
+def _runtime_cached_compiled_function(
+    tmp_path, *, cache_key: str
+) -> jit_executor_mod.JitCompiledFunction:
+    return _prepared_test_compiled_function(
         cache_key=cache_key,
         cache_dir=tmp_path,
         tlair_mlir=(
@@ -3154,109 +3366,97 @@ def _runtime_cached_artifact(tmp_path, *, cache_key: str) -> execution.TlaKernel
     )
 
 
-def test_launch_does_not_repeat_static_artifact_analysis(
+def test_jit_compiled_function_owns_one_lazy_executor(
     monkeypatch, tmp_path
 ) -> None:
-    artifact = _runtime_cached_artifact(tmp_path, cache_key="validated")
-
-    def _unexpected_validation(*_args, **_kwargs):
-        raise AssertionError("launch repeated static Artifact analysis")
-
-    monkeypatch.setattr(execution, "_validate_kernel_abi_layout", _unexpected_validation)
-
-    plan = execution._build_kernel_launch_plan(
-        artifact=artifact,
-        runtime=execution.TlaRuntimeOptions(),
-        launch_args=[],
-        block_num=1,
-    )
-
-    assert plan.payload == b""
-
-
-def test_artifact_runtime_handles_are_cached_per_artifact(
-    monkeypatch, tmp_path
-) -> None:
-    loads: list[tuple[str, int]] = []
-    _install_fake_launch_context(monkeypatch, device=0, stream=90)
+    loads: list[tuple[str, str]] = []
+    _install_fake_launch_context(monkeypatch, device=4, stream=90)
 
     def _load_binary(**kwargs):
-        loads.append((kwargs["kernel_path"].name, kwargs["device"]))
+        assert "device" not in kwargs
+        loads.append((kwargs["kernel_binary_path"].name, kwargs["kernel_mode"]))
         sequence = len(loads)
         return 100 + sequence, 200 + sequence
 
     monkeypatch.setattr(execution, "load_binary", _load_binary)
     monkeypatch.setattr(execution, "launch_kernel", lambda **_kwargs: None)
 
-    artifact = _runtime_cached_artifact(tmp_path, cache_key="first")
-    runtime = execution.TlaRuntimeOptions()
-    first = execution.execute_kernel(
-        artifact,
-        runtime=runtime,
-        launch_args=[],
-        launch_kwargs={"block_num": 1},
-    )
-    repeated = execution.execute_kernel(
-        artifact,
-        runtime=runtime,
-        launch_args=[],
-        launch_kwargs={"block_num": 1},
-    )
-    assert (first.module_handle, first.function_handle) == (101, 201)
-    assert (repeated.module_handle, repeated.function_handle) == (101, 201)
-    assert artifact._runtime_handle == (101, 201)
+    compiled = _runtime_cached_compiled_function(tmp_path, cache_key="first")
+    assert not hasattr(tla, "JitExecutor")
+    assert not hasattr(compiled, "to")
+    assert compiled._executor is None
+    first = compiled()
+    executor = compiled._executor
+    assert isinstance(executor, jit_executor_mod.JitExecutor)
+    assert isinstance(compiled.jit_module, jit_executor_mod.JitModule)
+    assert executor.jit_module is compiled.jit_module
+    assert compiled.kernel_mode == "aiv"
+    assert compiled.jit_module.kernel_mode == "aiv"
+    assert not hasattr(compiled, "runtime")
+    assert not hasattr(compiled.jit_module, "runtime")
+    assert executor.device == 4
+    assert executor.kernel_binary_path == compiled.kernel_binary_path
+    repeated = compiled()
+    assert (first.binary_handle, first.function_handle) == (101, 201)
+    assert (repeated.binary_handle, repeated.function_handle) == (101, 201)
 
-    other = _runtime_cached_artifact(tmp_path, cache_key="second")
-    other_result = execution.execute_kernel(
-        other,
-        runtime=runtime,
-        launch_args=[],
-        launch_kwargs={"block_num": 1},
-    )
-    assert (other_result.module_handle, other_result.function_handle) == (102, 202)
-    assert other._runtime_handle == (102, 202)
-    assert loads == [("first.o", 0), ("second.o", 0)]
+    other = _runtime_cached_compiled_function(tmp_path, cache_key="second")
+    assert other._executor is None
+    other_result = other()
+    assert (other_result.binary_handle, other_result.function_handle) == (102, 202)
+    assert other._executor is not executor
+    assert loads == [
+        ("first.o", "aiv"),
+        ("second.o", "aiv"),
+    ]
 
 
-def test_artifact_runtime_handle_load_is_serialized(monkeypatch, tmp_path) -> None:
-    artifact = _runtime_cached_artifact(tmp_path, cache_key="concurrent")
+def test_compiled_function_reuses_one_executor(monkeypatch, tmp_path) -> None:
     _install_fake_launch_context(monkeypatch, device=3, stream=99)
-    entered = threading.Event()
-    release = threading.Event()
     loads: list[int] = []
-    failures: list[BaseException] = []
 
     def _load_binary(**_kwargs):
         loads.append(1)
-        entered.set()
-        assert release.wait(timeout=5)
         return 101, 202
 
     monkeypatch.setattr(execution, "load_binary", _load_binary)
     monkeypatch.setattr(execution, "launch_kernel", lambda **_kwargs: None)
 
-    def _execute() -> None:
-        try:
-            execution.execute_kernel(
-                artifact,
-                runtime=execution.TlaRuntimeOptions(),
-                launch_args=[],
-                launch_kwargs={"block_num": 1},
-            )
-        except BaseException as exc:
-            failures.append(exc)
+    compiled = _runtime_cached_compiled_function(tmp_path, cache_key="default")
+    first = compiled()
+    repeated = compiled()
 
-    first = threading.Thread(target=_execute)
-    second = threading.Thread(target=_execute)
-    first.start()
-    assert entered.wait(timeout=5)
-    second.start()
-    release.set()
-    first.join(timeout=5)
-    second.join(timeout=5)
-
-    assert not failures
-    assert not first.is_alive()
-    assert not second.is_alive()
+    assert (first.binary_handle, first.function_handle) == (101, 202)
+    assert (repeated.binary_handle, repeated.function_handle) == (101, 202)
     assert len(loads) == 1
-    assert artifact._runtime_handle == (101, 202)
+    assert compiled._executor is not None
+    assert compiled._executor.device == 3
+
+
+def test_compiled_function_queries_current_stream_for_each_launch(
+    monkeypatch, tmp_path
+) -> None:
+    _install_fake_launch_context(monkeypatch, device=3, stream=0)
+    from catlass.base_dsl.runtime import ascend_stream_adapter as stream_mod
+
+    streams = iter((41, 42))
+    monkeypatch.setattr(stream_mod, "current_stream", lambda _device: next(streams))
+    loads: list[int] = []
+    launches: list[int] = []
+    monkeypatch.setattr(
+        execution,
+        "load_binary",
+        lambda **_kwargs: loads.append(1) or (101, 202),
+    )
+    monkeypatch.setattr(
+        execution,
+        "launch_kernel",
+        lambda **kwargs: launches.append(kwargs["stream"]),
+    )
+
+    compiled = _runtime_cached_compiled_function(tmp_path, cache_key="streams")
+    compiled()
+    compiled()
+
+    assert len(loads) == 1
+    assert launches == [41, 42]

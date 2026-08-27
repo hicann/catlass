@@ -13,17 +13,15 @@ from .base_dsl.runtime.dlpack_types import (
 
 from .execution import (
     TlaBackendCompilerNotFoundError,
-    TlaKernelArtifact,
     TlaKernelCompileError,
     TlaCompilerBridgeUnavailableError,
     TlaExecutionError,
     TlaExecutionResult,
     TlaRuntimeUnavailableError,
     TlaUnsupportedAbiError,
-    compile_kernel,
-    execute_kernel,
-    runtime_options_for_launch,
-    runtime_options_from_kwargs,
+    compile_and_cache,
+    compile_option_for_launch,
+    compile_option_from_kwargs,
 )
 from .base_dsl.op import (
     _FRONTEND_EMIT_STATE,
@@ -510,7 +508,6 @@ __all__ = [
     "TlaKernelCompileError",
     "TlaRuntimeUnavailableError",
     "TlaUnsupportedAbiError",
-    "TlaKernelArtifact",
     "TlaExecutionResult",
     "RuntimeTensorError",
     "DlpackBridgeError",

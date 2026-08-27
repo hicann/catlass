@@ -81,7 +81,7 @@ def test_kernel_dataclass_tensor_field_lowers() -> None:
 
 
 def test_execution_args_unpacks_dataclass_tensor_field() -> None:
-    from catlass.base_dsl.jit_executor import TlaExecutionArgs
+    from catlass.base_dsl.jit_executor import ExecutionArgs
     from catlass import compiler_bridge
 
     class _MockTensor:
@@ -119,7 +119,7 @@ def test_execution_args_unpacks_dataclass_tensor_field() -> None:
             ),
         ),
     )
-    payload = TlaExecutionArgs(kernel_abi=layout).generate_launch_payload([td])
+    payload = ExecutionArgs(kernel_abi=layout).generate_launch_payload([td])
     expected = (0x123456789ABCDEF0).to_bytes(8, "little") + (7).to_bytes(
         4, "little", signed=True
     ) + b"\0" * 4  # payload padded out to total_size 16
@@ -195,7 +195,7 @@ def test_frozen_dataclass_unpacks_to_runtime_scalar() -> None:
 
 
 def test_execution_args_expands_dataclass_into_fields() -> None:
-    from catlass.base_dsl.jit_executor import TlaExecutionArgs
+    from catlass.base_dsl.jit_executor import ExecutionArgs
     from catlass import compiler_bridge, execution
 
     td = TilingData(tiling_int=tla.Int32(7), tiling_float=tla.Float32(2.5))
@@ -248,7 +248,7 @@ def test_execution_args_expands_dataclass_into_fields() -> None:
         def __c_pointers__(self) -> list[int]:
             return [0x123456789ABCDEF0]
 
-    payload = TlaExecutionArgs(kernel_abi=layout).generate_launch_payload(
+    payload = ExecutionArgs(kernel_abi=layout).generate_launch_payload(
         [td, _Ptr()]
     )
     expected = (
@@ -270,7 +270,7 @@ def test_execution_args_expands_dataclass_into_fields() -> None:
 
 
 def test_execution_args_unpacks_plain_value_fields() -> None:
-    from catlass.base_dsl.jit_executor import TlaExecutionArgs
+    from catlass.base_dsl.jit_executor import ExecutionArgs
     from catlass import compiler_bridge
 
     plain = PlainTilingData(7, 2.5)
@@ -309,7 +309,7 @@ def test_execution_args_unpacks_plain_value_fields() -> None:
             ),
         ),
     )
-    payload = TlaExecutionArgs(kernel_abi=layout).generate_launch_payload([plain])
+    payload = ExecutionArgs(kernel_abi=layout).generate_launch_payload([plain])
     expected = (7).to_bytes(4, "little", signed=True) + (
         tla.Float32(2.5).__c_pointers__()[0].to_bytes(4, "little")
     )
@@ -356,7 +356,7 @@ def test_all_constexpr_dataclass_has_no_block_args() -> None:
 
 
 def test_execution_args_skips_constexpr_fields() -> None:
-    from catlass.base_dsl.jit_executor import TlaExecutionArgs
+    from catlass.base_dsl.jit_executor import ExecutionArgs
     from catlass import compiler_bridge
 
     td = ConstexprTilingData(TILE_M=16, TILE_N=32, dyn=tla.Int32(7))
@@ -381,7 +381,7 @@ def test_execution_args_skips_constexpr_fields() -> None:
             ),
         ),
     )
-    payload = TlaExecutionArgs(kernel_abi=layout).generate_launch_payload([td])
+    payload = ExecutionArgs(kernel_abi=layout).generate_launch_payload([td])
     expected = (7).to_bytes(4, "little", signed=True) + b"\0" * 4
     assert payload == expected
 

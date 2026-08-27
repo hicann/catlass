@@ -8,7 +8,12 @@ nav_order: 10
 
 ### `@tla.kernel` and `@tla.jit`
 
-`@tla.kernel` is the device-kernel entry point. `@tla.jit` is a DSL helper callable from a kernel and is preprocessed before lowering.
+`@tla.kernel` is the device-kernel entry point. Direct invocation is currently
+unsupported. Compile it explicitly with
+`compiled = tla.compile(kernel, *sample_args)`, then launch with
+`compiled(*runtime_args, block_num=...)`. `@tla.jit` is a DSL helper callable
+from a kernel and is preprocessed before lowering; calling or launching an
+`@tla.kernel` from it is currently unsupported.
 
 Bare Python helpers may also be called while a kernel is emitting device-time code. They execute in the caller's active emission context and may directly emit supported TLA operations. Use `@tla.jit` when the helper itself needs DSL control-flow preprocessing. A bare helper called from device-time control flow must not declare `global` or `nonlocal`; calling a kernel as a helper and recursive `@tla.jit` calls are unsupported.
 

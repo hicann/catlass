@@ -41,7 +41,8 @@ _PARENT_EXPORTS = (
     "jit",
     "compile",
     "TlaJitFunction",
-    "TlaJitExecutor",
+    "JitCompiledFunction",
+    "JitModule",
     "TlaIRNotExecutableError",
     "TlaCoreAPIError",
     "TlaExecutionError",
@@ -50,7 +51,6 @@ _PARENT_EXPORTS = (
     "TlaKernelCompileError",
     "TlaRuntimeUnavailableError",
     "TlaUnsupportedAbiError",
-    "TlaKernelArtifact",
     "TlaExecutionResult",
     "DSLLocation",
     "BaseDSL",
@@ -112,10 +112,10 @@ def __getattr__(name: str) -> Any:
 
         return getattr(_dsl, name)
 
-    if name == "TlaJitExecutor":
-        from ..base_dsl.jit_executor import TlaJitExecutor
+    if name in ("JitCompiledFunction", "JitModule"):
+        from ..base_dsl import jit_executor as _jit_executor
 
-        return TlaJitExecutor
+        return getattr(_jit_executor, name)
 
     if name in ("DSLLocation", "BaseDSL"):
         from .. import base_dsl as _base_dsl

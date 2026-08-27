@@ -38,9 +38,8 @@ HOST_DIRECTORY_SECTIONS: list[tuple[str, str]] = [
     (
         "Compile and Launch",
         "Compile a decorated kernel and launch it on the NPU. Use "
-        "`tla.compile` then `artifact(...)` / `.launch(...)` when the same "
-        "binary is launched repeatedly; call `@tla.kernel` to get a "
-        "`KernelLauncher` for one-off or few launches. Cache / arch / IR-dump "
+        "`tla.compile` to obtain a callable `JitCompiledFunction`; call it "
+        "directly to lazily create and then reuse its executor. Cache / arch / IR-dump "
         "knobs that are not function arguments are in "
         "`docs/zh/kernel_development/core_concepts/env_vars.md`.",
     ),
@@ -52,9 +51,8 @@ HOST_DIRECTORY_SECTIONS: list[tuple[str, str]] = [
     ),
     (
         "Compile and Launch / Launch",
-        "Run a compiled kernel on the NPU. After `tla.compile`, call the "
-        "executor or `TlaJitExecutor.launch`. After calling `@tla.kernel`, use "
-        "`KernelLauncher.launch` (or invoke the launcher).",
+        "Run a compiled kernel on the NPU by calling the `JitCompiledFunction` "
+        "returned by `tla.compile`.",
     ),
     (
         "Compile and Launch / Inspect",
@@ -85,7 +83,6 @@ HOST_SOURCE_PATHS = (
     PACKAGE_ROOT / "catlass" / "dsl.py",
     PACKAGE_ROOT / "catlass" / "base_dsl" / "compiler.py",
     PACKAGE_ROOT / "catlass" / "base_dsl" / "jit_executor.py",
-    PACKAGE_ROOT / "catlass" / "catlass_dsl" / "tla.py",
     PACKAGE_ROOT / "catlass" / "execution_lowering.py",
     PACKAGE_ROOT / "catlass" / "tla" / "runtime.py",
 )
@@ -93,8 +90,7 @@ HOST_SOURCE_PATHS = (
 # Display names in the generated reference (source qualified names stay unchanged).
 HOST_DISPLAY_NAMES = {
     "CompileCallable.__call__": "compile",
-    "TlaJitExecutor.launch": "TlaJitExecutor.launch",
-    "KernelLauncher.launch": "KernelLauncher.launch",
+    "JitCompiledFunction.__call__": "JitCompiledFunction.__call__",
     "_Tensor.mark_layout_dynamic": "Tensor.mark_layout_dynamic",
     "_Tensor.mark_compact_shape_dynamic": "Tensor.mark_compact_shape_dynamic",
     # Stdlib ``@dataclass`` packing rules live on the struct-arg validator.
@@ -232,7 +228,7 @@ def generate(*, docs_dir: Path | None = None) -> str:
             "This document describes the **TLA DSL Host-side APIs** "
             "(typically imported as `import catlass.tla as tla`). It covers the "
             "`@tla.kernel` decorator, Host `@dataclass` packing, "
-            "`tla.compile` / `KernelLauncher` launch, and Host tensors. "
+            "`tla.compile` / `JitCompiledFunction` launch, and Host tensors. "
             "Environment variables are in "
             "`docs/zh/kernel_development/core_concepts/env_vars.md`. "
             "Kernel-side ops live in `docs/en/api/kernel_api_reference.md`.",
@@ -244,8 +240,7 @@ def generate(*, docs_dir: Path | None = None) -> str:
         header_sources=(
             "Do not edit manually. Update Host docstrings in catlass/dsl.py,",
             "catlass/base_dsl/compiler.py, catlass/base_dsl/jit_executor.py,",
-            "catlass/catlass_dsl/tla.py, catlass/execution_lowering.py,",
-            "and catlass/tla/runtime.py.",
+            "catlass/execution_lowering.py, and catlass/tla/runtime.py.",
         ),
         leftovers_title="Other Host APIs",
         leftovers_blurb=(

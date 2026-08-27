@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import ctypes
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 import hashlib
 import json
 import math
 import os
 import re
 import shutil
+import shlex
 import struct
 import subprocess
 import sys
@@ -27,7 +28,6 @@ from .base_dsl.arch import (
     resolve_npu_arch as _resolve_npu_arch,
 )
 from .base_dsl import BaseDSL, DSLLocation
-from .base_dsl.compiler import _parse_compile_options_from_str
 from .base_dsl.typing import Numeric
 from .compiler_bridge import (
     BridgeLoweringError,
@@ -45,6 +45,7 @@ from .compiler_bridge import (
 from .types import dtype_size_bytes
 
 if TYPE_CHECKING:
+    from .base_dsl.jit_executor import JitCompiledFunction
     from .tla.ffi import ExternFunction
 
 # CATLASS_DSL_KEEP tokens: ir / ir-debug / kernel.
@@ -169,85 +170,19 @@ _PRINT_TENSOR_DTYPES_BY_NATIVE = {
 
 
 @dataclass(frozen=True)
-class TlaKernelArtifact:
-    cache_key: str
-    cache_dir: Path
-    tlair_mlir: str
-    lowered_llvm: str
-    entrypoint: str
-    compiler_bridge_path: Path | None
-    hivmc_path: Path
-    kernel_binary_path: Path
-    runtime: "TlaRuntimeOptions | None" = None
-    pass_ir_dump: str = ""
-    kernel_abi: KernelAbiLayout | None = None
-    expects_print_tensor: bool = False
-    expects_debug_fifo: bool = False
-    logical_mixed_handoff: "_LogicalMixedHandoff | None" = None
-    _artifact_metadata_prepared: bool = field(
-        default=False, repr=False, compare=False, hash=False
-    )
-    _abi_packer: "_PreparedAbiPacker | None" = field(
-        default=None, repr=False, compare=False, hash=False
-    )
-    _runtime_handle: tuple[int, int] | None = field(
-        default=None, init=False, repr=False, compare=False, hash=False
-    )
-    _runtime_handle_lock: threading.RLock = field(
-        default_factory=threading.RLock,
-        init=False,
-        repr=False,
-        compare=False,
-        hash=False,
-    )
-
-    def __post_init__(self) -> None:
-        # Production compile/cache-load paths pass precomputed metadata. Keep
-        # direct construction useful for tests and internal callers while still
-        # establishing the same invariant at Artifact construction time.
-        if not self._artifact_metadata_prepared:
-            metadata = _analyze_artifact_static_metadata(
-                self.tlair_mlir, self.lowered_llvm
-            )
-            object.__setattr__(
-                self, "expects_print_tensor", metadata.expects_print_tensor
-            )
-            object.__setattr__(self, "expects_debug_fifo", metadata.expects_debug_fifo)
-            object.__setattr__(
-                self, "logical_mixed_handoff", metadata.logical_mixed_handoff
-            )
-            object.__setattr__(self, "_artifact_metadata_prepared", True)
-
-        if self.kernel_abi is not None and self._abi_packer is None:
-            expected_entrypoint = (
-                self.logical_mixed_handoff.entrypoint
-                if self.logical_mixed_handoff is not None
-                else self.entrypoint
-            )
-            object.__setattr__(
-                self,
-                "_abi_packer",
-                _prepare_abi_packer(
-                    self.kernel_abi, expected_entrypoint=expected_entrypoint
-                ),
-            )
-
-
-@dataclass(frozen=True)
 class TlaExecutionResult:
-    artifact: TlaKernelArtifact
-    module_handle: int
+    binary_handle: int
     function_handle: int
     device: int
 
 
 @dataclass(frozen=True)
-class TlaRuntimeOptions:
+class TlaCompileOption:
     cache_enabled: bool = True
     cache_dir: Path | None = None
     force_recompile: bool = False
     kernel_mode: str = "aiv"
-    # Placeholder until ``_runtime_options_from_lowered_mlir``; derived from
+    # Placeholder until ``_resolve_compile_option_from_lowered_mlir``; derived from
     # public ``--npu-arch`` default (not a separate Host knob).
     arch_scope: str = _arch_scope_for_target_impl(
         target_arch=_resolve_npu_arch(DEFAULT_NPU_ARCH),
@@ -255,18 +190,6 @@ class TlaRuntimeOptions:
     )
     #: When True, dump IR across the lowering pipeline (env ``CATLASS_DSL_PRINT_IR``).
     print_ir: bool = False
-
-
-@dataclass(frozen=True)
-class _KernelLaunchPlan:
-    entrypoint: str
-    kernel_mode: str
-    block_num: int
-    payload: bytes
-    expects_debug_fifo: bool
-    # 1 moves the workspace to arg 0 for pure kernels; 2 replaces the
-    # trailing marker in place for mixed split kernels.
-    expects_print_tensor: bool | int
 
 
 @dataclass(frozen=True)
@@ -296,30 +219,63 @@ class _PreparedAbiPacker:
 @dataclass(frozen=True)
 class _LogicalMixedHandoff:
     entrypoint: str
-    user_arg_types: tuple[str, ...]
 
 
 @dataclass(frozen=True)
 class _ArtifactStaticMetadata:
-    expects_print_tensor: bool
-    expects_debug_fifo: bool
+    uses_scalar_print: bool
+    uses_tensor_print: bool
     logical_mixed_handoff: _LogicalMixedHandoff | None
 
 
 _MEMORY_COMPILE_CACHE_LOCK = threading.RLock()
-_MEMORY_COMPILE_CACHE: dict[str, TlaKernelArtifact] = {}
+_MEMORY_COMPILE_CACHE: dict[str, JitCompiledFunction] = {}
 _NATIVE_PRINT_TENSOR_STDOUT_LOCK = threading.RLock()
 
 
-def compile_kernel(
+def _parse_compile_options_from_str(options: Any) -> dict[str, str]:
+    """Parse an ``options="--key value"`` token string."""
+    if options is None:
+        return {}
+    if not isinstance(options, str):
+        raise TypeError(
+            "compile options must be a string "
+            '(e.g. options="--npu-arch 3510"), '
+            f"got {type(options).__name__}"
+        )
+    text = options.strip()
+    if not text:
+        return {}
+    tokens = shlex.split(text)
+    parsed: dict[str, str] = {}
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if token.startswith("--") and "=" in token:
+            key, value = token[2:].split("=", 1)
+            parsed[key.replace("-", "_")] = value
+            index += 1
+            continue
+        if token.startswith("--"):
+            key = token[2:].replace("-", "_")
+            if index + 1 >= len(tokens) or tokens[index + 1].startswith("-"):
+                raise ValueError(f"Missing value for compile option {token!r}")
+            parsed[key] = tokens[index + 1]
+            index += 2
+            continue
+        raise ValueError(f"Unexpected token in compile options: {token!r}")
+    return parsed
+
+
+def _compile_kernel(
     fn: Any,
     *,
     kind: str,
     options: Mapping[str, Any],
-    runtime: TlaRuntimeOptions,
+    compile_option: TlaCompileOption,
     type_args: Sequence[Any] | None = None,
     decorator_location: DSLLocation | None = None,
-) -> TlaKernelArtifact:
+) -> "JitCompiledFunction":
     lowered = BaseDSL()._lower(
         fn,
         kind=kind,
@@ -333,17 +289,17 @@ def compile_kernel(
     entrypoint = _extract_entrypoint(tlair_mlir)
     compiler_bridge_path = resolve_bridge_extension_path()
     hivmc = _resolve_hivmc_a5()
-    target = _resolve_kernel_target(runtime)
+    target = _resolve_kernel_target(compile_option)
     extern_targets = _resolve_extern_targets(
         extern_function,
         extern_core_types=extern_core_types,
         target_arch=target.target_arch,
     )
-    cache_dir = runtime.cache_dir or _default_cache_dir()
+    cache_dir = compile_option.cache_dir or _default_cache_dir()
     cache_key = _cache_key(
         tlair_mlir=tlair_mlir,
         entrypoint=entrypoint,
-        runtime=runtime,
+        compile_option=compile_option,
         compiler_bridge_path=compiler_bridge_path,
         hivmc=hivmc,
         target=target,
@@ -353,15 +309,21 @@ def compile_kernel(
     artifact_dir = cache_dir / cache_key
     manifest = artifact_dir / "manifest.json"
 
-    if runtime.cache_enabled and not runtime.force_recompile:
-        cached_memory = _get_memory_cached_artifact(cache_key)
+    if compile_option.cache_enabled and not compile_option.force_recompile:
+        cached_memory = _get_memory_cached_function(cache_key)
         if cached_memory is not None:
-            _copy_kept_artifacts(cached_memory)
-            return cached_memory
+            compiled = _new_jit_compiled_function_from_cached(cached_memory)
+            _set_memory_cached_function(compiled)
+            _copy_kept_artifacts(compiled)
+            return compiled
 
-    if runtime.cache_enabled and not runtime.force_recompile and manifest.exists():
+    if (
+        compile_option.cache_enabled
+        and not compile_option.force_recompile
+        and manifest.exists()
+    ):
         cached = _load_manifest(manifest)
-        kernel_path = artifact_dir / str(cached["kernel_binary"])
+        kernel_binary_path = artifact_dir / str(cached["kernel_binary"])
         mlir_path = artifact_dir / str(cached["lowered_mlir"])
         cached_pass_dump = cached.get("pass_ir_dump")
         pass_dump_path = (
@@ -369,22 +331,22 @@ def compile_kernel(
         )
         if (
             _cache_manifest_has_current_workspace_abis(cached)
-            and kernel_path.exists()
+            and kernel_binary_path.exists()
             and mlir_path.exists()
         ):
             lowered_llvm = mlir_path.read_text()
             static_metadata = _analyze_compiled_artifact_static_metadata(
                 tlair_mlir, lowered_llvm
             )
-            expected_abi_entrypoint = (
+            expected_entrypoint = (
                 static_metadata.logical_mixed_handoff.entrypoint
                 if static_metadata.logical_mixed_handoff is not None
                 else entrypoint
             )
             cached_kernel_abi, cached_abi_packer = _prepared_kernel_abi_from_manifest(
-                cached, expected_entrypoint=expected_abi_entrypoint
+                cached, expected_entrypoint=expected_entrypoint
             )
-            artifact = TlaKernelArtifact(
+            compiled = _new_jit_compiled_function(
                 cache_key=cache_key,
                 cache_dir=artifact_dir,
                 tlair_mlir=tlair_mlir,
@@ -392,9 +354,9 @@ def compile_kernel(
                 entrypoint=entrypoint,
                 compiler_bridge_path=compiler_bridge_path,
                 hivmc_path=hivmc,
-                kernel_binary_path=kernel_path,
-                runtime=_runtime_options_from_lowered_mlir(
-                    runtime,
+                kernel_binary_path=kernel_binary_path,
+                compile_option=_resolve_compile_option_from_lowered_mlir(
+                    compile_option,
                     lowered_llvm,
                     has_logical_mixed_handoff=(
                         static_metadata.logical_mixed_handoff is not None
@@ -404,27 +366,26 @@ def compile_kernel(
                 if pass_dump_path and pass_dump_path.exists()
                 else "",
                 kernel_abi=cached_kernel_abi,
-                expects_print_tensor=static_metadata.expects_print_tensor,
-                expects_debug_fifo=static_metadata.expects_debug_fifo,
+                abi_packer=cached_abi_packer,
+                uses_scalar_print=static_metadata.uses_scalar_print,
+                uses_tensor_print=static_metadata.uses_tensor_print,
                 logical_mixed_handoff=static_metadata.logical_mixed_handoff,
-                _artifact_metadata_prepared=True,
-                _abi_packer=cached_abi_packer,
             )
-            _set_memory_cached_artifact(artifact)
-            _copy_kept_artifacts(artifact)
-            return artifact
+            _set_memory_cached_function(compiled)
+            _copy_kept_artifacts(compiled)
+            return compiled
 
     artifact_dir.mkdir(parents=True, exist_ok=True)
     mlir_path = artifact_dir / "lowered.mlir"
     pass_dump_path = artifact_dir / "pass-ir-dump.mlir"
-    kernel_path = artifact_dir / "kernel.o"
+    kernel_binary_path = artifact_dir / "kernel.o"
 
     try:
         lowering_result = _run_tla_lowering_to_mlir(
             lowered_module=lowered.module,
             tlair_mlir=tlair_mlir,
             mlir_path=mlir_path,
-            runtime=runtime,
+            compile_option=compile_option,
         )
     except TlaKernelCompileError as exc:
         if exc.pass_ir_dump:
@@ -440,22 +401,22 @@ def compile_kernel(
     static_metadata = _analyze_compiled_artifact_static_metadata(
         tlair_mlir, lowered_llvm
     )
-    runtime_for_hivmc = _runtime_options_from_lowered_mlir(
-        runtime,
+    resolved_option = _resolve_compile_option_from_lowered_mlir(
+        compile_option,
         lowered_llvm,
         has_logical_mixed_handoff=(static_metadata.logical_mixed_handoff is not None),
     )
     kernel_abi = getattr(lowering_result, "kernel_abi", None)
-    expected_abi_entrypoint = (
+    expected_entrypoint = (
         static_metadata.logical_mixed_handoff.entrypoint
         if static_metadata.logical_mixed_handoff is not None
         else entrypoint
     )
     abi_packer = _prepare_compiled_abi_packer(
-        kernel_abi, expected_entrypoint=expected_abi_entrypoint
+        kernel_abi, expected_entrypoint=expected_entrypoint
     )
     hivmc_mlir_path, template_bitcode = _create_stamped_hivmc_input(
-        mlir_path, runtime_for_hivmc
+        mlir_path, resolved_option
     )
     if extern_function is not None:
         user_bitcodes = _compile_ascendc_extern_function(
@@ -464,7 +425,7 @@ def compile_kernel(
             targets=extern_targets,
         )
         if template_bitcode is None:
-            template_bitcode = _resolve_hivm_template_bitcode(runtime_for_hivmc)
+            template_bitcode = _resolve_hivm_template_bitcode(resolved_option)
         template_bitcode = ",".join(
             (template_bitcode, *(str(path) for path in user_bitcodes))
         )
@@ -473,8 +434,8 @@ def compile_kernel(
             _build_hivmc_a5_command(
                 compiler=hivmc,
                 mlir_path=hivmc_mlir_path,
-                kernel_path=kernel_path,
-                runtime=runtime_for_hivmc,
+                kernel_binary_path=kernel_binary_path,
+                compile_option=resolved_option,
                 template_bitcode=template_bitcode,
             ),
             label="hivmc-a5",
@@ -483,10 +444,10 @@ def compile_kernel(
     finally:
         if hivmc_mlir_path != mlir_path:
             hivmc_mlir_path.unlink(missing_ok=True)
-    if not kernel_path.exists():
+    if not kernel_binary_path.exists():
         raise TlaKernelCompileError(
             "hivmc-a5 completed but output kernel artifact was not "
-            f"created at {kernel_path}"
+            f"created at {kernel_binary_path}"
         )
 
     manifest.write_text(
@@ -500,7 +461,7 @@ def compile_kernel(
                     _PRINT_TENSOR_WORKSPACE_ABI_REVISION
                 ),
                 "entrypoint": entrypoint,
-                "kernel_binary": kernel_path.name,
+                "kernel_binary": kernel_binary_path.name,
                 "lowered_mlir": mlir_path.name,
                 "pass_ir_dump": pass_dump_path.name
                 if lowering_result.pass_ir_dump
@@ -509,7 +470,7 @@ def compile_kernel(
                     str(compiler_bridge_path) if compiler_bridge_path else None
                 ),
                 "hivmc": str(hivmc),
-                "arch_scope": runtime_for_hivmc.arch_scope,
+                "arch_scope": resolved_option.arch_scope,
                 "kernel_abi": kernel_abi_to_dict(kernel_abi),
             },
             indent=2,
@@ -517,7 +478,7 @@ def compile_kernel(
         )
         + "\n"
     )
-    artifact = TlaKernelArtifact(
+    compiled = _new_jit_compiled_function(
         cache_key=cache_key,
         cache_dir=artifact_dir,
         tlair_mlir=tlair_mlir,
@@ -525,39 +486,145 @@ def compile_kernel(
         entrypoint=entrypoint,
         compiler_bridge_path=compiler_bridge_path,
         hivmc_path=hivmc,
-        kernel_binary_path=kernel_path,
+        kernel_binary_path=kernel_binary_path,
         pass_ir_dump=lowering_result.pass_ir_dump,
-        runtime=runtime_for_hivmc,
+        compile_option=resolved_option,
         kernel_abi=kernel_abi,
-        expects_print_tensor=static_metadata.expects_print_tensor,
-        expects_debug_fifo=static_metadata.expects_debug_fifo,
+        abi_packer=abi_packer,
+        uses_scalar_print=static_metadata.uses_scalar_print,
+        uses_tensor_print=static_metadata.uses_tensor_print,
         logical_mixed_handoff=static_metadata.logical_mixed_handoff,
-        _artifact_metadata_prepared=True,
-        _abi_packer=abi_packer,
     )
-    if runtime.cache_enabled:
-        _set_memory_cached_artifact(artifact)
-    _copy_kept_artifacts(artifact)
-    return artifact
+    if compile_option.cache_enabled:
+        _set_memory_cached_function(compiled)
+    _copy_kept_artifacts(compiled)
+    return compiled
 
 
-def _get_memory_cached_artifact(cache_key: str) -> TlaKernelArtifact | None:
+def compile_and_cache(
+    fn: Any,
+    *,
+    kind: str,
+    options: Mapping[str, Any],
+    compile_option: TlaCompileOption,
+    type_args: Sequence[Any] | None = None,
+    decorator_location: DSLLocation | None = None,
+) -> "JitCompiledFunction":
+    """Compile or load one kernel and return an independent JIT owner."""
+    return _compile_kernel(
+        fn,
+        kind=kind,
+        options=options,
+        compile_option=compile_option,
+        type_args=type_args,
+        decorator_location=decorator_location,
+    )
+
+
+def _new_jit_compiled_function(
+    *,
+    cache_key: str,
+    cache_dir: Path,
+    tlair_mlir: str,
+    lowered_llvm: str,
+    entrypoint: str,
+    compiler_bridge_path: Path | None,
+    hivmc_path: Path,
+    kernel_binary_path: Path,
+    compile_option: TlaCompileOption,
+    pass_ir_dump: str,
+    kernel_abi: KernelAbiLayout | None,
+    abi_packer: _PreparedAbiPacker | None,
+    uses_scalar_print: bool,
+    uses_tensor_print: bool,
+    logical_mixed_handoff: _LogicalMixedHandoff | None,
+) -> "JitCompiledFunction":
+    """Build a compiled function from validated, device-independent state."""
+    from .base_dsl.jit_executor import (
+        ExecutionArgs,
+        JitCompiledFunction,
+        JitFunctionArtifacts,
+        JitModule,
+    )
+
+    if abi_packer is None:
+        raise TlaUnsupportedAbiError(
+            "kernel ABI was not validated while constructing the compiled function"
+        )
+
+    is_mixed = logical_mixed_handoff is not None and compile_option.kernel_mode == "mix"
+    print_metadata = (
+        _print_tensor_static_metadata_records(tlair_mlir, entrypoint=entrypoint)
+        if uses_tensor_print
+        else None
+    )
+    print_helper_core = (
+        _mixed_print_tensor_helper_core(lowered_llvm)
+        if uses_tensor_print and compile_option.kernel_mode == "mix"
+        else (
+            _core_type_from_arch_scope(compile_option.arch_scope)
+            if uses_tensor_print
+            else None
+        )
+    )
+
+    return JitCompiledFunction(
+        jit_module=JitModule(
+            kernel_binary_path=kernel_binary_path,
+            entrypoint=entrypoint,
+            kernel_mode=compile_option.kernel_mode,
+            execution_args=ExecutionArgs(
+                kernel_abi=kernel_abi,
+                abi_packer=abi_packer,
+            ),
+            uses_scalar_print=uses_scalar_print,
+            uses_tensor_print=uses_tensor_print,
+            is_mixed=is_mixed,
+            print_metadata=print_metadata,
+            print_helper_core=print_helper_core,
+        ),
+        artifacts=JitFunctionArtifacts(
+            MLIR=tlair_mlir,
+            LLVM=lowered_llvm,
+            BINARY=kernel_binary_path,
+            PASS_IR_DUMP=pass_ir_dump or None,
+            cache_key=cache_key,
+            cache_dir=cache_dir,
+            compiler_bridge_path=compiler_bridge_path,
+            hivmc_path=hivmc_path,
+        ),
+    )
+
+
+def _new_jit_compiled_function_from_cached(
+    cached: "JitCompiledFunction",
+) -> "JitCompiledFunction":
+    """Create a fresh launch owner while reusing immutable compile state."""
+    from .base_dsl.jit_executor import JitCompiledFunction
+
+    return JitCompiledFunction(
+        jit_module=cached.jit_module,
+        artifacts=cached.artifacts,
+    )
+
+
+def _get_memory_cached_function(cache_key: str) -> "JitCompiledFunction | None":
     with _MEMORY_COMPILE_CACHE_LOCK:
-        artifact = _MEMORY_COMPILE_CACHE.get(cache_key)
-    if artifact is None:
+        compiled = _MEMORY_COMPILE_CACHE.get(cache_key)
+    if compiled is None:
         return None
-    if not artifact.kernel_binary_path.exists():
-        _drop_memory_cached_artifact(cache_key)
+    if not compiled.kernel_binary_path.exists():
+        _drop_memory_cached_function(cache_key)
         return None
-    return artifact
+    return compiled
 
 
-def _set_memory_cached_artifact(artifact: TlaKernelArtifact) -> None:
+def _set_memory_cached_function(compiled: "JitCompiledFunction") -> None:
     with _MEMORY_COMPILE_CACHE_LOCK:
-        _MEMORY_COMPILE_CACHE[artifact.cache_key] = artifact
+        _MEMORY_COMPILE_CACHE[compiled.cache_key] = compiled
 
 
-def _drop_memory_cached_artifact(cache_key: str) -> None:
+def _drop_memory_cached_function(cache_key: str) -> None:
     with _MEMORY_COMPILE_CACHE_LOCK:
         _MEMORY_COMPILE_CACHE.pop(cache_key, None)
 
@@ -593,7 +660,7 @@ def _print_tensor_native_wire_bytes(metadata: _PrintTensorMetadata) -> int:
 
 
 def _validate_print_tensor_fifo_capacity(
-    artifact: TlaKernelArtifact,
+    metadata: Sequence[_PrintTensorMetadata],
     block_num: int,
     *,
     helper_core: str,
@@ -608,9 +675,6 @@ def _validate_print_tensor_fifo_capacity(
             f"{_PRINT_TENSOR_CORE_RECORDS} core records; got {core_records} "
             f"from {block_count} blocks"
         )
-    metadata = _print_tensor_static_metadata_records(
-        artifact.tlair_mlir, entrypoint=artifact.entrypoint
-    )
     # Dynamic control flow can execute any site zero or multiple times. Keep
     # the native per-record bound, but do not reserve the FIFO for every
     # statically visible site.
@@ -910,17 +974,7 @@ def _pack_launch_args_prepared(
                 )
             fields = builder()
             memref_fields[run.logical_index] = fields
-        missing = [field for field in run.fields if field not in fields]
-        if missing:
-            raise TlaUnsupportedAbiError(
-                f"memref launch field {missing[0]!r} missing from tensor descriptor"
-            )
         encoded_values = tuple(int(fields[field]) for field in run.fields)
-        for field_name, field_value in zip(run.fields, encoded_values, strict=True):
-            if field_value < 0 or field_value >= (1 << 64):
-                raise TlaUnsupportedAbiError(
-                    f"memref field {field_name!r} does not fit in 8 bytes"
-                )
         run.packer.pack_into(payload, run.start, *encoded_values)
     return bytes(payload)
 
@@ -1057,92 +1111,6 @@ def _prepare_compiled_abi_packer(
         ) from exc
 
 
-def _split_top_level_csv(text: str) -> list[str]:
-    result: list[str] = []
-    start = 0
-    angle_depth = 0
-    paren_depth = 0
-    brace_depth = 0
-    for index, char in enumerate(text):
-        if char == "<":
-            angle_depth += 1
-        elif char == ">" and angle_depth > 0:
-            angle_depth -= 1
-        elif char == "(" and angle_depth == 0:
-            paren_depth += 1
-        elif char == ")" and angle_depth == 0 and paren_depth > 0:
-            paren_depth -= 1
-        elif char == "{" and angle_depth == 0 and paren_depth == 0:
-            brace_depth += 1
-        elif char == "}" and angle_depth == 0 and paren_depth == 0 and brace_depth > 0:
-            brace_depth -= 1
-        elif char == "," and angle_depth == 0 and paren_depth == 0 and brace_depth == 0:
-            item = text[start:index].strip()
-            if item:
-                result.append(item)
-            start = index + 1
-    tail = text[start:].strip()
-    if tail:
-        result.append(tail)
-    return result
-
-
-def _find_matching_function_type_paren(text: str, start: int) -> int:
-    angle_depth = 0
-    depth = 0
-    for index in range(start, len(text)):
-        char = text[index]
-        if char == "<":
-            angle_depth += 1
-        elif char == ">" and angle_depth > 0:
-            angle_depth -= 1
-        elif char == "(" and angle_depth == 0:
-            depth += 1
-        elif char == ")" and angle_depth == 0:
-            depth -= 1
-            if depth == 0:
-                return index
-    return -1
-
-
-def _extract_named_func_args(mlir_text: str, func_name: str) -> list[str]:
-    match = re.search(
-        rf"(?:func\.func|\"func\.func\")\s+(?:private\s+)?@{re.escape(func_name)}\s*\(",
-        mlir_text,
-    )
-    if not match:
-        return []
-    start = match.end() - 1
-    end = _find_matching_function_type_paren(mlir_text, start)
-    if end <= start:
-        return []
-    params = _split_top_level_csv(mlir_text[start + 1 : end])
-    return params
-
-
-def _mixed_handoff_user_arg_types(params: Sequence[str]) -> tuple[str, ...]:
-    """Exclude compiler-owned print workspace operands from a mixed handoff.
-
-    The split functions carry the same user ABI plus an internal workspace
-    when scalar debug or tensor printing is present. That workspace is
-    supplied by a marker-backed FIFO descriptor, never by a public launch
-    argument.
-    """
-
-    user_arg_types: list[str] = []
-    for param in params:
-        if (
-            "tla.debug_print.workspace" in param
-            or "tla.print_tensor.workspace" in param
-        ):
-            continue
-        if ":" in param:
-            user_arg_types.append(param.split(":", 1)[1].strip())
-        else:
-            user_arg_types.append(param.strip())
-    return tuple(user_arg_types)
-
-
 def _extract_mixed_handoff_entrypoints(mlir_text: str) -> tuple[str, str] | None:
     names = re.findall(
         r"(?:func\.func|\"func\.func\")\s+@([A-Za-z_][A-Za-z0-9_]*)",
@@ -1159,16 +1127,11 @@ def _extract_logical_mixed_handoff(mlir_text: str) -> _LogicalMixedHandoff | Non
     entrypoints = _extract_mixed_handoff_entrypoints(mlir_text)
     if entrypoints is None:
         return None
-    aic_name, aiv_name = entrypoints
-    base_name = aic_name.removesuffix("_mix_aic")
-    if aiv_name.removesuffix("_mix_aiv") != base_name:
+    aic_entrypoint, aiv_entrypoint = entrypoints
+    logical_entrypoint = aic_entrypoint.removesuffix("_mix_aic")
+    if aiv_entrypoint.removesuffix("_mix_aiv") != logical_entrypoint:
         return None
-    params = _extract_named_func_args(mlir_text, aic_name)
-    if not params:
-        raise TlaUnsupportedAbiError(
-            "mixed handoff AIC split function must expose argument types"
-        )
-    return _LogicalMixedHandoff(base_name, _mixed_handoff_user_arg_types(params))
+    return _LogicalMixedHandoff(logical_entrypoint)
 
 
 def _analyze_artifact_static_metadata(
@@ -1176,8 +1139,8 @@ def _analyze_artifact_static_metadata(
 ) -> _ArtifactStaticMetadata:
     mlir_text = lowered_llvm or tlair_mlir
     return _ArtifactStaticMetadata(
-        expects_print_tensor="tla.print_tensor.workspace" in mlir_text,
-        expects_debug_fifo="tla.debug_print.workspace" in mlir_text,
+        uses_scalar_print="tla.debug_print.workspace" in mlir_text,
+        uses_tensor_print="tla.print_tensor.workspace" in mlir_text,
         logical_mixed_handoff=_extract_logical_mixed_handoff(mlir_text),
     )
 
@@ -1191,27 +1154,6 @@ def _analyze_compiled_artifact_static_metadata(
         raise TlaKernelCompileError(
             f"Invalid compiler-produced launch metadata: {exc}"
         ) from exc
-
-
-def _build_logical_mixed_handoff_launch_args(
-    launch_args: Sequence[Any],
-    arg_types: Sequence[str],
-    kernel_abi: KernelAbiLayout | None,
-) -> bytes:
-    # Host still passes one object per logical kernel argument. Dynamic GM expands
-    # each Tensor into many device params / memref_field slots in the ABI, so do
-    # not compare against the raw split-function parameter count.
-    expected = (
-        _logical_launch_arg_count(kernel_abi)
-        if kernel_abi is not None
-        else len(arg_types)
-    )
-    if len(launch_args) != expected:
-        raise TlaUnsupportedAbiError(
-            "mixed handoff launch argument count does not match ABI layout: "
-            f"got {len(launch_args)}, expected {expected}"
-        )
-    return _pack_launch_args(launch_args, kernel_abi)
 
 
 def _capture_c_stdout(launch: Callable[[], None]) -> str:
@@ -1575,8 +1517,8 @@ def _format_print_tensor_record(
     )
 
 
-def runtime_options_from_kwargs(kwargs: Mapping[str, Any]) -> TlaRuntimeOptions:
-    """Build runtime options from Host compile/launch kwargs.
+def compile_option_from_kwargs(kwargs: Mapping[str, Any]) -> TlaCompileOption:
+    """Build compile options from Host compile/launch kwargs.
 
     Public arch selection::
 
@@ -1590,11 +1532,11 @@ def runtime_options_from_kwargs(kwargs: Mapping[str, Any]) -> TlaRuntimeOptions:
     parsed_options = _parse_compile_options_from_str(kwargs.get("options"))
     npu_arch = str(parsed_options.get("npu_arch", DEFAULT_NPU_ARCH))
     target_arch = _resolve_npu_arch(npu_arch)
-    # Placeholder until ``_runtime_options_from_lowered_mlir`` reads core type.
+    # Placeholder until ``_resolve_compile_option_from_lowered_mlir`` reads core type.
     arch_scope = _arch_scope_for_target(target_arch=target_arch, core_type="aiv")
     _, core_type = _parse_arch_scope(arch_scope)
     cache_dir_env = os.getenv("CATLASS_DSL_CACHE_DIR")
-    return TlaRuntimeOptions(
+    return TlaCompileOption(
         cache_enabled=_env_truthy("CATLASS_DSL_CACHE", default="1"),
         cache_dir=(
             Path(cache_dir_env).expanduser().resolve() if cache_dir_env else None
@@ -1606,23 +1548,25 @@ def runtime_options_from_kwargs(kwargs: Mapping[str, Any]) -> TlaRuntimeOptions:
     )
 
 
-def runtime_options_for_launch(runtime: TlaRuntimeOptions) -> TlaRuntimeOptions:
-    if runtime.cache_dir is not None:
-        return runtime
-    if runtime.cache_enabled:
-        return replace(runtime, cache_dir=_default_cache_dir())
+def compile_option_for_launch(
+    compile_option: TlaCompileOption,
+) -> TlaCompileOption:
+    if compile_option.cache_dir is not None:
+        return compile_option
+    if compile_option.cache_enabled:
+        return replace(compile_option, cache_dir=_default_cache_dir())
     temp_dir = Path(tempfile.mkdtemp(prefix="tla-dsl-kernel-")).resolve()
-    return replace(runtime, cache_enabled=False, cache_dir=temp_dir)
+    return replace(compile_option, cache_enabled=False, cache_dir=temp_dir)
 
 
-def _runtime_options_from_lowered_mlir(
-    runtime: TlaRuntimeOptions,
+def _resolve_compile_option_from_lowered_mlir(
+    compile_option: TlaCompileOption,
     mlir_text: str,
     *,
     has_logical_mixed_handoff: bool,
-) -> TlaRuntimeOptions:
-    target_arch, core_type = _parse_arch_scope(runtime.arch_scope)
-    kernel_mode = runtime.kernel_mode
+) -> TlaCompileOption:
+    target_arch, core_type = _parse_arch_scope(compile_option.arch_scope)
+    kernel_mode = compile_option.kernel_mode
 
     if has_logical_mixed_handoff:
         core_type = "aic"
@@ -1644,10 +1588,13 @@ def _runtime_options_from_lowered_mlir(
         target_arch = "c310"
 
     arch_scope = _arch_scope_for_target(target_arch=target_arch, core_type=core_type)
-    if runtime.kernel_mode == kernel_mode and runtime.arch_scope == arch_scope:
-        return runtime
+    if (
+        compile_option.kernel_mode == kernel_mode
+        and compile_option.arch_scope == arch_scope
+    ):
+        return compile_option
     return replace(
-        runtime,
+        compile_option,
         kernel_mode=kernel_mode,
         arch_scope=arch_scope,
     )
@@ -1667,7 +1614,7 @@ def _cache_key(
     *,
     tlair_mlir: str,
     entrypoint: str,
-    runtime: TlaRuntimeOptions,
+    compile_option: TlaCompileOption,
     compiler_bridge_path: Path | None,
     hivmc: Path,
     target: TlaKernelTarget,
@@ -1682,8 +1629,8 @@ def _cache_key(
         "print_tensor_workspace_abi_revision": _PRINT_TENSOR_WORKSPACE_ABI_REVISION,
         "cache_abi_version": _ONLINE_CACHE_ABI_VERSION,
         "entrypoint": entrypoint,
-        "kernel_mode": runtime.kernel_mode,
-        "arch_scope": runtime.arch_scope,
+        "kernel_mode": compile_option.kernel_mode,
+        "arch_scope": compile_option.arch_scope,
         "cce_arch": target.cce_arch,
         "compiler_bridge": str(compiler_bridge_path) if compiler_bridge_path else None,
         "hivmc": str(hivmc),
@@ -1691,7 +1638,7 @@ def _cache_key(
         "hivmc_version": _tool_version(hivmc),
         "hivmc_fingerprint": _tool_fingerprint(hivmc),
         "mlir": tlair_mlir,
-        "print_ir": runtime.print_ir,
+        "print_ir": compile_option.print_ir,
         "extern_source_sha256": (
             None
             if extern_function is None
@@ -1783,7 +1730,7 @@ def _parse_keep_tokens(raw: str) -> frozenset[str]:
     return tokens & _KEEP_ALL_TOKENS
 
 
-def _copy_kept_artifacts(artifact: TlaKernelArtifact) -> None:
+def _copy_kept_artifacts(compiled: "JitCompiledFunction") -> None:
     """Copy selected compile artifacts to DUMP_DIR (or CWD) when KEEP is set."""
     tokens = _parse_keep_tokens(os.getenv("CATLASS_DSL_KEEP", ""))
     if not tokens:
@@ -1795,15 +1742,16 @@ def _copy_kept_artifacts(artifact: TlaKernelArtifact) -> None:
         else Path.cwd().resolve()
     )
     dump_dir.mkdir(parents=True, exist_ok=True)
-    stem = artifact.entrypoint or artifact.cache_key
+    artifacts = compiled.artifacts
+    stem = compiled.entrypoint or compiled.cache_key
     if "ir" in tokens:
-        (dump_dir / f"{stem}.mlir").write_text(artifact.lowered_llvm)
+        (dump_dir / f"{stem}.mlir").write_text(artifacts.LLVM)
     if "ir-debug" in tokens:
-        (dump_dir / f"{stem}.tlair.mlir").write_text(artifact.tlair_mlir)
-        if artifact.pass_ir_dump:
-            (dump_dir / f"{stem}.pass-ir-dump.mlir").write_text(artifact.pass_ir_dump)
-    if "kernel" in tokens and artifact.kernel_binary_path.exists():
-        shutil.copy2(artifact.kernel_binary_path, dump_dir / f"{stem}.o")
+        (dump_dir / f"{stem}.tlair.mlir").write_text(artifacts.MLIR)
+        if artifacts.PASS_IR_DUMP:
+            (dump_dir / f"{stem}.pass-ir-dump.mlir").write_text(artifacts.PASS_IR_DUMP)
+    if "kernel" in tokens and artifacts.BINARY.exists():
+        shutil.copy2(artifacts.BINARY, dump_dir / f"{stem}.o")
 
 
 def _parse_arch_scope(arch_scope: str) -> tuple[str, str]:
@@ -1824,13 +1772,13 @@ def _arch_scope_for_target(*, target_arch: str, core_type: str) -> str:
         raise TlaExecutionError(str(exc)) from exc
 
 
-def _resolve_kernel_target(runtime: TlaRuntimeOptions) -> TlaKernelTarget:
-    target_arch, core_type = _parse_arch_scope(runtime.arch_scope)
+def _resolve_kernel_target(compile_option: TlaCompileOption) -> TlaKernelTarget:
+    target_arch, core_type = _parse_arch_scope(compile_option.arch_scope)
     try:
         return _get_kernel_target(
             target_arch=target_arch,
             core_type=core_type,
-            arch_scope=runtime.arch_scope,
+            arch_scope=compile_option.arch_scope,
         )
     except ValueError as exc:
         raise TlaExecutionError(str(exc)) from exc
@@ -2013,24 +1961,24 @@ def _build_hivmc_a5_command(
     *,
     compiler: Path,
     mlir_path: Path,
-    kernel_path: Path,
-    runtime: TlaRuntimeOptions,
+    kernel_binary_path: Path,
+    compile_option: TlaCompileOption,
     template_bitcode: str | None = None,
 ) -> list[str]:
     if template_bitcode is None:
-        template_bitcode = _resolve_hivm_template_bitcode(runtime)
+        template_bitcode = _resolve_hivm_template_bitcode(compile_option)
     command = [
         str(compiler),
         str(mlir_path),
         "--target=Ascend950PR_9589",
     ]
-    if runtime.kernel_mode == "mix":
+    if compile_option.kernel_mode == "mix":
         command.extend(
             [
                 "--disable-ffts",
                 f"--link-aicore-bitcode={template_bitcode}",
                 "-o",
-                str(kernel_path),
+                str(kernel_binary_path),
             ]
         )
     else:
@@ -2040,14 +1988,14 @@ def _build_hivmc_a5_command(
                 "--enable-hivm-compile=False",
                 f"--link-aicore-bitcode={template_bitcode}",
                 "-o",
-                str(kernel_path),
+                str(kernel_binary_path),
             ]
         )
     return command
 
 
 def _create_stamped_hivmc_input(
-    mlir_path: Path, runtime: TlaRuntimeOptions
+    mlir_path: Path, compile_option: TlaCompileOption
 ) -> tuple[Path, str | None]:
     """Stamp a private HIVMC input only when debug-print helpers are present.
 
@@ -2064,12 +2012,12 @@ def _create_stamped_hivmc_input(
         return mlir_path, None
     compiler_input = mlir_path.with_name(f"{mlir_path.stem}.hivmc-input.mlir")
     compiler_input.write_text(compiler_text)
-    template_bitcode = _resolve_hivm_template_bitcode(runtime)
+    template_bitcode = _resolve_hivm_template_bitcode(compile_option)
     if "tla.print_tensor.workspace" in compiler_text:
         helper_core_type = (
             _mixed_print_tensor_helper_core(compiler_text)
-            if runtime.kernel_mode == "mix"
-            else _core_type_from_arch_scope(runtime.arch_scope)
+            if compile_option.kernel_mode == "mix"
+            else _core_type_from_arch_scope(compile_option.arch_scope)
         )
         helper = {
             "aic": ("Cube", "print_tensor.aic.c310.bc"),
@@ -2183,9 +2131,9 @@ def _mlir_build_dirs() -> list[Path]:
     return [nested, legacy, packaged]
 
 
-def _resolve_hivm_template_bitcode(runtime: TlaRuntimeOptions) -> str:
+def _resolve_hivm_template_bitcode(compile_option: TlaCompileOption) -> str:
     candidates: list[Path] = []
-    if runtime.kernel_mode == "mix":
+    if compile_option.kernel_mode == "mix":
         repo_aic_candidates: list[Path] = []
         aiv_candidates: list[Path] = []
         for build_dir in _mlir_build_dirs():
@@ -2204,7 +2152,7 @@ def _resolve_hivm_template_bitcode(runtime: TlaRuntimeOptions) -> str:
             "meta_op.aic.c310.bc and meta_op.aiv.c310.bc under the mlir build tree."
         )
 
-    if _core_type_from_arch_scope(runtime.arch_scope) == "aic":
+    if _core_type_from_arch_scope(compile_option.arch_scope) == "aic":
         for build_dir in _mlir_build_dirs():
             candidates.extend(
                 [
@@ -2250,13 +2198,13 @@ def _run_tla_lowering_to_mlir(
     lowered_module: Any | None,
     tlair_mlir: str,
     mlir_path: Path,
-    runtime: TlaRuntimeOptions | None = None,
+    compile_option: TlaCompileOption | None = None,
 ) -> Any:
     try:
         return _run_typed_bridge_to_mlir(
             lowered_module=lowered_module,
             mlir_path=mlir_path,
-            runtime=runtime,
+            compile_option=compile_option,
         )
     except (TlaCompilerBridgeUnavailableError, TlaKernelCompileError):
         tla_compile = _resolve_tla_compile()
@@ -2266,7 +2214,7 @@ def _run_tla_lowering_to_mlir(
             tla_compile=tla_compile,
             tlair_mlir=tlair_mlir,
             mlir_path=mlir_path,
-            runtime=runtime,
+            compile_option=compile_option,
         )
 
 
@@ -2274,7 +2222,7 @@ def _run_typed_bridge_to_mlir(
     *,
     lowered_module: Any | None,
     mlir_path: Path,
-    runtime: TlaRuntimeOptions | None = None,
+    compile_option: TlaCompileOption | None = None,
 ) -> Any:
     if lowered_module is None:
         raise TlaCompilerBridgeUnavailableError(
@@ -2284,7 +2232,7 @@ def _run_typed_bridge_to_mlir(
     try:
         # Host surface is a single PRINT_IR switch; bridge still takes
         # pass-print flags — enable full pipeline dump when requested.
-        print_ir = bool(runtime.print_ir) if runtime else False
+        print_ir = bool(compile_option.print_ir) if compile_option else False
         result = lower_tlair_module_to_mlir(
             lowered_module,
             mlir_print_ir_before=(),
@@ -2334,12 +2282,12 @@ def _run_tla_compile_cli_to_mlir(
     tla_compile: Path,
     tlair_mlir: str,
     mlir_path: Path,
-    runtime: TlaRuntimeOptions | None = None,
+    compile_option: TlaCompileOption | None = None,
 ) -> Any:
     input_path = mlir_path.with_suffix(".tlair.mlir")
     input_path.write_text(tlair_mlir)
     cmd = [str(tla_compile), str(input_path), "-o", str(mlir_path)]
-    print_requested = bool(runtime is not None and runtime.print_ir)
+    print_requested = bool(compile_option is not None and compile_option.print_ir)
     if print_requested:
         cmd.append("--mlir-print-ir-before-all")
         cmd.append("--mlir-print-ir-after-all")
@@ -2457,11 +2405,6 @@ def _env_truthy(name: str, *, default: str) -> bool:
     return value in {"1", "true", "yes", "on", "y"}
 
 
-from .catlass_dsl.ascend_jit_executor import (
-    execute_kernel,
-    _build_kernel_launch_plan,
-    _mark_tensor_launch_args_uploaded,
-)
 from .base_dsl.runtime.ascend import (
     launch_kernel,
     load_acl,

@@ -1,39 +1,52 @@
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass, fields, is_dataclass
-from typing import TYPE_CHECKING, Any, Mapping, Sequence
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Sequence
 
 if TYPE_CHECKING:
-    from ..execution import TlaExecutionResult, TlaKernelArtifact
+    from ..execution import TlaExecutionResult
 
 
 @dataclass(frozen=True)
-class TlaExecutionArgs:
+class JitFunctionArtifacts:
+    """Side artifacts retained for inspection and diagnostics.
+
+    These values are not inputs to ``JitModule`` and are never used to own
+    runtime binary or function handles.
+    """
+
+    MLIR: str
+    LLVM: str
+    BINARY: Path
+    cache_key: str
+    cache_dir: Path
+    hivmc_path: Path
+    PASS_IR_DUMP: str | None = None
+    compiler_bridge_path: Path | None = None
+
+
+@dataclass(frozen=True)
+class ExecutionArgs:
     """Runtime ABI binder for TLA kernel launch arguments.
 
     Packing always requires a compiler-produced ``kernel_abi`` layout so
     Dynamic-GM / memref ABI stays signature-driven.
-
-    Must not import ``catlass.execution`` at module load time: ``execution``
-    re-exports ``execute_kernel`` from ``ascend_jit_executor``, which imports
-    this class, so a top-level import here creates a circular import.
     """
 
-    signature: Mapping[str, Any] | None = None
     kernel_abi: Any | None = None
-    expected_arg_count: int | None = None
     abi_packer: Any | None = None
-
-    def filter_runtime_signature(
-        self, signature: Mapping[str, Any] | None = None
-    ) -> Mapping[str, Any] | None:
-        """Return the runtime-visible signature (constexpr stripping later)."""
-        return self.signature if signature is None else signature
 
     def get_rectified_args(
         self, launch_args: Sequence[Any], **_kwargs: Any
     ) -> tuple[Any, ...]:
         """Normalize call args before packing (adapters + passthrough)."""
+        # Tensor/pointer providers are already in the representation consumed by
+        # the prepared ABI packer. This is the common kernel-launch fast path.
+        if all(hasattr(arg, "__c_pointers__") for arg in launch_args):
+            return tuple(launch_args)
+
         from .runtime.jit_arg_adapters import (
             JitArgAdapterRegistry,
             _adapt_from_data_ptr,
@@ -77,36 +90,227 @@ class TlaExecutionArgs:
                 "launch arguments."
             )
         rectified = self.get_rectified_args(launch_args)
-        if (
-            self.expected_arg_count is not None
-            and len(rectified) != self.expected_arg_count
-        ):
-            raise execution_mod.TlaUnsupportedAbiError(
-                "launch argument count does not match expected signature: "
-                f"got {len(rectified)}, expected {self.expected_arg_count}"
-            )
         if self.abi_packer is not None:
             return execution_mod._pack_launch_args_prepared(rectified, self.abi_packer)
         return execution_mod._pack_launch_args(rectified, self.kernel_abi)
 
 
 @dataclass(frozen=True)
-class TlaJitExecutor:
-    """Callable wrapper around a compiled Tla kernel artifact."""
+class JitModule:
+    """Prepared TLA launch state shared by executors of one compiled function."""
 
-    artifact: TlaKernelArtifact
+    kernel_binary_path: Path
+    entrypoint: str
+    kernel_mode: str
+    execution_args: ExecutionArgs
+    uses_scalar_print: bool
+    uses_tensor_print: bool
+    is_mixed: bool
+    print_metadata: tuple[Any, ...] | None
+    print_helper_core: str | None
 
-    def launch(
+
+class JitExecutor:
+    """Callable TLA executor owning one loaded binary/function pair."""
+
+    def __init__(self, jit_module: JitModule) -> None:
+        from .. import execution as execution_mod
+        from .runtime.ascend_stream_adapter import current_device
+
+        self.jit_module = jit_module
+        self.device = int(current_device())
+        execution_mod.load_acl()
+        binary_handle, function_handle = execution_mod.load_binary(
+            entrypoint=jit_module.entrypoint,
+            kernel_mode=jit_module.kernel_mode,
+            kernel_binary_path=jit_module.kernel_binary_path,
+        )
+        self.binary_handle = int(binary_handle)
+        self.function_handle = int(function_handle)
+
+    @property
+    def kernel_binary_path(self) -> Path:
+        return self.jit_module.kernel_binary_path
+
+    def __call__(
         self,
         *launch_args: Any,
         block_num: int | None = None,
         args: Sequence[Any] | None = None,
-        **kwargs: Any,
+        **launch_kwargs: Any,
+    ) -> TlaExecutionResult:
+        """Launch using this executor's prepared binary state."""
+        from .. import execution as execution_mod
+
+        if launch_args and args is not None:
+            raise execution_mod.TlaUnsupportedAbiError(
+                "Launch arguments specified multiple times."
+            )
+        if args is None:
+            args = launch_args
+        if block_num is None:
+            block_num = 1
+        if not isinstance(block_num, int):
+            raise execution_mod.TlaUnsupportedAbiError("`block_num` must be an int.")
+
+        for arg in args:
+            prepare_for_launch = getattr(arg, "prepare_for_launch", None)
+            if callable(prepare_for_launch):
+                prepare_for_launch()
+
+        module = self.jit_module
+        uses_tensor_print = module.uses_tensor_print
+        print_metadata = module.print_metadata
+        if uses_tensor_print:
+            assert print_metadata is not None
+            assert module.print_helper_core is not None
+            execution_mod._validate_print_tensor_fifo_capacity(
+                print_metadata,
+                block_num,
+                helper_core=module.print_helper_core,
+                mixed=module.is_mixed,
+            )
+
+        payload = module.execution_args.generate_launch_payload(args)
+        payload = execution_mod._append_debug_print_workspace_payload(
+            payload, enabled=module.uses_scalar_print
+        )
+        if uses_tensor_print:
+            extension = bytearray(payload)
+            execution_mod._align_payload(extension, execution_mod._POINTER_ABI_SIZE)
+            extension.extend(
+                execution_mod._PRINT_TENSOR_WORKSPACE_SENTINEL.to_bytes(
+                    execution_mod._POINTER_ABI_SIZE,
+                    byteorder="little",
+                    signed=False,
+                )
+            )
+            payload = bytes(extension)
+
+        raw_stream = launch_kwargs.get("stream")
+        if raw_stream is None:
+            from .runtime.ascend_stream_adapter import current_stream
+
+            stream = int(current_stream(self.device))
+        else:
+            from .runtime.ascend_stream_adapter import as_stream
+
+            stream = as_stream(raw_stream, device=self.device)
+
+        def launch() -> None:
+            execution_mod.launch_kernel(
+                function_handle=self.function_handle,
+                stream=int(stream),
+                block_num=block_num,
+                payload=payload,
+                uses_scalar_print=module.uses_scalar_print,
+                uses_tensor_print=uses_tensor_print,
+                is_mixed=module.is_mixed,
+            )
+
+        if print_metadata is None:
+            launch()
+        else:
+            native_output = execution_mod._capture_c_stdout(launch)
+            print_block_count = execution_mod._checked_print_tensor_block_count(
+                block_num
+            )
+            helper_core = module.print_helper_core
+            assert helper_core is not None
+            expected_subblocks: tuple[int | None, ...] = (
+                (0, 1)
+                if helper_core == "aiv" and module.is_mixed
+                else (0,)
+                if helper_core == "aiv"
+                else (None,)
+            )
+            decoded = execution_mod._decode_native_print_tensor_records(
+                native_output,
+                metadata=print_metadata,
+                block_count=print_block_count,
+                expected_subblocks=expected_subblocks,
+            )
+            preserve_legacy_format = len(print_metadata) * print_block_count == 1
+            for metadata, record, values in decoded:
+                print(
+                    execution_mod._format_print_tensor_record(
+                        values,
+                        shape=record.shape,
+                        dtype=metadata.dtype,
+                        call=None if preserve_legacy_format else metadata.call,
+                        block=record.block,
+                        position=metadata.position if module.is_mixed else None,
+                        subblock=record.subblock,
+                    )
+                )
+
+        return execution_mod.TlaExecutionResult(
+            binary_handle=self.binary_handle,
+            function_handle=self.function_handle,
+            device=self.device,
+        )
+
+
+class JitCompiledFunction:
+    """Own compiled launch state and one lazily materialized executor."""
+
+    def __init__(
+        self,
+        *,
+        jit_module: JitModule,
+        artifacts: JitFunctionArtifacts,
+    ) -> None:
+        self.jit_module = jit_module
+        self.artifacts = artifacts
+        self._executor_lock = threading.Lock()
+        self._executor: JitExecutor | None = None
+
+    @property
+    def __mlir__(self) -> str:
+        return self.artifacts.MLIR
+
+    @property
+    def cache_key(self) -> str:
+        return self.artifacts.cache_key
+
+    @property
+    def kernel_binary_path(self) -> Path:
+        return self.jit_module.kernel_binary_path
+
+    @property
+    def entrypoint(self) -> str:
+        return self.jit_module.entrypoint
+
+    @property
+    def kernel_mode(self) -> str:
+        return self.jit_module.kernel_mode
+
+    @property
+    def execution_args(self) -> ExecutionArgs:
+        return self.jit_module.execution_args
+
+    def _get_executor(self) -> JitExecutor:
+        executor = self._executor
+        if executor is not None:
+            return executor
+
+        with self._executor_lock:
+            if self._executor is None:
+                self._executor = JitExecutor(self.jit_module)
+            return self._executor
+
+    def __call__(
+        self,
+        *launch_args: Any,
+        block_num: int | None = None,
+        args: Sequence[Any] | None = None,
+        **launch_kwargs: Any,
     ) -> TlaExecutionResult:
         """Directory: Compile and Launch / Launch
         Description:
-            Launch a compiled kernel on the NPU after `tla.compile`, passing runtime
-            kernel arguments and launch options (for example `block_num`, `stream`).
+            Launch a compiled kernel on the NPU, passing runtime kernel arguments
+            and launch options such as `block_num` and `stream`. The executor and
+            binary are loaded lazily on the first call and reused thereafter.
 
         Parameters:
             - *`launch_args`* (`Any`): Positional runtime kernel arguments matching
@@ -117,12 +321,10 @@ class TlaJitExecutor:
             - *`args`* (`Sequence[Any] | None`): Explicit runtime argument sequence.
               Optional; default `None`. Cannot be combined with non-empty
               `*launch_args`.
-            - *`stream`* (`Any`, via `**kwargs`): Optional ACL stream handle (often
-              an `int`). When omitted, uses `torch.npu.current_stream` if available;
-              otherwise set `stream=` explicitly or `CATLASS_DSL_NPU_DEVICE`.
+            - *`stream`* (`Any`, via `**launch_kwargs`): Optional ACL stream handle.
+              When omitted, uses the current stream for the executor's device.
 
         Constraints:
-            - `artifact(...)` and `.launch(...)` share the same runtime rules.
             - `*launch_args` and `args=` must not both be non-empty
               (`TlaUnsupportedAbiError`).
             - Launch args must be bound NPU buffers for tensors (`from_dlpack`);
@@ -131,53 +333,23 @@ class TlaJitExecutor:
 
         Example:
         ```python
-        artifact = tla.compile(vadd, tx, ty, options="--npu-arch 3510")
-        artifact(tx, ty, block_num=1)
-        # same as:
-        artifact.launch(tx, ty, block_num=1)
-        # or pass args explicitly:
-        artifact.launch(args=(tx, ty), block_num=1)
+        compiled = tla.compile(vadd, tx, ty, options="--npu-arch 3510")
+        compiled(tx, ty, block_num=1)
+        compiled(args=(tx, ty), block_num=1)
         ```
 
         """
-        from ..execution import (
-            TlaRuntimeUnavailableError,
-            TlaUnsupportedAbiError,
-            execute_kernel,
+        return self._get_executor()(
+            *launch_args,
+            block_num=block_num,
+            args=args,
+            **launch_kwargs,
         )
 
-        if launch_args and args is not None:
-            raise TlaUnsupportedAbiError("Launch arguments specified multiple times.")
-        if args is None:
-            args = launch_args
-        launch_kwargs = dict(kwargs)
-        if block_num is None:
-            block_num = 1
-        if not isinstance(block_num, int):
-            raise TlaUnsupportedAbiError("`block_num` must be an int.")
-        launch_kwargs["block_num"] = int(block_num)
-        runtime = self.artifact.runtime
-        if runtime is None:
-            raise TlaRuntimeUnavailableError(
-                "Compiled artifact is missing runtime options and cannot be launched."
-            )
-        return execute_kernel(
-            self.artifact,
-            runtime=runtime,
-            launch_args=tuple(args),
-            launch_kwargs=launch_kwargs,
-        )
 
-    def __call__(self, *args: Any, **kwargs: Any) -> TlaExecutionResult:
-        return self.launch(*args, **kwargs)
-
-    def __getattr__(self, name: str) -> Any:
-        return getattr(self.artifact, name)
-
-    def __eq__(self, other: object) -> bool:
-        if isinstance(other, TlaJitExecutor):
-            return self.artifact == other.artifact
-        return self.artifact == other
-
-
-__all__ = ["TlaExecutionArgs", "TlaJitExecutor"]
+__all__ = [
+    "ExecutionArgs",
+    "JitFunctionArtifacts",
+    "JitModule",
+    "JitCompiledFunction",
+]

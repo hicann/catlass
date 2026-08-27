@@ -20,9 +20,9 @@ _ACL_RT_BINARY_MAGIC_ELF_VECTOR_CORE = 0x41415246
 
 @dataclass
 class _LoadedKernel:
-    bin_handle: int
+    binary_handle: int
     function_handle: int
-    kernel_path: Path
+    kernel_binary_path: Path
 
 
 def load_acl() -> ModuleType:
@@ -93,72 +93,73 @@ def _binary_load_options_for_mode(kernel_mode: str) -> list[dict[str, int]]:
 
 
 def _register_kernel_binary(
-    *, kernel_path: Path, fn_name: str, kernel_mode: str
+    *, kernel_binary_path: Path, entrypoint: str, kernel_mode: str
 ) -> _LoadedKernel:
     """Load ``kernel.o`` via ``acl.rt.binary_load_from_data`` + mode magic."""
     import acl
 
-    raw = kernel_path.read_bytes()
+    raw = kernel_binary_path.read_bytes()
     host_buf = (ctypes.c_char * len(raw)).from_buffer_copy(raw)
     opts = _binary_load_options_for_mode(kernel_mode)
-    bin_handle, load_ret = acl.rt.binary_load_from_data(
+    binary_handle, load_ret = acl.rt.binary_load_from_data(
         ctypes.addressof(host_buf), len(raw), opts
     )
     check_acl_errors(load_ret, "acl.rt.binary_load_from_data")
-    fn_handle, get_ret = acl.rt.binary_get_function(int(bin_handle), fn_name)
+    function_handle, get_ret = acl.rt.binary_get_function(
+        int(binary_handle), entrypoint
+    )
     if int(get_ret) != 0:
         try:
-            acl.rt.binary_unload(int(bin_handle))
+            acl.rt.binary_unload(int(binary_handle))
         except Exception:
             pass
         check_acl_errors(get_ret, "acl.rt.binary_get_function")
     return _LoadedKernel(
-        bin_handle=int(bin_handle),
-        function_handle=int(fn_handle),
-        kernel_path=kernel_path,
+        binary_handle=int(binary_handle),
+        function_handle=int(function_handle),
+        kernel_binary_path=kernel_binary_path,
     )
 
 
-def load_binary(*, name: str, kernel_path: Path, device: int) -> tuple[int, int]:
-    """Load ``kernel.o`` and return ``(bin_handle, function_handle)``."""
-    import acl
-
-    fn_name, kernel_mode = name.split(maxsplit=1)
-    check_acl_errors(acl.rt.set_device(int(device)), "acl.rt.set_device")
-    resolved = kernel_path.resolve()
+def load_binary(
+    *, entrypoint: str, kernel_mode: str, kernel_binary_path: Path
+) -> tuple[int, int]:
+    """Load ``kernel.o`` in the current context and return its handles."""
+    resolved = kernel_binary_path.resolve()
     loaded = _register_kernel_binary(
-        kernel_path=resolved,
-        fn_name=fn_name,
+        kernel_binary_path=resolved,
+        entrypoint=entrypoint,
         kernel_mode=kernel_mode,
     )
-    return loaded.bin_handle, loaded.function_handle
+    return loaded.binary_handle, loaded.function_handle
 
 
 def launch_kernel(
     *,
-    function: int,
+    function_handle: int,
     stream: int,
     block_num: int,
-    args: bytes,
-    expects_debug_fifo: bool = False,
-    expects_print_tensor: bool | int = False,
+    payload: bytes,
+    uses_scalar_print: bool = False,
+    uses_tensor_print: bool = False,
+    is_mixed: bool = False,
 ) -> None:
     """Launch via PyACL ``kernel_args_*`` + ``launch_kernel_with_config`` (Host args)."""
     import acl
 
-    from .ascend_debug_fifo import launch_with_debug_fifo
-
     block_num = int(block_num)
 
-    def _acl_launch(launch_args: bytes) -> None:
-        payload = launch_args or (b"\x00" * ctypes.sizeof(ctypes.c_uint64))
-        host_buf = (ctypes.c_uint8 * len(payload)).from_buffer_copy(payload)
-        args_handle, init_ret = acl.rt.kernel_args_init(int(function))
+    def _acl_launch(launch_payload: bytes) -> None:
+        launch_payload = launch_payload or (b"\x00" * ctypes.sizeof(ctypes.c_uint64))
+        host_buf = (ctypes.c_uint8 * len(launch_payload)).from_buffer_copy(
+            launch_payload
+        )
+        args_handle, init_ret = acl.rt.kernel_args_init(int(function_handle))
         check_acl_errors(init_ret, "acl.rt.kernel_args_init")
         check_acl_errors(
             _acl_status(
                 acl.rt.kernel_args_append(
-                    args_handle, ctypes.addressof(host_buf), len(payload)
+                    args_handle, ctypes.addressof(host_buf), len(launch_payload)
                 )
             ),
             "acl.rt.kernel_args_append",
@@ -171,7 +172,7 @@ def launch_kernel(
         check_acl_errors(
             _acl_status(
                 acl.rt.launch_kernel_with_config(
-                    int(function),
+                    int(function_handle),
                     int(block_num),
                     int(stream),
                     [],
@@ -182,19 +183,22 @@ def launch_kernel(
             "acl.rt.launch_kernel_with_config",
         )
 
-    needs_fifo = bool(expects_debug_fifo) or bool(expects_print_tensor)
-    if needs_fifo:
+    uses_print_fifo = uses_scalar_print or uses_tensor_print
+    if uses_print_fifo:
+        from .ascend_debug_fifo import launch_with_debug_fifo
+
         launch_with_debug_fifo(
             launch_kernel=_acl_launch,
-            args=args,
+            payload=payload,
             block_num=block_num,
             stream=int(stream),
-            expects_debug_fifo=bool(expects_debug_fifo),
-            expects_print_tensor=expects_print_tensor,
+            uses_scalar_print=uses_scalar_print,
+            uses_tensor_print=uses_tensor_print,
+            is_mixed=is_mixed,
         )
         return
 
-    _acl_launch(args)
+    _acl_launch(payload)
 
 
 __all__ = [

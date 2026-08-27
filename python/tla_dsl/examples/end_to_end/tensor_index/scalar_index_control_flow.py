@@ -299,7 +299,9 @@ def _run_value_through_dynamic_if(
         out.fill_(-1.0)
         artifact = tla.compile(
             scalar_index_value_through_dynamic_if_kernel,
-            type_args=(out_t, meta_t, selector),
+            out_t,
+            meta_t,
+            selector,
         )
         artifact(out_t, meta_t, selector, block_num=args.block_num)
         torch.npu.synchronize()
@@ -325,7 +327,8 @@ def _run_store_in_dynamic_control_flow(
         out.fill_(-1)
         artifact = tla.compile(
             scalar_index_store_in_dynamic_control_flow_kernel,
-            type_args=(out_t, selector),
+            out_t,
+            selector,
         )
         artifact(out_t, selector, block_num=args.block_num)
         torch.npu.synchronize()
@@ -354,8 +357,11 @@ def _run_constexpr_if(
         expected = meta.flip(0) if reverse else meta
         artifact = tla.compile(
             scalar_index_constexpr_if_kernel,
-            type_args=(meta_t, out_t, reverse),
+            meta_t,
+            out_t,
+            reverse,
         )
+        # ``reverse`` specializes compilation and has no runtime ABI slot.
         artifact(meta_t, out_t, block_num=args.block_num)
         torch.npu.synchronize()
         if not torch.allclose(out, expected, rtol=0.0, atol=1e-4):

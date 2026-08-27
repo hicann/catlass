@@ -304,7 +304,7 @@ def host_launch_kernel() -> None:
 @tla.jit
 def host_orchestration() -> object:
     _HOST_EVENTS.append("orchestrated")
-    return host_launch_kernel()
+    return host_launch_kernel
 
 
 def test_inspectable_python_staging_values_lower() -> None:
@@ -372,9 +372,9 @@ def test_staging_local_nested_function_survives_root_transformation() -> None:
 
 def test_host_jit_is_python_orchestration_without_host_mlir() -> None:
     _HOST_EVENTS.clear()
-    launcher = host_orchestration()
+    kernel = host_orchestration()
     assert _HOST_EVENTS == ["orchestrated"]
-    assert launcher.__class__.__name__ == "KernelLauncher"
+    assert kernel is host_launch_kernel
     assert host_orchestration._mlir is None
 
 

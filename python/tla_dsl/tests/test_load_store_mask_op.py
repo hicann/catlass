@@ -231,23 +231,23 @@ def test_store_mask_rejects_mismatched_ub_width() -> None:
     # i8 UB ⇒ mask<256>, but create_mask(f32) is mask<64>.
     mask_ub = _ub_tensor(tla.Int8, 8)
     with pytest.raises(TlaCoreAPIError, match="implies !tla.mask"):
-        store_mask_mismatched_ub(mask_ub)
+        store_mask_mismatched_ub.dump_mlir(type_args=(mask_ub,))
 
 
 def test_load_mask_rejects_unsupported_elem_width() -> None:
     # i64 is 8 bytes → not a 1/2/4-byte Mask UB element.
     mask_ub = _ub_tensor(tla.Int64, 8)
     with pytest.raises(TlaCoreAPIError, match="1/2/4-byte"):
-        load_mask_wrong_elem(mask_ub)
+        load_mask_wrong_elem.dump_mlir(type_args=(mask_ub,))
 
 
 def test_load_mask_rejects_gm() -> None:
     mask_gm = _gm_tensor(tla.Float32, 2)
     with pytest.raises(TlaCoreAPIError, match="addrspace ub"):
-        load_mask_from_gm(mask_gm)
+        load_mask_from_gm.dump_mlir(type_args=(mask_gm,))
 
 
 def test_load_mask_requires_vec_func() -> None:
     mask_ub = _ub_tensor(tla.Float32, 2)
     with pytest.raises(Exception, match="vec.func"):
-        load_mask_outside_vec_func(mask_ub)
+        load_mask_outside_vec_func.dump_mlir(type_args=(mask_ub,))

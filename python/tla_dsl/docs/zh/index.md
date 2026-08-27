@@ -14,6 +14,7 @@ nav_order: 0
 | [Kernel API 参考](api/kernel_api_reference.md) | Kernel 侧 Core API（`tla.copy`、`tla.mmad`、Vector 运算、同步等）。 |
 | [Host API 参考](api/host_api_reference.md) | Host 侧 `@tla.kernel`、`tla.compile` / 启动、Host tensor。 |
 | [Host Tensor 接入](kernel_development/core_concepts/tensor_binding.md) | Host 侧 `from_dlpack` / `make_fake_tensor`，供 `tla.compile` / 启动使用。 |
+| [编译与启动](kernel_development/core_concepts/compile_and_launch.md) | 编译样本、缓存、重复启动与 stream。 |
 | [静态与动态 Layout](kernel_development/core_concepts/layout.md) | 静态 / 动态 layout；在 Host tensor 上标记动态；在 kernel 中编程。 |
 | [DSL 语法约束](kernel_development/core_concepts/syntax_guide.md) | `@tla.kernel` 内允许的 Python 写法。 |
 | [环境变量](kernel_development/core_concepts/env_vars.md) | `CATLASS_DSL_*` 及相关环境变量。 |

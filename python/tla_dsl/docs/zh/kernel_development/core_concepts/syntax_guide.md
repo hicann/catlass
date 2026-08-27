@@ -12,8 +12,11 @@ CATLASS DSL 采用Python作为kernel描述语言，但由于NPU架构、性能�
 
 并非所有Python代码都会被CATLASS DSL翻译成NPU指令，只有被 `@tla.kernel` 或 `@tla.jit` 装饰的函数才会被前端处理，转换为对应的NPU指令。
 
-- `@tla.kernel`：NPU kernel 入口，调用它返回启动器，在NPU上启动。
-- `@tla.jit`：kernel 中可调用的子函数。
+- `@tla.kernel`：NPU kernel 入口，当前不支持直接调用。须先通过
+  `compiled = tla.compile(kernel, *sample_args)` 显式编译，再通过
+  `compiled(*runtime_args, block_num=...)` 启动。
+- `@tla.jit`：kernel lowering 期间可调用的辅助函数，当前不支持调用或启动
+  `@tla.kernel`。
 
 两者装饰的Python函数遵循统一的降级——编译路径，以下的语法约束对两者同样适用。
 

@@ -363,7 +363,7 @@ def _cache_key_kwargs(tmp_path, target):
     return {
         "tlair_mlir": "module { func.func @kernel() }",
         "entrypoint": "kernel",
-        "runtime": execution.TlaRuntimeOptions(arch_scope="aiv.c310"),
+        "compile_option": execution.TlaCompileOption(arch_scope="aiv.c310"),
         "compiler_bridge_path": None,
         "hivmc": tmp_path / "hivmc-a5",
         "target": target,

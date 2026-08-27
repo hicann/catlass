@@ -14,8 +14,10 @@ nav_order: 15
 
 本文档介绍 **TLA DSL 的 Host 侧 API**（通常以 `import catlass.tla as tla` 导入）。
 内容覆盖：`@tla.kernel` 装饰器、Host 侧 `@dataclass` 打包、`tla.compile` /
-`KernelLauncher` 启动、Host tensor。
-环境变量见 [环境变量](../kernel_development/core_concepts/env_vars.md)。Kernel 侧接口见 [Kernel API 参考](kernel_api_reference.md)。
+`JitCompiledFunction` 启动、Host tensor。
+使用流程见 [编译与启动](../kernel_development/core_concepts/compile_and_launch.md)，环境变量见
+[环境变量](../kernel_development/core_concepts/env_vars.md)。Kernel 侧接口见
+[Kernel API 参考](kernel_api_reference.md)。
 
 接口说明与调用示例来自各 API 源码 docstring；这些接口均在 Python Host 脚本中、
 `@tla.kernel` 函数体**外**调用。
@@ -45,13 +47,13 @@ Host 侧 `@tla.kernel` 入口，以及 Host 侧 `@dataclass` 打包。
 
 ### `kernel`
 
-**源码：** [`catlass.dsl.kernel`](../../../catlass/dsl.py#L305)
+**源码：** [`catlass.dsl.kernel`](../../../catlass/dsl.py#L290)
 
 功能说明：
 
 将 Python 函数标注为 TLA Kernel 入口。函数体在 Host 端不执行。
-返回 `TlaJitFunction`。调用该对象会返回 `KernelLauncher`（此时不启动）；再调用
-launcher 或 `.launch(...)` 才会编译并执行。
+返回 `TlaJitFunction`。不允许直接调用 kernel；应先用 `tla.compile`
+显式编译，再调用返回的 `JitCompiledFunction` 启动。
 
 函数原型：
 
@@ -70,6 +72,8 @@ tla.kernel(fn: Callable[..., Any] | None = None, *, auto_sync: str | None = None
 
 - 被装饰的函数不能用 Python 的 `async def` 定义。
 - `auto_sync` 只能是 `"v0"` 或 `None`。
+- 启动前必须调用 `tla.compile(kernel, *sample_args)`；直接调用装饰后的
+  kernel 会抛出 `TypeError`。
 - Kernel 参数类型：
 
   | 类别 | 类型 |
@@ -93,14 +97,15 @@ def vadd_auto(src: tla.Tensor, dst: tla.Tensor) -> None:
     with tla.vector():
         tla.copy(src, dst)
 
-vadd(tx, ty, options="--npu-arch 3510")(block_num=1)
+compiled = tla.compile(vadd, tx, ty, options="--npu-arch 3510")
+compiled(tx, ty, block_num=1)
 ```
 
 ---
 
 ### `dataclass`
 
-**源码：** [`dataclasses.dataclass`](../../../catlass/execution_lowering.py#L759)
+**源码：** [`dataclasses.dataclass`](../../../catlass/execution_lowering.py#L773)
 
 功能说明：
 
@@ -158,8 +163,8 @@ artifact(tiling, block_num=1)
 ## 2. 编译与启动
 
 将装饰后的 kernel 编译为设备二进制并启动。同一份二进制需要多次启动时，用
-`tla.compile` 再 `artifact(...)` / `.launch(...)`；单次或少量启动可直接调用
-`@tla.kernel` 得到 `KernelLauncher` 再启动。缓存 / 架构 / IR dump 等非函数参数见
+`tla.compile` 获取可调用的 `JitCompiledFunction`；直接调用它时会延迟创建并复用内部
+executor。缓存 / 架构 / IR dump 等非函数参数见
 [环境变量](../kernel_development/core_concepts/env_vars.md)。
 
 ### 2.1 编译
@@ -169,18 +174,17 @@ artifact(tiling, block_num=1)
 
 #### `compile`
 
-**源码：** [`catlass.base_dsl.compiler.CompileCallable.__call__`](../../../catlass/base_dsl/compiler.py#L46)
+**源码：** [`catlass.base_dsl.compiler.CompileCallable.__call__`](../../../catlass/base_dsl/compiler.py#L11)
 
 功能说明：
 
-编译 `@tla.kernel` 函数，返回包装了 `TlaKernelArtifact` 的可调用执行器。
-这是公开的 `tla.compile` 入口。调用返回的执行器即可启动
-（`artifact(*tensors, block_num=...)`）。适合先编译一次，再对同一份二进制多次启动。
+编译 `@tla.jit` 或 `@tla.kernel` 函数，返回可调用的
+`JitCompiledFunction`。这是公开的 `tla.compile` 入口；调用返回的对象即可启动。
 
 函数原型：
 
 ```python
-tla.compile(func: Any, *args: Any, **kwargs: Any) -> TlaJitExecutor
+tla.compile(func: Any, *args: Any, **kwargs: Any) -> JitCompiledFunction
 ```
 
 参数说明：
@@ -193,36 +197,36 @@ tla.compile(func: Any, *args: Any, **kwargs: Any) -> TlaJitExecutor
 
 约束说明：
 
-- `func` 必须是 `@tla.kernel` 得到的 `TlaJitFunction`。
+- `func` 必须是 `@tla.jit` 或 `@tla.kernel` 得到的 `TlaJitFunction`。
 - `args` 只作编译期类型样本，不必绑定 NPU 缓冲（`make_fake_tensor` 合法）。
 - 用 `options="--npu-arch 3510"` 指定芯片名；不支持的取值在编译时报错。
-- `block_num` / `stream` 等启动参数写在返回执行器上
-  （`artifact(...)` / `TlaJitExecutor.launch`），而不是 `tla.compile`。
+- `block_num` / `stream` 等启动参数写在返回的编译函数上，而不是
+  `tla.compile`。
 
 调用示例：
 
 ```python
-artifact = tla.compile(vadd, tx, ty, options="--npu-arch 3510")
-artifact(tx, ty, block_num=1)
-artifact(tx, ty, block_num=1)  # 同一份二进制再次启动
+compiled = tla.compile(vadd, tx, ty, options="--npu-arch 3510")
+compiled(tx, ty, block_num=1)
+compiled(tx, ty, block_num=1)  # 同一份二进制再次启动
 ```
 
 ---
 
 #### `TlaJitFunction.compile`
 
-**源码：** [`catlass.dsl.TlaJitFunction.compile`](../../../catlass/dsl.py#L195)
+**源码：** [`catlass.dsl.TlaJitFunction.compile`](../../../catlass/dsl.py#L179)
 
 功能说明：
 
-编译当前 `@tla.kernel` 函数并返回 `TlaKernelArtifact`。
+编译当前 `@tla.jit` 或 `@tla.kernel` 函数并返回 `JitCompiledFunction`。
 日常 Host 入口是 `tla.compile(fn, *args, options=...)`；只有已持有
-`TlaJitFunction` 且需要原始 `TlaKernelArtifact` 时才调用 `.compile()`。
+`TlaJitFunction` 并需要直接获取编译函数所有者时才调用 `.compile()`。
 
 函数原型：
 
 ```python
-TlaJitFunction.compile(*, type_args: Sequence[Any] | None = None, **kwargs: Any) -> TlaKernelArtifact
+TlaJitFunction.compile(*, type_args: Sequence[Any] | None = None, **kwargs: Any) -> JitCompiledFunction
 ```
 
 参数说明：
@@ -240,7 +244,7 @@ TlaJitFunction.compile(*, type_args: Sequence[Any] | None = None, **kwargs: Any)
 调用示例：
 
 ```python
-artifact = my_kernel.compile(
+compiled = my_kernel.compile(
     type_args=[tx, ty],
     options="--npu-arch 3510",
 )
@@ -250,23 +254,22 @@ artifact = my_kernel.compile(
 
 ### 2.2 启动
 
-在 NPU 上运行已编译的 kernel。经 `tla.compile` 后，调用执行器或
-`TlaJitExecutor.launch`；经调用 `@tla.kernel` 后，使用 `KernelLauncher.launch`
-（或直接调用 launcher）。
+在 NPU 上运行已编译的 kernel。直接调用 `tla.compile` 返回的
+`JitCompiledFunction`。
 
-#### `TlaJitExecutor.launch`
+#### `JitCompiledFunction.__call__`
 
-**源码：** [`catlass.base_dsl.jit_executor.TlaJitExecutor.launch`](../../../catlass/base_dsl/jit_executor.py#L99)
+**源码：** [`catlass.base_dsl.jit_executor.JitCompiledFunction.__call__`](../../../catlass/base_dsl/jit_executor.py#L302)
 
 功能说明：
 
-在 NPU 上启动经 `tla.compile` 得到的已编译 kernel，传入运行时入参与启动参数
-（如 `block_num`、`stream`）。
+在 NPU 上启动已编译 kernel，传入运行时入参与 `block_num`、`stream` 等启动参数。
+executor 和 binary 在首次调用时延迟加载，后续调用直接复用。
 
 函数原型：
 
 ```python
-TlaJitExecutor.launch(*launch_args: Any, *, block_num: int | None = None, args: Sequence[Any] | None = None, **kwargs: Any) -> TlaExecutionResult
+JitCompiledFunction.__call__(*launch_args: Any, *, block_num: int | None = None, args: Sequence[Any] | None = None, **launch_kwargs: Any) -> TlaExecutionResult
 ```
 
 参数说明：
@@ -276,13 +279,11 @@ TlaJitExecutor.launch(*launch_args: Any, *, block_num: int | None = None, args: 
 - *`block_num`*（`int | None`）：启动的 block 数。可选，默认 `1`；传入时须为 `int`。
 - *`args`*（`Sequence[Any] | None`）：显式运行时实参序列。可选，默认 `None`。
   不能与非空的 `*launch_args` 同时使用。
-- *`stream`*（`Any`，经 `**kwargs`）：可选 ACL stream 句柄（常为 `int`）。
-  省略时优先用 `torch.npu.current_stream`；否则须显式传 `stream=`，
-  或依赖 `CATLASS_DSL_NPU_DEVICE`。
+- *`stream`*（`Any`，经 `**launch_kwargs`）：可选 ACL stream 句柄。
+  省略时使用执行器所在设备的当前 stream。
 
 约束说明：
 
-- `artifact(...)` 与 `.launch(...)` 共用同一套运行时规则。
 - `*launch_args` 与 `args=` 不能同时非空（`TlaUnsupportedAbiError`）。
 - tensor 启动实参须为已绑定的 NPU 缓冲（`from_dlpack`）；
   `make_fake_tensor` 仅用于编译样本。
@@ -291,78 +292,9 @@ TlaJitExecutor.launch(*launch_args: Any, *, block_num: int | None = None, args: 
 调用示例：
 
 ```python
-artifact = tla.compile(vadd, tx, ty, options="--npu-arch 3510")
-artifact(tx, ty, block_num=1)
-# 等价于：
-artifact.launch(tx, ty, block_num=1)
-# 或显式传 args：
-artifact.launch(args=(tx, ty), block_num=1)
-```
-
----
-
-#### `KernelLauncher.launch`
-
-**源码：** [`catlass.catlass_dsl.tla.KernelLauncher.launch`](../../../catlass/catlass_dsl/tla.py#L75)
-
-功能说明：
-
-在 NPU 上启动 `@tla.kernel`。先调用被装饰的 kernel 得到本对象
-（`launcher = my_kernel(*tensors, options=...)`，此时不启动），再调用
-`launcher.launch(...)` 或直接调用 launcher（`launcher(block_num=...)`，等价于
-`.launch(args=..., **kwargs)`）。尚无缓存产物，或 runtime 选项与上次编译不一致时，
-本方法会先编译再启动；runtime 选项不变且已有缓存产物时，不重新编译，直接启动。
-需要固定一份编译产物并多次启动、且编译与启动分离时，使用 `tla.compile` 返回的
-`TlaJitExecutor`。
-
-函数原型：
-
-```python
-KernelLauncher.launch(*, block_num: int | None = None, type_args: Sequence[Any] | None = None, args: Sequence[Any] | None = None, **kwargs: Any) -> TlaExecutionResult
-```
-
-参数说明：
-
-- *`block_num`*（`int | None`）：启动的 block 数。可选，默认 `1`（也可来自
-  构造 launcher 时保存的 kwargs）。传入时须为 `int`。
-- *`type_args`*（`Sequence[Any] | None`）：编译期类型样本。可选；省略时由
-  `args` / 第一次调用时的 launch args 推断。
-- *`args`*（`Sequence[Any] | None`）：显式运行时实参序列。可选。不能与
-  launcher 上已由第一次调用（`my_kernel(*tensors)`）保存的 launch args 同时使用。
-- *`stream`*（`Any`，经 `**kwargs`）：可选 ACL stream 句柄（常为 `int`）。
-  省略时优先用 `torch.npu.current_stream`；否则须显式传 `stream=`，
-  或依赖 `CATLASS_DSL_NPU_DEVICE`。
-- *`options`*（`str`，经 `**kwargs`）：芯片名，如 `options="--npu-arch 3510"`。
-  可在第一次调用或本次传入；本调用 kwargs 覆盖构造 launcher 时保存的值。
-
-约束说明：
-
-- 调用 `@tla.kernel` 返回 `KernelLauncher`，不会启动；本方法（或调用 launcher）
-  在尚无缓存产物或 runtime 选项变化时编译并启动，runtime 选项不变且已有缓存产物时
-  不重新编译、直接启动。
-- 第一次调用已传入 tensor（`my_kernel(tx, ty)`）时，第二次调用 / `.launch`
-  只应传 `block_num` 等启动 kwargs。
-- 对同一 `KernelLauncher` 重复 `.launch` 时，runtime 选项不变则复用已编译产物，
-  不重新编译。需要显式分离编译与启动时，使用 `tla.compile`。
-- launcher 已持有 launch args 时，不能再传 `args=`（`TlaUnsupportedAbiError`）。
-- tensor 启动实参须为已绑定的 NPU 缓冲（`from_dlpack`）；
-  `make_fake_tensor` 仅用于编译 / 类型样本。
-- `block_num` 须为 `int`（默认 `1`）。
-
-调用示例：
-
-```python
-@tla.kernel
-def vadd(src: tla.Tensor, dst: tla.Tensor) -> None:
-    with tla.vector():
-        tla.copy(src, dst)
-
-vadd(tx, ty, options="--npu-arch 3510")(block_num=1)
-# 或：
-launcher = vadd(tx, ty, options="--npu-arch 3510")
-launcher.launch(block_num=1)
-# 第一次未传 tensor 时，可在 .launch 里传 args：
-vadd(options="--npu-arch 3510").launch(args=(tx, ty), block_num=1)
+compiled = tla.compile(vadd, tx, ty, options="--npu-arch 3510")
+compiled(tx, ty, block_num=1)
+compiled(args=(tx, ty), block_num=1)
 ```
 
 ---
@@ -373,7 +305,7 @@ vadd(options="--npu-arch 3510").launch(args=(tx, ty), block_num=1)
 
 #### `TlaJitFunction.dump_mlir`
 
-**源码：** [`catlass.dsl.TlaJitFunction.dump_mlir`](../../../catlass/dsl.py#L253)
+**源码：** [`catlass.dsl.TlaJitFunction.dump_mlir`](../../../catlass/dsl.py#L238)
 
 功能说明：
 
@@ -393,8 +325,8 @@ TlaJitFunction.dump_mlir(*, type_args: Sequence[Any] | None = None) -> str
 约束说明：
 
 - `type_args` 规则与 `.compile()` 相同。
-- 返回的是前端 TLA IR（`tlair`），不是 `TlaKernelArtifact.lowered_llvm` 中的
-  HIVM/LLVM 形式。
+- 返回的是前端 TLA IR（`tlair`），不是
+  `JitCompiledFunction.artifacts.LLVM` 中的 HIVM/LLVM 形式。
 
 调用示例：
 
@@ -471,7 +403,7 @@ ty = from_dlpack(
 
 #### `make_fake_tensor`
 
-**源码：** [`catlass.tla.runtime.make_fake_tensor`](../../../catlass/tla/runtime.py#L830)
+**源码：** [`catlass.tla.runtime.make_fake_tensor`](../../../catlass/tla/runtime.py#L858)
 
 功能说明：
 

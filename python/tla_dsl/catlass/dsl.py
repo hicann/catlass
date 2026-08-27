@@ -10,9 +10,9 @@ from typing import Any, Callable, Mapping, Sequence
 
 from . import runtime as _runtime
 from .base_dsl import BaseDSL, DSLLocation
-from .base_dsl.typing import is_constexpr_annotation
 from .base_dsl.compiler import CompileCallable, compile
-from .execution import TlaKernelArtifact
+from .base_dsl.jit_executor import JitCompiledFunction
+from .base_dsl.typing import is_constexpr_annotation
 
 
 def _kernel_signature(fn: Callable[..., Any] | None) -> inspect.Signature | None:
@@ -98,21 +98,6 @@ def _constexpr_param_mask(fn: Callable[..., Any] | None) -> tuple[bool, ...]:
     return tuple(is_constexpr_annotation(p.annotation) for p in sig.parameters.values())
 
 
-def _strip_constexpr_launch_args(
-    args: Sequence[Any], fn: Callable[..., Any] | None
-) -> tuple[Any, ...]:
-    """Drop ``Constexpr`` params from a launch arg list.
-
-    Constexpr params are baked into the compiled kernel and have no ABI slot, so
-    they must not reach the launch payload — mirrors how ``get_rectified_args``
-    skips ``Constexpr`` dataclass fields.
-    """
-    mask = _constexpr_param_mask(fn)
-    if not any(mask):
-        return tuple(args)
-    return tuple(a for i, a in enumerate(args) if not (i < len(mask) and mask[i]))
-
-
 def _get_typed_call_args(
     args: Sequence[Any], fn: Callable[..., Any] | None = None
 ) -> Sequence[Any] | None:
@@ -149,9 +134,6 @@ def _get_typed_call_args(
     return tuple(inferred)
 
 
-from .catlass_dsl.tla import KernelLauncher
-
-
 _ACTIVE_JIT_HELPER_TRANSFORMER: contextvars.ContextVar[
     Callable[["TlaJitFunction"], Callable[..., Any]] | None
 ] = contextvars.ContextVar("tla_active_jit_helper_transformer", default=None)
@@ -184,8 +166,10 @@ class TlaJitFunction:
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         if self.kind == "kernel":
-            return KernelLauncher(
-                self, launch_kwargs=dict(kwargs), launch_args=tuple(args)
+            raise TypeError(
+                "Direct @tla.kernel invocation is disabled; compile explicitly "
+                "with `compiled = tla.compile(kernel, *sample_args)`, then launch "
+                "with `compiled(*runtime_args, block_num=...)`."
             )
         transform = _ACTIVE_JIT_HELPER_TRANSFORMER.get()
         if transform is not None:
@@ -194,13 +178,14 @@ class TlaJitFunction:
 
     def compile(
         self, *, type_args: Sequence[Any] | None = None, **kwargs: Any
-    ) -> TlaKernelArtifact:
+    ) -> JitCompiledFunction:
         """Directory: Compile and Launch / Compile
         Description:
-            Compile this `@tla.kernel` function and return a `TlaKernelArtifact`.
+            Compile this `@tla.jit` or `@tla.kernel` function and return a
+            `JitCompiledFunction`.
             Use `tla.compile(fn, *args, options=...)` as the usual Host entry; call
             `.compile()` only when you already hold a `TlaJitFunction` and need the
-            raw `TlaKernelArtifact`.
+            compiled-function owner directly.
 
             Parameters:
             - *`type_args`* (`Sequence[Any] | None`): Host tensors / scalars used as
@@ -218,19 +203,19 @@ class TlaJitFunction:
 
             Example:
             ```python
-            artifact = my_kernel.compile(
+            compiled = my_kernel.compile(
                 type_args=[tx, ty],
                 options="--npu-arch 3510",
             )
             ```
 
         """
-        runtime = _runtime.runtime_options_from_kwargs(kwargs)
-        return _runtime.compile_kernel(
+        compile_option = _runtime.compile_option_from_kwargs(kwargs)
+        return _runtime.compile_and_cache(
             self.fn,
             kind=self.kind,
             options=self.options,
-            runtime=runtime,
+            compile_option=compile_option,
             type_args=type_args,
             decorator_location=self.decorator_location,
         )
@@ -263,7 +248,7 @@ class TlaJitFunction:
             Constraints:
             - `type_args` follow the same rules as `.compile()`.
             - The returned string is frontend TLA IR (`tlair`), not the HIVM/LLVM
-              form stored on `TlaKernelArtifact.lowered_llvm`.
+              form stored on `JitCompiledFunction.artifacts.LLVM`.
 
             Example:
             ```python
@@ -310,9 +295,9 @@ def kernel(
     """Directory: Decorators
     Description:
         Mark a Python function as a TLA kernel entry. The function body is not
-        executed on the Host. Returns a `TlaJitFunction`. Calling that object
-        returns a `KernelLauncher` without launching; call the launcher or
-        `.launch(...)` to compile and run.
+        executed on the Host. Returns a `TlaJitFunction`. Direct invocation of a
+        kernel is disabled; compile it explicitly with `tla.compile`, then call the
+        returned `JitCompiledFunction` to launch.
 
         Parameters:
         - *`fn`* (`Callable[..., Any] | None`): The function being decorated.
@@ -324,6 +309,8 @@ def kernel(
         Constraints:
         - The decorated function must not be defined with Python `async def`.
         - `auto_sync` must be `"v0"` or `None`.
+        - Compile with `tla.compile(kernel, *sample_args)` before launching; calling
+          the decorated kernel directly raises `TypeError`.
         - Kernel parameter types:
 
           | Kind | Types |
@@ -346,7 +333,8 @@ def kernel(
             with tla.vector():
                 tla.copy(src, dst)
 
-        vadd(tx, ty, options="--npu-arch 3510")(block_num=1)
+        compiled = tla.compile(vadd, tx, ty, options="--npu-arch 3510")
+        compiled(tx, ty, block_num=1)
         ```
 
     """
@@ -416,7 +404,6 @@ __all__ = [
     "DSLLocation",
     "BaseDSL",
     "TlaJitFunction",
-    "KernelLauncher",
     "CompileCallable",
     "compile",
     "jit",

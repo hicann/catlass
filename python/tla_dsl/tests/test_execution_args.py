@@ -1,4 +1,4 @@
-"""Smoke tests for ``TlaExecutionArgs`` (layout packing details live in hivm tests)."""
+"""Smoke tests for ``ExecutionArgs`` (layout packing details live in hivm tests)."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ pytest.importorskip("catlass", exc_type=ImportError)
 
 import catlass.tla as tla
 from catlass import compiler_bridge, execution
-from catlass.base_dsl.jit_executor import TlaExecutionArgs
+from catlass.base_dsl.jit_executor import ExecutionArgs
 
 
 class _Ptr:
@@ -51,19 +51,12 @@ def _i32_ptr_layout() -> compiler_bridge.KernelAbiLayout:
 
 def test_execution_args_requires_kernel_abi() -> None:
     with pytest.raises(execution.TlaUnsupportedAbiError, match="kernel ABI layout"):
-        TlaExecutionArgs().generate_launch_payload([tla.Int32(1)])
+        ExecutionArgs().generate_launch_payload([tla.Int32(1)])
 
 
 def test_execution_args_delegates_pack_to_layout_path() -> None:
     args = [tla.Int32(5), _Ptr()]
     layout = _i32_ptr_layout()
-    assert TlaExecutionArgs(kernel_abi=layout).generate_launch_payload(
+    assert ExecutionArgs(kernel_abi=layout).generate_launch_payload(
         args
     ) == execution._pack_launch_args(args, layout)
-
-
-def test_execution_args_enforces_expected_arg_count() -> None:
-    layout = _i32_ptr_layout()
-    binder = TlaExecutionArgs(kernel_abi=layout, expected_arg_count=2)
-    with pytest.raises(execution.TlaUnsupportedAbiError, match="expected 2"):
-        binder.generate_launch_payload([tla.Int32(1)])

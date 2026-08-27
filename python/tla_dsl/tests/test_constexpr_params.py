@@ -5,9 +5,8 @@ as a constexpr and its value was silently dropped: the kernel body saw ``None``,
 traced the wrong branch, and — because the compile cache key hashes the emitted
 MLIR — every variant collapsed onto one cached kernel.
 
-The later sections work outward from the binding helpers to the public entry
-points — ``tla.compile(...)`` and the ``KernelLauncher`` returned by
-``kernel(...)`` — ending with the launch payload those APIs would hand to the
+The later sections work outward from the binding helpers to the public
+``tla.compile(...)`` entry point, ending with the launch payload it hands to the
 device. No test here needs an NPU: the payload is packed with the real ABI
 packer against fake operands.
 """
@@ -21,11 +20,9 @@ import pytest
 import catlass.tla as tla
 from catlass import execution
 from catlass.base_dsl.typing import is_constexpr_annotation
-from catlass.execution import TlaUnsupportedAbiError
 from catlass.dsl import (
     _bind_kernel_call_args,
     _get_typed_call_args,
-    _strip_constexpr_launch_args,
 )
 from catlass.tla.runtime import make_fake_tensor
 
@@ -239,19 +236,6 @@ def test_keyword_only_constexpr_param() -> None:
     ) != _keyword_only_constexpr.dump_mlir(type_args=("narrow",))
 
 
-def test_constexpr_args_are_stripped_from_launch_payload() -> None:
-    def fn(a, mode: tla.Constexpr[str], b, n: tla.Constexpr[int]) -> None: ...
-
-    assert _strip_constexpr_launch_args(("A", "wide", "B", 512), fn) == ("A", "B")
-
-
-def test_strip_is_identity_without_constexpr_params() -> None:
-    def fn(a, b) -> None: ...
-
-    assert _strip_constexpr_launch_args(("A", "B"), fn) == ("A", "B")
-    assert _strip_constexpr_launch_args(("A", "B"), None) == ("A", "B")
-
-
 # --------------------------------------------------------------------------
 # Diagnostics
 # --------------------------------------------------------------------------
@@ -273,10 +257,9 @@ def test_unmarked_compile_time_param_names_itself() -> None:
 # --------------------------------------------------------------------------
 # Public entry points
 #
-# ``tla.compile(...)`` and ``KernelLauncher`` both take kernel arguments and
-# runtime options in one ``**kwargs``, and both must keep constexpr values out
-# of the launch ABI. The tests above pin the binding helpers directly; these
-# exercise the two APIs callers actually use.
+# ``tla.compile(...)`` takes kernel arguments and runtime options in one
+# ``**kwargs`` and must keep constexpr values out of the launch ABI. The tests
+# above pin the binding helpers directly; these exercise the public API.
 # --------------------------------------------------------------------------
 
 VECTOR_ELE = 64
@@ -357,73 +340,33 @@ def test_compile_separates_named_constexpr_from_runtime_options() -> None:
     # A distinct kernel per mode proves `mode=` was bound as the kernel argument
     # and not swallowed as an unknown runtime option, while `options=` still
     # reached the runtime (a bogus option string would have raised).
-    assert add.artifact.cache_key != sub.artifact.cache_key
+    assert add.cache_key != sub.cache_key
 
 
 def test_compiled_artifact_abi_excludes_the_constexpr() -> None:
     a, b, c = _fake_operands()
-    artifact = tla.compile(
+    compiled = tla.compile(
         _selectable_binary, a, b, c, mode="add", options=_OPTIONS
-    ).artifact
+    )
 
     # Three tensors in, one compile-time constant that must own no ABI slot.
-    assert execution._logical_launch_arg_count(artifact.kernel_abi) == 3
+    assert execution._logical_launch_arg_count(
+        compiled.execution_args.kernel_abi
+    ) == 3
 
 
-def test_launcher_binds_named_constexpr_and_keeps_options_for_the_runtime() -> None:
-    a, b, c = _fake_operands()
-    launcher = _selectable_binary(a, b, c, mode="add", block_num=1, options=_OPTIONS)
-
-    # `mode` moved to the kernel arguments; only runtime options are left behind.
-    assert launcher._launch_args == (a, b, c, "add")
-    assert "mode" not in launcher._launch_kwargs
-    assert launcher._launch_kwargs["block_num"] == 1
-
-
-def test_launcher_and_compile_agree_on_the_kernel() -> None:
-    a, b, c = _fake_operands()
-    launcher = _selectable_binary(a, b, c, mode="sub", options=_OPTIONS)
-    compiled = tla.compile(_selectable_binary, a, b, c, mode="sub", options=_OPTIONS)
-
-    # Both public entry points must resolve the same call to the same kernel.
-    assert launcher._artifact.cache_key == compiled.artifact.cache_key
-
-
-def _pack_payload(artifact, launch_args):
-    """Pack ``launch_args`` exactly as ``execute_kernel`` would, minus the device."""
-    from catlass.base_dsl.jit_executor import TlaExecutionArgs
-
-    return TlaExecutionArgs(
-        kernel_abi=artifact.kernel_abi,
-        abi_packer=artifact._abi_packer,
-    ).generate_launch_payload(launch_args)
-
-
-@pytest.mark.parametrize("mode", ["add", "sub"])
-def test_launcher_payload_is_packable_only_once_the_constexpr_is_stripped(
-    mode: str,
-) -> None:
-    a, b, c = _bound_operands()
-    launcher = _selectable_binary(a, b, c, mode=mode, block_num=1, options=_OPTIONS)
-    artifact = launcher._artifact
-
-    # What execute_kernel is handed: the constexpr removed, the tensors kept.
-    payload = _pack_payload(
-        artifact, _strip_constexpr_launch_args(launcher._launch_args, _selectable_binary.fn)
-    )
-    assert len(payload) == artifact.kernel_abi.total_size
-
-    # And the value really has no slot: packing the user's own argument list,
-    # constexpr included, is rejected rather than quietly writing a 4th slot.
-    with pytest.raises(TlaUnsupportedAbiError):
-        _pack_payload(artifact, launcher._launch_args)
+def _pack_payload(compiled, launch_args):
+    """Pack ``launch_args`` through the compiled function's ABI binder."""
+    return compiled.execution_args.generate_launch_payload(launch_args)
 
 
 def test_compiled_artifact_payload_matches_the_tensors_alone() -> None:
     a, b, c = _bound_operands()
-    artifact = tla.compile(
+    compiled = tla.compile(
         _selectable_binary, a, b, c, mode="add", options=_OPTIONS
-    ).artifact
+    )
+    kernel_abi = compiled.execution_args.kernel_abi
+    assert kernel_abi is not None
 
     # tla.compile takes the constexpr; the launch that follows must not.
-    assert len(_pack_payload(artifact, (a, b, c))) == artifact.kernel_abi.total_size
+    assert len(_pack_payload(compiled, (a, b, c))) == kernel_abi.total_size

@@ -1,6 +1,6 @@
 """Host-side Ascend debug FIFO transport (Python port of RuntimeWrapper AscDebugFifo).
 
-Allocates the CANN print FIFO, swaps workspace sentinels into launch args,
+Allocates the CANN print FIFO, swaps workspace sentinels into the launch payload,
 then D2H-decodes scalar / tensor records to stdout with the same text formats
 e2e tests capture (``TLA printf:`` / ``DumpTensor:``).
 """
@@ -194,50 +194,51 @@ def destroy_fifo(fifo: _FifoData | None) -> None:
         fifo.device_ptr = 0
 
 
-def _args_to_u64_list(args: bytes) -> list[int]:
-    if len(args) % 8 != 0:
+def _payload_to_u64_list(payload: bytes) -> list[int]:
+    if len(payload) % 8 != 0:
         raise AscDebugFifoError(
             "debug workspace kernel arguments must be a multiple of 8 bytes"
         )
-    return list(struct.unpack("<" + "Q" * (len(args) // 8), args))
+    return list(struct.unpack("<" + "Q" * (len(payload) // 8), payload))
 
 
-def _u64_list_to_args(values: list[int]) -> bytes:
+def _u64_list_to_payload(values: list[int]) -> bytes:
     return struct.pack("<" + "Q" * len(values), *values) if values else b""
 
 
-def prepare_launch_args(
-    args: bytes,
+def prepare_launch_payload(
+    payload: bytes,
     *,
-    expects_debug_fifo: bool,
-    expects_print_tensor: bool | int,
+    uses_scalar_print: bool,
+    uses_tensor_print: bool,
+    is_mixed: bool,
     fifo_device_ptr: int,
 ) -> bytes:
-    values = _args_to_u64_list(args)
-    if expects_debug_fifo and expects_print_tensor:
+    values = _payload_to_u64_list(payload)
+    if uses_scalar_print and uses_tensor_print:
         raise AscDebugFifoError(
             "scalar debug FIFO and native tensor print cannot share a launch"
         )
-    if expects_debug_fifo:
+    if uses_scalar_print:
         if not values or values[-1] != DEBUG_PRINT_WORKSPACE_SENTINEL:
             raise AscDebugFifoError(
                 "debug print FIFO marker must occupy the final packed kernel argument"
             )
         values[-1] = int(fifo_device_ptr)
-        return _u64_list_to_args(values)
-    if expects_print_tensor:
+        return _u64_list_to_payload(values)
+    if uses_tensor_print:
         if not values or values[-1] != PRINT_TENSOR_WORKSPACE_SENTINEL:
             raise AscDebugFifoError(
                 "tensor print FIFO marker must occupy the final packed kernel argument"
             )
         workspace = int(fifo_device_ptr)
-        if int(expects_print_tensor) == 2:
+        if is_mixed:
             values[-1] = workspace
         else:
             values.pop()
             values.insert(0, workspace)
-        return _u64_list_to_args(values)
-    return args
+        return _u64_list_to_payload(values)
+    return payload
 
 
 def _write_stdout(text: str) -> None:
@@ -679,36 +680,38 @@ def close_fifo(
 def launch_with_debug_fifo(
     *,
     launch_kernel: Callable[[bytes], None],
-    args: bytes,
+    payload: bytes,
     block_num: int,
     stream: int,
-    expects_debug_fifo: bool,
-    expects_print_tensor: bool | int,
+    uses_scalar_print: bool,
+    uses_tensor_print: bool,
+    is_mixed: bool,
 ) -> None:
-    """Open FIFO if needed, rewrite args, invoke ``launch_kernel``, then close."""
-    needs_fifo = bool(expects_debug_fifo) or bool(expects_print_tensor)
-    if not needs_fifo:
-        launch_kernel(args)
+    """Open FIFO, rewrite the payload, invoke ``launch_kernel``, then close."""
+    uses_print_fifo = uses_scalar_print or uses_tensor_print
+    if not uses_print_fifo:
+        launch_kernel(payload)
         return
 
-    mixed = int(expects_print_tensor) == 2
-    fifo = open_fifo(block_num, mixed_handoff=mixed)
+    mixed_tensor_print = is_mixed and uses_tensor_print
+    fifo = open_fifo(block_num, mixed_handoff=mixed_tensor_print)
     try:
-        rewritten = prepare_launch_args(
-            args,
-            expects_debug_fifo=bool(expects_debug_fifo),
-            expects_print_tensor=expects_print_tensor,
+        rewritten_payload = prepare_launch_payload(
+            payload,
+            uses_scalar_print=uses_scalar_print,
+            uses_tensor_print=uses_tensor_print,
+            is_mixed=is_mixed,
             fifo_device_ptr=fifo.device_ptr,
         )
         try:
-            launch_kernel(rewritten)
+            launch_kernel(rewritten_payload)
         except Exception:
             destroy_fifo(fifo)
             raise
         close_fifo(
             fifo,
             stream,
-            tensor_only=bool(expects_print_tensor),
+            tensor_only=uses_tensor_print,
         )
     except Exception:
         if fifo.device_ptr:
@@ -724,5 +727,5 @@ __all__ = [
     "DEBUG_PRINT_WORKSPACE_SENTINEL",
     "PRINT_TENSOR_WORKSPACE_SENTINEL",
     "launch_with_debug_fifo",
-    "prepare_launch_args",
+    "prepare_launch_payload",
 ]

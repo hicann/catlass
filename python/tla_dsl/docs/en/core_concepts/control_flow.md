@@ -78,7 +78,9 @@ fixed collections assembled with the supported comprehensions.
 
 ## `@tla.jit`
 
-At Python scope, `@tla.jit` is a normal orchestration wrapper: it can call one
-or more `@tla.kernel` launchers and does not create host MLIR, a host ABI, or a
-host compilation cache entry. `@tla.kernel` remains the device compilation
-entry point.
+`@tla.jit` is a DSL helper used while a kernel is being lowered. It may be
+called from `@tla.kernel`, but calling or launching an `@tla.kernel` from it is
+currently unsupported. Direct `@tla.kernel` invocation is also currently
+unsupported. Compile explicitly with
+`compiled = tla.compile(kernel, *sample_args)`, then invoke the returned
+compiled function.

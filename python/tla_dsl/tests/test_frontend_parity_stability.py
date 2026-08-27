@@ -4,7 +4,6 @@ from pathlib import Path
 
 import catlass.tla as tla
 import catlass.execution as execution
-from catlass import runtime
 
 
 @tla.kernel
@@ -20,9 +19,9 @@ def test_full_demo_style_kernel_lowering_emits_mlir(compiler_tlair) -> None:
     assert '"tla.return"' in mlir
 
 
-def test_full_demo_style_compile_routes_kernel(monkeypatch) -> None:
-    artifact = execution.TlaKernelArtifact(
-        cache_key="parity",
+def _test_compiled_function(*, cache_key: str) -> tla.JitCompiledFunction:
+    return execution._new_jit_compiled_function(
+        cache_key=cache_key,
         cache_dir=Path("/tmp/cache"),
         tlair_mlir="module {}",
         lowered_llvm="; llvm",
@@ -30,7 +29,18 @@ def test_full_demo_style_compile_routes_kernel(monkeypatch) -> None:
         compiler_bridge_path=Path("/tmp/_tla_type_bridge_native.so"),
         hivmc_path=Path("/tmp/hivmc-a5"),
         kernel_binary_path=Path("/tmp/kernel.o"),
+        kernel_abi=object(),
+        abi_packer=object(),
+        uses_scalar_print=False,
+        uses_tensor_print=False,
+        logical_mixed_handoff=None,
+        compile_option=execution.TlaCompileOption(),
+        pass_ir_dump="",
     )
+
+
+def test_full_demo_style_compile_routes_kernel(monkeypatch) -> None:
+    compiled = _test_compiled_function(cache_key="parity")
     calls: list[tuple[str, str]] = []
 
     def fake_compile(
@@ -38,10 +48,16 @@ def test_full_demo_style_compile_routes_kernel(monkeypatch) -> None:
     ):
         del options, type_args, decorator_location, kwargs
         calls.append((fn.__name__, kind))
-        return artifact
+        return compiled
 
-    monkeypatch.setattr(runtime, "compile_kernel", fake_compile)
+    monkeypatch.setattr(execution, "_compile_kernel", fake_compile)
     result = tla.compile(fake_kernel)
 
-    assert result == artifact
+    assert isinstance(result, tla.JitCompiledFunction)
+    assert result is compiled
+    assert result.artifacts.MLIR == "module {}"
+    assert result.artifacts.LLVM == "; llvm"
+    assert result.artifacts.BINARY == Path("/tmp/kernel.o")
+    assert result.cache_key == "parity"
+    assert not hasattr(result, "artifact")
     assert calls == [("fake_kernel", "kernel")]

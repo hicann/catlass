@@ -6,7 +6,7 @@ import pytest
 
 pytest.importorskip("catlass", exc_type=ImportError)
 
-from catlass.base_dsl.jit_executor import TlaExecutionArgs
+from catlass.base_dsl.jit_executor import ExecutionArgs
 from catlass.base_dsl.runtime.jit_arg_adapters import (
     JitArgAdapterRegistry,
     _PointerLaunchArg,
@@ -27,7 +27,7 @@ class _Custom:
 
 
 def test_duck_typed_data_ptr_is_adapted() -> None:
-    adapted = TlaExecutionArgs().get_rectified_args([_HasDataPtr(0xABC)])
+    adapted = ExecutionArgs().get_rectified_args([_HasDataPtr(0xABC)])
     assert isinstance(adapted[0], _PointerLaunchArg)
     assert adapted[0].__c_pointers__() == [0xABC]
 
@@ -40,7 +40,7 @@ def test_registered_adapter_is_used() -> None:
         return _PointerLaunchArg(obj.ptr)
 
     try:
-        adapted = TlaExecutionArgs().get_rectified_args([_Custom(0x101)])
+        adapted = ExecutionArgs().get_rectified_args([_Custom(0x101)])
         assert isinstance(adapted[0], _PointerLaunchArg)
         assert adapted[0].__c_pointers__() == [0x101]
         assert JitArgAdapterRegistry.get_registered_adapter(_Custom(0)) is _adapt_custom
