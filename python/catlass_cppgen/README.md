@@ -113,6 +113,7 @@
    pip install build
    python -m build
    ```
+
    这会在 `dist/` 目录下生成 `.whl` 和 `.tar.gz` 文件。
 
 2. **安装分发包**：
@@ -121,6 +122,7 @@
    pip install dist/catlass_cppgen-*.whl
 
    ```
+
    或者：
 
    ```bash
@@ -128,6 +130,7 @@
    ```
 
 3. **直接安装（开发模式）**：
+
    ```bash
    pip install -e .
 
@@ -136,6 +139,7 @@
 ### 3.2 从本地目录安装
 
 如果您想直接从项目目录安装：
+
 ```bash
 pip install .
 
@@ -144,6 +148,7 @@ pip install .
 ## 4. 使用示例
 
 当前 `catlass_cppgen` 支持 matmul、grouped_matmul 以及 EVG 后处理特性的代码生成。以下是应用`cppgen`的环节示意：
+
 ```plain
 Gemm / GroupGemm（算子规划）
     ↓ get_kernels()
@@ -153,6 +158,7 @@ Kernel 对象（调优与特性查询）
 ```
 
 详细参考使用示例和 API 文档请参考下述文档：
+
  - [Kernel API 基础文档](docs/kernel_api.md)
  - [`OpTensor` 基础文档](docs/optensor_api.md)
  - [`EVG` 基础文档](docs/evg_api.md)
