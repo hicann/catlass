@@ -32,28 +32,23 @@ EXAMPLES_DIR = (
     / "python" / "tla_dsl" / "examples" / "end_to_end"
 )
 
-_TLA_DSL_ROOT = EXAMPLES_DIR.parents[1]
-
 _MODULE_CACHE: dict[Path, Any] = {}
 
 
 class _SiblingFinder(importlib.abc.MetaPathFinder):
-    """Resolve one example directory's sibling modules, and nothing else.
+    """Answer bare imports with this example directory's .py files.
 
-    Run as ``python debug_print/debug_print_mixed.py``, an example's own
-    directory is sys.path[0], so ``from debug_print import DTYPE_SPECS`` finds
-    the sibling debug_print.py. Imported from here it would not.
-
-    Prepending that directory to sys.path would fix it and cause a worse
-    problem: the entry outlives the case, and every .py beside it then shadows
-    same-named modules for the rest of the session -- an example called
-    types.py or queue.py would break the interpreter for every later case. So
-    resolve siblings through this finder instead, installed as a fallback only
-    while the example is being imported.
-
-    The stdlib check below is belt-and-braces: as a fallback finder we are only
-    reached once normal resolution has failed, so a stdlib name cannot get here
-    anyway. It keeps the guarantee if the finder is ever moved earlier.
+    Replicates the standalone-run semantics where the script's own directory
+    is sys.path[0], e.g. ``from debug_print import DTYPE_SPECS`` finding the
+    sibling debug_print.py. We cannot add that directory to sys.path instead:
+    the entry would outlive the case and every .py beside it would then shadow
+    same-named modules for the rest of the session (a sibling called types.py
+    would break every later case). The finder is installed at the head of
+    sys.meta_path, not as a trailing fallback: a lingering sys.path entry for
+    examples/end_to_end makes PathFinder answer ``debug_print`` with the
+    namespace package end_to_end/debug_print/ -- a *successful* resolution a
+    fallback never sees. The stdlib check below is what keeps a same-named
+    sibling out of the standard library's way in this position.
     """
 
     def __init__(self, directory: Path) -> None:
@@ -75,31 +70,11 @@ def _sibling_imports(directory: Path) -> Any:
     """Make `directory`'s modules importable by bare name, for this block only."""
 
     finder = _SiblingFinder(directory)
-    # Appended, not prepended: the finder is a *fallback*, consulted only after
-    # the builtin, frozen and sys.path finders have all failed. That makes it
-    # structurally unable to shadow the stdlib, site-packages or anything else --
-    # a prepended finder would sit ahead of the entire import machinery.
-    sys.meta_path.append(finder)
-
-    # Make the `examples` shared-helpers package importable
-    # (`from examples.end_to_end.common import ...`).
-    _root = str(_TLA_DSL_ROOT)
-    _root_added = _root not in sys.path
-    if _root_added:
-        sys.path.append(_root)
-
+    sys.meta_path.insert(0, finder)  # head position: see the class docstring
     try:
         yield
     finally:
-        try:
-            sys.meta_path.remove(finder)
-        except ValueError:
-            pass
-        if _root_added:
-            try:
-                sys.path.remove(_root)
-            except ValueError:
-                pass
+        sys.meta_path.remove(finder)
 
 
 def load_example(path: Path) -> Any:

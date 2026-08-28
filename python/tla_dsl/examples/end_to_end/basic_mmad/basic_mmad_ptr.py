@@ -17,11 +17,10 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-_DSL_BASE_PATH = str((Path(__file__).resolve().parent / "../../../").resolve())
+_DSL_EXAMPLE_PATH = str((Path(__file__).resolve().parent / "..").resolve())
 
-_DSL_PATH_ADDED = _DSL_BASE_PATH not in sys.path
-if _DSL_PATH_ADDED:
-    sys.path.insert(0, _DSL_BASE_PATH)
+if _DSL_EXAMPLE_PATH not in sys.path:
+    sys.path.insert(0, _DSL_EXAMPLE_PATH)
 
 import argparse
 import catlass.tla as tla
@@ -108,7 +107,7 @@ def basic_mmad_ptr(lhs: tla.Tensor, rhs: tla.Tensor, out: tla.Tensor) -> None:
 
 
 def run(args: argparse.Namespace) -> int:
-    from examples.end_to_end.common import compare
+    from common import compare
     from catlass.tla.runtime import from_dlpack
 
     torch.npu.set_device(args.device)
@@ -148,11 +147,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Minimal ptr/make_tensor MMAD.")
     parser.add_argument("--device", type=int, default=0)
     parser.add_argument("--block-num", type=int, default=1)
-    try:
-        return run(parser.parse_args())
-    finally:
-        if _DSL_PATH_ADDED:
-            sys.path.remove(_DSL_BASE_PATH)
+    return run(parser.parse_args())
 
 
 if __name__ == "__main__":

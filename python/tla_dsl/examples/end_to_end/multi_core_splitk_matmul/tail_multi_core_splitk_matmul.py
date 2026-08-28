@@ -18,11 +18,10 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-_DSL_BASE_PATH = str((Path(__file__).resolve().parent / "../../../").resolve())
+_DSL_EXAMPLE_PATH = str((Path(__file__).resolve().parent / "..").resolve())
 
-_DSL_PATH_ADDED = _DSL_BASE_PATH not in sys.path
-if _DSL_PATH_ADDED:
-    sys.path.insert(0, _DSL_BASE_PATH)
+if _DSL_EXAMPLE_PATH not in sys.path:
+    sys.path.insert(0, _DSL_EXAMPLE_PATH)
 
 from dataclasses import dataclass
 import argparse
@@ -32,7 +31,7 @@ import torch
 import torch_npu  # noqa: F401
 from catlass.params import NormalStoreParams, StoreDist
 
-from examples.end_to_end.common import (
+from common import (
     TilingParams,
     SwizzleParams,
 )
@@ -756,7 +755,7 @@ def workspace_shape(tiling_params: TilingParams, aic: int) -> tuple[int, int]:
 
 
 def run(args: argparse.Namespace) -> int:
-    from examples.end_to_end.common import (
+    from common import (
         get_block_num,
         create_tla_tensor,
         tolerance,
@@ -853,11 +852,7 @@ def main() -> int:
     parser.add_argument("--dtype-b", choices=("f16", "bf16", "f32"), default="f16")
     parser.add_argument("--dtype-c", choices=("f16", "bf16", "f32"), default="f16")
     parser.add_argument("--block-num", type=int, default=-1)
-    try:
-        return run(parser.parse_args())
-    finally:
-        if _DSL_PATH_ADDED:
-            sys.path.remove(_DSL_BASE_PATH)
+    return run(parser.parse_args())
 
 
 if __name__ == "__main__":

@@ -13,11 +13,10 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-_DSL_BASE_PATH = str((Path(__file__).resolve().parent / "../../../").resolve())
+_DSL_EXAMPLE_PATH = str((Path(__file__).resolve().parent / "..").resolve())
 
-_DSL_PATH_ADDED = _DSL_BASE_PATH not in sys.path
-if _DSL_PATH_ADDED:
-    sys.path.insert(0, _DSL_BASE_PATH)
+if _DSL_EXAMPLE_PATH not in sys.path:
+    sys.path.insert(0, _DSL_EXAMPLE_PATH)
 
 import argparse
 
@@ -27,7 +26,7 @@ import torch_npu  # noqa: F401
 
 from catlass.types import dtype_size_bytes
 
-from examples.end_to_end.common import TilingParams, SwizzleParams
+from common import TilingParams, SwizzleParams
 
 # ---- kernel constants + @tla.kernel ----
 UB_SIZE = tla.arch.get_capacity_in_bytes(tla.AddressSpace.ub)
@@ -692,7 +691,7 @@ def _compute_ub_slots(dtype_c: str) -> tuple[int, int]:
 
 
 def run(args: argparse.Namespace) -> int:
-    from examples.end_to_end.common import (
+    from common import (
         get_block_num,
         create_tla_tensor,
         compare,
@@ -764,11 +763,7 @@ def main() -> int:
     p.add_argument("--dtype-b", choices=("f16", "bf16", "f32"), default="f32")
     p.add_argument("--dtype-c", choices=("f16", "f32"), default="f32")
     p.add_argument("--block-num", type=int, default=-1)
-    try:
-        return run(p.parse_args())
-    finally:
-        if _DSL_PATH_ADDED:
-            sys.path.remove(_DSL_BASE_PATH)
+    return run(p.parse_args())
 
 
 if __name__ == "__main__":

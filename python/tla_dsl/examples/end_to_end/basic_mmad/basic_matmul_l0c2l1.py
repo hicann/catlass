@@ -10,6 +10,14 @@
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+_DSL_EXAMPLE_PATH = str((Path(__file__).resolve().parent / "..").resolve())
+
+if _DSL_EXAMPLE_PATH not in sys.path:
+    sys.path.insert(0, _DSL_EXAMPLE_PATH)
+
 import argparse
 
 import catlass.tla as tla
@@ -158,7 +166,7 @@ def run(args: argparse.Namespace) -> int:
     import torch
     import torch_npu
 
-    from examples.end_to_end.common import (
+    from common import (
         create_tla_tensor,
         compare,
     )

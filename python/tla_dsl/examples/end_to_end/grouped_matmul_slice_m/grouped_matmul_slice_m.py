@@ -13,11 +13,10 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-_DSL_BASE_PATH = str((Path(__file__).resolve().parent / "../../../").resolve())
+_DSL_EXAMPLE_PATH = str((Path(__file__).resolve().parent / "..").resolve())
 
-_DSL_PATH_ADDED = _DSL_BASE_PATH not in sys.path
-if _DSL_PATH_ADDED:
-    sys.path.insert(0, _DSL_BASE_PATH)
+if _DSL_EXAMPLE_PATH not in sys.path:
+    sys.path.insert(0, _DSL_EXAMPLE_PATH)
 
 import argparse
 
@@ -26,7 +25,7 @@ import torch
 import torch_npu  # noqa: F401
 from catlass.tla.runtime import from_dlpack
 
-from examples.end_to_end.common import SwizzleParams, TilingParams
+from common import SwizzleParams, TilingParams
 
 # Host sets before compile (ArgProxy has no layout_tag during lowering).
 LAYOUT_A_IS_COL = False
@@ -464,7 +463,7 @@ def grouped_matmul_slice_m_kernel(
 
 
 def run(args: argparse.Namespace) -> int:
-    from examples.end_to_end.common import (
+    from common import (
         compare,
         create_tla_tensor,
         get_block_num,
@@ -575,11 +574,7 @@ def main() -> int:
     parser.add_argument("--dtype-c", choices=("f16", "bf16", "f32"), default="f16")
     parser.add_argument("--group-mode", choices=("average", "random"), default="random")
     parser.add_argument("--block-num", type=int, default=-1)
-    try:
-        return run(parser.parse_args())
-    finally:
-        if _DSL_PATH_ADDED:
-            sys.path.remove(_DSL_BASE_PATH)
+    return run(parser.parse_args())
 
 
 if __name__ == "__main__":

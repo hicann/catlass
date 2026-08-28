@@ -13,11 +13,10 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-_DSL_BASE_PATH = str((Path(__file__).resolve().parent / "../../../").resolve())
+_DSL_EXAMPLE_PATH = str((Path(__file__).resolve().parent / "..").resolve())
 
-_DSL_PATH_ADDED = _DSL_BASE_PATH not in sys.path
-if _DSL_PATH_ADDED:
-    sys.path.insert(0, _DSL_BASE_PATH)
+if _DSL_EXAMPLE_PATH not in sys.path:
+    sys.path.insert(0, _DSL_EXAMPLE_PATH)
 
 import argparse
 
@@ -207,7 +206,7 @@ def run(args: argparse.Namespace) -> int:
     import torch
     import torch_npu  # noqa: F401
 
-    from examples.end_to_end.common import create_tla_tensor, compare
+    from common import create_tla_tensor, compare
 
     mi, ni, ki = int(args.m), int(args.n), int(args.k)
 
@@ -251,11 +250,7 @@ def main() -> int:
     parser.add_argument("--layout-b", choices=("row", "col"), default="row")
     parser.add_argument("--block-num", type=int, default=1)
     parser.add_argument("--sentinel", type=float, default=-9.0)
-    try:
-        return run(parser.parse_args())
-    finally:
-        if _DSL_PATH_ADDED:
-            sys.path.remove(_DSL_BASE_PATH)
+    return run(parser.parse_args())
 
 
 if __name__ == "__main__":
