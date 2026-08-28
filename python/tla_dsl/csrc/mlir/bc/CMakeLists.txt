@@ -80,7 +80,11 @@ function(compile_single_cpp_to_bc cpp_with_path core_type arch)
     endif()
     list(APPEND bisheng_args ${cpp_with_path})
     list(APPEND bisheng_args -emit-llvm -c)
-    list(APPEND bisheng_args -mllvm -disable-llvm-optzns)
+    # Do NOT pass -mllvm -disable-llvm-optzns here. That flag leaves AscendC
+    # helpers such as GetPhyType / Params ctors as out-of-line linkonce_odr
+    # functions (no alwaysinline), so hivmc later still emits CALL sites and
+    # breaks tools that require a fully inlined aicore kernel. Keep -O2 so
+    # LLVM inlines those helpers into the always_inline _mlir_ciface_* stubs.
 
     if(is_debug)
         set_source_files_properties(${cpp_with_path} PROPERTIES LANGUAGE c++)
