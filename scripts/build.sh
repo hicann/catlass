@@ -199,12 +199,18 @@ case "$TARGET" in
     *)
         echo -e "${INFO}Building target: $TARGET...${NC}"
         if [[ -d ${BUILD_DIR} ]]; then
-            if [[ "$TARGET" == "102_dynamic_optimized_matmul" ]] || [[ "$TARGET" == "catlass_examples" ]]; then
+            if [[ "$TARGET" == "catlass_examples" ]]; then
+                cmake -S "$CMAKE_SOURCE_DIR" -B "$BUILD_DIR" \
+                    -DCMAKE_INSTALL_PREFIX="$OUTPUT_DIR" \
+                    -DCOMPILE_DYNAMIC_OPTIMIZED_MATMUL=ON \
+                    -DCOMPILE_DYNAMIC_QBMM_OPTIMIZED_MATMUL=ON \
+                    "${CMAKE_OPTIONS[@]}"
+            elif [[ "$TARGET" == "102_dynamic_optimized_matmul" ]]; then
                 cmake -S "$CMAKE_SOURCE_DIR" -B "$BUILD_DIR" \
                     -DCMAKE_INSTALL_PREFIX="$OUTPUT_DIR" \
                     -DCOMPILE_DYNAMIC_OPTIMIZED_MATMUL=ON \
                     "${CMAKE_OPTIONS[@]}"
-            elif [[ "$TARGET" == "103_dynamic_optimized_quant_matmul_per_token_basic" ]] || [[ "$TARGET" == "catlass_examples" ]]; then
+            elif [[ "$TARGET" == "103_dynamic_optimized_quant_matmul_per_token_basic" ]]; then
                 cmake -S "$CMAKE_SOURCE_DIR" -B "$BUILD_DIR" \
                     -DCMAKE_BUILD_TYPE="$CMAKE_BUILD_TYPE" \
                     -DCMAKE_INSTALL_PREFIX="$OUTPUT_DIR" \
