@@ -32,7 +32,7 @@ $$
 
 **算法总览**：
 
-```
+```text
 输入 A ──→ GETRF（LU 分解）──► LU ──→ GETRI（求逆）──► A⁻¹
 ```
 
@@ -145,6 +145,7 @@ MatrixInverse kernel 针对不同核心类型（AIC/AIV）有特化实现。
 #### 3.4.1 GETRF 阶段 AIC 职责
 
 AIC 负责：
+
 1. **TRSM**：用已计算的 $L_{diag}^{-1}$ 更新右侧矩阵
 2. **Schur GEMM**：计算 Schur 补项 $A_{22} - L_{21}U_{12}$
 
@@ -155,6 +156,7 @@ AIC 负责 TRTRI 的 GEMM 部分，将密集矩阵乘法剥离到 Cube。
 #### 3.4.3 ApplyLInverse 阶段 AIC 职责
 
 AIC 负责：
+
 1. 块间 GEMM：更新右侧列块
 2. 块内 GEMM：应用当前块的 $L^{-1}$
 
@@ -163,6 +165,7 @@ AIC 负责：
 #### 3.5.1 GETRF 阶段 AIV 职责
 
 **Core 0** 负责：
+
 1. Panel LU 分解（含选主元）
 2. 应用行交换到已处理和未处理区域
 3. 计算 $L_{diag}$ 的逆
@@ -172,6 +175,7 @@ AIC 负责：
 #### 3.5.2 TRTRI 阶段 AIV 职责
 
 **Core 0** 负责：
+
 1. 复制 LU 到 workspace（L 严格下三角、U 上三角为稠密格式）
 2. 对角块求逆（原地计算 $U_{diag}^{-1}$）
 3. DTRMM 结果取反拷贝
@@ -190,7 +194,7 @@ AIC 负责：
 
 ### 3.6 DispatchPolicy 设计
 
-#### MmadPingpong 模板参数含义：
+#### MmadPingpong 模板参数含义
 
 | 参数 | 说明 | 当前样例取值 |
 |---|---|---|
@@ -231,6 +235,7 @@ AIV 与 AIC 之间通过 `AscendC::SyncAll<false>()` 同步。每个 GETRF 迭�
 硬件架构中缓存一致性需要软件显式维护。
 
 部分关键 cache 操作位置：
+
 1. AIV Core 0 PanelGetrf 后：flush gmA
 2. AIV 全核 epilogue 后：flush gmA
 3. AIV TRTRIdiag 后：flush gmInvUDense
@@ -262,7 +267,7 @@ bash scripts/build.sh 78_matrix_inverse
 
 成功执行输出：
 
-```
+```text
 Matrix Inverse: N=128, device=0
 Kernel time: X.XX ms
 Compare success.
