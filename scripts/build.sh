@@ -163,23 +163,23 @@ function build_python_extension() {
 
 function build_torch_library() {
     echo -e "${INFO}Building Torch library...${NC}"
-    cmake -B build \
+    cmake -S "$CMAKE_SOURCE_DIR" -B "$BUILD_DIR" \
         -DCMAKE_INSTALL_PREFIX="$OUTPUT_DIR/python_extension" \
         -DCATLASS_INCLUDE_DIR="$CMAKE_SOURCE_DIR/include" \
         -DPython3_EXECUTABLE="$(which python3)" \
         -DBUILD_TORCH_LIB=True \
         "${CMAKE_OPTIONS[@]}"
-    cmake --build build --target catlass_torch -j
-    cmake --install build --component catlass_torch
+    cmake --build "$BUILD_DIR" --target catlass_torch -j
+    cmake --install "$BUILD_DIR" --component catlass_torch
     echo -e "${INFO}Torch library built successfully${NC}"
 }
 
 function build_mstuner_catlass() {
     echo -e "${INFO}Building mstuner_catlass...${NC}"
     cmake -S "$CMAKE_SOURCE_DIR" -B "$BUILD_DIR" "${CMAKE_OPTIONS[@]}"
-    cmake --build build --target mstuner_catlass -j
-    cmake --install build --component catlass_kernels
-    cmake --install build --component mstuner_catlass
+    cmake --build "$BUILD_DIR" --target mstuner_catlass -j
+    cmake --install "$BUILD_DIR" --component catlass_kernels
+    cmake --install "$BUILD_DIR" --component mstuner_catlass
     echo -e "${INFO}mstuner_catlass built successfully${NC}"
 }
 
