@@ -13,7 +13,7 @@
         <licensefile></licensefile>
         <policylist>
             <policy name="projectPolicy" desc="">
-                <policyitem type="license" name="cann License" path=".*" desc="CANN 协议"/>
+                <policyitem type="license" name="CANN-2.0" path=".*" desc="CANN 协议"/>
                 <policyitem type="copyright" name="*" path=".*" rule="may" group="defaultGroup" filefilter="copyrightPolicyFilter" desc=""/>
             </policy>
         </policylist>
