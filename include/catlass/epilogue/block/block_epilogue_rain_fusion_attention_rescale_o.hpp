@@ -161,13 +161,13 @@ public:
     }
 
     template <DRegSplitStages dRegSplitStages>
-    __simd_vf__ inline void RescaleFunc(
+    __simd_vf__ static inline void RescaleFunc(
         __ubuf__ ElementOTmp* goUb, __ubuf__ ElementOTmp* loUb, __ubuf__ ElementOTmp* dmUb, uint32_t row,
         uint32_t colStride, uint32_t colTail, uint32_t vlElemNum)
     {}
 
     template <>
-    __simd_vf__ inline void RescaleFunc<DRegSplitStages::ONE>(
+    __simd_vf__ static inline void RescaleFunc<DRegSplitStages::ONE>(
         __ubuf__ ElementOTmp* goUb, __ubuf__ ElementOTmp* loUb, __ubuf__ ElementOTmp* dmUb, uint32_t row,
         uint32_t colStride, uint32_t colTail, uint32_t vlElemNum)
     {
@@ -190,7 +190,7 @@ public:
     }
 
     template <>
-    __simd_vf__ inline void RescaleFunc<DRegSplitStages::TWO>(
+    __simd_vf__ static inline void RescaleFunc<DRegSplitStages::TWO>(
         __ubuf__ ElementOTmp* goUb, __ubuf__ ElementOTmp* loUb, __ubuf__ ElementOTmp* dmUb, uint32_t row,
         uint32_t colStride, uint32_t colTail, uint32_t vlElemNum)
     {
@@ -223,13 +223,13 @@ public:
     }
 
     template <DRegSplitStages dRegSplitStages>
-    __simd_vf__ inline void RescaleFuncLast(
+    __simd_vf__ static inline void RescaleFuncLast(
         __ubuf__ ElementOTmp* goUb, __ubuf__ ElementOTmp* loUb, __ubuf__ ElementOTmp* dmUb, __ubuf__ ElementOTmp* glUb,
         uint32_t row, uint32_t colStride, uint32_t colTail, uint32_t vlElemNum)
     {}
 
     template <>
-    __simd_vf__ inline void RescaleFuncLast<DRegSplitStages::ONE>(
+    __simd_vf__ static inline void RescaleFuncLast<DRegSplitStages::ONE>(
         __ubuf__ ElementOTmp* goUb, __ubuf__ ElementOTmp* loUb, __ubuf__ ElementOTmp* dmUb, __ubuf__ ElementOTmp* glUb,
         uint32_t row, uint32_t colStride, uint32_t colTail, uint32_t vlElemNum)
     {
@@ -256,7 +256,7 @@ public:
     }
 
     template <>
-    __simd_vf__ inline void RescaleFuncLast<DRegSplitStages::TWO>(
+    __simd_vf__ static inline void RescaleFuncLast<DRegSplitStages::TWO>(
         __ubuf__ ElementOTmp* goUb, __ubuf__ ElementOTmp* loUb, __ubuf__ ElementOTmp* dmUb, __ubuf__ ElementOTmp* glUb,
         uint32_t row, uint32_t colStride, uint32_t colTail, uint32_t vlElemNum)
     {
@@ -295,13 +295,13 @@ public:
     }
 
     template <DRegSplitStages dRegSplitStages>
-    __simd_vf__ inline void RescaleFuncSingle(
+    __simd_vf__ static inline void RescaleFuncSingle(
         __ubuf__ ElementOTmp* goUb, __ubuf__ ElementOTmp* loUb, __ubuf__ ElementOTmp* glUb, uint32_t row,
         uint32_t colStride, uint32_t colTail, uint32_t vlElemNum)
     {}
 
     template <>
-    __simd_vf__ inline void RescaleFuncSingle<DRegSplitStages::ONE>(
+    __simd_vf__ static inline void RescaleFuncSingle<DRegSplitStages::ONE>(
         __ubuf__ ElementOTmp* goUb, __ubuf__ ElementOTmp* loUb, __ubuf__ ElementOTmp* glUb, uint32_t row,
         uint32_t colStride, uint32_t colTail, uint32_t vlElemNum)
     {
@@ -320,7 +320,7 @@ public:
     }
 
     template <>
-    __simd_vf__ inline void RescaleFuncSingle<DRegSplitStages::TWO>(
+    __simd_vf__ static inline void RescaleFuncSingle<DRegSplitStages::TWO>(
         __ubuf__ ElementOTmp* goUb, __ubuf__ ElementOTmp* loUb, __ubuf__ ElementOTmp* glUb, uint32_t row,
         uint32_t colStride, uint32_t colTail, uint32_t vlElemNum)
     {

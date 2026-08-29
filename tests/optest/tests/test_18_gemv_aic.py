@@ -19,7 +19,7 @@ def test_gemv_aic():
     x = torch.randn(n, dtype=torch.float32, device="npu")
 
     alpha = 1.0
-    beta = 0.5
+    beta = 0.0
 
     # Test 1: beta=0, Y should have no effect
     y_zeros = torch.zeros(m, dtype=torch.float32, device="npu")

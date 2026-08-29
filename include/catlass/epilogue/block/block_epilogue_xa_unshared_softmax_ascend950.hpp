@@ -223,7 +223,7 @@ private:
     }
 
     template <typename ElementS, uint16_t S2BaseSize, NRangeIndex NRange>
-    __simd_vf__ inline void ComputeMaskandScale(
+    __simd_vf__ static inline void ComputeMaskandScale(
         __ubuf__ ElementS* srcUb, __ubuf__ uint8_t* maskUbUnRoll1, __ubuf__ uint8_t* maskUbUnRoll2,
         __ubuf__ ElementS* maxUb, uint16_t m, uint32_t tailN, ElementS scale)
     {
@@ -277,7 +277,7 @@ private:
     }
 
     template <typename ElementP, typename ElementS, uint16_t S2BaseSize, NRangeIndex NRange>
-    __simd_vf__ inline void ComputeExpSubSum(
+    __simd_vf__ static inline void ComputeExpSubSum(
         __ubuf__ ElementP* expUb, __ubuf__ ElementS* srcUb, __ubuf__ ElementS* nowMaxUb, __ubuf__ ElementS* expSumUb,
         uint16_t m, uint32_t blockStride)
     {

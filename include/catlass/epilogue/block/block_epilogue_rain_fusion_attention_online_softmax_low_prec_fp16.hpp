@@ -214,7 +214,7 @@ private:
     uint32_t subBlockIdx_;
 
     template <KvBaseTileRegSplitStages kvBaseTileRegSplitStages>
-    __simd_vf__ inline void ComputeScaleAndMax(
+    __simd_vf__ static inline void ComputeScaleAndMax(
         __ubuf__ ElementInput* srcUb, __ubuf__ ElementInput* newMaxUb, uint16_t m, uint32_t tailN, ElementInput dScale,
         uint16_t s2BaseSize)
     {
@@ -225,7 +225,7 @@ private:
     }
 
     template <>
-    __simd_vf__ inline void ComputeScaleAndMax<KvBaseTileRegSplitStages::ONE>(
+    __simd_vf__ static inline void ComputeScaleAndMax<KvBaseTileRegSplitStages::ONE>(
         __ubuf__ ElementInput* srcUb, __ubuf__ ElementInput* newMaxUb, uint16_t m, uint32_t tailN, ElementInput dScale,
         uint16_t s2BaseSize)
     {
@@ -251,7 +251,7 @@ private:
     }
 
     template <>
-    __simd_vf__ inline void ComputeScaleAndMax<KvBaseTileRegSplitStages::TWO>(
+    __simd_vf__ static inline void ComputeScaleAndMax<KvBaseTileRegSplitStages::TWO>(
         __ubuf__ ElementInput* srcUb, __ubuf__ ElementInput* newMaxUb, uint16_t m, uint32_t tailN, ElementInput dScale,
         uint16_t s2BaseSize)
     {
@@ -281,7 +281,7 @@ private:
     }
 
     // SM_ROW_MAX_ELEM_NUM = 64: mFullVecCnt = 0, tailM = m
-    __simd_vf__ inline void UpdateMax(__ubuf__ ElementInput* nowMaxUb, __ubuf__ float* lastMaxUb, uint32_t tailM)
+    __simd_vf__ static inline void UpdateMax(__ubuf__ ElementInput* nowMaxUb, __ubuf__ float* lastMaxUb, uint32_t tailM)
     {
         using namespace AscendC::MicroAPI;
         constexpr static CastTrait castTraitZeroRound = {
@@ -310,7 +310,7 @@ private:
     }
 
     template <KvBaseTileRegSplitStages kvBaseTileRegSplitStages>
-    __simd_vf__ inline void ComputeExpSubSumB16(
+    __simd_vf__ static inline void ComputeExpSubSumB16(
         __ubuf__ ElementOutput* expUb, __ubuf__ ElementInput* srcUb, __ubuf__ ElementInput* nowMaxUb,
         __ubuf__ ElementInput* expSumUb, uint16_t m, uint32_t tailN, uint32_t blockStride, uint16_t s2BaseSize)
     {
@@ -321,7 +321,7 @@ private:
     }
 
     template <>
-    __simd_vf__ inline void ComputeExpSubSumB16<KvBaseTileRegSplitStages::ONE>(
+    __simd_vf__ static inline void ComputeExpSubSumB16<KvBaseTileRegSplitStages::ONE>(
         __ubuf__ ElementOutput* expUb, __ubuf__ ElementInput* srcUb, __ubuf__ ElementInput* nowMaxUb,
         __ubuf__ ElementInput* expSumUb, uint16_t m, uint32_t tailN, uint32_t blockStride, uint16_t s2BaseSize)
     {
@@ -349,7 +349,7 @@ private:
     }
 
     template <>
-    __simd_vf__ inline void ComputeExpSubSumB16<KvBaseTileRegSplitStages::TWO>(
+    __simd_vf__ static inline void ComputeExpSubSumB16<KvBaseTileRegSplitStages::TWO>(
         __ubuf__ ElementOutput* expUb, __ubuf__ ElementInput* srcUb, __ubuf__ ElementInput* nowMaxUb,
         __ubuf__ ElementInput* expSumUb, uint16_t m, uint32_t tailN, uint32_t blockStride, uint16_t s2BaseSize)
     {
@@ -387,7 +387,7 @@ private:
     }
 
     template <typename ElementInput>
-    __simd_vf__ inline void CastExpSumAndExpMax(
+    __simd_vf__ static inline void CastExpSumAndExpMax(
         __ubuf__ float* sumUb, __ubuf__ float* maxUb, __ubuf__ ElementInput* expSumUb, __ubuf__ ElementInput* nowMaxUb,
         uint16_t mFullVecCnt, uint32_t tailM)
     {
@@ -435,7 +435,7 @@ private:
     }
 
     template <typename ElementInput>
-    __simd_vf__ inline void UpdateExpSumAndExpMax(
+    __simd_vf__ static inline void UpdateExpSumAndExpMax(
         __ubuf__ float* sumUb, __ubuf__ float* expMaxUb, __ubuf__ float* maxUb, __ubuf__ ElementInput* expSumUb,
         __ubuf__ ElementInput* nowMaxUb, uint16_t mFullVecCnt, uint32_t tailM)
     {
