@@ -15,6 +15,9 @@ def TlaDialect : Dialect {
     Tla dialect schema for TlaIR matmul prototyping.
   }];
   let cppNamespace = "::tla";
+  // auto generate parseType/printType/parseAttribute/printAttribute
+  let useDefaultAttributePrinterParser = 1;
+  let useDefaultTypePrinterParser = 1;
 }
 
 class Tla_Op<string mnemonic, list<Trait> traits = []> : Op<TlaDialect, mnemonic, traits>;

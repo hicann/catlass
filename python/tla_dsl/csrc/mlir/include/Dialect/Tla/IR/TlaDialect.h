@@ -12,6 +12,8 @@ public:
         return "tla";
     }
     void initialize();
+    // auto generate parseType/printType/parseAttribute/printAttribute
+    // here need declare
     mlir::Type parseType(mlir::DialectAsmParser& parser) const override;
     void printType(mlir::Type type, mlir::DialectAsmPrinter& printer) const override;
     mlir::Attribute parseAttribute(mlir::DialectAsmParser& parser, mlir::Type type) const override;
