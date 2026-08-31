@@ -8,7 +8,7 @@
 // MAIN-NOT: tla.scalar_load
 // HELPER-LABEL: func.func private @vector_region_
 // HELPER: %[[REDUCED:.*]] = ave.hir.reduction <add>
-// HELPER: %[[STORE_MASK:.*]], %{{.*}} = ave.hir.plt %{{.*}} : vector<64xi1>, index
+// HELPER: %[[STORE_MASK:.*]], %{{.*}} = ave.hir.plt %{{.*}} {element_alignment_bit_width = 32 : i32} : vector<256xi1>, index
 // HELPER-NOT: ave.hir.broadcast_vector
 // HELPER-NOT: ONEPT
 // HELPER: ave.hir.masked_store <NORM_B32> {{.*}}, %[[STORE_MASK]], %[[REDUCED]]
