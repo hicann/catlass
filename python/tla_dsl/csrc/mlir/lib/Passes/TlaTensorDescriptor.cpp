@@ -84,10 +84,10 @@ mlir::FailureOr<TensorLayoutTag> getExplicitTensorLayoutTagAttr(mlir::Operation*
     return parseTensorLayoutTagAttr(layoutTagAttr.getValue());
 }
 
-mlir::FailureOr<TileTypeInfo> decodeTileTypeInfo(mlir::Type tileType)
+mlir::FailureOr<TensorTypeInfo> decodeTensorTypeInfo(mlir::Type tensorType)
 {
-    TileTypeInfo info;
-    auto tensorTy = llvm::dyn_cast<::tla::TlaTensorType>(tileType);
+    TensorTypeInfo info;
+    auto tensorTy = llvm::dyn_cast<::tla::TlaTensorType>(tensorType);
     if (!tensorTy)
         return failure();
     auto layout = tensorTy.getLayout();
@@ -101,16 +101,11 @@ mlir::FailureOr<TileTypeInfo> decodeTileTypeInfo(mlir::Type tileType)
         failed(::tla::getTlaIndexTreeLeaves(layout.getOrigin().getTree(), info.originShapeDims)))
         return failure();
 
-    std::string elemBuf;
-    llvm::raw_string_ostream elemOs(elemBuf);
-    elemOs << ptr.getPointee();
-    elemOs.flush();
-    info.elementType = std::move(elemBuf);
-    info.mlirElementType = ptr.getPointee();
+    info.elementType = ptr.getPointee();
     info.tlaAddressSpace = ptr.getAddrspace();
     info.addressSpace = stringifyAddressSpace(ptr.getAddrspace()).str();
     auto layoutTag = convertTlaLayoutTag(layout.getLayoutTag());
-    if (info.elementType.empty() || info.addressSpace.empty() || failed(layoutTag))
+    if (!info.elementType || info.addressSpace.empty() || failed(layoutTag))
         return failure();
     info.layoutTag = *layoutTag;
 
@@ -172,7 +167,7 @@ mlir::MemRefType getDynamicStridedMemrefType(mlir::MemRefType memrefType)
 
 bool validateTensorDescriptor(mlir::Operation* op, const TensorDescriptor& desc, llvm::StringRef errorMessage)
 {
-    if (!desc.base || !desc.bridgedBaseMemrefType || desc.addrspace.empty() || desc.elementType.empty()) {
+    if (!desc.base || !desc.bridgedBaseMemrefType || desc.addrspace.empty() || !desc.elementType) {
         op->emitError() << errorMessage;
         return false;
     }
@@ -315,7 +310,7 @@ FailureOr<int64_t> getStaticAllocationElementCount(Value ptr)
 
 mlir::FailureOr<TensorDescriptor> descriptorFromTensorDescOp(::tla::TensorDescOp descOp)
 {
-    auto info = decodeTileTypeInfo(descOp.getResult().getType());
+    auto info = decodeTensorTypeInfo(descOp.getResult().getType());
     if (failed(info))
         return descOp->emitError() << "tla.tensor_desc result is not a structured tla.tensor", failure();
     TensorDescriptor d;
@@ -337,7 +332,7 @@ mlir::FailureOr<TensorDescriptor> descriptorFromTensorDescOp(::tla::TensorDescOp
             flatElemCount = info->originShapeDims[0] * info->originShapeDims[1];
         }
         auto bridged =
-            buildHivmMemrefType(descOp.getContext(), {flatElemCount}, info->mlirElementType, info->tlaAddressSpace);
+            buildHivmMemrefType(descOp.getContext(), {flatElemCount}, info->elementType, info->tlaAddressSpace);
         if (failed(bridged))
             return failure();
         d.bridgedBaseMemrefType = *bridged;

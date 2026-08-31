@@ -34,8 +34,8 @@ static bool hasNoResultUses(Operation* op)
 
 static bool isTlaTensorBridgeCast(UnrealizedConversionCastOp op)
 {
-    return llvm::any_of(op->getOperandTypes(), [](Type type) { return succeeded(decodeTileTypeInfo(type)); }) ||
-           llvm::any_of(op->getResultTypes(), [](Type type) { return succeeded(decodeTileTypeInfo(type)); });
+    return llvm::any_of(op->getOperandTypes(), [](Type type) { return succeeded(decodeTensorTypeInfo(type)); }) ||
+           llvm::any_of(op->getResultTypes(), [](Type type) { return succeeded(decodeTensorTypeInfo(type)); });
 }
 
 static bool isDeadTensorBridgeCast(UnrealizedConversionCastOp op)

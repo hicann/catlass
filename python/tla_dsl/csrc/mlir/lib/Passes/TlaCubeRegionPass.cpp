@@ -62,9 +62,9 @@ struct LowerTlaMmadPattern : public OpRewritePattern<::tla::MmadOp> {
         Value initCVal = initC;
         Value unitFlagVal = rewriter.create<arith::TruncIOp>(op.getLoc(), i8Type, unitFlag);
 
-        auto lhsInfo = ::tla::decodeTileTypeInfo(lhsType);
-        auto rhsInfo = ::tla::decodeTileTypeInfo(rhsType);
-        auto accInfo = ::tla::decodeTileTypeInfo(accType);
+        auto lhsInfo = ::tla::decodeTensorTypeInfo(lhsType);
+        auto rhsInfo = ::tla::decodeTensorTypeInfo(rhsType);
+        auto accInfo = ::tla::decodeTensorTypeInfo(accType);
         if (failed(lhsInfo) || failed(rhsInfo) || failed(accInfo)) {
             op.emitError() << "tla.mmad currently requires structured tla.tensor operand types";
             return failure();
@@ -78,20 +78,20 @@ struct LowerTlaMmadPattern : public OpRewritePattern<::tla::MmadOp> {
             return failure();
         }
         bool supportedF16Route =
-            lhsInfo->elementType == "f16" && rhsInfo->elementType == "f16" && accInfo->elementType == "f32";
+            lhsInfo->elementType.isF16() && rhsInfo->elementType.isF16() && accInfo->elementType.isF32();
         bool supportedBf16Route =
-            lhsInfo->elementType == "bf16" && rhsInfo->elementType == "bf16" && accInfo->elementType == "f32";
+            lhsInfo->elementType.isBF16() && rhsInfo->elementType.isBF16() && accInfo->elementType.isF32();
         bool supportedF32Route =
-            lhsInfo->elementType == "f32" && rhsInfo->elementType == "f32" && accInfo->elementType == "f32";
+            lhsInfo->elementType.isF32() && rhsInfo->elementType.isF32() && accInfo->elementType.isF32();
         // Integer route: unlike the float routes, the L0C accumulator is i32.
-        bool supportedI8Route =
-            lhsInfo->elementType == "i8" && rhsInfo->elementType == "i8" && accInfo->elementType == "i32";
-        // fp8 routes: element types print as the MLIR spellings f8E4M3FN / f8E5M2.
+        bool supportedI8Route = lhsInfo->elementType.isSignlessInteger(8) &&
+                                rhsInfo->elementType.isSignlessInteger(8) && accInfo->elementType.isSignlessInteger(32);
+        // fp8 routes support both MLIR f8E4M3FN and f8E5M2 types.
         // The two formats mix freely on the cube, so all four operand pairings are
         // legal; each accumulates into fp32.
-        auto isFp8 = [](StringRef elem) { return elem == "f8E4M3FN" || elem == "f8E5M2"; };
+        auto isFp8 = [](Type elem) { return elem.isFloat8E4M3FN() || elem.isFloat8E5M2(); };
         bool supportedFp8Route =
-            isFp8(lhsInfo->elementType) && isFp8(rhsInfo->elementType) && accInfo->elementType == "f32";
+            isFp8(lhsInfo->elementType) && isFp8(rhsInfo->elementType) && accInfo->elementType.isF32();
         if (!supportedF16Route && !supportedBf16Route && !supportedF32Route && !supportedI8Route &&
             !supportedFp8Route) {
             op.emitError() << "unsupported tla.mmad element types; expected f16,f16 -> f32, bf16,bf16 "
@@ -200,7 +200,7 @@ struct LowerTlaMmadPattern : public OpRewritePattern<::tla::MmadOp> {
         // MLIR prints the type as f8E4M3FN / f8E5M2; the BC runtime symbols are
         // named after the C++ element type the wrapper instantiates, which is the
         // CANN builtin fp8_e4m3fn_t / fp8_e5m2_t.
-        auto fp8Tag = [](StringRef elem) -> StringRef { return elem == "f8E4M3FN" ? "fp8_e4m3fn_t" : "fp8_e5m2_t"; };
+        auto fp8Tag = [](Type elem) -> StringRef { return elem.isFloat8E4M3FN() ? "fp8_e4m3fn_t" : "fp8_e5m2_t"; };
         std::string fp8CalleeStorage;
         if (supportedFp8Route) {
             fp8CalleeStorage =

@@ -1,4 +1,5 @@
 // RUN: %tla_compile %s -o - | %filecheck %s
+// RUN: sed 's/f32/ui8/g' %s | not %tla_compile - -o - 2>&1 | %filecheck %s --check-prefix=UNSIGNED-ERR
 
 module {
   tla.func @make_tensor_copy_kernel(%arg0: !tla.tensor<!tla.layout<!tla.shape<128,128>, !tla.stride<128,1>, !tla.shape<128,128>, RowMajor>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>) {
@@ -27,3 +28,4 @@ module {
 // CHECK: call @copy_ub_RowMajor_to_gm_RowMajor_float
 // CHECK-NOT: tla.make_tensor
 // CHECK-NOT: memref.reinterpret_cast
+// UNSIGNED-ERR: failed to legalize operation 'tla.copy'

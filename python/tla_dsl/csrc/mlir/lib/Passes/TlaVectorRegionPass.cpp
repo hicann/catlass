@@ -1013,7 +1013,7 @@ static LogicalResult materializeTensorDescSubview(
     Value colOff = lookupOrCloneScalarValue(b, descOp.getCoord1(), valueMap);
     Value stride0 = lookupOrCloneScalarValue(b, descOp.getStride0(), valueMap);
     Value stride1 = lookupOrCloneScalarValue(b, descOp.getStride1(), valueMap);
-    auto info = decodeTileTypeInfo(descOp.getResult().getType());
+    auto info = decodeTensorTypeInfo(descOp.getResult().getType());
     if (failed(info))
         return failure();
     if (!rowOff || !colOff || !stride0 || !stride1)

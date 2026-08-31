@@ -22,11 +22,11 @@ namespace {
 
 // Build a tla.tensor_desc from a derived descriptor, keeping the producer's tile
 // type on the result. Static leaves are materialized as SSA in `desc`.
-static Value buildTensorDescOp(OpBuilder& builder, Location loc, Type tileType, const TensorDescriptor& desc)
+static Value buildTensorDescOp(OpBuilder& builder, Location loc, Type tensorType, const TensorDescriptor& desc)
 {
     return builder
         .create<::tla::TensorDescOp>(
-            loc, tileType, desc.base, desc.shape[0], desc.shape[1], desc.shape[2], desc.shape[3], desc.stride[0],
+            loc, tensorType, desc.base, desc.shape[0], desc.shape[1], desc.shape[2], desc.shape[3], desc.stride[0],
             desc.stride[1], desc.stride[2], desc.stride[3], desc.originShape[0], desc.originShape[1], desc.coord[0],
             desc.coord[1])
         .getResult();

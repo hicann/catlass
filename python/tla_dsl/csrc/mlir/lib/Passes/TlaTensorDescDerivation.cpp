@@ -43,7 +43,7 @@ mlir::Value IndexConstantCache::get(mlir::Operation* anchor, int64_t value, unsi
 }
 
 static mlir::FailureOr<TensorDescriptor> buildTileViewResultDescriptorFromParent(
-    mlir::Operation* op, mlir::Value base, mlir::MemRefType bridgedBaseType, const TileTypeInfo& info,
+    mlir::Operation* op, mlir::Value base, mlir::MemRefType bridgedBaseType, const TensorTypeInfo& info,
     const TensorDescriptor& parent, mlir::Value row, mlir::Value col, mlir::Value sh0, mlir::Value sh1,
     ConstantFactory getConstant)
 {
@@ -342,7 +342,7 @@ mlir::LogicalResult TensorDescriptorDerivation::derive(mlir::func::FuncOp funcOp
     // The producer-local descriptor builder takes the constant factory
     // explicitly.
     auto buildTileViewResultDescriptorFromParent =
-        [&](Operation* op, Value base, MemRefType bridgedBaseType, const TileTypeInfo& info,
+        [&](Operation* op, Value base, MemRefType bridgedBaseType, const TensorTypeInfo& info,
             const TensorDescriptor& parent, Value row, Value col, Value sh0, Value sh1) -> FailureOr<TensorDescriptor> {
         return ::tla::buildTileViewResultDescriptorFromParent(
             op, base, bridgedBaseType, info, parent, row, col, sh0, sh1, getOrCreateConstant);
@@ -387,7 +387,7 @@ mlir::LogicalResult TensorDescriptorDerivation::derive(mlir::func::FuncOp funcOp
                 return;
             }
 
-            auto resultInfo = decodeTileTypeInfo(tileOp.getResult().getType());
+            auto resultInfo = decodeTensorTypeInfo(tileOp.getResult().getType());
             if (failed(resultInfo)) {
                 op->emitError() << "tla.tile_view currently requires a structured tla.tensor result "
                                    "type";
@@ -483,7 +483,7 @@ mlir::LogicalResult TensorDescriptorDerivation::derive(mlir::func::FuncOp funcOp
                 return;
             }
 
-            auto childInfo = decodeTileTypeInfo(op->getResult(0).getType());
+            auto childInfo = decodeTensorTypeInfo(op->getResult(0).getType());
             if (failed(childInfo)) {
                 op->emitError() << "tla.make_tensor_like currently requires a structured tla.tensor "
                                    "result type";
@@ -502,7 +502,7 @@ mlir::LogicalResult TensorDescriptorDerivation::derive(mlir::func::FuncOp funcOp
                     flatElemCount = dim0 * dim1;
             }
             auto bridgedBaseType = buildHivmMemrefType(
-                op->getContext(), {flatElemCount}, childInfo->mlirElementType, childInfo->tlaAddressSpace);
+                op->getContext(), {flatElemCount}, childInfo->elementType, childInfo->tlaAddressSpace);
             if (failed(bridgedBaseType)) {
                 op->emitError() << "tla.make_tensor_like buffer memref must be bridgeable to builtin memref type";
                 derivationFailed = true;
@@ -678,12 +678,12 @@ mlir::LogicalResult TensorDescriptorDerivation::derive(mlir::func::FuncOp funcOp
                 shape[2] = one;
                 shape[3] = one;
                 constexpr int64_t linearStrideAlignmentBytes = 32;
-                int64_t elementBytes = getByteSizeOfFixedWidthScalarType(childInfo->mlirElementType);
-                if (childInfo->mlirElementType.isInteger(1))
+                int64_t elementBytes = getByteSizeOfFixedWidthScalarType(childInfo->elementType);
+                if (childInfo->elementType.isInteger(1))
                     elementBytes = 1;
                 if (elementBytes <= 0 || linearStrideAlignmentBytes % elementBytes != 0) {
                     op->emitError() << "tla.make_tensor_like cannot derive a 32-byte-aligned stride for element type "
-                                    << childInfo->mlirElementType;
+                                    << childInfo->elementType;
                     derivationFailed = true;
                     return;
                 }
@@ -784,7 +784,7 @@ mlir::LogicalResult TensorDescriptorDerivation::derive(mlir::func::FuncOp funcOp
                 return;
             }
 
-            auto childInfo = decodeTileTypeInfo(op->getResult(0).getType());
+            auto childInfo = decodeTensorTypeInfo(op->getResult(0).getType());
             if (failed(childInfo)) {
                 op->emitError() << "tla.make_tensor currently requires a structured tla.tensor "
                                    "result type";
@@ -812,7 +812,7 @@ mlir::LogicalResult TensorDescriptorDerivation::derive(mlir::func::FuncOp funcOp
                     flatElemCount = dim0 * dim1;
             }
             auto bridgedBaseType = buildHivmMemrefType(
-                op->getContext(), {flatElemCount}, childInfo->mlirElementType, childInfo->tlaAddressSpace);
+                op->getContext(), {flatElemCount}, childInfo->elementType, childInfo->tlaAddressSpace);
             if (failed(bridgedBaseType)) {
                 op->emitError() << "tla.make_tensor buffer memref must be bridgeable to builtin memref type";
                 derivationFailed = true;

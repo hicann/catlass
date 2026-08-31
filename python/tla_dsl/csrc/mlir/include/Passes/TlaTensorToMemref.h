@@ -42,8 +42,7 @@ mlir::FailureOr<mlir::Value> castMemrefToType(
 /// the L0C->UB split-mode infix.
 std::string getCopyRouteCallee(
     mlir::MLIRContext* ctx, llvm::StringRef srcAddrspace, llvm::StringRef dstAddrspace, TensorLayoutTag srcLayout,
-    TensorLayoutTag dstLayout, llvm::StringRef srcElementType, llvm::StringRef dstElementType,
-    llvm::StringRef extraDesc = "");
+    TensorLayoutTag dstLayout, mlir::Type srcElementType, mlir::Type dstElementType, llvm::StringRef extraDesc = "");
 
 /// The 24-element i64 runtime payload for a copy route: the src tile's 12-field
 /// (4D) layout descriptor followed by the dst tile's. Linear descriptors carry

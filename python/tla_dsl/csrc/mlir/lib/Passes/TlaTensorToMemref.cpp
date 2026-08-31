@@ -591,23 +591,23 @@ static mlir::FailureOr<hivm::AddressSpace> resolveHivmAddressSpace(MLIRContext* 
     return memorySpaceAttr.getAddressSpace();
 }
 
-static StringRef copyRuntimeElemSuffix(StringRef elementType)
+static StringRef copyRuntimeElemSuffix(Type elementType)
 {
-    if (elementType == "f32")
+    if (elementType.isF32())
         return "float";
-    if (elementType == "f16")
+    if (elementType.isF16())
         return "half";
-    if (elementType == "bf16")
+    if (elementType.isBF16())
         return "bf16";
-    if (elementType == "i8")
+    if (elementType.isSignlessInteger(8))
         return "int8_t";
-    if (elementType == "i16")
+    if (elementType.isSignlessInteger(16))
         return "int16_t";
-    if (elementType == "i32")
+    if (elementType.isSignlessInteger(32))
         return "int32_t";
-    if (elementType == "f8E4M3FN")
+    if (elementType.isFloat8E4M3FN())
         return "fp8_e4m3fn_t";
-    if (elementType == "f8E5M2")
+    if (elementType.isFloat8E5M2())
         return "fp8_e5m2_t";
     return {};
 }
@@ -616,16 +616,16 @@ static StringRef copyRuntimeElemSuffix(StringRef elementType)
 // that feed the cube (GM->L1 and L1->L0A/L0B); there is no vector-path wrapper
 // for it, and fixpipe cannot produce it. Element types are therefore not
 // route-agnostic, and a route must ask for a suffix it can actually implement.
-static bool isCubeOperandOnlyElementType(StringRef elementType)
+static bool isCubeOperandOnlyElementType(Type elementType)
 {
-    return elementType == "f8E4M3FN" || elementType == "f8E5M2";
+    return elementType.isFloat8E4M3FN() || elementType.isFloat8E5M2();
 }
 
 // Suffix for the vector staging routes (GM<->UB, UB->L1). Spelling a cube-operand
 // type here would name a symbol the bc layer never defines, which surfaces as a
 // link failure instead of a diagnostic; an empty suffix rejects the route where
 // it is chosen.
-static StringRef vectorPathElemSuffix(StringRef elementType)
+static StringRef vectorPathElemSuffix(Type elementType)
 {
     if (isCubeOperandOnlyElementType(elementType))
         return {};
@@ -644,22 +644,22 @@ static StringRef vectorPathElemSuffix(StringRef elementType)
 // that accidental guard disappears and the route instead resolves to a callee
 // name with no REGISTER_L0C_TO_* behind it, which fails at link time rather than
 // as a diagnostic here.
-static bool isLegalFixpipeElementType(StringRef srcElementType, StringRef dstElementType)
+static bool isLegalFixpipeElementType(Type srcElementType, Type dstElementType)
 {
-    if (srcElementType == "f32")
-        return dstElementType == "f32" || dstElementType == "f16" || dstElementType == "bf16";
-    return srcElementType == "i32" && dstElementType == "i32";
+    if (srcElementType.isF32())
+        return dstElementType.isF32() || dstElementType.isF16() || dstElementType.isBF16();
+    return srcElementType.isSignlessInteger(32) && dstElementType.isSignlessInteger(32);
 }
 
 std::string getCopyRouteCallee(
     MLIRContext* ctx, StringRef srcAddrspace, StringRef dstAddrspace, TensorLayoutTag srcLayout,
-    TensorLayoutTag dstLayout, StringRef srcElementType, StringRef dstElementType, StringRef extraDesc)
+    TensorLayoutTag dstLayout, Type srcElementType, Type dstElementType, StringRef extraDesc)
 {
     FailureOr<hivm::AddressSpace> srcSpace = resolveHivmAddressSpace(ctx, srcAddrspace);
     FailureOr<hivm::AddressSpace> dstSpace = resolveHivmAddressSpace(ctx, dstAddrspace);
     if (failed(srcSpace) || failed(dstSpace))
         return {};
-    StringRef dstElem = dstElementType.empty() ? srcElementType : dstElementType;
+    Type dstElem = dstElementType;
 
     // Copy routing is keyed by explicit (addrspace, layout-tag) pairs. Runtime
     // symbol names encode both endpoint layout tags so future layout variants can

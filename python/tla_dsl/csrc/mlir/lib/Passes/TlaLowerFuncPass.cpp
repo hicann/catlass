@@ -148,7 +148,7 @@ static FailureOr<Value> materializeRootTensorDescriptor(
     OpBuilder& builder, Location loc, BlockArgument base, ::tla::TlaTensorType tensorType)
 {
     FailureOr<ParsedTensorInfo> rawInfo = parseTensorInfo(tensorType);
-    FailureOr<TileTypeInfo> normalizedInfo = decodeTileTypeInfo(tensorType);
+    FailureOr<TensorTypeInfo> normalizedInfo = decodeTensorTypeInfo(tensorType);
     if (failed(rawInfo) || failed(normalizedInfo))
         return failure();
 

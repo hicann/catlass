@@ -50,20 +50,19 @@ mlir::FailureOr<TensorLayoutTag> parseTensorLayoutTagAttr(llvm::StringRef layout
 mlir::FailureOr<TensorLayoutTag> getExplicitTensorLayoutTagAttr(mlir::Operation* op);
 
 /// Static metadata decoded from a structured `!tla.tensor` type.
-struct TileTypeInfo {
+struct TensorTypeInfo {
     llvm::SmallVector<int64_t, 4> shapeDims;
     llvm::SmallVector<int64_t, 4> strideDims;
     llvm::SmallVector<int64_t, 4> coordDims;
     llvm::SmallVector<int64_t, 4> originShapeDims;
     std::string addressSpace;
-    std::string elementType;
-    mlir::Type mlirElementType;
+    mlir::Type elementType;
     ::AddressSpace tlaAddressSpace = ::AddressSpace::gm;
     TensorLayoutTag layoutTag = TensorLayoutTag::Unknown;
     int64_t rank = 0;
 };
 
-mlir::FailureOr<TileTypeInfo> decodeTileTypeInfo(mlir::Type tileType);
+mlir::FailureOr<TensorTypeInfo> decodeTensorTypeInfo(mlir::Type tensorType);
 
 /// Raw, rank-preserving decode used by vector lowering.
 struct ParsedTensorInfo {
@@ -88,7 +87,7 @@ struct TensorDescriptor {
     std::array<mlir::Value, 2> coord;
     TensorLayoutTag layoutTag = TensorLayoutTag::Unknown;
     std::string addrspace;
-    std::string elementType;
+    mlir::Type elementType;
 };
 
 /// Fully dynamic shape/stride form used at structural joins and runtime calls.
