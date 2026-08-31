@@ -168,6 +168,7 @@ struct BlockPrologue {
 #include "catlass/gemm/block/block_mmad_xa_unshared_qk_tla.hpp"
 #include "catlass/gemm/block/block_mmad_xa_shared_pv_tla.hpp"
 #include "catlass/gemm/block/block_mmad_xa_unshared_pv_tla.hpp"
+#include "catlass/gemm/block/block_mmad_syrk_tla.hpp"
 #endif
 #include "catlass/gemm/block/block_mmad_xfai_qk.hpp"
 #include "catlass/gemm/block/block_mmad_xfai_pv.hpp"
