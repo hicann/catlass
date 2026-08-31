@@ -35,7 +35,7 @@ static llvm::cl::opt<std::string> emitAction(
     llvm::cl::init("mlir"));
 
 static llvm::cl::opt<std::string> printPipeline(
-    "print-pipeline", llvm::cl::desc("Print the pass pipeline and exit"), llvm::cl::value_desc("none|llvm|mlir|all"),
+    "print-pipeline", llvm::cl::desc("Print the pass pipeline and exit"), llvm::cl::value_desc("none|mlir|all"),
     llvm::cl::init("none"));
 
 int main(int argc, char** argv)
@@ -54,23 +54,15 @@ int main(int argc, char** argv)
     tla::tools::loadTlaCompileDialects(context);
 
     PassManager tlaPm(&context);
-    PassManager llvmPm(&context);
-    tla::tools::buildTlaCompilePassManagers(context, tlaPm, llvmPm);
+    tla::tools::buildTlaCompilePassManagers(context, tlaPm);
     auto _ignoreTla = mlir::applyPassManagerCLOptions(tlaPm);
-    auto _ignoreLlvm = mlir::applyPassManagerCLOptions(llvmPm);
 
-    if (printPipeline == "all" || printPipeline == "mlir" || printPipeline == "llvm") {
-        if (printPipeline == "all" || printPipeline == "mlir") {
-            tlaPm.printAsTextualPipeline(llvm::outs());
-            llvm::outs() << "\n";
-        }
-        if (printPipeline == "all" || printPipeline == "llvm") {
-            llvmPm.printAsTextualPipeline(llvm::outs());
-            llvm::outs() << "\n";
-        }
+    if (printPipeline == "all" || printPipeline == "mlir") {
+        tlaPm.printAsTextualPipeline(llvm::outs());
+        llvm::outs() << "\n";
         return 0;
     } else if (printPipeline != "none") {
-        llvm::errs() << "--print-pipeline flag not recognized. Available values: {none, mlir, llvm, all}.\n";
+        llvm::errs() << "--print-pipeline flag not recognized. Available values: {none, mlir, all}.\n";
         return 1;
     }
 
@@ -125,8 +117,7 @@ int main(int argc, char** argv)
     std::string outputText;
     std::string pipelineError;
     if (!tla::tools::runTlaCompilePipelinesWithManagers(
-            moduleRef.get(), emitAction, tlaPm, llvmPm, outputText, pipelineError,
-            /*rewriteTileSignaturesToLLVMPointer=*/true)) {
+            moduleRef.get(), emitAction, tlaPm, outputText, pipelineError)) {
         llvm::errs() << pipelineError << "\n";
         return 1;
     }

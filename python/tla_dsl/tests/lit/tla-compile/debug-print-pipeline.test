@@ -1,6 +1,5 @@
 // RUN: sed -n '/BEGIN-LOWER$/,/END-LOWER$/p' %s | %tla_compile - -o - | %filecheck %s --check-prefix=LOWER
 // RUN: sed -n '/BEGIN-LOWER$/,/END-LOWER$/p' %s | %tla_compile - --emit=mlir --mlir-print-ir-after-all -o /dev/null 2>&1 | %filecheck %s --check-prefix=BRIDGE
-// RUN: sed -n '/BEGIN-LOWER$/,/END-LOWER$/p' %s | not %tla_compile - --emit=llvm --mlir-print-ir-after-all -o /dev/null 2>&1 | sed -n '/IR Dump After ReconcileUnrealizedCasts/,/Failed to translate/p' | %filecheck %s --check-prefix=FINAL
 // RUN: sed -n '/BEGIN-NOOP$/,/END-NOOP$/p' %s | %tla_compile - --emit=tla-mlir -o - | %filecheck %s --check-prefix=NOOP
 
 // BEGIN-LOWER
@@ -118,16 +117,6 @@ module {
 // BRIDGE-DAG: builtin.unrealized_conversion_cast %{{.*}} : ui32 to i32
 // BRIDGE-DAG: arith.extui %{{.*}} : i32 to i64
 // BRIDGE-DAG: arith.extf %{{.*}} : f16 to f32
-
-// FINAL-LABEL: IR Dump After ReconcileUnrealizedCasts
-// FINAL-NOT: unrealized_conversion_cast
-// FINAL: llvm.func @debug_print_formatted_aic
-// FINAL-NOT: unrealized_conversion_cast
-// FINAL-DAG: llvm.zext %{{.*}} : i8 to i64
-// FINAL-DAG: llvm.zext %{{.*}} : i16 to i64
-// FINAL-DAG: llvm.zext %{{.*}} : i32 to i64
-// FINAL-NOT: unrealized_conversion_cast
-// FINAL: Failed to translate to LLVM IR.
 
 // BEGIN-NOOP
 module { tla.func @without_debug_print() { tla.return } }

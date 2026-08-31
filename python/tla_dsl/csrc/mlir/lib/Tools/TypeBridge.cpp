@@ -648,8 +648,7 @@ py::dict lowerToMlir(
     ::tla::tools::loadTlaCompileDialects(*context);
 
     PassManager tlaPm(context);
-    PassManager llvmPm(context);
-    ::tla::tools::buildTlaCompilePassManagers(*context, tlaPm, llvmPm);
+    ::tla::tools::buildTlaCompilePassManagers(*context, tlaPm);
     KernelPointerProvenance pointerProvenance = collectKernelPointerProvenance(module);
 
     std::string passDump;
@@ -666,18 +665,11 @@ py::dict lowerToMlir(
             /*printModuleScope=*/true,
             /*printAfterOnlyOnChange=*/false,
             /*printAfterOnlyOnFailure=*/false, passDumpStream);
-        llvmPm.enableIRPrinting(
-            shouldPrintBefore, shouldPrintAfter,
-            /*printModuleScope=*/true,
-            /*printAfterOnlyOnChange=*/false,
-            /*printAfterOnlyOnFailure=*/false, passDumpStream);
     }
 
     std::string output;
     std::string error;
-    bool success = ::tla::tools::runTlaCompilePipelinesWithManagers(
-        module, StringRef("mlir"), tlaPm, llvmPm, output, error,
-        /*rewriteTileSignaturesToLLVMPointer=*/true);
+    bool success = ::tla::tools::runTlaCompilePipelinesWithManagers(module, StringRef("mlir"), tlaPm, output, error);
     passDumpStream.flush();
     py::dict result;
     result["success"] = success;
