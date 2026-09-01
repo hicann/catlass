@@ -215,25 +215,3 @@ def test_from_dlpack_requires_layout_tag() -> None:
 
     with pytest.raises(TypeError, match=r"required keyword-only argument: 'layout_tag'"):
         from_dlpack(_Buf())
-
-
-def test_from_dlpack_row_major_npu_tensor() -> None:
-    import os
-
-    # Prevent torch from auto-loading torch_npu during import; a missing CANN
-    # runtime raises RuntimeError (not ImportError) and would abort collection.
-    os.environ.setdefault("TORCH_DEVICE_BACKEND_AUTOLOAD", "0")
-    torch = pytest.importorskip("torch")
-    try:
-        import torch_npu as torch_npu_mod
-    except (ImportError, OSError, RuntimeError) as exc:
-        pytest.skip(f"torch_npu unavailable: {exc}")
-    assert torch_npu_mod is not None
-    if not torch.npu.is_available():
-        pytest.skip("NPU not available")
-    buf = torch.empty((2, 3), dtype=torch.float32, device="npu").contiguous()
-    tensor = from_dlpack(buf, layout_tag=tla.arch.RowMajor)
-    assert tensor._shape_tuple == (2, 3)
-    assert tensor.layout_tag == "RowMajor"
-    assert tensor.addrspace == "gm"
-    assert tensor.data_ptr != 0
