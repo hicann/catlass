@@ -144,6 +144,222 @@ def _static_i8_mmad_kernel() -> None:
         tla.mmad(acc, lhs, rhs, init_c=True, unit_flag=3)
 
 
+def _mx_mmad_kernel(elem_a, elem_b):
+    """MX kernel: scales ride the L1->L0 load, and the matmul is tla.mmad_mx."""
+
+    @tla.kernel
+    def _kernel() -> None:
+        l1a = tla.make_tensor(
+            tla.allocate((128, 64), elem_a, tla.AddressSpace.l1, 512),
+            tla.make_layout(tla.make_shape(128, 64), tla.make_stride(64, 1)),
+        )
+        l1b = tla.make_tensor(
+            tla.allocate((64, 128), elem_b, tla.AddressSpace.l1, 512),
+            tla.make_layout(tla.make_shape(64, 128), tla.make_stride(128, 1)),
+        )
+        accp = tla.make_tensor(
+            tla.allocate((128, 128), tla.Float32, tla.AddressSpace.l1, 512),
+            tla.make_layout(tla.make_shape(128, 128), tla.make_stride(128, 1)),
+        )
+        # One e8m0 exponent per 32 elements along K, carried as i8 storage.
+        sa_p = tla.make_tensor(
+            tla.allocate((128, 2), tla.Float8E8M0, tla.AddressSpace.l1, 512),
+            tla.make_layout(tla.make_shape(128, 2), tla.make_stride(2, 1)),
+        )
+        sb_p = tla.make_tensor(
+            tla.allocate((2, 128), tla.Float8E8M0, tla.AddressSpace.l1, 512),
+            tla.make_layout(tla.make_shape(2, 128), tla.make_stride(128, 1)),
+        )
+        lhs = tla.make_tensor_like(
+            tla.allocate((128, 64), elem_a, tla.AddressSpace.l0a, 512), l1a, tla.arch.zN
+        )
+        rhs = tla.make_tensor_like(
+            tla.allocate((64, 128), elem_b, tla.AddressSpace.l0b, 512), l1b, tla.arch.nZ
+        )
+        acc = tla.make_tensor_like(
+            tla.allocate((128, 128), tla.Float32, tla.AddressSpace.l0c, 512),
+            accp,
+            tla.arch.L0Clayout,
+        )
+        sa = tla.make_tensor_like(
+            tla.allocate((128, 2), tla.Float8E8M0, tla.AddressSpace.l1, 512),
+            sa_p,
+            tla.arch.zZMxScale,
+        )
+        sb = tla.make_tensor_like(
+            tla.allocate((2, 128), tla.Float8E8M0, tla.AddressSpace.l1, 512),
+            sb_p,
+            tla.arch.nNMxScale,
+        )
+        # The L1 operands carry the fractal tags a real kernel gives them --
+        # make_tensor_like from a GM tile does this -- because the L1 -> L0 load
+        # is named after the source layout, zN or nZ, not just the destination.
+        src_a = tla.make_tensor_like(
+            tla.allocate((128, 64), elem_a, tla.AddressSpace.l1, 512), l1a, tla.arch.zN
+        )
+        src_b = tla.make_tensor_like(
+            tla.allocate((64, 128), elem_b, tla.AddressSpace.l1, 512), l1b, tla.arch.nZ
+        )
+        with tla.cube():
+            tla.copy(lhs, src_a, scale=sa)
+            tla.copy(rhs, src_b, scale=sb)
+            tla.mmad_mx(acc, lhs, rhs, init_c=True, unit_flag=3)
+
+    return _kernel
+
+
+def _mx_half_scaled_mmad_kernel(scale_lhs=True, use_mx_op=False):
+    """Negative case: lhs MX-loaded, rhs loaded plain, then one tla.mmad.
+
+    tla.mmad rejects the scaled lhs outright -- it lowers to mad, which would
+    drop the scale.
+
+    mad_mx scales both operands, so there is no instruction for this. Nothing
+    about the operands says so -- the element types and layout tags are those of
+    both a legal MX matmul and a legal plain one -- which is the point: only the
+    provenance of each operand separates the three cases.
+    """
+
+    @tla.kernel
+    def _kernel() -> None:
+        l1a_p = tla.make_tensor(
+            tla.allocate((128, 64), tla.Float8E4M3FN, tla.AddressSpace.l1, 512),
+            tla.make_layout(tla.make_shape(128, 64), tla.make_stride(64, 1)),
+        )
+        l1b_p = tla.make_tensor(
+            tla.allocate((64, 128), tla.Float8E4M3FN, tla.AddressSpace.l1, 512),
+            tla.make_layout(tla.make_shape(64, 128), tla.make_stride(128, 1)),
+        )
+        accp = tla.make_tensor(
+            tla.allocate((128, 128), tla.Float32, tla.AddressSpace.l1, 512),
+            tla.make_layout(tla.make_shape(128, 128), tla.make_stride(128, 1)),
+        )
+        sa_p = tla.make_tensor(
+            tla.allocate((128, 2), tla.Float8E8M0, tla.AddressSpace.l1, 512),
+            tla.make_layout(tla.make_shape(128, 2), tla.make_stride(2, 1)),
+        )
+        # zN / nZ on the L1 side so the plain (unscaled) L1->L0 route exists.
+        l1a = tla.make_tensor_like(
+            tla.allocate((128, 64), tla.Float8E4M3FN, tla.AddressSpace.l1, 512),
+            l1a_p,
+            tla.arch.zN,
+        )
+        l1b = tla.make_tensor_like(
+            tla.allocate((64, 128), tla.Float8E4M3FN, tla.AddressSpace.l1, 512),
+            l1b_p,
+            tla.arch.nZ,
+        )
+        lhs = tla.make_tensor_like(
+            tla.allocate((128, 64), tla.Float8E4M3FN, tla.AddressSpace.l0a, 512),
+            l1a,
+            tla.arch.zN,
+        )
+        rhs = tla.make_tensor_like(
+            tla.allocate((64, 128), tla.Float8E4M3FN, tla.AddressSpace.l0b, 512),
+            l1b,
+            tla.arch.nZ,
+        )
+        acc = tla.make_tensor_like(
+            tla.allocate((128, 128), tla.Float32, tla.AddressSpace.l0c, 512),
+            accp,
+            tla.arch.L0Clayout,
+        )
+        sa = tla.make_tensor_like(
+            tla.allocate((128, 2), tla.Float8E8M0, tla.AddressSpace.l1, 512),
+            sa_p,
+            tla.arch.zZMxScale,
+        )
+        with tla.cube():
+            if scale_lhs:
+                tla.copy(lhs, l1a, scale=sa)
+            else:
+                tla.copy(lhs, l1a)
+            tla.copy(rhs, l1b)
+            if use_mx_op:
+                tla.mmad_mx(acc, lhs, rhs, init_c=True, unit_flag=3)
+            else:
+                tla.mmad(acc, lhs, rhs, init_c=True, unit_flag=3)
+
+    return _kernel
+
+
+_FP4_TYPES = {"f4e2m1": tla.Float4E2M1, "f4e1m2": tla.Float4E1M2}
+
+
+def _mxfp4_mmad_kernel(fmt, rhs_fmt=None, scale=True):
+    """MX fp4: i4 elements on the ordinary zN/nZ layouts, encoding from the load.
+
+    `rhs_fmt` loads the rhs with a different encoding than the lhs; `scale=False`
+    drops the scale from both loads and matmuls with the plain tla.mmad, leaving
+    packed fp4 tiles on a route the cube does not have.
+    """
+
+    lhs_t = _FP4_TYPES[fmt]
+    rhs_t = _FP4_TYPES[rhs_fmt or fmt]
+
+    @tla.kernel
+    def _kernel() -> None:
+        # Shapes are in fp4 elements; storage is half that in bytes.
+        l1a = tla.make_tensor(
+            tla.allocate((128, 64), lhs_t, tla.AddressSpace.l1, 512),
+            tla.make_layout(tla.make_shape(128, 64), tla.make_stride(64, 1)),
+        )
+        l1b = tla.make_tensor(
+            tla.allocate((64, 128), rhs_t, tla.AddressSpace.l1, 512),
+            tla.make_layout(tla.make_shape(64, 128), tla.make_stride(128, 1)),
+        )
+        accp = tla.make_tensor(
+            tla.allocate((128, 128), tla.Float32, tla.AddressSpace.l1, 512),
+            tla.make_layout(tla.make_shape(128, 128), tla.make_stride(128, 1)),
+        )
+        sa_p = tla.make_tensor(
+            tla.allocate((128, 2), tla.Float8E8M0, tla.AddressSpace.l1, 512),
+            tla.make_layout(tla.make_shape(128, 2), tla.make_stride(2, 1)),
+        )
+        sb_p = tla.make_tensor(
+            tla.allocate((2, 128), tla.Float8E8M0, tla.AddressSpace.l1, 512),
+            tla.make_layout(tla.make_shape(2, 128), tla.make_stride(128, 1)),
+        )
+        src_a = tla.make_tensor_like(
+            tla.allocate((128, 64), lhs_t, tla.AddressSpace.l1, 512), l1a, tla.arch.zN
+        )
+        src_b = tla.make_tensor_like(
+            tla.allocate((64, 128), rhs_t, tla.AddressSpace.l1, 512), l1b, tla.arch.nZ
+        )
+        lhs = tla.make_tensor_like(
+            tla.allocate((128, 64), lhs_t, tla.AddressSpace.l0a, 512), src_a, tla.arch.zN
+        )
+        rhs = tla.make_tensor_like(
+            tla.allocate((64, 128), rhs_t, tla.AddressSpace.l0b, 512), src_b, tla.arch.nZ
+        )
+        acc = tla.make_tensor_like(
+            tla.allocate((128, 128), tla.Float32, tla.AddressSpace.l0c, 512),
+            accp,
+            tla.arch.L0Clayout,
+        )
+        sa = tla.make_tensor_like(
+            tla.allocate((128, 2), tla.Float8E8M0, tla.AddressSpace.l1, 512), sa_p, tla.arch.zZMxScale
+        )
+        sb = tla.make_tensor_like(
+            tla.allocate((2, 128), tla.Float8E8M0, tla.AddressSpace.l1, 512), sb_p, tla.arch.nNMxScale
+        )
+        with tla.cube():
+            if scale:
+                tla.copy(lhs, src_a, scale=sa)
+                tla.copy(rhs, src_b, scale=sb)
+            else:
+                tla.copy(lhs, src_a)
+                tla.copy(rhs, src_b)
+            if scale:
+                tla.mmad_mx(acc, lhs, rhs, init_c=True, unit_flag=3)
+            else:
+                # What a user who did not know fp4 is microscaling-only would
+                # write: the plain route has no fp4 variant at all.
+                tla.mmad(acc, lhs, rhs, init_c=True, unit_flag=3)
+
+    return _kernel
+
+
 @tla.kernel
 def _dynamic_init_mmad_kernel(
     mem_a: tla.Tensor, mem_b: tla.Tensor, mem_c: tla.Tensor
@@ -357,6 +573,14 @@ def main() -> None:
             "fp8",
             "fp8-mixed",
             "fp8-vector-copy",
+            "mx",
+            "mx-mixed",
+            "mxfp4",
+            "mxfp4-e1m2",
+            "mx-half-scaled",
+            "mx-op-without-scale",
+            "mxfp4-mixed-encodings",
+            "mxfp4-unscaled",
             "dynamic-init",
             "dynamic-unit",
             "dynamic-both",
@@ -379,6 +603,27 @@ def main() -> None:
         kernel, type_args = _fp8_mmad_kernel(tla.Float8E4M3FN, tla.Float8E5M2), ()
     elif case == "fp8-vector-copy":
         kernel, type_args = _fp8_vector_copy_kernel, _fp8_vector_copy_args()
+    elif case == "mx":
+        kernel, type_args = _mx_mmad_kernel(tla.Float8E4M3FN, tla.Float8E4M3FN), ()
+    elif case == "mx-mixed":
+        kernel, type_args = _mx_mmad_kernel(tla.Float8E5M2, tla.Float8E4M3FN), ()
+    elif case == "mxfp4":
+        kernel, type_args = _mxfp4_mmad_kernel("f4e2m1"), ()
+    elif case == "mxfp4-e1m2":
+        kernel, type_args = _mxfp4_mmad_kernel("f4e1m2"), ()
+    elif case == "mx-half-scaled":
+        kernel, type_args = _mx_half_scaled_mmad_kernel(), ()
+    elif case == "mx-op-without-scale":
+        kernel, type_args = (
+            _mx_half_scaled_mmad_kernel(scale_lhs=False, use_mx_op=True),
+            (),
+        )
+    elif case == "mxfp4-mixed-encodings":
+        # lhs e1m2, rhs e2m1. Legal: each operand names its own encoding, and the
+        # cube has a mad_mx for every pairing.
+        kernel, type_args = _mxfp4_mmad_kernel("f4e1m2", rhs_fmt="f4e2m1"), ()
+    elif case == "mxfp4-unscaled":
+        kernel, type_args = _mxfp4_mmad_kernel("f4e2m1", scale=False), ()
     else:
         kernels = {
             "dynamic-init": _dynamic_init_mmad_kernel,

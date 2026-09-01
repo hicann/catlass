@@ -110,6 +110,41 @@ def _cases(device: int) -> Iterator[tuple[str, list[list[str]]]]:
         device,
     )
 
+    # --- mx_mmad: the microscaling matmul coverage matrix ---
+    #
+    # Two axes, and both are real. The operand formats are the four MXFP8
+    # pairings plus the two MXFP4 encodings -- the cube has a mad_mx for every
+    # one, including mixed. The layout axis moves each operand and its scale
+    # block together: row-major A and column-major B reach L1 through a
+    # transposing DN2NZ, the other orientations through a plain ND2NZ, so
+    # the two settings exercise genuinely different copies.
+    #
+    # The operands themselves have no layout axis: the GM -> L1 routes exist only
+    # for a row-major A into zN and a column-major B into nZ.
+    for case in (
+        "f8e4m3fn,f8e4m3fn",
+        "f8e5m2,f8e5m2",
+        "f8e4m3fn,f8e5m2",
+        "f8e5m2,f8e4m3fn",
+        "f4e2m1",
+        "f4e1m2",
+    ):
+        # fp8 takes all four orientations; packed fp4 needs K contiguous, which
+        # only the row/col pairing gives it.
+        layouts = (
+            (("row", "col"),)
+            if case.startswith("f4")
+            else (("row", "row"), ("row", "col"), ("col", "row"), ("col", "col"))
+        )
+        for la, lb in layouts:
+            yield (
+                f"mx-mmad-{case.replace(',', '-')}-{la}{lb}",
+                [[
+                    "mx_mmad/mx_matmul.py", "--case", case,
+                    "--layout-a", la, "--layout-b", lb, *dev,
+                ]],
+            )
+
     for script, label in (
         ("basic_matmul_mutex.py", "mutex"),
         ("basic_matmul_mutex_with.py", "mutex-with"),

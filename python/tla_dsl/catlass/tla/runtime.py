@@ -313,12 +313,17 @@ class _Tensor(TensorABC):
         flat_strides = _flat_layout_leaves(self.stride)
         shape_tuple = self._shape_tuple or ()
         if leading_dim is None:
+            from ..core_api import (
+                _COLUMN_MAJOR_LAYOUT_TOKENS,
+                is_row_major_layout,
+            )
+
             # Prefer layout-tag semantics when unit strides are ambiguous
             # (e.g. ColumnMajor with shape[0]==1 → strides (1,1)).
-            if self.layout_tag == "ColumnMajor":
-                leading_dim = 0
-            elif self.layout_tag == "RowMajor":
+            if is_row_major_layout(self.layout_tag):
                 leading_dim = len(flat_strides) - 1
+            elif self.layout_tag in _COLUMN_MAJOR_LAYOUT_TOKENS:
+                leading_dim = 0
             else:
                 leading_dim = _deduce_compact_stride_order(
                     shape_tuple, flat_strides, strict_unit_stride=True
@@ -760,11 +765,21 @@ def from_dlpack(
                 "from_dlpack element_type override requires both the exported dtype and the "
                 f"override to declare a storage width; got {dtype!r} and {element_type!r}"
             ) from exc
-        if override_width != exported_width:
+        # Narrowing to a sub-byte element that tiles the exported width is the
+        # one width change that is well defined: the host has no 4-bit dtype, so
+        # a packed fp4 buffer can only be exported as bytes, and the override is
+        # what says how many elements each byte holds. origin_shape carries the
+        # true element count. Anything else -- f32 read as i32, say -- is a
+        # reinterpretation the caller almost never means.
+        packs_into_exported = (
+            override_width < exported_width and exported_width % override_width == 0
+        )
+        if override_width != exported_width and not packs_into_exported:
             raise RuntimeTensorError(
                 f"from_dlpack element_type override {element_type.__name__} is "
                 f"{override_width}-bit but the exported buffer is {exported_width}-bit; "
-                "the override must not change the element storage width"
+                "an override may narrow to a sub-byte element that tiles the "
+                "exported width, but must not otherwise change it"
             )
         dtype = element_type
 

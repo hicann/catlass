@@ -207,13 +207,29 @@ inline bool hasDefaultRowMajorStrides(ArrayRef<int64_t> shape, ArrayRef<int64_t>
     return true;
 }
 
+// The element type a memref is built over. The dialect's own cube element
+// formats (f4e2m1 / f4e1m2 / f8e8m0) have no LLVM lowering, so a memref must
+// never carry one; they are buffered as bytes. Every memref builder goes through
+// here rather than reading the pointee directly -- getting this wrong shows up
+// as "invalid memref element type" far from the cause.
+//
+// Only the element type changes, never the extents. That is safe because the GM
+// tensors this applies to are layout-dynamic, so their memrefs are ?x?x?x? and
+// carry no element count; the true counts travel beside them as origin_shape. A
+// statically shaped sub-byte tensor would additionally need its contiguous
+// extent halved, and does not arise today.
+inline Type storageElementType(MLIRContext* ctx, Type elementType)
+{
+    return ::tla::isTlaCustomElementType(elementType) ? IntegerType::get(ctx, 8) : elementType;
+}
+
 inline FailureOr<MemRefType> buildHivmMemrefType(
     MLIRContext* ctx, ArrayRef<int64_t> shape, Type elementType, ::AddressSpace addrSpace)
 {
     FailureOr<Attribute> memorySpaceOr = mapTlaAddressSpaceToHivmMemspace(ctx, addrSpace);
     if (failed(memorySpaceOr))
         return failure();
-    return MemRefType::get(shape, elementType, AffineMap(), *memorySpaceOr);
+    return MemRefType::get(shape, storageElementType(ctx, elementType), AffineMap(), *memorySpaceOr);
 }
 
 inline FailureOr<MemRefType> bridgeTlaTensorStorageType(Type tlaTensorType)
@@ -268,7 +284,7 @@ inline FailureOr<MemRefType> bridgeTlaTensorStorageType(Type tlaTensorType)
     }
 
     MLIRContext* ctx = tlaTensorType.getContext();
-    Type elementType = ptr.getPointee();
+    Type elementType = storageElementType(ctx, ptr.getPointee());
     auto tlaAddressSpace = symbolizeAddressSpace(addressSpace);
     if (!tlaAddressSpace)
         return failure();

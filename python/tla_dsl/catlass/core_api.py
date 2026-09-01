@@ -58,6 +58,7 @@ from .types import (
     TlaTensor,
     TlaTile,
     dtype_size_bytes,
+    dtype_size_bits,
     _replace_flat_leaves_in_tree,
 )
 from .params import (
@@ -91,10 +92,20 @@ _PIPE_VALUES = {
 _MISSING = object()
 _SUPPORTED_COMPARE_ELEMENT_TYPES = frozenset({"f16", "f32", "i32", "u32"})
 _MASK_CMP_MODES = ("lt", "le", "gt", "ge", "eq", "ne")
+# The two packed 4-bit cube float formats. Same width, different exponent /
+# mantissa split, and the two matmul operands may use different ones.
+_FP4_FORMATS = frozenset({"f4e2m1", "f4e1m2"})
+
 _MAKE_TENSOR_SUPPORTED_ELEMENT_TYPES = frozenset(
     # fp8 is a cube operand format only: it can be held in a tile and moved
-    # through the copy machinery, but no vector op consumes it.
+    # through the copy machinery, but no vector op consumes it. The packed fp4
+    # formats are narrower still -- their tiles are buffered as i8 storage with
+    # half the elements; nothing addresses them element-wise. f8e8m0 is the
+    # microscaling scale element, likewise only ever moved, never computed on.
     {
+        "f4e2m1",
+        "f4e1m2",
+        "f8e8m0",
         "f16",
         "bf16",
         "f32",
@@ -109,6 +120,13 @@ _MAKE_TENSOR_SUPPORTED_ELEMENT_TYPES = frozenset(
         "f8e5m2",
     }
 )
+
+
+# An MX shared-exponent scale block nests exactly like zZ, but its C0 is fixed by
+# the e8m0 scale format (2 elements per C0, 32 bytes per fractal) instead of being
+# derived from the element width. Everything else about the layout is identical.
+_MX_SCALE_ELE_NUM_PER_C0 = 2
+_MX_SCALE_ELE_NUM_PER_FRACTAL = 32
 
 
 def _check_compare_element_type_supported(op_name: str, element_type: str) -> None:
@@ -1478,7 +1496,9 @@ def _materialize_dynamic_gm_root_tensor_descriptor(
             shape_vals.append(_const_index(int(extent), loc=loc))
 
     abi_strides: list[mlir_ir.Value] | None = None
-    if (layout_tag == "RowMajor" or is_nz_family) and any(
+    is_row_major = is_row_major_layout(layout_tag)
+    is_column_major = layout_tag in _COLUMN_MAJOR_LAYOUT_TOKENS
+    if (is_row_major or is_column_major or is_nz_family) and any(
         leaf is None for leaf in stride_leaves
     ):
         meta = memref.ExtractStridedMetadataOp(memref_arg, loc=loc)
@@ -1492,7 +1512,12 @@ def _materialize_dynamic_gm_root_tensor_descriptor(
         abi_strides = list(results[stride_start : stride_start + abi_rank])
 
     stride_vals: list[mlir_ir.Value] = []
-    if layout_tag == "RowMajor" or is_nz_family:
+    # Both orientations take their dynamic stride leaves from the memref itself.
+    # Deriving the column-major pitch as "shape[0]" instead was only right while
+    # the buffer's first dimension happened to be the logical major axis; a
+    # tensor handed over with its logical shape and column-major strides -- the
+    # natural way to express one -- breaks that assumption silently.
+    if is_row_major or is_column_major or is_nz_family:
         for axis, leaf in enumerate(stride_leaves):
             if leaf is None:
                 if abi_strides is None:
@@ -1505,8 +1530,12 @@ def _materialize_dynamic_gm_root_tensor_descriptor(
     elif rank == 1:
         stride_vals.append(_const_index(1, loc=loc))
     else:
-        stride_vals.append(_const_index(1, loc=loc))
-        stride_vals.append(shape_vals[0])
+        # Never fall back to a column-major stride pair for an unclassified tag:
+        # it lowers silently and only shows up as wrong numbers on device.
+        raise TlaLoweringError(
+            f"dynamic GM prologue has no stride rule for layout {layout_tag!r}; "
+            "classify it in _ROW_MAJOR_LAYOUT_TOKENS or _COLUMN_MAJOR_LAYOUT_TOKENS"
+        )
 
     def origin_abi_value(axis: int) -> mlir_ir.Value:
         """Use companion ABI origin args when the type leaf is dynamic."""
@@ -1641,9 +1670,56 @@ def _require_resolved_metadata_leaves(
 # Layout constants aligned with ``catlass/catlass.hpp`` and ``tla/layout.hpp``.
 _CATLASS_BYTE_PER_C0 = 32
 _CATLASS_C0_NUM_PER_FRACTAL = 16
-_LINEAR_LAYOUT_TOKENS = frozenset({"RowMajor", "ColumnMajor"})
-_NZ_FAMILY_LAYOUT_TOKENS = frozenset({"zN", "nZ", "zZ", "L0Clayout", "zNUnAlign"})
+_MX_SCALE_GM_LAYOUT_TOKENS = frozenset(
+    {"rowMajorMxScaleA", "colMajorMxScaleA", "rowMajorMxScaleB", "colMajorMxScaleB"}
+)
+_LINEAR_LAYOUT_TOKENS = (
+    frozenset({"RowMajor", "ColumnMajor"}) | _MX_SCALE_GM_LAYOUT_TOKENS
+)
+# Orientation of a linear layout, named once. Everything downstream -- stride
+# derivation, the dynamic GM prologue, leading-dim inference -- must ask these
+# rather than compare against "RowMajor"/"ColumnMajor" literally: a tag that is
+# row-major but not spelled RowMajor otherwise falls into a column-major
+# fallback that no validator can see, because the tag is a perfectly valid
+# linear tag.
+_ROW_MAJOR_LAYOUT_TOKENS = frozenset(
+    {"RowMajor", "rowMajorMxScaleA", "rowMajorMxScaleB"}
+)
+_COLUMN_MAJOR_LAYOUT_TOKENS = _LINEAR_LAYOUT_TOKENS - _ROW_MAJOR_LAYOUT_TOKENS
+
+
+def is_row_major_layout(layout_tag: str) -> bool:
+    """True when a linear layout is row-major (unit stride on the last axis)."""
+    return layout_tag in _ROW_MAJOR_LAYOUT_TOKENS
+
+
+_NZ_FAMILY_LAYOUT_TOKENS = frozenset(
+    {
+        "zN",
+        "nZ",
+        "zZ",
+        "L0Clayout",
+        "zNUnAlign",
+        "zZMxScale",
+        "nNMxScale",
+    }
+)
 _MAKE_TENSOR_LIKE_ON_CHIP_ADDRSPACES = frozenset({"l1", "l0a", "l0b", "l0c", "ub"})
+_BITS_PER_BYTE = 8
+
+
+def _c0_geometry(element_bits: int) -> tuple[int, int]:
+    """(elements per C0, elements per fractal) for an element width in bits.
+
+    The hardware C0 is 32 *bytes* whatever the element type, so the count is
+    ``32 * 8 / element_bits``. Doing it in bits is what makes sub-byte elements
+    work: in bytes the fp4 divisor would be 0.5 and floor division would silently
+    return the count for an 8-bit element (32 instead of 64). This mirrors the
+    bc layer, which has always computed it this way via
+    ``BytesToBits(BYTE_PER_C0) / SizeOfBits<T>``.
+    """
+    c0 = _builtins.max(1, (_CATLASS_BYTE_PER_C0 * _BITS_PER_BYTE) // element_bits)
+    return c0, c0 * _CATLASS_C0_NUM_PER_FRACTAL
 
 
 def _ceil_div(a: int, b: int) -> int:
@@ -1657,19 +1733,23 @@ def _round_up(a: int, m: int) -> int:
 
 
 def _linear_stride_alignment_elements(
-    element_bytes: int, alignment_bytes: int | None
+    element_bits: int, alignment_bytes: int | None
 ) -> int:
+    """How many elements a linear (RowMajor/ColumnMajor) stride must round up to.
+
+    In bits, so a sub-byte element gives its true count (a 32-byte alignment is
+    512 fp4 elements, not an error). Only the linear layouts use this; the
+    NZ-family ones derive their strides from the fractal geometry instead, but
+    it is computed before the layout is known, so it must tolerate any width.
+    """
     if alignment_bytes is None:
         return 1
-    if (
-        alignment_bytes <= 0
-        or element_bytes <= 0
-        or alignment_bytes % element_bytes != 0
-    ):
+    alignment_bits = alignment_bytes * _BITS_PER_BYTE
+    if alignment_bytes <= 0 or element_bits <= 0 or alignment_bits % element_bits != 0:
         raise ValueError(
             "linear stride byte alignment must be a positive multiple of element size"
         )
-    return alignment_bytes // element_bytes
+    return alignment_bits // element_bits
 
 
 def _mul_int_optional(a: int | None, b: int) -> int | None:
@@ -1757,14 +1837,12 @@ def _validate_static_make_tensor_layout(
     if layout_tag in _LINEAR_LAYOUT_TOKENS:
         if len(shape_const_tree) == 1:
             checks = ((stride_const_tree[0], 1),)
-        elif layout_tag == "RowMajor":
+        elif is_row_major_layout(layout_tag):
             checks = ((stride_const_tree[1], 1),)
         else:
             checks = ((stride_const_tree[0], 1),)
     else:
-        element_bytes = dtype_size_bytes(dtype)
-        ele_num_per_c0 = _CATLASS_BYTE_PER_C0 // element_bytes
-        ele_num_per_fractal = ele_num_per_c0 * _CATLASS_C0_NUM_PER_FRACTAL
+        ele_num_per_c0, ele_num_per_fractal = _c0_geometry(dtype_size_bits(dtype))
         shape00, shape01 = shape_const_tree[0]
         shape10, _ = shape_const_tree[1]
         stride00, stride01 = stride_const_tree[0]
@@ -1784,12 +1862,24 @@ def _validate_static_make_tensor_layout(
                 (stride00, 1),
                 (stride11, ele_num_per_fractal),
             )
-        elif layout_tag == "zZ":
+        elif layout_tag == "nNMxScale":
+            checks = (
+                (shape00, _MX_SCALE_ELE_NUM_PER_C0),
+                (shape10, _CATLASS_C0_NUM_PER_FRACTAL),
+                (stride00, 1),
+                (stride01, _MX_SCALE_ELE_NUM_PER_FRACTAL),
+            )
+        elif layout_tag in ("zZ", "zZMxScale"):
+            c0 = ele_num_per_c0
+            fractal = ele_num_per_fractal
+            if layout_tag == "zZMxScale":
+                c0 = _MX_SCALE_ELE_NUM_PER_C0
+                fractal = _MX_SCALE_ELE_NUM_PER_FRACTAL
             checks = (
                 (shape00, _CATLASS_C0_NUM_PER_FRACTAL),
-                (shape10, ele_num_per_c0),
+                (shape10, c0),
                 (stride10, 1),
-                (stride11, ele_num_per_fractal),
+                (stride11, fractal),
             )
         elif layout_tag == "L0Clayout":
             checks = (
@@ -1879,17 +1969,13 @@ def _materialize_layout_trees_from_origin(
     if not isinstance(origin_shape, tuple) or len(origin_shape) != 2:
         return None
     rows, cols = origin_shape
-    element_bytes = dtype_size_bytes(dtype)
-    if element_bytes <= 0:
+    if dtype_size_bits(dtype) <= 0:
         return None
-    ele_num_per_c0 = _builtins.max(1, _CATLASS_BYTE_PER_C0 // element_bytes)
-    ele_num_per_fractal = _builtins.max(
-        1, (_CATLASS_BYTE_PER_C0 * _CATLASS_C0_NUM_PER_FRACTAL) // element_bytes
-    )
+    ele_num_per_c0, ele_num_per_fractal = _c0_geometry(dtype_size_bits(dtype))
     c0_num_per_fractal = _CATLASS_C0_NUM_PER_FRACTAL
     coord = (0, 0)
     linear_alignment_elements = _linear_stride_alignment_elements(
-        element_bytes, _CATLASS_BYTE_PER_C0
+        dtype_size_bits(dtype), _CATLASS_BYTE_PER_C0
     )
     if layout == "RowMajor":
         return (
@@ -1905,6 +1991,15 @@ def _materialize_layout_trees_from_origin(
             coord,
             origin_shape,
         )
+    if layout in _MX_SCALE_GM_LAYOUT_TOKENS:
+        # e8m0 scale blocks are contiguous matrices, and no 32-byte C0 rounding
+        # applies: the scale C0 is 2, fixed by the format rather than derived from
+        # the element width. A-side is row-major, B-side column-major, as the tag
+        # name says -- and the pitch has to land on the leaf Catlass reads
+        # (stride0 for A, stride1 for B), or the copy strides by one element.
+        if is_row_major_layout(layout):
+            return ((rows, cols), (cols, 1), coord, origin_shape)
+        return ((rows, cols), (1, rows), coord, origin_shape)
     if layout == "zN":
         rows_ru = _round_up_expr(rows, c0_num_per_fractal)
         return (
@@ -1927,7 +2022,27 @@ def _materialize_layout_trees_from_origin(
             coord,
             origin_shape,
         )
-    if layout == "zZ":
+    if layout == "nNMxScale":
+        rows_ru = _round_up_expr(rows, _MX_SCALE_ELE_NUM_PER_C0)
+        return (
+            (
+                (
+                    _MX_SCALE_ELE_NUM_PER_C0,
+                    _ceil_div_expr(rows, _MX_SCALE_ELE_NUM_PER_C0),
+                ),
+                (c0_num_per_fractal, _ceil_div_expr(cols, c0_num_per_fractal)),
+            ),
+            (
+                (1, _MX_SCALE_ELE_NUM_PER_FRACTAL),
+                (_MX_SCALE_ELE_NUM_PER_C0, rows_ru * c0_num_per_fractal),
+            ),
+            coord,
+            origin_shape,
+        )
+    if layout in ("zZ", "zZMxScale"):
+        if layout == "zZMxScale":
+            ele_num_per_c0 = _MX_SCALE_ELE_NUM_PER_C0
+            ele_num_per_fractal = _MX_SCALE_ELE_NUM_PER_FRACTAL
         cols_ru = _round_up_expr(cols, ele_num_per_c0)
         return (
             (
@@ -1989,20 +2104,16 @@ def _remap_tensor_like_prefix_fields_for_layout_trees(
     if origin_pair == (None, None) and origin_shape != (None, None):
         return None
     rows, cols = origin_pair
-    element_bytes = dtype_size_bytes(dtype)
-    if element_bytes <= 0:
-        return None
-    ele_num_per_c0 = _builtins.max(1, _CATLASS_BYTE_PER_C0 // element_bytes)
-    ele_num_per_fractal = _builtins.max(
-        1, (_CATLASS_BYTE_PER_C0 * _CATLASS_C0_NUM_PER_FRACTAL) // element_bytes
-    )
-    c0_num_per_fractal = _CATLASS_C0_NUM_PER_FRACTAL
     layout_tag = layout.strip()
+    if dtype_size_bits(dtype) <= 0:
+        return None
+    ele_num_per_c0, ele_num_per_fractal = _c0_geometry(dtype_size_bits(dtype))
+    c0_num_per_fractal = _CATLASS_C0_NUM_PER_FRACTAL
     origin_shape_tree: tuple[Any, ...] = (rows, cols)
     coord_tree: tuple[Any, ...] = (0, 0)
 
     linear_alignment_elements = _linear_stride_alignment_elements(
-        element_bytes, linear_stride_alignment_bytes
+        dtype_size_bits(dtype), linear_stride_alignment_bytes
     )
 
     if layout_tag == "RowMajor":
@@ -2015,6 +2126,15 @@ def _remap_tensor_like_prefix_fields_for_layout_trees(
             None if rows is None else _round_up(rows, linear_alignment_elements)
         )
         return ((rows, cols), (1, leading_stride), coord_tree, origin_shape_tree)
+    if layout_tag in _MX_SCALE_GM_LAYOUT_TOKENS:
+        # An e8m0 scale block in GM is a plain contiguous matrix; only its
+        # orientation matters here. The fractal structure the copy needs is
+        # rebuilt on the device side from rows / cols / pitch, so the descriptor
+        # carries just the two leaves and no C0 rounding applies -- the scale C0
+        # is 2, fixed by the format, not derived from the element width.
+        if is_row_major_layout(layout_tag):
+            return ((rows, cols), (cols, 1), coord_tree, origin_shape_tree)
+        return ((rows, cols), (1, rows), coord_tree, origin_shape_tree)
     if layout_tag == "zN":
         rows_round_up = None if rows is None else _round_up(rows, c0_num_per_fractal)
         ceil_div_rows = None if rows is None else _ceil_div(rows, c0_num_per_fractal)
@@ -2043,7 +2163,32 @@ def _remap_tensor_like_prefix_fields_for_layout_trees(
             (ele_num_per_c0, ele_num_per_fractal),
         )
         return layout_shape, layout_stride, coord_tree, origin_shape_tree
-    if layout_tag == "zZ":
+    if layout_tag == "nNMxScale":
+        rows_round_up = (
+            None if rows is None else _round_up(rows, _MX_SCALE_ELE_NUM_PER_C0)
+        )
+        layout_shape = (
+            (
+                _MX_SCALE_ELE_NUM_PER_C0,
+                None if rows is None else _ceil_div(rows, _MX_SCALE_ELE_NUM_PER_C0),
+            ),
+            (
+                c0_num_per_fractal,
+                None if cols is None else _ceil_div(cols, c0_num_per_fractal),
+            ),
+        )
+        layout_stride = (
+            (1, _MX_SCALE_ELE_NUM_PER_FRACTAL),
+            (
+                _MX_SCALE_ELE_NUM_PER_C0,
+                _mul_int_optional(rows_round_up, c0_num_per_fractal),
+            ),
+        )
+        return layout_shape, layout_stride, coord_tree, origin_shape_tree
+    if layout_tag in ("zZ", "zZMxScale"):
+        if layout_tag == "zZMxScale":
+            ele_num_per_c0 = _MX_SCALE_ELE_NUM_PER_C0
+            ele_num_per_fractal = _MX_SCALE_ELE_NUM_PER_FRACTAL
         cols_round_up = None if cols is None else _round_up(cols, ele_num_per_c0)
         ceil_div_rows = None if rows is None else _ceil_div(rows, c0_num_per_fractal)
         ceil_div_cols = None if cols is None else _ceil_div(cols, ele_num_per_c0)
@@ -2156,8 +2301,13 @@ def _layout_attr_from_value(value: mlir_ir.Value) -> str | None:
     return text or None
 
 
+# Shared by every matmul the frontend emits. There is one contract because there
+# is one entry point: tla.mmad. Which cube instruction it becomes is settled in
+# tla-cube-region from operand provenance, not here.
 def _validate_mmad_contract(
-    acc: mlir_ir.Value, lhs: mlir_ir.Value, rhs: mlir_ir.Value
+    acc: mlir_ir.Value,
+    lhs: mlir_ir.Value,
+    rhs: mlir_ir.Value,
 ) -> None:
     acc_desc = _tla_tensor_type_for_mlir_value(acc)
     lhs_desc = _tla_tensor_type_for_mlir_value(lhs)
@@ -2178,14 +2328,33 @@ def _validate_mmad_contract(
         rhs_desc.element_type,
         acc_desc.element_type,
     )
-    if element_types not in {
+    # Packed fp4 is recognised by its element type, which states both the 4-bit
+    # width and the encoding. It uses the ordinary zN / nZ layouts like
+    # everything else, and the two operands need not share an encoding -- the
+    # cube has a mad_mx for every pairing.
+    is_fp4 = bool({element_types[0], element_types[1]} & _FP4_FORMATS)
+    if is_fp4:
+        if (
+            element_types[0] not in _FP4_FORMATS
+            or element_types[1] not in _FP4_FORMATS
+            or element_types[2] != "f32"
+        ):
+            raise TlaLoweringError(
+                "unsupported packed fp4 tla.mmad operands; expected any "
+                "f4e2m1/f4e1m2 pair -> f32"
+            )
+    elif element_types not in {
         ("f16", "f16", "f32"),
         ("bf16", "bf16", "f32"),
         ("f32", "f32", "f32"),
         # Integer route: the L0C accumulator is i32, not fp32.
         ("i8", "i8", "i32"),
-        # fp8 routes accumulate into fp32. The two formats mix freely, so all
-        # four operand combinations are valid.
+        # fp8 accumulates into fp32. The two formats mix freely, so all four
+        # operand combinations are valid. This one table covers both the plain
+        # and the microscaling matmul: an MX fp8 L0 tile is indistinguishable
+        # from a plain one here, since MX-ness is a property of the load that
+        # wrote the tile. tla-cube-region reads that provenance and picks
+        # tla.mmad vs tla.mmad_mx.
         ("f8e4m3fn", "f8e4m3fn", "f32"),
         ("f8e5m2", "f8e5m2", "f32"),
         ("f8e4m3fn", "f8e5m2", "f32"),
@@ -2207,7 +2376,11 @@ def _validate_mmad_contract(
             "unsupported tla.mmad tile shape contract; expected lhs(MxK), rhs(KxN), acc(MxN)"
         )
 
-    expected_layouts = ((acc, "L0Clayout"), (lhs, "zN"), (rhs, "nZ"))
+    expected_layouts = (
+        (acc, "L0Clayout"),
+        (lhs, "zN"),
+        (rhs, "nZ"),
+    )
     for operand, expected in expected_layouts:
         layout = _tla_tensor_type_for_mlir_value(operand).layout_tag
         layout = layout or _layout_attr_from_value(operand)
@@ -3305,7 +3478,16 @@ def _emit_tensor_print(
         _op_error("print", "UB tensor printing requires AIV placement")
     logical_shape = (
         descriptor.origin_shape
-        if descriptor.layout_tag in ("zN", "nZ", "zZ", "L0Clayout", "zNUnAlign")
+        if descriptor.layout_tag
+        in (
+            "zN",
+            "nZ",
+            "zZ",
+            "L0Clayout",
+            "zNUnAlign",
+            "zZMxScale",
+            "nNMxScale",
+        )
         else descriptor.shape
     )
     shape = _print_tensor_shape_pattern_leaves(logical_shape)
@@ -3467,27 +3649,29 @@ def _require_allocation_dtype(op_name: str, dtype: Any) -> tuple[type[Numeric], 
             f"(e.g. tla.Float32), got {_type_name(dtype)}",
         )
     width = int(getattr(dtype, "width", 0) or 0)
-    if width <= 0 or width % 8 != 0:
+    # Sub-byte widths are allowed only when a whole number of them tiles a byte
+    # (fp4's 4 bits), so an allocation is still a whole number of bytes.
+    if width <= 0 or (width % 8 != 0 and 8 % width != 0):
         _op_error(
             op_name,
             f"unsupported allocation dtype {dtype.dtype}; expected byte-addressable "
             "fixed-width scalar Numeric",
         )
-    element_bytes = dtype_size_bytes(str(dtype.dtype))
-    if element_bytes <= 0:
+    element_bits = dtype_size_bits(str(dtype.dtype))
+    if element_bits <= 0:
         _op_error(
             op_name,
-            f"unsupported allocation dtype {dtype.dtype}; expected byte-addressable "
-            "fixed-width scalar Numeric",
+            f"unsupported allocation dtype {dtype.dtype}; expected a fixed-width "
+            "scalar Numeric whose width tiles a byte",
         )
-    return dtype, element_bytes
+    return dtype, element_bits
 
 
 def _static_allocation_size_bytes(
     op_name: str,
     shape: ShapeLike,
     dtype: type[Numeric],
-    element_bytes: int,
+    element_bits: int,
 ) -> int:
     _check_shape(shape)
     num_elements = 1
@@ -3505,7 +3689,9 @@ def _static_allocation_size_bytes(
             )
         num_elements *= int(dim_const)
 
-    size_bytes = num_elements * element_bytes
+    # In bits, so a sub-byte element type is not rounded up per element; the
+    # width guard above ensures the total lands on a byte boundary.
+    size_bytes = _ceil_div(num_elements * element_bits, _BITS_PER_BYTE)
     if size_bytes <= 0 or size_bytes > 9_223_372_036_854_775_807:
         raise TlaLoweringError(
             f"tla.{op_name} allocation size_bytes must be in [1, 2**63-1] "
@@ -4257,6 +4443,7 @@ def copy(
     src: Tensor,
     params: CopyParams | None = None,
     *,
+    scale: Tensor | None = None,
     loc: mlir_ir.Location | None = None,
 ) -> None:
     """Directory: Data Movement
@@ -4274,9 +4461,26 @@ def copy(
         - `src` (`Tensor`): Source tile. Required.
         - `params` (`CopyParams | None`): Optional path-specific params
           (`CopyL0C2DstParams`, `CopyUbToGmParams` / atomic, …). Default `None`.
+        - **MX scale tiles** (`zZMxScale` / `nNMxScale` destinations) reach L1 as a
+          flat run of bytes, so the source tile must span full rows of its buffer.
+          Stack per-chunk scale blocks along rows; do not slice a wide scale buffer
+          along columns. This is checked only when the row pitch is statically
+          known -- a layout-dynamic tensor cannot be checked at compile time.
+        - `scale` (`Tensor | None`): L1 tile of OCP `e8m0` shared exponents, one per
+          32 elements along K, which turns an L1→L0A/L0B load into a microscaling
+          (MX) load and lowers to `tla.copy_mx`. Carried as `i8`/`u8` storage because
+          MLIR has no e8m0 type, and tagged `tla.arch.zZMxScale` for an L0A
+          destination or `tla.arch.nNMxScale` for an L0B destination. Default `None`.
 
         Constraints:
         - Must be called inside a `@tla.kernel`-decorated kernel function.
+        - `scale` is only valid on the L1→L0A/L0B route, and the tile it loads must
+          then be consumed by `tla.mmad`, which becomes a microscaling matmul
+          because of this load. The scale is consumed by the load, not by the matmul:
+          the hardware's `mad_mx` takes no scale operand, so the MX association is
+          established when the operand lands in L0. This mirrors AscendC, where the
+          MX load is the five-argument overload of `LoadData` rather than a separate
+          entry point.
         - Must be called inside `tla.cube()` or `tla.vector()` (cube routes above
           in `cube()`, vector routes in `vector()`).
         - Whole-tile DMA uses `tla.copy`. Register-level UB unaligned access uses
@@ -4358,7 +4562,17 @@ def copy(
     # (_ArgProxy) do not expose Python .dtype / .addrspace attributes.
     src_dtype = src_desc.element_type.lower()
     dst_dtype = dst_desc.element_type.lower()
-    same_dtype = src_dtype == dst_dtype
+    # An e8m0 scale block is the only route where the two sides legitimately
+    # disagree: the host cannot produce an e8m0 buffer, so GM holds plain bytes
+    # while the L1 tile carries the format. fp4 operands do not need this any
+    # more -- a GM fp4 tile names its own element type, like every other operand.
+    _reinterprets_scale_bytes = (
+        src_dtype in ("i8", "u8")
+        and dst_dtype == "f8e8m0"
+        and src_desc.addrspace == "gm"
+        and dst_desc.addrspace == "l1"
+    )
+    same_dtype = src_dtype == dst_dtype or _reinterprets_scale_bytes
     src_layout = src_desc.layout_tag
     dst_layout = dst_desc.layout_tag
 
@@ -4487,8 +4701,69 @@ def copy(
             f"#tla.atomic_mode<{atomic_mode.value}>", context=ctx
         )
 
+    copy_attrs: dict[str, Any] = {}
+
+    # A scale operand turns this into the MX L1 -> L0A/L0B load. Only that route
+    # can carry one, and the scale's storage and tag must match the destination
+    # side: A-side scales are zZ, B-side nN.
+    if scale is not None:
+        _require_category("copy", "scale", scale, "tensor", 2)
+        scale_value = _as_value(scale)
+        scale_desc = _tla_tensor_type_for_mlir_value(scale_value)
+        src_desc = _tla_tensor_type_for_mlir_value(src_value)
+        dst_desc = _tla_tensor_type_for_mlir_value(dst_value)
+
+        if src_desc.addrspace != "l1":
+            _op_error("copy", "an MX scale is only valid on an l1 source")
+        if dst_desc.addrspace not in ("l0a", "l0b"):
+            _op_error("copy", "an MX scale is only valid on an l0a or l0b destination")
+        if scale_desc.addrspace != "l1":
+            _op_error("copy", "scale must be an l1 tile")
+        # A packed fp4 tile names its own format, width and encoding together.
+        is_fp4 = src_desc.element_type in _FP4_FORMATS
+        if is_fp4:
+            expected_dst_tag = "zN" if dst_desc.addrspace == "l0a" else "nZ"
+            if dst_desc.layout.layout_tag != expected_dst_tag:
+                _op_error(
+                    "copy",
+                    f"an fp4 {dst_desc.addrspace} tile must be tagged {expected_dst_tag}",
+                )
+        elif src_desc.element_type not in ("f8e4m3fn", "f8e5m2"):
+            _op_error(
+                "copy",
+                f"unsupported MX element type {src_desc.element_type}; expected "
+                "f8e4m3fn, f8e5m2, f4e2m1, or f4e1m2",
+            )
+        if src_desc.element_type != dst_desc.element_type:
+            _op_error("copy", "src and dst element types must match")
+        if scale_desc.element_type not in ("f8e8m0", "i8", "u8"):
+            _op_error(
+                "copy",
+                "scale must be an f8e8m0 tile (i8/u8 storage is still accepted)",
+            )
+        expected_scale_layout = (
+            "zZMxScale" if dst_desc.addrspace == "l0a" else "nNMxScale"
+        )
+        if scale_desc.layout.layout_tag != expected_scale_layout:
+            _op_error(
+                "copy",
+                f"scale for an {dst_desc.addrspace} destination must be tagged "
+                f"{expected_scale_layout}, got {scale_desc.layout.layout_tag}",
+            )
+        # Remember that this L0 tile carries a scale block. Nothing in the tile's
+        # type records it, so this is the only thing that can tell tla.mmad and
+        # tla.mmad_mx apart later.
+        _runtime._current_frontend_state().mx_scaled_l0_values.add(dst_value)
+        # An MX load is its own op in the dialect.
+        return _tla_ops_gen.copy_mx(dst_value, src_value, scale_value, loc=loc)
+
     return _tla_ops_gen.copy(
-        dst_value, src_value, params=params_value, loc=loc, atomic_mode=atomic_mode_attr
+        dst_value,
+        src_value,
+        params=params_value,
+        loc=loc,
+        atomic_mode=atomic_mode_attr,
+        **copy_attrs,
     )
 
 
@@ -5200,6 +5475,69 @@ def _vec_func(
     return _region_stub("vec.func")
 
 
+# Operand handling shared by every matmul: the checks here are the same whether
+# the op ends up as tla.mmad or tla.mmad_mx, which tla-cube-region decides.
+def _prepare_mmad_operands(
+    op_name, acc, lhs, rhs, init_c, unit_flag, compute_order, loc, extra_kwargs
+):
+    if extra_kwargs:
+        _op_error(
+            op_name,
+            f"unknown keyword argument(s): {', '.join(sorted(extra_kwargs))}",
+        )
+    _require_category(op_name, "acc", acc, "tensor", 0)
+    _require_category(op_name, "lhs", lhs, "tensor", 1)
+    _require_category(op_name, "rhs", rhs, "tensor", 2)
+    _require_frontend_state(op_name)
+    _runtime._require_enclosing_region(op_name, "cube")
+
+    if init_c is None:
+        init_c = False
+    _require_bool(op_name, "init_c", init_c, 3)
+    init_c_value = _as_i1_value(init_c)
+
+    if unit_flag is None:
+        unit_flag = 0
+    _require_index(op_name, "unit_flag", unit_flag, 4)
+    if isinstance(unit_flag, int):
+        if unit_flag not in [0b00, 0b10, 0b11]:
+            raise TlaLoweringError(
+                f"tla.{op_name} operand 'unit_flag' expects values [0b00, 0b10, 0b11], "
+                f"got [{unit_flag}]"
+            )
+        unit_flag_value = _const_i64(unit_flag)
+    elif (
+        isinstance(unit_flag, Numeric)
+        and type(unit_flag).is_integer
+        and type(unit_flag).signed
+    ):
+        unit_flag_value = _as_i64_value(unit_flag)
+    elif _category(unit_flag) == "index":
+        unit_flag_value = _as_i64_value(unit_flag)
+    else:
+        raise TlaLoweringError(f"tla.{op_name} unit_flag must be a int")
+
+    if not isinstance(compute_order, ComputeOrder):
+        raise TlaLoweringError(
+            f"tla.{op_name} attribute 'compute_order' must be a "
+            f"{ComputeOrder}, got {type(compute_order).__name__}"
+        )
+    ctx = loc.context if loc is not None else mlir_ir.Context.current
+    compute_order_attr = mlir_ir.Attribute.parse(
+        f"#tla.compute_order<{str(compute_order)}>", context=ctx
+    )
+
+    return (
+        _as_value(acc),
+        _as_value(lhs),
+        _as_value(rhs),
+        init_c_value,
+        unit_flag_value,
+        compute_order_attr,
+        ctx,
+    )
+
+
 @dsl_user_op
 def mmad(
     acc: Tensor,
@@ -5244,64 +5582,26 @@ def mmad(
             # After: l0c accumulates lhs@rhs (cleared first when init_c=True).
         ```
     """
-    if extra_kwargs:
-        _op_error(
-            "mmad",
-            f"unknown keyword argument(s): {', '.join(sorted(extra_kwargs))}",
-        )
-    _require_category("mmad", "acc", acc, "tensor", 0)
-    _require_category("mmad", "lhs", lhs, "tensor", 1)
-    _require_category("mmad", "rhs", rhs, "tensor", 2)
-    _require_frontend_state("mmad")
-    _runtime._require_enclosing_region("mmad", "cube")
-
-    if init_c is None:
-        init_c = False
-    _require_bool("mmad", "init_c", init_c, 3)
-    init_c_value = _as_i1_value(init_c)
-
-    if unit_flag is None:
-        unit_flag = 0
-    _require_index("mmad", "unit_flag", unit_flag, 4)
-    if isinstance(unit_flag, int):
-        if unit_flag not in [0b00, 0b10, 0b11]:
-            raise TlaLoweringError(
-                "tla.mmad operand 'unit_flag' expects values [0b00, 0b10, 0b11], "
-                f"got [{unit_flag}]"
-            )
-        unit_flag_value = _const_i64(unit_flag)
-    elif (
-        isinstance(unit_flag, Numeric)
-        and type(unit_flag).is_integer
-        and type(unit_flag).signed
-    ):
-        unit_flag_value = _as_i64_value(unit_flag)
-    elif _category(unit_flag) == "index":
-        unit_flag_value = _as_i64_value(unit_flag)
-    else:
-        raise TlaLoweringError("tla.mmad unit_flag must be a int")
-
-    if not isinstance(compute_order, ComputeOrder):
-        raise TlaLoweringError(
-            "tla.mmad attribute 'compute_order' must be a "
-            f"{ComputeOrder}, got {type(compute_order).__name__}"
-        )
+    (
+        acc_value,
+        lhs_value,
+        rhs_value,
+        init_c_value,
+        unit_flag_value,
+        compute_order_attr,
+        ctx,
+    ) = _prepare_mmad_operands(
+        "mmad", acc, lhs, rhs, init_c, unit_flag, compute_order, loc, extra_kwargs
+    )
+    _check_mx_provenance("mmad", lhs_value, rhs_value)
     if not isinstance(hf32_mode, HF32Mode):
         raise TlaLoweringError(
             "tla.mmad attribute 'hf32_mode' must be a "
             f"{HF32Mode}, got {type(hf32_mode).__name__}"
         )
-    ctx = loc.context if loc is not None else mlir_ir.Context.current
-    compute_order_attr = mlir_ir.Attribute.parse(
-        f"#tla.compute_order<{str(compute_order)}>", context=ctx
-    )
     hf32_mode_attr = mlir_ir.Attribute.parse(
         f"#tla.hf32_mode<{str(hf32_mode)}>", context=ctx
     )
-
-    acc_value = _as_value(acc)
-    lhs_value = _as_value(lhs)
-    rhs_value = _as_value(rhs)
     _validate_mmad_contract(acc_value, lhs_value, rhs_value)
     _tla_ops_gen.mmad(
         acc_value,
@@ -5312,6 +5612,120 @@ def mmad(
         loc=loc,
         compute_order=compute_order_attr,
         hf32_mode=hf32_mode_attr,
+    )
+
+
+def _check_mx_provenance(op_name: str, lhs_value: Any, rhs_value: Any) -> None:
+    """Hold tla.mmad and tla.mmad_mx to their own operand contracts.
+
+    Whether a matmul is microscaling is a property of how its operands were
+    *written* -- by a tla.copy(..., scale=...) that attaches the e8m0 block --
+    and not of their type or layout: an MX fp8 L0 tile is indistinguishable from
+    a plain one. So neither op can be inferred from the other, and each has to
+    reject the operands belonging to the other. Getting it wrong is silent:
+    tla.mmad lowers to mad and simply drops the exponents, while mad_mx reads a
+    scale block nothing populated.
+    """
+    state = _runtime._current_frontend_state()
+    scaled = state.mx_scaled_l0_values if state is not None else set()
+    wants_scaled = op_name == "mmad_mx"
+    for value, name in ((lhs_value, "lhs"), (rhs_value, "rhs")):
+        if (value in scaled) == wants_scaled:
+            continue
+        if wants_scaled:
+            _op_error(
+                op_name,
+                f"{name} operand was not loaded by tla.copy(..., scale=...); "
+                "tla.mmad_mx needs the e8m0 scale block that load attaches, and "
+                "would otherwise read one that was never populated",
+            )
+        _op_error(
+            op_name,
+            f"{name} operand was loaded by tla.copy(..., scale=...); a "
+            "microscaling matmul must be written as tla.mmad_mx, since tla.mmad "
+            "lowers to mad and would drop the scale",
+        )
+
+
+@dsl_user_op
+def mmad_mx(
+    acc: Tensor,
+    lhs: Tensor,
+    rhs: Tensor,
+    init_c: bool | Bool | None = None,
+    unit_flag: IndexLike | None = None,
+    compute_order: ComputeOrder = ComputeOrder.M_FIRST,
+    loc: mlir_ir.Location | None = None,
+    **extra_kwargs: object,
+) -> None:
+    """Directory: Matrix Compute
+    Description:
+        Emit a microscaling (MX) matrix-multiply-accumulate on TLA tiles.
+
+        A separate op from `tla.mmad` because the cube has a dedicated `mad_mx`
+        instruction, which AscendC exposes as `asc_mmad_mx`.
+
+        Like that instruction, this takes **no scale argument**. `lhs`/`rhs` must
+        have been loaded by `tla.copy` with its `scale` operand, which attaches the
+        e8m0 block to the L0 tile; the hardware then reads the scale from a side
+        buffer addressed off the L0 tile. Passing operands that were *not* loaded
+        that way is an error, as is passing microscaling operands to `tla.mmad` --
+        the two ops are not interchangeable, and nothing about the operands
+        themselves reveals which is which.
+
+        Parameters:
+        - `acc` (`Tensor`): Accumulator / output tile on L0C, always fp32. Required.
+        - `lhs` (`Tensor`): Left-hand matrix tile on L0A. Required.
+        - `rhs` (`Tensor`): Right-hand matrix tile on L0B. Required.
+        - `init_c` (`bool | Bool | None`): Whether to clear the accumulator first;
+          defaults to `False` when omitted. Optional, default `None`.
+        - `unit_flag` (`IndexLike | None`): Unit-flag control bits; defaults to `0`
+          when omitted. Optional, default `None`.
+        - `compute_order` (`ComputeOrder`): M/N compute-direction priority; default `M_FIRST`.
+
+        Constraints:
+        - Must be called inside a `@tla.kernel`-decorated kernel function.
+        - Must be called inside `tla.cube()`; `acc`/`lhs`/`rhs` must be matching L0 tiles.
+        - Operands must be an `f8e4m3fn`/`f8e5m2` pair or an `f4e2m1`/`f4e1m2`
+          pair; either pair may mix its two formats, and the accumulator is fp32.
+        - Both operands must have been loaded by `tla.copy(..., scale=...)`.
+
+        Example:
+        ```python
+        # Before: l1a/l1b hold fp8 operands, l1sa/l1sb their e8m0 scale blocks.
+        with tla.cube():
+            tla.copy(l0a, l1a, scale=l1sa)   # scale rides the load, not the matmul
+            tla.copy(l0b, l1b, scale=l1sb)
+            tla.mmad_mx(l0c, l0a, l0b, init_c=True)
+            # After: l0c accumulates the microscaled lhs@rhs.
+        ```
+    """
+    (
+        acc_value,
+        lhs_value,
+        rhs_value,
+        init_c_value,
+        unit_flag_value,
+        compute_order_attr,
+        ctx,
+    ) = _prepare_mmad_operands(
+        "mmad_mx", acc, lhs, rhs, init_c, unit_flag, compute_order, loc, extra_kwargs
+    )
+    _check_mx_provenance("mmad_mx", lhs_value, rhs_value)
+    _validate_mmad_contract(acc_value, lhs_value, rhs_value)
+    # hf32_mode is deliberately absent: it is an fp32 rounding mode, and MX
+    # operands are fp8/fp4.
+    # An fp4 operand states its encoding in its own element type, so there is
+    # nothing to name here and nothing that can contradict the load.
+    mmad_kwargs: dict[str, Any] = {"compute_order": compute_order_attr}
+    _tla_ops_gen.mmad_mx(
+        acc_value,
+        lhs_value,
+        rhs_value,
+        init_c_value,
+        unit_flag_value,
+        loc=loc,
+        **mmad_kwargs,
     )
 
 
@@ -7211,7 +7625,7 @@ def allocate(
         ```
     """
     _require_frontend_state("allocate")
-    dtype, element_bytes = _require_allocation_dtype("allocate", dtype)
+    dtype, element_bits = _require_allocation_dtype("allocate", dtype)
     align = _require_byte_alignment("allocate", byte_alignment, 3)
     addr_token = _require_pointer_addrspace("allocate", mem_scope, 2)
     if mem_scope in (AddressSpace.generic, AddressSpace.gm):
@@ -7220,7 +7634,7 @@ def allocate(
             "invalid argument 'mem_scope' (position 2): expected on-chip AddressSpace "
             "(l1, l0a, l0b, l0c, ub)",
         )
-    size_bytes = _static_allocation_size_bytes("allocate", shape, dtype, element_bytes)
+    size_bytes = _static_allocation_size_bytes("allocate", shape, dtype, element_bits)
 
     ctx = loc.context if loc is not None else mlir_ir.Context.current
     ptr_ty = PtrType.get(dtype.mlir_type(ctx), addr_token, align, context=ctx)
@@ -7373,6 +7787,7 @@ _require_generated("mutex_unlock")
 _require_generated("cube")
 _require_generated("vector")
 _require_generated("mmad")
+_require_generated("mmad_mx")
 _require_generated("add")
 _require_generated("adds")
 _require_generated("sub")
@@ -7484,6 +7899,12 @@ arch._set("FIX", _runtime.pipes.FIX)
 arch._set("zN", _LayoutTag("zN"))
 arch._set("nZ", _LayoutTag("nZ"))
 arch._set("zZ", _LayoutTag("zZ"))
+arch._set("zZMxScale", _LayoutTag("zZMxScale"))
+arch._set("nNMxScale", _LayoutTag("nNMxScale"))
+arch._set("rowMajorMxScaleA", _LayoutTag("rowMajorMxScaleA"))
+arch._set("colMajorMxScaleA", _LayoutTag("colMajorMxScaleA"))
+arch._set("rowMajorMxScaleB", _LayoutTag("rowMajorMxScaleB"))
+arch._set("colMajorMxScaleB", _LayoutTag("colMajorMxScaleB"))
 arch._set("nN", _LayoutTag("nN"))
 arch._set("RowMajor", _LayoutTag("RowMajor"))
 arch._set("ColumnMajor", _LayoutTag("ColumnMajor"))
@@ -7827,6 +8248,7 @@ __all__ = [
     "cube",
     "vector",
     "mmad",
+    "mmad_mx",
     "full",
     "arange",
     "add",

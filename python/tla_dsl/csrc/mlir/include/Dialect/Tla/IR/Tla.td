@@ -139,7 +139,23 @@ def Tla_LayoutTag_nZ : I32EnumAttrCase<"nZ", 3>;
 def Tla_LayoutTag_zZ : I32EnumAttrCase<"zZ", 4>;
 def Tla_LayoutTag_L0CLayout : I32EnumAttrCase<"L0Clayout", 5>;
 def Tla_LayoutTag_zNUnAlign : I32EnumAttrCase<"zNUnAlign", 6>;
-def Tla_LayoutTagEnum : Tla_I32Enum<"LayoutTag", "Tensor layout tag for tla.tensor types.", [Tla_LayoutTag_RowMajor, Tla_LayoutTag_ColumnMajor, Tla_LayoutTag_zN, Tla_LayoutTag_nZ, Tla_LayoutTag_zZ, Tla_LayoutTag_L0CLayout, Tla_LayoutTag_zNUnAlign]>;
+// MX shared-exponent scale block. Same nesting as zZ, but its C0 is fixed at 2
+// elements / 32 bytes per fractal by the e8m0 scale format rather than derived
+// from the element width, so it cannot reuse zZ.
+def Tla_LayoutTag_zZMxScale : I32EnumAttrCase<"zZMxScale", 7>;
+// The B-side MX scale block uses the transposed nN nesting.
+def Tla_LayoutTag_nNMxScale : I32EnumAttrCase<"nNMxScale", 8>;
+// GM-side MX scale blocks, named by side (A / B) and orientation. These say how
+// the scales sit in *global* memory, which the L1 tags above cannot: a
+// pre-swizzled buffer and a natural one are both u8 and otherwise
+// indistinguishable, and they select different copies. The four match Catlass's
+// isMxScaleFor{Row,Column}Major{A,B} predicates one-to-one; scaleA reaches L1 as
+// zZ and scaleB as nN either way.
+def Tla_LayoutTag_rowMajorMxScaleA : I32EnumAttrCase<"rowMajorMxScaleA", 9>;
+def Tla_LayoutTag_colMajorMxScaleA : I32EnumAttrCase<"colMajorMxScaleA", 10>;
+def Tla_LayoutTag_rowMajorMxScaleB : I32EnumAttrCase<"rowMajorMxScaleB", 11>;
+def Tla_LayoutTag_colMajorMxScaleB : I32EnumAttrCase<"colMajorMxScaleB", 12>;
+def Tla_LayoutTagEnum : Tla_I32Enum<"LayoutTag", "Tensor layout tag for tla.tensor types.", [Tla_LayoutTag_RowMajor, Tla_LayoutTag_ColumnMajor, Tla_LayoutTag_zN, Tla_LayoutTag_nZ, Tla_LayoutTag_zZ, Tla_LayoutTag_L0CLayout, Tla_LayoutTag_zNUnAlign, Tla_LayoutTag_zZMxScale, Tla_LayoutTag_nNMxScale, Tla_LayoutTag_rowMajorMxScaleA, Tla_LayoutTag_colMajorMxScaleA, Tla_LayoutTag_rowMajorMxScaleB, Tla_LayoutTag_colMajorMxScaleB]>;
 
 def Tla_AddressSpace_Generic : I32EnumAttrCase<"generic", 0>;
 def Tla_AddressSpace_Gm : I32EnumAttrCase<"gm", 1>;
@@ -158,6 +174,35 @@ def Tla_PtrAddressSpaceAttr : Tla_EnumAttr<"PtrAddressSpace", "ptr_address_space
   }];
 }
 
+
+// Cube element formats that this MLIR has no builtin type for.
+//
+// LLVM 19 ships Float8E4M3FN / Float8E5M2 and nothing narrower: Float4E2M1FN and
+// Float8E8M0FNU both arrive in LLVM 20. Spelling them as dialect types rather
+// than borrowing i4 / i8 keeps the *format* in the type, where it belongs --
+// e2m1 and e1m2 are the same width and differ only in exponent/mantissa split,
+// so a shared integer carrier cannot tell them apart and the encoding has to be
+// smuggled alongside on an attribute that nothing verifies against the type.
+//
+// These are storage-only: no arithmetic is ever performed on them in MLIR (the
+// cube's mad_mx does it), so they need no float semantics. At the memref
+// boundary they are buffered as i8 -- see storageTypeAndCount -- which is what
+// keeps every byte-denominated thing downstream meaning bytes.
+//
+// When the toolchain reaches LLVM 20 these become aliases for the builtin
+// Float4E2M1FN / Float8E8M0FNU and nothing else has to change.
+class Tla_CubeElementType<string name, string typeMnemonic, string desc>
+    : TypeDef<TlaDialect, name, []> {
+  let mnemonic = typeMnemonic;
+  let summary = desc;
+}
+
+def Tla_Float4E2M1Type : Tla_CubeElementType<"Float4E2M1", "f4e2m1",
+    "Packed 4-bit float, 2-bit exponent / 1-bit mantissa (OCP MXFP4).">;
+def Tla_Float4E1M2Type : Tla_CubeElementType<"Float4E1M2", "f4e1m2",
+    "Packed 4-bit float, 1-bit exponent / 2-bit mantissa.">;
+def Tla_Float8E8M0Type : Tla_CubeElementType<"Float8E8M0", "f8e8m0",
+    "8-bit shared exponent (OCP microscaling scale block).">;
 
 def Tla_PtrType : TypeDef<TlaDialect, "Ptr", []> {
   let summary = "First-class pointer SSA value (pointee, address space, alignment).";
@@ -804,6 +849,11 @@ def Tla_CopyOp : Tla_Op<"copy", []> {
     must be nested inside a ``tla.vector`` region.
 
     The atomic operation is enabled if ``atomic_mode`` provided, and currently only ``AtomicMode.ADD`` is supported, which is lowered to HIVM ``SetAtomicOp``
+
+    A microscaling (MX) L1->L0A/L0B load is ``tla.copy_mx``, which carries the
+    operand's e8m0 scale block. The frontend spells that as ``tla.copy`` with a
+    ``scale=`` argument, mirroring AscendC's five-argument ``LoadData``, but it
+    lowers to the separate op.
   }];
   let arguments = (ins
     Tla_TensorType:$dst, Tla_TensorType:$src,
@@ -811,6 +861,37 @@ def Tla_CopyOp : Tla_Op<"copy", []> {
     OptionalAttr<Tla_AtomicModeAttr>:$atomic_mode);
   let assemblyFormat = [{
     $dst `,` $src (`,` $params^)? attr-dict `:` qualified(type($dst)) `,` qualified(type($src)) (`,` qualified(type($params))^)?
+  }];
+  let hasVerifier = 1;
+}
+
+def Tla_CopyMxOp : Tla_Op<"copy_mx", []> {
+  let summary = "Microscaling (MX) L1->L0 copy";
+  let description = [{
+    Copy an MX operand tile from L1 to L0A/L0B, attaching its shared-exponent
+    scale block. Must be nested inside a ``tla.cube`` region.
+
+    A separate op from ``tla.copy`` so that the plain copy keeps a fixed operand
+    shape. The frontend still spells this as ``tla.copy(dst, src, scale=...)``,
+    mirroring AscendC, where the MX load is the five-argument overload of
+    ``LoadData`` rather than a distinct entry point.
+
+    On this hardware the scale is consumed by the *load*, not by the matmul:
+    ``tla.mmad_mx`` takes no scale operand, and the MX association is
+    established when the operand lands in L0.
+
+    ``scale`` is an L1 tile of OCP ``e8m0`` shared exponents, one per
+    ``MX_SCALE_GROUP_NUM`` (32) elements along K, carried as ``u8`` storage
+    because MLIR has no e8m0 type. It must be tagged ``zZ`` for an L0A
+    destination and ``nN`` for an L0B destination.
+
+    The destination L0 tile is what makes the matmul an MX matmul, so it must be
+    consumed by ``tla.mmad_mx`` rather than ``tla.mmad``.
+  }];
+  let arguments = (ins Tla_TensorType:$dst, Tla_TensorType:$src, Tla_TensorType:$scale);
+  let assemblyFormat = [{
+    $dst `,` $src `,` $scale attr-dict `:`
+    qualified(type($dst)) `,` qualified(type($src)) `,` qualified(type($scale))
   }];
   let hasVerifier = 1;
 }
@@ -1018,6 +1099,35 @@ def Tla_MmadOp : Tla_Op<"mmad", []> {
                        I1:$init_c, I64:$unit_flag,
                        Tla_ComputeOrderAttr:$compute_order,
                        Tla_HF32ModeAttr:$hf32_mode);
+  let assemblyFormat = [{
+    $acc `,` $lhs `,` $rhs `,` $init_c `,` $unit_flag attr-dict `:`
+    qualified(type($acc)) `,` qualified(type($lhs)) `,` qualified(type($rhs)) `,` type($init_c) `,` type($unit_flag)
+  }];
+  let hasVerifier = 1;
+}
+
+def Tla_MmadMxOp : Tla_Op<"mmad_mx", []> {
+  let summary = "Microscaling (MX) matrix multiply-accumulate";
+  let description = [{
+    Perform a microscaling matrix multiply-accumulate on tensor views. Must be
+    nested inside a ``tla.cube`` region.
+
+    A distinct op rather than a flag on ``tla.mmad``, mirroring the hardware:
+    the cube has a dedicated ``mad_mx`` instruction, which AscendC exposes as
+    ``asc_mmad_mx``.
+
+    Like that instruction, this op takes **no scale operand**. ``lhs``/``rhs``
+    must have been loaded by ``tla.copy`` with its ``scale`` operand, which is
+    what attaches the e8m0 block to the L0 tile; the scale then lives in a side
+    buffer addressed from the L0 tile rather than being passed here.
+
+    A packed-fp4 operand names its encoding in its own element type
+    (``!tla.f4e2m1`` / ``!tla.f4e1m2``), so there is nothing to state here and
+    nothing that can disagree with the load that wrote the tile.
+  }];
+  let arguments = (ins Tla_TensorType:$acc, Tla_TensorType:$lhs, Tla_TensorType:$rhs,
+                       I1:$init_c, I64:$unit_flag,
+                       Tla_ComputeOrderAttr:$compute_order);
   let assemblyFormat = [{
     $acc `,` $lhs `,` $rhs `,` $init_c `,` $unit_flag attr-dict `:`
     qualified(type($acc)) `,` qualified(type($lhs)) `,` qualified(type($rhs)) `,` type($init_c) `,` type($unit_flag)

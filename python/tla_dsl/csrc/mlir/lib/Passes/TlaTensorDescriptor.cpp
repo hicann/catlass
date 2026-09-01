@@ -21,7 +21,9 @@ bool isNZFamilyLayout(TensorLayoutTag layoutTag)
 
 bool isLinearLayout(TensorLayoutTag layoutTag)
 {
-    return layoutTag == TensorLayoutTag::RowMajor || layoutTag == TensorLayoutTag::ColumnMajor;
+    return layoutTag == TensorLayoutTag::RowMajor || layoutTag == TensorLayoutTag::ColumnMajor ||
+           layoutTag == TensorLayoutTag::rowMajorMxScaleA || layoutTag == TensorLayoutTag::colMajorMxScaleA ||
+           layoutTag == TensorLayoutTag::rowMajorMxScaleB || layoutTag == TensorLayoutTag::colMajorMxScaleB;
 }
 
 llvm::StringRef stringifyTensorLayoutTag(TensorLayoutTag layoutTag)
@@ -37,6 +39,18 @@ llvm::StringRef stringifyTensorLayoutTag(TensorLayoutTag layoutTag)
             return "zN";
         case TensorLayoutTag::zZ:
             return "zZ";
+        case TensorLayoutTag::zZMxScale:
+            return "zZMxScale";
+        case TensorLayoutTag::nNMxScale:
+            return "nNMxScale";
+        case TensorLayoutTag::rowMajorMxScaleA:
+            return "rowMajorMxScaleA";
+        case TensorLayoutTag::colMajorMxScaleA:
+            return "colMajorMxScaleA";
+        case TensorLayoutTag::rowMajorMxScaleB:
+            return "rowMajorMxScaleB";
+        case TensorLayoutTag::colMajorMxScaleB:
+            return "colMajorMxScaleB";
         case TensorLayoutTag::nZ:
             return "nZ";
         case TensorLayoutTag::L0C:
@@ -60,6 +74,18 @@ mlir::FailureOr<TensorLayoutTag> convertTlaLayoutTag(::LayoutTag layoutTag)
             return TensorLayoutTag::nZ;
         case LayoutTag::zZ:
             return TensorLayoutTag::zZ;
+        case LayoutTag::zZMxScale:
+            return TensorLayoutTag::zZMxScale;
+        case LayoutTag::nNMxScale:
+            return TensorLayoutTag::nNMxScale;
+        case LayoutTag::rowMajorMxScaleA:
+            return TensorLayoutTag::rowMajorMxScaleA;
+        case LayoutTag::colMajorMxScaleA:
+            return TensorLayoutTag::colMajorMxScaleA;
+        case LayoutTag::rowMajorMxScaleB:
+            return TensorLayoutTag::rowMajorMxScaleB;
+        case LayoutTag::colMajorMxScaleB:
+            return TensorLayoutTag::colMajorMxScaleB;
         case LayoutTag::L0Clayout:
             return TensorLayoutTag::L0C;
         case LayoutTag::zNUnAlign:
@@ -302,10 +328,15 @@ FailureOr<int64_t> getStaticAllocationElementCount(Value ptr)
     if (!ptrType || !intToPtr)
         return failure();
     auto sizeBytes = inferStaticAllocationSizeBytes(intToPtr.getAddr(), {});
-    int64_t elementBytes = getByteSizeOfFixedWidthScalarType(ptrType.getPointee());
-    if (failed(sizeBytes) || *sizeBytes < 0 || elementBytes <= 0 || *sizeBytes % elementBytes != 0)
+    // In bits, so a sub-byte pointee (packed fp4's i4) yields its true element
+    // count rather than being rejected for having no whole-byte width.
+    int64_t elementBits = getBitSizeOfFixedWidthScalarType(ptrType.getPointee());
+    if (failed(sizeBytes) || *sizeBytes < 0 || elementBits <= 0)
         return failure();
-    return *sizeBytes / elementBytes;
+    int64_t sizeBits = *sizeBytes * 8;
+    if (sizeBits % elementBits != 0)
+        return failure();
+    return sizeBits / elementBits;
 }
 
 mlir::FailureOr<TensorDescriptor> descriptorFromTensorDescOp(::tla::TensorDescOp descOp)

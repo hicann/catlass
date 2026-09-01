@@ -1,0 +1,34 @@
+// Packed fp4 routes through the cube, and the operand contract the two matmul
+// ops are held to.
+//
+// tla.mmad and tla.mmad_mx are both written by the user and neither is inferred
+// from the other, so each has to reject the operands belonging to the other.
+// That check lives in the frontend, which is why these two cases fail while the
+// IR is still being generated rather than while it is being compiled.
+
+// RUN: not %python %S/Inputs/generate_mmad_ir.py mx-half-scaled 2>&1 | %filecheck %s --check-prefix=HALFSCALED
+
+// HALFSCALED: lhs operand was loaded by tla.copy(..., scale=...)
+
+// RUN: not %python %S/Inputs/generate_mmad_ir.py mx-op-without-scale 2>&1 | %filecheck %s --check-prefix=MXNOSCALE
+
+// MXNOSCALE: lhs operand was not loaded by tla.copy(..., scale=...)
+
+// The encoding of a packed fp4 tile is its element type, so the load and the
+// matmul cannot disagree -- there is no second place for it to be stated. The
+// two operands need not agree with each other either: the cube has a mad_mx for
+// every pairing, so a mixed-encoding matmul is legal and names both types in its
+// callee.
+
+// RUN: %python %S/Inputs/generate_mmad_ir.py mxfp4-mixed-encodings | %tla_compile - -o - 2>&1 | %filecheck %s --check-prefix=FMTMIXED
+
+// FMTMIXED: mmad_float4_e1m2x2_t_float4_e2m1x2_t_float
+
+// Packed fp4 is microscaling-only: there is no plain fp4 route on the cube. An
+// unscaled fp4 load leaves tiles that are i8 as far as MLIR is concerned, so
+// without this the matmul would fall through to the generic "unsupported element
+// types" complaint and name i8 rather than the actual problem.
+
+// RUN: %python %S/Inputs/generate_mmad_ir.py mxfp4-unscaled | not %tla_compile - -o - 2>&1 | %filecheck %s --check-prefix=FP4UNSCALED
+
+// FP4UNSCALED: packed fp4 tla.mmad operands must be loaded by tla.copy(..., scale=...); the cube has no non-microscaling fp4 route

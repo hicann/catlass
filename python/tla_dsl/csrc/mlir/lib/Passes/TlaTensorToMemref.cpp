@@ -703,6 +703,58 @@ std::string getCopyRouteCallee(
             return {};
         return Twine("copy_ub_RowMajor_to_gm_RowMajor_").concat(suffix).str();
     }
+    // Packed fp4 GM -> L1. The source is a plain byte buffer -- the host has no
+    // fp4 type, so GM holds packed bytes -- while the destination tile is
+    // logically i4. This is the one route where src and dst element types
+    // legitimately differ: it is where packed bytes become fp4 elements. The
+    // encoding comes from extraDesc, which the copy lowering fills from the
+    // destination tile's own element type.
+    // The element types are part of the *condition*, not a check inside the body:
+    // fp4 now shares zN / nZ with every other operand type, so the layouts alone
+    // no longer identify this route and a plain i8 zN copy has to fall through to
+    // the generic one below.
+    if (*srcSpace == hivm::AddressSpace::GM && *dstSpace == hivm::AddressSpace::L1 && srcElementType == dstElem &&
+        ::tla::isPackedFp4Type(dstElem) &&
+        ((srcLayout == TensorLayoutTag::RowMajor && dstLayout == TensorLayoutTag::zN) ||
+         (srcLayout == TensorLayoutTag::ColumnMajor && dstLayout == TensorLayoutTag::nZ))) {
+        // The suffix is the C++ type the wrapper instantiates, like every other
+        // bc symbol. The encoding comes off the destination tile's element type;
+        // there is nowhere else it could come from, and nothing to disagree with.
+        StringRef fmt =
+            ::llvm::isa<::tla::Float4E1M2Type>(dstElem) ? StringRef("float4_e1m2x2_t") : StringRef("float4_e2m1x2_t");
+        StringRef src = srcLayout == TensorLayoutTag::RowMajor ? "RowMajor" : "ColumnMajor";
+        StringRef dst = dstLayout == TensorLayoutTag::zN ? "zN" : "nZ";
+        return (Twine("copy_gm_") + src + "_to_l1_" + dst + "_" + fmt).str();
+    }
+    // An e8m0 scale block, on either side of the copy. The dialect type is the
+    // spelling that says what the bytes mean, and both GM and L1 tiles normally
+    // carry it; plain i8 stays accepted because the host cannot produce an e8m0
+    // buffer and a caller may hand the bytes over untyped.
+    auto isScaleElem = [](Type elem) { return ::llvm::isa<::tla::Float8E8M0Type>(elem) || elem.isSignlessInteger(8); };
+
+    // MX scale GM -> L1, with the fractal reorder done by the copy. The source
+    // tag says how the block sits in GM; A-side scales land on L1 as zZ and
+    // B-side as nN whichever orientation they came in.
+    if (*srcSpace == hivm::AddressSpace::GM && *dstSpace == hivm::AddressSpace::L1 && isScaleElem(srcElementType) &&
+        isScaleElem(dstElem)) {
+        StringRef src, dst;
+        if (dstLayout == TensorLayoutTag::zZMxScale &&
+            (srcLayout == TensorLayoutTag::rowMajorMxScaleA || srcLayout == TensorLayoutTag::colMajorMxScaleA)) {
+            src = srcLayout == TensorLayoutTag::rowMajorMxScaleA ? "rowMajorMxScaleA" : "colMajorMxScaleA";
+            dst = "zZMxScale";
+        } else if (
+            dstLayout == TensorLayoutTag::nNMxScale &&
+            (srcLayout == TensorLayoutTag::rowMajorMxScaleB || srcLayout == TensorLayoutTag::colMajorMxScaleB)) {
+            src = srcLayout == TensorLayoutTag::rowMajorMxScaleB ? "rowMajorMxScaleB" : "colMajorMxScaleB";
+            dst = "nNMxScale";
+        }
+        if (!src.empty())
+            return (Twine("copy_gm_") + src + "_to_l1_" + dst + "_uint8_t").str();
+    }
+
+    // Element types live in the condition, not a check inside the body -- a body
+    // check would abort the whole lookup instead of falling through to the
+    // routes below.
     if (*srcSpace == hivm::AddressSpace::GM && *dstSpace == hivm::AddressSpace::L1 &&
         srcLayout == TensorLayoutTag::RowMajor && dstLayout == TensorLayoutTag::zN) {
         if (srcElementType != dstElem)
@@ -768,8 +820,7 @@ std::string getCopyRouteCallee(
             return {};
         return Twine("copy_l0c_to_gm_RowMajor_").concat(suffix).str();
     }
-    // L0C -> UB row-major: an fp32 acc may narrow to f32 / f16 / bf16 on fixpipe;
-    // an i32 acc (int8 MMAD) stays i32.
+    // L0C (fp32 MMAD acc) -> UB row-major: dst may be f32 / f16 / bf16 (narrowing on fixpipe).
     if (*srcSpace == hivm::AddressSpace::L0C && *dstSpace == hivm::AddressSpace::UB &&
         srcLayout == TensorLayoutTag::L0C && dstLayout == TensorLayoutTag::RowMajor) {
         if (!isLegalFixpipeElementType(srcElementType, dstElem))
@@ -779,8 +830,7 @@ std::string getCopyRouteCallee(
             return {};
         return Twine("copy_l0c_to_ub_RowMajor_").concat(extraDesc).concat("_").concat(suffix).str();
     }
-    // L0C -> UB col-major: an fp32 acc may narrow to f32 / f16 / bf16 on fixpipe;
-    // an i32 acc (int8 MMAD) stays i32.
+    // L0C (fp32 MMAD acc) -> UB col-major: dst may be f32 / f16 / bf16 (narrowing on fixpipe).
     if (*srcSpace == hivm::AddressSpace::L0C && *dstSpace == hivm::AddressSpace::UB &&
         srcLayout == TensorLayoutTag::L0C && dstLayout == TensorLayoutTag::ColumnMajor) {
         if (!isLegalFixpipeElementType(srcElementType, dstElem))
@@ -808,7 +858,7 @@ std::string getCopyRouteCallee(
 // (RowMajor/ColumnMajor) descriptors carry shape[2]=shape[3]=stride[2]=stride[3]=1
 // (enforced by validateTensorDescriptor), so the same 12-field encoding serves
 // both Linear and NZFamily endpoints.
-static SmallVector<Value, 12> buildCopyPayload(OpBuilder& builder, Location loc, const TensorDescriptor& desc)
+SmallVector<Value, 12> buildCopyPayloadForDescriptor(OpBuilder& builder, Location loc, const TensorDescriptor& desc)
 {
     return {
         castValueToI64(builder, loc, desc.shape[0]),       castValueToI64(builder, loc, desc.shape[1]),
@@ -825,8 +875,8 @@ SmallVector<Value, 24> buildCopyPayloadForRoute(
 {
     SmallVector<Value, 24> payload;
     auto append = [&](ArrayRef<Value> values) { payload.append(values.begin(), values.end()); };
-    append(buildCopyPayload(builder, loc, srcDesc));
-    append(buildCopyPayload(builder, loc, dstDesc));
+    append(buildCopyPayloadForDescriptor(builder, loc, srcDesc));
+    append(buildCopyPayloadForDescriptor(builder, loc, dstDesc));
     return payload;
 }
 
@@ -839,6 +889,21 @@ static bool isAicTemplateRuntimeCall(StringRef name)
     // The BC symbols are named after the C++ element type the wrapper
     // instantiates, so the operands read fp8_e4m3fn_t / fp8_e5m2_t.
     if (name.starts_with("mmad_fp8_e") && name.ends_with("_float"))
+        return true;
+    // MX mmad: same per-pairing naming, on the mx_fp8_* / float4_* operand types.
+    // fp4 carries no `mx` marker because its C++ type has none -- there is no
+    // non-microscaling fp4 route for it to be confused with.
+    if ((name.starts_with("mmad_mx_fp8_e") || name.starts_with("mmad_float4_e")) && name.ends_with("_float"))
+        return true;
+    // L1 -> L0 loads that also attach the e8m0 scale block.
+    if (name.starts_with("copy_mx_l1_"))
+        return true;
+    // fp4 operands are packed two-per-byte, so their GM -> L1 routes are named by
+    // the fp4 encoding rather than by a storage type suffix.
+    if (name.starts_with("copy_gm_") && (name.ends_with("_float4_e2m1x2_t") || name.ends_with("_float4_e1m2x2_t")))
+        return true;
+    // MX scale GM -> L1 with the reorder done by the DMA.
+    if (name.starts_with("copy_gm_") && name.find("MxScale") != StringRef::npos && name.ends_with("_uint8_t"))
         return true;
     if (!(name.starts_with("copy_")))
         return false;

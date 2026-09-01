@@ -127,6 +127,9 @@ mlir::FailureOr<mlir::Value> materializeTileMemrefFromDescriptor(
 // ---------------------------------------------------------------------------
 
 mlir::FailureOr<int64_t> getStaticNumElements(llvm::ArrayRef<int64_t> shape);
+llvm::SmallVector<mlir::Value, 12> buildCopyPayloadForDescriptor(
+    mlir::OpBuilder& builder, mlir::Location loc, const TensorDescriptor& desc);
+
 mlir::FailureOr<int64_t> getElementByteWidth(mlir::Type elementType);
 mlir::FailureOr<int64_t> getVectorLaneCount(mlir::Type elementType);
 

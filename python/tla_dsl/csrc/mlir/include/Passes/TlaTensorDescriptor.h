@@ -39,7 +39,13 @@ enum class TensorLayoutTag
     zZ,
     nZ,
     L0C,
-    zNUnAlign
+    zNUnAlign,
+    zZMxScale,
+    nNMxScale,
+    rowMajorMxScaleA,
+    colMajorMxScaleA,
+    rowMajorMxScaleB,
+    colMajorMxScaleB
 };
 
 bool isNZFamilyLayout(TensorLayoutTag layoutTag);

@@ -7,6 +7,10 @@
 // RUN: %python %S/Inputs/generate_mmad_ir.py i8-fixpipe | %tla_compile - -o - | %filecheck %s --check-prefix=I8FIX
 // RUN: %python %S/Inputs/generate_mmad_ir.py fp8 | %tla_compile - -o - | %filecheck %s --check-prefix=FP8
 // RUN: %python %S/Inputs/generate_mmad_ir.py fp8-mixed | %tla_compile - -o - | %filecheck %s --check-prefix=FP8MIX
+// RUN: %python %S/Inputs/generate_mmad_ir.py mx | %tla_compile - -o - | %filecheck %s --check-prefix=MX
+// RUN: %python %S/Inputs/generate_mmad_ir.py mx-mixed | %tla_compile - -o - | %filecheck %s --check-prefix=MXMIX
+// RUN: %python %S/Inputs/generate_mmad_ir.py mxfp4 | %tla_compile - -o - | %filecheck %s --check-prefix=MXFP4
+// RUN: %python %S/Inputs/generate_mmad_ir.py mxfp4-e1m2 | %tla_compile - -o - | %filecheck %s --check-prefix=MXFP4B
 // RUN: %python %S/Inputs/generate_mmad_ir.py dynamic-init | %tla_compile - -o - | %filecheck %s --check-prefix=DYN-INIT
 // RUN: %python %S/Inputs/generate_mmad_ir.py dynamic-unit | %tla_compile - -o - | %filecheck %s --check-prefix=DYN-UNIT
 // RUN: %python %S/Inputs/generate_mmad_ir.py dynamic-both | %tla_compile - -o - | %filecheck %s --check-prefix=DYN-BOTH
@@ -66,6 +70,38 @@
 // I8FIX-DAG: call @copy_l0c_to_l1_zN_int32_t(
 // I8FIX-NOT: tla.mmad
 // I8FIX-NOT: tla.copy
+
+// The frontend spells the MX load as tla.copy(scale=...), which lowers to
+// tla.copy_mx, and the matmul as tla.mmad_mx -- both are written by the user;
+// neither is inferred. Compare the FP8 prefix above, whose kernel is identical
+// apart from the loads carrying no scale and the matmul being tla.mmad, and
+// which therefore stays on mad.
+// MX-DAG: func.func private @copy_mx_l1_zN_to_l0a_zN_fp8_e4m3fn_t(
+// MX-DAG: func.func private @copy_mx_l1_nZ_to_l0b_nZ_fp8_e4m3fn_t(
+// MX-DAG: func.func private @mmad_mx_fp8_e4m3_t_mx_fp8_e4m3_t_float(
+// MX: call @copy_mx_l1_zN_to_l0a_zN_fp8_e4m3fn_t(
+// MX: call @copy_mx_l1_nZ_to_l0b_nZ_fp8_e4m3fn_t(
+// MX: call @mmad_mx_fp8_e4m3_t_mx_fp8_e4m3_t_float(
+// MX-NOT: tla.copy_mx
+// MX-NOT: tla.mmad
+
+// The two fp8 formats mix, so the callee name is per-operand.
+// MXMIX-DAG: func.func private @mmad_mx_fp8_e5m2_t_mx_fp8_e4m3_t_float(
+// MXMIX: call @mmad_mx_fp8_e5m2_t_mx_fp8_e4m3_t_float(
+// MXMIX-NOT: tla.mmad
+
+// Packed fp4: the encoding cannot be read off the element type (the tile is i8
+// storage), so it is taken from the load and threaded into the callee name.
+// MXFP4-DAG: func.func private @copy_mx_l1_zN_to_l0a_zN_float4_e2m1x2_t(
+// MXFP4-DAG: func.func private @copy_mx_l1_nZ_to_l0b_nZ_float4_e2m1x2_t(
+// MXFP4-DAG: func.func private @mmad_float4_e2m1x2_t_float4_e2m1x2_t_float(
+// MXFP4: call @mmad_float4_e2m1x2_t_float4_e2m1x2_t_float(
+// MXFP4-NOT: tla.copy_mx
+// MXFP4-NOT: tla.mmad
+
+// MXFP4B-DAG: func.func private @mmad_float4_e1m2x2_t_float4_e1m2x2_t_float(
+// MXFP4B: call @mmad_float4_e1m2x2_t_float4_e1m2x2_t_float(
+// MXFP4B-NOT: tla.mmad
 
 // DYN-INIT-COUNT-1: func.func private @mmad_float_float_float(
 // DYN-INIT-LABEL: func.func @_dynamic_init_mmad_kernel(

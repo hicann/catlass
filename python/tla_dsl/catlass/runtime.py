@@ -416,6 +416,7 @@ _CORE_API_EXPORTS = (
     "cube",
     "vector",
     "mmad",
+    "mmad_mx",
     "full",
     "arange",
     "add",

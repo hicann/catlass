@@ -32,6 +32,12 @@ class _FrontendEmitState:
     tensor_type_by_value: dict[Any, Any] = field(default_factory=dict)
     #: ``mlir.Value`` -> resolved tensor metadata fields (shape/stride/coord/origin_shape/...).
     tensor_metadata_by_value: dict[Any, dict[str, Any]] = field(default_factory=dict)
+    #: ``mlir.Value`` of every L0 tile written by ``tla.copy(..., scale=...)``.
+    #: MX-ness is not visible in a tile's type -- an MX fp8 L0 tile looks exactly
+    #: like a plain one -- so it is only knowable from how the tile was written.
+    #: Recording it here lets tla.mmad and tla.mmad_mx each reject the operands
+    #: that belong to the other, which is otherwise a silent wrong-results bug.
+    mx_scaled_l0_values: set[Any] = field(default_factory=set)
     mutex_guard_depth: int = 0
     #: Stack of enclosing region wrappers, each one of "cube" / "vector" /
     #: "vec.func" (the wrapper's own name).

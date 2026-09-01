@@ -166,10 +166,13 @@ mlir::LogicalResult AllocPtrOp::verify()
     int64_t sizeBytes = getSizeBytesAttr().getInt();
     if (sizeBytes <= 0)
         return emitOpError("size_bytes must be positive");
-    int64_t elemBytes = getByteSizeOfFixedWidthScalarType(resTy.getPointee());
-    if (elemBytes <= 0)
+    // In bits: a packed fp4 buffer has an i4 pointee, which has no whole-byte
+    // width but is still a fixed-width scalar. The allocation itself is always a
+    // whole number of bytes, which the divisibility check below still enforces.
+    int64_t elemBits = getBitSizeOfFixedWidthScalarType(resTy.getPointee());
+    if (elemBits <= 0)
         return emitOpError("alloc_ptr pointee must be a fixed-width scalar type");
-    if (sizeBytes % elemBytes != 0)
+    if ((sizeBytes * 8) % elemBits != 0)
         return emitOpError("size_bytes must be a multiple of result pointee type size");
     return mlir::success();
 }
@@ -204,7 +207,8 @@ mlir::LogicalResult TensorDescOp::verify()
     auto tensorType = getResult().getType();
     auto layout = tensorType.getLayout();
     auto layoutTag = layout.getLayoutTag();
-    bool isLinear = layoutTag == LayoutTag::RowMajor || layoutTag == LayoutTag::ColumnMajor;
+    bool isLinear =
+        layoutTag == LayoutTag::RowMajor || layoutTag == LayoutTag::ColumnMajor || isMxScaleGmLayout(layoutTag);
     bool isNZFamily = isNZFamilyLayout(layoutTag);
     if (!isLinear && !isNZFamily)
         return emitOpError("result must use a supported linear or NZFamily layout");
@@ -318,6 +322,87 @@ mlir::LogicalResult CallExternOp::verify()
     return mlir::success();
 }
 
+mlir::LogicalResult MmadMxOp::verify()
+{
+    if (!hasEnclosingRegion<CubeOp>(getOperation()))
+        return emitOpError("must be nested inside a tla.cube region");
+
+    auto accTy = mlir::dyn_cast<TlaTensorType>(getAcc().getType());
+    auto lhsTy = mlir::dyn_cast<TlaTensorType>(getLhs().getType());
+    auto rhsTy = mlir::dyn_cast<TlaTensorType>(getRhs().getType());
+    if (!accTy || !lhsTy || !rhsTy)
+        return mlir::success(); // Operand type verifier handles malformed tensors.
+
+    if (accTy.getPtr().getAddrspace() != AddressSpace::l0c)
+        return emitOpError("acc must be an l0c tile");
+    if (lhsTy.getPtr().getAddrspace() != AddressSpace::l0a)
+        return emitOpError("lhs must be an l0a tile");
+    if (rhsTy.getPtr().getAddrspace() != AddressSpace::l0b)
+        return emitOpError("rhs must be an l0b tile");
+    // Every MX route accumulates into fp32; there is no narrowing mad_mx form.
+    if (!accTy.getPtr().getPointee().isF32())
+        return emitOpError("acc must be f32: every MX route accumulates into an fp32 L0C");
+
+    LayoutTag lhsTag = lhsTy.getLayout().getLayoutTag();
+    LayoutTag rhsTag = rhsTy.getLayout().getLayoutTag();
+    if (accTy.getLayout().getLayoutTag() != LayoutTag::L0Clayout)
+        return emitOpError("acc must be tagged L0Clayout");
+
+    // Two operand forms, and the sides must agree on which one they are in:
+    // packed fp4 (!tla.f4e2m1 / !tla.f4e1m2, which mix freely) or fp8
+    // (f8E4M3FN / f8E5M2, which also mix freely), both in zN / nZ.
+    bool lhsFp4 = ::tla::isPackedFp4Type(lhsTy.getPtr().getPointee());
+    bool rhsFp4 = ::tla::isPackedFp4Type(rhsTy.getPtr().getPointee());
+    if (lhsFp4 != rhsFp4)
+        return emitOpError("both operands must be packed fp4 or neither");
+
+    auto isFp8 = [](mlir::Type ty) { return ty.isFloat8E4M3FN() || ty.isFloat8E5M2(); };
+    if (lhsFp4) {
+        if (lhsTag != LayoutTag::zN || rhsTag != LayoutTag::nZ)
+            return emitOpError("packed fp4 operands must be tagged zN / nZ");
+    } else {
+        if (lhsTag != LayoutTag::zN || rhsTag != LayoutTag::nZ)
+            return emitOpError("fp8 MX operands must be tagged zN (lhs) and nZ (rhs)");
+        if (!isFp8(lhsTy.getPtr().getPointee()) || !isFp8(rhsTy.getPtr().getPointee()))
+            return emitOpError("MX operands must be f8E4M3FN / f8E5M2, or fp4-tagged i8 tiles");
+    }
+    return mlir::success();
+}
+
+mlir::LogicalResult CopyMxOp::verify()
+{
+    if (!hasEnclosingRegion<CubeOp>(getOperation()))
+        return emitOpError("must be nested inside a tla.cube region");
+    auto srcTy = mlir::dyn_cast<TlaTensorType>(getSrc().getType());
+    auto dstTy = mlir::dyn_cast<TlaTensorType>(getDst().getType());
+    auto scaleTy = mlir::dyn_cast<TlaTensorType>(getScale().getType());
+    if (!srcTy || !dstTy || !scaleTy)
+        return mlir::success(); // Operand type verifier handles malformed tensors.
+
+    AddressSpace src = srcTy.getPtr().getAddrspace();
+    AddressSpace dst = dstTy.getPtr().getAddrspace();
+    AddressSpace scale = scaleTy.getPtr().getAddrspace();
+    if (src != AddressSpace::l1)
+        return emitOpError("MX operand tile must come from l1");
+    if (dst != AddressSpace::l0a && dst != AddressSpace::l0b)
+        return emitOpError("MX operand tile must land in l0a or l0b");
+    if (scale != AddressSpace::l1)
+        return emitOpError("MX scale tile must live in l1");
+
+    // The scale block is e8m0. i8 storage stays accepted so a caller that only
+    // has bytes to hand is not forced to relabel them, but the dialect type is
+    // the spelling that says what the bytes mean.
+    auto scaleElem = scaleTy.getPtr().getPointee();
+    if (!::llvm::isa<::tla::Float8E8M0Type>(scaleElem) && !scaleElem.isInteger(8))
+        return emitOpError("MX scale tile must be f8e8m0 (or i8/u8 storage)");
+    // A-side scales feed L0A and must be zZ; B-side feed L0B and must be nN.
+    LayoutTag expected = dst == AddressSpace::l0a ? LayoutTag::zZMxScale : LayoutTag::nNMxScale;
+    if (scaleTy.getLayout().getLayoutTag() != expected)
+        return emitOpError("MX scale tile for an ")
+               << (dst == AddressSpace::l0a ? "l0a" : "l0b") << " destination must be tagged "
+               << (dst == AddressSpace::l0a ? "zZMxScale" : "nNMxScale");
+    return mlir::success();
+}
 // One thread block may hold at most this many threads on the supported targets.
 // The lowering packs the product into hivm_regbaseintrins::SIMT_EntryAttr, whose
 // value is a uint32_t, so an unchecked product would also truncate.

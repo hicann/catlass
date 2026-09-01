@@ -141,7 +141,7 @@ public:
         target.addIllegalOp<
             ::tla::TileViewOp, ::tla::ScalarLoadOp, ::tla::ScalarStoreOp, ::tla::CopyOp, ::tla::MakeTensorLikeOp,
             ::tla::MakeTensorOp, ::tla::LoadOp, ::tla::StoreOp, ::tla::FuncOp, ::tla::ReturnOp, ::tla::CubeOp,
-            ::tla::VectorOp, ::tla::MmadOp, ::tla::AllocPtrOp, ::tla::RecastPtrOp, ::tla::TensorPtrOp,
+            ::tla::VectorOp, ::tla::MmadOp, ::tla::MmadMxOp, ::tla::AllocPtrOp, ::tla::RecastPtrOp, ::tla::TensorPtrOp,
             ::tla::PtrAddOp>();
         target.addDynamicallyLegalOp<
             ::tla::MakeShapeOp, ::tla::MakeCoordOp, ::tla::MakeStrideOp, ::tla::MakeLayoutOp, ::tla::IntToPtrOp,

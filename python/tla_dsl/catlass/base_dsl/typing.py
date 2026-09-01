@@ -601,6 +601,27 @@ def _mlir_f8e5m2() -> mlir_ir.Type:
     return mlir_ir.Float8E5M2Type.get()
 
 
+# The cube element formats MLIR 19 has no builtin for -- Float4E2M1FN and
+# Float8E8M0FNU both land in LLVM 20. Until then the Tla dialect spells them
+# itself, so these go through the type bridge rather than mlir_ir.
+def _mlir_f4e2m1() -> mlir_ir.Type:
+    from .._tla_type_bridge import float4_e2m1_type_get
+
+    return float4_e2m1_type_get(mlir_ir.Context.current)
+
+
+def _mlir_f4e1m2() -> mlir_ir.Type:
+    from .._tla_type_bridge import float4_e1m2_type_get
+
+    return float4_e1m2_type_get(mlir_ir.Context.current)
+
+
+def _mlir_f8e8m0() -> mlir_ir.Type:
+    from .._tla_type_bridge import float8_e8m0_type_get
+
+    return float8_e8m0_type_get(mlir_ir.Context.current)
+
+
 class Numeric(metaclass=NumericMeta, is_abstract=True):
     """Numeric type and value (``DslType`` / ``NumericMeta`` first-class).
 
@@ -702,6 +723,10 @@ class Numeric(metaclass=NumericMeta, is_abstract=True):
             token = "f8e4m3fn"
         elif isinstance(ty, mlir_ir.Float8E5M2Type):
             token = "f8e5m2"
+        elif str(ty) in ("!tla.f4e2m1", "!tla.f4e1m2", "!tla.f8e8m0"):
+            # Dialect types, so there is no mlir_ir class to isinstance against;
+            # the printed mnemonic is the token.
+            token = str(ty).removeprefix("!tla.")
         elif isinstance(ty, mlir_ir.F64Type):
             raise TypeError(f"unsupported element type for Numeric: {ty!r}")
         elif isinstance(ty, mlir_ir.IntegerType):
@@ -1155,6 +1180,41 @@ class Float8E5M2(
     Float, metaclass=FloatMeta, width=8, dtype="f8e5m2", mlir_type=_mlir_f8e5m2
 ):
     """OCP E5M2, the wider-exponent 8-bit float operand format."""
+
+
+class Float4E2M1(
+    Float, metaclass=FloatMeta, width=4, dtype="f4e2m1", mlir_type=_mlir_f4e2m1
+):
+    """OCP MXFP4: packed 4-bit float, 2-bit exponent / 1-bit mantissa.
+
+    Storage stays byte-addressable -- a tile of these is buffered as i8 with
+    half as many elements -- but that is a lowering detail, not something a
+    kernel says. What the kernel writes is the format, and the format is what
+    selects the cube's mad_mx variant.
+
+    Microscaling-only: the cube has no plain fp4 route, so a tile of these must
+    be loaded by ``tla.copy(..., scale=...)`` and matmul'd with ``tla.mmad_mx``.
+    """
+
+
+class Float4E1M2(
+    Float, metaclass=FloatMeta, width=4, dtype="f4e1m2", mlir_type=_mlir_f4e1m2
+):
+    """Packed 4-bit float, 1-bit exponent / 2-bit mantissa.
+
+    The same width as [`Float4E2M1`] and a different format; the two are told
+    apart by type, and may be mixed across the two matmul operands.
+    """
+
+
+class Float8E8M0(
+    Float, metaclass=FloatMeta, width=8, dtype="f8e8m0", mlir_type=_mlir_f8e8m0
+):
+    """OCP E8M0 shared exponent -- the element of a microscaling scale block.
+
+    One per 32 elements along K. No arithmetic is ever performed on it here: it
+    is handed to the cube, which applies it.
+    """
 
 
 class Constexpr(Generic[_T]):

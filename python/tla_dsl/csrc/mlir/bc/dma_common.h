@@ -4,10 +4,22 @@
 
 #include "catlass/arch/arch.hpp"
 #include "catlass/layout/layout.hpp"
+#include "catlass/numeric_size.hpp"
 #include "tla/layout.hpp"
 #include "tla/tensor.hpp"
 
 using bf16 = bfloat16_t;
+
+#if ((defined(__NPU_ARCH__) && __NPU_ARCH__ == 3510) || (defined(CATLASS_ARCH) && CATLASS_ARCH == 3510))
+// The MX fp8 operand types live in the AscendC namespace, and the REGISTER_*
+// macros paste their argument into both the symbol name and the signature -- a
+// `::` cannot go into a symbol. Re-declare them at global scope under the *same*
+// spelling so the token stays the real C++ type name, which is what every bc
+// symbol suffix is. The fp4 types need no alias: float4_e2m1x2_t is already a
+// global name.
+using mx_fp8_e4m3_t = AscendC::mx_fp8_e4m3_t;
+using mx_fp8_e5m2_t = AscendC::mx_fp8_e5m2_t;
+#endif
 
 /// Layout tags for the bc-layer DMA helpers. Mirrors the IR-side
 /// `TensorLayoutTag` enum (same enumerators, same order)
@@ -21,6 +33,12 @@ enum class LayoutTag
     nZ,
     L0C,
     zNUnAlign,
+    zZMxScale,
+    nNMxScale,
+    rowMajorMxScaleA,
+    colMajorMxScaleA,
+    rowMajorMxScaleB,
+    colMajorMxScaleB,
 };
 
 /// Unified 4D (12-field) tensor descriptor. Linear layouts (RowMajor/
@@ -98,8 +116,9 @@ CATLASS_DEVICE auto makeColumnMajorTlaLayout(const TensorDesc& desc)
 template <typename T>
 CATLASS_DEVICE auto makezNTlaLayout(const TensorDesc& desc)
 {
-    constexpr uint32_t eleNumPerC0 = Catlass::BYTE_PER_C0 / sizeof(T);
-    constexpr uint32_t eleNumPerFractal = Catlass::BYTE_PER_FRACTAL / sizeof(T);
+    constexpr uint32_t eleNumPerC0 = Catlass::BytesToBits(Catlass::BYTE_PER_C0) / Catlass::SizeOfBits<T>::value;
+    constexpr uint32_t eleNumPerFractal =
+        Catlass::BytesToBits(Catlass::BYTE_PER_FRACTAL) / Catlass::SizeOfBits<T>::value;
     return tla::MakeLayout(
         tla::MakeShape(
             tla::MakeShape(tla::Int<Catlass::C0_NUM_PER_FRACTAL>{}, desc.shape1),
@@ -127,8 +146,9 @@ CATLASS_DEVICE auto makezNUnAlignTlaLayout(const TensorDesc& desc)
 template <typename T>
 CATLASS_DEVICE auto makenZTlaLayout(const TensorDesc& desc)
 {
-    constexpr uint32_t eleNumPerC0 = Catlass::BYTE_PER_C0 / sizeof(T);
-    constexpr uint32_t eleNumPerFractal = Catlass::BYTE_PER_FRACTAL / sizeof(T);
+    constexpr uint32_t eleNumPerC0 = Catlass::BytesToBits(Catlass::BYTE_PER_C0) / Catlass::SizeOfBits<T>::value;
+    constexpr uint32_t eleNumPerFractal =
+        Catlass::BytesToBits(Catlass::BYTE_PER_FRACTAL) / Catlass::SizeOfBits<T>::value;
     return tla::MakeLayout(
         tla::MakeShape(
             tla::MakeShape(tla::Int<eleNumPerC0>{}, desc.shape1),
@@ -211,20 +231,192 @@ CATLASS_DEVICE auto makeL1Tensor(memref_t<__cbuf__ T, 1>* memref, const TensorDe
     }
 }
 
+#if ((defined(__NPU_ARCH__) && __NPU_ARCH__ == 3510) || (defined(CATLASS_ARCH) && CATLASS_ARCH == 3510))
+// MX shared-exponent scale block, laid out like zZ but with the C0 fixed by the
+// e8m0 format (2 elements per C0, 32 bytes per fractal) rather than derived from
+// the element width. Mirrors tla::MakeMxScaleLayout<..., zZ, ...>; the descriptor
+// already carries the nested tile shape and parent strides, as for zN/nZ.
+CATLASS_DEVICE auto makeMxScalezZTlaLayout(const TensorDesc& desc)
+{
+    return tla::MakeLayout(
+        tla::MakeShape(
+            tla::MakeShape(tla::Int<Catlass::C0_NUM_PER_FRACTAL>{}, desc.shape1),
+            tla::MakeShape(tla::Int<2>{}, desc.shape3)),
+        tla::MakeStride(tla::MakeStride(tla::Int<2>{}, desc.stride1), tla::MakeStride(tla::Int<1>{}, tla::Int<32>{})),
+        tla::MakeShape(desc.originShape0, desc.originShape1));
+}
+
+// The B-side scale block: same idea, transposed nesting (copy_l1_to_l0b requires
+// nN where copy_l1_to_l0a requires zZ).
+CATLASS_DEVICE auto makeMxScalenNTlaLayout(const TensorDesc& desc)
+{
+    return tla::MakeLayout(
+        tla::MakeShape(
+            tla::MakeShape(tla::Int<2>{}, desc.shape1),
+            tla::MakeShape(tla::Int<Catlass::C0_NUM_PER_FRACTAL>{}, desc.shape3)),
+        tla::MakeStride(tla::MakeStride(tla::Int<1>{}, tla::Int<32>{}), tla::MakeStride(tla::Int<2>{}, desc.stride3)),
+        tla::MakeShape(desc.originShape0, desc.originShape1));
+}
+
+// GM-side MX scale tensors, one per (side, orientation).
+//
+// The shape/stride *rank structure* is what Catlass dispatches on: its
+// isMxScaleForRowMajorA / ColumnMajorA / RowMajorB / ColumnMajorB predicates key
+// off whether each stride leaf is a scalar or a pair, and off whether one
+// particular leaf is the literal constant 2. These mirror
+// tla::MakeMxScaleLayout<e8m0, RowMajor|ColumnMajor, isMxScaleB>, except the
+// pitch comes from the descriptor instead of being assumed contiguous: a tile
+// view into a wider scale buffer has a pitch wider than its own extent.
+//
+// Match the structure and Catlass's own tested copy runs; miss it and the
+// TileCopyTla static_assert fires.
+template <LayoutTag Tag>
+CATLASS_DEVICE auto makeGMMxScaleTensor(memref_t<__gm__ uint8_t, 2>* memref, const TensorDesc& desc)
+{
+    auto g = makeGlobalTensor(reinterpret_cast<__gm__ float8_e8m0_t*>(basePtr(memref)));
+    constexpr uint32_t C0 = 2; // e8m0 scale C0, fixed by the format
+    const uint32_t rows = desc.shape0;
+    const uint32_t cols = desc.shape1;
+    const uint32_t colGroups = (cols + C0 - 1) / C0;
+    const uint32_t rowGroups = (rows + C0 - 1) / C0;
+    const auto origin = tla::MakeShape(desc.originShape0, desc.originShape1);
+    const auto coord = makeTlaTileCoord(desc);
+
+    if constexpr (Tag == LayoutTag::rowMajorMxScaleA) {
+        // A side: stride0 is a scalar row pitch, and must not be the constant 2.
+        return tla::MakeTensor(
+            g,
+            tla::MakeLayout(
+                tla::MakeShape(rows, tla::MakeShape(tla::Int<C0>{}, colGroups)),
+                tla::MakeStride(desc.stride0, tla::MakeStride(tla::Int<1>{}, tla::Int<C0>{})), origin),
+            coord, Catlass::Arch::PositionGM{});
+    } else if constexpr (Tag == LayoutTag::colMajorMxScaleA) {
+        // Not the same bytes as row-major A. Catlass reaches this one through
+        // ND2NZ where row-major A uses the transposing DN2NZ, so the GM block
+        // must arrive with its groups interleaved in C0-sized pairs and the row
+        // index running fastest between pairs. That is forced by the copy moving
+        // e8m0 reinterpreted as half: each 16-bit unit has to hold two groups of
+        // the *same* row, which a plain transpose breaks by pairing two rows.
+        //
+        // Hence the row stride is the literal C0 -- which is also what the
+        // isMxScaleForColumnMajorA predicate keys on -- and the pair stride is
+        // desc.stride1 * C0, desc.stride1 being the row count.
+        return tla::MakeTensor(
+            g,
+            tla::MakeLayout(
+                tla::MakeShape(rows, tla::MakeShape(tla::Int<C0>{}, colGroups)),
+                tla::MakeStride(tla::Int<C0>{}, tla::MakeStride(tla::Int<1>{}, desc.stride1 * C0)), origin),
+            coord, Catlass::Arch::PositionGM{});
+    } else if constexpr (Tag == LayoutTag::rowMajorMxScaleB) {
+        // B side: the ranks flip -- leaf 0 becomes the pair, leaf 1 the scalar.
+        // The mirror of column-major A above, and ND2NZ for the same reason: the
+        // block arrives with its groups interleaved in C0-sized pairs, the
+        // column index running fastest between pairs, and the pair stride is
+        // desc.stride0 * C0 with desc.stride0 the column count.
+        return tla::MakeTensor(
+            g,
+            tla::MakeLayout(
+                tla::MakeShape(tla::MakeShape(tla::Int<C0>{}, rowGroups), cols),
+                tla::MakeStride(tla::MakeStride(tla::Int<1>{}, desc.stride0 * C0), tla::Int<C0>{}), origin),
+            coord, Catlass::Arch::PositionGM{});
+    } else {
+        static_assert(
+            Tag == LayoutTag::colMajorMxScaleB,
+            "GM MX scale supports rowMajorMxScaleA / colMajorMxScaleA / rowMajorMxScaleB / colMajorMxScaleB");
+        return tla::MakeTensor(
+            g,
+            tla::MakeLayout(
+                tla::MakeShape(tla::MakeShape(tla::Int<C0>{}, rowGroups), cols),
+                tla::MakeStride(tla::MakeStride(tla::Int<1>{}, tla::Int<C0>{}), desc.stride1), origin),
+            coord, Catlass::Arch::PositionGM{});
+    }
+}
+
+// The scale block travels over the ABI as u8 (MLIR has no e8m0 type); the
+// element type is restored here, where the copy templates require it.
+template <LayoutTag Tag>
+CATLASS_DEVICE auto makeL1MxScaleTensor(memref_t<__cbuf__ uint8_t, 1>* memref, const TensorDesc& desc)
+{
+    AscendC::LocalTensor<float8_e8m0_t> tensor(AscendC::TPosition::A1, localAddr(memref), elementCount(memref));
+    if constexpr (Tag == LayoutTag::zZMxScale) {
+        return tla::MakeTensor(
+            tensor, makeMxScalezZTlaLayout(desc), makeTlaTileCoord(desc), Catlass::Arch::PositionL1{});
+    } else {
+        static_assert(Tag == LayoutTag::nNMxScale, "MX scale tile supports zZMxScale (A) / nNMxScale (B) only");
+        return tla::MakeTensor(
+            tensor, makeMxScalenNTlaLayout(desc), makeTlaTileCoord(desc), Catlass::Arch::PositionL1{});
+    }
+}
+#endif
+
+// Packed fp4 tiles travel over the bc ABI as int8_t storage -- the ABI is
+// byte-denominated, whatever the tile's element type says -- and the real
+// element type is restored here, where Catlass's SizeOfBits<> gives the layout
+// math its 4-bit element width. Shapes in the descriptor are in fp4 elements, so
+// the byte extent is half of that.
+// zN and nZ produce distinct Tensor types, so the choice must be a template
+// parameter, not a runtime flag. It is spelled as a LayoutTag rather than a bool
+// so the call sites read as the layout they mean, like every other tensor
+// builder here.
+template <typename TFp4, LayoutTag Tag>
+CATLASS_DEVICE auto makeL1Fp4Tensor(memref_t<__cbuf__ int8_t, 1>* memref, const TensorDesc& desc)
+{
+    static_assert(Tag == LayoutTag::zN || Tag == LayoutTag::nZ, "L1 fp4 tile supports zN / nZ only");
+    AscendC::LocalTensor<TFp4> tensor(AscendC::TPosition::A1, localAddr(memref), elementCount(memref));
+    if constexpr (Tag == LayoutTag::nZ) {
+        return tla::MakeTensor(
+            tensor, makenZTlaLayout<TFp4>(desc), makeTlaTileCoord(desc), Catlass::Arch::PositionL1{});
+    } else {
+        return tla::MakeTensor(
+            tensor, makezNTlaLayout<TFp4>(desc), makeTlaTileCoord(desc), Catlass::Arch::PositionL1{});
+    }
+}
+
+template <typename TFp4, LayoutTag Tag>
+CATLASS_DEVICE auto makeGMFp4Tensor(memref_t<__gm__ int8_t, 2>* memref, const TensorDesc& desc)
+{
+    static_assert(
+        Tag == LayoutTag::RowMajor || Tag == LayoutTag::ColumnMajor,
+        "GM fp4 tile supports RowMajor / ColumnMajor only");
+    auto g = makeGlobalTensor(reinterpret_cast<__gm__ TFp4*>(basePtr(memref)));
+    if constexpr (Tag == LayoutTag::ColumnMajor) {
+        return tla::MakeTensor(g, makeColumnMajorTlaLayout(desc), makeTlaTileCoord(desc), Catlass::Arch::PositionGM{});
+    } else {
+        return tla::MakeTensor(
+            g, makeRowMajorTlaLayout<TFp4>(desc), makeTlaTileCoord(desc), Catlass::Arch::PositionGM{});
+    }
+}
+
+// TElem is allowed to differ from the memref's storage type: an MX L0 tile is
+// addressed as mx_fp8_* / float4_*x2_t while the ABI hands it over as the byte
+// storage those occupy. The width is the same either way, so only the
+// LocalTensor's element type changes and the layout math is untouched.
+template <LayoutTag Tag, typename TElem, typename TStore>
+CATLASS_DEVICE auto makeL0ATensorAs(memref_t<__ca__ TStore, 1>* memref, const TensorDesc& desc)
+{
+    static_assert(Tag == LayoutTag::zN, "L0A tensor supports zN only");
+    AscendC::LocalTensor<TElem> tensor(AscendC::TPosition::A2, localAddr(memref), elementCount(memref));
+    return tla::MakeTensor(tensor, makezNTlaLayout<TElem>(desc), makeTlaTileCoord(desc), Catlass::Arch::PositionL0A{});
+}
+
+template <LayoutTag Tag, typename TElem, typename TStore>
+CATLASS_DEVICE auto makeL0BTensorAs(memref_t<__cb__ TStore, 1>* memref, const TensorDesc& desc)
+{
+    static_assert(Tag == LayoutTag::nZ, "L0B tensor supports nZ only");
+    AscendC::LocalTensor<TElem> tensor(AscendC::TPosition::B2, localAddr(memref), elementCount(memref));
+    return tla::MakeTensor(tensor, makenZTlaLayout<TElem>(desc), makeTlaTileCoord(desc), Catlass::Arch::PositionL0B{});
+}
+
 template <LayoutTag Tag, typename T>
 CATLASS_DEVICE auto makeL0ATensor(memref_t<__ca__ T, 1>* memref, const TensorDesc& desc)
 {
-    static_assert(Tag == LayoutTag::zN, "L0A tensor supports zN only");
-    AscendC::LocalTensor<T> tensor(AscendC::TPosition::A2, localAddr(memref), elementCount(memref));
-    return tla::MakeTensor(tensor, makezNTlaLayout<T>(desc), makeTlaTileCoord(desc), Catlass::Arch::PositionL0A{});
+    return makeL0ATensorAs<Tag, T, T>(memref, desc);
 }
 
 template <LayoutTag Tag, typename T>
 CATLASS_DEVICE auto makeL0BTensor(memref_t<__cb__ T, 1>* memref, const TensorDesc& desc)
 {
-    static_assert(Tag == LayoutTag::nZ, "L0B tensor supports nZ only");
-    AscendC::LocalTensor<T> tensor(AscendC::TPosition::B2, localAddr(memref), elementCount(memref));
-    return tla::MakeTensor(tensor, makenZTlaLayout<T>(desc), makeTlaTileCoord(desc), Catlass::Arch::PositionL0B{});
+    return makeL0BTensorAs<Tag, T, T>(memref, desc);
 }
 
 template <LayoutTag Tag, typename T>

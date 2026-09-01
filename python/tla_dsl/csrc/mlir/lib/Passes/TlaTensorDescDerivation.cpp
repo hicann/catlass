@@ -172,6 +172,36 @@ static mlir::FailureOr<TensorDescriptor> buildTileViewResultDescriptorFromParent
     return desc;
 }
 
+// The storage type a logical element type is buffered as, plus the element count
+// in that storage type.
+//
+// Sub-byte elements are the only case where these differ: a packed fp4 tile is
+// logically i4, but buffering it as an i4 memref would silently redenominate the
+// memref's offset and strides in half-bytes, while the bc layer advances a
+// byte-typed pointer by them. So the *storage* stays i8 with half as many
+// elements, and everything byte-denominated downstream keeps meaning bytes. The
+// logical i4 survives on the descriptor's elementType, which is where the C0
+// geometry reads its width from.
+static std::pair<mlir::Type, int64_t> storageTypeAndCount(mlir::Type elementType, int64_t elementCount)
+{
+    int64_t bits = getBitSizeOfFixedWidthScalarType(elementType);
+    mlir::Type storage = mlir::IntegerType::get(elementType.getContext(), 8);
+    // The dialect's own cube element formats (f4e2m1 / f4e1m2 / f8e8m0) exist
+    // only to carry the format; they have no LLVM lowering, so a memref must
+    // never be built over one. A byte-wide one (e8m0) is simply i8; a sub-byte
+    // one additionally packs, below.
+    if (isTlaCustomElementType(elementType) && bits % 8 == 0)
+        return {storage, elementCount};
+    // An unknown type answers 0 bits, which this catches too: a memref over it
+    // keeps whatever element type it already had.
+    if (bits % 8 == 0)
+        return {elementType, elementCount};
+    const int64_t perByte = 8 / bits;
+    if (elementCount == mlir::ShapedType::kDynamic)
+        return {storage, elementCount};
+    return {storage, (elementCount + perByte - 1) / perByte};
+}
+
 mlir::LogicalResult TensorDescriptorDerivation::derive(mlir::func::FuncOp funcOp)
 {
     bool derivationFailed = false;
@@ -501,8 +531,9 @@ mlir::LogicalResult TensorDescriptorDerivation::derive(mlir::func::FuncOp funcOp
                 if (dim0 > 0 && dim1 > 0)
                     flatElemCount = dim0 * dim1;
             }
-            auto bridgedBaseType = buildHivmMemrefType(
-                op->getContext(), {flatElemCount}, childInfo->elementType, childInfo->tlaAddressSpace);
+            auto [storageElemType, storageElemCount] = storageTypeAndCount(childInfo->elementType, flatElemCount);
+            auto bridgedBaseType =
+                buildHivmMemrefType(op->getContext(), {storageElemCount}, storageElemType, childInfo->tlaAddressSpace);
             if (failed(bridgedBaseType)) {
                 op->emitError() << "tla.make_tensor_like buffer memref must be bridgeable to builtin memref type";
                 derivationFailed = true;
@@ -629,9 +660,17 @@ mlir::LogicalResult TensorDescriptorDerivation::derive(mlir::func::FuncOp funcOp
                     return mulShapeLeaves(/*a=*/1, /*b=*/0, /*c=*/2);
                 }
                 // nZ/zZ: stride[1] = ceil_div_cols * c0 * ele_num_per_c0 = shape[3]*shape[2]*shape[0]
-                if ((childInfo->layoutTag == TensorLayoutTag::nZ || childInfo->layoutTag == TensorLayoutTag::zZ) &&
+                // zZMxScale nests exactly like zZ (only its constants differ: the MX scale C0 is
+                // fixed at 2 by the e8m0 format), so the same product derives its dynamic leaf.
+                if ((childInfo->layoutTag == TensorLayoutTag::nZ || childInfo->layoutTag == TensorLayoutTag::zZ ||
+                     childInfo->layoutTag == TensorLayoutTag::zZMxScale) &&
                     idx == 1) {
                     return mulShapeLeaves(/*a=*/3, /*b=*/2, /*c=*/0);
+                }
+                // nNMxScale is the transposed MX scale nesting, so its dynamic leaf is stride[3]
+                // = rows_round_up * c0 = shape[1]*shape[0]*shape[2], matching the zN rule.
+                if (childInfo->layoutTag == TensorLayoutTag::nNMxScale && idx == 3) {
+                    return mulShapeLeaves(/*a=*/1, /*b=*/0, /*c=*/2);
                 }
                 // zNUnAlign: stride[1] = stride[3] = rows * ele_num_per_c0 = shape[1]*shape[0]*shape[2]
                 // (shape[1] == 1, so the product is rows*ele_num_per_c0). Both leaves are runtime-
@@ -811,8 +850,9 @@ mlir::LogicalResult TensorDescriptorDerivation::derive(mlir::func::FuncOp funcOp
                 if (dim0 > 0 && dim1 > 0)
                     flatElemCount = dim0 * dim1;
             }
-            auto bridgedBaseType = buildHivmMemrefType(
-                op->getContext(), {flatElemCount}, childInfo->elementType, childInfo->tlaAddressSpace);
+            auto [storageElemType, storageElemCount] = storageTypeAndCount(childInfo->elementType, flatElemCount);
+            auto bridgedBaseType =
+                buildHivmMemrefType(op->getContext(), {storageElemCount}, storageElemType, childInfo->tlaAddressSpace);
             if (failed(bridgedBaseType)) {
                 op->emitError() << "tla.make_tensor buffer memref must be bridgeable to builtin memref type";
                 derivationFailed = true;

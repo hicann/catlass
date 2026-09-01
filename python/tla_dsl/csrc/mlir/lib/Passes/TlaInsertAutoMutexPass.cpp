@@ -291,9 +291,11 @@ static unsigned addressSpaceRank(::AddressSpace space)
     llvm_unreachable("unknown TLA address space");
 }
 
-static FailureOr<::Pipe> inferCopyPipe(::tla::CopyOp op)
+// Takes the source tile rather than the op: tla.copy and tla.copy_mx pick their
+// pipe the same way, from where the data is coming from.
+static FailureOr<::Pipe> inferCopyPipe(Value src)
 {
-    auto sourceType = dyn_cast<::tla::TlaTensorType>(op.getSrc().getType());
+    auto sourceType = dyn_cast<::tla::TlaTensorType>(src.getType());
     if (!sourceType)
         return failure();
     switch (sourceType.getPtr().getAddrspace()) {
@@ -425,25 +427,27 @@ static unsigned analyzeUnitFlagPossibilities(Value value, DenseSet<Value>& visit
     return possibilities;
 }
 
-static FailureOr<bool> isMmadUnitFlagEnabled(::tla::MmadOp op)
+// Takes the op generically so both tla.mmad and tla.mmad_mx are covered: they
+// carry the same unit_flag operand and must both take part in auto-mutex.
+static FailureOr<bool> isMmadUnitFlagEnabled(Operation* op, Value unitFlag)
 {
     DenseSet<Value> visiting;
-    unsigned possibilities = analyzeUnitFlagPossibilities(op.getUnitFlag(), visiting);
+    unsigned possibilities = analyzeUnitFlagPossibilities(unitFlag, visiting);
     if (possibilities == UnitFlagZero)
         return false;
     if (possibilities == UnitFlagEnabled)
         return true;
     if (possibilities & UnitFlagInvalid) {
-        op.emitError("auto_sync='v0' supports tla.mmad unit_flag values 0, 2, or 3");
+        op->emitError("auto_sync='v0' supports tla.mmad unit_flag values 0, 2, or 3");
         return failure();
     }
     if ((possibilities & UnitFlagZero) && (possibilities & UnitFlagEnabled)) {
-        op.emitError(
+        op->emitError(
             "auto_sync='v0' requires tla.mmad unit_flag to be always zero or always enabled; "
             "a runtime choice between zero and 2/3 cannot safely determine L0C locking");
         return failure();
     }
-    op.emitError(
+    op->emitError(
         "auto_sync='v0' requires tla.mmad unit_flag to be provably always zero or always enabled with value 2/3");
     return failure();
 }
@@ -456,7 +460,7 @@ static LogicalResult collectInstructionPlans(
         if (failed(result))
             return;
         if (auto copy = dyn_cast<::tla::CopyOp>(operation)) {
-            FailureOr<::Pipe> pipe = inferCopyPipe(copy);
+            FailureOr<::Pipe> pipe = inferCopyPipe(copy.getSrc());
             if (failed(pipe)) {
                 copy.emitError("cannot infer automatic mutex pipe for tla.copy");
                 result = failure();
@@ -486,22 +490,65 @@ static LogicalResult collectInstructionPlans(
             plans.push_back(std::move(plan));
             return;
         }
-        if (auto mm = dyn_cast<::tla::MmadOp>(operation)) {
-            FailureOr<MutexIdSpace> idSpace = resolveMutexIdSpace(func, mm);
+        // tla.copy_mx is an L1 -> L0A/L0B load like the tla.copy above, and needs
+        // the same treatment: without it an MX kernel's operand loads sit outside
+        // auto-sync entirely. It carries one resource the plain copy has no
+        // equivalent of -- the e8m0 scale tile, read from L1 alongside the
+        // operand -- so all three tiles go into the plan.
+        if (auto copyMx = dyn_cast<::tla::CopyMxOp>(operation)) {
+            FailureOr<::Pipe> pipe = inferCopyPipe(copyMx.getSrc());
+            if (failed(pipe)) {
+                copyMx.emitError("cannot infer automatic mutex pipe for tla.copy_mx");
+                result = failure();
+                return;
+            }
+            FailureOr<MutexIdSpace> idSpace = resolveMutexIdSpace(func, copyMx);
             if (failed(idSpace)) {
                 result = failure();
                 return;
             }
-            FailureOr<bool> unitFlagEnabled = isMmadUnitFlagEnabled(mm);
+            InstructionPlan plan{copyMx, *pipe, *idSpace, {}};
+            plan.resources.push_back(resolver.resolve(copyMx.getDst()));
+            plan.resources.push_back(resolver.resolve(copyMx.getSrc()));
+            plan.resources.push_back(resolver.resolve(copyMx.getScale()));
+            plans.push_back(std::move(plan));
+            return;
+        }
+        // tla.mmad and tla.mmad_mx are treated identically here: same cube pipe,
+        // same acc/lhs/rhs resources, same unit_flag rule. Handled through the
+        // common accessors so the MX flavour cannot silently skip auto-mutex.
+        if (isa<::tla::MmadOp, ::tla::MmadMxOp>(operation)) {
+            Value mmAcc;
+            Value mmLhs;
+            Value mmRhs;
+            Value mmUnitFlag;
+            if (auto mm = dyn_cast<::tla::MmadOp>(operation)) {
+                mmAcc = mm.getAcc();
+                mmLhs = mm.getLhs();
+                mmRhs = mm.getRhs();
+                mmUnitFlag = mm.getUnitFlag();
+            } else {
+                auto mmx = cast<::tla::MmadMxOp>(operation);
+                mmAcc = mmx.getAcc();
+                mmLhs = mmx.getLhs();
+                mmRhs = mmx.getRhs();
+                mmUnitFlag = mmx.getUnitFlag();
+            }
+            FailureOr<MutexIdSpace> idSpace = resolveMutexIdSpace(func, operation);
+            if (failed(idSpace)) {
+                result = failure();
+                return;
+            }
+            FailureOr<bool> unitFlagEnabled = isMmadUnitFlagEnabled(operation, mmUnitFlag);
             if (failed(unitFlagEnabled)) {
                 result = failure();
                 return;
             }
-            InstructionPlan plan{mm, Pipe::cube, *idSpace, {}};
+            InstructionPlan plan{operation, Pipe::cube, *idSpace, {}};
             if (!*unitFlagEnabled)
-                plan.resources.push_back(resolver.resolve(mm.getAcc()));
-            plan.resources.push_back(resolver.resolve(mm.getLhs()));
-            plan.resources.push_back(resolver.resolve(mm.getRhs()));
+                plan.resources.push_back(resolver.resolve(mmAcc));
+            plan.resources.push_back(resolver.resolve(mmLhs));
+            plan.resources.push_back(resolver.resolve(mmRhs));
             plans.push_back(std::move(plan));
             return;
         }

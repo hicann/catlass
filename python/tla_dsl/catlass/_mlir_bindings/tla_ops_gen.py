@@ -625,6 +625,39 @@ def CopyL0C2DstParams(params, unit_flag, relu_enable, quant_mode, l0c2ub_mode, *
   return _get_op_result_or_op_results(CopyL0C2DstParamsOp(params=params, unit_flag=unit_flag, relu_enable=relu_enable, quant_mode=quant_mode, l0c2ub_mode=l0c2ub_mode, quant_scale_or_tensor=quant_scale_or_tensor, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
+class CopyMxOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.copy_mx"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, dst, src, scale, *, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    operands.append(_get_op_result_or_value(dst))
+    operands.append(_get_op_result_or_value(src))
+    operands.append(_get_op_result_or_value(scale))
+    _ods_context = _ods_get_default_loc_context(loc)
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def dst(self):
+    return self.operation.operands[0]
+
+  @builtins.property
+  def src(self):
+    return self.operation.operands[1]
+
+  @builtins.property
+  def scale(self):
+    return self.operation.operands[2]
+
+def copy_mx(dst, src, scale, *, loc=None, ip=None) -> _ods_ir.Operation:
+  return _get_op_result_or_op_results(CopyMxOp(dst=dst, src=src, scale=scale, loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
 class CopyOp(_ods_ir.OpView):
   OPERATION_NAME = "tla.copy"
 
@@ -1861,6 +1894,63 @@ class MinsOp(_ods_ir.OpView):
 
 def mins(result, lhs, rhs, *, mask=None, loc=None, ip=None) -> _ods_ir.Value:
   return _get_op_result_or_op_results(MinsOp(result=result, lhs=lhs, rhs=rhs, mask=mask, loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
+class MmadMxOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.mmad_mx"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, acc, lhs, rhs, init_c, unit_flag, compute_order, *, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    operands.append(_get_op_result_or_value(acc))
+    operands.append(_get_op_result_or_value(lhs))
+    operands.append(_get_op_result_or_value(rhs))
+    operands.append(_get_op_result_or_value(init_c))
+    operands.append(_get_op_result_or_value(unit_flag))
+    _ods_context = _ods_get_default_loc_context(loc)
+    attributes["compute_order"] = (compute_order if (
+    isinstance(compute_order, _ods_ir.Attribute) or
+    not _ods_ir.AttrBuilder.contains('Tla_ComputeOrderAttr')) else
+      _ods_ir.AttrBuilder.get('Tla_ComputeOrderAttr')(compute_order, context=_ods_context))
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def acc(self):
+    return self.operation.operands[0]
+
+  @builtins.property
+  def lhs(self):
+    return self.operation.operands[1]
+
+  @builtins.property
+  def rhs(self):
+    return self.operation.operands[2]
+
+  @builtins.property
+  def init_c(self):
+    return self.operation.operands[3]
+
+  @builtins.property
+  def unit_flag(self):
+    return self.operation.operands[4]
+
+  @builtins.property
+  def compute_order(self):
+    return self.operation.attributes["compute_order"]
+
+  @compute_order.setter
+  def compute_order(self, value):
+    if value is None:
+      raise ValueError("'None' not allowed as value for mandatory attributes")
+    self.operation.attributes["compute_order"] = value
+
+def mmad_mx(acc, lhs, rhs, init_c, unit_flag, compute_order, *, loc=None, ip=None) -> _ods_ir.Operation:
+  return _get_op_result_or_op_results(MmadMxOp(acc=acc, lhs=lhs, rhs=rhs, init_c=init_c, unit_flag=unit_flag, compute_order=compute_order, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
 class MmadOp(_ods_ir.OpView):

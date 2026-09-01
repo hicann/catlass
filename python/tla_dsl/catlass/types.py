@@ -584,7 +584,30 @@ _TENSOR_DTYPE_SIZES: dict[str, int] = {
     "f32": 4,
     "f8e4m3fn": 1,
     "f8e5m2": 1,
+    # An e8m0 shared exponent is one opaque byte.
+    "f8e8m0": 1,
 }
+
+
+# Element widths in bits. Bits are the primitive: the bytes table cannot express
+# a sub-byte type, and the packed fp4 formats are deliberately absent from it so
+# byte-denominated callers (vector registers, masks, host storage) reject fp4
+# outright rather than silently rounding it up to a byte.
+_TENSOR_DTYPE_BITS: dict[str, int] = {
+    **{name: size * 8 for name, size in _TENSOR_DTYPE_SIZES.items()},
+    "f4e2m1": 4,
+    "f4e1m2": 4,
+}
+
+
+def dtype_size_bits(dtype: str) -> int:
+    """Storage size in bits for a Tla element type token.
+
+    Unlike :func:`dtype_size_bytes` this can express the sub-byte types (``i4``),
+    which is what lets a packed fp4 tile derive its C0 geometry from the element
+    type. Unknown names return ``0``.
+    """
+    return int(_TENSOR_DTYPE_BITS.get(dtype.strip().lower(), 0))
 
 
 def dtype_size_bytes(dtype: str) -> int:
@@ -776,6 +799,9 @@ from .base_dsl.typing import (
     Float32,
     Float8E4M3FN,
     Float8E5M2,
+    Float4E2M1,
+    Float4E1M2,
+    Float8E8M0,
 )
 
 __all__ = [
@@ -823,6 +849,10 @@ __all__ = [
     "BFloat16",
     "Float8E4M3FN",
     "Float8E5M2",
+    "Float4E2M1",
+    "Float4E1M2",
+    "Float8E8M0",
     "annotation_to_category",
     "dtype_size_bytes",
+    "dtype_size_bits",
 ]

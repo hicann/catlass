@@ -353,7 +353,7 @@ Bind a real NPU buffer with `from_dlpack`, or a metadata-only sample with `make_
 
 #### `from_dlpack`
 
-**Source:** [`catlass.tla.runtime.from_dlpack`](../../../catlass/tla/runtime.py#L625)
+**Source:** [`catlass.tla.runtime.from_dlpack`](../../../catlass/tla/runtime.py#L630)
 
 Description:
 
@@ -415,7 +415,7 @@ ty = from_dlpack(
 
 #### `make_fake_tensor`
 
-**Source:** [`catlass.tla.runtime.make_fake_tensor`](../../../catlass/tla/runtime.py#L858)
+**Source:** [`catlass.tla.runtime.make_fake_tensor`](../../../catlass/tla/runtime.py#L873)
 
 Description:
 
@@ -514,7 +514,7 @@ artifact = tla.compile(my_kernel, ta, options="--npu-arch 3510")
 
 #### `Tensor.mark_compact_shape_dynamic`
 
-**Source:** [`catlass.tla.runtime._Tensor.mark_compact_shape_dynamic`](../../../catlass/tla/runtime.py#L346)
+**Source:** [`catlass.tla.runtime._Tensor.mark_compact_shape_dynamic`](../../../catlass/tla/runtime.py#L351)
 
 Description:
 

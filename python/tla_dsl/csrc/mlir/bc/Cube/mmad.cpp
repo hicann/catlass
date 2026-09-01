@@ -74,11 +74,19 @@ __aicore__ __attribute__((always_inline)) void _mlir_ciface_mmad_int8_int8_int32
         a->aligned + a->offset, b->aligned + b->offset, c->aligned + c->offset, m, n, k, initC, unitFlag);
 }
 
-// fp8 routes (Ascend950 only). These are the PLAIN fp8 types: MmadCal only takes
-// the mad_mx path for mx_fp8_*/fp4 operands, so these land on the same `mad`
-// intrinsic as the f16/bf16/f32 routes and need no MX scale setup. A and B
-// formats are independent, hence four symbols.
 #if ((defined(__NPU_ARCH__) && __NPU_ARCH__ == 3510) || (defined(CATLASS_ARCH) && CATLASS_ARCH == 3510))
+// The PLAIN fp8 routes, not the mx_fp8_* ones -- MmadCal only takes the mad_mx
+// path for mx_fp8_*/fp4 operands, so these land on the same `mad` intrinsic as
+// the f16/bf16/f32 routes and need no MX scale setup. A and B formats are
+// independent, hence four symbols.
+//
+// The MX fp8 operand types need re-declaring at global scope under the same
+// spelling: AscendC::mx_fp8_e4m3_t contains a `::`, which cannot be pasted into
+// a symbol name, and these macros paste the type token into both the symbol and
+// the signature. The fp4 types are global already and are used as-is.
+using mx_fp8_e4m3_t = AscendC::mx_fp8_e4m3_t;
+using mx_fp8_e5m2_t = AscendC::mx_fp8_e5m2_t;
+
 #define REGISTER_MMAD_FP8(TypeA, TypeB)                                                                        \
     __aicore__ __attribute__((always_inline)) void _mlir_ciface_mmad_##TypeA##_##TypeB##_float(                \
         memref_t<__ca__ TypeA, 1>* a, memref_t<__cb__ TypeB, 1>* b, memref_t<__cc__ float, 1>* c, int64_t m,   \
@@ -92,5 +100,41 @@ REGISTER_MMAD_FP8(fp8_e4m3fn_t, fp8_e4m3fn_t)
 REGISTER_MMAD_FP8(fp8_e5m2_t, fp8_e5m2_t)
 REGISTER_MMAD_FP8(fp8_e4m3fn_t, fp8_e5m2_t)
 REGISTER_MMAD_FP8(fp8_e5m2_t, fp8_e4m3fn_t)
+
+// MX routes. The L0 tiles were loaded as mx_fp8_*, which is what makes MmadCal
+// pick mad_mx; the scale itself was consumed by that load, so this call has no
+// scale operand and is otherwise identical to the plain fp8 one.
+#define REGISTER_MMAD_MXFP8(TypeA, TypeB)                                                                      \
+    __aicore__ __attribute__((always_inline)) void _mlir_ciface_mmad_##TypeA##_##TypeB##_float(                \
+        memref_t<__ca__ TypeA, 1>* a, memref_t<__cb__ TypeB, 1>* b, memref_t<__cc__ float, 1>* c, int64_t m,   \
+        int64_t n, int64_t k, bool initC = true, uint8_t unitFlag = 0)                                         \
+    {                                                                                                          \
+        Catlass::Gemm::Mmad<TypeA, TypeB, float>(                                                              \
+            a->aligned + a->offset, b->aligned + b->offset, c->aligned + c->offset, m, n, k, initC, unitFlag); \
+    }
+
+REGISTER_MMAD_MXFP8(mx_fp8_e4m3_t, mx_fp8_e4m3_t)
+REGISTER_MMAD_MXFP8(mx_fp8_e5m2_t, mx_fp8_e5m2_t)
+REGISTER_MMAD_MXFP8(mx_fp8_e4m3_t, mx_fp8_e5m2_t)
+REGISTER_MMAD_MXFP8(mx_fp8_e5m2_t, mx_fp8_e4m3_t)
+
+// MX fp4. Unlike fp8, the L0 element type is the fp4 type itself -- MmadCal's
+// isMx list matches fp4x2_e2m1_t/fp4x2_e1m2_t directly, with no mx_* variant.
+// The tiles arrive as int8_t storage (two fp4 per byte) and are reinterpreted.
+#define REGISTER_MMAD_MXFP4(TypeA, TypeB)                                                                      \
+    __aicore__ __attribute__((always_inline)) void _mlir_ciface_mmad_##TypeA##_##TypeB##_float(                \
+        memref_t<__ca__ int8_t, 1>* a, memref_t<__cb__ int8_t, 1>* b, memref_t<__cc__ float, 1>* c, int64_t m, \
+        int64_t n, int64_t k, bool initC = true, uint8_t unitFlag = 0)                                         \
+    {                                                                                                          \
+        Catlass::Gemm::Mmad<TypeA, TypeB, float>(                                                              \
+            reinterpret_cast<__ca__ TypeA*>(a->aligned + a->offset),                                           \
+            reinterpret_cast<__cb__ TypeB*>(b->aligned + b->offset), c->aligned + c->offset, m, n, k, initC,   \
+            unitFlag);                                                                                         \
+    }
+
+REGISTER_MMAD_MXFP4(float4_e2m1x2_t, float4_e2m1x2_t)
+REGISTER_MMAD_MXFP4(float4_e1m2x2_t, float4_e1m2x2_t)
+REGISTER_MMAD_MXFP4(float4_e2m1x2_t, float4_e1m2x2_t)
+REGISTER_MMAD_MXFP4(float4_e1m2x2_t, float4_e2m1x2_t)
 #endif
 }

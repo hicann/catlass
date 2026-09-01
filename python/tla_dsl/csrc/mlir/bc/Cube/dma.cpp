@@ -79,6 +79,120 @@ CATLASS_DEVICE void copyL0CToUB(
     }
 }
 
+#if ((defined(__NPU_ARCH__) && __NPU_ARCH__ == 3510) || (defined(CATLASS_ARCH) && CATLASS_ARCH == 3510))
+// MX L1 -> L0 loads. The scale rides along with the *load*, not the matmul:
+// the copy templates take a third (e8m0, zZ, L1) tensor, and the L0 element type
+// switches to the mx_* variant, which is what makes the later mad take the
+// mad_mx path.
+// The e8m0 scale block reaches L1 as a flat byte copy: the host emits it already
+// in device (zZ / nN) order, so no reordering is needed on the way in. Only the
+// L1 -> L0 hop below needs the real MX layouts.
+//
+// The copy must honour the tile coordinate and the tile's own extent. Reading
+// from the base of the buffer for originShape bytes is only correct for a
+// single tile at coordinate (0, 0); a K-tiled kernel then decodes every chunk
+// with chunk 0's exponents, which looks like a plausible result one power of
+// two out rather than like garbage.
+//
+// Tiles must span full rows of the scale buffer (shape1 == stride0), which is
+// how per-chunk zZ / nN blocks are stacked: each block is then contiguous, so
+// one flat run of bytes is exact. A partial-width tile would need a strided
+// copy, and the scale row pitch (K/32 bytes) is not generally a multiple of the
+// 32-byte DMA block, so that case cannot be served here at all. tla.copy
+// rejects it when the row pitch is statically known; under a layout-dynamic
+
+template <class ArchTag, LayoutTag SrcLayout, typename TSrc, typename TL0>
+CATLASS_DEVICE void copyL1ToL0AMxFp8(
+    memref_t<__cbuf__ TSrc, 1>* src, memref_t<__ca__ TSrc, 1>* dst, memref_t<__cbuf__ uint8_t, 1>* scale,
+    const TensorDesc& srcDesc, const TensorDesc& dstDesc, const TensorDesc& scaleDesc)
+{
+    auto srcTensor = makeL1Tensor<SrcLayout, TSrc>(src, srcDesc);
+    auto scaleTensor = makeL1MxScaleTensor<LayoutTag::zZMxScale>(scale, scaleDesc);
+    auto dstTensor = makeL0ATensorAs<LayoutTag::zN, TL0>(dst, dstDesc);
+    // The specialization is picked by the *type* arguments, the operator by the
+    // call arguments, and the two want different things of the L0 element.
+    // Catlass's transposing (nZ in) specialization enables itself only for
+    // int8_t / float8_e* / float4_*, which an mx_fp8_* L0 tile is not -- while
+    // its MX operator() asserts the opposite, that the L0 tile *is* mx_fp8_*.
+    // Selecting with a same-width stand-in typed as the L1 element satisfies the
+    // first, and passing the real tile satisfies the second. The stand-in is
+    // never read: only decltype of it is used.
+    auto dstSelector = makeL0ATensorAs<LayoutTag::zN, TSrc>(dst, dstDesc);
+    Catlass::Gemm::Tile::TileCopyTla<ArchTag, decltype(srcTensor), decltype(dstSelector)>{}(
+        dstTensor, srcTensor, scaleTensor);
+}
+
+template <class ArchTag, LayoutTag SrcLayout, typename TSrc, typename TL0>
+CATLASS_DEVICE void copyL1ToL0BMxFp8(
+    memref_t<__cbuf__ TSrc, 1>* src, memref_t<__cb__ TSrc, 1>* dst, memref_t<__cbuf__ uint8_t, 1>* scale,
+    const TensorDesc& srcDesc, const TensorDesc& dstDesc, const TensorDesc& scaleDesc)
+{
+    auto srcTensor = makeL1Tensor<SrcLayout, TSrc>(src, srcDesc);
+    auto scaleTensor = makeL1MxScaleTensor<LayoutTag::nNMxScale>(scale, scaleDesc);
+    auto dstTensor = makeL0BTensorAs<LayoutTag::nZ, TL0>(dst, dstDesc);
+    // Same stand-in as on the A side: select the specialization with the L1
+    // element type, call it with the real mx_fp8_* tile.
+    auto dstSelector = makeL0BTensorAs<LayoutTag::nZ, TSrc>(dst, dstDesc);
+    Catlass::Gemm::Tile::TileCopyTla<ArchTag, decltype(srcTensor), decltype(dstSelector)>{}(
+        dstTensor, srcTensor, scaleTensor);
+}
+#endif
+
+// Packed fp4 variants. The operand tiles are int8_t over the ABI and are
+// reinterpreted as float4_*x2_t here, which is what gives the Catlass layout
+// math its 4-bit element width and selects the fp4 copy specialisations.
+template <class ArchTag, typename TFp4, LayoutTag SrcLayout, LayoutTag DstLayout>
+CATLASS_DEVICE void copyGMToL1Fp4(
+    memref_t<__gm__ int8_t, 2>* src, memref_t<__cbuf__ int8_t, 1>* dst, const TensorDesc& srcDesc,
+    const TensorDesc& dstDesc)
+{
+    auto srcTensor = makeGMFp4Tensor<TFp4, SrcLayout>(src, srcDesc);
+    auto dstTensor = makeL1Fp4Tensor<TFp4, DstLayout>(dst, dstDesc);
+    Catlass::Gemm::Tile::TileCopyTla<ArchTag, decltype(srcTensor), decltype(dstTensor)>{}(dstTensor, srcTensor);
+}
+
+template <class ArchTag, typename TFp4, LayoutTag SrcLayout>
+CATLASS_DEVICE void copyL1ToL0AMxFp4(
+    memref_t<__cbuf__ int8_t, 1>* src, memref_t<__ca__ int8_t, 1>* dst, memref_t<__cbuf__ uint8_t, 1>* scale,
+    const TensorDesc& srcDesc, const TensorDesc& dstDesc, const TensorDesc& scaleDesc)
+{
+    auto srcTensor = makeL1Fp4Tensor<TFp4, SrcLayout>(src, srcDesc);
+    auto scaleTensor = makeL1MxScaleTensor<LayoutTag::zZMxScale>(scale, scaleDesc);
+    auto dstTensor = makeL0ATensorAs<LayoutTag::zN, TFp4>(dst, dstDesc);
+    Catlass::Gemm::Tile::TileCopyTla<ArchTag, decltype(srcTensor), decltype(dstTensor)>{}(
+        dstTensor, srcTensor, scaleTensor);
+}
+
+template <class ArchTag, typename TFp4, LayoutTag SrcLayout>
+CATLASS_DEVICE void copyL1ToL0BMxFp4(
+    memref_t<__cbuf__ int8_t, 1>* src, memref_t<__cb__ int8_t, 1>* dst, memref_t<__cbuf__ uint8_t, 1>* scale,
+    const TensorDesc& srcDesc, const TensorDesc& dstDesc, const TensorDesc& scaleDesc)
+{
+    auto srcTensor = makeL1Fp4Tensor<TFp4, SrcLayout>(src, srcDesc);
+    auto scaleTensor = makeL1MxScaleTensor<LayoutTag::nNMxScale>(scale, scaleDesc);
+    auto dstTensor = makeL0BTensorAs<LayoutTag::nZ, TFp4>(dst, dstDesc);
+    Catlass::Gemm::Tile::TileCopyTla<ArchTag, decltype(srcTensor), decltype(dstTensor)>{}(
+        dstTensor, srcTensor, scaleTensor);
+}
+
+// MX scale GM -> L1 with the fractal reorder done by the copy.
+//
+// Catlass already implements this for all four (side, orientation) pairs -- see
+// the MxScale specializations in gemm/tile/ascend950/copy_gm_to_l1.hpp -- so this
+// only has to build tensors whose layouts its predicates recognise and let
+// TileCopyTla dispatch. Doing the DN2NZ by hand instead means reimplementing
+// details it already gets right, such as ceil-dividing the halved extent rather
+// than truncating it.
+template <class ArchTag, LayoutTag SrcLayout, LayoutTag DstLayout>
+CATLASS_DEVICE void copyGMToL1MxScale(
+    memref_t<__gm__ uint8_t, 2>* src, memref_t<__cbuf__ uint8_t, 1>* dst, const TensorDesc& srcDesc,
+    const TensorDesc& dstDesc)
+{
+    auto srcTensor = makeGMMxScaleTensor<SrcLayout>(src, srcDesc);
+    auto dstTensor = makeL1MxScaleTensor<DstLayout>(dst, dstDesc);
+    Catlass::Gemm::Tile::TileCopyTla<ArchTag, decltype(srcTensor), decltype(dstTensor)>{}(dstTensor, srcTensor);
+}
+
 extern "C" {
 #if ((defined(__NPU_ARCH__) && __NPU_ARCH__ == 3510) || (defined(CATLASS_ARCH) && CATLASS_ARCH == 3510))
 
@@ -201,6 +315,95 @@ REGISTER_L0C_TO_UB(RowMajor, nosplit, NO_SPLIT, int32_t, int32_t)
 REGISTER_L0C_TO_UB(ColumnMajor, nosplit, NO_SPLIT, int32_t, int32_t)
 REGISTER_L0C_TO_UB(RowMajor, splitm, SPLIT_M, int32_t, int32_t)
 REGISTER_L0C_TO_UB(RowMajor, splitn, SPLIT_N, int32_t, int32_t)
+
+// Both source layouts per side, as the non-MX REGISTER_L1_TO_L0A/B above take.
+#define REGISTER_L1_TO_L0A_MX_FP8(LayoutSrc, L1Type, L0Type)                                                      \
+    [aicore] __attribute__((always_inline)) void _mlir_ciface_copy_mx_l1_##LayoutSrc##_to_l0a_zN_##L1Type(        \
+        memref_t<__cbuf__ L1Type, 1>* src, memref_t<__ca__ L1Type, 1>* dst, memref_t<__cbuf__ uint8_t, 1>* scale, \
+        DESC_ABI_PARAMS(src), DESC_ABI_PARAMS(dst), DESC_ABI_PARAMS(scale))                                       \
+    {                                                                                                             \
+        copyL1ToL0AMxFp8<Catlass::Arch::Ascend950, LayoutTag::LayoutSrc, L1Type, L0Type>(                         \
+            src, dst, scale, TENSOR_DESC_12(src), TENSOR_DESC_12(dst), TENSOR_DESC_12(scale));                    \
+    }
+
+REGISTER_L1_TO_L0A_MX_FP8(zN, fp8_e4m3fn_t, mx_fp8_e4m3_t)
+REGISTER_L1_TO_L0A_MX_FP8(nZ, fp8_e4m3fn_t, mx_fp8_e4m3_t)
+REGISTER_L1_TO_L0A_MX_FP8(zN, fp8_e5m2_t, mx_fp8_e5m2_t)
+REGISTER_L1_TO_L0A_MX_FP8(nZ, fp8_e5m2_t, mx_fp8_e5m2_t)
+
+#define REGISTER_L1_TO_L0B_MX_FP8(LayoutSrc, L1Type, L0Type)                                                      \
+    [aicore] __attribute__((always_inline)) void _mlir_ciface_copy_mx_l1_##LayoutSrc##_to_l0b_nZ_##L1Type(        \
+        memref_t<__cbuf__ L1Type, 1>* src, memref_t<__cb__ L1Type, 1>* dst, memref_t<__cbuf__ uint8_t, 1>* scale, \
+        DESC_ABI_PARAMS(src), DESC_ABI_PARAMS(dst), DESC_ABI_PARAMS(scale))                                       \
+    {                                                                                                             \
+        copyL1ToL0BMxFp8<Catlass::Arch::Ascend950, LayoutTag::LayoutSrc, L1Type, L0Type>(                         \
+            src, dst, scale, TENSOR_DESC_12(src), TENSOR_DESC_12(dst), TENSOR_DESC_12(scale));                    \
+    }
+
+REGISTER_L1_TO_L0B_MX_FP8(zN, fp8_e4m3fn_t, mx_fp8_e4m3_t)
+REGISTER_L1_TO_L0B_MX_FP8(nZ, fp8_e4m3fn_t, mx_fp8_e4m3_t)
+REGISTER_L1_TO_L0B_MX_FP8(zN, fp8_e5m2_t, mx_fp8_e5m2_t)
+REGISTER_L1_TO_L0B_MX_FP8(nZ, fp8_e5m2_t, mx_fp8_e5m2_t)
+
+#define REGISTER_GM_TO_L1_FP4(NameSrc, NameDst, TFp4)                                                       \
+    [aicore] __attribute__((always_inline)) void _mlir_ciface_copy_gm_##NameSrc##_to_l1_##NameDst##_##TFp4( \
+        memref_t<__gm__ int8_t, 2>* src, memref_t<__cbuf__ int8_t, 1>* dst, DESC_ABI_PARAMS(src),           \
+        DESC_ABI_PARAMS(dst))                                                                               \
+    {                                                                                                       \
+        copyGMToL1Fp4<Catlass::Arch::Ascend950, TFp4, LayoutTag::NameSrc, LayoutTag::NameDst>(              \
+            src, dst, TENSOR_DESC_12(src), TENSOR_DESC_12(dst));                                            \
+    }
+
+REGISTER_GM_TO_L1_FP4(RowMajor, zN, float4_e2m1x2_t)
+REGISTER_GM_TO_L1_FP4(ColumnMajor, nZ, float4_e2m1x2_t)
+REGISTER_GM_TO_L1_FP4(RowMajor, zN, float4_e1m2x2_t)
+REGISTER_GM_TO_L1_FP4(ColumnMajor, nZ, float4_e1m2x2_t)
+
+// Both source layouts, unlike the fp8 MX macros above. Catlass's B8/B4 transpose
+// specialization admits ElementDst in int8_t / float8_e* / float4_*x2_t: an fp4
+// L0 tile is float4_*x2_t and qualifies, while an MX fp8 L0 tile is mx_fp8_* and
+// does not, which is why only fp4 gets the transposing pairing.
+#define REGISTER_L1_TO_L0A_MX_FP4(LayoutSrc, TFp4)                                                                \
+    [aicore] __attribute__((always_inline)) void _mlir_ciface_copy_mx_l1_##LayoutSrc##_to_l0a_zN_##TFp4(          \
+        memref_t<__cbuf__ int8_t, 1>* src, memref_t<__ca__ int8_t, 1>* dst, memref_t<__cbuf__ uint8_t, 1>* scale, \
+        DESC_ABI_PARAMS(src), DESC_ABI_PARAMS(dst), DESC_ABI_PARAMS(scale))                                       \
+    {                                                                                                             \
+        copyL1ToL0AMxFp4<Catlass::Arch::Ascend950, TFp4, LayoutTag::LayoutSrc>(                                   \
+            src, dst, scale, TENSOR_DESC_12(src), TENSOR_DESC_12(dst), TENSOR_DESC_12(scale));                    \
+    }
+
+#define REGISTER_L1_TO_L0B_MX_FP4(LayoutSrc, TFp4)                                                                \
+    [aicore] __attribute__((always_inline)) void _mlir_ciface_copy_mx_l1_##LayoutSrc##_to_l0b_nZ_##TFp4(          \
+        memref_t<__cbuf__ int8_t, 1>* src, memref_t<__cb__ int8_t, 1>* dst, memref_t<__cbuf__ uint8_t, 1>* scale, \
+        DESC_ABI_PARAMS(src), DESC_ABI_PARAMS(dst), DESC_ABI_PARAMS(scale))                                       \
+    {                                                                                                             \
+        copyL1ToL0BMxFp4<Catlass::Arch::Ascend950, TFp4, LayoutTag::LayoutSrc>(                                   \
+            src, dst, scale, TENSOR_DESC_12(src), TENSOR_DESC_12(dst), TENSOR_DESC_12(scale));                    \
+    }
+
+REGISTER_L1_TO_L0A_MX_FP4(zN, float4_e2m1x2_t)
+REGISTER_L1_TO_L0A_MX_FP4(nZ, float4_e2m1x2_t)
+REGISTER_L1_TO_L0A_MX_FP4(zN, float4_e1m2x2_t)
+REGISTER_L1_TO_L0A_MX_FP4(nZ, float4_e1m2x2_t)
+
+REGISTER_L1_TO_L0B_MX_FP4(zN, float4_e2m1x2_t)
+REGISTER_L1_TO_L0B_MX_FP4(nZ, float4_e2m1x2_t)
+REGISTER_L1_TO_L0B_MX_FP4(zN, float4_e1m2x2_t)
+REGISTER_L1_TO_L0B_MX_FP4(nZ, float4_e1m2x2_t)
+
+#define REGISTER_GM_TO_L1_MX_SCALE(SrcLayout, DstLayout)                                                         \
+    [aicore] __attribute__((always_inline)) void _mlir_ciface_copy_gm_##SrcLayout##_to_l1_##DstLayout##_uint8_t( \
+        memref_t<__gm__ uint8_t, 2>* src, memref_t<__cbuf__ uint8_t, 1>* dst, DESC_ABI_PARAMS(src),              \
+        DESC_ABI_PARAMS(dst))                                                                                    \
+    {                                                                                                            \
+        copyGMToL1MxScale<Catlass::Arch::Ascend950, LayoutTag::SrcLayout, LayoutTag::DstLayout>(                 \
+            src, dst, TENSOR_DESC_12(src), TENSOR_DESC_12(dst));                                                 \
+    }
+
+REGISTER_GM_TO_L1_MX_SCALE(rowMajorMxScaleA, zZMxScale)
+REGISTER_GM_TO_L1_MX_SCALE(colMajorMxScaleA, zZMxScale)
+REGISTER_GM_TO_L1_MX_SCALE(rowMajorMxScaleB, nNMxScale)
+REGISTER_GM_TO_L1_MX_SCALE(colMajorMxScaleB, nNMxScale)
 
 #endif
 }
