@@ -68,6 +68,78 @@ def _native_lower(kernel, *, type_args=None):
     return compiler_bridge.lower_tlair_module_to_mlir(lowered.module)
 
 
+def test_native_bridge_returns_anonymous_mlir_provenance_on_pipeline_failure() -> None:
+    fixture = (
+        Path(__file__).parent
+        / "lit"
+        / "tla-compile"
+        / "mixed-split-symbol-conflict.mlir"
+    )
+    with mlir_ir.Context() as context:
+        context.allow_unregistered_dialects = True
+        _tla_type_bridge = pytest.importorskip("catlass._tla_type_bridge")
+        _tla_type_bridge._load_bridge_extension().load_tla_dialect(context)
+        module = mlir_ir.Module.parse(fixture.read_text())
+        with pytest.raises(compiler_bridge.BridgeLoweringError) as exc_info:
+            compiler_bridge.lower_tlair_module_to_mlir(module)
+
+    diagnostic = next(
+        diagnostic
+        for diagnostic in exc_info.value.diagnostics
+        if diagnostic.severity == "error"
+        and "cannot split mixed function" in diagnostic.message
+    )
+    assert diagnostic.severity == "error"
+    assert "cannot split mixed function" in diagnostic.message
+    assert diagnostic.locations == (
+        compiler_bridge.BridgeSourceLocation(filename="-", line=4, column=3),
+        compiler_bridge.BridgeSourceLocation(
+            filename="kernels/example.py", line=17, column=9
+        ),
+    )
+    assert diagnostic.preferred_location == diagnostic.locations[1]
+    assert diagnostic.rendered.startswith("loc(fused[")
+    assert ": error: " in diagnostic.rendered
+    assert "cannot split mixed function" in diagnostic.rendered
+    diagnostic_index = exc_info.value.diagnostics.index(diagnostic)
+    note = exc_info.value.diagnostics[diagnostic_index + 1]
+    assert note.severity == "note"
+    assert note.message.startswith("see current operation:")
+    assert note.locations == diagnostic.locations
+    assert ": note: see current operation:" in note.rendered
+
+
+def test_native_bridge_omits_unknown_location_from_rendered_diagnostic() -> None:
+    fixture = (
+        Path(__file__).parent
+        / "lit"
+        / "tla-compile"
+        / "mixed-split-symbol-conflict.mlir"
+    )
+    with mlir_ir.Context() as context:
+        context.allow_unregistered_dialects = True
+        _tla_type_bridge = pytest.importorskip("catlass._tla_type_bridge")
+        _tla_type_bridge._load_bridge_extension().load_tla_dialect(context)
+        module = mlir_ir.Module.parse(
+            fixture.read_text().replace(
+                'loc(fused["-":4:3, "kernels/example.py":17:9])',
+                "loc(unknown)",
+            )
+        )
+        with pytest.raises(compiler_bridge.BridgeLoweringError) as exc_info:
+            compiler_bridge.lower_tlair_module_to_mlir(module)
+
+    diagnostic = next(
+        diagnostic
+        for diagnostic in exc_info.value.diagnostics
+        if diagnostic.severity == "error"
+        and "cannot split mixed function" in diagnostic.message
+    )
+    assert diagnostic.locations == ()
+    assert diagnostic.rendered.startswith("error: ")
+    assert not diagnostic.rendered.startswith("loc(unknown):")
+
+
 def test_native_bridge_collects_post_lowering_supported_kernel_abi() -> None:
     result = _native_lower(
         _native_kernel_abi_types,

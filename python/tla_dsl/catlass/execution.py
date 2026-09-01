@@ -30,6 +30,7 @@ from .base_dsl.arch import (
 from .base_dsl import BaseDSL, DSLLocation
 from .base_dsl.typing import Numeric
 from .compiler_bridge import (
+    BridgeDiagnostic,
     BridgeLoweringError,
     BridgeUnavailableError,
     KernelAbiArgumentKind,
@@ -108,8 +109,15 @@ class TlaBackendCompilerNotFoundError(TlaExecutionError):
 class TlaKernelCompileError(TlaExecutionError):
     """Raised when kernel lowering or backend compilation fails."""
 
-    def __init__(self, message: str, *, pass_ir_dump: str = "") -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        diagnostics: Sequence[BridgeDiagnostic] = (),
+        pass_ir_dump: str = "",
+    ) -> None:
         super().__init__(message)
+        self.diagnostics = tuple(diagnostics)
         self.pass_ir_dump = pass_ir_dump
 
 
@@ -392,6 +400,7 @@ def _compile_kernel(
             _write_pass_ir_dump(pass_dump_path, exc.pass_ir_dump)
             raise TlaKernelCompileError(
                 f"{exc}\npass IR dump: {pass_dump_path}",
+                diagnostics=exc.diagnostics,
                 pass_ir_dump=exc.pass_ir_dump,
             ) from exc
         raise
@@ -2206,7 +2215,7 @@ def _run_tla_lowering_to_mlir(
             mlir_path=mlir_path,
             compile_option=compile_option,
         )
-    except (TlaCompilerBridgeUnavailableError, TlaKernelCompileError):
+    except TlaCompilerBridgeUnavailableError:
         tla_compile = _resolve_tla_compile()
         if tla_compile is None:
             raise
@@ -2245,6 +2254,7 @@ def _run_typed_bridge_to_mlir(
     except BridgeLoweringError as exc:
         raise TlaKernelCompileError(
             f"In-process Tla compiler bridge failed.\nerror:\n{exc}",
+            diagnostics=exc.diagnostics,
             pass_ir_dump=exc.pass_ir_dump,
         ) from exc
     except Exception as exc:

@@ -7,7 +7,7 @@ module {
     "tla.vector"() ({
     }) : () -> ()
     tla.return
-  }
+  } loc(fused["-":4:3, "kernels/example.py":17:9])
   func.func @mixed_mix_aic() {
     func.return
   }

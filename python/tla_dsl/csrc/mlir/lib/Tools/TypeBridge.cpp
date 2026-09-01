@@ -8,6 +8,7 @@
 
 #include "mlir/Bindings/Python/PybindAdaptors.h"
 #include "mlir/CAPI/IR.h"
+#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/Location.h"
@@ -42,6 +43,102 @@ namespace {
 InFlightDiagnostic emitBridgeError(MLIRContext* ctx, StringRef message)
 {
     return emitError(UnknownLoc::get(ctx), message);
+}
+
+StringRef diagnosticSeverityText(DiagnosticSeverity severity)
+{
+    switch (severity) {
+        case DiagnosticSeverity::Error:
+            return "error";
+        case DiagnosticSeverity::Warning:
+            return "warning";
+        case DiagnosticSeverity::Note:
+            return "note";
+        case DiagnosticSeverity::Remark:
+            return "remark";
+    }
+    llvm_unreachable("unknown MLIR diagnostic severity");
+}
+
+struct BridgeSourceLocation {
+    std::string filename;
+    unsigned line;
+    unsigned column;
+};
+
+struct BridgeDiagnostic {
+    std::string severity;
+    std::string message;
+    std::vector<BridgeSourceLocation> locations;
+    std::string rendered;
+};
+
+std::vector<BridgeSourceLocation> diagnosticLocations(Location location)
+{
+    std::vector<BridgeSourceLocation> locations;
+    auto append = [&](FileLineColLoc fileLocation) {
+        BridgeSourceLocation candidate{
+            fileLocation.getFilename().str(), fileLocation.getLine(), fileLocation.getColumn()};
+        if (!llvm::any_of(locations, [&](const BridgeSourceLocation& existing) {
+                return existing.filename == candidate.filename && existing.line == candidate.line &&
+                       existing.column == candidate.column;
+            }))
+            locations.push_back(std::move(candidate));
+    };
+    // Preserve every nested source coordinate in MLIR's deterministic
+    // traversal order. This covers fused, named, call-site, and opaque
+    // locations without requiring the bridge to interpret their storage.
+    location->walk([&](Location nested) {
+        if (auto fileLocation = dyn_cast<FileLineColLoc>(nested))
+            append(fileLocation);
+        return WalkResult::advance();
+    });
+
+    return locations;
+}
+
+BridgeDiagnostic captureDiagnostic(Diagnostic& diagnostic)
+{
+    BridgeDiagnostic result;
+    result.severity = diagnosticSeverityText(diagnostic.getSeverity()).str();
+    result.message = diagnostic.str();
+    result.locations = diagnosticLocations(diagnostic.getLocation());
+    llvm::raw_string_ostream stream(result.rendered);
+    if (!isa<UnknownLoc>(diagnostic.getLocation())) {
+        diagnostic.getLocation().print(stream);
+        stream << ": ";
+    }
+    stream << result.severity << ": " << result.message;
+    stream.flush();
+    return result;
+}
+
+void captureDiagnosticRecords(Diagnostic& diagnostic, std::vector<BridgeDiagnostic>& records)
+{
+    records.push_back(captureDiagnostic(diagnostic));
+    // The diagnostic engine invokes handlers for the primary diagnostic only.
+    // Preserve attached notes immediately after it, matching MLIR's output
+    // order without adding a second, nested Python diagnostic schema.
+    for (Diagnostic& note : diagnostic.getNotes())
+        captureDiagnosticRecords(note, records);
+}
+
+py::dict diagnosticToPython(const BridgeDiagnostic& diagnostic)
+{
+    py::dict result;
+    result["severity"] = diagnostic.severity;
+    result["message"] = diagnostic.message;
+    py::list locations;
+    for (const BridgeSourceLocation& candidate : diagnostic.locations) {
+        py::dict item;
+        item["filename"] = candidate.filename;
+        item["line"] = candidate.line;
+        item["column"] = candidate.column;
+        locations.append(std::move(item));
+    }
+    result["locations"] = std::move(locations);
+    result["rendered"] = diagnostic.rendered;
+    return result;
 }
 
 MLIRContext* bridgeContext(MlirContext context)
@@ -669,17 +766,36 @@ py::dict lowerToMlir(
 
     std::string output;
     std::string error;
+    std::vector<BridgeDiagnostic> diagnostics;
+    ScopedDiagnosticHandler diagnosticHandler(context, [&](Diagnostic& diagnostic) {
+        captureDiagnosticRecords(diagnostic, diagnostics);
+        // Errors are transported through BridgeLoweringError. Non-errors are
+        // deliberately forwarded to pre-existing diagnostic handlers, which
+        // retain ownership of their presentation on successful lowerings.
+        return diagnostic.getSeverity() == DiagnosticSeverity::Error ? success() : failure();
+    });
     bool success = ::tla::tools::runTlaCompilePipelinesWithManagers(module, StringRef("mlir"), tlaPm, output, error);
     passDumpStream.flush();
     py::dict result;
     result["success"] = success;
     result["error"] = success ? "" : (error.empty() ? "Failed to run Tla pipeline." : error);
+    py::list diagnosticRecords;
+    for (const BridgeDiagnostic& diagnostic : diagnostics)
+        diagnosticRecords.append(diagnosticToPython(diagnostic));
+    result["diagnostics"] = std::move(diagnosticRecords);
     result["lowered_mlir"] = output;
     result["pass_ir_dump"] = passDump;
-    if (auto kernelAbi = buildKernelAbi(module, pointerProvenance))
-        result["kernel_abi"] = *kernelAbi;
-    else
+    // A failed pass may leave partially rewritten functions behind. ABI
+    // collection is meaningful only for successful lowering and must never
+    // replace the compiler diagnostic that caused the failure.
+    if (success) {
+        if (auto kernelAbi = buildKernelAbi(module, pointerProvenance))
+            result["kernel_abi"] = *kernelAbi;
+        else
+            result["kernel_abi"] = py::none();
+    } else {
         result["kernel_abi"] = py::none();
+    }
     return result;
 }
 

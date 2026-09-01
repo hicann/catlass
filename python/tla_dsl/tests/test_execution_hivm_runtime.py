@@ -824,6 +824,53 @@ def test_generated_kernel_bridge_lowers_live_module(monkeypatch, tmp_path) -> No
     ]
 
 
+def test_compile_and_cache_preserves_diagnostics_when_writing_pass_ir_dump(
+    monkeypatch, tmp_path
+) -> None:
+    tlair_mlir = "module { tla.func @zero_arg_kernel() { tla.return } }"
+    diagnostic = compiler_bridge.BridgeDiagnostic(
+        severity="error",
+        message="typed pipeline failed",
+        rendered="kernel.py:7:2: error: typed pipeline failed",
+    )
+    pass_ir_dump = "// ----- IR Dump After failing-pass -----\\nmodule {}\\n"
+
+    monkeypatch.setattr(
+        base_dsl_mod.BaseDSL,
+        "_lower",
+        lambda *_args, **_kwargs: _FakeLowered(tlair_mlir, module=object()),
+    )
+    monkeypatch.setattr(execution, "resolve_bridge_extension_path", lambda: None)
+    monkeypatch.setattr(execution, "_resolve_hivmc_a5", lambda: tmp_path / "hivmc-a5")
+    monkeypatch.setattr(execution, "_tool_version", lambda _path: "test-version")
+    monkeypatch.setattr(
+        execution,
+        "_run_tla_lowering_to_mlir",
+        lambda **_kwargs: (_ for _ in ()).throw(
+            execution.TlaKernelCompileError(
+                "typed bridge failed",
+                diagnostics=(diagnostic,),
+                pass_ir_dump=pass_ir_dump,
+            )
+        ),
+    )
+
+    with pytest.raises(execution.TlaKernelCompileError) as exc_info:
+        execution.compile_and_cache(
+            _zero_arg_kernel,
+            kind="kernel",
+            options={},
+            compile_option=execution.TlaCompileOption(
+                cache_enabled=False, cache_dir=tmp_path / "cache", print_ir=True
+            ),
+        )
+
+    assert exc_info.value.diagnostics == (diagnostic,)
+    assert exc_info.value.pass_ir_dump == pass_ir_dump
+    assert "pass IR dump:" in str(exc_info.value)
+    assert len(list((tmp_path / "cache").rglob("pass-ir-dump.mlir"))) == 1
+
+
 def test_force_recompile_refreshes_launched_artifact_in_memory_cache(
     monkeypatch, tmp_path
 ) -> None:
@@ -1023,6 +1070,12 @@ def test_lower_tlair_module_to_mlir_uses_typed_extension(monkeypatch) -> None:
             return {
                 "lowered_mlir": "module { func.func @zero_arg_kernel() }\n",
                 "pass_ir_dump": "after-pass-dump",
+                "diagnostics": [
+                    {
+                        "severity": "warning",
+                        "message": "visible through MLIR's default handler",
+                    }
+                ],
             }
 
     monkeypatch.setattr(
@@ -1075,6 +1128,252 @@ def test_lower_tlair_module_to_mlir_preserves_pass_dump_on_failure(
     assert "IR Dump After failing-pass" in exc_info.value.pass_ir_dump
 
 
+def test_bridge_diagnostic_prefers_python_provenance_without_dropping_mlir(
+    monkeypatch,
+) -> None:
+    class _FakeExtension:
+        def lower_to_mlir(self, *_args) -> dict[str, object]:
+            return {
+                "success": False,
+                "error": "pipeline failed",
+                "diagnostics": [
+                    {
+                        "severity": "error",
+                        "message": "invalid operation",
+                        "rendered": "kernels/example.py:17:9: error: invalid operation",
+                        "locations": [
+                            {"filename": "-", "line": 4, "column": 3},
+                            {
+                                "filename": "kernels/example.py",
+                                "line": 17,
+                                "column": 9,
+                            },
+                        ],
+                    },
+                    {
+                        "severity": "note",
+                        "message": "emitted after the error",
+                        "rendered": "kernels/example.py:18:1: note: emitted after the error",
+                        "locations": [
+                            {
+                                "filename": "kernels/example.py",
+                                "line": 18,
+                                "column": 1,
+                            }
+                        ],
+                    },
+                    {
+                        "severity": "warning",
+                        "message": "a warning remains structured on failure",
+                        "rendered": "warning: a warning remains structured on failure",
+                    },
+                    {
+                        "severity": "remark",
+                        "message": "a remark remains structured on failure",
+                        "rendered": "remark: a remark remains structured on failure",
+                    },
+                ],
+            }
+
+    monkeypatch.setattr(
+        compiler_bridge, "_load_bridge_extension", lambda: _FakeExtension()
+    )
+
+    with pytest.raises(compiler_bridge.BridgeLoweringError) as exc_info:
+        compiler_bridge.lower_tlair_module_to_mlir(object())
+
+    diagnostic = next(
+        diagnostic
+        for diagnostic in exc_info.value.diagnostics
+        if diagnostic.severity == "error" and diagnostic.message == "invalid operation"
+    )
+    assert diagnostic.locations == (
+        compiler_bridge.BridgeSourceLocation("-", 4, 3),
+        compiler_bridge.BridgeSourceLocation("kernels/example.py", 17, 9),
+    )
+    assert diagnostic.preferred_location == compiler_bridge.BridgeSourceLocation(
+        "kernels/example.py", 17, 9
+    )
+    assert diagnostic.rendered == "kernels/example.py:17:9: error: invalid operation"
+    assert exc_info.value.diagnostics[1] == compiler_bridge.BridgeDiagnostic(
+        severity="note",
+        message="emitted after the error",
+        locations=(compiler_bridge.BridgeSourceLocation("kernels/example.py", 18, 1),),
+        rendered="kernels/example.py:18:1: note: emitted after the error",
+    )
+    assert [diagnostic.severity for diagnostic in exc_info.value.diagnostics] == [
+        "error",
+        "note",
+        "warning",
+        "remark",
+    ]
+
+
+def test_lower_tlair_module_to_mlir_tolerates_malformed_diagnostic_payload(
+    monkeypatch,
+) -> None:
+    class _FakeExtension:
+        def lower_to_mlir(self, *_args) -> dict[str, object]:
+            return {
+                "success": False,
+                "error": "pipeline failed",
+                "diagnostics": [
+                    {
+                        "severity": "error",
+                        "message": "valid diagnostic",
+                        "locations": [
+                            {"filename": "kernel.py", "line": "bad", "column": 2},
+                            {"filename": "kernel.py", "line": 8, "column": "bad"},
+                        ],
+                    }
+                ],
+            }
+
+    monkeypatch.setattr(
+        compiler_bridge, "_load_bridge_extension", lambda: _FakeExtension()
+    )
+
+    with pytest.raises(compiler_bridge.BridgeLoweringError) as exc_info:
+        compiler_bridge.lower_tlair_module_to_mlir(object())
+
+    assert exc_info.value.diagnostics == (
+        compiler_bridge.BridgeDiagnostic(
+            severity="error",
+            message="valid diagnostic",
+            locations=(compiler_bridge.BridgeSourceLocation("kernel.py", 8, 0),),
+        ),
+    )
+
+
+@pytest.mark.parametrize(
+    ("locations", "expected_locations"),
+    [
+        (None, ()),
+        ("not a location list", ()),
+        ({"filename": "kernel.py", "line": 8}, ()),
+        (
+            [
+                None,
+                "not a location record",
+                {"filename": "kernel.py", "line": 8, "column": 2},
+            ],
+            (compiler_bridge.BridgeSourceLocation("kernel.py", 8, 2),),
+        ),
+    ],
+)
+def test_lower_tlair_module_to_mlir_ignores_malformed_location_collections(
+    monkeypatch, locations, expected_locations
+) -> None:
+    class _FakeExtension:
+        def lower_to_mlir(self, *_args) -> dict[str, object]:
+            return {
+                "success": False,
+                "error": "pipeline failed",
+                "diagnostics": [
+                    {
+                        "severity": "error",
+                        "message": "valid diagnostic",
+                        "locations": locations,
+                    }
+                ],
+            }
+
+    monkeypatch.setattr(
+        compiler_bridge, "_load_bridge_extension", lambda: _FakeExtension()
+    )
+
+    with pytest.raises(compiler_bridge.BridgeLoweringError) as exc_info:
+        compiler_bridge.lower_tlair_module_to_mlir(object())
+
+    assert str(exc_info.value) == "pipeline failed"
+    assert exc_info.value.diagnostics[0].locations == expected_locations
+
+
+@pytest.mark.parametrize("diagnostics", [None, "not a record stream", {"error": 1}])
+def test_lower_tlair_module_to_mlir_ignores_invalid_diagnostic_collections(
+    monkeypatch, diagnostics
+) -> None:
+    class _FakeExtension:
+        def lower_to_mlir(self, *_args) -> dict[str, object]:
+            return {
+                "success": False,
+                "error": "pipeline failed",
+                "diagnostics": diagnostics,
+            }
+
+    monkeypatch.setattr(
+        compiler_bridge, "_load_bridge_extension", lambda: _FakeExtension()
+    )
+
+    with pytest.raises(compiler_bridge.BridgeLoweringError) as exc_info:
+        compiler_bridge.lower_tlair_module_to_mlir(object())
+
+    assert str(exc_info.value) == "pipeline failed"
+    assert exc_info.value.diagnostics == ()
+
+
+def test_lower_tlair_module_to_mlir_ignores_malformed_diagnostic_elements(
+    monkeypatch,
+) -> None:
+    class _FakeExtension:
+        def lower_to_mlir(self, *_args) -> dict[str, object]:
+            return {
+                "success": False,
+                "error": "pipeline failed",
+                "diagnostics": [
+                    None,
+                    "not a diagnostic record",
+                    {
+                        "severity": "error",
+                        "message": "valid diagnostic",
+                        "locations": [
+                            {"filename": "kernel.py", "line": 8, "column": 2}
+                        ],
+                    },
+                ],
+            }
+
+    monkeypatch.setattr(
+        compiler_bridge, "_load_bridge_extension", lambda: _FakeExtension()
+    )
+
+    with pytest.raises(compiler_bridge.BridgeLoweringError) as exc_info:
+        compiler_bridge.lower_tlair_module_to_mlir(object())
+
+    assert str(exc_info.value) == "pipeline failed"
+    assert exc_info.value.diagnostics == (
+        compiler_bridge.BridgeDiagnostic(
+            severity="error",
+            message="valid diagnostic",
+            locations=(compiler_bridge.BridgeSourceLocation("kernel.py", 8, 2),),
+        ),
+    )
+
+
+def test_typed_bridge_preserves_diagnostics_on_runtime_error(monkeypatch, tmp_path) -> None:
+    diagnostic = compiler_bridge.BridgeDiagnostic(
+        severity="error",
+        message="invalid operation",
+        locations=(compiler_bridge.BridgeSourceLocation("kernel.py", 7, 2),),
+        rendered="kernel.py:7:2: error: invalid operation",
+    )
+
+    def fail_lowering(*_args, **_kwargs):
+        raise compiler_bridge.BridgeLoweringError(
+            "pipeline failed", diagnostics=(diagnostic,), pass_ir_dump="pass dump"
+        )
+
+    monkeypatch.setattr(execution, "lower_tlair_module_to_mlir", fail_lowering)
+
+    with pytest.raises(execution.TlaKernelCompileError) as exc_info:
+        execution._run_typed_bridge_to_mlir(
+            lowered_module=object(), mlir_path=tmp_path / "lowered.mlir"
+        )
+
+    assert exc_info.value.diagnostics == (diagnostic,)
+    assert exc_info.value.pass_ir_dump == "pass dump"
+
+
 def test_lower_tlair_module_to_mlir_requires_typed_extension(monkeypatch) -> None:
     module = object()
 
@@ -1103,7 +1402,7 @@ def test_run_tla_lowering_to_mlir_falls_back_to_tla_compile(
         execution,
         "_run_typed_bridge_to_mlir",
         lambda **_kwargs: (_ for _ in ()).throw(
-            execution.TlaKernelCompileError("typed bridge failed")
+            execution.TlaCompilerBridgeUnavailableError("typed bridge unavailable")
         ),
     )
     monkeypatch.setattr(execution, "_resolve_tla_compile", lambda: tla_compile)
@@ -1199,6 +1498,40 @@ def test_run_tla_lowering_to_mlir_raises_when_no_fallback_exists(
             mlir_path=tmp_path / "lowered.mlir",
             compile_option=execution.TlaCompileOption(),
         )
+
+
+def test_run_tla_lowering_to_mlir_preserves_typed_failure_without_cli_fallback(
+    monkeypatch, tmp_path
+) -> None:
+    diagnostic = compiler_bridge.BridgeDiagnostic(
+        severity="error",
+        message="typed pipeline failed",
+        rendered="kernel.py:7:2: error: typed pipeline failed",
+    )
+    monkeypatch.setattr(
+        execution,
+        "_run_typed_bridge_to_mlir",
+        lambda **_kwargs: (_ for _ in ()).throw(
+            execution.TlaKernelCompileError(
+                "typed bridge failed", diagnostics=(diagnostic,)
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        execution,
+        "_resolve_tla_compile",
+        lambda: pytest.fail("CLI fallback must not run after a typed compiler failure"),
+    )
+
+    with pytest.raises(execution.TlaKernelCompileError) as exc_info:
+        execution._run_tla_lowering_to_mlir(
+            lowered_module=object(),
+            tlair_mlir="module {}\n",
+            mlir_path=tmp_path / "lowered.mlir",
+            compile_option=execution.TlaCompileOption(),
+        )
+
+    assert exc_info.value.diagnostics == (diagnostic,)
 
 
 def test_resolve_compile_option_from_lowered_mlir_updates_kernel_mode() -> None:

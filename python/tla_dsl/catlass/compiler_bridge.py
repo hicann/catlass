@@ -18,11 +18,59 @@ class BridgeUnavailableError(RuntimeError):
     """Raised when the in-process compile bridge is unavailable."""
 
 
+@dataclass(frozen=True)
+class BridgeSourceLocation:
+    """One source coordinate retained from an MLIR diagnostic location tree."""
+
+    filename: str
+    line: int
+    column: int
+
+    @property
+    def is_anonymous_mlir(self) -> bool:
+        return self.filename in {"", "-", "<unknown>"}
+
+
+def _preferred_diagnostic_location(
+    locations: Sequence[BridgeSourceLocation],
+) -> BridgeSourceLocation | None:
+    """Choose the primary user-facing coordinate without dropping provenance."""
+
+    for location in locations:
+        if not location.is_anonymous_mlir and location.filename.endswith(".py"):
+            return location
+    for location in locations:
+        if not location.is_anonymous_mlir:
+            return location
+    return locations[0] if locations else None
+
+
+@dataclass(frozen=True)
+class BridgeDiagnostic:
+    """A native compiler diagnostic plus its complete source provenance."""
+
+    severity: str
+    message: str
+    locations: tuple[BridgeSourceLocation, ...] = ()
+    rendered: str = ""
+
+    @property
+    def preferred_location(self) -> BridgeSourceLocation | None:
+        return _preferred_diagnostic_location(self.locations)
+
+
 class BridgeLoweringError(RuntimeError):
     """Raised when the in-process bridge pipeline fails after producing IR dumps."""
 
-    def __init__(self, message: str, *, pass_ir_dump: str = "") -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        diagnostics: Sequence[BridgeDiagnostic] = (),
+        pass_ir_dump: str = "",
+    ) -> None:
         super().__init__(message)
+        self.diagnostics = tuple(diagnostics)
         self.pass_ir_dump = pass_ir_dump
 
 
@@ -257,6 +305,47 @@ class TlaLoweringResult:
     kernel_abi: KernelAbiLayout | None = None
 
 
+def _bridge_diagnostic(value: Any) -> BridgeDiagnostic:
+    """Decode the bridge's location-preserving diagnostic envelope."""
+
+    if not isinstance(value, Mapping):
+        return BridgeDiagnostic(
+            severity="error", message=str(value), rendered=str(value)
+        )
+    locations: list[BridgeSourceLocation] = []
+    raw_locations = value.get("locations", ())
+    if not isinstance(raw_locations, Sequence) or isinstance(
+        raw_locations, (str, bytes, bytearray)
+    ):
+        raw_locations = ()
+    for raw_location in raw_locations:
+        if not isinstance(raw_location, Mapping):
+            continue
+        try:
+            line = int(raw_location.get("line", 0) or 0)
+        except (TypeError, ValueError):
+            continue
+        try:
+            column = int(raw_location.get("column", 0) or 0)
+        except (TypeError, ValueError):
+            column = 0
+        if line <= 0:
+            continue
+        candidate = BridgeSourceLocation(
+            filename=str(raw_location.get("filename") or "<unknown>"),
+            line=line,
+            column=max(0, column),
+        )
+        if candidate not in locations:
+            locations.append(candidate)
+    return BridgeDiagnostic(
+        severity=str(value.get("severity") or "error"),
+        message=str(value.get("message") or ""),
+        locations=tuple(locations),
+        rendered=str(value.get("rendered") or ""),
+    )
+
+
 def lower_tlair_module_to_mlir(
     module: mlir_ir.Module,
     *,
@@ -281,8 +370,18 @@ def lower_tlair_module_to_mlir(
     )
     pass_ir_dump = str(result.get("pass_ir_dump", ""))
     if result.get("success", True) is False:
+        raw_diagnostics = result.get("diagnostics", ())
+        if not isinstance(raw_diagnostics, Sequence) or isinstance(
+            raw_diagnostics, (str, bytes, bytearray)
+        ):
+            raw_diagnostics = ()
         raise BridgeLoweringError(
             str(result.get("error", "Failed to run Tla pipeline.")),
+            diagnostics=tuple(
+                _bridge_diagnostic(value)
+                for value in raw_diagnostics
+                if isinstance(value, Mapping)
+            ),
             pass_ir_dump=pass_ir_dump,
         )
     return TlaLoweringResult(
@@ -304,7 +403,9 @@ def resolve_bridge_extension_path() -> Path | None:
 
 
 __all__ = [
+    "BridgeDiagnostic",
     "BridgeLoweringError",
+    "BridgeSourceLocation",
     "BridgeUnavailableError",
     "KernelAbiArgumentKind",
     "KernelAbiArgument",
