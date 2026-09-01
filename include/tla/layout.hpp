@@ -719,7 +719,7 @@ CATLASS_HOST_DEVICE constexpr auto GetTileLayout(Layout const& layout, TileShape
         // `MakeLayoutTile` 中 rank(shape<0>)==1 && rank(shape<1>)==2 分支一致。
         if constexpr (
             Layout::depth == 2 && Layout::rank == 2 && rank_v<decltype(shape<0>(Layout{}))> == 1 &&
-            rank_v<decltype(shape<1>(Layout{}))> == 2) {
+            rank_v<decltype(shape<1>(Layout{}))> == 2 && is_static<decltype(shape<1, 0>(layout))>::value) {
             constexpr uint32_t ELE_NUM_PER_C0 = decltype(shape<1, 0>(layout))::value;
             return MakeLayout(
                 MakeShape(rows, MakeShape(Int<ELE_NUM_PER_C0>{}, CeilDiv(cols, Int<ELE_NUM_PER_C0>{}))),
@@ -729,7 +729,7 @@ CATLASS_HOST_DEVICE constexpr auto GetTileLayout(Layout const& layout, TileShape
         // rank(shape<0>)==2 && rank(shape<1>)==1 分支一致。
         else if constexpr (
             Layout::depth == 2 && Layout::rank == 2 && rank_v<decltype(shape<0>(Layout{}))> == 2 &&
-            rank_v<decltype(shape<1>(Layout{}))> == 1) {
+            rank_v<decltype(shape<1>(Layout{}))> == 1 && is_static<decltype(shape<0, 0>(layout))>::value) {
             constexpr uint32_t ELE_NUM_PER_C0 = decltype(shape<0, 0>(layout))::value;
             return MakeLayout(
                 MakeShape(MakeShape(Int<ELE_NUM_PER_C0>{}, CeilDiv(rows, Int<ELE_NUM_PER_C0>{})), cols),
