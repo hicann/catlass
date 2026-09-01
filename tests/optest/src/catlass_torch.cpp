@@ -49,6 +49,7 @@
 #include "template/a8w4_mx_matmul.h"
 #include "template/a8w4_grouped_mx_matmul.h"
 #include "template/svd_quant_matmul.h"
+#include "template/basic_syrk.h"
 #include "template/trmm.h"
 #include "template/conv_bias.h"
 #include "template/symm.h"
@@ -428,5 +429,10 @@ REGISTER_TORCH_FUNC(planar_complex_matmul);
 // ── example 78_matrix_inverse ──
 static auto& matrix_inverse = MatrixInverseOp::Run;
 REGISTER_TORCH_FUNC(matrix_inverse);
+
+// ── example 82_ascend950_basic_syrk ──
+using Ascend950BasicSyrkOp = BasicSyrkLike<CatlassKernel::Ascend950BasicSyrk>;
+static auto& ascend950_basic_syrk = Ascend950BasicSyrkOp::Run;
+REGISTER_TORCH_FUNC(ascend950_basic_syrk);
 
 } // namespace CatlassKernelWrapper

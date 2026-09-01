@@ -202,4 +202,43 @@ struct TrmmOptions {
     }
 };
 
+/**
+ * @struct SyrkOptions
+ * @brief Options structuture for syrk examples.
+ * @brief Arguments: `example_name m k [device_id]`
+ */
+struct SyrkOptions {
+    const std::string HELPER = "m k [device_id]";
+
+    Catlass::GemmCoord problemShape{128, 128, 128};
+    int32_t deviceId{0};
+
+    SyrkOptions() = default;
+
+    int Parse(int argc, const char** argv)
+    {
+        enum class ArgsIndex
+        {
+            M_INDEX = 1,
+            K_INDEX,
+            DEVICE_ID_INDEX,
+            ARGS_MAX
+        };
+
+        if (argc > static_cast<uint32_t>(ArgsIndex::ARGS_MAX) ||
+            argc < static_cast<uint32_t>(ArgsIndex::DEVICE_ID_INDEX)) {
+            std::cerr << TOSTRING(CATLASS_EXAMPLE_NAME) << " " << HELPER << std::endl;
+            return -1;
+        }
+
+        problemShape.m() = std::atoi(argv[static_cast<uint32_t>(ArgsIndex::M_INDEX)]);
+        problemShape.n() = std::atoi(argv[static_cast<uint32_t>(ArgsIndex::M_INDEX)]);
+        problemShape.k() = std::atoi(argv[static_cast<uint32_t>(ArgsIndex::K_INDEX)]);
+        if (argc == static_cast<uint32_t>(ArgsIndex::ARGS_MAX)) {
+            deviceId = std::atoi(argv[static_cast<uint32_t>(ArgsIndex::DEVICE_ID_INDEX)]);
+        }
+        return 0;
+    }
+};
+
 #endif

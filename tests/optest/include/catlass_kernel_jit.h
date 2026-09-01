@@ -517,6 +517,15 @@ void Ascend950MatmulFullLoadA(
 void Symm(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const SymmParams& params);
 
 /**
+ * @brief JIT interface for example 82_ascend950_basic_syrk.
+ *
+ * Y = X * X^T. ``params.m`` must equal ``params.n``; only ``inputAddr[0]`` (X) and
+ * ``outputAddr[0]`` (Y) are consumed.
+ */
+void Ascend950BasicSyrk(
+    const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
+
+/**
  * @brief Reserved JIT interface for example 74_ascend950_weight_quant_a8w4_grouped_mx_matmul.
  *
  * Grouped MX A8W4 matmul: C = (MxScaleA * A_fp8) @ (MxScaleB * B_fp4) per group.

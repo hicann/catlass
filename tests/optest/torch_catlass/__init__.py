@@ -85,6 +85,7 @@ __all__ = [
     "ascend950_rain_fusion_attention",
     "clear_jit_cache",
     "symm",
+    "ascend950_basic_syrk",
     "__version__",
     "__catlass_version__",
 ]

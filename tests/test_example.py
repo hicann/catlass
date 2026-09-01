@@ -845,6 +845,7 @@ normal_cases_3510 = [
     "64_ascend950_matmul_evg_add_ub 256 512 1024 0",
     "68_ascend950_multi_core_splitk_matmul 256 512 1024 0",
     "69_ascend950_tail_multi_core_splitk_matmul 256 512 1024 0",
+    "82_ascend950_basic_syrk 1024 1024 0",
 ]
 
 

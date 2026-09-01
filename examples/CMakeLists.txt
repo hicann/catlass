@@ -179,6 +179,7 @@ set(EXAMPLE_ASCEND950
     74_ascend950_weight_quant_a8w4_grouped_mx_matmul
     80_ascend950_grouped_matmul_slice_m_gelu
     81_ascend950_rain_fusion_attention
+    82_ascend950_basic_syrk
 )
 
 if(CATLASS_ARCH STREQUAL "2201")

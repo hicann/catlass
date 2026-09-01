@@ -119,6 +119,7 @@ from .w4a8_matmul import w4a8_matmul  # example 32
 from .w8a16_matmul import w8a16_matmul  # example 30
 from .grouped_matmul_slice_m_gelu import grouped_matmul_slice_m_gelu  # example 80
 from .matrix_inverse import matrix_inverse  # example 78
+from .ascend950_basic_syrk import ascend950_basic_syrk  # example 82
 
 __all__ = [
     "basic_matmul",  # example 00
@@ -206,4 +207,5 @@ __all__ = [
     "planar_complex_matmul",  # example 77
     "grouped_matmul_slice_m_gelu",  # example 80
     "matrix_inverse",  # example 78
+    "ascend950_basic_syrk",  # example 82
 ]
