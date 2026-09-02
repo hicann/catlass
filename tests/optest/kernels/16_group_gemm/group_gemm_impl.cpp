@@ -111,5 +111,14 @@ extern "C" void run(uint32_t blockNum, aclrtStream stream, const CatlassKernel::
         params->outputAddr[0],params->outputAddr[0]};
 
     Catlass::RunKernel<Kernel>(args, stream, blockNum);
-    aclrtSynchronizeStream(stream);
+    if (aclrtSynchronizeStream(stream) == ACL_ERROR_NONE) {
+        g_catlassWorkspaceFree(reinterpret_cast<uint8_t*>(dAlpha), G * sizeof(ScalarType));
+        g_catlassWorkspaceFree(reinterpret_cast<uint8_t*>(dBeta), G * sizeof(ScalarType));
+        g_catlassWorkspaceFree(reinterpret_cast<uint8_t*>(dS), G * sizeof(GemmCoord));
+        g_catlassWorkspaceFree(reinterpret_cast<uint8_t*>(dLA), G * sizeof(LayoutA));
+        g_catlassWorkspaceFree(reinterpret_cast<uint8_t*>(dLWA), G * sizeof(LayoutA));
+        g_catlassWorkspaceFree(reinterpret_cast<uint8_t*>(dLB), G * sizeof(LayoutB));
+        g_catlassWorkspaceFree(reinterpret_cast<uint8_t*>(dLWB), G * sizeof(LayoutB));
+        g_catlassWorkspaceFree(reinterpret_cast<uint8_t*>(dLC), G * sizeof(LayoutX));
+    }
 }

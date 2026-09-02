@@ -117,22 +117,26 @@ extern "C" void run(uint32_t blockNum, aclrtStream stream, const CatlassKernel::
     LayoutB layoutB{k, n};
     LayoutX layoutX{m, n};
 
-    // Create workspace layouts with aligned strides (matching gemm.cpp L133-134)
+    // Create workspace layouts with aligned strides
     LayoutA layoutWA = GetWorkspaceLayout(layoutA, align);
     LayoutB layoutWB = GetWorkspaceLayout(layoutB, align);
 
-    // Compute workspace sizes (matching gemm.cpp L135-136)
+    // Compute workspace sizes
     size_t sizeWA = GetWorkspaceLen(layoutWA) * sizeof(ElementA);
     size_t sizeWB = GetWorkspaceLen(layoutWB) * sizeof(ElementB);
+
+    // Evaluate whether need workspace alloc
+    const bool needWA = !IsSameStride(layoutWA, layoutA);
+    const bool needWB = !IsSameStride(layoutWB, layoutB);
 
     // Allocate workspace buffers for non-aligned strides
     // (matching gemm.cpp L147-164: deviceWA / deviceWB)
     uint8_t* deviceWA = params->inputAddr[0];
     uint8_t* deviceWB = params->inputAddr[1];
-    if (!IsSameStride(layoutWA, layoutA)) {
+    if (needWA) {
         deviceWA = g_catlassWorkspaceAlloc(sizeWA);
     }
-    if (!IsSameStride(layoutWB, layoutB)) {
+    if (needWB) {
         deviceWB = g_catlassWorkspaceAlloc(sizeWB);
     }
 
@@ -146,11 +150,23 @@ extern "C" void run(uint32_t blockNum, aclrtStream stream, const CatlassKernel::
     // Epilogue: D = alpha * (A*B) + beta * X
     typename EpiBlock::Params epilogueParams{alpha, beta, deviceX, layoutX, deviceX, layoutX};
 
-    uint8_t* gws = g_catlassWorkspaceAlloc((size_t)m * n * sizeof(ElementC));
+    uint8_t* deviceWorkspace = g_catlassWorkspaceAlloc(sizeX);
 
     typename Kernel::Arguments args{GemmCoord{m,n,k}, align,
         params->inputAddr[0], params->inputAddr[1],
-        gws, deviceWA, deviceWB, epilogueParams};
+        deviceWorkspace, deviceWA, deviceWB, epilogueParams};
 
     Catlass::RunKernel<Kernel>(args, stream, blockNum);
+
+    aclError error = aclrtSynchronizeStream(stream);
+    if (error == ACL_ERROR_NONE) { // mem free if needed
+        if (needWA) {
+            g_catlassWorkspaceFree(deviceWA, sizeWA);
+        }
+        if (needWB) {
+            g_catlassWorkspaceFree(deviceWB, sizeWB);
+        }
+
+        g_catlassWorkspaceFree(deviceWorkspace, sizeX);
+    }
 }

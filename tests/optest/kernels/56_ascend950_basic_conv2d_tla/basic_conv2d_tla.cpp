@@ -115,7 +115,11 @@ void Ascend950BasicConv2dTLA(const uint32_t blockNum, aclrtStream stream, const 
     typename Conv2dKernel::Params kernelParams = Conv2dKernel::ToUnderlyingArguments(arguments, deviceWorkspace);
 
     BasicConv2dTlaKernelLauncher<Conv2dKernel><<<blockNum, nullptr, stream>>>(kernelParams);
-    ACL_CHECK(aclrtSynchronizeStream(stream));
+
+    if (deviceWorkspace != nullptr && g_catlassWorkspaceFree != nullptr &&
+        aclrtSynchronizeStream(stream) == ACL_ERROR_NONE) {
+        g_catlassWorkspaceFree(deviceWorkspace, sizeWorkspace);
+    }
 }
 
 } // namespace CatlassKernel

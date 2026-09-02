@@ -816,7 +816,12 @@ void RainFusionAttention(uint32_t blockNum, aclrtStream stream, const RainFusion
         callRfaKernel(RfaTypeTag<bfloat16_t>{});
     }
 
-    ACL_CHECK(aclrtSynchronizeStream(stream));
+    if (g_catlassWorkspaceFree != nullptr && aclrtSynchronizeStream(stream) == ACL_ERROR_NONE) {
+        g_catlassWorkspaceFree(tilingDevice, tilingSize);
+        if (workspaceDevice != nullptr) {
+            g_catlassWorkspaceFree(workspaceDevice, workSpaceSize);
+        }
+    }
 }
 
 } // namespace CatlassKernel

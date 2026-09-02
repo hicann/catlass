@@ -86,7 +86,12 @@ void MatrixInverseImpl(const uint32_t blockNum, aclrtStream stream, const Matrix
 
     invOp.Initialize(arguments, deviceWorkspace);
     invOp(stream, blockNum);
-    ACL_CHECK(aclrtSynchronizeStream(stream));
+    if (g_catlassWorkspaceFree != nullptr && aclrtSynchronizeStream(stream) == ACL_ERROR_NONE) {
+        g_catlassWorkspaceFree(deviceIpiv, sizeIpiv);
+        if (deviceWorkspace != nullptr) {
+            g_catlassWorkspaceFree(deviceWorkspace, sizeWorkspace);
+        }
+    }
 }
 
 void MatrixInverse(const uint32_t blockNum, aclrtStream stream, const MatrixInverseParams& params)

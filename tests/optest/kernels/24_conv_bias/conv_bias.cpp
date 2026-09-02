@@ -94,6 +94,10 @@ void ConvBias(const uint32_t blockNum, aclrtStream stream, const ConvParams& par
     typename ConvKernel::Params kernelParams = ConvKernel::ToUnderlyingArguments(arguments, deviceWorkspace);
 
     ConvBiasKernelLauncher<ConvKernel><<<blockNum, nullptr, stream>>>(kernelParams);
+
+    if (sizeWorkspace > 0 && deviceWorkspace != nullptr && aclrtSynchronizeStream(stream) == ACL_ERROR_NONE) {
+        g_catlassWorkspaceFree(deviceWorkspace, sizeWorkspace);
+    }
 }
 
 } // namespace CatlassKernel

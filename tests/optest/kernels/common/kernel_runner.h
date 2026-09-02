@@ -64,6 +64,10 @@ inline void RunKernel(typename Kernel::Arguments args, aclrtStream stream, uint3
     }
     auto params = Kernel::ToUnderlyingArguments(args, ws);
     KERNEL_NAME<Kernel><<<coreNum, nullptr, stream>>>(params);
+
+    if (ws != nullptr && g_catlassWorkspaceFree != nullptr && aclrtSynchronizeStream(stream) == ACL_ERROR_NONE) {
+        g_catlassWorkspaceFree(ws, wsSize);
+    }
 }
 
 } // namespace Catlass

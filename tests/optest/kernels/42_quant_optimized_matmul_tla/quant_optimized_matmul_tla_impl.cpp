@@ -223,17 +223,15 @@ extern "C" void run(uint32_t blockNum, aclrtStream stream, const CatlassKernel::
 
     uint8_t* deviceWA = deviceA;
     uint8_t* deviceWB = deviceB;
+    size_t sizeWA = 0;
+    size_t sizeWB = 0;
 #if CATLASS_JIT_NEED_PADDING_A
-    {
-        size_t sizeWA = GetWorkspaceLen(tagA, get<0>(L1TileShape{}), get<2>(L1TileShape{})) * sizeof(ElementA);
-        deviceWA = g_catlassWorkspaceAlloc(sizeWA);
-    }
+    sizeWA = GetWorkspaceLen(tagA, get<0>(L1TileShape{}), get<2>(L1TileShape{})) * sizeof(ElementA);
+    deviceWA = g_catlassWorkspaceAlloc(sizeWA);
 #endif
 #if CATLASS_JIT_NEED_PADDING_B
-    {
-        size_t sizeWB = GetWorkspaceLen(tagB, get<2>(L1TileShape{}), get<1>(L1TileShape{})) * sizeof(ElementB);
-        deviceWB = g_catlassWorkspaceAlloc(sizeWB);
-    }
+    sizeWB = GetWorkspaceLen(tagB, get<2>(L1TileShape{}), get<1>(L1TileShape{})) * sizeof(ElementB);
+    deviceWB = g_catlassWorkspaceAlloc(sizeWB);
 #endif
 
     typename MatmulKernel::Arguments arguments{
@@ -242,4 +240,14 @@ extern "C" void run(uint32_t blockNum, aclrtStream stream, const CatlassKernel::
         {deviceA, layoutA, deviceB, layoutB, deviceWA, layoutWA, deviceWB, layoutWB},
         {deviceScale, layoutScale, devicePerTokenScale, layoutPerTokenScale, deviceD, layoutD}};
     Catlass::RunKernel<MatmulKernel>(arguments, stream, blockNum);
+
+    // QuantOptimizedMatmulTla::GetWorkspaceSize() > 0，RunKernel 内部已同步该 stream。
+    if (g_catlassWorkspaceFree != nullptr) {
+#if CATLASS_JIT_NEED_PADDING_A
+        g_catlassWorkspaceFree(deviceWA, sizeWA);
+#endif
+#if CATLASS_JIT_NEED_PADDING_B
+        g_catlassWorkspaceFree(deviceWB, sizeWB);
+#endif
+    }
 }

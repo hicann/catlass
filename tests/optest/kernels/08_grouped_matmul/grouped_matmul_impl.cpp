@@ -99,5 +99,10 @@ extern "C" void run(uint32_t blockNum, aclrtStream stream, const CatlassKernel::
 
     Catlass::RunKernel<MatmulKernel>(arguments, stream, blockNum);
 
-    aclrtSynchronizeStream(stream);
+    if (aclrtSynchronizeStream(stream) == ACL_ERROR_NONE) {
+        g_catlassWorkspaceFree(reinterpret_cast<uint8_t*>(problemShapeListDevice), problemCount * sizeof(GemmCoord));
+        g_catlassWorkspaceFree(reinterpret_cast<uint8_t*>(layoutAListDevice), problemCount * sizeof(LayoutA));
+        g_catlassWorkspaceFree(reinterpret_cast<uint8_t*>(layoutBListDevice), problemCount * sizeof(LayoutB));
+        g_catlassWorkspaceFree(reinterpret_cast<uint8_t*>(layoutCListDevice), problemCount * sizeof(LayoutC));
+    }
 }

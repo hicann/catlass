@@ -37,14 +37,6 @@
 namespace CatlassKernel {
 using namespace Catlass;
 
-#define ACL_CHECK(status)                                                                   \
-    do {                                                                                    \
-        aclError error = status;                                                            \
-        if (error != ACL_ERROR_NONE) {                                                      \
-            std::cerr << __FILE__ << ":" << __LINE__ << " aclError:" << error << std::endl; \
-        }                                                                                   \
-    } while (0)
-
 template <class Kernel>
 CATLASS_GLOBAL __mix__(1, 0) void BasicConv2dKernelLauncher(typename Kernel::Params params)
 {
@@ -122,7 +114,10 @@ void BasicConv2d(const uint32_t blockNum, aclrtStream stream, const ConvParams& 
     typename Conv2dKernel::Params kParams = Conv2dKernel::ToUnderlyingArguments(arguments, deviceWorkspace);
 
     BasicConv2dKernelLauncher<Conv2dKernel><<<blockNum, nullptr, stream>>>(kParams);
-    ACL_CHECK(aclrtSynchronizeStream(stream));
+
+    if (sizeWorkspace > 0 && deviceWorkspace != nullptr && aclrtSynchronizeStream(stream) == ACL_ERROR_NONE) {
+        g_catlassWorkspaceFree(deviceWorkspace, sizeWorkspace);
+    }
 }
 
 } // namespace CatlassKernel

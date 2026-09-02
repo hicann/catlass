@@ -107,4 +107,9 @@ extern "C" void run(uint32_t blockNum, aclrtStream stream, const CatlassKernel::
     } else {
         KernelAdapter<PlanarKernel><<<blockNum, nullptr, stream>>>(kernelParams, hardwareSyncAddr);
     }
+
+    if (workspace != nullptr && g_catlassWorkspaceFree != nullptr &&
+        aclrtSynchronizeStream(stream) == ACL_ERROR_NONE) {
+        g_catlassWorkspaceFree(workspace, workspaceSize);
+    }
 }

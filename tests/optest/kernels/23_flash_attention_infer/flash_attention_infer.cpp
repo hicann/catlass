@@ -878,7 +878,13 @@ void FAImpl(const uint32_t blockNum, aclrtStream stream, const FlashAttentionPar
     ACL_CHECK(aclrtGetHardwareSyncAddr(reinterpret_cast<void**>(&hardwareSyncAddr)));
     
     FAInfer<DType><<<blockDim, nullptr, stream>>>(hardwareSyncAddr, qDevice, kDevice, vDevice, maskDevice, blockTableDevice, oDevice, qSeqDevice, kvSeqDevice, sDevice, pDevice, oTempDevice, oUpdateDevice, tilingDevice);
-    ACL_CHECK(aclrtSynchronizeStream(stream));
+    if (g_catlassWorkspaceFree != nullptr && aclrtSynchronizeStream(stream) == ACL_ERROR_NONE) {
+        g_catlassWorkspaceFree(sDevice, mm1OutSize);
+        g_catlassWorkspaceFree(pDevice, smOnlineOutSize);
+        g_catlassWorkspaceFree(oTempDevice, mm2OutSize);
+        g_catlassWorkspaceFree(oUpdateDevice, UpdateSize);
+        g_catlassWorkspaceFree(tilingDevice, tilingSize);
+    }
 }
 
 void FlashAttentionInfer(uint32_t blockNum, aclrtStream stream, const FlashAttentionParams& params)
