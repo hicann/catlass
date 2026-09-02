@@ -288,7 +288,10 @@ uint32_t GetKVSplitParamSpec(
     uint32_t totalTaskNumSpec = tilingHost[TILING_TOTAL_QTOKENS];
     uint32_t formerTaskNum = totalTaskNumSpec;
     uint32_t tailTaskNum = 0;
-    if (mlaInfo.numTokens % NUM20 <= NUM10 && mlaInfo.batch <= 40) {
+    // Use the runtime AIC core count (blockDim) consistently so the former/tail split stays
+    // valid on any core count. When numTokens <= blockDim all tasks are former (one per core,
+    // no KV split); only align former tasks to full core waves when a wave is actually filled.
+    if (totalTaskNumSpec >= blockDim && mlaInfo.numTokens % blockDim <= blockDim / 2 && mlaInfo.batch <= blockDim * 2) {
         uint32_t processLoop = totalTaskNumSpec / blockDim;
         formerTaskNum = processLoop * blockDim;
         tailTaskNum = totalTaskNumSpec - formerTaskNum;

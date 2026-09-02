@@ -189,6 +189,7 @@ fi
 
 if [ "$DISABLE_ASCEND950" = true ]; then
     CONFIG_SETTINGS+=(--config-settings="cmake.define.DISABLE_ASCEND950=ON")
+    CONFIG_SETTINGS+=(--config-settings="cmake.define.CATLASS_ARCH_LIST=2201")
     echo "Ascend 950 support: DISABLED (ENABLE_ASCEND950=0)"
 fi
 
