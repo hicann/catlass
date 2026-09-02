@@ -101,7 +101,7 @@ def _is_safe_python_value(value: Any, seen: set[int] | None = None) -> bool:
 
 
 def _is_trusted_dsl_value(value: Any) -> bool:
-    from mlir import ir as mlir_ir  # type: ignore[assignment]
+    from catlass._mlir import ir as mlir_ir  # type: ignore[assignment]
 
     if isinstance(value, mlir_ir.Value):
         return True
@@ -309,8 +309,8 @@ class ScfGenerator:
         block_term_op_builder: dict[Callable[..., Any], Callable[..., None]]
         | None = None,
     ) -> Any:
-        from mlir import ir as mlir_ir  # type: ignore[assignment]
-        from mlir.dialects import scf  # type: ignore[import-not-found]
+        from catlass._mlir import ir as mlir_ir  # type: ignore[assignment]
+        from catlass._mlir.dialects import scf  # type: ignore[import-not-found]
         from . import core_api as _core_api
 
         if initial_ir_values is None or initial_pytree_def is None:
@@ -404,7 +404,7 @@ class ScfGenerator:
 
 
 def _internal_frontend_bool_and(*values: Any) -> Any:
-    from mlir import ir as mlir_ir  # type: ignore[assignment]
+    from catlass._mlir import ir as mlir_ir  # type: ignore[assignment]
 
     from .base_dsl.typing import Bool
 
@@ -519,7 +519,7 @@ def _internal_frontend_for(
     captured_names: tuple[str, ...] | None = None,
     captured_values: tuple[Any, ...] | None = None,
 ) -> Any:
-    from mlir.dialects import scf  # type: ignore[import-not-found]
+    from catlass._mlir.dialects import scf  # type: ignore[import-not-found]
     from . import core_api as _core_api
 
     if not isinstance(range_value, FrontendRange):
@@ -597,7 +597,7 @@ def _while_execute_dynamic(
     captured_values: tuple[Any, ...] | None = None,
     full_write_args_count: int | None = None,
 ) -> Any:
-    from mlir.dialects import scf  # type: ignore[import-not-found]
+    from catlass._mlir.dialects import scf  # type: ignore[import-not-found]
     from . import core_api as _core_api
 
     if _runtime._has_enclosing_region("vec.func"):
@@ -779,7 +779,7 @@ def _dynamic_region_leaf_name(
 
 
 def _internal_frontend_bool_or(*values: Any) -> Any:
-    from mlir import ir as mlir_ir  # type: ignore[assignment]
+    from catlass._mlir import ir as mlir_ir  # type: ignore[assignment]
 
     from .base_dsl.typing import Bool
 
@@ -798,7 +798,7 @@ def _internal_frontend_bool_or(*values: Any) -> Any:
 
 
 def _internal_frontend_bool_not(value: Any) -> Any:
-    from mlir import ir as mlir_ir  # type: ignore[assignment]
+    from catlass._mlir import ir as mlir_ir  # type: ignore[assignment]
 
     from .base_dsl.typing import Bool
 
@@ -886,7 +886,7 @@ def _flatten_minmax_values(values: tuple[Any, ...]) -> list[Any]:
 
 
 def _is_dynamic_index_like(value: Any) -> bool:
-    from mlir import ir as mlir_ir  # type: ignore[assignment]
+    from catlass._mlir import ir as mlir_ir  # type: ignore[assignment]
 
     from .base_dsl.typing import Numeric
 
@@ -897,7 +897,7 @@ def _is_dynamic_index_like(value: Any) -> bool:
 
 
 def _select_minmax_numeric(kind: str, left: Any, right: Any) -> Any:
-    from mlir.dialects import arith  # type: ignore[import-not-found]
+    from catlass._mlir.dialects import arith  # type: ignore[import-not-found]
 
     from .base_dsl.typing import Numeric, as_numeric
 
@@ -950,7 +950,7 @@ def _internal_frontend_compare(
 
 
 def _internal_frontend_compare_pair(left: Any, right: Any, op: str) -> Any:
-    from mlir.dialects import arith  # type: ignore[import-not-found]
+    from catlass._mlir.dialects import arith  # type: ignore[import-not-found]
 
     if (
         op not in {"is", "is not"}
@@ -988,7 +988,7 @@ def _internal_frontend_compare_pair(left: Any, right: Any, op: str) -> Any:
 
 def _compare_index_or_python(left: Any, right: Any, predicate: Any, op: str) -> Any:
     del predicate  # Numeric / as_numeric path emits typed cmpi; unused for bare Values.
-    from mlir import ir as mlir_ir  # type: ignore[assignment]
+    from catlass._mlir import ir as mlir_ir  # type: ignore[assignment]
 
     from .base_dsl.typing import Numeric
 
@@ -1036,7 +1036,7 @@ def _internal_frontend_if(
     captured_names: tuple[str, ...] | None = None,
     captured_values: tuple[Any, ...] | None = None,
 ) -> Any:
-    from mlir.dialects import scf  # type: ignore[import-not-found]
+    from catlass._mlir.dialects import scf  # type: ignore[import-not-found]
     from . import core_api as _core_api
 
     carried_names_tuple = tree_utils.normalize_frontend_if_carried_names(
@@ -1142,8 +1142,8 @@ def _internal_frontend_if(
 def _internal_frontend_if_expr(
     condition: Any, true_fn: Callable[[], Any], false_fn: Callable[[], Any]
 ) -> Any:
-    from mlir import ir as mlir_ir  # type: ignore[assignment]
-    from mlir.dialects import scf  # type: ignore[import-not-found]
+    from catlass._mlir import ir as mlir_ir  # type: ignore[assignment]
+    from catlass._mlir.dialects import scf  # type: ignore[import-not-found]
     from . import core_api as _core_api
 
     if _is_safe_python_value(condition):

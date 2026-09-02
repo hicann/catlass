@@ -30,7 +30,7 @@ def pytest_sessionstart(session: pytest.Session) -> None:
         # binaries (which would fail later with confusing import errors).
         pytest.exit(
             f"Pre-test MLIR build check failed: {exc}\n"
-            "Run `build.sh` (or `build.sh --debug`) first.",
+            "Run `./build.sh` first.",
             returncode=1,
         )
 

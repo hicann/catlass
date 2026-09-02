@@ -385,7 +385,7 @@ def _has_scope_declaration(
 def _contains_runtime_value(value: Any, seen: set[int] | None = None) -> bool:
     """Classify a prepared lowering value without speculating about calls."""
 
-    from mlir import ir as mlir_ir
+    from catlass._mlir import ir as mlir_ir
 
     from .typing import Numeric
 

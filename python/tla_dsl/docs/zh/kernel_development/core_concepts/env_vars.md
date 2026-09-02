@@ -119,7 +119,7 @@ nav_order: 50
 
 | 取值 | 含义 |
 | --- | --- |
-| 默认值：空 | `tests/run_dsl_test.sh` 等脚本依次回退至 `CATLASS_DSL_ASCENDNPU_IR_ROOT`、工作区同级目录 `AscendNPU-IR`、仓库内 `python/tla_dsl/3rdparty/AscendNPU-IR` |
+| 默认值：空 | 构建使用仓库内 `python/tla_dsl/3rdparty/AscendNPU-IR` |
 | 目录路径 | 指向已构建的 AscendNPU-IR 目录，例如 `/opt/AscendNPU-IR` |
 
 ---
@@ -130,7 +130,7 @@ nav_order: 50
 
 | 取值 | 含义 |
 | --- | --- |
-| 默认值：空 | 由构建脚本依据 `CATLASS_DSL_PREBUILT_ASCENDNPU_IR` 自动设置 |
+| 默认值：空 | 由构建脚本根据已解析的 AscendNPU-IR 安装目录自动设置 |
 | 目录路径 | 手动指定该目录 |
 
 一般无需修改。

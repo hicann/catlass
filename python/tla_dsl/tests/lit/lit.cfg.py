@@ -65,12 +65,6 @@ if existing_path:
 config.environment["PATH"] = os.pathsep.join(path_entries)
 
 python_path_entries = [os.path.dirname(os.path.dirname(config.tla_lit_source_dir))]
-ascendnpu_ir_root = getattr(config, "tla_ascendnpu_ir_root", "")
-mlir_python_root = os.path.join(
-    ascendnpu_ir_root, "build", "install", "python_packages", "mlir_core"
-)
-if os.path.isdir(mlir_python_root):
-    python_path_entries.append(mlir_python_root)
 existing_python_path = os.environ.get("PYTHONPATH", "")
 if existing_python_path:
     python_path_entries.append(existing_python_path)

@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from mlir import ir as mlir_ir  # type: ignore[assignment]
+from catlass._mlir import ir as mlir_ir  # type: ignore[assignment]
 
 from .. import _tla_type_bridge
-from .._mlir_bindings import tla_ops_gen as _tla_ops_gen
+from catlass._mlir.dialects import tla as _tla_ops_gen  # type: ignore[import-not-found]
 from ..base_dsl.op import dsl_user_op
 from .. import runtime as _runtime
 from ..base_dsl.typing import Bool, Numeric

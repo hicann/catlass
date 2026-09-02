@@ -13,10 +13,9 @@ Options:
   --clean      Remove all build artifacts and rebuild from scratch
   (default)    CMAKE_BUILD_TYPE=Debug and editable installation
 
-Environment variables (auto-detected where possible):
-  ASCEND_HOME_PATH                  CANN / ascend-toolkit root (REQUIRED)
-  CATLASS_DSL_PREBUILT_ASCENDNPU_IR     AscendNPU-IR build root (REQUIRED)
-                                    e.g. /path/to/AscendNPU-IR
+Environment variables:
+  ASCEND_HOME_PATH                      CANN / ascend-toolkit root (REQUIRED)
+  CATLASS_DSL_PREBUILT_ASCENDNPU_IR     Shared AscendNPU-IR source/build root
 EOF
 }
 
@@ -50,7 +49,7 @@ done
 if [[ $do_clean -eq 1 ]]; then
   echo "==> Cleaning build artifacts..."
   rm -rf build/ csrc/mlir/build/ dist/ *.egg-info .pytest_cache/
-  rm -f catlass/_tla_type_bridge_native*.so
+  rm -rf catlass/_mlir
   echo "Clean complete."
 fi
 
@@ -65,40 +64,56 @@ if [[ -z "${ASCEND_HOME_PATH:-}" ]]; then
   exit 1
 fi
 
-if [[ -z "${CATLASS_DSL_PREBUILT_ASCENDNPU_IR:-}" ]]; then
-  CATLASS_DSL_PREBUILT_ASCENDNPU_IR="${repo_root}/3rdparty/AscendNPU-IR"
-  echo "==> CATLASS_DSL_PREBUILT_ASCENDNPU_IR not set, using repo default: ${CATLASS_DSL_PREBUILT_ASCENDNPU_IR}"
-fi
-# Export so child processes (setup.py / pip build subprocesses) can see it.
-export CATLASS_DSL_PREBUILT_ASCENDNPU_IR
-
 # ============================================================================
-# 2. Auto-derive MLIR paths (consumed by setup.py / CMake / generate_tla_python_bindings)
-#    Layout: $CATLASS_DSL_PREBUILT_ASCENDNPU_IR/build/install/{include,lib/cmake/{mlir,llvm}}
+# 2. Resolve AscendNPU-IR source and install trees
 # ============================================================================
 
-npu_ir_install="${CATLASS_DSL_PREBUILT_ASCENDNPU_IR}/build/install"
+submodule_root="${repo_root}/3rdparty/AscendNPU-IR"
 
-if [[ ! -d "$npu_ir_install" ]]; then
-  echo "ERROR: AscendNPU-IR install prefix not found: $npu_ir_install" >&2
-  echo "  Build AscendNPU-IR first, or fix CATLASS_DSL_PREBUILT_ASCENDNPU_IR." >&2
+npu_ir_source=""
+source_candidates=(
+  "${CATLASS_DSL_ASCENDNPU_IR_ROOT:-}"
+  "${submodule_root}"
+  "${CATLASS_DSL_PREBUILT_ASCENDNPU_IR:-}"
+)
+for candidate in "${source_candidates[@]}"; do
+  if [[ -n "${candidate}" && -d "${candidate}/third-party/llvm-project/mlir" ]]; then
+    npu_ir_source="$(cd "${candidate}" && pwd -P)"
+    break
+  fi
+done
+if [[ -z "${npu_ir_source}" ]]; then
+  echo "ERROR: Unable to locate an AscendNPU-IR source tree." >&2
   exit 1
 fi
 
-export MLIR_TBLGEN_INCLUDE_DIR="${npu_ir_install}/include"
-export MLIR_DIR="${npu_ir_install}/lib/cmake/mlir"
-export LLVM_DIR="${npu_ir_install}/lib/cmake/llvm"
+npu_ir_install=""
+install_candidates=(
+  "${CATLASS_DSL_ASCENDNPU_IR_INSTALL_DIR:-}"
+  "${submodule_root}/build/install"
+)
+if [[ -n "${CATLASS_DSL_PREBUILT_ASCENDNPU_IR:-}" ]]; then
+  install_candidates+=("${CATLASS_DSL_PREBUILT_ASCENDNPU_IR}/build/install")
+fi
+for candidate in "${install_candidates[@]}"; do
+  if [[ -f "${candidate}/lib/cmake/mlir/MLIRConfig.cmake" &&
+        -f "${candidate}/lib/cmake/llvm/LLVMConfig.cmake" ]]; then
+    npu_ir_install="$(cd "${candidate}" && pwd -P)"
+    break
+  fi
+done
 
-# Allow Python to import mlir_core and other AscendNPU-IR-provided Python packages
-mlir_core="${npu_ir_install}/python_packages/mlir_core"
-if [[ -d "$mlir_core" ]]; then
-  export PYTHONPATH="${mlir_core}${PYTHONPATH:+:${PYTHONPATH}}"
+if [[ -z "${npu_ir_install}" ]]; then
+  echo "ERROR: Unable to locate an AscendNPU-IR install tree." >&2
+  exit 1
 fi
 
+export CATLASS_DSL_ASCENDNPU_IR_ROOT="${npu_ir_source}"
+export CATLASS_DSL_ASCENDNPU_IR_INSTALL_DIR="${npu_ir_install}"
+
 echo "==> ASCEND_HOME_PATH=${ASCEND_HOME_PATH}"
-echo "==> CATLASS_DSL_PREBUILT_ASCENDNPU_IR=${CATLASS_DSL_PREBUILT_ASCENDNPU_IR}"
-echo "==> MLIR_TBLGEN_INCLUDE_DIR=${MLIR_TBLGEN_INCLUDE_DIR}"
-echo "==> MLIR_DIR=${MLIR_DIR}"
+echo "==> AscendNPU-IR source=${CATLASS_DSL_ASCENDNPU_IR_ROOT}"
+echo "==> AscendNPU-IR install=${CATLASS_DSL_ASCENDNPU_IR_INSTALL_DIR}"
 
 # ============================================================================
 # 3. Check whether C++ sources are stale (dev mode only; triggers cmake reconfiguration)
@@ -122,22 +137,17 @@ fi
 
 if [[ "$mode" == "release" ]]; then
   export CMAKE_BUILD_TYPE="Release"
-  # pip isolated envs are removed after each build; clear the reused CMake
-  # fingerprint dir so a stale ninja path in CMakeCache cannot be hit.
   rm -rf build/cmake build/lib.*
-  python -m pip wheel . -w dist/
+  python -m pip wheel --no-deps . -w dist/
   echo "Release build complete."
   echo "Wheels: ${repo_root}/dist/"
 else
   export CMAKE_BUILD_TYPE="Debug"
   export CMAKE_BUILD_DIR="csrc/mlir/build"
   python setup.py build_ext --inplace
-  # PEP 517 metadata generation leaves an in-tree *.egg-info directory. Start
-  # pip outside the project and isolate its Python process from PYTHONPATH so
-  # that source metadata cannot shadow the site-packages installation.
   (
     cd "$repo_root/.."
-    python -I -m pip install -e "$repo_root" --no-deps
+    python -I -m pip install --no-build-isolation -e "$repo_root" --no-deps
   )
   echo "Debug build and install complete."
 fi

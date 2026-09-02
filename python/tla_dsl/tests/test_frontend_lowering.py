@@ -2,7 +2,7 @@ from catlass.tla.runtime import make_fake_tensor
 
 import functools
 import pytest
-from mlir import ir as mlir_ir
+from catlass._mlir import ir as mlir_ir
 import inspect
 
 import catlass.tla as tla

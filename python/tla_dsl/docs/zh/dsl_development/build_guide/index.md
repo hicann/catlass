@@ -47,9 +47,9 @@ lld --version
 cmake --version
 ninja --version
 test -n "${ASCEND_HOME_PATH}"
-test -n "${CATLASS_DSL_PREBUILT_ASCENDNPU_IR}"
-test -f "${CATLASS_DSL_PREBUILT_ASCENDNPU_IR}/build/install/lib/cmake/mlir/MLIRConfig.cmake"
-python -c "import mlir; import numpy"
+test -f "python/tla_dsl/3rdparty/AscendNPU-IR/build/install/lib/cmake/mlir/MLIRConfig.cmake" || \
+  test -f "${CATLASS_DSL_PREBUILT_ASCENDNPU_IR}/build/install/lib/cmake/mlir/MLIRConfig.cmake"
+python -c "import numpy"
 ```
 
 以上命令均无任何输出、退出码为 `0`，即表示环境就绪；否则将输出错误信息。
@@ -79,10 +79,8 @@ cd /path/to/catlass/python/tla_dsl
 `build.sh` 默认执行 Development 模式构建，主要步骤为：
 
 1. 检查 `ASCEND_HOME_PATH` 和 AscendNPU-IR 构建产物。
-2. 从 AscendNPU-IR 的 `build/install` 设置 MLIR、LLVM 和 mlir Python 包路径。
-3. 生成 TLA Python op 绑定。
-4. 在 `csrc/mlir/build` 中构建 DSL 的二进制扩展 `_tla_type_bridge_native*.so` 和调试时使用的 `TlaCompile` 降级编译程序。
-5. 以 editable 模式安装 `ascend-catlass-dsl`，且不重复安装依赖。
+2. 在 `csrc/mlir/build` 中构建编译器和 Python 扩展。
+3. 以 editable 模式安装 `ascend-catlass-dsl`，且不重复安装依赖。
 
 - `--clean` 会删除 DSL 子项目中的 `build/`、`csrc/mlir/build/`、`dist/`、egg-info、pytest 缓存和二进制库（`_tla_type_bridge_native*.so`）后，再执行 Development 模式构建。
 
@@ -91,7 +89,7 @@ cd /path/to/catlass/python/tla_dsl
 ```bash
 test -x csrc/mlir/build/tools/tla-compile/TlaCompile
 test -n "$(find csrc/mlir/build/python/catlass -name '_tla_type_bridge_native*.so' -print -quit)"
-python -c "import catlass"
+python -c "from catlass import tla"
 ```
 
 以上命令均无任何输出、退出码为 `0`，即表示检查通过、产物就绪。
@@ -167,14 +165,14 @@ cd /path/to/catlass
 bash tests/run_dsl_test.sh --device 0
 ```
 
-该脚本会激活 Conda 环境、加载 CANN、检查 AscendNPU-IR、构建 DSL，然后以单个 pytest 进程运行 `tests/dsl_battery`。这是一组上板回归测试，不应与无需 NPU 的 DSL 单元测试混淆。
+该脚本会加载 CANN、检查 AscendNPU-IR、构建 DSL，并运行 `tests/dsl_battery` 上板回归测试。
 
 常用变量如下：
 
 | 变量                                | 含义                                                     |
 | ----------------------------------- | -------------------------------------------------------- |
 | `ASCEND_HOME_PATH`                  | CANN Toolkit 根目录；脚本也会尝试定位并加载 `set_env.sh` |
-| `CATLASS_DSL_PREBUILT_ASCENDNPU_IR` | 已构建的 AscendNPU-IR 源码根目录                         |
+| `CATLASS_DSL_PREBUILT_ASCENDNPU_IR` | 共享的 AscendNPU-IR 源码与构建树根目录，作为仓库内子模块之后的回退路径 |
 | `CATLASS_DSL_DIR`                   | DSL 子项目路径；默认从脚本位置推导                       |
 | `DEVICE_ID`                         | NPU device id；默认 `1`，可由 `--device` 覆盖            |
 | `CATLASS_DSL_FORCE_RECOMPILE`       | 是否强制重新编译运行时产物；脚本默认设为 `1`             |

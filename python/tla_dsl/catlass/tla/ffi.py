@@ -7,7 +7,7 @@ import re
 from dataclasses import dataclass
 from typing import Callable, TypeAlias, get_type_hints
 
-from mlir import ir as mlir_ir  # type: ignore[assignment]
+from catlass._mlir import ir as mlir_ir  # type: ignore[assignment]
 
 from ..base_dsl.op import dsl_user_op
 from ..base_dsl.typing import Numeric, TypedPointer

@@ -24,19 +24,6 @@ except ImportError:
 PROJECT_ROOT = Path(__file__).resolve().parent
 
 
-def generate_tla_bindings() -> None:
-    script = PROJECT_ROOT / "tools" / "generate_tla_python_bindings.py"
-    if not script.is_file():
-        raise RuntimeError(f"TableGen binding generator not found: {script}")
-
-    print("==> Generating Tla Python op bindings")
-    subprocess.run(
-        [sys.executable, str(script)],
-        cwd=PROJECT_ROOT,
-        check=True,
-    )
-
-
 def _detect_compiler() -> dict[str, str]:
     """Detect clang/clang++ and pin the CMake compilers to clang 19.x.
 
@@ -112,7 +99,6 @@ class CMakeBuild(build_ext):
             raise RuntimeError("CMake was not found. Install CMake or add it to PATH.")
 
         self._inplace = self.inplace
-        generate_tla_bindings()
         super().run()
 
     def copy_extensions_to_source(self) -> None:
@@ -126,7 +112,12 @@ class CMakeBuild(build_ext):
                 dst.unlink()
         dst.parent.mkdir(parents=True, exist_ok=True)
         if src.is_dir():
-            shutil.copytree(src, dst)
+            shutil.copytree(
+                src,
+                dst,
+                symlinks=True,
+                ignore=shutil.ignore_patterns("libCatlassAggregateCAPI.so"),
+            )
         else:
             shutil.copy2(src, dst)
 
@@ -168,6 +159,11 @@ class CMakeBuild(build_ext):
             "-DCMAKE_SYSROOT=/",
         ]
 
+        for name in ("CATLASS_INCLUDE_DIR",):
+            value = os.environ.get(name)
+            if value:
+                configure_command.append(f"-D{name}={value}")
+
         compiler_env = _detect_compiler()
         for key, value in compiler_env.items():
             configure_command.append(f"-D{key}={value}")
@@ -189,7 +185,7 @@ class CMakeBuild(build_ext):
             "--config",
             build_type,
             "--target",
-            ext.cmake_target,
+            *shlex.split(ext.cmake_target),
         ]
         if "CMAKE_BUILD_PARALLEL_LEVEL" not in os.environ:
             jobs = self.parallel or os.cpu_count() or 1
@@ -226,7 +222,13 @@ class CMakeBuild(build_ext):
                 raise RuntimeError(
                     f"Failed to relocate CMake extension to {extension_path}"
                 )
-        # dev: artifacts stay in the CMake build tree; runtime resolves them there.
+        mlir_pkg = cmake_out_dir / "_mlir"
+        if mlir_pkg.is_dir():
+            if self._inplace:
+                destination = PROJECT_ROOT / "catlass" / "_mlir"
+            else:
+                destination = extension_dir / "_mlir"
+            self._install(mlir_pkg, destination)
 
     def _get_build_directory(
         self,
@@ -254,6 +256,10 @@ class CMakeBuild(build_ext):
                 os.environ.get("CXX", ""),
                 generator or "",
                 os.environ.get("CMAKE_TOOLCHAIN_FILE", ""),
+                os.environ.get("ASCEND_HOME_PATH", ""),
+                os.environ.get("CATLASS_DSL_ASCENDNPU_IR_ROOT", ""),
+                os.environ.get("CATLASS_DSL_ASCENDNPU_IR_INSTALL_DIR", ""),
+                os.environ.get("CATLASS_INCLUDE_DIR", ""),
                 *extra_cmake_args,
             ]
         )
@@ -290,7 +296,7 @@ setup(
         CMakeExtension(
             "catlass._tla_type_bridge_native",
             sourcedir="csrc/mlir",
-            target="tla-compiler",
+            target="tla-compiler CatlassPythonModules",
             cmake_output_dir="python/catlass",
         ),
     ],

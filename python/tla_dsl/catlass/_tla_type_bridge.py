@@ -7,7 +7,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
-from mlir import ir as mlir_ir  # type: ignore[assignment]
+from catlass._mlir import ir as mlir_ir  # type: ignore[assignment]
 
 
 class TlaTypeBridgeUnavailableError(RuntimeError):

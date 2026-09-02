@@ -15,7 +15,7 @@ execution = pytest.importorskip("catlass.execution", exc_type=ImportError)
 base_dsl_mod = pytest.importorskip("catlass.base_dsl", exc_type=ImportError)
 tla = pytest.importorskip("catlass.tla", exc_type=ImportError)
 runtime_mod = pytest.importorskip("catlass.runtime", exc_type=ImportError)
-mlir_ir = pytest.importorskip("mlir.ir", exc_type=ImportError)
+mlir_ir = pytest.importorskip("catlass._mlir.ir", exc_type=ImportError)
 
 
 @tla.kernel

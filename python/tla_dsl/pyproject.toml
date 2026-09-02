@@ -57,13 +57,14 @@ runtime = [
 dev = [
   {include-group = "runtime"},
   "pytest",
+  "lit==19.1.7",
   "ruff",
   "black",
   "mypy",
 ]
 
-[tool.setuptools]
-packages = ["catlass"]
+[tool.setuptools.packages.find]
+include = ["catlass*"]
 
 [tool.setuptools.package-data]
 "catlass" = ["lib/bc/**/*.bc"]
@@ -77,13 +78,9 @@ search_parent_directories = true
 target-version = "py310"
 
 [tool.ruff.format]
-exclude = [
-  "catlass/_mlir_bindings/tla_ops_gen.py",
-  "catlass/_version.py",
-]
+exclude = ["catlass/_version.py"]
 
 [tool.ruff.lint.per-file-ignores]
-"catlass/_mlir_bindings/tla_ops_gen.py" = ["E402", "E701", "F401"]
 "catlass/base_dsl/__init__.py" = ["F403"]
 # Pre-commit CI: suppress non-format lint (E402 after path bootstrap, re-export F401/F822,
 # latent F821, intentional unused DSL locals F841). Format is handled by ruff-format.

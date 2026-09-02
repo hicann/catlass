@@ -6,7 +6,7 @@ import inspect
 
 import catlass.tla as tla
 import catlass.runtime as runtime_mod
-from catlass._mlir_bindings import tla_ops_gen
+from catlass._mlir.dialects import tla as tla_ops_gen
 
 
 @tla.kernel

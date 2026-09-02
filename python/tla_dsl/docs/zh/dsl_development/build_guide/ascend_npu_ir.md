@@ -49,8 +49,7 @@ cd /path/to/catlass/python/tla_dsl/3rdparty/AscendNPU-IR
   --build-triton \
   --enable-lld \
   --build ./build \
-  --apply-patches \
-  --python-binding
+  --apply-patches
 ```
 
 将 `/path/to/clang` 和 `/path/to/clang++` 替换为实际编译器路径，例如 `$(command -v clang-19)` 和 `$(command -v clang++-19)` 对应的结果。`-j 128` 只是示例，请根据可用 CPU、内存和磁盘 I/O 调整；并发数过大会导致资源耗尽。
@@ -60,16 +59,15 @@ cd /path/to/catlass/python/tla_dsl/3rdparty/AscendNPU-IR
 仍在 AscendNPU-IR 源码根目录执行：
 
 ```bash
-test -f bishengir/include/bishengir/Dialect/HIVM/IR/HIVM.h
-test -f build/tools/bishengir/include/bishengir/Interfaces/BiShengIREnums.h.inc
+test -f build/install/include/bishengir/Dialect/HIVM/IR/HIVM.h
+test -f build/install/include/bishengir/Interfaces/BiShengIREnums.h.inc
+test -f third-party/llvm-project/mlir/cmake/modules/AddMLIRPython.cmake
 test -f build/install/lib/cmake/mlir/MLIRConfig.cmake
 test -f build/install/lib/cmake/llvm/LLVMConfig.cmake
-test -d build/install/python_packages/mlir_core
-PYTHONPATH="$PWD/build/install/python_packages/mlir_core${PYTHONPATH:+:${PYTHONPATH}}" \
-  python -c "import mlir"
+test -f build/install/lib/libMLIRHIVMDialect.a
 ```
 
-将当前源码根目录导出为环境变量 `CATLASS_DSL_PREBUILT_ASCENDNPU_IR`：
+将当前构建树导出为：
 
 ```bash
 export CATLASS_DSL_PREBUILT_ASCENDNPU_IR="$PWD"

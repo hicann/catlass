@@ -4,7 +4,7 @@ in dsl_user_op, removal of _CapturedLocation intermediate class."""
 from __future__ import annotations
 
 import pytest
-from mlir import ir as mlir_ir
+from catlass._mlir import ir as mlir_ir
 
 import catlass.tla as tla
 import catlass.runtime as runtime_mod

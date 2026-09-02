@@ -13,6 +13,7 @@
 
 # Compiled Dynamic libraries
 *.so
+python/tla_dsl/catlass/_mlir/
 *.dylib
 *.dll
 

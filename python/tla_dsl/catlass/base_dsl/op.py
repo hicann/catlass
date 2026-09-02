@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from functools import wraps
 from typing import Any, Callable, Iterator, get_type_hints
 
-from mlir import ir as mlir_ir  # type: ignore[assignment]
+from catlass._mlir import ir as mlir_ir  # type: ignore[assignment]
 
 _IdentityBinding = tuple[Any, Any]
 

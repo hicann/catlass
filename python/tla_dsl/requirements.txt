@@ -9,6 +9,7 @@ setuptools-scm>=8
 # Runtime, development, and documentation tools
 numpy>=1.24,<3
 pytest
+lit==19.1.7
 ruff
 black
 mypy

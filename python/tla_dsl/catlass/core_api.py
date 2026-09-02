@@ -10,11 +10,11 @@ from enum import Enum
 from itertools import chain
 from typing import TYPE_CHECKING, Any, Callable, Iterable, NoReturn, Sequence, TypeAlias
 
-from mlir import ir as mlir_ir  # type: ignore[assignment]
-from mlir._mlir_libs._mlir import (  # type: ignore[import-not-found]
+from catlass._mlir import ir as mlir_ir  # type: ignore[assignment]
+from catlass._mlir._mlir_libs._mlir import (  # type: ignore[import-not-found]
     register_value_caster as _register_value_caster,
 )
-from mlir.dialects import arith as _mlir_arith  # type: ignore[import-not-found]
+from catlass._mlir.dialects import arith as _mlir_arith  # type: ignore[import-not-found]
 
 from . import _tla_type_bridge
 from .params import CastParams
@@ -22,7 +22,7 @@ from .params import CastParams
 # Element-type tokens the tla.cast lowering supports: signed ints and the AVE
 # float set. Unsigned ints, Bool (i1) and Float64 (f64) are rejected by VectorSSA.to.
 _CAST_SUPPORTED_DTYPES = frozenset({"i8", "i16", "i32", "i64", "f16", "bf16", "f32"})
-from ._mlir_bindings import tla_ops_gen as _tla_ops_gen
+from catlass._mlir.dialects import tla as _tla_ops_gen  # type: ignore[import-not-found]
 from .base_dsl import ast_helpers as _ast_helpers
 from .base_dsl.op import dsl_user_op, _capture_user_loc
 from .base_dsl.typing import Bool, Float32, Int8, Int32, Numeric, as_numeric
@@ -719,7 +719,7 @@ def _require_generated(symbol_name: str) -> None:
     if not hasattr(_tla_ops_gen, symbol_name):
         raise RuntimeError(
             f"Generated Tla binding is missing `{symbol_name}`; regenerate "
-            "catlass/_mlir_bindings/tla_ops_gen.py"
+            "catlass/_mlir/dialects/_tla_ops_gen.py"
         )
 
 
@@ -1439,7 +1439,7 @@ def _materialize_dynamic_gm_root_tensor_descriptor(
     ``memref_arg`` is the schema-v4 unified GM memref. ``origin0_arg`` / ``origin1_arg``
     are the companion index ABI args (no shape→origin derivation).
     """
-    from mlir.dialects import arith, memref
+    from catlass._mlir.dialects import arith, memref
 
     from .base_dsl.typing import as_numeric
 

@@ -11,7 +11,7 @@ from typing import Any, TYPE_CHECKING, Mapping, Sequence
 from . import _tla_type_bridge
 
 if TYPE_CHECKING:
-    from mlir import ir as mlir_ir
+    from catlass._mlir import ir as mlir_ir
 
 
 class BridgeUnavailableError(RuntimeError):

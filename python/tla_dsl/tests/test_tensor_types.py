@@ -10,7 +10,7 @@ import catlass.core_api as core_api_mod
 import catlass.runtime as runtime_mod
 from catlass.execution_lowering import TlaLoweringError
 from catlass.tla.runtime import from_dlpack
-from mlir import ir as mlir_ir
+from catlass._mlir import ir as mlir_ir
 
 
 def test_tla_type_descriptors_construct_native_mlir_types() -> None:

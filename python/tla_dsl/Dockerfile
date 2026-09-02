@@ -95,8 +95,7 @@ RUN cd /opt/AscendNPU-IR && \
   --build-triton \
   --enable-lld \
   --build ./build \
-  --apply-patches \
-  --python-binding
+  --apply-patches
 
 RUN find /opt/AscendNPU-IR \
   -name .git \
@@ -104,8 +103,4 @@ RUN find /opt/AscendNPU-IR \
   -exec rm -rf '{}' +
 
 ENV CATLASS_DSL_PREBUILT_ASCENDNPU_IR=/opt/AscendNPU-IR
-ENV MLIR_TBLGEN_INCLUDE_DIR=${CATLASS_DSL_PREBUILT_ASCENDNPU_IR}/build/install/include
-ENV PYTHONPATH="${CATLASS_DSL_PREBUILT_ASCENDNPU_IR}/build/install/python_packages/mlir_core:${PYTHONPATH:-}"
 ENV BISHENG_COMPILER_PATH=${ASCEND_HOME_PATH}/bin
-ENV MLIR_DIR=${CATLASS_DSL_PREBUILT_ASCENDNPU_IR}/build/install/lib/cmake/mlir
-ENV LLVM_DIR=${CATLASS_DSL_PREBUILT_ASCENDNPU_IR}/build/install/lib/cmake/llvm

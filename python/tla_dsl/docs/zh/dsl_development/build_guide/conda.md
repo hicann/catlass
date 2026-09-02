@@ -43,8 +43,6 @@ test -n "${ASCEND_HOME_PATH}"
 
 ```bash
 export CATLASS_DSL_PREBUILT_ASCENDNPU_IR="/path/to/catlass/python/tla_dsl/3rdparty/AscendNPU-IR"
-export PYTHONPATH="${CATLASS_DSL_PREBUILT_ASCENDNPU_IR}/build/install/python_packages/mlir_core${PYTHONPATH:+:${PYTHONPATH}}"
-python -c "import mlir"
 ```
 
 这些环境设置对当前 shell 生效。

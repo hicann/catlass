@@ -41,17 +41,14 @@
 # python/tla_dsl/examples/end_to_end/batched_matmul (batched_matmul.py).
 # python/tla_dsl/examples/end_to_end/grouped_matmul_slice_m (grouped_matmul_slice_m.py).
 #
-# Toolchain paths (env overrides first; directory-layout fallbacks last):
+# Toolchain paths:
 #   CANN:             ASCEND_HOME_PATH (source set_env.sh if not already in env)
 #                     → WORKSPACE_ROOT/Ascend/9.1.0-beta.3/ascend-toolkit/set_env.sh
-#   AscendNPU-IR: CATLASS_DSL_PREBUILT_ASCENDNPU_IR
-#                     → CATLASS_DSL_ASCENDNPU_IR_ROOT
-#                     → WORKSPACE_ROOT/AscendNPU-IR
-#                     → CATLASS_DSL_DIR/3rdparty/AscendNPU-IR
+#   AscendNPU-IR:     CATLASS_DSL_PREBUILT_ASCENDNPU_IR
+#                     with repository submodule fallback
 #   TLA DSL:          CATLASS_DSL_DIR → CATDSL_ROOT/python/tla_dsl
 #
 # CANN 9.1+ ships hivmc-a5 in toolkit; no separate HIVMC sibling is required.
-# LLVM/MLIR come from AscendNPU-IR build/install, not from conda.
 #
 # Usage:
 #   bash tests/run_dsl_test.sh
@@ -79,21 +76,10 @@ _resolve_cann_set_env_sh() {
     return 1
 }
 
-# Prefer env for AscendNPU-IR; fall back to monorepo sibling, then in-tree 3rdparty.
-if [[ -z "${CATLASS_DSL_PREBUILT_ASCENDNPU_IR:-}" ]]; then
-    if [[ -n "${CATLASS_DSL_ASCENDNPU_IR_ROOT:-}" ]]; then
-        CATLASS_DSL_PREBUILT_ASCENDNPU_IR="${CATLASS_DSL_ASCENDNPU_IR_ROOT}"
-    elif [[ -d "${WORKSPACE_ROOT}/AscendNPU-IR" ]]; then
-        CATLASS_DSL_PREBUILT_ASCENDNPU_IR="${WORKSPACE_ROOT}/AscendNPU-IR"
-    else
-        CATLASS_DSL_PREBUILT_ASCENDNPU_IR="${CATLASS_DSL_DIR}/3rdparty/AscendNPU-IR"
-    fi
-fi
-CATLASS_DSL_ASCENDNPU_IR_ROOT="${CATLASS_DSL_ASCENDNPU_IR_ROOT:-${CATLASS_DSL_PREBUILT_ASCENDNPU_IR}}"
-
-CONDA_ENV="${CONDA_ENV:-ascend-catlass-dsl}"
 DEVICE_ID="${DEVICE_ID:-1}"
 export CATLASS_DSL_FORCE_RECOMPILE="${CATLASS_DSL_FORCE_RECOMPILE:-1}"
+tla_dsl_wheel_path=""
+tla_dsl_wheel_site=""
 
 BASIC_MMAD_REL="examples/end_to_end/basic_mmad/basic_matmul.py"
 BASIC_MMAD_AUTO_SYNC_REL="examples/end_to_end/basic_mmad/basic_matmul_auto_sync.py"
@@ -153,14 +139,6 @@ BASIC_MMAD_EPILOGUE_TANH_REL="examples/end_to_end/basic_mmad_epilogue/matmul_tan
 CAST_MULTI_REL="examples/end_to_end/vector_ops/cast_multi.py"
 GATHER_OP_REL="examples/end_to_end/vector_ops/gather_op.py"
 
-_ascendnpu_ir_dev_is_prebuilt() {
-    local root="$1"
-    [[ -n "${root}" ]] || return 1
-    [[ -f "${root}/build/install/lib/cmake/mlir/MLIRConfig.cmake" ]] || return 1
-    [[ -f "${root}/build/tools/bishengir/include/bishengir/Interfaces/BiShengIREnums.h.inc" ]] || return 1
-    return 0
-}
-
 usage() {
     cat <<EOF
 Usage: $(basename "$0") [options]
@@ -218,8 +196,8 @@ Run end-to-end validation for:
 Runs the basic_mmad flag-sync matrix with irregular CLI shapes (333×444×555
 and 1×2×3); representative mutex and atomic-add cases use 333×444×555.
 Example defaults remain regular (256×512×1024).
-Activates conda env "${CONDA_ENV}", sources CANN set_env.sh, exports AscendNPU-IR MLIR/LLVM
-env, runs ./build.sh, then runs the test.
+Uses the current Python environment, sources CANN set_env.sh, builds the DSL,
+then runs the test battery.
 
 Options:
   -h, --help              Show this help
@@ -229,19 +207,14 @@ Paths (auto from script location):
   WORKSPACE_ROOT=${WORKSPACE_ROOT}   (override: ASCEND_CATLASS_DSL_ROOT)
   CATDSL_ROOT=${CATDSL_ROOT}
   CATLASS_DSL_DIR=${CATLASS_DSL_DIR}
-  CONDA_ENV=${CONDA_ENV}
+  Python: $(command -v python 2>/dev/null || echo '<not found>')
 
-Toolchain (env first, layout fallback last):
+Toolchain:
   ASCEND_HOME_PATH               current: ${ASCEND_HOME_PATH:-<unset>}
     resolve: ASCEND_HOME_PATH/set_env.sh
              → WORKSPACE_ROOT/Ascend/9.1.0-beta.3/ascend-toolkit/set_env.sh
     note: sourcing CANN set_env.sh sets ASCEND_HOME_PATH automatically
-  CATLASS_DSL_PREBUILT_ASCENDNPU_IR  current: ${CATLASS_DSL_PREBUILT_ASCENDNPU_IR}
-  CATLASS_DSL_ASCENDNPU_IR_ROOT      current: ${CATLASS_DSL_ASCENDNPU_IR_ROOT}
-    resolve: CATLASS_DSL_PREBUILT_ASCENDNPU_IR → CATLASS_DSL_ASCENDNPU_IR_ROOT
-             → WORKSPACE_ROOT/AscendNPU-IR
-             → CATLASS_DSL_DIR/3rdparty/AscendNPU-IR
-  MLIR_DIR                       (default: ${MLIR_DIR:-<after Dev export>})
+  CATLASS_DSL_PREBUILT_ASCENDNPU_IR  current: ${CATLASS_DSL_PREBUILT_ASCENDNPU_IR:-<unset>}
 
 Example:
   bash ${SCRIPT_PATH}/run_dsl_test.sh
@@ -271,37 +244,6 @@ while [[ $# -gt 0 ]]; do
 done
 
 
-_activate_conda() {
-    if [[ -n "${CONDA_EXE:-}" ]] && [[ -f "$(dirname "${CONDA_EXE}")/../etc/profile.d/conda.sh" ]]; then
-        # shellcheck disable=SC1091
-        source "$(dirname "${CONDA_EXE}")/../etc/profile.d/conda.sh"
-    elif command -v conda >/dev/null 2>&1; then
-        local conda_base
-        conda_base="$(conda info --base)"
-        # shellcheck disable=SC1091
-        source "${conda_base}/etc/profile.d/conda.sh"
-    else
-        echo "error: conda not found; activate ${CONDA_ENV} manually or fix PATH." >&2
-        exit 1
-    fi
-    conda activate "${CONDA_ENV}"
-}
-
-_export_ascendnpu_ir_dev_mlir_env() {
-    local root="$1"
-
-    export MLIR_DIR="${root}/build/install/lib/cmake/mlir"
-    export LLVM_DIR="${root}/build/install/lib/cmake/llvm"
-    export MLIR_TBLGEN_INCLUDE_DIR="${root}/build/install/include"
-    export PATH="${root}/build/install/bin:${root}/build/bin:${PATH}"
-    export PYTHONPATH="${root}/build/install/python_packages/mlir_core${PYTHONPATH:+:${PYTHONPATH}}"
-    export LD_LIBRARY_PATH="${root}/build/install/python_packages/mlir_core/mlir/_mlir_libs:${root}/build/install/lib:${root}/build/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
-
-    echo "    MLIR_DIR=${MLIR_DIR}"
-    echo "    LLVM_DIR=${LLVM_DIR}"
-    echo "    MLIR_TBLGEN_INCLUDE_DIR=${MLIR_TBLGEN_INCLUDE_DIR}"
-}
-
 _export_cann_build_env() {
     if [[ -z "${ASCEND_HOME_PATH:-}" ]]; then
         local toolkit_dir
@@ -322,25 +264,10 @@ _export_toolchain_env() {
     echo "==> Exporting toolchain env"
     echo "    WORKSPACE_ROOT=${WORKSPACE_ROOT}"
 
-    if [[ ! -d "${CATLASS_DSL_PREBUILT_ASCENDNPU_IR}" ]]; then
-        echo "error: AscendNPU-IR directory not found: ${CATLASS_DSL_PREBUILT_ASCENDNPU_IR}" >&2
-        exit 1
-    fi
-    export CATLASS_DSL_PREBUILT_ASCENDNPU_IR
-    export CATLASS_DSL_ASCENDNPU_IR_ROOT
-    echo "    CATLASS_DSL_PREBUILT_ASCENDNPU_IR=${CATLASS_DSL_PREBUILT_ASCENDNPU_IR}"
-    echo "    CATLASS_DSL_ASCENDNPU_IR_ROOT=${CATLASS_DSL_ASCENDNPU_IR_ROOT}"
-
-    if ! _ascendnpu_ir_dev_is_prebuilt "${CATLASS_DSL_PREBUILT_ASCENDNPU_IR}"; then
-        echo "error: AscendNPU-IR is not built at ${CATLASS_DSL_PREBUILT_ASCENDNPU_IR}" >&2
-        echo "       Build it first (see python/tla_dsl/README.md §2.4)." >&2
-        exit 1
-    fi
-    _export_ascendnpu_ir_dev_mlir_env "${CATLASS_DSL_PREBUILT_ASCENDNPU_IR}"
 }
 
 _prepare_tla_dsl() {
-    echo "==> Using AscendNPU-IR at ${CATLASS_DSL_PREBUILT_ASCENDNPU_IR}"
+    echo "==> Building TLA DSL"
     if [[ -f "${CATDSL_ROOT}/.gitmodules" ]]; then
         (
             cd "${CATDSL_ROOT}"
@@ -348,11 +275,35 @@ _prepare_tla_dsl() {
         )
     fi
 
-    echo "==> ./build.sh (under ${CATLASS_DSL_DIR})"
+    echo "==> ./build.sh --release (under ${CATLASS_DSL_DIR})"
     (
         cd "${CATLASS_DSL_DIR}"
-        ./build.sh
+        ./build.sh --release
     )
+
+    # Locate the wheel produced by the Release build.
+    local wheel
+    wheel="$(find "${CATLASS_DSL_DIR}/dist" -maxdepth 1 -type f \
+        -name 'ascend_catlass_dsl-*.whl' -printf '%T@ %p\n' 2>/dev/null \
+        | sort -nr | head -n 1 | cut -d' ' -f2-)"
+    if [[ -z "${wheel}" || ! -f "${wheel}" ]]; then
+        echo "error: Release wheel was not produced under ${CATLASS_DSL_DIR}/dist" >&2
+        exit 1
+    fi
+
+    tla_dsl_wheel_path="${wheel}"
+    tla_dsl_wheel_site="$(mktemp -d "${TMPDIR:-/tmp}/tla-dsl-wheel.XXXXXX")"
+    echo "==> Installing Release wheel into ${tla_dsl_wheel_site}"
+    python -m pip install --no-deps --upgrade --target "${tla_dsl_wheel_site}" "${tla_dsl_wheel_path}"
+
+    local package_path
+    package_path="$(PYTHONPATH="${tla_dsl_wheel_site}:${PYTHONPATH:-}" python -c 'import catlass; print(catlass.__file__)')"
+    if [[ "${package_path}" != "${tla_dsl_wheel_site}"/* ]]; then
+        echo "error: wheel package was not selected (resolved ${package_path})" >&2
+        exit 1
+    fi
+    echo "==> Testing wheel: ${tla_dsl_wheel_path}"
+    echo "    imported catlass from ${package_path}"
 }
 
 # --- main ---
@@ -366,9 +317,6 @@ if [[ ! -f "${CATLASS_DSL_DIR}/build.sh" ]]; then
     exit 1
 fi
 
-echo "==> Activating conda env: ${CONDA_ENV}"
-_activate_conda
-
 if ! _cann_set_env_sh="$(_resolve_cann_set_env_sh)"; then
     echo "error: CANN set_env.sh not found." >&2
     echo "       Set ASCEND_HOME_PATH to your CANN toolkit root (with set_env.sh)," >&2
@@ -380,12 +328,7 @@ echo "==> Sourcing CANN: ${_cann_set_env_sh}"
 # shellcheck disable=SC1090
 source "${_cann_set_env_sh}"
 
-# CANN set_env.sh often prepends a system Python ahead of the active conda env.
-# Keep the activated env's interpreter first so MLIR cp311 extensions resolve.
-if [[ -n "${CONDA_PREFIX:-}" && -x "${CONDA_PREFIX}/bin/python" ]]; then
-    export PATH="${CONDA_PREFIX}/bin:${PATH}"
-    echo "==> Preferring conda python: $(command -v python) ($(python -V 2>&1))"
-fi
+echo "==> Using Python: $(command -v python) ($(python -V 2>&1))"
 
 echo "==> Exporting CANN build env"
 _export_cann_build_env
@@ -394,6 +337,7 @@ _export_toolchain_env
 
 echo "==> Using CATLASS_DSL_DIR=${CATLASS_DSL_DIR}"
 
+trap 'if [[ -n "${tla_dsl_wheel_site}" && -d "${tla_dsl_wheel_site}" ]]; then rm -rf "${tla_dsl_wheel_site}"; fi' EXIT
 _prepare_tla_dsl
 
 if [[ ! -f "${CATLASS_DSL_DIR}/${BASIC_MMAD_REL}" ]]; then
@@ -598,7 +542,8 @@ fi
 echo "==> Running the DSL battery (tests/dsl_battery)"
 (
     cd "${CATDSL_ROOT}"
-    TLA_DSL_RUN_BATTERY=1 python -m pytest tests/dsl_battery \
+    TLA_DSL_RUN_BATTERY=1 PYTHONPATH="${tla_dsl_wheel_site}:${PYTHONPATH:-}" \
+    python -m pytest tests/dsl_battery \
         --run-battery --device "${DEVICE_ID}" \
         -p no:randomly -v
 )

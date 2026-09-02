@@ -14,7 +14,7 @@ MkDocs 构建为静态站点。
 
 ## 前置条件
 
-生成脚本仅做 AST 解析，不依赖 `mlir_core`。构建 MkDocs 站点前安装文档依赖：
+生成脚本仅做 AST 解析。构建 MkDocs 站点前安装文档依赖：
 
 ```bash
 # /path/to/catlass 需替换为你 clone 的 CATLASS 仓库实际路径

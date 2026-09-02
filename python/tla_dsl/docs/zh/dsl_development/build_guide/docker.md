@@ -50,7 +50,6 @@ docker run \
 test -n "${ASCEND_HOME_PATH}"
 test -n "${CATLASS_DSL_PREBUILT_ASCENDNPU_IR}"
 test -f "${CATLASS_DSL_PREBUILT_ASCENDNPU_IR}/build/install/lib/cmake/mlir/MLIRConfig.cmake"
-python -c "import mlir"
 ```
 
 [编译与测试](index.md)说明项目构建和各类测试入口。

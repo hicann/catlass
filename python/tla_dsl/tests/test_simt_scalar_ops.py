@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import catlass.tla as tla
 from catlass.tla.runtime import make_fake_tensor
-from catlass._mlir_bindings import tla_ops_gen
+from catlass._mlir.dialects import tla as tla_ops_gen
 
 
 @tla.kernel

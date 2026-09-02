@@ -18,8 +18,19 @@ def test_repeated_editable_install_isolates_python_from_project_pythonpath(
     shutil.copy2(PROJECT_ROOT / "build.sh", build_script)
 
     npu_ir_root = tmp_path / "AscendNPU-IR"
-    mlir_core = npu_ir_root / "build" / "install" / "python_packages" / "mlir_core"
-    mlir_core.mkdir(parents=True)
+    (npu_ir_root / "third-party" / "llvm-project" / "mlir").mkdir(parents=True)
+    for package in ("mlir", "llvm"):
+        config = (
+            npu_ir_root
+            / "build"
+            / "install"
+            / "lib"
+            / "cmake"
+            / package
+            / f"{package.upper()}Config.cmake"
+        )
+        config.parent.mkdir(parents=True, exist_ok=True)
+        config.touch()
     retained_path = tmp_path / "retained-pythonpath"
     retained_path.mkdir()
 
@@ -44,14 +55,40 @@ def test_repeated_editable_install_isolates_python_from_project_pythonpath(
         {
             "ASCEND_HOME_PATH": str(tmp_path / "ascend-toolkit"),
             "BUILD_TEST_LOG": str(log_path),
+            "CATLASS_DSL_ASCENDNPU_IR_INSTALL_DIR": str(tmp_path / "missing-install"),
+            "CATLASS_DSL_ASCENDNPU_IR_ROOT": str(tmp_path / "missing-source"),
             "CATLASS_DSL_PREBUILT_ASCENDNPU_IR": str(npu_ir_root),
             "PATH": f"{fake_bin}{os.pathsep}{env['PATH']}",
             "PYTHONPATH": os.pathsep.join([str(project_root), str(retained_path)]),
         }
     )
 
-    subprocess.run([build_script], check=True, env=env)
-    subprocess.run([build_script], check=True, env=env)
+    first_build = subprocess.run(
+        [build_script], check=True, env=env, capture_output=True, text=True
+    )
+    assert f"AscendNPU-IR source={npu_ir_root}" in first_build.stdout
+    assert f"AscendNPU-IR install={npu_ir_root / 'build' / 'install'}" in first_build.stdout
+
+    explicit_source = tmp_path / "explicit-source"
+    (explicit_source / "third-party" / "llvm-project" / "mlir").mkdir(parents=True)
+    explicit_install = tmp_path / "explicit-install"
+    for package in ("mlir", "llvm"):
+        config = (
+            explicit_install
+            / "lib"
+            / "cmake"
+            / package
+            / f"{package.upper()}Config.cmake"
+        )
+        config.parent.mkdir(parents=True, exist_ok=True)
+        config.touch()
+    env["CATLASS_DSL_ASCENDNPU_IR_ROOT"] = str(explicit_source)
+    env["CATLASS_DSL_ASCENDNPU_IR_INSTALL_DIR"] = str(explicit_install)
+    second_build = subprocess.run(
+        [build_script], check=True, env=env, capture_output=True, text=True
+    )
+    assert f"AscendNPU-IR source={explicit_source}" in second_build.stdout
+    assert f"AscendNPU-IR install={explicit_install}" in second_build.stdout
 
     invocations = [
         line.split("\t", maxsplit=2) 
@@ -63,12 +100,12 @@ def test_repeated_editable_install_isolates_python_from_project_pythonpath(
     assert pip_invocations == [
         [
             str(project_root.parent),
-            f"-I -m pip install -e {project_root} --no-deps",
-            os.pathsep.join([str(mlir_core), str(project_root), str(retained_path)]),
+            f"-I -m pip install --no-build-isolation -e {project_root} --no-deps",
+            os.pathsep.join([str(project_root), str(retained_path)]),
         ],
         [
             str(project_root.parent),
-            f"-I -m pip install -e {project_root} --no-deps",
-            os.pathsep.join([str(mlir_core), str(project_root), str(retained_path)]),
+            f"-I -m pip install --no-build-isolation -e {project_root} --no-deps",
+            os.pathsep.join([str(project_root), str(retained_path)]),
         ],
     ]

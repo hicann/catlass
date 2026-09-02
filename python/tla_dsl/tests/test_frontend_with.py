@@ -10,7 +10,7 @@ import catlass.tla as tla
 import catlass.runtime as runtime_mod
 from catlass.execution_lowering import TlaLoweringError
 from catlass import _tla_type_bridge
-from mlir import ir as mlir_ir
+from catlass._mlir import ir as mlir_ir
 
 
 def _ensure_compute_order_or_skip() -> None:

@@ -7,7 +7,7 @@ import inspect
 import warnings
 from typing import Any
 
-from mlir import ir as mlir_ir
+from catlass._mlir import ir as mlir_ir
 from catlass import _tla_type_bridge
 import pytest
 

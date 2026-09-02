@@ -38,12 +38,10 @@ target_include_directories(_tla_type_bridge_native PRIVATE
 )
 target_link_libraries(_tla_type_bridge_native PRIVATE
   Python3::Module
-  $<TARGET_FILE:TlaCompilePipeline>
-  $<TARGET_FILE:TlaPasses>
-  -Wl,--start-group
-  ${CATLASS_DSL_HIVM_REQUIRED_LIB_FILES}
-  -Wl,--end-group
   ${CATLASS_DSL_MLIR_PYTHON_CAPI_LIBRARY}
+)
+target_compile_options(_tla_type_bridge_native PRIVATE
+  $<$<CXX_COMPILER_ID:GNU>:-Wno-attributes>
 )
 if(pybind11_FOUND)
   target_link_libraries(_tla_type_bridge_native PRIVATE pybind11::headers)
@@ -51,5 +49,7 @@ endif()
 add_dependencies(_tla_type_bridge_native TlaCompilePipeline TlaPasses)
 set_target_properties(_tla_type_bridge_native PROPERTIES
   LIBRARY_OUTPUT_DIRECTORY ${CATLASS_DSL_PYTHON_PACKAGE_OUTPUT_DIR}
-  BUILD_RPATH "${CATLASS_DSL_MLIR_PYTHON_CAPI_DIR};${CATLASS_DSL_HIVM_LIB_DIR}"
+  BUILD_RPATH "\$ORIGIN/_mlir/_mlir_libs"
+  INSTALL_RPATH "\$ORIGIN/_mlir/_mlir_libs"
+  BUILD_WITH_INSTALL_RPATH ON
 )

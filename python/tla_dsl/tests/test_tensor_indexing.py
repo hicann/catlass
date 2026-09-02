@@ -12,7 +12,7 @@ import tempfile
 
 import pytest
 
-from mlir import ir as mlir_ir
+from catlass._mlir import ir as mlir_ir
 import catlass.tla as tla
 from catlass.base_dsl.ast_preprocessor import (
     _FrontendControlFlowTransformer,

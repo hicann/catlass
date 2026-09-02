@@ -9,7 +9,7 @@ from catlass.tla.runtime import make_fake_tensor
 
 import pytest
 
-from mlir import ir as mlir_ir
+from catlass._mlir import ir as mlir_ir
 from catlass import _tla_type_bridge
 import catlass.tla as tla
 import catlass.runtime as runtime_mod

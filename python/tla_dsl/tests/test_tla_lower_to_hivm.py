@@ -14,7 +14,7 @@ import catlass.runtime as runtime_mod
 from catlass.execution_lowering import TlaLoweringError
 from catlass.params import BlockStoreParams
 from catlass import _tla_type_bridge
-from mlir import ir as mlir_ir
+from catlass._mlir import ir as mlir_ir
 
 
 def _ensure_compute_order_or_skip() -> None:
@@ -43,35 +43,6 @@ def _require_hivm_tla_compile() -> pathlib.Path:
     )
     if not tla_compile.exists():
         raise AssertionError("TlaCompile binary not found. Build csrc/mlir first.")
-    prebuilt = os.environ.get("CATLASS_DSL_PREBUILT_ASCENDNPU_IR")
-    ascendnpuir_root = pathlib.Path(
-        pathlib.Path(prebuilt) if prebuilt else repo_root / "3rdparty" / "AscendNPU-IR"
-    )
-    generated_inc_candidates = [
-        ascendnpuir_root
-        / "build"
-        / "tools"
-        / "bishengir"
-        / "bishengir"
-        / "include"
-        / "bishengir"
-        / "Interfaces"
-        / "BiShengIREnums.h.inc",
-        ascendnpuir_root
-        / "build"
-        / "tools"
-        / "bishengir"
-        / "include"
-        / "bishengir"
-        / "Interfaces"
-        / "BiShengIREnums.h.inc",
-    ]
-    hivm_lib = ascendnpuir_root / "build" / "lib" / "libMLIRHIVMDialect.so"
-    hivm_static_lib = ascendnpuir_root / "build" / "lib" / "libMLIRHIVMDialect.a"
-    if not any(path.exists() for path in generated_inc_candidates) or not (
-        hivm_lib.exists() or hivm_static_lib.exists()
-    ):
-        pytest.skip("BiShengIR/HIVM support is not available in this build environment")
     return tla_compile
 
 def _run_tla_compile_ir_after_pass(

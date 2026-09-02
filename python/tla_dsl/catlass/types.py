@@ -10,7 +10,7 @@ from .base_dsl.typing import (
     Pointer as PointerABC,
 )
 
-from mlir import ir as mlir_ir  # type: ignore[assignment]
+from catlass._mlir import ir as mlir_ir  # type: ignore[assignment]
 
 from . import _tla_type_bridge
 from .address_space import AddressSpace

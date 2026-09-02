@@ -54,7 +54,7 @@ def _eager_capture() -> Iterator[Any]:
     Used by :func:`~catlass.tla.runtime.make_fake_tensor` so Host fake construction
     can open a disposable emission context without exposing capture to callers.
     """
-    from mlir import ir as mlir_ir  # type: ignore[assignment]
+    from catlass._mlir import ir as mlir_ir  # type: ignore[assignment]
 
     with mlir_ir.Context() as ctx:
         ctx.allow_unregistered_dialects = True
@@ -85,7 +85,7 @@ def _require_enclosing_cube_or_vector(op_name: str) -> None:
 
 def _coerce_bool_value(value: Any) -> Any:
     """Lower a bool-like frontend value to MLIR ``i1`` SSA."""
-    from mlir import ir as mlir_ir  # type: ignore[assignment]
+    from catlass._mlir import ir as mlir_ir  # type: ignore[assignment]
 
     from .base_dsl.typing import Bool, Numeric, as_numeric
 
@@ -126,7 +126,7 @@ def _coerce_bool_value(value: Any) -> Any:
 
 
 def _const_i1(value: int) -> Any:
-    from mlir import ir as mlir_ir  # type: ignore[assignment]
+    from catlass._mlir import ir as mlir_ir  # type: ignore[assignment]
 
     i1 = mlir_ir.IntegerType.get_signless(1)
     op = mlir_ir.Operation.create(
@@ -138,7 +138,7 @@ def _const_i1(value: int) -> Any:
 
 
 def _coerce_index_value(value: Any) -> Any:
-    from mlir import ir as mlir_ir
+    from catlass._mlir import ir as mlir_ir
 
     from .base_dsl.typing import Numeric
 
@@ -182,7 +182,7 @@ def _coerce_index_value(value: Any) -> Any:
 
 
 def _const_index(value: int) -> Any:
-    from mlir import ir as mlir_ir  # type: ignore[assignment]
+    from catlass._mlir import ir as mlir_ir  # type: ignore[assignment]
 
     op = mlir_ir.Operation.create(
         "arith.constant",
@@ -231,7 +231,7 @@ class _RegionStub:
 
 
 def _capture_caller_location() -> Any:
-    from mlir import ir as mlir_ir  # type: ignore[assignment]
+    from catlass._mlir import ir as mlir_ir  # type: ignore[assignment]
 
     frame = inspect.currentframe()
     if frame is None:
@@ -348,7 +348,7 @@ def _internal_frontend_region(
     mode: Any = None,
     thread_block_dim: Any = None,
 ) -> None:
-    from mlir import ir as mlir_ir  # type: ignore[assignment]
+    from catlass._mlir import ir as mlir_ir  # type: ignore[assignment]
 
     if kind not in {"cube", "vector", "vec.func"}:
         raise TlaIRNotExecutableError(f"Unsupported TLA region wrapper: {kind}")
@@ -456,7 +456,7 @@ _CORE_API_EXPORTS = (
 
 def const_expr(value: Any) -> bool:
     """Return a Python bool for frontend-time control flow."""
-    from mlir import ir as mlir_ir  # type: ignore[assignment]
+    from catlass._mlir import ir as mlir_ir  # type: ignore[assignment]
 
     resolved = _resolve_frontend_bound_value(value)
     if isinstance(resolved, mlir_ir.Value) or isinstance(value, mlir_ir.Value):

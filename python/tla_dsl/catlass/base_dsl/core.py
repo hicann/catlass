@@ -7,7 +7,7 @@ import inspect
 import re
 from typing import TYPE_CHECKING, Any, Callable, Sequence
 
-from mlir import ir as mlir_ir  # type: ignore[assignment]
+from catlass._mlir import ir as mlir_ir  # type: ignore[assignment]
 
 if TYPE_CHECKING:
     from ..execution_lowering import LoweredTlaIR

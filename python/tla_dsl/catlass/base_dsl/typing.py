@@ -20,7 +20,7 @@ from typing import (
 )
 
 import numpy as np
-from mlir import ir as mlir_ir  # type: ignore[assignment]
+from catlass._mlir import ir as mlir_ir  # type: ignore[assignment]
 
 from ..address_space import AddressSpace
 from .op import (
@@ -57,7 +57,7 @@ def _binary_op(
         *,
         loc: mlir_ir.Location | None = None,
     ) -> Any:
-        from mlir.dialects import arith
+        from catlass._mlir.dialects import arith
 
         if not isinstance(rhs, Numeric):
             if not isinstance(rhs, (int, float, bool, mlir_ir.Value)):

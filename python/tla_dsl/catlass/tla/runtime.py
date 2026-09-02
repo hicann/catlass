@@ -6,7 +6,7 @@ import ctypes
 import weakref
 from typing import Any, Iterable, Iterator
 
-from mlir import ir as mlir_ir  # type: ignore[assignment]
+from catlass._mlir import ir as mlir_ir  # type: ignore[assignment]
 
 from ..address_space import AddressSpace
 from ..base_dsl.runtime.dlpack_types import (
