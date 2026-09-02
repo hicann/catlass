@@ -1,0 +1,23 @@
+# lgtm and approve labels num
+lgtm_need_nums: 2
+approve_need_nums: 1
+
+# merge method
+default_merge_method: squash
+
+# label list
+require_labels:
+  - label: lgtm
+    operator: "cann-robot"
+  - label: approve
+    operator: "cann-robot"
+  - label: cann-cla/yes
+    operator: "cann-robot"
+  - label: ci-pipeline-passed
+    operator: "cann-robot"
+  - label: RDV-SUCC
+    operator: "cann-robot,zhouhao176,huangxin361,tianxinghui,zjw666888,triwooder,weixin_42818618,yuantao_,longjihui,sunhao_hw,mdrumond"
+
+# block label list
+block_labels:
+  - label: needs-issue
