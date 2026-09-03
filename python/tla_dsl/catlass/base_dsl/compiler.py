@@ -11,7 +11,7 @@ class CompileCallable:
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> JitCompiledFunction:
         """Directory: Compile and Launch / Compile
         Description:
-            Compile a `@tla.jit` or `@tla.kernel` function and return a callable
+            Compile a `@tla.kernel` function and return a callable
             `JitCompiledFunction`. This is the public `tla.compile` entry. Call the
             returned object to launch (`compiled(*tensors, block_num=...)`). Use this
             path when you compile once and launch the same binary repeatedly.
@@ -26,7 +26,7 @@ class CompileCallable:
               `CATLASS_DSL_*` environment variables.
 
             Constraints:
-            - `func` must be a `@tla.jit` or `@tla.kernel` `TlaJitFunction`.
+            - `func` must be a `@tla.kernel` `TlaJitFunction`.
             - `args` are compile-time type samples; they need not be bound NPU
               buffers (`make_fake_tensor` is valid).
             - Pass the public chip name with `options="--npu-arch 3510"`;
@@ -53,9 +53,7 @@ class CompileCallable:
             raise TlaUnsupportedAbiError("Function is not set or invalid.")
 
         if not isinstance(func, TlaJitFunction):
-            raise TlaUnsupportedAbiError(
-                "tla.compile expects a @tla.jit or @tla.kernel function."
-            )
+            raise TlaUnsupportedAbiError("tla.compile expects a @tla.kernel function.")
         if "type_args" in kwargs:
             raise TypeError(
                 "tla.compile() does not accept `type_args`; "

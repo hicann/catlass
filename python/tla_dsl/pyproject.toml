@@ -84,7 +84,6 @@ exclude = ["catlass/_version.py"]
 "catlass/base_dsl/__init__.py" = ["F403"]
 # Pre-commit CI: suppress non-format lint (E402 after path bootstrap, re-export F401/F822,
 # latent F821, intentional unused DSL locals F841). Format is handled by ruff-format.
-"catlass/catlass_dsl/ascend_jit_executor.py" = ["F821"]
 "catlass/core_api.py" = ["E402", "F401", "F822"]
 "catlass/dsl.py" = ["E402"]
 "catlass/execution.py" = ["E402", "F401"]

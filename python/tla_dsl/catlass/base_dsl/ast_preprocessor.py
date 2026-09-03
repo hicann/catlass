@@ -6,6 +6,7 @@ import ast
 import builtins
 import contextlib
 import dataclasses
+import functools
 import inspect
 import sys
 import symtable
@@ -79,6 +80,14 @@ def reject_user_class_value(value: Any, *, context: str) -> None:
 
     def check(item: Any) -> None:
         if item is None or isinstance(item, (bool, int, float, str, bytes)):
+            return
+        if (
+            inspect.isfunction(item)
+            or inspect.ismethod(item)
+            or isinstance(item, functools.partial)
+        ):
+            # Plain callables may be ``Constexpr`` kernel args; if not annotated,
+            # lowering fails later with a Constexpr hint.
             return
         if id(item) in seen:
             return
@@ -3299,15 +3308,9 @@ def _validate_language_boundaries(
             return _UNKNOWN_LANGUAGE_VALUE
 
     def is_jit(value: Any) -> bool:
-        jit_type = getattr(sys.modules.get("catlass.dsl"), "TlaJitFunction", None)
-        return (
-            jit_type is not None
-            # Deliberately reject subclasses: only the DSL's exact decorator
-            # wrapper proves that the helper is genuine.
-            and value.__class__ is jit_type
-            and getattr(value, "kind", None) == "jit"
-            and callable(getattr(value, "fn", None))
-        )
+        from ..dsl import is_jit_callable
+
+        return is_jit_callable(value)
 
     def validate_jit(node: ast.AST, helper: Callable[..., Any]) -> None:
         if id(helper) in validating:
@@ -3350,11 +3353,14 @@ def _validate_language_boundaries(
             # they are ordinary Python staging code.
             return
         if is_jit(value):
-            validate_jit(node.func, value.fn)
+            from ..dsl import unwrap_jit_callable
+
+            validate_jit(node.func, unwrap_jit_callable(value))
             return
-        jit_type = getattr(sys.modules.get("catlass.dsl"), "TlaJitFunction", None)
-        if jit_type is not None and value.__class__ is jit_type:
-            name = getattr(getattr(value, "fn", None), "__name__", "<kernel>")
+        from ..dsl import TlaJitFunction
+
+        if isinstance(value, TlaJitFunction):
+            name = getattr(value.fn, "__name__", "<kernel>")
             fail(
                 node.func,
                 f"calling @tla.kernel {name!r} from a Tla DSL function is not "

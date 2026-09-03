@@ -491,8 +491,17 @@ def _reject_host_captures(
     as a value-based rule goes -- mutating a host container that happens to
     hold handles (``tiles.reverse()``) still traces once and is not caught
     here.
+
+    Compile-time callables (``def`` / ``lambda`` / ``partial`` / ``@tla.jit``)
+    used as ``tla.Constexpr`` arguments are also allowed: invoking them during
+    staging inlines device ops into the traced region, which is the intended
+    Phase-1 Constexpr Callable behavior.
     """
+    from .base_dsl.runtime.jit_arg_adapters import _is_compile_time_callable
+
     for name, value in zip(names or (), values or ()):
+        if _is_compile_time_callable(value):
+            continue
         root = (type(value).__module__ or "").split(".")[0]
         if root in _TLA_HANDLE_MODULES:
             continue

@@ -245,7 +245,7 @@ def _require_mmad_compute_order_supported() -> None:
 
 def test_mmad_validates_operands_and_kwargs() -> None:
     _require_mmad_compute_order_supported()
-    @tla.jit
+    @tla.kernel
     def kernel(
         mem_a: tla.Tensor,
         mem_b: tla.Tensor,
@@ -294,7 +294,7 @@ def test_mmad_validates_operands_and_kwargs() -> None:
 
 def test_mmad_rejects_old_order_at_frontend() -> None:
     _require_mmad_compute_order_supported()
-    @tla.jit
+    @tla.kernel
     def kernel(
         mem_a: tla.Tensor,
         mem_b: tla.Tensor,
@@ -336,7 +336,7 @@ def test_mmad_rejects_old_order_at_frontend() -> None:
 
 def test_mmad_rejects_wrong_element_types_at_frontend() -> None:
     _require_mmad_compute_order_supported()
-    @tla.jit
+    @tla.kernel
     def kernel(
         mem_a: tla.Tensor,
         mem_b: tla.Tensor,
@@ -378,7 +378,7 @@ def test_mmad_rejects_wrong_element_types_at_frontend() -> None:
 
 def test_mmad_rejects_wrong_shape_contract_at_frontend() -> None:
     _require_mmad_compute_order_supported()
-    @tla.jit
+    @tla.kernel
     def kernel(
         mem_a: tla.Tensor,
         mem_b: tla.Tensor,
@@ -424,7 +424,7 @@ def test_mmad_rejects_wrong_shape_contract_at_frontend() -> None:
 
 def test_mmad_rejects_rhs_zn_layout_at_frontend() -> None:
     _require_mmad_compute_order_supported()
-    @tla.jit
+    @tla.kernel
     def kernel(
         mem_a: tla.Tensor,
         mem_b: tla.Tensor,
@@ -465,7 +465,7 @@ def test_mmad_rejects_rhs_zn_layout_at_frontend() -> None:
 
 
 def test_mmad_rejects_unknown_kwarg() -> None:
-    @tla.jit
+    @tla.kernel
     def kernel(mem: tla.Tensor) -> None:
         lhs = tla.tile_view(mem, tla.make_shape(1, 8), tla.make_coord(0, 0))
         rhs = tla.tile_view(mem, tla.make_shape(1, 8), tla.make_coord(0, 0))

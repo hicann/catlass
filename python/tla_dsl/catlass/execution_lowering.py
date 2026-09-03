@@ -19,9 +19,14 @@ from .base_dsl.ast_preprocessor import (
     reject_user_class_value,
     validate_language_boundaries,
 )
-from .base_dsl import DSLLocation
+from .base_dsl import BaseDSL, DSLLocation
 from .base_dsl.typing import Numeric, is_constexpr_annotation
-from .dsl import _jit_helper_transformer
+from .dsl import (
+    _jit_helper_inline,
+    is_jit_callable,
+    unwrap_jit_callable,
+)
+from .base_dsl.runtime.jit_arg_adapters import _is_compile_time_callable
 from .tla.typing import Tensor
 
 
@@ -148,7 +153,7 @@ def lower_jit_to_tlair_module_by_execution(
         internal_min=ast_decorators._internal_frontend_min,
         internal_max=ast_decorators._internal_frontend_max,
     )
-    sig = inspect.signature(fn)
+    sig = BaseDSL()._get_signature(fn)
     params = list(sig.parameters.values())
     arg_names = [p.name for p in params]
     constexpr_names = {p.name for p in params if _is_constexpr_annotation(p.annotation)}
@@ -156,6 +161,18 @@ def lower_jit_to_tlair_module_by_execution(
     keyword_only_names = {p.name for p in params if p.kind is kw_only}
     call_args = _prepare_call_args(arg_names=arg_names, type_args=type_args)
     for name, value in zip(arg_names, call_args, strict=False):
+        if name in constexpr_names:
+            # Constexpr host values are not ABI leaves, but user-defined callable
+            # class instances are still outside the Phase-1 allowlist
+            # (def / lambda / partial / @tla.jit). Type tokens used as
+            # Constexpr[type] remain allowed (classes, not instances).
+            if (
+                callable(value)
+                and not isinstance(value, type)
+                and not _is_compile_time_callable(value)
+            ):
+                reject_user_class_value(value, context=f"kernel argument {name!r}")
+            continue
         reject_user_class_value(value, context=f"kernel argument {name!r}")
 
     ctx = mlir_ir.Context()
@@ -205,7 +222,7 @@ def _transform_jit_helper(helper: Any) -> Any:
     """Transform one genuine helper with the same frontend hooks as its root."""
 
     return maybe_transform_for_lowering(
-        helper.fn,
+        unwrap_jit_callable(helper),
         internal_for=ast_decorators._internal_frontend_for,
         internal_region=runtime._internal_frontend_region,
         internal_if=ast_decorators._internal_frontend_if,
@@ -563,7 +580,7 @@ def _build_tla_func(
                 # Helpers discovered only while staging a factory or Python
                 # forwarding call have not passed the root-function boundary
                 # walk. Validate them before their first transformation.
-                validate_language_boundaries(helper.fn)
+                validate_language_boundaries(unwrap_jit_callable(helper))
                 transformed = _transform_jit_helper(helper)
 
                 def guarded_helper(*args: Any, **kwargs: Any) -> Any:
@@ -583,7 +600,7 @@ def _build_tla_func(
                 return guarded_helper
 
             try:
-                with _jit_helper_transformer(transform_helper):
+                with _jit_helper_inline(transform_helper):
                     if keyword_only_names:
                         # Keyword-only params (``def k(*, sel: Constexpr[str])``)
                         # are ordinary entries in ``arg_names``; passing them
@@ -746,6 +763,9 @@ def _resolve_execution_arg_types(
                     else:
                         resolved[name] = ("scalar_group", tuple(resolved_types))
                     continue
+            if is_jit_callable(value):
+                # Compile-time helpers are not runtime ABI leaves.
+                continue
             if _is_dataclass_instance(value):
                 # Unpack a stdlib dataclass into one scalar type per field.
                 resolved[name] = (

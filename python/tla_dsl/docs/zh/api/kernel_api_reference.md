@@ -2074,6 +2074,8 @@ with tla.vector():
 
 Cube / Vector / `vec.func` 区域以及 kernel 侧循环范围。
 
+从这些 region 内调用的外层 `def`、`tla.Constexpr` 函数入参与 `@tla.jit` helper，须遵守本节各 region 约束，以及所用算子条目的「约束说明」。
+
 ### `range`
 
 **源码：** [`catlass.core_api.range`](../../../catlass/core_api.py#L5008)

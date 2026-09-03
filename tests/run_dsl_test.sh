@@ -34,6 +34,8 @@
 # matmul_bias.py, matmul_leaky_relu.py, matmul_sigmoid.py, matmul_silu.py, matmul_tanh.py).
 # python/tla_dsl/examples/end_to_end/flash_attention_infer (flash_attention_infer.py).
 # python/tla_dsl/examples/end_to_end/lazy_conditions (lazy_conditions.py).
+# python/tla_dsl/examples/end_to_end/constexpr_callable (constexpr_callable_epilogue.py).
+# python/tla_dsl/examples/end_to_end/jit_callable (jit_callable_epilogue.py).
 # python/tla_dsl/examples/end_to_end/simt (basic_vadd_simt.py).
 # python/tla_dsl/examples/end_to_end/multi_core_splitk_matmul (multi_core_splitk_matmul.py,
 # tail_multi_core_splitk_matmul.py).
@@ -126,6 +128,8 @@ GROUPED_MATMUL_SLICEM_REL="examples/end_to_end/grouped_matmul_slice_m/grouped_ma
 BATCHED_MATMUL_REL="examples/end_to_end/batched_matmul/batched_matmul.py"
 FLASH_ATTENTION_INFER_REL="examples/end_to_end/flash_attention_infer/flash_attention_infer.py"
 LAZY_CONDITIONS_REL="examples/end_to_end/lazy_conditions/lazy_conditions.py"
+CONSTEXPR_CALLABLE_REL="examples/end_to_end/constexpr_callable/constexpr_callable_epilogue.py"
+JIT_CALLABLE_REL="examples/end_to_end/jit_callable/jit_callable_epilogue.py"
 SIMT_VADD_REL="examples/end_to_end/simt/basic_vadd_simt.py"
 MULTI_CORE_SPLITK_REL="examples/end_to_end/multi_core_splitk_matmul/multi_core_splitk_matmul.py"
 TAIL_MULTI_CORE_SPLITK_REL="examples/end_to_end/multi_core_splitk_matmul/tail_multi_core_splitk_matmul.py"
@@ -186,6 +190,8 @@ Run end-to-end validation for:
   - basic_mmad_epilogue (matmul_add.py, ...: CV fused examples)
   - flash_attention_infer (flash_attention_infer.py)
   - lazy_conditions (lazy_conditions.py)
+  - constexpr_callable (constexpr_callable_epilogue.py: Constexpr Callable epilogue)
+  - jit_callable (jit_callable_epilogue.py: @tla.jit helper as Constexpr epilogue)
   - simt (basic_vadd_simt.py: SIMT thread-block add)
   - multi_core_splitk_matmul (multi_core_splitk_matmul.py: using split-k strategy for workload balancing)
   - basic_mmad_streamk (basic_mmad_streamk.py: streamK workload balancing)
@@ -462,6 +468,14 @@ if [[ ! -f "${CATLASS_DSL_DIR}/${FLASH_ATTENTION_INFER_REL}" ]]; then
 fi
 if [[ ! -f "${CATLASS_DSL_DIR}/${LAZY_CONDITIONS_REL}" ]]; then
     echo "error: missing ${LAZY_CONDITIONS_REL} under ${CATLASS_DSL_DIR}" >&2
+    exit 1
+fi
+if [[ ! -f "${CATLASS_DSL_DIR}/${CONSTEXPR_CALLABLE_REL}" ]]; then
+    echo "error: missing ${CONSTEXPR_CALLABLE_REL} under ${CATLASS_DSL_DIR}" >&2
+    exit 1
+fi
+if [[ ! -f "${CATLASS_DSL_DIR}/${JIT_CALLABLE_REL}" ]]; then
+    echo "error: missing ${JIT_CALLABLE_REL} under ${CATLASS_DSL_DIR}" >&2
     exit 1
 fi
 if [[ ! -f "${CATLASS_DSL_DIR}/${SIMT_VADD_REL}" ]]; then

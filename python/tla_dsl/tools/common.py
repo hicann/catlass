@@ -46,6 +46,8 @@ class APIEntry:
     is_class: bool = False
     is_namespace: bool = False
     is_env: bool = False
+    # Language-boundary topic with no callable prototype (Host reference only).
+    is_concept: bool = False
     source_path: Path | None = None
 
 
@@ -340,6 +342,8 @@ def format_signature(entry: APIEntry, *, default_source_path: Path) -> str:
 def source_markdown(
     entry: APIEntry, docs_dir: Path, *, default_source_path: Path
 ) -> str:
+    if entry.is_concept:
+        return "**Source:** Host language boundary (not a callable API)"
     if entry.source_line is None:
         if entry.is_env:
             return f"**Source:** environment variable `{entry.name}`"
@@ -376,26 +380,33 @@ def render_entry(
                 f"`{entry.name}` missing {label}:; please update {entry.qualified_name}"
             )
     h = "#" * heading_level
-    return "\n".join(
+    parts = [
+        f"{h} `{entry.name}`",
+        "",
+        source_markdown(entry, docs_dir, default_source_path=default_source_path),
+        "",
+        "Description:",
+        "",
+        sections["Description"],
+        "",
+    ]
+    if not entry.is_concept:
+        parts.extend(
+            [
+                "Prototype:",
+                "",
+                "```python",
+                format_signature(entry, default_source_path=default_source_path),
+                "```",
+                "",
+                "Parameters:",
+                "",
+                sections["Parameters"],
+                "",
+            ]
+        )
+    parts.extend(
         [
-            f"{h} `{entry.name}`",
-            "",
-            source_markdown(entry, docs_dir, default_source_path=default_source_path),
-            "",
-            "Description:",
-            "",
-            sections["Description"],
-            "",
-            "Prototype:",
-            "",
-            "```python",
-            format_signature(entry, default_source_path=default_source_path),
-            "```",
-            "",
-            "Parameters:",
-            "",
-            sections["Parameters"],
-            "",
             "Constraints:",
             "",
             sections["Constraints"],
@@ -410,6 +421,7 @@ def render_entry(
             "",
         ]
     )
+    return "\n".join(parts)
 
 
 def iter_apis(node: DocNode) -> list[str]:

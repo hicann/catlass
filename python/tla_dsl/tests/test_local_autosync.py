@@ -40,3 +40,23 @@ def test_kernel_auto_sync_v0_propagates_to_tla_func() -> None:
 def test_kernel_rejects_invalid_auto_sync_version(value: object) -> None:
     with pytest.raises(ValueError, match="auto_sync must be 'v0' or None"):
         tla.kernel(auto_sync=value)  # type: ignore[arg-type]
+
+
+def test_kernel_rejects_unknown_decorator_kwargs() -> None:
+    with pytest.raises(TypeError, match=r"unexpected keyword argument"):
+        tla.kernel(foo=1)  # type: ignore[call-arg]
+
+
+def test_kernel_rejects_non_callable_positional() -> None:
+    with pytest.raises(TypeError, match="expects a callable"):
+        tla.kernel(123, auto_sync="v0")  # type: ignore[arg-type]
+
+
+def test_jit_rejects_unknown_decorator_kwargs() -> None:
+    with pytest.raises(TypeError, match=r"unexpected keyword argument"):
+        tla.jit(foo=1)  # type: ignore[call-arg]
+
+
+def test_jit_rejects_non_callable_positional() -> None:
+    with pytest.raises(TypeError, match="expects a callable"):
+        tla.jit(123)  # type: ignore[arg-type]

@@ -235,6 +235,15 @@ def _cases(device: int) -> Iterator[tuple[str, list[list[str]]]]:
         "lazy-conditions",
         [["lazy_conditions/lazy_conditions.py", *dev]],
     )
+    # Constexpr Callable / @tla.jit helper as Constexpr epilogue (Phase-1).
+    yield (
+        "constexpr-callable",
+        [["constexpr_callable/constexpr_callable_epilogue.py", *dev]],
+    )
+    yield (
+        "jit-callable",
+        [["jit_callable/jit_callable_epilogue.py", *dev]],
+    )
     yield (
         "simt-basic-vadd",
         [["simt/basic_vadd_simt.py", "--block-num", "1", *dev]],

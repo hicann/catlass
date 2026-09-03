@@ -5,22 +5,24 @@ from __future__ import annotations
 import contextlib
 import contextvars
 from dataclasses import dataclass, is_dataclass
+import functools
 import inspect
 from typing import Any, Callable, Mapping, Sequence
 
 from . import runtime as _runtime
 from .base_dsl import BaseDSL, DSLLocation
 from .base_dsl.compiler import CompileCallable, compile
-from .base_dsl.jit_executor import JitCompiledFunction
-from .base_dsl.typing import is_constexpr_annotation
+from .base_dsl.jit_executor import ExecutionArgs, JitCompiledFunction
+from .base_dsl.runtime.jit_arg_adapters import is_arg_annotation_constexpr
+from .catlass_dsl.catlass import TlaDSL
 
 
 def _kernel_signature(fn: Callable[..., Any] | None) -> inspect.Signature | None:
     if fn is None:
         return None
     try:
-        return inspect.signature(fn)
-    except (TypeError, ValueError):
+        return BaseDSL()._get_signature(fn)
+    except (TypeError, ValueError, NameError):
         return None
 
 
@@ -95,7 +97,21 @@ def _constexpr_param_mask(fn: Callable[..., Any] | None) -> tuple[bool, ...]:
     sig = _kernel_signature(fn)
     if sig is None:
         return ()
-    return tuple(is_constexpr_annotation(p.annotation) for p in sig.parameters.values())
+    return tuple(
+        is_arg_annotation_constexpr(p.annotation, p.name, index, fn)
+        for index, p in enumerate(sig.parameters.values())
+    )
+
+
+def _strip_constexpr_launch_args(
+    args: Sequence[Any], fn: Callable[..., Any] | None
+) -> tuple[Any, ...]:
+    """Drop ``Constexpr`` params from a launch arg list."""
+    if fn is None:
+        return tuple(args)
+    return ExecutionArgs(
+        original_signature=BaseDSL()._get_signature(fn)
+    ).get_rectified_args_from_original_args(args)
 
 
 def _get_typed_call_args(
@@ -103,9 +119,10 @@ def _get_typed_call_args(
 ) -> Sequence[Any] | None:
     # ``Constexpr`` params are compile-time host values with no MLIR type and no
     # kernel block arg, so they are passed through verbatim whatever their type
-    # (``str``, tuple, enum, …). Without this they would fall into the ``None``
-    # branch below and the kernel body would silently see ``None`` instead of the
-    # value — and every variant would collapse onto one cached kernel.
+    # (``str``, tuple, enum, Callable, …). Without this they would fall into the
+    # ``None`` branch below and the kernel body would silently see ``None``
+    # instead of the value — and every variant would collapse onto one cached
+    # kernel.
     mask = _constexpr_param_mask(fn)
     args, _ = _bind_kernel_call_args(fn, args)
     inferred: list[Any] = []
@@ -118,6 +135,8 @@ def _get_typed_call_args(
             continue
         resolver = getattr(arg, "__get_mlir_types__", None)
         if callable(resolver):
+            inferred.append(arg)
+        elif is_jit_callable(arg):
             inferred.append(arg)
         elif is_dataclass(arg) and not isinstance(arg, type):
             # Plain stdlib ``@dataclass`` instances are unpacked into per-field
@@ -134,27 +153,60 @@ def _get_typed_call_args(
     return tuple(inferred)
 
 
-_ACTIVE_JIT_HELPER_TRANSFORMER: contextvars.ContextVar[
-    Callable[["TlaJitFunction"], Callable[..., Any]] | None
-] = contextvars.ContextVar("tla_active_jit_helper_transformer", default=None)
+_TLA_JIT_MARKER = "_tla_jit"
+
+_JIT_HELPER_INLINE: contextvars.ContextVar[
+    Callable[[Callable[..., Any]], Callable[..., Any]] | None
+] = contextvars.ContextVar("tla_jit_helper_inline", default=None)
 
 
 @contextlib.contextmanager
-def _jit_helper_transformer(
-    transform: Callable[["TlaJitFunction"], Callable[..., Any]],
+def _jit_helper_inline(
+    transform: Callable[[Callable[..., Any]], Callable[..., Any]],
 ):
-    """Use transformed ``@tla.jit`` helpers while lowering one root function."""
+    """While lowering a kernel, inline ``@tla.jit`` helpers via *transform*."""
 
-    token = _ACTIVE_JIT_HELPER_TRANSFORMER.set(transform)
+    token = _JIT_HELPER_INLINE.set(transform)
     try:
         yield
     finally:
-        _ACTIVE_JIT_HELPER_TRANSFORMER.reset(token)
+        _JIT_HELPER_INLINE.reset(token)
+
+
+def is_jit_callable(value: Any) -> bool:
+    """Return whether *value* is a ``@tla.jit`` helper wrapper."""
+
+    return getattr(value, _TLA_JIT_MARKER, False) is True
+
+
+def unwrap_jit_callable(value: Any) -> Any:
+    """Follow ``__wrapped__`` to the underlying Python function."""
+
+    if not is_jit_callable(value):
+        return value
+    return inspect.unwrap(value)
+
+
+def _make_jit_wrapper(
+    fn: Callable[..., Any], *, location: DSLLocation | None
+) -> Callable[..., Any]:
+    """Build a ``@tla.jit`` helper wrapper (Phase-1 inline staging path)."""
+
+    @functools.wraps(fn)
+    def jit_wrapper(*args: Any, **kwargs: Any) -> Any:
+        inline = _JIT_HELPER_INLINE.get()
+        if inline is None:
+            return fn(*args, **kwargs)
+        return inline(jit_wrapper)(*args, **kwargs)
+
+    setattr(jit_wrapper, _TLA_JIT_MARKER, True)
+    setattr(jit_wrapper, "_tla_decorator_location", location)
+    return jit_wrapper
 
 
 @dataclass
 class TlaJitFunction:
-    """Wrapper for Tla DSL JIT/kernels that can emit and execute Tla IR."""
+    """Wrapper for ``@tla.kernel`` functions that emit and execute Tla IR."""
 
     fn: Callable[..., Any]
     kind: str
@@ -164,24 +216,42 @@ class TlaJitFunction:
     _base_dsl: BaseDSL | None = None
     _lowered: Any | None = None
 
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "__wrapped__", self.fn)
+        object.__setattr__(self, "__signature__", inspect.signature(self.fn))
+        object.__setattr__(
+            self,
+            "__name__",
+            getattr(self.fn, "__name__", type(self).__name__),
+        )
+        object.__setattr__(
+            self,
+            "__qualname__",
+            getattr(self.fn, "__qualname__", self.__name__),
+        )
+        object.__setattr__(
+            self,
+            "__module__",
+            getattr(self.fn, "__module__", type(self).__module__),
+        )
+        annotations = getattr(self.fn, "__annotations__", {})
+        object.__setattr__(
+            self, "__annotations__", dict(annotations) if annotations else {}
+        )
+
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
-        if self.kind == "kernel":
-            raise TypeError(
-                "Direct @tla.kernel invocation is disabled; compile explicitly "
-                "with `compiled = tla.compile(kernel, *sample_args)`, then launch "
-                "with `compiled(*runtime_args, block_num=...)`."
-            )
-        transform = _ACTIVE_JIT_HELPER_TRANSFORMER.get()
-        if transform is not None:
-            return transform(self)(*args, **kwargs)
-        return self.fn(*args, **kwargs)
+        raise TypeError(
+            "Direct @tla.kernel invocation is disabled; compile explicitly "
+            "with `compiled = tla.compile(kernel, *sample_args)`, then launch "
+            "with `compiled(*runtime_args, block_num=...)`."
+        )
 
     def compile(
         self, *, type_args: Sequence[Any] | None = None, **kwargs: Any
     ) -> JitCompiledFunction:
         """Directory: Compile and Launch / Compile
         Description:
-            Compile this `@tla.jit` or `@tla.kernel` function and return a
+            Compile this `@tla.kernel` function and return a
             `JitCompiledFunction`.
             Use `tla.compile(fn, *args, options=...)` as the usual Host entry; call
             `.compile()` only when you already hold a `TlaJitFunction` and need the
@@ -275,112 +345,25 @@ class TlaJitFunction:
         return mlir
 
 
-def jit(fn: Callable[..., Any]) -> TlaJitFunction:
-    """Decorate a helper for Tla DSL lowering."""
+def _make_kernel_wrapper(
+    fn: Callable[..., Any],
+    *,
+    location: DSLLocation | None,
+    options: Mapping[str, Any],
+) -> TlaJitFunction:
+    """Build a ``TlaJitFunction`` kernel wrapper from ``jit_runner``."""
 
-    _reject_async_dsl_function(fn, kind="jit")
     return TlaJitFunction(
         fn,
-        kind="jit",
-        options={},
-        decorator_location=_capture_decorator_location(),
+        kind="kernel",
+        options=dict(options),
+        decorator_location=location,
     )
 
 
-def kernel(
-    fn: Callable[..., Any] | None = None,
-    *,
-    auto_sync: str | None = None,
-) -> TlaJitFunction | Callable[[Callable[..., Any]], TlaJitFunction]:
-    """Directory: Decorators
-    Description:
-        Mark a Python function as a TLA kernel entry. The function body is not
-        executed on the Host. Returns a `TlaJitFunction`. Direct invocation of a
-        kernel is disabled; compile it explicitly with `tla.compile`, then call the
-        returned `JitCompiledFunction` to launch.
-
-        Parameters:
-        - *`fn`* (`Callable[..., Any] | None`): The function being decorated.
-          Use `@tla.kernel` or `@tla.kernel(auto_sync=...)`; call `tla.kernel(fn)`
-          only when decorator syntax is unavailable.
-        - *`auto_sync`* (`str | None`): Optional. `"v0"` enables experimental
-          automatic in-core synchronization for supported `tla.copy`, `tla.mmad`,
-          and `tla.vec.func` accesses. Default `None` (synchronization stays
-          explicit).
-
-        Constraints:
-        - The decorated function must not be defined with Python `async def`.
-        - `auto_sync` must be `"v0"` or `None`.
-        - With `auto_sync="v0"`:
-          - Only pipeline synchronization within one AIC or AIV is generated.
-            Cross-core synchronization and thread synchronization inside
-            `tla.vec.func` remain explicit.
-          - Local `tla.flag` / `tla.set_flag` / `tla.wait_flag` and `tla.mutex` /
-            `tla.mutex_guard` cannot be mixed with automatic synchronization.
-            `tla.call_extern` is also unsupported.
-          - Protected on-chip tensors must originate from `tla.allocate`; tensors
-            built by `tla.make_ptr` from raw on-chip addresses are unsupported.
-          - UB `tla.scalar_load` / `tla.scalar_store` directly under `tla.vector`
-            are unsupported by AutoSync. Place them inside `tla.vec.func` when
-            AutoSync is enabled. This placement is not required when AutoSync is
-            disabled.
-          - Runtime selection among buffers created by `tla.allocate` is supported,
-            but switching a carried pointer to another allocation across loop
-            iterations and inconsistent multi-buffer allocation order are not.
-          - `tla.mmad` `unit_flag` must be provably always zero or always enabled
-            with value 2/3. L0C copy `unit_flag` supports only 0 or 3.
-          - `tla.print_tensor` and `tla.debug_print` do not receive automatic
-            synchronization.
-        - Compile with `tla.compile(kernel, *sample_args)` before launching; calling
-          the decorated kernel directly raises `TypeError`.
-        - Kernel parameter types:
-
-          | Kind | Types |
-          | --- | --- |
-          | Tensor | `tla.Tensor` |
-          | Python scalars | `bool` / `int` / `float` |
-          | `tla` scalars | `Bool`, `Int8/16/32/64`, `UInt8/16/32/64`, `Float16/32`, `BFloat16` |
-          | Compile-time | `tla.Constexpr[...]` |
-          | Struct | `@dataclass` whose fields are among the above |
-
-        Example:
-        ```python
-        @tla.kernel
-        def vadd(src: tla.Tensor, dst: tla.Tensor) -> None:
-            with tla.vector():
-                tla.copy(src, dst)
-
-        @tla.kernel(auto_sync="v0")
-        def vadd_auto(src: tla.Tensor, dst: tla.Tensor) -> None:
-            with tla.vector():
-                tla.copy(src, dst)
-
-        compiled = tla.compile(vadd, tx, ty, options="--npu-arch 3510")
-        compiled(tx, ty, block_num=1)
-        ```
-
-    """
-
-    if auto_sync not in (None, "v0"):
-        raise ValueError(
-            f"tla.kernel auto_sync must be 'v0' or None, got {auto_sync!r}"
-        )
-
-    def decorate(target: Callable[..., Any]) -> TlaJitFunction:
-        if not callable(target):
-            raise TypeError("tla.kernel expects a callable")
-        _reject_async_dsl_function(target, kind="kernel")
-        options = {} if auto_sync is None else {"auto_sync": auto_sync}
-        return TlaJitFunction(
-            target,
-            kind="kernel",
-            options=options,
-            decorator_location=_capture_decorator_location(),
-        )
-
-    if fn is None:
-        return decorate
-    return decorate(fn)
+# User-facing decorators: ``@tla.jit`` / ``@tla.kernel`` (docs live on TlaDSL).
+jit = TlaDSL.jit
+kernel = TlaDSL.kernel
 
 
 def _reject_async_dsl_function(fn: Callable[..., Any], *, kind: str) -> None:
@@ -404,28 +387,14 @@ def _reject_async_dsl_function(fn: Callable[..., Any], *, kind: str) -> None:
     raise error
 
 
-def _capture_decorator_location() -> DSLLocation | None:
-    frame = inspect.currentframe()
-    if frame is None:
-        return None
-    caller = frame.f_back
-    while caller is not None and caller.f_code.co_filename == __file__:
-        caller = caller.f_back
-    if caller is None:
-        return None
-    filename = caller.f_code.co_filename
-    return DSLLocation(
-        filename=filename,
-        lineno=int(caller.f_lineno),
-        col_offset=0,
-        function_name=caller.f_code.co_name,
-    )
-
-
 __all__ = [
     "DSLLocation",
     "BaseDSL",
+    "TlaDSL",
     "TlaJitFunction",
+    "is_jit_callable",
+    "unwrap_jit_callable",
+    "_jit_helper_inline",
     "CompileCallable",
     "compile",
     "jit",

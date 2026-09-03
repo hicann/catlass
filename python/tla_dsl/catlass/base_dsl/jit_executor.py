@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import inspect
 import threading
 from dataclasses import dataclass, fields, is_dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Mapping, Sequence
 
 if TYPE_CHECKING:
     from ..execution import TlaExecutionResult
@@ -31,12 +32,93 @@ class JitFunctionArtifacts:
 class ExecutionArgs:
     """Runtime ABI binder for TLA kernel launch arguments.
 
-    Packing always requires a compiler-produced ``kernel_abi`` layout so
-    Dynamic-GM / memref ABI stays signature-driven.
+    ``original_signature`` (when set) is the pre-Constexpr-strip kernel
+    signature; ``signature`` is the filtered runtime copy. Packing always
+    requires a compiler-produced ``kernel_abi`` layout so Dynamic-GM / memref
+    ABI stays signature-driven.
     """
 
+    original_signature: inspect.Signature | None = None
     kernel_abi: Any | None = None
     abi_packer: Any | None = None
+    signature: inspect.Signature | None = None
+
+    def __post_init__(self) -> None:
+        if self.original_signature is not None and self.signature is None:
+            object.__setattr__(
+                self,
+                "signature",
+                self.filter_runtime_signature(self.original_signature),
+            )
+
+    @classmethod
+    def from_callable(
+        cls,
+        fn: Callable[..., Any],
+        *,
+        kernel_abi: Any | None = None,
+        abi_packer: Any | None = None,
+    ) -> "ExecutionArgs":
+        """Build a binder from a kernel callable's original signature."""
+        from .core import BaseDSL
+
+        return cls(
+            original_signature=BaseDSL()._get_signature(fn),
+            kernel_abi=kernel_abi,
+            abi_packer=abi_packer,
+        )
+
+    def filter_runtime_signature(self, sig: inspect.Signature) -> inspect.Signature:
+        """Drop Constexpr parameters from a signature."""
+        from .runtime.jit_arg_adapters import is_arg_annotation_constexpr
+
+        filtered_params = []
+        for index, (name, param) in enumerate(sig.parameters.items()):
+            if param.kind in (
+                inspect.Parameter.VAR_POSITIONAL,
+                inspect.Parameter.VAR_KEYWORD,
+            ):
+                filtered_params.append(param)
+                continue
+            if is_arg_annotation_constexpr(param.annotation, name, index, None):
+                continue
+            filtered_params.append(param)
+        return sig.replace(parameters=filtered_params)
+
+    def get_rectified_args_from_original_args(
+        self,
+        full_args: Sequence[Any],
+        full_kwargs: Mapping[str, Any] | None = None,
+    ) -> tuple[Any, ...]:
+        """Strip Constexpr parameters from a full kernel call argument list."""
+        from .runtime.jit_arg_adapters import is_arg_annotation_constexpr
+
+        sig = self.original_signature
+        runtime_sig = self.signature
+        assert sig is not None and runtime_sig is not None
+
+        runtime_arity = sum(
+            1
+            for param in runtime_sig.parameters.values()
+            if param.kind
+            not in (
+                inspect.Parameter.VAR_POSITIONAL,
+                inspect.Parameter.VAR_KEYWORD,
+            )
+        )
+        # Already-stripped launch args: do not re-bind against the original
+        # signature (Constexpr slots between runtime params would shift).
+        if len(full_args) == runtime_arity and not full_kwargs:
+            return tuple(full_args)
+
+        bound = sig.bind_partial(*full_args, **dict(full_kwargs or {}))
+        bound.apply_defaults()
+        for index, (name, param) in enumerate(sig.parameters.items()):
+            if is_arg_annotation_constexpr(param.annotation, name, index, None):
+                bound.arguments.pop(name, None)
+
+        runtime_bound = inspect.BoundArguments(runtime_sig, bound.arguments)
+        return tuple(runtime_bound.args) + tuple(runtime_bound.kwargs.values())
 
     def get_rectified_args(
         self, launch_args: Sequence[Any], **_kwargs: Any

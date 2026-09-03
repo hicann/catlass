@@ -27,14 +27,13 @@ OUTPUT_PATH = PACKAGE_ROOT / "docs" / "en" / "api" / "host_api_reference.md"
 GENERATED_BY = "python/tla_dsl/tools/generate_host_api_reference.py"
 DEFAULT_SOURCE_PATH = PACKAGE_ROOT / "catlass" / "dsl.py"
 
-# ``@tla.jit`` is intentionally omitted: helper semantics are not frozen.
-# Do not add a ``Directory:`` docstring on ``catlass.dsl.jit`` until they are.
+# Host decorator docs cover ``@tla.kernel``, ``@tla.jit``, and ``@tla.extern``.
 HOST_DIRECTORY_SECTIONS: list[tuple[str, str]] = [
     (
         "Decorators",
-        "Host-side `@tla.kernel` and `@tla.extern` declarations, plus Host "
-        "`@dataclass` packing. Decorated kernel and extern declaration bodies "
-        "are not executed on the Host.",
+        "Host-side `@tla.kernel` entry, `@tla.jit` device helpers, "
+        "`@tla.extern` declarations, and Host `@dataclass` packing. Decorated "
+        "kernel, helper, and extern declaration bodies are not executed on the Host.",
     ),
     (
         "Compile and Launch",
@@ -82,6 +81,7 @@ DIRECTORY_INTROS = dict(HOST_DIRECTORY_SECTIONS)
 
 HOST_SOURCE_PATHS = (
     PACKAGE_ROOT / "catlass" / "dsl.py",
+    PACKAGE_ROOT / "catlass" / "catlass_dsl" / "catlass.py",
     PACKAGE_ROOT / "catlass" / "base_dsl" / "compiler.py",
     PACKAGE_ROOT / "catlass" / "base_dsl" / "jit_executor.py",
     PACKAGE_ROOT / "catlass" / "execution_lowering.py",
@@ -97,6 +97,9 @@ HOST_DISPLAY_NAMES = {
     "_Tensor.mark_compact_shape_dynamic": "Tensor.mark_compact_shape_dynamic",
     # Stdlib ``@dataclass`` packing rules live on the struct-arg validator.
     "_validate_dataclass_kernel_arg": "dataclass",
+    # Public ``tla.kernel`` / ``tla.jit`` are aliases of these classmethods.
+    "CatlassBaseDSL.kernel": "kernel",
+    "CatlassBaseDSL.jit": "jit",
 }
 
 # Signature / qualified-name overrides when the documented public face differs
@@ -124,7 +127,76 @@ HOST_ENTRY_OVERRIDES: dict[str, dict[str, object]] = {
         ],
         "returns": "type",
     },
+    "CatlassBaseDSL.kernel": {
+        "qualified_name": "catlass.dsl.kernel",
+        "params": [
+            ParamInfo("fn", "Callable[..., Any] | None", "positional", "None"),
+            ParamInfo("auto_sync", "str | None", "keyword_only", "None"),
+        ],
+        "returns": ("TlaJitFunction | Callable[[Callable[..., Any]], TlaJitFunction]"),
+    },
+    "CatlassBaseDSL.jit": {
+        "qualified_name": "catlass.dsl.jit",
+        "params": [
+            ParamInfo("fn", "Callable[..., Any] | None", "positional", "None"),
+        ],
+        "returns": "Callable[..., Any]",
+    },
 }
+
+# Injected language-boundary topic (not scraped from a runtime symbol).
+CONSTEXPR_CALLABLE_DOC = """\
+Directory: Decorators
+Description:
+    Covers the "Compile-time function" row in the [`kernel`](#kernel) parameter table
+    (`tla.Constexpr[Callable[...]]`, or `tla.Constexpr` when the value is callable).
+    It does not cover compile-time constants.
+
+    Passing forms: outer `def`, `lambda`, `functools.partial`, or an `@tla.jit`-decorated
+    function. Pass at `tla.compile`; omit from `compiled(...)`. Different callables
+    specialize differently.
+
+Parameters:
+    None. Language-boundary notes for Constexpr Callable kernel arguments; not a
+    callable Host API.
+
+Constraints:
+    Body semantics (plain `def` / `lambda` / `partial`):
+
+    - Runs only during `tla.compile` / `dump_mlir`; DSL ops enter the current kernel's device
+      IR. The body is not run again when launching `compiled(...)`.
+    - When called from a kernel, the body may use only interfaces from the
+      [Kernel API](kernel_api_reference.md); see each entry's Constraints.
+    - Arbitrary Host-side Python is not device computation, including but not limited to
+      third-party libraries, file/network I/O, reliance on local Host state, and treating DSL
+      values as Host tensors or containers.
+    - TLA control flow is not supported: `tla.range`, dynamic `if` / `while`, and similar.
+
+    Body rules when the argument is `@tla.jit` are under [`jit`](#jit).
+
+    **Calls inside a kernel**
+
+    - Outer plain `def`: same body semantics as above.
+    - `@tla.jit` helper: see [`jit`](#jit); inlined into the current kernel IR during lowering.
+    - Constexpr Callable argument: same as this section.
+
+Example:
+    ```python
+    def abs_epilogue(value):
+        return tla.abs(value)
+
+    @tla.kernel
+    def transform(src: tla.Tensor, dst: tla.Tensor, epilogue: tla.Constexpr) -> None:
+        tile = tla.tile_view(src, tla.make_shape(64), tla.make_coord(0))
+        with tla.vector():
+            with tla.vec.func(mode="simd"):
+                dst_tile = tla.tile_view(dst, tla.make_shape(64), tla.make_coord(0))
+                dst_tile.store(epilogue(tile.load()))
+
+    compiled_ep = tla.compile(transform, tx, ty, abs_epilogue, options="--npu-arch 3510")
+    compiled_ep(tx, ty, block_num=1)  # abs_epilogue omitted at launch
+    ```
+"""
 
 
 def _should_collect(name: str) -> bool:
@@ -143,6 +215,7 @@ def _apply_overrides(source_name: str, entry: APIEntry) -> APIEntry:
         docstring=entry.docstring,
         source_path=entry.source_path,
         is_class=bool(meta.get("is_class", entry.is_class)),
+        is_concept=bool(meta.get("is_concept", entry.is_concept)),
         params=list(meta.get("params", entry.params)),  # type: ignore[arg-type]
         returns=str(meta.get("returns", entry.returns)),
     )
@@ -229,6 +302,16 @@ def parse_host_apis() -> dict[str, APIEntry]:
         if not path.is_file():
             raise FileNotFoundError(f"host API source not found: {path}")
         entries.update(_collect_host_file(path))
+    # Language-boundary topic: kept in the generator, not as a runtime stub.
+    jit = entries.get("jit")
+    entries["Constexpr Callable arguments"] = APIEntry(
+        name="Constexpr Callable arguments",
+        qualified_name="Host language boundary · Constexpr Callable",
+        source_line=(jit.source_line + 1) if jit and jit.source_line else None,
+        docstring=CONSTEXPR_CALLABLE_DOC,
+        source_path=jit.source_path if jit else None,
+        is_concept=True,
+    )
     return entries
 
 
@@ -253,9 +336,10 @@ def generate(*, docs_dir: Path | None = None) -> str:
         ],
         header_sources=(
             "Do not edit manually. Update Host docstrings in catlass/dsl.py,",
-            "catlass/base_dsl/compiler.py, catlass/base_dsl/jit_executor.py,",
-            "catlass/execution_lowering.py, catlass/tla/ffi.py, and",
-            "catlass/tla/runtime.py.",
+            "catlass/catlass_dsl/catlass.py, catlass/base_dsl/compiler.py,",
+            "catlass/base_dsl/jit_executor.py, catlass/execution_lowering.py,",
+            "catlass/tla/ffi.py, and catlass/tla/runtime.py. Constexpr Callable",
+            "language-boundary text lives in this generator (`CONSTEXPR_CALLABLE_DOC`).",
         ),
         leftovers_title="Other Host APIs",
         leftovers_blurb=(

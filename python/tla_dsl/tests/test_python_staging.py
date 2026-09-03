@@ -283,7 +283,7 @@ def global_bare_helper_in_runtime_if_kernel(limit: int) -> None:
         update()
 
 
-@tla.jit
+@tla.kernel
 def jit_calls_bare_helper(value: int) -> None:
     _emit_coord(value)
 
@@ -375,7 +375,9 @@ def test_host_jit_is_python_orchestration_without_host_mlir() -> None:
     kernel = host_orchestration()
     assert _HOST_EVENTS == ["orchestrated"]
     assert kernel is host_launch_kernel
-    assert host_orchestration._mlir is None
+    # Phase-1 @tla.jit is a Python wrapper (no Host MLIR attachment).
+    assert getattr(host_orchestration, "_tla_jit", False) is True
+    assert not hasattr(host_orchestration, "_mlir")
 
 
 @pytest.mark.parametrize(

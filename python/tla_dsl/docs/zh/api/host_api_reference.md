@@ -13,7 +13,7 @@ nav_order: 15
 # TLA DSL Host API 参考
 
 本文档介绍 **TLA DSL 的 Host 侧 API**（通常以 `import catlass.tla as tla` 导入）。
-内容覆盖：`@tla.kernel` 装饰器、Host 侧 `@dataclass` 打包、`tla.compile` /
+内容覆盖：`@tla.kernel` / `@tla.jit` 装饰器、Host 侧 `@dataclass` 打包、`tla.compile` /
 `JitCompiledFunction` 启动、Host tensor。
 使用流程见 [编译与启动](../kernel_development/core_concepts/compile_and_launch.md)，环境变量见
 [环境变量](../kernel_development/core_concepts/env_vars.md)。Kernel 侧接口见
@@ -42,12 +42,12 @@ DLPack 接入教程见 [Host Tensor 接入](../kernel_development/core_concepts/
 
 ## 1. 装饰器
 
-Host 侧 `@tla.kernel` 入口，以及 Host 侧 `@dataclass` 打包。
+Host 侧 `@tla.kernel` 入口、`@tla.jit` device helper，以及 Host 侧 `@dataclass` 打包。
 被装饰的 kernel 函数体在 Host 端不执行。
 
 ### `kernel`
 
-**源码：** [`catlass.dsl.kernel`](../../../catlass/dsl.py#L290)
+**源码：** [`catlass.dsl.kernel`](../../../catlass/catlass_dsl/catlass.py#L27)
 
 功能说明：
 
@@ -72,6 +72,7 @@ tla.kernel(fn: Callable[..., Any] | None = None, *, auto_sync: str | None = None
 约束说明：
 
 - 被装饰的函数不能用 Python 的 `async def` 定义。
+- 关键字选项有白名单：当前仅支持 `auto_sync`。
 - `auto_sync` 只能是 `"v0"` 或 `None`。
 - 使用 `auto_sync="v0"` 时：
   - 只生成单个 AIC 或 AIV 内部不同硬件流水之间的核内同步。AIC/AIV
@@ -92,15 +93,17 @@ tla.kernel(fn: Callable[..., Any] | None = None, *, auto_sync: str | None = None
 - 详细设计和限制说明见 [AutoSync 设计](../dsl_development/feature_development/auto_sync_design.md)。
 - 启动前必须调用 `tla.compile(kernel, *sample_args)`；直接调用装饰后的
   kernel 会抛出 `TypeError`。
-- Kernel 参数类型：
 
-  | 类别 | 类型 |
-  | --- | --- |
-  | Tensor | `tla.Tensor` |
-  | Python 标量 | `bool` / `int` / `float` |
-  | `tla` 标量 | `Bool`、`Int8/16/32/64`、`UInt8/16/32/64`、`Float16/32`、`BFloat16` |
-  | 编译期常量 | `tla.Constexpr[...]` |
-  | 结构体 | 字段类型属于上表的 `@dataclass` 实例 |
+**Kernel 入参类型**
+
+| 类别 | 类型 | 启动时传入 |
+| --- | --- | --- |
+| Tensor | `tla.Tensor` | 是 |
+| Python 标量 | `bool` / `int` / `float` | 是 |
+| `tla` 标量 | `Bool`、`Int8/16/32/64`、`UInt8/16/32/64`、`Float16/32`、`BFloat16` | 是 |
+| 编译期常量 | `tla.Constexpr[...]` | 否 |
+| 编译期函数 | `tla.Constexpr[Callable[...]]` 或 `tla.Constexpr` | 否；见 [Constexpr Callable 入参](#constexpr-callable-入参) |
+| 结构体 | 字段类型属于上表的 `@dataclass` 实例 | 按字段展开；Constexpr 字段 launch 时不需要传入 |
 
 调用示例：
 
@@ -110,20 +113,107 @@ def vadd(src: tla.Tensor, dst: tla.Tensor) -> None:
     with tla.vector():
         tla.copy(src, dst)
 
-@tla.kernel(auto_sync="v0")
-def vadd_auto(src: tla.Tensor, dst: tla.Tensor) -> None:
-    with tla.vector():
-        tla.copy(src, dst)
-
 compiled = tla.compile(vadd, tx, ty, options="--npu-arch 3510")
 compiled(tx, ty, block_num=1)
 ```
 
 ---
 
+### `jit`
+
+**源码：** [`catlass.dsl.jit`](../../../catlass/catlass_dsl/catlass.py#L114)
+
+功能说明：
+
+将 Python 函数标注为 device 侧 DSL helper。
+
+- 在 `@tla.kernel` 降级过程中被调用时，函数体内联进该 kernel 的 device IR。
+- 可作为 [Constexpr Callable](#constexpr-callable-入参) kernel 入参；也可在 kernel 内按名调用。
+- 在 Host 上直接调用时按普通 Python 执行。
+
+函数原型：
+
+```python
+tla.jit(fn: Callable[..., Any] | None = None) -> Callable[..., Any]
+```
+
+参数说明：
+
+- *`fn`*（`Callable[..., Any] | None`）：被装饰的函数。用 `@tla.jit`；只有无法使用
+  装饰器语法时才手写 `tla.jit(fn)`。
+
+约束说明：
+
+- 可用普通 `def` 定义；不可使用 `async def`。
+- 不接受关键字选项。
+- 无独立的 `dump_mlir` / `compile`。
+- helper 之间不可递归调用。
+- helper 可包含需框架改写的控制流：动态 `if` / `while`、`tla.range` 等；
+  在 `@tla.kernel` 降级内联时一并处理。
+
+调用示例：
+
+```python
+@tla.jit
+def apply_abs(value):
+    return tla.abs(value)
+
+@tla.kernel
+def k(src: tla.Tensor, dst: tla.Tensor) -> None:
+    ...
+    y = apply_abs(x)  # 按名调用，compile 时内联
+
+compiled = tla.compile(k, tx, ty, options="--npu-arch 3510")
+compiled(tx, ty, block_num=1)
+```
+
+---
+
+### Constexpr Callable 入参
+
+对应 [`kernel`](#kernel) 入参表中「编译期函数」一行（`tla.Constexpr[Callable[...]]`，或实参为可调用对象的 `tla.Constexpr`）；不含「编译期常量」。
+
+传递形态：外层 `def`、`lambda`、`functools.partial`，或 `@tla.jit` 装饰的函数。
+在 `tla.compile` 时传入，`compiled(...)` 启动时不再传入；不同函数对象对应不同特化。
+
+函数体语义（普通 `def` / `lambda` / `partial`）：
+
+- 只在 `tla.compile` / `dump_mlir` 时执行；其中的 DSL 操作写入当前 kernel 的 device IR。`compiled(...)` 启动时不再执行该函数体。
+- 在 kernel 内调用时，函数体只能使用 [Kernel API](kernel_api_reference.md) 中的接口，具体约束见对应条目。
+- 任意 Host 侧 Python 不构成设备计算语义，包括但不限于第三方库、文件/网络 I/O、对本机状态的依赖，以及把 DSL 值当 Host 张量或容器使用。
+- 不支持 TLA 控制流：`tla.range`、动态 `if` / `while` 等。
+
+`@tla.jit` 作入参时的函数体约束见 [`jit`](#jit)。
+
+**Kernel 体内可调用**
+
+- 外层普通 `def`：同本节「函数体语义」。
+- `@tla.jit` helper：见 [`jit`](#jit)；降级时内联进当前 kernel IR。
+- Constexpr Callable 入参：同本节。
+
+调用示例：
+
+```python
+def abs_epilogue(value):
+    return tla.abs(value)
+
+@tla.kernel
+def transform(src: tla.Tensor, dst: tla.Tensor, epilogue: tla.Constexpr) -> None:
+    tile = tla.tile_view(src, tla.make_shape(64), tla.make_coord(0))
+    with tla.vector():
+        with tla.vec.func(mode="simd"):
+            dst_tile = tla.tile_view(dst, tla.make_shape(64), tla.make_coord(0))
+            dst_tile.store(epilogue(tile.load()))
+
+compiled_ep = tla.compile(transform, tx, ty, abs_epilogue, options="--npu-arch 3510")
+compiled_ep(tx, ty, block_num=1)  # 不再传 abs_epilogue
+```
+
+---
+
 ### `dataclass`
 
-**源码：** [`dataclasses.dataclass`](../../../catlass/execution_lowering.py#L773)
+**源码：** [`dataclasses.dataclass`](../../../catlass/execution_lowering.py#L850)
 
 功能说明：
 
@@ -196,8 +286,9 @@ executor。缓存 / 架构 / IR dump 等非函数参数见
 
 功能说明：
 
-编译 `@tla.jit` 或 `@tla.kernel` 函数，返回可调用的
-`JitCompiledFunction`。这是公开的 `tla.compile` 入口；调用返回的对象即可启动。
+编译 `@tla.kernel` 函数，返回可调用的
+`JitCompiledFunction`。这是公开的 `tla.compile` 入口；调用返回的对象即可启动
+（`compiled(*tensors, block_num=...)`）。适合编译一次、同一二进制多次启动。
 
 函数原型：
 
@@ -215,7 +306,7 @@ tla.compile(func: Any, *args: Any, **kwargs: Any) -> JitCompiledFunction
 
 约束说明：
 
-- `func` 必须是 `@tla.jit` 或 `@tla.kernel` 得到的 `TlaJitFunction`。
+- `func` 必须是 `@tla.kernel` 得到的 `TlaJitFunction`。
 - `args` 只作编译期类型样本，不必绑定 NPU 缓冲（`make_fake_tensor` 合法）。
 - 用 `options="--npu-arch 3510"` 指定芯片名；不支持的取值在编译时报错。
 - `block_num` / `stream` 等启动参数写在返回的编译函数上，而不是
@@ -233,11 +324,11 @@ compiled(tx, ty, block_num=1)  # 同一份二进制再次启动
 
 #### `TlaJitFunction.compile`
 
-**源码：** [`catlass.dsl.TlaJitFunction.compile`](../../../catlass/dsl.py#L179)
+**源码：** [`catlass.dsl.TlaJitFunction.compile`](../../../catlass/dsl.py#L249)
 
 功能说明：
 
-编译当前 `@tla.jit` 或 `@tla.kernel` 函数并返回 `JitCompiledFunction`。
+编译当前 `@tla.kernel` 函数并返回 `JitCompiledFunction`。
 日常 Host 入口是 `tla.compile(fn, *args, options=...)`；只有已持有
 `TlaJitFunction` 并需要直接获取编译函数所有者时才调用 `.compile()`。
 
@@ -277,7 +368,7 @@ compiled = my_kernel.compile(
 
 #### `JitCompiledFunction.__call__`
 
-**源码：** [`catlass.base_dsl.jit_executor.JitCompiledFunction.__call__`](../../../catlass/base_dsl/jit_executor.py#L302)
+**源码：** [`catlass.base_dsl.jit_executor.JitCompiledFunction.__call__`](../../../catlass/base_dsl/jit_executor.py#L384)
 
 功能说明：
 
@@ -323,7 +414,7 @@ compiled(args=(tx, ty), block_num=1)
 
 #### `TlaJitFunction.dump_mlir`
 
-**源码：** [`catlass.dsl.TlaJitFunction.dump_mlir`](../../../catlass/dsl.py#L238)
+**源码：** [`catlass.dsl.TlaJitFunction.dump_mlir`](../../../catlass/dsl.py#L308)
 
 功能说明：
 

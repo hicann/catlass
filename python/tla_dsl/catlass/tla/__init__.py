@@ -41,6 +41,9 @@ _PARENT_EXPORTS = (
     "jit",
     "compile",
     "TlaJitFunction",
+    "TlaDSL",
+    "is_jit_callable",
+    "unwrap_jit_callable",
     "JitCompiledFunction",
     "JitModule",
     "TlaIRNotExecutableError",
@@ -110,6 +113,9 @@ def __getattr__(name: str) -> Any:
         "jit",
         "compile",
         "TlaJitFunction",
+        "TlaDSL",
+        "is_jit_callable",
+        "unwrap_jit_callable",
     ):
         from .. import dsl as _dsl
 
