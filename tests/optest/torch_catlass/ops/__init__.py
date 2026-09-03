@@ -21,6 +21,7 @@ from .ascend950_rain_fusion_attention import (
     ascend950_rain_fusion_attention,  # example 76
 )
 from .ascend950_flash_attention_infer import ascend950_flash_attention_infer  # example 49
+from .ascend950_hstu_infer import ascend950_hstu_infer  # example 83
 from .ascend950_fp8_mx_flash_attention_infer import (
     ascend950_fp8_mx_flash_attention_infer,  # example 65
 )
@@ -149,6 +150,7 @@ __all__ = [
     "conv_bias",  # example 24
     "flash_attention_infer_tla",  # example 40
     "ascend950_flash_attention_infer",  # example 49
+    "ascend950_hstu_infer",  # example 83
     "ascend950_fp8_mx_flash_attention_infer",  # example 65
     "matmul_full_loadA",  # example 25
     "matmul_relu",  # example 26

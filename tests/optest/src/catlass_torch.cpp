@@ -23,6 +23,7 @@
 #include "template/batched_matmul.h"
 #include "template/flash_attention.h"
 #include "template/flash_attention_chunk_prefill.h"
+#include "template/hstu_infer.h"
 #include "template/rain_fusion_attention.h"
 #include "template/grouped_matmul.h"
 #include "template/grouped_quant_matmul.h"
@@ -276,6 +277,9 @@ REGISTER_TORCH_FUNC(ascend950_flash_attention_infer);
 
 static auto& ascend950_fp8_mx_flash_attention_infer = Ascend950MxFp8FlashAttentionInferOp::Run;
 REGISTER_TORCH_FUNC(ascend950_fp8_mx_flash_attention_infer);
+
+static auto& ascend950_hstu_infer = Ascend950HstuInferOp::Run;
+REGISTER_TORCH_FUNC(ascend950_hstu_infer);
 
 using W8A16MatmulOp = MatmulLike<CatlassKernel::W8A16Matmul>;
 static auto& w8a16_matmul = W8A16MatmulOp::Run;

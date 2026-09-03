@@ -623,6 +623,34 @@ struct MmadXASharedPV : public MmadBase<ArchTag_, false> {
     static constexpr uint32_t STAGES = 2;
 };
 
+template <class ArchTag_, bool ENABLE_PAGED_KV_CACHE_ = false, bool ENABLE_UNIT_FLAG_ = false>
+struct MmadHstuQK : public MmadBase<ArchTag_, false> {
+    static constexpr bool ENABLE_PAGED_KV_CACHE = ENABLE_PAGED_KV_CACHE_;
+    static constexpr bool ENABLE_UNIT_FLAG = ENABLE_UNIT_FLAG_;
+    static constexpr bool ENABLE_PV_RESIDENT_L0C = true;
+
+    static constexpr uint32_t L0A_STAGES = 2;
+    static constexpr uint32_t L0B_STAGES = 2;
+    static constexpr uint32_t L0C_STAGES = 1;
+    static constexpr uint32_t L1A_STAGES = 1;
+    static constexpr uint32_t L1B_STAGES = 2;
+    static constexpr uint32_t UBC_STAGES = 2;
+};
+
+template <class ArchTag_, bool ENABLE_PAGED_KV_CACHE_ = false, bool ENABLE_UNIT_FLAG_ = false>
+struct MmadHstuPV : public MmadBase<ArchTag_, false> {
+    static constexpr bool ENABLE_PAGED_KV_CACHE = ENABLE_PAGED_KV_CACHE_;
+    static constexpr bool ENABLE_UNIT_FLAG = ENABLE_UNIT_FLAG_;
+    static constexpr bool ENABLE_PV_RESIDENT_L0C = true;
+
+    static constexpr uint32_t L0A_STAGES = 2;
+    static constexpr uint32_t L0B_STAGES = 2;
+    static constexpr uint32_t L0C_STAGES = 1;
+    static constexpr uint32_t L1A_STAGES = 2;
+    static constexpr uint32_t L1B_STAGES = 2;
+    static constexpr uint32_t UBC_STAGES = 2;
+};
+
 } // namespace Catlass::Gemm
 
 #endif // CATLASS_GEMM_DISPATCH_POLICY_HPP

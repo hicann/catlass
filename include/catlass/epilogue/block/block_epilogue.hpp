@@ -70,6 +70,7 @@ class BlockEpilogue {
 #include "catlass/epilogue/block/block_epilogue_xa_shared_rescale_ascend950.hpp"
 #include "catlass/epilogue/block/block_epilogue_xa_unshared_softmax_ascend950.hpp"
 #include "catlass/epilogue/block/block_epilogue_xa_combine_scale_ascend950.hpp"
+#include "catlass/epilogue/block/block_epilogue_silu_scale.hpp"
 #endif
 
 #endif // CATLASS_EPILOGUE_BLOCK_BLOCK_EPILOGUE_HPP

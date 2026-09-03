@@ -180,6 +180,7 @@ set(EXAMPLE_ASCEND950
     80_ascend950_grouped_matmul_slice_m_gelu
     81_ascend950_rain_fusion_attention
     82_ascend950_basic_syrk
+    83_ascend950_hstu_infer
 )
 
 if(CATLASS_ARCH STREQUAL "2201")

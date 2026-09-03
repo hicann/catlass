@@ -209,6 +209,31 @@ struct TileCopy<ArchTag, Gemm::GemmType<ElementC_, LayoutTagC_, AscendC::TPositi
     using CopyUbToGmD = CopyUb2Gm<ArchTag, DType>;
 };
 
+#if (defined(CATLASS_ARCH) && CATLASS_ARCH == 3510)
+template <
+    class ArchTag,
+    /// Element for C matrix operand
+    class ElementC_, class LayoutTagC_,
+    /// GemmType for D matrix operand
+    class ElementD_, class LayoutTagD_>
+struct TileCopy<
+    ArchTag, Gemm::GemmType<ElementD_, LayoutTagD_, AscendC::TPosition::A1>,
+    Gemm::GemmType<ElementC_, LayoutTagC_, AscendC::TPosition::VECCALC>> {
+    using ElementC = ElementC_;
+    using LayoutTagC = LayoutTagC_;
+    using CType = Gemm::GemmType<ElementC, LayoutTagC, AscendC::TPosition::VECCALC>;
+    using LayoutC = detail::TagToLayout_t<ElementC, LayoutTagC>;
+
+    using ElementD = ElementD_;
+    using LayoutTagD = LayoutTagD_;
+    using DType = Gemm::GemmType<ElementD, LayoutTagD, AscendC::TPosition::A1>;
+    using LayoutD = detail::TagToLayout_t<ElementD, LayoutTagD>;
+
+    template <class TensorDst, class TensorSrc>
+    using CopyUbToDst = CopyUb2L1Tla<ArchTag, TensorSrc, TensorDst>;
+};
+#endif
+
 } // namespace Catlass::Epilogue::Tile
 
 #endif // CATLASS_EPILOGUE_TILE_TILE_COPY_HPP

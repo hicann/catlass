@@ -781,6 +781,85 @@ def test_81_ascend950_rain_fusion_attention(build_env):
     run_case(build_env, "81_ascend950_rain_fusion_attention", case_cpp)
 
 
+@only_on_3510
+def test_83_ascend950_hstu_infer(build_env):
+    # gen_data args: batch, qSeqlen, kvSeqlen, numHeads, kvHeads, headSize, isVariedLen,
+    #                siluScale, layout, dtype, maskType, pagedBlockSize, dataPath
+    data_path = os.path.join(CMAKE_EXAMPLES_PATH, "83_ascend950_hstu_infer", "data")
+    case_py = [str(i) for i in [2, 256, 256, 8, 8, 256, 0, 0.1]] + [
+        "TND",
+        "half",
+        "0",
+        "0",
+        data_path,
+    ]
+    subprocess.run(
+        [
+            "python",
+            os.path.join(CMAKE_EXAMPLES_PATH, "83_ascend950_hstu_infer", "gen_data.py"),
+        ]
+        + case_py,
+        check=False,
+    )
+    # example args: batch qSeqlen kvSeqlen numHeads kvHeads embeddingSize isVariedLen siluScale
+    #               --dtype half --layout TND --mask 0 --paged_block_size 0
+    #               --datapath ... --device ...
+    case_cpp = [str(i) for i in [2, 256, 256, 8, 8, 256, 0, 0.1]] + [
+        "--dtype",
+        "half",
+        "--layout",
+        "TND",
+        "--mask",
+        "0",
+        "--paged_block_size",
+        "0",
+        "--datapath",
+        data_path,
+        "--device",
+        DEVICE_ID,
+    ]
+    run_case(build_env, "83_ascend950_hstu_infer", case_cpp)
+
+
+@only_on_3510
+def test_83_ascend950_hstu_infer_paged(build_env):
+    # paged KV cache: causal mask, block size 128
+    data_path = os.path.join(CMAKE_EXAMPLES_PATH, "83_ascend950_hstu_infer", "data")
+    case_py = [str(i) for i in [2, 256, 256, 8, 8, 256, 0, 0.1]] + [
+        "TND",
+        "half",
+        "1",
+        "128",
+        data_path,
+    ]
+    subprocess.run(
+        [
+            "python",
+            os.path.join(CMAKE_EXAMPLES_PATH, "83_ascend950_hstu_infer", "gen_data.py"),
+        ]
+        + case_py,
+        check=False,
+    )
+    # example args: batch qSeqlen kvSeqlen numHeads kvHeads embeddingSize isVariedLen siluScale
+    #               --dtype half --layout TND --mask 1 --paged_block_size 128
+    #               --datapath ... --device ...
+    case_cpp = [str(i) for i in [2, 256, 256, 8, 8, 256, 0, 0.1]] + [
+        "--dtype",
+        "half",
+        "--layout",
+        "TND",
+        "--mask",
+        "1",
+        "--paged_block_size",
+        "128",
+        "--datapath",
+        data_path,
+        "--device",
+        DEVICE_ID,
+    ]
+    run_case(build_env, "83_ascend950_hstu_infer", case_cpp)
+
+
 # ---------------------------------------------------------------------------
 # normal cases: generated via parametrize
 # ---------------------------------------------------------------------------

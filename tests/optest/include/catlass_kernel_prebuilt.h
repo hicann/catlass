@@ -189,6 +189,42 @@ __attribute__((weak)) void RainFusionAttention(
     const uint32_t blockNum, aclrtStream stream, const RainFusionAttentionParams& params);
 
 /**
+ * @brief Runtime parameters for example 83_ascend950_hstu_infer.
+ *
+ * HSTU inference attention: replaces softmax with scaled SiLU activation
+ * (P = siluScale * S * sigmoid(S)). Supports NTD/TND layouts and paged KV
+ * cache (NHD layout with block table indirection).
+ *
+ * inputAddr[0]: per-batch cumulative Q sequence lengths (int64, batch+1).
+ * inputAddr[1]: per-batch cumulative KV sequence lengths (int64, batch+1).
+ * inputAddr[2]: query tensor.
+ * inputAddr[3]: key tensor.
+ * inputAddr[4]: value tensor.
+ * inputAddr[5]: paged KV block table (uint32 [batch, maxNumBlocks]).
+ * outputAddr[0]: output tensor (same layout as query).
+ */
+struct HstuInferParams : public PrebuiltParams {
+    uint32_t qNtokens = 0;             ///< Total Q tokens across batches (from cumulative lengths).
+    uint32_t batch = 0;                ///< Batch size.
+    uint32_t numHeads = 0;             ///< Number of Q heads.
+    uint32_t kvHeads = 0;              ///< Number of KV heads (must equal numHeads).
+    uint32_t embeddingSize = 0;        ///< Per-head embedding dimension (256 for best performance).
+    uint32_t maxKvSeqlen = 0;          ///< Max KV sequence length across batches (paged mode only).
+    uint32_t numPagedBlocks = 0;       ///< Total paged KV cache blocks (paged mode only).
+    uint32_t pagedBlockSize = 0;       ///< Paged block size, 0 disables paged KV cache.
+    uint32_t maskType = 0;             ///< 0: no mask; 1: causal multiplicative mask.
+    float siluScale = 0.1f;            ///< SiLU activation scale.
+    std::string layout = "TND";        ///< Q/O layout: "TND" or "NTD".
+    aclDataType dataType = ACL_FLOAT16; ///< Input/output element type (fp16 only).
+};
+
+/**
+ * @brief Reserved prebuilt interface for example 83_ascend950_hstu_infer.
+ */
+__attribute__((weak)) void Ascend950HstuInfer(
+    const uint32_t blockNum, aclrtStream stream, const HstuInferParams& params);
+
+/**
  * @brief Broadcast MatMul with Per-Block Quantization（Ascend 950 TLA）。
  * @param blockNum  启用的 AI Core 数量。
  * @param stream    ACL 计算流。

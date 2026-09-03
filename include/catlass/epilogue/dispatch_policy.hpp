@@ -310,6 +310,13 @@ struct EpilogueAtlasA2RescaleO_FD {
     using ArchTag = Arch::AtlasA2;
     static constexpr LseMode LSE_MODE = LSE_MODE_;
 };
+
+struct EpilogueSilu {
+    using ArchTag = Arch::Ascend950;
+    static constexpr uint32_t UB_STAGES = 2;
+    static constexpr uint32_t AIV_CORE_NUM = 2;
+};
+
 } // namespace Catlass::Epilogue
 
 #endif // CATLASS_EPILOGUE_DISPATCH_POLICY_HPP
