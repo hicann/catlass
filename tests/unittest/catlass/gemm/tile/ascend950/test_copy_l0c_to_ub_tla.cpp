@@ -173,7 +173,10 @@ TEST_P(TileCopyL0CToUbTlaAscend950Test, L0CToRowMajorTestSplitN)
 
     setShape<ElementDst>();
     auto layoutSrc = tla::MakeLayoutL0C(_row, _col);
-    auto layoutDst = tla::MakeLayout<ElementDst, LayoutDstTag>(_dst_row, _dst_col);
+    auto layoutDst = tla::MakeLayout(
+        tla::MakeShape(_dst_row, _dst_col),
+        tla::MakeStride(static_cast<int64_t>(RoundUp(_col, 32) / 2), tla::Int<1>{}),
+        tla::MakeShape(_dst_row, _dst_col));
     L0CToUb950TensorSrc<ElementAccumulator, LayoutSrc> tensorL0C(l0cSrc, layoutSrc);
     L0CToUb950TensorDst<ElementDst, LayoutDst> tensorUb(ubDst, layoutDst);
 
@@ -190,7 +193,7 @@ TEST_P(TileCopyL0CToUbTlaAscend950Test, L0CToRowMajorTestSplitN)
     ASSERT_EQ(fixpipeArg->nSize, RoundUp(_col, 32));
     ASSERT_EQ(fixpipeArg->mSize, _row);
     ASSERT_EQ(fixpipeArg->srcStride, _row_round);
-    ASSERT_EQ(fixpipeArg->dstStride, _col);
+    ASSERT_EQ(fixpipeArg->dstStride, RoundUp(_col, 32) / 2);
     ASSERT_EQ(fixpipeArg->dualDstCtl, 2);
 }
 
