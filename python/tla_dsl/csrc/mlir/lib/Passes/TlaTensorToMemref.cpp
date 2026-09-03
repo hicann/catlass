@@ -100,14 +100,14 @@ static bool tryGmOriginLayout(
         return false;
     if (info->addressSpace != ::AddressSpace::gm)
         return false;
-    if (info->layoutTag != "RowMajor" && info->layoutTag != "ColumnMajor")
+    if (info->layoutTag != LayoutTag::RowMajor && info->layoutTag != LayoutTag::ColumnMajor)
         return false;
     if (llvm::any_of(info->originShape, [](int64_t d) { return d == ShapedType::kDynamic; }))
         return false;
     unsigned rank = info->originShape.size();
     originDims.assign(info->originShape.begin(), info->originShape.end());
     contigStrides.assign(rank, 1);
-    if (info->layoutTag == "RowMajor") {
+    if (info->layoutTag == LayoutTag::RowMajor) {
         int64_t acc = 1;
         for (int i = rank - 1; i >= 0; --i) {
             contigStrides[i] = acc;
@@ -652,8 +652,8 @@ static bool isLegalFixpipeElementType(Type srcElementType, Type dstElementType)
 }
 
 std::string getCopyRouteCallee(
-    MLIRContext* ctx, StringRef srcAddrspace, StringRef dstAddrspace, TensorLayoutTag srcLayout,
-    TensorLayoutTag dstLayout, Type srcElementType, Type dstElementType, StringRef extraDesc)
+    MLIRContext* ctx, StringRef srcAddrspace, StringRef dstAddrspace, ::LayoutTag srcLayout, ::LayoutTag dstLayout,
+    Type srcElementType, Type dstElementType, StringRef extraDesc)
 {
     FailureOr<hivm::AddressSpace> srcSpace = resolveHivmAddressSpace(ctx, srcAddrspace);
     FailureOr<hivm::AddressSpace> dstSpace = resolveHivmAddressSpace(ctx, dstAddrspace);
@@ -665,7 +665,7 @@ std::string getCopyRouteCallee(
     // symbol names encode both endpoint layout tags so future layout variants can
     // be added as new explicit routes instead of overloading addrspace-only names.
     if (*srcSpace == hivm::AddressSpace::UB && *dstSpace == hivm::AddressSpace::L1 &&
-        srcLayout == TensorLayoutTag::RowMajor && dstLayout == TensorLayoutTag::zN) {
+        srcLayout == LayoutTag::RowMajor && dstLayout == LayoutTag::zN) {
         if (srcElementType != dstElem)
             return {};
         StringRef suffix = vectorPathElemSuffix(srcElementType);
@@ -674,8 +674,7 @@ std::string getCopyRouteCallee(
         return Twine("copy_ub_RowMajor_to_l1_zN_").concat(suffix).str();
     }
     if (*srcSpace == hivm::AddressSpace::UB && *dstSpace == hivm::AddressSpace::L1 &&
-        (srcLayout == TensorLayoutTag::zN || srcLayout == TensorLayoutTag::zNUnAlign) &&
-        dstLayout == TensorLayoutTag::zN) {
+        (srcLayout == LayoutTag::zN || srcLayout == LayoutTag::zNUnAlign) && dstLayout == LayoutTag::zN) {
         if (srcElementType != dstElem)
             return {};
         StringRef suffix = vectorPathElemSuffix(srcElementType);
@@ -685,7 +684,7 @@ std::string getCopyRouteCallee(
     }
     // GM (row-major) -> UB (row-major): vector-core staging load.
     if (*srcSpace == hivm::AddressSpace::GM && *dstSpace == hivm::AddressSpace::UB &&
-        srcLayout == TensorLayoutTag::RowMajor && dstLayout == TensorLayoutTag::RowMajor) {
+        srcLayout == LayoutTag::RowMajor && dstLayout == LayoutTag::RowMajor) {
         if (srcElementType != dstElem)
             return {};
         StringRef suffix = vectorPathElemSuffix(srcElementType);
@@ -695,7 +694,7 @@ std::string getCopyRouteCallee(
     }
     // UB (row-major) -> GM (row-major): vector-core staging store.
     if (*srcSpace == hivm::AddressSpace::UB && *dstSpace == hivm::AddressSpace::GM &&
-        srcLayout == TensorLayoutTag::RowMajor && dstLayout == TensorLayoutTag::RowMajor) {
+        srcLayout == LayoutTag::RowMajor && dstLayout == LayoutTag::RowMajor) {
         if (srcElementType != dstElem)
             return {};
         StringRef suffix = vectorPathElemSuffix(srcElementType);
@@ -715,15 +714,15 @@ std::string getCopyRouteCallee(
     // the generic one below.
     if (*srcSpace == hivm::AddressSpace::GM && *dstSpace == hivm::AddressSpace::L1 && srcElementType == dstElem &&
         ::tla::isPackedFp4Type(dstElem) &&
-        ((srcLayout == TensorLayoutTag::RowMajor && dstLayout == TensorLayoutTag::zN) ||
-         (srcLayout == TensorLayoutTag::ColumnMajor && dstLayout == TensorLayoutTag::nZ))) {
+        ((srcLayout == LayoutTag::RowMajor && dstLayout == LayoutTag::zN) ||
+         (srcLayout == LayoutTag::ColumnMajor && dstLayout == LayoutTag::nZ))) {
         // The suffix is the C++ type the wrapper instantiates, like every other
         // bc symbol. The encoding comes off the destination tile's element type;
         // there is nowhere else it could come from, and nothing to disagree with.
         StringRef fmt =
             ::llvm::isa<::tla::Float4E1M2Type>(dstElem) ? StringRef("float4_e1m2x2_t") : StringRef("float4_e2m1x2_t");
-        StringRef src = srcLayout == TensorLayoutTag::RowMajor ? "RowMajor" : "ColumnMajor";
-        StringRef dst = dstLayout == TensorLayoutTag::zN ? "zN" : "nZ";
+        StringRef src = stringifyLayoutTag(srcLayout);
+        StringRef dst = stringifyLayoutTag(dstLayout);
         return (Twine("copy_gm_") + src + "_to_l1_" + dst + "_" + fmt).str();
     }
     // An e8m0 scale block, on either side of the copy. The dialect type is the
@@ -738,15 +737,15 @@ std::string getCopyRouteCallee(
     if (*srcSpace == hivm::AddressSpace::GM && *dstSpace == hivm::AddressSpace::L1 && isScaleElem(srcElementType) &&
         isScaleElem(dstElem)) {
         StringRef src, dst;
-        if (dstLayout == TensorLayoutTag::zZMxScale &&
-            (srcLayout == TensorLayoutTag::rowMajorMxScaleA || srcLayout == TensorLayoutTag::colMajorMxScaleA)) {
-            src = srcLayout == TensorLayoutTag::rowMajorMxScaleA ? "rowMajorMxScaleA" : "colMajorMxScaleA";
-            dst = "zZMxScale";
+        if (dstLayout == LayoutTag::zZMxScale &&
+            (srcLayout == LayoutTag::rowMajorMxScaleA || srcLayout == LayoutTag::colMajorMxScaleA)) {
+            src = stringifyLayoutTag(srcLayout);
+            dst = stringifyLayoutTag(dstLayout);
         } else if (
-            dstLayout == TensorLayoutTag::nNMxScale &&
-            (srcLayout == TensorLayoutTag::rowMajorMxScaleB || srcLayout == TensorLayoutTag::colMajorMxScaleB)) {
-            src = srcLayout == TensorLayoutTag::rowMajorMxScaleB ? "rowMajorMxScaleB" : "colMajorMxScaleB";
-            dst = "nNMxScale";
+            dstLayout == LayoutTag::nNMxScale &&
+            (srcLayout == LayoutTag::rowMajorMxScaleB || srcLayout == LayoutTag::colMajorMxScaleB)) {
+            src = stringifyLayoutTag(srcLayout);
+            dst = stringifyLayoutTag(dstLayout);
         }
         if (!src.empty())
             return (Twine("copy_gm_") + src + "_to_l1_" + dst + "_uint8_t").str();
@@ -756,7 +755,7 @@ std::string getCopyRouteCallee(
     // check would abort the whole lookup instead of falling through to the
     // routes below.
     if (*srcSpace == hivm::AddressSpace::GM && *dstSpace == hivm::AddressSpace::L1 &&
-        srcLayout == TensorLayoutTag::RowMajor && dstLayout == TensorLayoutTag::zN) {
+        srcLayout == LayoutTag::RowMajor && dstLayout == LayoutTag::zN) {
         if (srcElementType != dstElem)
             return {};
         StringRef suffix = copyRuntimeElemSuffix(srcElementType);
@@ -765,7 +764,7 @@ std::string getCopyRouteCallee(
         return Twine("copy_gm_RowMajor_to_l1_zN_").concat(suffix).str();
     }
     if (*srcSpace == hivm::AddressSpace::GM && *dstSpace == hivm::AddressSpace::L1 &&
-        srcLayout == TensorLayoutTag::ColumnMajor && dstLayout == TensorLayoutTag::nZ) {
+        srcLayout == LayoutTag::ColumnMajor && dstLayout == LayoutTag::nZ) {
         if (srcElementType != dstElem)
             return {};
         StringRef suffix = copyRuntimeElemSuffix(srcElementType);
@@ -773,8 +772,8 @@ std::string getCopyRouteCallee(
             return {};
         return Twine("copy_gm_ColumnMajor_to_l1_nZ_").concat(suffix).str();
     }
-    if (*srcSpace == hivm::AddressSpace::L1 && *dstSpace == hivm::AddressSpace::L0A &&
-        srcLayout == TensorLayoutTag::zN && dstLayout == TensorLayoutTag::zN) {
+    if (*srcSpace == hivm::AddressSpace::L1 && *dstSpace == hivm::AddressSpace::L0A && srcLayout == LayoutTag::zN &&
+        dstLayout == LayoutTag::zN) {
         if (srcElementType != dstElem)
             return {};
         StringRef suffix = copyRuntimeElemSuffix(srcElementType);
@@ -782,8 +781,8 @@ std::string getCopyRouteCallee(
             return {};
         return Twine("copy_l1_zN_to_l0a_zN_").concat(suffix).str();
     }
-    if (*srcSpace == hivm::AddressSpace::L1 && *dstSpace == hivm::AddressSpace::L0A &&
-        srcLayout == TensorLayoutTag::nZ && dstLayout == TensorLayoutTag::zN) {
+    if (*srcSpace == hivm::AddressSpace::L1 && *dstSpace == hivm::AddressSpace::L0A && srcLayout == LayoutTag::nZ &&
+        dstLayout == LayoutTag::zN) {
         if (srcElementType != dstElem)
             return {};
         StringRef suffix = copyRuntimeElemSuffix(srcElementType);
@@ -791,8 +790,8 @@ std::string getCopyRouteCallee(
             return {};
         return Twine("copy_l1_nZ_to_l0a_zN_").concat(suffix).str();
     }
-    if (*srcSpace == hivm::AddressSpace::L1 && *dstSpace == hivm::AddressSpace::L0B &&
-        srcLayout == TensorLayoutTag::zN && dstLayout == TensorLayoutTag::nZ) {
+    if (*srcSpace == hivm::AddressSpace::L1 && *dstSpace == hivm::AddressSpace::L0B && srcLayout == LayoutTag::zN &&
+        dstLayout == LayoutTag::nZ) {
         if (srcElementType != dstElem)
             return {};
         StringRef suffix = copyRuntimeElemSuffix(srcElementType);
@@ -800,8 +799,8 @@ std::string getCopyRouteCallee(
             return {};
         return Twine("copy_l1_zN_to_l0b_nZ_").concat(suffix).str();
     }
-    if (*srcSpace == hivm::AddressSpace::L1 && *dstSpace == hivm::AddressSpace::L0B &&
-        srcLayout == TensorLayoutTag::nZ && dstLayout == TensorLayoutTag::nZ) {
+    if (*srcSpace == hivm::AddressSpace::L1 && *dstSpace == hivm::AddressSpace::L0B && srcLayout == LayoutTag::nZ &&
+        dstLayout == LayoutTag::nZ) {
         if (srcElementType != dstElem)
             return {};
         StringRef suffix = copyRuntimeElemSuffix(srcElementType);
@@ -812,7 +811,7 @@ std::string getCopyRouteCallee(
     // L0C -> GM row-major: an fp32 acc may narrow to f32 / f16 / bf16 on fixpipe;
     // an i32 acc (int8 MMAD) stays i32.
     if (*srcSpace == hivm::AddressSpace::L0C && *dstSpace == hivm::AddressSpace::GM &&
-        srcLayout == TensorLayoutTag::L0C && dstLayout == TensorLayoutTag::RowMajor) {
+        srcLayout == LayoutTag::L0Clayout && dstLayout == LayoutTag::RowMajor) {
         if (!isLegalFixpipeElementType(srcElementType, dstElem))
             return {};
         StringRef suffix = copyRuntimeElemSuffix(dstElem);
@@ -822,7 +821,7 @@ std::string getCopyRouteCallee(
     }
     // L0C (fp32 MMAD acc) -> UB row-major: dst may be f32 / f16 / bf16 (narrowing on fixpipe).
     if (*srcSpace == hivm::AddressSpace::L0C && *dstSpace == hivm::AddressSpace::UB &&
-        srcLayout == TensorLayoutTag::L0C && dstLayout == TensorLayoutTag::RowMajor) {
+        srcLayout == LayoutTag::L0Clayout && dstLayout == LayoutTag::RowMajor) {
         if (!isLegalFixpipeElementType(srcElementType, dstElem))
             return {};
         StringRef suffix = copyRuntimeElemSuffix(dstElem);
@@ -832,7 +831,7 @@ std::string getCopyRouteCallee(
     }
     // L0C (fp32 MMAD acc) -> UB col-major: dst may be f32 / f16 / bf16 (narrowing on fixpipe).
     if (*srcSpace == hivm::AddressSpace::L0C && *dstSpace == hivm::AddressSpace::UB &&
-        srcLayout == TensorLayoutTag::L0C && dstLayout == TensorLayoutTag::ColumnMajor) {
+        srcLayout == LayoutTag::L0Clayout && dstLayout == LayoutTag::ColumnMajor) {
         if (!isLegalFixpipeElementType(srcElementType, dstElem))
             return {};
         StringRef suffix = copyRuntimeElemSuffix(dstElem);
@@ -843,7 +842,7 @@ std::string getCopyRouteCallee(
     // L0C -> L1 zN: an fp32 acc may narrow to f32 / f16 / bf16 on fixpipe; an i32
     // acc (int8 MMAD) stays i32.
     if (*srcSpace == hivm::AddressSpace::L0C && *dstSpace == hivm::AddressSpace::L1 &&
-        srcLayout == TensorLayoutTag::L0C && dstLayout == TensorLayoutTag::zN) {
+        srcLayout == LayoutTag::L0Clayout && dstLayout == LayoutTag::zN) {
         if (!isLegalFixpipeElementType(srcElementType, dstElem))
             return {};
         StringRef suffix = copyRuntimeElemSuffix(dstElem);

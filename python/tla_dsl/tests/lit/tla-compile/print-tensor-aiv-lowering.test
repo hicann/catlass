@@ -91,7 +91,7 @@ module {
     %layout = tla.make_layout %shape, %stride : !tla.shape<32,32>, !tla.stride<32,1> -> !tla.layout<!tla.shape<32,32>, !tla.stride<32,1>, !tla.shape<32,32>, RowMajor>
     %coord = tla.make_coord {values = [17, 10]} -> !tla.coord<17,10>
     %base = tla.make_tensor %ptr, %layout, %coord : !tla.ptr<f32, ub, 32>, !tla.layout<!tla.shape<32,32>, !tla.stride<32,1>, !tla.shape<32,32>, RowMajor>, !tla.coord<17,10> -> !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<32,1>, !tla.shape<32,32>, RowMajor>, !tla.coord<17,10>, !tla.ptr<f32, ub, 32>>
-    %x = tla.make_tensor_like %ptr like %base layoutTag("zN") : !tla.ptr<f32, ub, 32>, !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<32,1>, !tla.shape<32,32>, RowMajor>, !tla.coord<17,10>, !tla.ptr<f32, ub, 32>> -> !tla.tensor<!tla.layout<!tla.shape<(16,2),(8,4)>, !tla.stride<(8,128),(1,256)>, !tla.shape<32,32>, zN>, !tla.coord<17,10>, !tla.ptr<f32, ub, 32>>
+    %x = tla.make_tensor_like %ptr like %base layoutTag(#tla.layout_tag<zN>) : !tla.ptr<f32, ub, 32>, !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<32,1>, !tla.shape<32,32>, RowMajor>, !tla.coord<17,10>, !tla.ptr<f32, ub, 32>> -> !tla.tensor<!tla.layout<!tla.shape<(16,2),(8,4)>, !tla.stride<(8,128),(1,256)>, !tla.shape<32,32>, zN>, !tla.coord<17,10>, !tla.ptr<f32, ub, 32>>
     "tla.vector"() ({
       tla.print_tensor %x length = %count shape = [32, 32] : !tla.tensor<!tla.layout<!tla.shape<(16,2),(8,4)>, !tla.stride<(8,128),(1,256)>, !tla.shape<32,32>, zN>, !tla.coord<17,10>, !tla.ptr<f32, ub, 32>>, i64
     }) : () -> ()

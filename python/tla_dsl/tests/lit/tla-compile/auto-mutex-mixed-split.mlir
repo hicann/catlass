@@ -9,8 +9,8 @@ module {
     %ready = tla.cross_flag "ready" -> !tla.cross_flag<2>
     %l1_ptr = tla.alloc_ptr{size_bytes = 4096} -> !tla.ptr<f32, l1, 512>
     %ub_ptr = tla.alloc_ptr{size_bytes = 4096} -> !tla.ptr<f32, ub, 256>
-    %l1 = "tla.make_tensor_like"(%l1_ptr, %gm) {layoutTag = "zN"} : (!tla.ptr<f32, l1, 512>, !gm) -> !l1
-    %ub = "tla.make_tensor_like"(%ub_ptr, %gm) {layoutTag = "RowMajor"} : (!tla.ptr<f32, ub, 256>, !gm) -> !ub
+    %l1 = "tla.make_tensor_like"(%l1_ptr, %gm) {layoutTag = #tla.layout_tag<zN>} : (!tla.ptr<f32, l1, 512>, !gm) -> !l1
+    %ub = "tla.make_tensor_like"(%ub_ptr, %gm) {layoutTag = #tla.layout_tag<RowMajor>} : (!tla.ptr<f32, ub, 256>, !gm) -> !ub
     "tla.cube"() ({
       tla.copy %l1, %gm : !l1, !gm
       tla.cross_core_set_flag %ready {pipe = #tla.pipe<fix>} : !tla.cross_flag<2>

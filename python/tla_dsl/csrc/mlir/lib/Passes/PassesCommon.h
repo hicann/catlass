@@ -240,10 +240,9 @@ inline FailureOr<MemRefType> bridgeTlaTensorStorageType(Type tlaTensorType)
     SmallVector<int64_t, 4> originShape;
     std::string elementTypeStorage;
     std::string addressSpaceStorage;
-    std::string layoutTagStorage;
     StringRef elementTypeText;
     StringRef addressSpace;
-    StringRef layoutTag;
+    ::LayoutTag layoutTag = ::LayoutTag::Unknown;
 
     auto tensorTy = dyn_cast<::tla::TlaTensorType>(tlaTensorType);
     if (!tensorTy)
@@ -262,15 +261,15 @@ inline FailureOr<MemRefType> bridgeTlaTensorStorageType(Type tlaTensorType)
     os.flush();
     elementTypeText = StringRef(elementTypeStorage).trim();
     addressSpaceStorage = stringifyAddressSpace(ptr.getAddrspace()).str();
-    layoutTagStorage = stringifyLayoutTag(layout.getLayoutTag()).str();
     addressSpace = addressSpaceStorage;
-    layoutTag = layoutTagStorage;
+    layoutTag = layout.getLayoutTag();
 
     if (shape.empty() || strides.empty() || coords.empty() || originShape.empty() || elementTypeText.empty() ||
-        addressSpace.empty() || layoutTag.empty())
+        addressSpace.empty() || layoutTag == ::LayoutTag::Unknown)
         return failure();
 
-    if (layoutTag != "RowMajor" && originShape.size() == coords.size() && shape.size() != originShape.size()) {
+    if (layoutTag != ::LayoutTag::RowMajor && originShape.size() == coords.size() &&
+        shape.size() != originShape.size()) {
         shape = originShape;
     }
     if (strides.size() != shape.size())
@@ -292,7 +291,8 @@ inline FailureOr<MemRefType> bridgeTlaTensorStorageType(Type tlaTensorType)
     if (failed(memorySpaceOr))
         return failure();
 
-    if (layoutTag == "RowMajor" && !(hasZeroStaticCoords(coords) && hasDefaultRowMajorStrides(shape, strides))) {
+    if (layoutTag == ::LayoutTag::RowMajor &&
+        !(hasZeroStaticCoords(coords) && hasDefaultRowMajorStrides(shape, strides))) {
         auto layout = StridedLayoutAttr::get(ctx, ShapedType::kDynamic, strides);
         return MemRefType::get(shape, elementType, layout, *memorySpaceOr);
     }

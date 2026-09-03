@@ -41,8 +41,8 @@ mlir::FailureOr<mlir::Value> castMemrefToType(
 /// or "" if the (route, element-type) combination is unsupported. `extraDesc` is
 /// the L0C->UB split-mode infix.
 std::string getCopyRouteCallee(
-    mlir::MLIRContext* ctx, llvm::StringRef srcAddrspace, llvm::StringRef dstAddrspace, TensorLayoutTag srcLayout,
-    TensorLayoutTag dstLayout, mlir::Type srcElementType, mlir::Type dstElementType, llvm::StringRef extraDesc = "");
+    mlir::MLIRContext* ctx, llvm::StringRef srcAddrspace, llvm::StringRef dstAddrspace, ::LayoutTag srcLayout,
+    ::LayoutTag dstLayout, mlir::Type srcElementType, mlir::Type dstElementType, llvm::StringRef extraDesc = "");
 
 /// The 24-element i64 runtime payload for a copy route: the src tile's 12-field
 /// (4D) layout descriptor followed by the dst tile's. Linear descriptors carry

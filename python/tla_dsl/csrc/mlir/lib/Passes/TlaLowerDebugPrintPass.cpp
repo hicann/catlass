@@ -557,7 +557,7 @@ static LogicalResult lowerPrintTensor(
             return op.emitError("could not materialize the tensor physical offset");
 
         Value rowDivisor = desc.shape[0];
-        if (desc.layoutTag == ::tla::TensorLayoutTag::zNUnAlign)
+        if (desc.layoutTag == ::LayoutTag::zNUnAlign)
             rowDivisor = rewriter.createOrFold<arith::DivSIOp>(op.getLoc(), desc.stride[3], desc.shape[2]);
         Value physical0 = rewriter.createOrFold<arith::RemSIOp>(op.getLoc(), desc.coord[0], rowDivisor);
         Value physical1 = rewriter.createOrFold<arith::DivSIOp>(op.getLoc(), desc.coord[0], rowDivisor);

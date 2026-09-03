@@ -2277,30 +2277,6 @@ def _logical_tensor_shape_from_metadata(value: mlir_ir.Value) -> tuple[int | Non
     )
 
 
-def _layout_attr_from_value(value: mlir_ir.Value) -> str | None:
-    owner = getattr(value, "owner", None)
-    attrs = getattr(owner, "attributes", None)
-    if attrs is None:
-        return None
-    attr = None
-    for name in ("layouttag", "layout"):
-        try:
-            attr = attrs.get(name)
-        except AttributeError:
-            try:
-                attr = attrs[name]
-            except Exception:
-                attr = None
-        except Exception:
-            attr = None
-        if attr is not None:
-            break
-    if attr is None:
-        return None
-    text = str(attr).strip('"')
-    return text or None
-
-
 # Shared by every matmul the frontend emits. There is one contract because there
 # is one entry point: tla.mmad. Which cube instruction it becomes is settled in
 # tla-cube-region from operand provenance, not here.
@@ -2383,8 +2359,7 @@ def _validate_mmad_contract(
     )
     for operand, expected in expected_layouts:
         layout = _tla_tensor_type_for_mlir_value(operand).layout_tag
-        layout = layout or _layout_attr_from_value(operand)
-        if layout is not None and layout != expected:
+        if layout != expected:
             raise TlaLoweringError(
                 "unsupported tla.mmad operand layout; expected acc L0Clayout, lhs zN, rhs nZ"
             )
@@ -3924,7 +3899,10 @@ def make_layout(
         origin_ssa = origin_shape._shape_value
     attrs: dict[str, mlir_ir.Attribute] = {}
     if layout_token != "RowMajor":
-        attrs["layoutTag"] = mlir_ir.StringAttr.get(layout_token)
+        ctx = loc.context if loc is not None else mlir_ir.Context.current
+        attrs["layoutTag"] = mlir_ir.Attribute.parse(
+            f"#tla.layout_tag<{layout_token}>", ctx
+        )
     operands: list[mlir_ir.Value] = [shape_val, stride_val]
     if origin_ssa is not None:
         operands.append(origin_ssa)
@@ -4382,11 +4360,13 @@ def make_tensor_like(
             coord=coord,
             origin_shape=origin,
         )
+    ctx = loc.context if loc is not None else mlir_ir.Context.current
+    layout_tag_attr = mlir_ir.Attribute.parse(f"#tla.layout_tag<{layout}>", ctx)
     op = mlir_ir.Operation.create(
         "tla.make_tensor_like",
         operands=[ptr_value, like_value],
         results=[_coerce_type(result_desc)],
-        attributes={"layoutTag": mlir_ir.StringAttr.get(layout)},
+        attributes={"layoutTag": layout_tag_attr},
         loc=loc,
     )
     out = op.results[0]

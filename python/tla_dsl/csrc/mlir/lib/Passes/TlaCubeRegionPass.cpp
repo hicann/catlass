@@ -175,10 +175,8 @@ struct LowerTlaMmadPatternImpl : public OpRewritePattern<MmadOpTy> {
                 lhsInfo->originShapeDims[0], lhsInfo->originShapeDims[1], rhsInfo->originShapeDims[0],
                 rhsInfo->originShapeDims[1], accInfo->originShapeDims[0], accInfo->originShapeDims[1])))
             return failure();
-        TensorLayoutTag expectedLhsTag = TensorLayoutTag::zN;
-        TensorLayoutTag expectedRhsTag = TensorLayoutTag::nZ;
-        if (accInfo->layoutTag != TensorLayoutTag::L0C || lhsInfo->layoutTag != expectedLhsTag ||
-            rhsInfo->layoutTag != expectedRhsTag) {
+        if (accInfo->layoutTag != LayoutTag::L0Clayout || lhsInfo->layoutTag != LayoutTag::zN ||
+            rhsInfo->layoutTag != LayoutTag::nZ) {
             op.emitError() << "unsupported tla.mmad operand layout; expected acc L0Clayout, lhs zN, rhs nZ";
             return failure();
         }
@@ -383,7 +381,7 @@ struct LowerTlaCopyMxPattern : public OpRewritePattern<::tla::CopyMxOp> {
         bool isFp4 = ::tla::isPackedFp4Type(srcDesc->elementType);
         std::string calleeName;
         if (isFp4) {
-            calleeName = (Twine("copy_mx_l1_") + (srcDesc->layoutTag == TensorLayoutTag::nZ ? "nZ" : "zN") +
+            calleeName = (Twine("copy_mx_l1_") + stringifyLayoutTag(srcDesc->layoutTag) +
                           (toL0A ? "_to_l0a_zN_" : "_to_l0b_nZ_") + fp4CppType(srcDesc->elementType))
                              .str();
         } else {
@@ -400,7 +398,7 @@ struct LowerTlaCopyMxPattern : public OpRewritePattern<::tla::CopyMxOp> {
             // Either source layout, on either side: the L1 tile keeps whatever
             // orientation its GM operand had, and the transposing pairing is a
             // real Catlass specialization.
-            calleeName = (Twine("copy_mx_l1_") + (srcDesc->layoutTag == TensorLayoutTag::nZ ? "nZ" : "zN") +
+            calleeName = (Twine("copy_mx_l1_") + stringifyLayoutTag(srcDesc->layoutTag) +
                           (toL0A ? "_to_l0a_zN_" : "_to_l0b_nZ_") + fmt)
                              .str();
         }
@@ -605,8 +603,8 @@ struct LowerTlaCopyPattern : public OpRewritePattern<::tla::CopyOp> {
         // above (L1 / L0A / L0B / L0C).
 
         op.emitError() << "tla.copy descriptor/layout combination is unsupported: " << srcAddrspace << "("
-                       << ::tla::stringifyTensorLayoutTag(srcDesc.layoutTag) << ") -> " << dstAddrspace << "("
-                       << ::tla::stringifyTensorLayoutTag(dstDesc.layoutTag) << ")";
+                       << ::stringifyLayoutTag(srcDesc.layoutTag) << ") -> " << dstAddrspace << "("
+                       << ::stringifyLayoutTag(dstDesc.layoutTag) << ")";
         return failure();
     }
 

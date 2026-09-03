@@ -277,12 +277,12 @@ def _kernel_make_tensor_like_supported_layout_tags(mem: tla.Tensor) -> None:
     #     %2 = "tla.make_coord"() : () -> !tla.coord<32,64>
     #     %3 = "tla.tile_view"(%arg0, %0, %2) : (!tla.tensor<!tla.layout<!tla.shape<128,128>, !tla.stride<128,1>, !tla.shape<128,128>, RowMajor>, !tla.coord<0,0>, !tla.ptr<f16, gm, 2>>, !tla.shape<32,32>, !tla.coord<32,64>) -> !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<128,1>, !tla.shape<32,32>, RowMajor>, !tla.coord<32,64>, !tla.ptr<f16, gm, 2>>
     #     %4 = "tla.alloc_ptr"() {size_bytes = 2048 : i64} : () -> !tla.ptr<f16, l1, 512>
-    #     %5 = "tla.make_tensor_like"(%4, %3) {layoutTag = "RowMajor"} : (!tla.ptr<f16, l1, 512>, !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<128,1>, !tla.shape<32,32>, RowMajor>, !tla.coord<32,64>, !tla.ptr<f16, gm, 2>>) -> !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<32,1>, !tla.shape<32,32>, RowMajor>, !tla.coord<0,0>, !tla.ptr<f16, l1, 512>>
-    #     %6 = "tla.make_tensor_like"(%4, %3) {layoutTag = "ColumnMajor"} : (!tla.ptr<f16, l1, 512>, !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<128,1>, !tla.shape<32,32>, RowMajor>, !tla.coord<32,64>, !tla.ptr<f16, gm, 2>>) -> !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<1,32>, !tla.shape<32,32>, ColumnMajor>, !tla.coord<0,0>, !tla.ptr<f16, l1, 512>>
-    #     %7 = "tla.make_tensor_like"(%4, %3) {layoutTag = "zN"} : (!tla.ptr<f16, l1, 512>, !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<128,1>, !tla.shape<32,32>, RowMajor>, !tla.coord<32,64>, !tla.ptr<f16, gm, 2>>) -> !tla.tensor<!tla.layout<!tla.shape<(16,2),(16,2)>, !tla.stride<(16,256),(1,512)>, !tla.shape<32,32>, zN>, !tla.coord<0,0>, !tla.ptr<f16, l1, 512>>
-    #     %8 = "tla.make_tensor_like"(%4, %3) {layoutTag = "nZ"} : (!tla.ptr<f16, l1, 512>, !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<128,1>, !tla.shape<32,32>, RowMajor>, !tla.coord<32,64>, !tla.ptr<f16, gm, 2>>) -> !tla.tensor<!tla.layout<!tla.shape<(16,2),(16,2)>, !tla.stride<(1,512),(16,256)>, !tla.shape<32,32>, nZ>, !tla.coord<0,0>, !tla.ptr<f16, l1, 512>>
-    #     %9 = "tla.make_tensor_like"(%4, %3) {layoutTag = "zZ"} : (!tla.ptr<f16, l1, 512>, !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<128,1>, !tla.shape<32,32>, RowMajor>, !tla.coord<32,64>, !tla.ptr<f16, gm, 2>>) -> !tla.tensor<!tla.layout<!tla.shape<(16,2),(16,2)>, !tla.stride<(16,512),(1,256)>, !tla.shape<32,32>, zZ>, !tla.coord<0,0>, !tla.ptr<f16, l1, 512>>
-    #     %10 = "tla.make_tensor_like"(%4, %3) {layoutTag = "L0Clayout"} : (!tla.ptr<f16, l1, 512>, !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<128,1>, !tla.shape<32,32>, RowMajor>, !tla.coord<32,64>, !tla.ptr<f16, gm, 2>>) -> !tla.tensor<!tla.layout<!tla.shape<(16,2),(16,2)>, !tla.stride<(16,256),(1,512)>, !tla.shape<32,32>, L0Clayout>, !tla.coord<0,0>, !tla.ptr<f16, l1, 512>>
+    #     %5 = "tla.make_tensor_like"(%4, %3) {layoutTag = #tla.layout_tag<RowMajor>} : (!tla.ptr<f16, l1, 512>, !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<128,1>, !tla.shape<32,32>, RowMajor>, !tla.coord<32,64>, !tla.ptr<f16, gm, 2>>) -> !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<32,1>, !tla.shape<32,32>, RowMajor>, !tla.coord<0,0>, !tla.ptr<f16, l1, 512>>
+    #     %6 = "tla.make_tensor_like"(%4, %3) {layoutTag = #tla.layout_tag<ColumnMajor>} : (!tla.ptr<f16, l1, 512>, !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<128,1>, !tla.shape<32,32>, RowMajor>, !tla.coord<32,64>, !tla.ptr<f16, gm, 2>>) -> !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<1,32>, !tla.shape<32,32>, ColumnMajor>, !tla.coord<0,0>, !tla.ptr<f16, l1, 512>>
+    #     %7 = "tla.make_tensor_like"(%4, %3) {layoutTag = #tla.layout_tag<zN>} : (!tla.ptr<f16, l1, 512>, !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<128,1>, !tla.shape<32,32>, RowMajor>, !tla.coord<32,64>, !tla.ptr<f16, gm, 2>>) -> !tla.tensor<!tla.layout<!tla.shape<(16,2),(16,2)>, !tla.stride<(16,256),(1,512)>, !tla.shape<32,32>, zN>, !tla.coord<0,0>, !tla.ptr<f16, l1, 512>>
+    #     %8 = "tla.make_tensor_like"(%4, %3) {layoutTag = #tla.layout_tag<nZ>} : (!tla.ptr<f16, l1, 512>, !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<128,1>, !tla.shape<32,32>, RowMajor>, !tla.coord<32,64>, !tla.ptr<f16, gm, 2>>) -> !tla.tensor<!tla.layout<!tla.shape<(16,2),(16,2)>, !tla.stride<(1,512),(16,256)>, !tla.shape<32,32>, nZ>, !tla.coord<0,0>, !tla.ptr<f16, l1, 512>>
+    #     %9 = "tla.make_tensor_like"(%4, %3) {layoutTag = #tla.layout_tag<zZ>} : (!tla.ptr<f16, l1, 512>, !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<128,1>, !tla.shape<32,32>, RowMajor>, !tla.coord<32,64>, !tla.ptr<f16, gm, 2>>) -> !tla.tensor<!tla.layout<!tla.shape<(16,2),(16,2)>, !tla.stride<(16,512),(1,256)>, !tla.shape<32,32>, zZ>, !tla.coord<0,0>, !tla.ptr<f16, l1, 512>>
+    #     %10 = "tla.make_tensor_like"(%4, %3) {layoutTag = #tla.layout_tag<L0Clayout>} : (!tla.ptr<f16, l1, 512>, !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<128,1>, !tla.shape<32,32>, RowMajor>, !tla.coord<32,64>, !tla.ptr<f16, gm, 2>>) -> !tla.tensor<!tla.layout<!tla.shape<(16,2),(16,2)>, !tla.stride<(16,256),(1,512)>, !tla.shape<32,32>, L0Clayout>, !tla.coord<0,0>, !tla.ptr<f16, l1, 512>>
     #     "tla.return"() : () -> ()
     #   }) {function_type = (!tla.tensor<!tla.layout<!tla.shape<128,128>, !tla.stride<128,1>, !tla.shape<128,128>, RowMajor>, !tla.coord<0,0>, !tla.ptr<f16, gm, 2>>) -> (), sym_name = "_kernel_make_tensor_like_supported_layout_tags"} : () -> ()
     # }
@@ -301,12 +301,12 @@ def test_interface_make_tensor_like_supported_layout_tags(compiler_tlair) -> Non
         _kernel_make_tensor_like_supported_layout_tags, type_args=(root,)
     )
     assert mlir.count('"tla.make_tensor_like"') == 6
-    assert 'layoutTag = "RowMajor"' in mlir
-    assert 'layoutTag = "ColumnMajor"' in mlir
-    assert 'layoutTag = "zN"' in mlir
-    assert 'layoutTag = "nZ"' in mlir
-    assert 'layoutTag = "zZ"' in mlir
-    assert 'layoutTag = "L0Clayout"' in mlir
+    assert 'layoutTag = #tla.layout_tag<RowMajor>' in mlir
+    assert 'layoutTag = #tla.layout_tag<ColumnMajor>' in mlir
+    assert 'layoutTag = #tla.layout_tag<zN>' in mlir
+    assert 'layoutTag = #tla.layout_tag<nZ>' in mlir
+    assert 'layoutTag = #tla.layout_tag<zZ>' in mlir
+    assert 'layoutTag = #tla.layout_tag<L0Clayout>' in mlir
     assert (
         "<!tla.layout<!tla.shape<32,32>, !tla.stride<128,1>, !tla.shape<32,32>, RowMajor>, !tla.coord<32,64>, !tla.ptr<f16, gm, 2>>"
         in mlir
@@ -461,7 +461,7 @@ def _kernel_tile_view_comprehensive(mem: tla.Tensor, tile_row: tla.types.TlaInde
     #     %11 = "tla.make_coord"(%10) : (index) -> !tla.coord<?,0>
     #     %12 = "tla.tile_view"(%7, %8, %11) : (!tla.tensor<!tla.layout<!tla.shape<8,8>, !tla.stride<80,1>, !tla.shape<5,5>, RowMajor>, !tla.coord<55,55>, !tla.ptr<f16, gm, 2>>, !tla.shape<4,4>, !tla.coord<?,0>) -> !tla.tensor<!tla.layout<!tla.shape<4,4>, !tla.stride<80,1>, !tla.shape<4,4>, RowMajor>, !tla.coord<?,55>, !tla.ptr<f16, gm, 2>>
     #     %13 = "tla.alloc_ptr"() {size_bytes = 128 : i64} : () -> !tla.ptr<f16, l1, 512>
-    #     %14 = "tla.make_tensor_like"(%13, %7) {layoutTag = "zN"} : (!tla.ptr<f16, l1, 512>, !tla.tensor<!tla.layout<!tla.shape<8,8>, !tla.stride<80,1>, !tla.shape<5,5>, RowMajor>, !tla.coord<55,55>, !tla.ptr<f16, gm, 2>>) -> !tla.tensor<!tla.layout<!tla.shape<(16,1),(16,1)>, !tla.stride<(16,256),(1,256)>, !tla.shape<5,5>, zN>, !tla.coord<0,0>, !tla.ptr<f16, l1, 512>>
+    #     %14 = "tla.make_tensor_like"(%13, %7) {layoutTag = #tla.layout_tag<zN>} : (!tla.ptr<f16, l1, 512>, !tla.tensor<!tla.layout<!tla.shape<8,8>, !tla.stride<80,1>, !tla.shape<5,5>, RowMajor>, !tla.coord<55,55>, !tla.ptr<f16, gm, 2>>) -> !tla.tensor<!tla.layout<!tla.shape<(16,1),(16,1)>, !tla.stride<(16,256),(1,256)>, !tla.shape<5,5>, zN>, !tla.coord<0,0>, !tla.ptr<f16, l1, 512>>
     #     "tla.return"() : () -> ()
     #   }) {function_type = (!tla.tensor<!tla.layout<!tla.shape<80,80>, !tla.stride<80,1>, !tla.shape<50,50>, RowMajor>, !tla.coord<10,10>, !tla.ptr<f16, gm, 2>>, index) -> (), sym_name = "_kernel_tile_view_comprehensive"} : () -> ()
     # }
@@ -485,7 +485,7 @@ def test_interface_tile_view_comprehensive_explicit_root_metadata(
     assert "tla.tile_view" in mlir
     assert mlir.count("tla.tile_view") == 3
     assert "tla.make_shape" in mlir
-    assert 'layoutTag = "zN"' in mlir
+    assert 'layoutTag = #tla.layout_tag<zN>' in mlir
     assert ", l1" in mlir
     assert "#tla.addrspace<" not in mlir
     assert "!tla.ptr<f16, gm, 2>" in mlir

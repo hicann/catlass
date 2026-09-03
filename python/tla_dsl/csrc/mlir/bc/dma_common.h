@@ -21,24 +21,24 @@ using mx_fp8_e4m3_t = AscendC::mx_fp8_e4m3_t;
 using mx_fp8_e5m2_t = AscendC::mx_fp8_e5m2_t;
 #endif
 
-/// Layout tags for the bc-layer DMA helpers. Mirrors the IR-side
-/// `TensorLayoutTag` enum (same enumerators, same order)
-enum class LayoutTag
+/// Layout tags for the bc-layer DMA helpers. Mirrors the Tla.td definition.
+// csrc/mlir/build/tblgen/tla/Enums.h.inc
+enum class LayoutTag : uint32_t
 {
-    Unknown,
-    RowMajor,
-    ColumnMajor,
-    zN,
-    zZ,
-    nZ,
-    L0C,
-    zNUnAlign,
-    zZMxScale,
-    nNMxScale,
-    rowMajorMxScaleA,
-    colMajorMxScaleA,
-    rowMajorMxScaleB,
-    colMajorMxScaleB,
+    Unknown = 0,
+    RowMajor = 1,
+    ColumnMajor = 2,
+    zN = 3,
+    nZ = 4,
+    zZ = 5,
+    L0Clayout = 6,
+    zNUnAlign = 7,
+    zZMxScale = 8,
+    nNMxScale = 9,
+    rowMajorMxScaleA = 10,
+    colMajorMxScaleA = 11,
+    rowMajorMxScaleB = 12,
+    colMajorMxScaleB = 13,
 };
 
 /// Unified 4D (12-field) tensor descriptor. Linear layouts (RowMajor/
@@ -422,7 +422,7 @@ CATLASS_DEVICE auto makeL0BTensor(memref_t<__cb__ T, 1>* memref, const TensorDes
 template <LayoutTag Tag, typename T>
 CATLASS_DEVICE auto makeL0CTensor(memref_t<__cc__ T, 1>* memref, const TensorDesc& desc)
 {
-    static_assert(Tag == LayoutTag::L0C, "L0C tensor supports L0C only");
+    static_assert(Tag == LayoutTag::L0Clayout, "L0C tensor supports L0C only");
     AscendC::LocalTensor<T> tensor(AscendC::TPosition::CO1, localAddr(memref), elementCount(memref));
     return tla::MakeTensor(tensor, makeL0CTlaLayout<T>(desc), makeTlaTileCoord(desc), Catlass::Arch::PositionL0C{});
 }

@@ -41,7 +41,7 @@ CATLASS_DEVICE void copyL0CToGM(
     memref_t<__cc__ ElementSrc, 1>* src, memref_t<__gm__ ElementDst, 2>* dst, const TensorDesc& srcDesc,
     const TensorDesc& dstDesc, uint8_t unitFlag)
 {
-    auto srcTensor = makeL0CTensor<LayoutTag::L0C, ElementSrc>(src, srcDesc);
+    auto srcTensor = makeL0CTensor<LayoutTag::L0Clayout, ElementSrc>(src, srcDesc);
     auto dstTensor = makeGMTensor<DstLayout, ElementDst>(dst, dstDesc);
     Catlass::Gemm::Tile::CopyL0CToGmTla<ArchTag, decltype(srcTensor), decltype(dstTensor)>{}(
         dstTensor, srcTensor, unitFlag);
@@ -53,7 +53,7 @@ CATLASS_DEVICE void copyL0CToL1(
     memref_t<__cc__ ElementSrc, 1>* src, memref_t<__cbuf__ ElementDst, 1>* dst, const TensorDesc& srcDesc,
     const TensorDesc& dstDesc, uint8_t unitFlag)
 {
-    auto srcTensor = makeL0CTensor<LayoutTag::L0C, ElementSrc>(src, srcDesc);
+    auto srcTensor = makeL0CTensor<LayoutTag::L0Clayout, ElementSrc>(src, srcDesc);
     auto dstTensor = makeL1Tensor<DstLayout, ElementDst>(dst, dstDesc);
     Catlass::Gemm::Tile::CopyL0CToL1Tla<ArchTag, decltype(srcTensor), decltype(dstTensor)>{}(
         dstTensor, srcTensor, unitFlag);
@@ -66,7 +66,7 @@ CATLASS_DEVICE void copyL0CToUB(
     memref_t<__cc__ ElementSrc, 1>* src, memref_t<__ubuf__ ElementDst, 1>* dst, const TensorDesc& srcDesc,
     const TensorDesc& dstDesc, uint8_t unitFlag, uint8_t subBlockId)
 {
-    auto srcTensor = makeL0CTensor<LayoutTag::L0C, ElementSrc>(src, srcDesc);
+    auto srcTensor = makeL0CTensor<LayoutTag::L0Clayout, ElementSrc>(src, srcDesc);
     auto dstTensor = makeUBTensor<DstLayout, ElementDst>(dst, dstDesc);
     if constexpr (Mode == Catlass::Gemm::Tile::CopyL0CToUBMode::NO_SPLIT) {
         Catlass::Gemm::Tile::CopyL0CToUBTla<ArchTag, decltype(srcTensor), decltype(dstTensor), Mode>{}(

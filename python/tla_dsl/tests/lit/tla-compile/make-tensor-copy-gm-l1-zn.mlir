@@ -8,7 +8,7 @@ module {
     %shape = tla.make_shape -> !tla.shape<(16,2),(8,4)>
     %stride = tla.make_stride -> !tla.stride<(8,128),(1,256)>
     %origin = tla.make_shape -> !tla.shape<32,32>
-    %layout = tla.make_layout %shape, %stride origin %origin {layoutTag = "zN"} :
+    %layout = tla.make_layout %shape, %stride origin %origin {layoutTag = #tla.layout_tag<zN>} :
       !tla.shape<(16,2),(8,4)>, !tla.stride<(8,128),(1,256)> origin !tla.shape<32,32> ->
       !tla.layout<!tla.shape<(16,2),(8,4)>, !tla.stride<(8,128),(1,256)>, !tla.shape<32,32>, zN>
     %coord = tla.make_coord -> !tla.coord<0,0>

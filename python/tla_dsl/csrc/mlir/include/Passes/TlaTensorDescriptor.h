@@ -30,30 +30,7 @@ inline constexpr llvm::StringLiteral kAllocSizeBytesMetadataAttrName = "tla.allo
 /// Bridge a structured `!tla.tensor` type to a builtin memref type.
 mlir::FailureOr<mlir::MemRefType> bridgeTlaTensorType(mlir::Type tlaTensorType);
 
-enum class TensorLayoutTag
-{
-    Unknown,
-    RowMajor,
-    ColumnMajor,
-    zN,
-    zZ,
-    nZ,
-    L0C,
-    zNUnAlign,
-    zZMxScale,
-    nNMxScale,
-    rowMajorMxScaleA,
-    colMajorMxScaleA,
-    rowMajorMxScaleB,
-    colMajorMxScaleB
-};
-
-bool isNZFamilyLayout(TensorLayoutTag layoutTag);
-bool isLinearLayout(TensorLayoutTag layoutTag);
-llvm::StringRef stringifyTensorLayoutTag(TensorLayoutTag layoutTag);
-mlir::FailureOr<TensorLayoutTag> convertTlaLayoutTag(::LayoutTag layoutTag);
-mlir::FailureOr<TensorLayoutTag> parseTensorLayoutTagAttr(llvm::StringRef layouttag);
-mlir::FailureOr<TensorLayoutTag> getExplicitTensorLayoutTagAttr(mlir::Operation* op);
+bool isLinearLayout(::LayoutTag layoutTag);
 
 /// Static metadata decoded from a structured `!tla.tensor` type.
 struct TensorTypeInfo {
@@ -64,7 +41,7 @@ struct TensorTypeInfo {
     std::string addressSpace;
     mlir::Type elementType;
     ::AddressSpace tlaAddressSpace = ::AddressSpace::gm;
-    TensorLayoutTag layoutTag = TensorLayoutTag::Unknown;
+    ::LayoutTag layoutTag = ::LayoutTag::Unknown;
     int64_t rank = 0;
 };
 
@@ -78,7 +55,7 @@ struct ParsedTensorInfo {
     llvm::SmallVector<int64_t, 2> strides;
     ::AddressSpace addressSpace;
     mlir::Type elementType;
-    std::string layoutTag;
+    ::LayoutTag layoutTag = ::LayoutTag::Unknown;
 };
 
 mlir::FailureOr<ParsedTensorInfo> parseTensorInfo(mlir::Type tensorType);
@@ -91,7 +68,7 @@ struct TensorDescriptor {
     std::array<mlir::Value, 4> stride;
     std::array<mlir::Value, 2> originShape;
     std::array<mlir::Value, 2> coord;
-    TensorLayoutTag layoutTag = TensorLayoutTag::Unknown;
+    ::LayoutTag layoutTag = ::LayoutTag::Unknown;
     std::string addrspace;
     mlir::Type elementType;
 };

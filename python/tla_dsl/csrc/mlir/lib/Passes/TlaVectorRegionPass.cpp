@@ -1037,7 +1037,7 @@ static LogicalResult materializeTensorDescSubview(
         auto stride3 = lookupOrCloneScalarValue(b, descOp.getStride3(), valueMap);
         if (!shape0 || !shape1 || !shape2 || !shape3 || !stride0 || !stride1 || !stride2 || !stride3)
             return failure();
-        if (info->layoutTag == TensorLayoutTag::zN) {
+        if (info->layoutTag == LayoutTag::zN) {
             Value pc0 = b.create<arith::RemSIOp>(loc, rowOff, shape0);
             Value pc1 = b.create<arith::DivSIOp>(loc, rowOff, shape0);
             Value pc2 = b.create<arith::RemSIOp>(loc, colOff, shape2);
@@ -1049,7 +1049,7 @@ static LogicalResult materializeTensorDescSubview(
             Value sum01 = b.create<arith::AddIOp>(loc, t0, t1);
             Value sum23 = b.create<arith::AddIOp>(loc, t2, t3);
             flatOffset = b.create<arith::AddIOp>(loc, sum01, sum23);
-        } else if (info->layoutTag == TensorLayoutTag::zNUnAlign) {
+        } else if (info->layoutTag == LayoutTag::zNUnAlign) {
             // zNUnAlign only used in on-chip memory, and the scalar unit in a
             // vf only supports integer arith to 32 bits. Keep the entire
             // address calculation in i32, then convert its final result to the

@@ -13,101 +13,11 @@ mlir::FailureOr<mlir::MemRefType> bridgeTlaTensorType(mlir::Type tlaTensorType)
     return bridgeTlaTensorStorageType(tlaTensorType);
 }
 
-bool isNZFamilyLayout(TensorLayoutTag layoutTag)
+bool isLinearLayout(::LayoutTag layoutTag)
 {
-    auto tlaLayoutTag = symbolizeLayoutTag(stringifyTensorLayoutTag(layoutTag));
-    return tlaLayoutTag && isNZFamilyLayout(*tlaLayoutTag);
-}
-
-bool isLinearLayout(TensorLayoutTag layoutTag)
-{
-    return layoutTag == TensorLayoutTag::RowMajor || layoutTag == TensorLayoutTag::ColumnMajor ||
-           layoutTag == TensorLayoutTag::rowMajorMxScaleA || layoutTag == TensorLayoutTag::colMajorMxScaleA ||
-           layoutTag == TensorLayoutTag::rowMajorMxScaleB || layoutTag == TensorLayoutTag::colMajorMxScaleB;
-}
-
-llvm::StringRef stringifyTensorLayoutTag(TensorLayoutTag layoutTag)
-{
-    switch (layoutTag) {
-        case TensorLayoutTag::Unknown:
-            return "unknown";
-        case TensorLayoutTag::RowMajor:
-            return "RowMajor";
-        case TensorLayoutTag::ColumnMajor:
-            return "ColumnMajor";
-        case TensorLayoutTag::zN:
-            return "zN";
-        case TensorLayoutTag::zZ:
-            return "zZ";
-        case TensorLayoutTag::zZMxScale:
-            return "zZMxScale";
-        case TensorLayoutTag::nNMxScale:
-            return "nNMxScale";
-        case TensorLayoutTag::rowMajorMxScaleA:
-            return "rowMajorMxScaleA";
-        case TensorLayoutTag::colMajorMxScaleA:
-            return "colMajorMxScaleA";
-        case TensorLayoutTag::rowMajorMxScaleB:
-            return "rowMajorMxScaleB";
-        case TensorLayoutTag::colMajorMxScaleB:
-            return "colMajorMxScaleB";
-        case TensorLayoutTag::nZ:
-            return "nZ";
-        case TensorLayoutTag::L0C:
-            return "L0Clayout";
-        case TensorLayoutTag::zNUnAlign:
-            return "zNUnAlign";
-    }
-    return "unknown";
-}
-
-mlir::FailureOr<TensorLayoutTag> convertTlaLayoutTag(::LayoutTag layoutTag)
-{
-    switch (layoutTag) {
-        case LayoutTag::RowMajor:
-            return TensorLayoutTag::RowMajor;
-        case LayoutTag::ColumnMajor:
-            return TensorLayoutTag::ColumnMajor;
-        case LayoutTag::zN:
-            return TensorLayoutTag::zN;
-        case LayoutTag::nZ:
-            return TensorLayoutTag::nZ;
-        case LayoutTag::zZ:
-            return TensorLayoutTag::zZ;
-        case LayoutTag::zZMxScale:
-            return TensorLayoutTag::zZMxScale;
-        case LayoutTag::nNMxScale:
-            return TensorLayoutTag::nNMxScale;
-        case LayoutTag::rowMajorMxScaleA:
-            return TensorLayoutTag::rowMajorMxScaleA;
-        case LayoutTag::colMajorMxScaleA:
-            return TensorLayoutTag::colMajorMxScaleA;
-        case LayoutTag::rowMajorMxScaleB:
-            return TensorLayoutTag::rowMajorMxScaleB;
-        case LayoutTag::colMajorMxScaleB:
-            return TensorLayoutTag::colMajorMxScaleB;
-        case LayoutTag::L0Clayout:
-            return TensorLayoutTag::L0C;
-        case LayoutTag::zNUnAlign:
-            return TensorLayoutTag::zNUnAlign;
-    }
-    return failure();
-}
-
-mlir::FailureOr<TensorLayoutTag> parseTensorLayoutTagAttr(llvm::StringRef layouttag)
-{
-    auto layoutTag = symbolizeLayoutTag(layouttag);
-    if (!layoutTag)
-        return failure();
-    return convertTlaLayoutTag(*layoutTag);
-}
-
-mlir::FailureOr<TensorLayoutTag> getExplicitTensorLayoutTagAttr(mlir::Operation* op)
-{
-    auto layoutTagAttr = op->getAttrOfType<StringAttr>("layouttag");
-    if (!layoutTagAttr)
-        return failure();
-    return parseTensorLayoutTagAttr(layoutTagAttr.getValue());
+    return layoutTag == ::LayoutTag::RowMajor || layoutTag == ::LayoutTag::ColumnMajor ||
+           layoutTag == ::LayoutTag::rowMajorMxScaleA || layoutTag == ::LayoutTag::colMajorMxScaleA ||
+           layoutTag == ::LayoutTag::rowMajorMxScaleB || layoutTag == ::LayoutTag::colMajorMxScaleB;
 }
 
 mlir::FailureOr<TensorTypeInfo> decodeTensorTypeInfo(mlir::Type tensorType)
@@ -130,10 +40,9 @@ mlir::FailureOr<TensorTypeInfo> decodeTensorTypeInfo(mlir::Type tensorType)
     info.elementType = ptr.getPointee();
     info.tlaAddressSpace = ptr.getAddrspace();
     info.addressSpace = stringifyAddressSpace(ptr.getAddrspace()).str();
-    auto layoutTag = convertTlaLayoutTag(layout.getLayoutTag());
-    if (!info.elementType || info.addressSpace.empty() || failed(layoutTag))
+    info.layoutTag = layout.getLayoutTag();
+    if (!info.elementType || info.addressSpace.empty())
         return failure();
-    info.layoutTag = *layoutTag;
 
     info.rank = static_cast<int64_t>(info.coordDims.size());
     if (isLinearLayout(info.layoutTag)) {
@@ -177,7 +86,7 @@ mlir::FailureOr<ParsedTensorInfo> parseTensorInfo(mlir::Type tensorType)
         }
         info.elementType = ptr.getPointee();
         info.addressSpace = ptr.getAddrspace();
-        info.layoutTag = stringifyLayoutTag(layout.getLayoutTag()).str();
+        info.layoutTag = layout.getLayoutTag();
         return info;
     }
     return failure();

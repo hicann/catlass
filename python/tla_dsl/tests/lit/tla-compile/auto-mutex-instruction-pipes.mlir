@@ -20,11 +20,11 @@ module {
     %l0a_ptr = tla.alloc_ptr{size_bytes = 4096} -> !tla.ptr<f32, l0a, 512>
     %l1_ptr = tla.alloc_ptr{size_bytes = 4096} -> !tla.ptr<f32, l1, 512>
     %ub_ptr = tla.alloc_ptr{size_bytes = 4096} -> !tla.ptr<f32, ub, 256>
-    %l1 = "tla.make_tensor_like"(%l1_ptr, %gm) {layoutTag = "zN"} : (!tla.ptr<f32, l1, 512>, !gm) -> !l1
-    %l0a = "tla.make_tensor_like"(%l0a_ptr, %l1) {layoutTag = "zN"} : (!tla.ptr<f32, l0a, 512>, !l1) -> !l0a
-    %l0b = "tla.make_tensor_like"(%l0b_ptr, %gm) {layoutTag = "nZ"} : (!tla.ptr<f32, l0b, 512>, !gm) -> !l0b
-    %l0c = "tla.make_tensor_like"(%l0c_ptr, %gm) {layoutTag = "L0Clayout"} : (!tla.ptr<f32, l0c, 512>, !gm) -> !l0c
-    %ub = "tla.make_tensor_like"(%ub_ptr, %gm) {layoutTag = "RowMajor"} : (!tla.ptr<f32, ub, 256>, !gm) -> !ub
+    %l1 = "tla.make_tensor_like"(%l1_ptr, %gm) {layoutTag = #tla.layout_tag<zN>} : (!tla.ptr<f32, l1, 512>, !gm) -> !l1
+    %l0a = "tla.make_tensor_like"(%l0a_ptr, %l1) {layoutTag = #tla.layout_tag<zN>} : (!tla.ptr<f32, l0a, 512>, !l1) -> !l0a
+    %l0b = "tla.make_tensor_like"(%l0b_ptr, %gm) {layoutTag = #tla.layout_tag<nZ>} : (!tla.ptr<f32, l0b, 512>, !gm) -> !l0b
+    %l0c = "tla.make_tensor_like"(%l0c_ptr, %gm) {layoutTag = #tla.layout_tag<L0Clayout>} : (!tla.ptr<f32, l0c, 512>, !gm) -> !l0c
+    %ub = "tla.make_tensor_like"(%ub_ptr, %gm) {layoutTag = #tla.layout_tag<RowMajor>} : (!tla.ptr<f32, ub, 256>, !gm) -> !ub
     %params = "tla.CopyL0C2DstParams"() <{unit_flag = 0 : i64, relu_enable = false, quant_mode = #tla.quant_mode<NO_QUANT>, l0c2ub_mode = #tla.l0c2ub_mode<NO_SPLIT_VEC_0>}> : () -> !tla.copy_l0c2dst_params
     %init = arith.constant true
     %unit = arith.constant 0 : i64
@@ -97,10 +97,10 @@ module {
     %pb = tla.alloc_ptr{size_bytes = 4096} -> !tla.ptr<f32, l0b, 512>
     %pc = tla.alloc_ptr{size_bytes = 4096} -> !tla.ptr<f32, l0c, 512>
     %pub = tla.alloc_ptr{size_bytes = 4096} -> !tla.ptr<f32, ub, 256>
-    %a = "tla.make_tensor_like"(%pa, %gm) {layoutTag = "zN"} : (!tla.ptr<f32, l0a, 512>, !unit_gm) -> !unit_l0a
-    %b = "tla.make_tensor_like"(%pb, %gm) {layoutTag = "nZ"} : (!tla.ptr<f32, l0b, 512>, !unit_gm) -> !unit_l0b
-    %c = "tla.make_tensor_like"(%pc, %gm) {layoutTag = "L0Clayout"} : (!tla.ptr<f32, l0c, 512>, !unit_gm) -> !unit_l0c
-    %ub = "tla.make_tensor_like"(%pub, %gm) {layoutTag = "RowMajor"} : (!tla.ptr<f32, ub, 256>, !unit_gm) -> !unit_ub
+    %a = "tla.make_tensor_like"(%pa, %gm) {layoutTag = #tla.layout_tag<zN>} : (!tla.ptr<f32, l0a, 512>, !unit_gm) -> !unit_l0a
+    %b = "tla.make_tensor_like"(%pb, %gm) {layoutTag = #tla.layout_tag<nZ>} : (!tla.ptr<f32, l0b, 512>, !unit_gm) -> !unit_l0b
+    %c = "tla.make_tensor_like"(%pc, %gm) {layoutTag = #tla.layout_tag<L0Clayout>} : (!tla.ptr<f32, l0c, 512>, !unit_gm) -> !unit_l0c
+    %ub = "tla.make_tensor_like"(%pub, %gm) {layoutTag = #tla.layout_tag<RowMajor>} : (!tla.ptr<f32, ub, 256>, !unit_gm) -> !unit_ub
     %init = arith.constant true
     %unit32 = scf.if %cond -> (i32) {
       %two = arith.constant 2 : i32

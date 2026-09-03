@@ -112,7 +112,7 @@ static mlir::FailureOr<TensorDescriptor> buildTileViewResultDescriptorFromParent
             }
             // zNUnAlign: shape[0] = tile_M = sh0. The M axis is not fractal-blocked, so leaf[0]
             // is the runtime tile row count (zN's leaf[0] is the static C0_NUM_PER_FRACTAL).
-            if (info.layoutTag == TensorLayoutTag::zNUnAlign && idx == 0) {
+            if (info.layoutTag == LayoutTag::zNUnAlign && idx == 0) {
                 return sh0;
             }
             if (idx == 1) {
@@ -453,17 +453,12 @@ mlir::LogicalResult TensorDescriptorDerivation::derive(mlir::func::FuncOp funcOp
                 return;
             }
 
-            auto explicitLayout = getExplicitTensorLayoutTagAttr(op);
-            if (succeeded(explicitLayout)) {
-                if (*explicitLayout != resultInfo->layoutTag) {
-                    op->emitError() << "tla.tile_view layouttag must match result tensor layout_tag";
+            if (auto layoutTagAttr = op->getAttrOfType<::tla::LayoutTagAttr>("layoutTag")) {
+                if (layoutTagAttr.getValue() != resultInfo->layoutTag) {
+                    op->emitError() << "tla.tile_view layoutTag must match result tensor layout_tag";
                     derivationFailed = true;
                     return;
                 }
-            } else if (auto layoutTagAttr = op->getAttrOfType<StringAttr>("layouttag")) {
-                op->emitError() << "unsupported tla.tile_view layouttag '" << layoutTagAttr.getValue() << "'";
-                derivationFailed = true;
-                return;
             }
 
             auto bridgedParent = dyn_cast<MemRefType>(parent.bridgedBaseMemrefType);
@@ -541,21 +536,13 @@ mlir::LogicalResult TensorDescriptorDerivation::derive(mlir::func::FuncOp funcOp
             }
 
             OpBuilder builder(op);
-            auto layoutTagAttr = op->getAttrOfType<StringAttr>("layoutTag");
-            if (!layoutTagAttr)
-                layoutTagAttr = op->getAttrOfType<StringAttr>("layouttag");
+            auto layoutTagAttr = op->getAttrOfType<::tla::LayoutTagAttr>("layoutTag");
             if (!layoutTagAttr) {
                 op->emitError() << "tla.make_tensor_like requires a layoutTag attribute";
                 derivationFailed = true;
                 return;
             }
-            auto layoutTag = parseTensorLayoutTagAttr(layoutTagAttr.getValue());
-            if (failed(layoutTag)) {
-                op->emitError() << "unsupported tla.make_tensor_like layoutTag '" << layoutTagAttr.getValue() << "'";
-                derivationFailed = true;
-                return;
-            }
-            if (*layoutTag != childInfo->layoutTag) {
+            if (layoutTagAttr.getValue() != childInfo->layoutTag) {
                 op->emitError() << "tla.make_tensor_like layoutTag must match result tensor layout_tag";
                 derivationFailed = true;
                 return;
@@ -592,18 +579,18 @@ mlir::LogicalResult TensorDescriptorDerivation::derive(mlir::func::FuncOp funcOp
                 if (!isNZFamilyLayout(childInfo->layoutTag)) {
                     op->emitError() << "dynamic NZFamily layout shape leaf at index " << idx
                                     << " has no SSA derivation rule for layout "
-                                    << stringifyTensorLayoutTag(childInfo->layoutTag);
+                                    << stringifyLayoutTag(childInfo->layoutTag);
                     return failure();
                 }
                 if (leaves.size() < 4) {
                     op->emitError() << "NZFamily layout shape must have 4 leaves for layout "
-                                    << stringifyTensorLayoutTag(childInfo->layoutTag);
+                                    << stringifyLayoutTag(childInfo->layoutTag);
                     return failure();
                 }
                 // zNUnAlign: shape[0] = rows = origin M. The M axis is not fractal-blocked,
                 // so leaf[0] is the runtime row count (not a compile-time divisor like zN's
                 // C0_NUM_PER_FRACTAL) and is derived directly from the logical origin M.
-                if (childInfo->layoutTag == TensorLayoutTag::zNUnAlign && idx == 0) {
+                if (childInfo->layoutTag == LayoutTag::zNUnAlign && idx == 0) {
                     return parent.originShape[0];
                 }
                 if (idx == 1) {
@@ -655,32 +642,32 @@ mlir::LogicalResult TensorDescriptorDerivation::derive(mlir::func::FuncOp funcOp
                 };
                 // Layout-coupled NZFamily stride derivation from the remapped fractal shape leaves.
                 // zN/L0C: stride[3] = ceil_div_rows * c0 * ele_num_per_c0 = shape[1]*shape[0]*shape[2]
-                if ((childInfo->layoutTag == TensorLayoutTag::zN || childInfo->layoutTag == TensorLayoutTag::L0C) &&
+                if ((childInfo->layoutTag == LayoutTag::zN || childInfo->layoutTag == LayoutTag::L0Clayout) &&
                     idx == 3) {
                     return mulShapeLeaves(/*a=*/1, /*b=*/0, /*c=*/2);
                 }
                 // nZ/zZ: stride[1] = ceil_div_cols * c0 * ele_num_per_c0 = shape[3]*shape[2]*shape[0]
                 // zZMxScale nests exactly like zZ (only its constants differ: the MX scale C0 is
                 // fixed at 2 by the e8m0 format), so the same product derives its dynamic leaf.
-                if ((childInfo->layoutTag == TensorLayoutTag::nZ || childInfo->layoutTag == TensorLayoutTag::zZ ||
-                     childInfo->layoutTag == TensorLayoutTag::zZMxScale) &&
+                if ((childInfo->layoutTag == LayoutTag::nZ || childInfo->layoutTag == LayoutTag::zZ ||
+                     childInfo->layoutTag == LayoutTag::zZMxScale) &&
                     idx == 1) {
                     return mulShapeLeaves(/*a=*/3, /*b=*/2, /*c=*/0);
                 }
                 // nNMxScale is the transposed MX scale nesting, so its dynamic leaf is stride[3]
                 // = rows_round_up * c0 = shape[1]*shape[0]*shape[2], matching the zN rule.
-                if (childInfo->layoutTag == TensorLayoutTag::nNMxScale && idx == 3) {
+                if (childInfo->layoutTag == LayoutTag::nNMxScale && idx == 3) {
                     return mulShapeLeaves(/*a=*/1, /*b=*/0, /*c=*/2);
                 }
                 // zNUnAlign: stride[1] = stride[3] = rows * ele_num_per_c0 = shape[1]*shape[0]*shape[2]
                 // (shape[1] == 1, so the product is rows*ele_num_per_c0). Both leaves are runtime-
                 // varying because rows is dynamic (M axis is not fractal-blocked).
-                if (childInfo->layoutTag == TensorLayoutTag::zNUnAlign && (idx == 1 || idx == 3)) {
+                if (childInfo->layoutTag == LayoutTag::zNUnAlign && (idx == 1 || idx == 3)) {
                     return mulShapeLeaves(/*a=*/1, /*b=*/0, /*c=*/2);
                 }
                 op->emitError() << "dynamic NZFamily layout stride leaf at index " << idx
                                 << " has no SSA derivation rule for layout "
-                                << stringifyTensorLayoutTag(childInfo->layoutTag);
+                                << stringifyLayoutTag(childInfo->layoutTag);
                 return failure();
             };
 
@@ -740,9 +727,9 @@ mlir::LogicalResult TensorDescriptorDerivation::derive(mlir::func::FuncOp funcOp
                 auto materializeLinearStride = [&](int64_t leaf, size_t idx) -> FailureOr<Value> {
                     if (leaf != ShapedType::kDynamic)
                         return getOrCreateConstant(op, leaf, 0);
-                    if (childInfo->layoutTag == TensorLayoutTag::RowMajor)
+                    if (childInfo->layoutTag == LayoutTag::RowMajor)
                         return idx == 0 ? alignLinearExtent(shape[1]) : one;
-                    if (childInfo->layoutTag == TensorLayoutTag::ColumnMajor)
+                    if (childInfo->layoutTag == LayoutTag::ColumnMajor)
                         return idx == 0 ? one : alignLinearExtent(shape[0]);
                     op->emitError() << "unsupported linear layout for dynamic stride derivation";
                     return failure();

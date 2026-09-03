@@ -28,7 +28,7 @@
     %13 = "tla.make_tensor"(%8, %11, %12) : (!tla.ptr<f32, gm, 4>, !tla.layout<!tla.shape<8,8>, !tla.stride<8,1>, !tla.shape<8,8>, RowMajor>, !tla.coord<0,0>) -> !tla.tensor<!tla.layout<!tla.shape<8,8>, !tla.stride<8,1>, !tla.shape<8,8>, RowMajor>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>
     %14 = "arith.constant"() <{value = 8 : index}> : () -> index
     %15 = "tla.ptr_add"(%5, %14) : (!tla.ptr<f32, l1, 256>, index) -> !tla.ptr<f32, l1, 256>
-    %16 = "tla.make_tensor_like"(%15, %13) <{layoutTag = "zN"}> : (!tla.ptr<f32, l1, 256>, !tla.tensor<!tla.layout<!tla.shape<8,8>, !tla.stride<8,1>, !tla.shape<8,8>, RowMajor>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>) -> !tla.tensor<!tla.layout<!tla.shape<(16,1),(8,1)>, !tla.stride<(8,128),(1,128)>, !tla.shape<8,8>, zN>, !tla.coord<0,0>, !tla.ptr<f32, l1, 256>>
+    %16 = "tla.make_tensor_like"(%15, %13) <{layoutTag = #tla.layout_tag<zN>}> : (!tla.ptr<f32, l1, 256>, !tla.tensor<!tla.layout<!tla.shape<8,8>, !tla.stride<8,1>, !tla.shape<8,8>, RowMajor>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>) -> !tla.tensor<!tla.layout<!tla.shape<(16,1),(8,1)>, !tla.stride<(8,128),(1,128)>, !tla.shape<8,8>, zN>, !tla.coord<0,0>, !tla.ptr<f32, l1, 256>>
     "tla.cube"() ({
       "tla.copy"(%16, %13) : (!tla.tensor<!tla.layout<!tla.shape<(16,1),(8,1)>, !tla.stride<(8,128),(1,128)>, !tla.shape<8,8>, zN>, !tla.coord<0,0>, !tla.ptr<f32, l1, 256>>, !tla.tensor<!tla.layout<!tla.shape<8,8>, !tla.stride<8,1>, !tla.shape<8,8>, RowMajor>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>) -> ()
     }) : () -> ()

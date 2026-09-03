@@ -66,21 +66,6 @@ def Tla_AddressSpaceTypeParameter
   let printer = "$_printer << ::stringifyAddressSpace($_self)";
 }
 
-def Tla_LayoutTagTypeParameter
-    : TypeParameter<"::LayoutTag", "Tla tensor layout keyword"> {
-  let parser = [{ [&]() -> ::mlir::FailureOr<::LayoutTag> {
-    ::llvm::StringRef kw;
-    if ($_parser.parseKeyword(&kw))
-      return ::mlir::failure();
-    auto sym = ::symbolizeLayoutTag(kw);
-    if (!sym)
-      return $_parser.emitError($_parser.getCurrentLocation())
-             << "unknown LayoutTag keyword: " << kw;
-    return *sym;
-  }() }];
-  let printer = "$_printer << ::stringifyLayoutTag($_self)";
-}
-
 class Tla_IndexTreeType<string name, string typeMnemonic, string typeSummary>
     : TypeDef<TlaDialect, name, []> {
   let mnemonic = typeMnemonic;
@@ -132,30 +117,57 @@ class Tla_I32Enum<string name, string description, list<I32EnumAttrCase> cases>
     : I32EnumAttr<name, description, cases> {
 }
 
-def Tla_LayoutTag_RowMajor : I32EnumAttrCase<"RowMajor", 0>;
-def Tla_LayoutTag_ColumnMajor : I32EnumAttrCase<"ColumnMajor", 1>;
-def Tla_LayoutTag_zN : I32EnumAttrCase<"zN", 2>;
-def Tla_LayoutTag_nZ : I32EnumAttrCase<"nZ", 3>;
-def Tla_LayoutTag_zZ : I32EnumAttrCase<"zZ", 4>;
-def Tla_LayoutTag_L0CLayout : I32EnumAttrCase<"L0Clayout", 5>;
-def Tla_LayoutTag_zNUnAlign : I32EnumAttrCase<"zNUnAlign", 6>;
+class Tla_I32EnumAttr<string attrMnemonic, Tla_I32Enum enumInfo>
+    : EnumAttr<TlaDialect, enumInfo, attrMnemonic> {
+  let assemblyFormat = "`<` $value `>`";
+  let cppNamespace = "::tla";
+}
+
+def Tla_LayoutTag_Unknown : I32EnumAttrCase<"Unknown", 0>;
+def Tla_LayoutTag_RowMajor : I32EnumAttrCase<"RowMajor", 1>;
+def Tla_LayoutTag_ColumnMajor : I32EnumAttrCase<"ColumnMajor", 2>;
+def Tla_LayoutTag_zN : I32EnumAttrCase<"zN", 3>;
+def Tla_LayoutTag_nZ : I32EnumAttrCase<"nZ", 4>;
+def Tla_LayoutTag_zZ : I32EnumAttrCase<"zZ", 5>;
+def Tla_LayoutTag_L0CLayout : I32EnumAttrCase<"L0Clayout", 6>;
+def Tla_LayoutTag_zNUnAlign : I32EnumAttrCase<"zNUnAlign", 7>;
 // MX shared-exponent scale block. Same nesting as zZ, but its C0 is fixed at 2
 // elements / 32 bytes per fractal by the e8m0 scale format rather than derived
 // from the element width, so it cannot reuse zZ.
-def Tla_LayoutTag_zZMxScale : I32EnumAttrCase<"zZMxScale", 7>;
+def Tla_LayoutTag_zZMxScale : I32EnumAttrCase<"zZMxScale", 8>;
 // The B-side MX scale block uses the transposed nN nesting.
-def Tla_LayoutTag_nNMxScale : I32EnumAttrCase<"nNMxScale", 8>;
+def Tla_LayoutTag_nNMxScale : I32EnumAttrCase<"nNMxScale", 9>;
 // GM-side MX scale blocks, named by side (A / B) and orientation. These say how
 // the scales sit in *global* memory, which the L1 tags above cannot: a
 // pre-swizzled buffer and a natural one are both u8 and otherwise
 // indistinguishable, and they select different copies. The four match Catlass's
 // isMxScaleFor{Row,Column}Major{A,B} predicates one-to-one; scaleA reaches L1 as
 // zZ and scaleB as nN either way.
-def Tla_LayoutTag_rowMajorMxScaleA : I32EnumAttrCase<"rowMajorMxScaleA", 9>;
-def Tla_LayoutTag_colMajorMxScaleA : I32EnumAttrCase<"colMajorMxScaleA", 10>;
-def Tla_LayoutTag_rowMajorMxScaleB : I32EnumAttrCase<"rowMajorMxScaleB", 11>;
-def Tla_LayoutTag_colMajorMxScaleB : I32EnumAttrCase<"colMajorMxScaleB", 12>;
-def Tla_LayoutTagEnum : Tla_I32Enum<"LayoutTag", "Tensor layout tag for tla.tensor types.", [Tla_LayoutTag_RowMajor, Tla_LayoutTag_ColumnMajor, Tla_LayoutTag_zN, Tla_LayoutTag_nZ, Tla_LayoutTag_zZ, Tla_LayoutTag_L0CLayout, Tla_LayoutTag_zNUnAlign, Tla_LayoutTag_zZMxScale, Tla_LayoutTag_nNMxScale, Tla_LayoutTag_rowMajorMxScaleA, Tla_LayoutTag_colMajorMxScaleA, Tla_LayoutTag_rowMajorMxScaleB, Tla_LayoutTag_colMajorMxScaleB]>;
+def Tla_LayoutTag_rowMajorMxScaleA : I32EnumAttrCase<"rowMajorMxScaleA", 10>;
+def Tla_LayoutTag_colMajorMxScaleA : I32EnumAttrCase<"colMajorMxScaleA", 11>;
+def Tla_LayoutTag_rowMajorMxScaleB : I32EnumAttrCase<"rowMajorMxScaleB", 12>;
+def Tla_LayoutTag_colMajorMxScaleB : I32EnumAttrCase<"colMajorMxScaleB", 13>;
+def Tla_LayoutTagEnum : Tla_I32Enum<"LayoutTag", "Tensor layout tag for tla.tensor types.", [
+  Tla_LayoutTag_Unknown,
+  Tla_LayoutTag_RowMajor,
+  Tla_LayoutTag_ColumnMajor,
+  Tla_LayoutTag_zN,
+  Tla_LayoutTag_nZ,
+  Tla_LayoutTag_zZ,
+  Tla_LayoutTag_L0CLayout,
+  Tla_LayoutTag_zNUnAlign,
+  Tla_LayoutTag_zZMxScale,
+  Tla_LayoutTag_nNMxScale,
+  Tla_LayoutTag_rowMajorMxScaleA,
+  Tla_LayoutTag_colMajorMxScaleA,
+  Tla_LayoutTag_rowMajorMxScaleB,
+  Tla_LayoutTag_colMajorMxScaleB]>;
+def Tla_LayoutTagAttr : Tla_I32EnumAttr<"layout_tag", Tla_LayoutTagEnum> {
+  let description = [{
+    tla layout_tag RowMajor,ColumnMajor,zN,nZ,zZ,L0Clayout,zNUnAlign for generic data types,
+    and zZMxScale,nNMxScale,rowMajorMxScaleA,colMajorMxScaleA,rowMajorMxScaleB,colMajorMxScaleB for mxfp4/mxfp8 scale.
+  }];
+}
 
 def Tla_AddressSpace_Generic : I32EnumAttrCase<"generic", 0>;
 def Tla_AddressSpace_Gm : I32EnumAttrCase<"gm", 1>;
@@ -227,7 +239,7 @@ def Tla_LayoutType : TypeDef<TlaDialect, "Layout", []> {
     TypeParameter<"::tla::ShapeType", "shape tree type">:$shape,
     TypeParameter<"::tla::StrideType", "stride tree type">:$stride,
     TypeParameter<"::tla::ShapeType", "origin shape">:$origin,
-    Tla_LayoutTagTypeParameter:$layoutTag
+    EnumParameter<Tla_LayoutTagEnum>:$layoutTag
   );
   let assemblyFormat = "`<` qualified($shape) `,` qualified($stride) `,` qualified($origin) `,` $layoutTag `>`";
   let genVerifyDecl = 1;
@@ -1020,7 +1032,7 @@ def Tla_MakeTensorLikeOp : Tla_Op<"make_tensor_like", []> {
   let description = [{
     Reconstruct a typed local tensor from a raw allocation pointer and a reference tensor.
   }];
-  let arguments = (ins Tla_PtrType:$ptr, Tla_TensorType:$like, StrAttr:$layoutTag);
+  let arguments = (ins Tla_PtrType:$ptr, Tla_TensorType:$like, Tla_LayoutTagAttr:$layoutTag);
   let results = (outs Tla_TensorType:$tile);
   let assemblyFormat = [{
     $ptr `like` $like `layoutTag` `(` $layoutTag `)` attr-dict `:` qualified(type($ptr)) `,` qualified(type($like)) `->` qualified(type($tile))
@@ -1303,7 +1315,7 @@ def Tla_MakeLayoutOp : Tla_Op<"make_layout", [Pure]> {
   let arguments = (ins Tla_ShapeType:$shape,
                        Tla_StrideType:$stride,
                        Optional<Tla_ShapeType>:$origin_shape,
-                       OptionalAttr<StrAttr>:$layoutTag);
+                       OptionalAttr<Tla_LayoutTagAttr>:$layoutTag);
   let results = (outs Tla_LayoutType:$result);
   let assemblyFormat = [{
     $shape `,` $stride (`origin` $origin_shape^)? attr-dict `:`
@@ -1488,7 +1500,7 @@ def Tla_TileViewOp : Tla_Op<"tile_view", []> {
     Create a tensor view over an existing ``!tla.tensor`` using packed
     ``!tla.shape`` and ``!tla.coord`` values.
   }];
-  let arguments = (ins Tla_TensorType:$source, Tla_ShapeType:$shape, Tla_CoordType:$coord, OptionalAttr<StrAttr>:$layouttag);
+  let arguments = (ins Tla_TensorType:$source, Tla_ShapeType:$shape, Tla_CoordType:$coord, OptionalAttr<Tla_LayoutTagAttr>:$layoutTag);
   let results = (outs Tla_TensorType:$view);
   let assemblyFormat = [{
     $source `,` $shape `,` $coord attr-dict `:` qualified(type($source)) `,` qualified(type($shape)) `,` qualified(type($coord)) `->` qualified(type($view))

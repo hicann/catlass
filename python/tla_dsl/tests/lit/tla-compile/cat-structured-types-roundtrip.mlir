@@ -12,10 +12,10 @@ module {
     %parent = tla.make_tensor %parent_ptr, %parent_layout, %parent_coord : !tla.ptr<f16, l1, 512>, !tla.layout<!tla.shape<16,16>, !tla.stride<16,1>, !tla.shape<16,16>, RowMajor>, !tla.coord<0,0> -> !tla.tensor<!tla.layout<!tla.shape<16,16>, !tla.stride<16,1>, !tla.shape<16,16>, RowMajor>, !tla.coord<0,0>, !tla.ptr<f16, l1, 512>>
     %lhs_raw = tla.alloc_ptr{size_bytes = 512} -> !tla.ptr<i8, l1, 512>
     %lhs_ptr = tla.recast_ptr %lhs_raw : !tla.ptr<i8, l1, 512> -> !tla.ptr<f16, l1, 512>
-    %lhs = tla.make_tensor_like %lhs_ptr like %parent layoutTag("zN") : !tla.ptr<f16, l1, 512>, !tla.tensor<!tla.layout<!tla.shape<16,16>, !tla.stride<16,1>, !tla.shape<16,16>, RowMajor>, !tla.coord<0,0>, !tla.ptr<f16, l1, 512>> -> !tla.tensor<!tla.layout<!tla.shape<(16,1),(16,1)>, !tla.stride<(16,256),(1,256)>, !tla.shape<16,16>, zN>, !tla.coord<0,0>, !tla.ptr<f16, l1, 512>>
+    %lhs = tla.make_tensor_like %lhs_ptr like %parent layoutTag(#tla.layout_tag<zN>) : !tla.ptr<f16, l1, 512>, !tla.tensor<!tla.layout<!tla.shape<16,16>, !tla.stride<16,1>, !tla.shape<16,16>, RowMajor>, !tla.coord<0,0>, !tla.ptr<f16, l1, 512>> -> !tla.tensor<!tla.layout<!tla.shape<(16,1),(16,1)>, !tla.stride<(16,256),(1,256)>, !tla.shape<16,16>, zN>, !tla.coord<0,0>, !tla.ptr<f16, l1, 512>>
     %rhs_raw = tla.alloc_ptr{size_bytes = 512} -> !tla.ptr<i8, l0b, 512>
     %rhs_ptr = tla.recast_ptr %rhs_raw : !tla.ptr<i8, l0b, 512> -> !tla.ptr<f16, l0b, 512>
-    %rhs = tla.make_tensor_like %rhs_ptr like %parent layoutTag("nZ") : !tla.ptr<f16, l0b, 512>, !tla.tensor<!tla.layout<!tla.shape<16,16>, !tla.stride<16,1>, !tla.shape<16,16>, RowMajor>, !tla.coord<0,0>, !tla.ptr<f16, l1, 512>> -> !tla.tensor<!tla.layout<!tla.shape<(8,2),(16,1)>, !tla.stride<(1,256),(8,128)>, !tla.shape<16,16>, nZ>, !tla.coord<0,0>, !tla.ptr<f16, l0b, 512>>
+    %rhs = tla.make_tensor_like %rhs_ptr like %parent layoutTag(#tla.layout_tag<nZ>) : !tla.ptr<f16, l0b, 512>, !tla.tensor<!tla.layout<!tla.shape<16,16>, !tla.stride<16,1>, !tla.shape<16,16>, RowMajor>, !tla.coord<0,0>, !tla.ptr<f16, l1, 512>> -> !tla.tensor<!tla.layout<!tla.shape<(8,2),(16,1)>, !tla.stride<(1,256),(8,128)>, !tla.shape<16,16>, nZ>, !tla.coord<0,0>, !tla.ptr<f16, l0b, 512>>
     %shape = "tla.make_shape"() : () -> !tla.shape<(?,16),8>
     %stride = "tla.make_stride"() : () -> !tla.stride<(16,1),128>
     %origin = "tla.make_shape"() : () -> !tla.shape<(32,16),8>

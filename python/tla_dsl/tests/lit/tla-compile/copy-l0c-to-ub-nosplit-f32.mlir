@@ -14,7 +14,7 @@ module attributes {tla.module_exec_units = "cube"} {
 
     %4 = tla.alloc_ptr{size_bytes = 4096} -> !tla.ptr<i8, l0c, 512>
     %5 = tla.recast_ptr %4 : !tla.ptr<i8, l0c, 512> -> !tla.ptr<f32, l0c, 512>
-    %6 = tla.make_tensor_like %5 like %3 layoutTag("L0Clayout") : !tla.ptr<f32, l0c, 512>, !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<32,1>, !tla.shape<32,32>, RowMajor>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>> -> !tla.tensor<!tla.layout<!tla.shape<(16,2),(16,2)>, !tla.stride<(16,256),(1,512)>, !tla.shape<32,32>, L0Clayout>, !tla.coord<0,0>, !tla.ptr<f32, l0c, 512>>
+    %6 = tla.make_tensor_like %5 like %3 layoutTag(#tla.layout_tag<L0Clayout>) : !tla.ptr<f32, l0c, 512>, !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<32,1>, !tla.shape<32,32>, RowMajor>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>> -> !tla.tensor<!tla.layout<!tla.shape<(16,2),(16,2)>, !tla.stride<(16,256),(1,512)>, !tla.shape<32,32>, L0Clayout>, !tla.coord<0,0>, !tla.ptr<f32, l0c, 512>>
 
     "tla.cube"() ({
       %7 = tla.alloc_ptr{size_bytes = 4096} -> !tla.ptr<i8, ub, 256>

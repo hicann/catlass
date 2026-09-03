@@ -404,8 +404,8 @@ def test_make_tensor_like_supports_every_layout_pair(
     mlir = make_tensor_like_layout_pair_kernel.dump_mlir(
         type_args=(mem_in, 64, 96)
     )
-    assert f'layoutTag("{parent_name}")' in mlir
-    assert f'layoutTag("{child_name}")' in mlir
+    assert f'layoutTag(<{parent_name}>)' in mlir
+    assert f'layoutTag(<{child_name}>)' in mlir
     assert "!tla.shape<?,?>" in mlir
 
     input_path = tmp_path / f"layout_pair_{parent_name}_to_{child_name}.mlir"
