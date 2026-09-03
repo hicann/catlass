@@ -65,13 +65,31 @@ tla.kernel(fn: Callable[..., Any] | None = None, *, auto_sync: str | None = None
 
 - *`fn`*（`Callable[..., Any] | None`）：被装饰的函数。用 `@tla.kernel` 或
   `@tla.kernel(auto_sync=...)`；只有无法使用装饰器语法时才手写 `tla.kernel(fn)`。
-- *`auto_sync`*（`str | None`）：可选。`"v0"` 表示由框架自动插入局部 mutex；
-  默认 `None`（同步仍由用户显式控制）。
+- *`auto_sync`*（`str | None`）：可选。`"v0"` 为受支持的 `tla.copy`、
+  `tla.mmad` 和 `tla.vec.func` 访存启用实验性自动核内同步；默认 `None`
+  （同步仍由用户显式控制）。
 
 约束说明：
 
 - 被装饰的函数不能用 Python 的 `async def` 定义。
 - `auto_sync` 只能是 `"v0"` 或 `None`。
+- 使用 `auto_sync="v0"` 时：
+  - 只生成单个 AIC 或 AIV 内部不同硬件流水之间的核内同步。AIC/AIV
+    核间同步和 `tla.vec.func` 内部需要的线程级同步仍由开发者显式处理。
+  - 不能与核内 `tla.flag` / `tla.set_flag` / `tla.wait_flag`、`tla.mutex` /
+    `tla.mutex_guard` 或 `tla.call_extern` 混用。
+  - 被自动同步保护的片上 tensor 必须来自 `tla.allocate`。不支持保护通过
+    `tla.make_ptr` 从片上裸地址构造的 tensor。
+  - 当前 AutoSync 不支持将 UB `tla.scalar_load` / `tla.scalar_store` 直接写在
+    `tla.vector` 下；启用 AutoSync 时须将其放在 `tla.vec.func` 内。不启用
+    AutoSync 时，这类写法仍然合法。
+  - 支持通过运行时条件选择由 `tla.allocate` 创建的 buffer，但不支持在循环
+    迭代间把携带的 pointer 切换到另一块 allocation，也不支持多个条件 buffer
+    在不同分支中使用不一致的 allocation 顺序。
+  - `tla.mmad` 的 `unit_flag` 必须能静态证明为始终等于 0 或始终位于
+    `{2, 3}`；L0C copy 的 `unit_flag` 只支持 0 或 3。
+  - `tla.print_tensor` 和 `tla.debug_print` 不会获得自动同步。
+- 详细设计和限制说明见 [AutoSync 设计](../dsl_development/feature_development/auto_sync_design.md)。
 - 启动前必须调用 `tla.compile(kernel, *sample_args)`；直接调用装饰后的
   kernel 会抛出 `TypeError`。
 - Kernel 参数类型：

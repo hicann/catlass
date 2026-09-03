@@ -303,12 +303,34 @@ def kernel(
         - *`fn`* (`Callable[..., Any] | None`): The function being decorated.
           Use `@tla.kernel` or `@tla.kernel(auto_sync=...)`; call `tla.kernel(fn)`
           only when decorator syntax is unavailable.
-        - *`auto_sync`* (`str | None`): Optional. `"v0"` inserts automatic local
-          mutexes. Default `None` (synchronization stays explicit).
+        - *`auto_sync`* (`str | None`): Optional. `"v0"` enables experimental
+          automatic in-core synchronization for supported `tla.copy`, `tla.mmad`,
+          and `tla.vec.func` accesses. Default `None` (synchronization stays
+          explicit).
 
         Constraints:
         - The decorated function must not be defined with Python `async def`.
         - `auto_sync` must be `"v0"` or `None`.
+        - With `auto_sync="v0"`:
+          - Only pipeline synchronization within one AIC or AIV is generated.
+            Cross-core synchronization and thread synchronization inside
+            `tla.vec.func` remain explicit.
+          - Local `tla.flag` / `tla.set_flag` / `tla.wait_flag` and `tla.mutex` /
+            `tla.mutex_guard` cannot be mixed with automatic synchronization.
+            `tla.call_extern` is also unsupported.
+          - Protected on-chip tensors must originate from `tla.allocate`; tensors
+            built by `tla.make_ptr` from raw on-chip addresses are unsupported.
+          - UB `tla.scalar_load` / `tla.scalar_store` directly under `tla.vector`
+            are unsupported by AutoSync. Place them inside `tla.vec.func` when
+            AutoSync is enabled. This placement is not required when AutoSync is
+            disabled.
+          - Runtime selection among buffers created by `tla.allocate` is supported,
+            but switching a carried pointer to another allocation across loop
+            iterations and inconsistent multi-buffer allocation order are not.
+          - `tla.mmad` `unit_flag` must be provably always zero or always enabled
+            with value 2/3. L0C copy `unit_flag` supports only 0 or 3.
+          - `tla.print_tensor` and `tla.debug_print` do not receive automatic
+            synchronization.
         - Compile with `tla.compile(kernel, *sample_args)` before launching; calling
           the decorated kernel directly raises `TypeError`.
         - Kernel parameter types:
