@@ -6,7 +6,8 @@ import dataclasses
 import inspect
 import linecache
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Mapping, Sequence
+from pathlib import Path
+from typing import Any, Mapping, Sequence
 
 from catlass._mlir import ir as mlir_ir  # type: ignore[assignment]
 
@@ -22,9 +23,6 @@ from .base_dsl import DSLLocation
 from .base_dsl.typing import Numeric, is_constexpr_annotation
 from .dsl import _jit_helper_transformer
 from .tla.typing import Tensor
-
-if TYPE_CHECKING:
-    from .tla.ffi import ExternFunction
 
 
 class TlaLoweringError(RuntimeError):
@@ -67,6 +65,15 @@ def _format_execution_source_error(fn: Any, exc: Exception) -> str | None:
     return message
 
 
+@dataclass(frozen=True)
+class ExternCompileSpec:
+    """Compilation requirements for one called external source."""
+
+    source: str
+    core_types: frozenset[str]
+    include_dirs: tuple[Path, ...]
+
+
 @dataclass
 class LoweredTlaIR:
     """Structured result of execution-mode lowering to TLA MLIR (``tla`` dialect)."""
@@ -75,8 +82,7 @@ class LoweredTlaIR:
     module: mlir_ir.Module
     generic: bool = False
     _asm: str | None = None
-    extern_function: ExternFunction | None = None
-    extern_core_types: frozenset[str] = frozenset()
+    extern_compile_specs: tuple[ExternCompileSpec, ...] = ()
 
     def asm(self, *, generic: bool | None = None) -> str:
         emit_generic = self.generic if generic is None else bool(generic)
@@ -169,7 +175,7 @@ def lower_jit_to_tlair_module_by_execution(
             module = mlir_ir.Module.create()
             with mlir_ir.InsertionPoint(module.body):
                 fn_loc = _coerce_location(ctx, location)
-                extern_function, extern_core_types = _build_tla_func(
+                extern_compile_specs = _build_tla_func(
                     fn=fn,
                     module=module,
                     fn_name=fn.__name__,
@@ -186,8 +192,7 @@ def lower_jit_to_tlair_module_by_execution(
         context=ctx,
         module=module,
         generic=bool(generic),
-        extern_function=extern_function,
-        extern_core_types=extern_core_types,
+        extern_compile_specs=extern_compile_specs,
     )
     lowered._asm = module.operation.get_asm(
         print_generic_op_form=bool(generic),
@@ -247,7 +252,8 @@ def _build_tla_func(
     ctx: mlir_ir.Context,
     fn_loc: mlir_ir.Location,
     auto_sync: str | None,
-) -> tuple[ExternFunction | None, frozenset[str]]:
+) -> tuple[ExternCompileSpec, ...]:
+    # Return compilation requirements for all called extern sources.
     runtime_arg_names = [name for name in arg_names if name not in constexpr_names]
 
     # Dynamic GM host tensors enter as unified GM memref + originShape0/1 index args.
@@ -610,10 +616,61 @@ def _build_tla_func(
                 if message is None:
                     message = f"Execution-mode lowering failed while running `{fn.__name__}`: {exc}"
                 raise UnsupportedExecutionLowering(message) from exc
-            extern_function = frontend_state.extern_function
-            extern_core_types = frozenset(frontend_state.extern_core_types)
+            # Group called externs by source in first-use order. Declarations that
+            # share a source must also share one ordered include configuration;
+            # merge their call-site core types into a single compile spec. The
+            # lowering pass independently keeps each original callee symbol and
+            # derives its core type, including AIC_OR_AIV for a symbol used by both.
+            # Example (source -> first symbol, include dirs, merged core types):
+            # {
+            #     'extern "C" { ... }': (
+            #         "tla_user_shared_a",
+            #         (Path("/project/include"),),
+            #         {"aic", "aiv"},
+            #     )
+            # }
+            source_compile_configs: dict[
+                str, tuple[str, tuple[Path, ...], set[str]]
+            ] = {}
+            for usage in frontend_state.extern_usages.values():
+                source = usage.function.source
+                symbol = usage.function.symbol
+                include_dirs = usage.function.include_dirs
+                config = source_compile_configs.get(source)
+                if config is None:
+                    core_types: set[str] = set()
+                    source_compile_configs[source] = (
+                        symbol,
+                        include_dirs,
+                        core_types,
+                    )
+                else:
+                    configured_symbol, configured_include_dirs, core_types = config
+                    if configured_include_dirs != include_dirs:
+                        raise runtime.TlaCoreAPIError(
+                            "tla.extern: source compile configuration conflict: "
+                            f"symbol {configured_symbol!r} uses include_dirs="
+                            f"{[str(path) for path in configured_include_dirs]!r}, "
+                            f"but symbol {symbol!r} uses include_dirs="
+                            f"{[str(path) for path in include_dirs]!r} for the same source"
+                        )
+                for _, core_type in usage.calls:
+                    core_types.add(core_type)
+
+            extern_compile_specs = tuple(
+                ExternCompileSpec(
+                    source=source,
+                    core_types=frozenset(core_types),
+                    include_dirs=include_dirs,
+                )
+                for source, (
+                    _,
+                    include_dirs,
+                    core_types,
+                ) in source_compile_configs.items()
+            )
         mlir_ir.Operation.create("tla.return", loc=fn_loc)
-    return extern_function, extern_core_types
+    return extern_compile_specs
 
 
 def _coerce_location(

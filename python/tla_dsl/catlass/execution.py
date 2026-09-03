@@ -47,7 +47,7 @@ from .types import dtype_size_bytes
 
 if TYPE_CHECKING:
     from .base_dsl.jit_executor import JitCompiledFunction
-    from .tla.ffi import ExternFunction
+    from .execution_lowering import ExternCompileSpec
 
 # CATLASS_DSL_KEEP tokens: ir / ir-debug / kernel.
 _KEEP_ALL_TOKENS: frozenset[str] = frozenset({"ir", "ir-debug", "kernel"})
@@ -291,18 +291,12 @@ def _compile_kernel(
         type_args=type_args,
         location=decorator_location,
     )
-    extern_function = lowered.extern_function
-    extern_core_types = lowered.extern_core_types
+    extern_compile_specs = lowered.extern_compile_specs
     tlair_mlir = lowered.asm(generic=True)
     entrypoint = _extract_entrypoint(tlair_mlir)
     compiler_bridge_path = resolve_bridge_extension_path()
     hivmc = _resolve_hivmc_a5()
     target = _resolve_kernel_target(compile_option)
-    extern_targets = _resolve_extern_targets(
-        extern_function,
-        extern_core_types=extern_core_types,
-        target_arch=target.target_arch,
-    )
     cache_dir = compile_option.cache_dir or _default_cache_dir()
     cache_key = _cache_key(
         tlair_mlir=tlair_mlir,
@@ -311,13 +305,27 @@ def _compile_kernel(
         compiler_bridge_path=compiler_bridge_path,
         hivmc=hivmc,
         target=target,
-        extern_function=extern_function,
-        extern_targets=extern_targets,
+        extern_compile_specs=extern_compile_specs,
     )
     artifact_dir = cache_dir / cache_key
     manifest = artifact_dir / "manifest.json"
 
-    if compile_option.cache_enabled and not compile_option.force_recompile:
+    can_reuse_cache = (
+        compile_option.cache_enabled and not compile_option.force_recompile
+    )
+    current_extern_manifest = None
+    # For kernels with tla.extern, check if current cache is valid, load it or recompile if not.
+    if can_reuse_cache and extern_compile_specs:
+        current_extern_manifest = _load_current_extern_cache_manifest(
+            manifest,
+            cache_key=cache_key,
+            target_arch=target.target_arch,
+            extern_compile_specs=extern_compile_specs,
+        )
+        can_reuse_cache = current_extern_manifest is not None
+
+    # For all kernels, check the memory cache, and reuse it if valid.
+    if can_reuse_cache:
         cached_memory = _get_memory_cached_function(cache_key)
         if cached_memory is not None:
             compiled = _new_jit_compiled_function_from_cached(cached_memory)
@@ -325,12 +333,14 @@ def _compile_kernel(
             _copy_kept_artifacts(compiled)
             return compiled
 
-    if (
-        compile_option.cache_enabled
-        and not compile_option.force_recompile
-        and manifest.exists()
-    ):
-        cached = _load_manifest(manifest)
+    # For kernels with tla.extern, reuse the above cache (or None);
+    # For other kernels, load the manifest if it exists.
+    if can_reuse_cache and manifest.exists():
+        cached = (
+            current_extern_manifest
+            if current_extern_manifest is not None
+            else _load_manifest(manifest)
+        )
         kernel_binary_path = artifact_dir / str(cached["kernel_binary"])
         mlir_path = artifact_dir / str(cached["lowered_mlir"])
         cached_pass_dump = cached.get("pass_ir_dump")
@@ -427,12 +437,31 @@ def _compile_kernel(
     hivmc_mlir_path, template_bitcode = _create_stamped_hivmc_input(
         mlir_path, resolved_option
     )
-    if extern_function is not None:
-        user_bitcodes = _compile_ascendc_extern_function(
-            extern_function,
+    user_bitcodes: list[Path] = []
+    # Group dependencies by source content and compile target, because even if
+    # the same source is compiled for multiple targets, the dependencies may differ.
+    # For example:
+    # {
+    #     ("<source-sha256>", "aic.c310"): frozenset({Path("/path/to/aic.h")}),
+    #     ("<source-sha256>", "aiv.c310"): frozenset({Path("/path/to/aiv.h")}),
+    # }
+    extern_dependency_groups: dict[tuple[str, str], frozenset[Path]] = {}
+    for source_index, spec in enumerate(extern_compile_specs):
+        bitcodes, dependencies_by_target = _compile_ascendc_extern_source(
+            spec.source,
+            source_index=source_index,
             artifact_dir=artifact_dir,
-            targets=extern_targets,
+            targets=_resolve_extern_targets(
+                core_types=spec.core_types,
+                target_arch=target.target_arch,
+            ),
+            user_include_dirs=spec.include_dirs,
         )
+        user_bitcodes.extend(bitcodes)
+        source_sha256 = _extern_source_sha256(spec.source)
+        for target_name, dependencies in dependencies_by_target.items():
+            extern_dependency_groups[(source_sha256, target_name)] = dependencies
+    if user_bitcodes:
         if template_bitcode is None:
             template_bitcode = _resolve_hivm_template_bitcode(resolved_option)
         template_bitcode = ",".join(
@@ -459,34 +488,28 @@ def _compile_kernel(
             f"created at {kernel_binary_path}"
         )
 
-    manifest.write_text(
-        json.dumps(
-            {
-                "cache_key": cache_key,
-                "debug_print_workspace_abi_revision": (
-                    _DEBUG_PRINT_WORKSPACE_ABI_REVISION
-                ),
-                "print_tensor_workspace_abi_revision": (
-                    _PRINT_TENSOR_WORKSPACE_ABI_REVISION
-                ),
-                "entrypoint": entrypoint,
-                "kernel_binary": kernel_binary_path.name,
-                "lowered_mlir": mlir_path.name,
-                "pass_ir_dump": pass_dump_path.name
-                if lowering_result.pass_ir_dump
-                else None,
-                "compiler_bridge": (
-                    str(compiler_bridge_path) if compiler_bridge_path else None
-                ),
-                "hivmc": str(hivmc),
-                "arch_scope": resolved_option.arch_scope,
-                "kernel_abi": kernel_abi_to_dict(kernel_abi),
-            },
-            indent=2,
-            sort_keys=True,
+    manifest_data = {
+        "cache_key": cache_key,
+        "debug_print_workspace_abi_revision": (_DEBUG_PRINT_WORKSPACE_ABI_REVISION),
+        "print_tensor_workspace_abi_revision": (_PRINT_TENSOR_WORKSPACE_ABI_REVISION),
+        "entrypoint": entrypoint,
+        "kernel_binary": kernel_binary_path.name,
+        "lowered_mlir": mlir_path.name,
+        "pass_ir_dump": pass_dump_path.name if lowering_result.pass_ir_dump else None,
+        "compiler_bridge": (
+            str(compiler_bridge_path) if compiler_bridge_path else None
+        ),
+        "hivmc": str(hivmc),
+        "arch_scope": resolved_option.arch_scope,
+        "kernel_abi": kernel_abi_to_dict(kernel_abi),
+    }
+    if extern_compile_specs:
+        _, builtin_include_roots = _ascendc_compiler_inputs()
+        manifest_data["extern_dependency_groups"] = _snapshot_extern_dependency_groups(
+            extern_dependency_groups,
+            builtin_include_roots=builtin_include_roots,
         )
-        + "\n"
-    )
+    manifest.write_text(json.dumps(manifest_data, indent=2, sort_keys=True) + "\n")
     compiled = _new_jit_compiled_function(
         cache_key=cache_key,
         cache_dir=artifact_dir,
@@ -1627,11 +1650,18 @@ def _cache_key(
     compiler_bridge_path: Path | None,
     hivmc: Path,
     target: TlaKernelTarget,
-    extern_function: ExternFunction | None = None,
-    extern_targets: Sequence[TlaKernelTarget] = (),
+    extern_compile_specs: Sequence[ExternCompileSpec] = (),
 ) -> str:
-    extern_compile = (
-        None if extern_function is None else _ascendc_extern_compile_identity()
+    extern_compile_environment = (
+        None if not extern_compile_specs else _ascendc_compile_environment_identity()
+    )
+    extern_compile_identities = sorted(
+        (
+            _extern_source_sha256(spec.source),
+            tuple(sorted(spec.core_types)),
+            tuple(str(path) for path in spec.include_dirs),
+        )
+        for spec in extern_compile_specs
     )
     key_payload = {
         "debug_print_workspace_abi_revision": _DEBUG_PRINT_WORKSPACE_ABI_REVISION,
@@ -1648,17 +1678,16 @@ def _cache_key(
         "hivmc_fingerprint": _tool_fingerprint(hivmc),
         "mlir": tlair_mlir,
         "print_ir": compile_option.print_ir,
-        "extern_source_sha256": (
-            None
-            if extern_function is None
-            else hashlib.sha256(extern_function.source.encode("utf-8")).hexdigest()
-        ),
-        "extern_targets": [target.arch_scope for target in extern_targets],
-        "extern_compile": extern_compile,
+        "extern_compile_specs": extern_compile_identities,
+        "extern_compile_environment": extern_compile_environment,
     }
     return hashlib.sha256(
         json.dumps(key_payload, sort_keys=True).encode("utf-8")
     ).hexdigest()[:16]
+
+
+def _extern_source_sha256(source: str) -> str:
+    return hashlib.sha256(source.encode("utf-8")).hexdigest()
 
 
 def _tool_version(binary: Path) -> str:
@@ -1683,6 +1712,14 @@ def _string_tuple(value: Any) -> tuple[str, ...]:
     return tuple(str(item) for item in value)
 
 
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def _tool_fingerprint(binary: Path | None) -> str:
     if binary is None:
         return "unresolved"
@@ -1690,14 +1727,11 @@ def _tool_fingerprint(binary: Path | None) -> str:
         stat = binary.stat()
     except OSError:
         return "missing"
-    digest = hashlib.sha256()
     try:
-        with binary.open("rb") as handle:
-            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                digest.update(chunk)
+        digest = _file_sha256(binary)
     except OSError:
         return f"stat:{stat.st_size}:{stat.st_mtime_ns}"
-    return f"{stat.st_size}:{stat.st_mtime_ns}:{digest.hexdigest()}"
+    return f"{stat.st_size}:{stat.st_mtime_ns}:{digest}"
 
 
 def _default_cache_dir() -> Path:
@@ -1826,7 +1860,7 @@ def _resolve_ccec() -> Path:
     )
 
 
-def _ascendc_include_dirs(ascend_home: Path) -> list[Path]:
+def _ascendc_builtin_include_dirs(ascend_home: Path) -> list[Path]:
     asc_root = (ascend_home / "asc").resolve()
     highlevel_api = asc_root.parent / "ascendc" / "include" / "highlevel_api"
     return [
@@ -1867,23 +1901,17 @@ def _ascendc_compiler_inputs() -> tuple[Path, list[Path]]:
             "Ascend C headers can be found."
         )
     ascend_home = Path(ascend_home_env).expanduser().resolve()
-    return compiler, _ascendc_include_dirs(ascend_home)
+    return compiler, _ascendc_builtin_include_dirs(ascend_home)
 
 
 def _resolve_extern_targets(
-    extern_function: ExternFunction | None,
     *,
-    extern_core_types: Iterable[str],
+    core_types: Iterable[str],
     target_arch: str,
 ) -> tuple[TlaKernelTarget, ...]:
-    if extern_function is None:
-        return ()
-
-    core_types = frozenset(extern_core_types)
+    core_types = frozenset(core_types)
     if not core_types:
-        raise TlaKernelCompileError(
-            f"external function {extern_function.symbol!r} has no call target"
-        )
+        raise TlaKernelCompileError("external source has no call target")
     unsupported = core_types.difference(("aic", "aiv"))
     if unsupported:
         raise TlaKernelCompileError(
@@ -1898,30 +1926,77 @@ def _resolve_extern_targets(
     return targets
 
 
-def _ascendc_extern_compile_identity() -> dict[str, object]:
-    """Return the resolved compiler configuration tracked by the kernel cache."""
+def _ascendc_compile_environment_identity() -> dict[str, object]:
+    """Return the resolved Ascend C compile environment tracked by the cache."""
 
-    compiler, include_dirs = _ascendc_compiler_inputs()
+    compiler, builtin_include_dirs = _ascendc_compiler_inputs()
     return {
         "ccec": str(compiler),
         "ccec_version": _tool_version(compiler),
         "ccec_fingerprint": _tool_fingerprint(compiler),
-        "include_dirs": [str(path) for path in include_dirs],
+        "builtin_include_dirs": [str(path) for path in builtin_include_dirs],
     }
 
 
-def _compile_ascendc_extern_function(
-    extern_function: ExternFunction,
+def _parse_ascendc_depfile(depfile: Path, *, cwd: Path) -> set[Path]:
+    try:
+        dependency_text = re.sub(
+            r"\\\r?\n", " ", depfile.read_text(encoding="utf-8")
+        ).split(":", 1)[1]
+        raw_paths = shlex.split(dependency_text, comments=False, posix=True)
+    except (OSError, IndexError, ValueError) as exc:
+        raise TlaKernelCompileError(
+            f"invalid CCEC dependency file {depfile}: {exc}"
+        ) from exc
+
+    dependencies: set[Path] = set()
+    for raw_path in raw_paths:
+        path = Path(raw_path.replace("$$", "$"))
+        dependencies.add((path if path.is_absolute() else cwd / path).resolve())
+    return dependencies
+
+
+def _snapshot_extern_dependency_groups(
+    dependency_groups: Mapping[tuple[str, str], frozenset[Path]],
     *,
-    artifact_dir: Path,
-    targets: Sequence[TlaKernelTarget],
-) -> tuple[Path, ...]:
-    # ``targets`` is produced by ``_resolve_extern_targets`` in the compile path.
-    targets = tuple(targets)
-    assert 1 <= len(targets) <= 2
-    source = artifact_dir / "extern.cpp"
-    source.write_text(extern_function.source, encoding="utf-8")
-    compiler, include_dirs = _ascendc_compiler_inputs()
+    builtin_include_roots: Sequence[Path] = (),
+) -> list[dict[str, object]]:
+    unique_dependencies = {
+        path for dependencies in dependency_groups.values() for path in dependencies
+    }
+    dependency_snapshots: dict[Path, dict[str, object]] = {}
+    for path in unique_dependencies:
+        if any(path.is_relative_to(root) for root in builtin_include_roots):
+            stat = path.stat()
+            dependency_snapshots[path] = {
+                "path": str(path),
+                "size": stat.st_size,
+                "mtime_ns": stat.st_mtime_ns,
+            }
+        else:
+            dependency_snapshots[path] = {
+                "path": str(path),
+                "sha256": _file_sha256(path),
+            }
+    return [
+        {
+            "source_sha256": source_sha256,
+            "target": target,
+            "dependency_snapshots": [
+                dependency_snapshots[path]
+                for path in sorted(dependency_groups[(source_sha256, target)], key=str)
+            ],
+        }
+        for source_sha256, target in sorted(dependency_groups)
+    ]
+
+
+def _ascendc_extern_base_command(
+    source_path: Path,
+    *,
+    user_include_dirs: Sequence[Path],
+) -> list[str]:
+    compiler, builtin_include_dirs = _ascendc_compiler_inputs()
     command = [
         str(compiler),
         "-O2",
@@ -1930,40 +2005,141 @@ def _compile_ascendc_extern_function(
         "--cce-auto-sync=off",
         "--cce-aicore-only",
         "--cce-generic-addrspace=off",
-        str(source),
-        "-emit-llvm",
-        "-c",
-        "-mllvm",
-        "-disable-llvm-optzns",
+        str(source_path),
         "-DCATLASS_ARCH=3510",
         "-DTILING_KEY_VAR",
         "-Wno-ignored-attributes",
         "-std=c++17",
     ]
-    for include_dir in include_dirs:
+    for include_dir in (*user_include_dirs, *builtin_include_dirs):
         command.extend(["-I", str(include_dir)])
+    return command
 
-    outputs = tuple(
-        artifact_dir / f"extern.{target.arch_scope}.bc" for target in targets
+
+def _parse_ascendc_dependencies(
+    depfile: Path,
+    *,
+    cwd: Path,
+    source_path: Path,
+) -> set[Path]:
+    source_path = source_path.resolve()
+    return {
+        dependency
+        for dependency in _parse_ascendc_depfile(depfile, cwd=cwd)
+        if dependency != source_path
+    }
+
+
+def _scan_ascendc_extern_source_dependencies(
+    source: str,
+    *,
+    source_index: int,
+    targets: Sequence[TlaKernelTarget],
+    user_include_dirs: Sequence[Path],
+) -> dict[str, frozenset[Path]]:
+    with tempfile.TemporaryDirectory(prefix="catlass-extern-deps-") as temp_dir:
+        scan_dir = Path(temp_dir)
+        source_path = scan_dir / f"extern.{source_index}.cpp"
+        source_path.write_text(source, encoding="utf-8")
+        command = _ascendc_extern_base_command(
+            source_path,
+            user_include_dirs=user_include_dirs,
+        )
+
+        dependencies_by_target: dict[str, frozenset[Path]] = {}
+        for target in targets:
+            depfile = scan_dir / f"extern.{source_index}.{target.arch_scope}.scan.d"
+            scan_command = [
+                *command,
+                f"--cce-aicore-arch={target.cce_arch}",
+                "-M",
+                "-MF",
+                str(depfile),
+            ]
+            _run_checked(
+                scan_command,
+                label=f"ccec external source dependency scan {source_index}",
+                cwd=scan_dir,
+            )
+            dependencies_by_target[target.arch_scope] = frozenset(
+                _parse_ascendc_dependencies(
+                    depfile,
+                    cwd=scan_dir,
+                    source_path=source_path,
+                )
+            )
+        return dependencies_by_target
+
+
+def _compile_ascendc_extern_source(
+    source: str,
+    *,
+    source_index: int,
+    artifact_dir: Path,
+    targets: Sequence[TlaKernelTarget],
+    user_include_dirs: Sequence[Path],
+) -> tuple[tuple[Path, ...], dict[str, frozenset[Path]]]:
+    # ``targets`` is produced by ``_resolve_extern_targets`` in the compile path.
+    targets = tuple(targets)
+    assert 1 <= len(targets) <= 2
+    source_path = artifact_dir / f"extern.{source_index}.cpp"
+    source_path.write_text(source, encoding="utf-8")
+    command = _ascendc_extern_base_command(
+        source_path,
+        user_include_dirs=user_include_dirs,
     )
-    for target, output in zip(targets, outputs, strict=True):
+    command.extend(
+        [
+            "-emit-llvm",
+            "-c",
+            "-mllvm",
+            "-disable-llvm-optzns",
+        ]
+    )
+
+    outputs_and_depfiles = tuple(
+        (
+            artifact_dir / f"extern.{source_index}.{target.arch_scope}.bc",
+            artifact_dir / f"extern.{source_index}.{target.arch_scope}.d",
+        )
+        for target in targets
+    )
+    dependencies_by_target: dict[str, frozenset[Path]] = {}
+    for target, (output, depfile) in zip(targets, outputs_and_depfiles, strict=True):
         target_command = [
             *command,
             f"--cce-aicore-arch={target.cce_arch}",
+            "-MD",
+            "-MF",
+            str(depfile),
+            "-MT",
+            str(output),
             "-o",
             str(output),
         ]
         _run_checked(
             target_command,
-            label=f"ccec external function {extern_function.symbol}",
+            label=f"ccec external source {source_index}",
             cwd=artifact_dir,
         )
         if not output.exists():
             raise TlaKernelCompileError(
-                "ccec completed but external function bitcode was not created at "
+                "ccec completed but external source bitcode was not created at "
                 f"{output}"
             )
-    return tuple(output.resolve() for output in outputs)
+        dependencies_by_target[target.arch_scope] = frozenset(
+            _parse_ascendc_dependencies(
+                depfile,
+                cwd=artifact_dir,
+                source_path=source_path,
+            )
+        )
+        depfile.unlink()
+
+    return (
+        tuple(output.resolve() for output, _ in outputs_and_depfiles),
+        dependencies_by_target,
+    )
 
 
 def _build_hivmc_a5_command(
@@ -2339,6 +2515,87 @@ def _load_manifest(path: Path) -> dict[str, Any]:
         return json.loads(path.read_text())
     except Exception as exc:
         raise TlaExecutionError(f"Invalid cache manifest at {path}: {exc}") from exc
+
+
+def _manifest_extern_dependency_groups_match_current_files(
+    manifest: Mapping[str, Any],
+    *,
+    current_dependency_groups: Mapping[tuple[str, str], frozenset[Path]],
+) -> bool:
+    groups = manifest.get("extern_dependency_groups")
+    if not isinstance(groups, list):
+        return False
+    try:
+        manifest_groups = {
+            (group["source_sha256"], group["target"]): {
+                Path(snapshot["path"]): snapshot
+                for snapshot in group["dependency_snapshots"]
+            }
+            for group in groups
+        }
+        # Check the (source, target)s match or not.
+        if set(manifest_groups) != set(current_dependency_groups):
+            return False
+        # Check the dependencies path for each (source, target) match or not.
+        for key, current_dependencies in current_dependency_groups.items():
+            if set(manifest_groups[key].keys()) != set(current_dependencies):
+                return False
+        # Check the dependency snapshots for each path match or not.
+        all_dependency_snapshots = {
+            path: snapshot
+            for dependencies in manifest_groups.values()
+            for path, snapshot in dependencies.items()
+        }
+        for path, snapshot in all_dependency_snapshots.items():
+            if "sha256" in snapshot:
+                if _file_sha256(path) != snapshot["sha256"]:
+                    return False
+            else:
+                stat = path.stat()
+                if (
+                    stat.st_size != snapshot["size"]
+                    or stat.st_mtime_ns != snapshot["mtime_ns"]
+                ):
+                    return False
+        return True
+    except (KeyError, TypeError, OSError):
+        return False
+
+
+def _load_current_extern_cache_manifest(
+    path: Path,
+    *,
+    cache_key: str,
+    target_arch: str,
+    extern_compile_specs: Sequence[ExternCompileSpec],
+) -> dict[str, Any] | None:
+    manifest = _load_manifest(path) if path.exists() else None
+    if manifest is not None and isinstance(
+        manifest.get("extern_dependency_groups"), list
+    ):
+        # Re-resolve every compiled source/target so a newly shadowing header changes
+        # its dependency group even when the previously selected file is intact.
+        current_dependency_groups: dict[tuple[str, str], frozenset[Path]] = {}
+        for source_index, spec in enumerate(extern_compile_specs):
+            dependencies_by_target = _scan_ascendc_extern_source_dependencies(
+                spec.source,
+                source_index=source_index,
+                targets=_resolve_extern_targets(
+                    core_types=spec.core_types,
+                    target_arch=target_arch,
+                ),
+                user_include_dirs=spec.include_dirs,
+            )
+            source_sha256 = _extern_source_sha256(spec.source)
+            for target_name, dependencies in dependencies_by_target.items():
+                current_dependency_groups[(source_sha256, target_name)] = dependencies
+        if _manifest_extern_dependency_groups_match_current_files(
+            manifest,
+            current_dependency_groups=current_dependency_groups,
+        ):
+            return manifest
+    _drop_memory_cached_function(cache_key)
+    return None
 
 
 def _cache_manifest_has_current_debug_print_workspace_abi(

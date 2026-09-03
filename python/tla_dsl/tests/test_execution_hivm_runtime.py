@@ -632,8 +632,7 @@ def test_debug_print_aic_output_uses_scalar_frame(
 class _FakeLowered:
     def __init__(self, text: str, module: object | None = None) -> None:
         self.module = module
-        self.extern_function = None
-        self.extern_core_types = frozenset()
+        self.extern_compile_specs = ()
         self._text = text
 
     def asm(self, *, generic: bool = False) -> str:

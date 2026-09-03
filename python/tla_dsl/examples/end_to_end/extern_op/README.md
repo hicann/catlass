@@ -1,10 +1,19 @@
-# 外部算子端到端示例
+# 外部 Ascend C 算子端到端示例
 
-本目录下样例演示如何使用 `@tla.extern` 将用户提供的 Ascend C 函数嵌入 **CATLASS DSL** Kernel：`extern_vecadd.py` 展示外部函数与 TLA DSL 原语协同完成向量加法，`extern_dual_core.py` 展示同一份源码中的同一个外部函数同时被 AIC 和 AIV 调用。
+本目录下样例演示如何使用 `@tla.extern` 将用户提供的 Ascend C 函数嵌入 **CATLASS DSL** Kernel，包括单 Kernel 调用多个外部算子，以及同一个外部符号同时被 AIC 和 AIV 调用。
 
 ## VecAdd 功能说明
 
-向量加法算子实现两个一维向量的逐元素加法，计算公式为：
+目录包含四个示例：
+
+| 文件 | 概述 |
+|------|------|
+| [**`extern_dual_core.py`**](extern_dual_core.py) | 单份 Ascend C 源码、单个 extern op 同时在 AIC 与 AIV 区域调用。 |
+| [**`extern_vecadd.py`**](extern_vecadd.py) | 外部 Ascend C 函数与 TLA DSL 混合编程示例，包含外部函数源码、ABI 声明和 VecAdd Kernel。 |
+| [**`extern_multi_ops.py`**](extern_multi_ops.py) | 两个独立外部 Ascend C 算子组成 GM→UB→GM round-trip。 |
+| [**`extern_custom_include.py`**](extern_custom_include.py) | 使用 `include_dirs` 引用用户头文件，并将头文件常量写回 Host 验证。 |
+
+向量加法示例实现两个一维向量的逐元素加法，计算公式为：
 
 $$
 \begin{aligned}
@@ -12,7 +21,7 @@ C &= A + B
 \end{aligned}
 $$
 
-本样例仅使用外部 Ascend C 函数 `tla_user_gm_to_ub_f32` 替换输入 A、B 的 GM（Global Memory）到 UB（Unified Buffer）数据搬运，向量加法和结果写回仍由 TLA DSL 完成。整体流程如下：
+`extern_vecadd.py` 仅使用外部 Ascend C 函数 `tla_user_gm_to_ub_f32` 替换输入 A、B 的 GM（Global Memory）到 UB（Unified Buffer）数据搬运，向量加法和结果写回仍由 TLA DSL 完成。整体流程如下：
 
 1. 通过 `@tla.extern` 声明外部函数的 C ABI，并以内联字符串形式提供 Ascend C 源码；
 2. 在 `tla.vector()` 区域内调用外部函数，将 A、B 从 GM 搬运到 UB；
@@ -23,48 +32,40 @@ $$
 
 `extern_dual_core.py` 只提供一份 `OP_SOURCE_CODES` 和一个 `tla_user_store_i32` 外部函数声明。TLA Kernel 在 `tla.cube()` 与 `tla.vector()` 区域中复用这个声明。输出包含三个 64-byte cache line：AIC 写入索引 0，两个 AIV sub-block 分别写入索引 16、32，使三个执行单元写入不同的 cache line。对应位置的期望值为 `[101, 202, 202]`，其余元素为 0。
 
-## 代码组织
+## 单 Kernel 多外部算子
 
-本目录组织结构如下所示：
+`extern_multi_ops.py` 的流程为：
 
-```plain
-./extern_op
-├── extern_dual_core.py
-├── extern_vecadd.py
-└── README.md
-```
-
-| 文件 | 概述 |
-|------|------|
-| [**`extern_dual_core.py`**](extern_dual_core.py) | 单份 Ascend C 源码、单个 extern op 同时在 AIC 与 AIV 区域调用，并进行上板结果校验。 |
-| [**`extern_vecadd.py`**](extern_vecadd.py) | 外部 Ascend C 函数与 TLA DSL 混合编程示例，包含外部函数源码、ABI 声明、VecAdd Kernel 和上板精度校验。 |
+1. 使用两份独立 source 声明 `tla_multi_gm_to_ub_f32` 和 `tla_multi_ub_to_gm_f32`；
+2. 在同一个 `tla.vector()` 区域依次调用两个外部算子；
+3. 使用 MTE2→MTE3 flag 保证 GM→UB 完成后才开始 UB→GM；
+4. 编译时分别生成 `extern.0.aiv.c310.bc`、`extern.1.aiv.c310.bc`，并全部加入 HIVMC 链接输入。
 
 ## 约束说明
 
-- 本样例的向量长度固定为 256，输入和输出数据类型固定为 `float32`，启动核数固定为 1，编译目标为 `--npu-arch 3510`。
+- VecAdd 和 multi-op 样例的向量长度固定为 256，输入和输出数据类型固定为 `float32`，启动核数固定为 1，编译目标为 `--npu-arch 3510`。
 - `@tla.extern` 的 `source` 必须是非空的 Ascend C 源码字符串；`name` 必须是合法的 C 标识符，省略时使用被装饰的 Python 函数名。
+- 相同 symbol 可以为不同 Kernel 分别声明；同一 Kernel 内只能使用其中一个声明对象，相同声明可以调用多次。
+- 同一 Kernel 内，相同 source 只能使用同一组规范化、有序的 `include_dirs`；不同 Kernel 可以分别配置。
+- `include_dirs` 可按顺序指定用户头文件搜索目录；相对路径按 extern 声明文件所在目录解析。
 - 外部函数声明只支持位置固定、无默认值的参数。参数类型必须标注为 `tla.Pointer[dtype, address_space]` 或具体的 TLA 数值类型（如 `tla.Int32`），返回类型必须标注为 `None`。
 - Kernel 调用外部函数时，需要传入显式指针（例如 `tensor.ptr`），且参数个数、数据类型和指针地址空间必须与声明完全一致。
 - 外部函数必须在一个 `tla.vector()` 或 `tla.cube()` 区域内调用，不能在 `tla.vec.func(...)` 中调用。
-- 单个 Kernel 当前最多依赖一个不同的外部函数，但可以像本样例一样多次调用该函数。
-- 外部调用当前需要显式编写流水同步，不能与 `@tla.kernel(auto_sync="v0")` 组合使用。本样例通过 `flag` 的 `set` / `wait` 保证外部 GM→UB 搬运完成后再进行向量计算。
+- 单个 Kernel 可以调用多个外部函数；相同 source 对每个实际使用的 core target 只编译一次，不同 source 按首次调用顺序编号并分别编译。
+- 外部调用当前需要显式编写流水同步，不能与 `@tla.kernel(auto_sync="v0")` 组合使用。样例通过 `flag` 的 `set` / `wait` 保证外部 GM→UB 搬运完成后，再进入后续 VECTOR 或 MTE3 流水。
 
 ## 使用示例
 
-要运行本路径下的样例，请参考[环境配置](../../../docs/zh/dev_guide/00_environment_setup.md)完成部署。
+要运行本路径下的样例，请参考[快速开始](../../../docs/zh/quick_start.md)完成部署。
 
 ### 命令行参数
 
 ```text
 extern_vecadd.py [-h] [--device DEVICE]
 extern_dual_core.py [-h] [--device DEVICE]
+extern_multi_ops.py [-h] [--device DEVICE]
+extern_custom_include.py [-h] [--device DEVICE]
 ```
-
-上述命令行参数具体说明如下：
-
-| 参数 | 默认值 | 说明 |
-|------|--------|------|
-| `--device` | `0` | 上板执行使用的 NPU 设备号。 |
 
 ### 执行示例
 
@@ -79,6 +80,12 @@ python examples/end_to_end/extern_op/extern_vecadd.py --device 0
 # 同一个 extern op 分别在 AIC 和 AIV 中调用
 python examples/end_to_end/extern_op/extern_dual_core.py --device 0
 
+# 执行 GM→UB→GM round-trip
+python examples/end_to_end/extern_op/extern_multi_ops.py --device 0
+
+# 执行 extern op，验证从用户头文件读取并写回的值
+python examples/end_to_end/extern_op/extern_custom_include.py --device 0
+
 # 忽略进程内缓存和磁盘缓存，强制重新编译后执行
 CATLASS_DSL_FORCE_RECOMPILE=1 \
   python examples/end_to_end/extern_op/extern_vecadd.py --device 0
@@ -90,7 +97,7 @@ CATLASS_DSL_FORCE_RECOMPILE=1 \
 passed; kernel=<cache_dir>/<cache_key>/kernel.o
 ```
 
-两个程序都使用 `torch.testing.assert_close` 进行结果校验；校验通过后输出 `passed` 和编译产物路径，校验失败则抛出异常。`cache_dir` 是编译缓存目录，`cache_key` 是编译缓存的哈希值。
+执行成功后输出 `passed` 和编译产物路径，失败则抛出异常。`cache_dir` 是编译缓存目录，`cache_key` 是编译缓存的哈希值。
 
 ---
 
@@ -147,7 +154,7 @@ with tla.vector():
         # ...
 ```
 
-`tla.compile()` 会根据外部函数的实际调用区域选择目标。本样例仅在 AIV 区域调用，因此内联源码会由 Ascend C 编译器编译为 `extern.aiv.c310.bc`，再加入 `hivmc-a5 --link-aicore-bitcode` 的链接输入。外部源码内容和编译器信息也会参与 Kernel 缓存键计算；修改 `OP_SOURCE_CODES` 后会生成新的缓存项。
+`tla.compile()` 会根据外部函数的实际调用区域选择目标。本样例仅在 AIV 区域调用，因此内联源码会由 Ascend C 编译器编译为 `extern.0.aiv.c310.bc`，再加入 `hivmc-a5 --link-aicore-bitcode` 的链接输入。不同 source 按首次调用顺序编号；外部源码内容和编译器信息也会参与 Kernel 缓存键计算，修改 source 后会生成新的缓存项。
 
 ### 在 AIC 和 AIV 中调用同一个符号
 
@@ -162,4 +169,4 @@ with tla.vector():
     tla_user_store_i32(result.ptr, index, AIV_VALUE)
 ```
 
-Lower Extern Call 阶段保留原始符号 `tla_user_store_i32`。由于该符号同时从 AIC 和 AIV 区域调用，其声明会被标记为 `AIC_OR_AIV`，拆分后的两个 mixed kernel 入口仍然调用同一个符号。CCEC 分别使用 AIC 和 AIV target 编译同一份 `extern.cpp`，生成各自定义原始符号的 bitcode，再由 HIVMC 链接到对应的 mixed kernel 入口。
+Lower Extern Call 阶段保留原始符号 `tla_user_store_i32`。由于该符号同时从 AIC 和 AIV 区域调用，其声明会被标记为 `AIC_OR_AIV`，拆分后的两个 mixed kernel 入口仍然调用同一个符号。CCEC 分别使用 AIC 和 AIV target 编译同一份 `extern.0.cpp`，生成 `extern.0.aic.c310.bc` 和 `extern.0.aiv.c310.bc`，再由 HIVMC 链接到对应的 mixed kernel 入口。

@@ -77,9 +77,7 @@ def run(device: int = 0) -> None:
     expected[ELEMENTS_PER_CACHE_LINE] = AIV_VALUE
     expected[2 * ELEMENTS_PER_CACHE_LINE] = AIV_VALUE
     torch.testing.assert_close(result, expected, rtol=0.0, atol=0.0)
-    print(
-        f"passed; result={result.cpu().tolist()}; kernel={executor.kernel_binary_path}"
-    )
+    print(f"passed; kernel={executor.kernel_binary_path}")
 
 
 def main() -> int:

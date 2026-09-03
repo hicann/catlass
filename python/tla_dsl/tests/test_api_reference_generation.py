@@ -55,3 +55,14 @@ def test_generated_host_api_reference_is_current() -> None:
         "generate",
         "python3 tools/generate_host_api_reference.py",
     )
+
+
+def test_host_api_reference_includes_extern() -> None:
+    """Keep the public extern decorator in the generated Host API reference."""
+    package_root = pathlib.Path(__file__).resolve().parents[1]
+    sys.path.insert(0, str(package_root / "tools"))
+    generator = importlib.import_module("generate_host_api_reference")
+
+    extern = generator.parse_host_apis()["extern"]
+
+    assert extern.qualified_name == "catlass.tla.ffi.extern"

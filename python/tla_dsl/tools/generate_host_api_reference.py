@@ -32,8 +32,9 @@ DEFAULT_SOURCE_PATH = PACKAGE_ROOT / "catlass" / "dsl.py"
 HOST_DIRECTORY_SECTIONS: list[tuple[str, str]] = [
     (
         "Decorators",
-        "Host-side `@tla.kernel` entry, plus Host `@dataclass` packing. "
-        "The decorated kernel body is not executed on the Host.",
+        "Host-side `@tla.kernel` and `@tla.extern` declarations, plus Host "
+        "`@dataclass` packing. Decorated kernel and extern declaration bodies "
+        "are not executed on the Host.",
     ),
     (
         "Compile and Launch",
@@ -84,6 +85,7 @@ HOST_SOURCE_PATHS = (
     PACKAGE_ROOT / "catlass" / "base_dsl" / "compiler.py",
     PACKAGE_ROOT / "catlass" / "base_dsl" / "jit_executor.py",
     PACKAGE_ROOT / "catlass" / "execution_lowering.py",
+    PACKAGE_ROOT / "catlass" / "tla" / "ffi.py",
     PACKAGE_ROOT / "catlass" / "tla" / "runtime.py",
 )
 
@@ -100,6 +102,18 @@ HOST_DISPLAY_NAMES = {
 # Signature / qualified-name overrides when the documented public face differs
 # from the source helper (e.g. stdlib ``@dataclass``).
 HOST_ENTRY_OVERRIDES: dict[str, dict[str, object]] = {
+    "extern": {
+        "params": [
+            ParamInfo("source", "str", "keyword_only", None),
+            ParamInfo("name", "str | None", "keyword_only", "None"),
+            ParamInfo(
+                "include_dirs",
+                "str | os.PathLike[str] | Sequence[str | os.PathLike[str]]",
+                "keyword_only",
+                "()",
+            ),
+        ],
+    },
     "_validate_dataclass_kernel_arg": {
         "qualified_name": "dataclasses.dataclass",
         "is_class": False,
@@ -227,7 +241,7 @@ def generate(*, docs_dir: Path | None = None) -> str:
         intro=[
             "This document describes the **TLA DSL Host-side APIs** "
             "(typically imported as `import catlass.tla as tla`). It covers the "
-            "`@tla.kernel` decorator, Host `@dataclass` packing, "
+            "`@tla.kernel` and `@tla.extern` decorators, Host `@dataclass` packing, "
             "`tla.compile` / `JitCompiledFunction` launch, and Host tensors. "
             "Environment variables are in "
             "`docs/zh/kernel_development/core_concepts/env_vars.md`. "
@@ -240,7 +254,8 @@ def generate(*, docs_dir: Path | None = None) -> str:
         header_sources=(
             "Do not edit manually. Update Host docstrings in catlass/dsl.py,",
             "catlass/base_dsl/compiler.py, catlass/base_dsl/jit_executor.py,",
-            "catlass/execution_lowering.py, and catlass/tla/runtime.py.",
+            "catlass/execution_lowering.py, catlass/tla/ffi.py, and",
+            "catlass/tla/runtime.py.",
         ),
         leftovers_title="Other Host APIs",
         leftovers_blurb=(

@@ -24,7 +24,7 @@ from .params import CastParams
 _CAST_SUPPORTED_DTYPES = frozenset({"i8", "i16", "i32", "i64", "f16", "bf16", "f32"})
 from catlass._mlir.dialects import tla as _tla_ops_gen  # type: ignore[import-not-found]
 from .base_dsl import ast_helpers as _ast_helpers
-from .base_dsl.op import dsl_user_op, _capture_user_loc
+from .base_dsl.op import _ExternUsage, dsl_user_op, _capture_user_loc
 from .base_dsl.typing import Bool, Float32, Int8, Int32, Numeric, as_numeric
 from .base_dsl.typing import Pointer, TypedPointer
 from .tla.tensor import normalize_tile_view_coord
@@ -8086,19 +8086,6 @@ def _emit_extern_call(
             f"{extern_function.symbol} expects {len(extern_function.arg_types)} arguments, got {len(args)}",
         )
 
-    state = _runtime._current_frontend_state()
-    # Validate: only 1 external function per kernel; same function can be called multiple times.
-    assert state is not None
-    if state.extern_function is None:
-        state.extern_function = extern_function
-    elif state.extern_function is not extern_function:
-        _op_error(
-            "extern",
-            "v1 supports at most one external function per kernel; "
-            "the same function may be called multiple times",
-        )
-    state.extern_core_types.add(core_type)
-
     operands: list[mlir_ir.Value] = []
     for position, (arg, expected) in enumerate(
         zip(args, extern_function.arg_types, strict=True)
@@ -8169,7 +8156,21 @@ def _emit_extern_call(
                 )
         operands.append(value)
 
-    _tla_ops_gen.call_extern(extern_function.symbol, operands, loc=loc)
+    state = _runtime._current_frontend_state()
+    assert state is not None
+    usage = state.extern_usages.get(extern_function.symbol)
+    if usage is not None and usage.function is not extern_function:
+        _op_error(
+            "extern",
+            f"symbol {extern_function.symbol!r} has multiple declarations",
+        )
+
+    # Create the call op and record it in usage.
+    call_op = _tla_ops_gen.call_extern(extern_function.symbol, operands, loc=loc)
+    if usage is None:
+        usage = _ExternUsage(function=extern_function)
+        state.extern_usages[extern_function.symbol] = usage
+    usage.calls.append((call_op, core_type))
 
 
 _mask_namespace = _Namespace()

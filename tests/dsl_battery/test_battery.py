@@ -10,8 +10,6 @@ this file is that the whole gate is readable in one place.
 
 from __future__ import annotations
 
-from typing import Any, Callable, Iterator
-from pathlib import Path
 from typing import Iterator
 
 import pytest
@@ -193,6 +191,14 @@ def _cases(device: int) -> Iterator[tuple[str, list[list[str]]]]:
     yield (
         "extern-dual-core",
         [["extern_op/extern_dual_core.py", *dev]],
+    )
+    yield (
+        "extern-multi-ops",
+        [["extern_op/extern_multi_ops.py", *dev]],
+    )
+    yield (
+        "extern-custom-include",
+        [["extern_op/extern_custom_include.py", *dev]],
     )
 
     # --- basic_mixed ---

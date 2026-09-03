@@ -12,11 +12,22 @@ import inspect
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from functools import wraps
-from typing import Any, Callable, Iterator, get_type_hints
+from typing import TYPE_CHECKING, Any, Callable, Iterator, get_type_hints
 
 from catlass._mlir import ir as mlir_ir  # type: ignore[assignment]
 
+if TYPE_CHECKING:
+    from ..tla.ffi import ExternFunction
+
 _IdentityBinding = tuple[Any, Any]
+
+
+@dataclass
+class _ExternUsage:
+    """Declaration and call sites for one original external symbol."""
+
+    function: ExternFunction
+    calls: list[tuple[mlir_ir.Operation, str]] = field(default_factory=list)
 
 
 @dataclass
@@ -44,10 +55,8 @@ class _FrontendEmitState:
     active_regions: list[str] = field(default_factory=list)
     #: Stack of ``mode`` values for the enclosing ``tla.vec.func`` regions.
     vec_func_modes: list[str] = field(default_factory=list)
-    #: The one external function used by this kernel in the v1 implementation.
-    extern_function: Any | None = None
-    #: Core types from call sites of ``extern_function``.
-    extern_core_types: set[str] = field(default_factory=set)
+    #: Original symbol -> declaration and all call sites in this kernel.
+    extern_usages: dict[str, _ExternUsage] = field(default_factory=dict)
 
 
 _FRONTEND_EMIT_STATE: contextvars.ContextVar[_FrontendEmitState | None] = (
