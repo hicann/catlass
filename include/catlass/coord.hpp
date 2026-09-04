@@ -33,7 +33,7 @@ public:
     using LongIndex = LongIndex_;
 
     // Default ctor initializes uniformly
-    CATLASS_HOST_DEVICE constexpr explicit Coord(Index value = Index(0))
+    CATLASS_HOST_DEVICE constexpr explicit Coord(Index value = Index(0)) : idx{}
     {
         for (int i = 0; i < RANK; ++i) {
             idx[i] = value;
@@ -41,7 +41,7 @@ public:
     }
 
     // Constructs from an array of integers
-    CATLASS_HOST_DEVICE constexpr Coord(Index const (&idx_)[RANK])
+    CATLASS_HOST_DEVICE constexpr Coord(Index const (&idx_)[RANK]) : idx{}
     {
         for (int i = 0; i < RANK; ++i) {
             idx[i] = idx_[i];
@@ -49,35 +49,35 @@ public:
     }
 
     CATLASS_HOST_DEVICE
-    int Argmin() const
+    constexpr int Argmin() const
     {
         return ArgminImpl<1>(0);
     }
 
     // Returns the index of the dimension with greatest value
     CATLASS_HOST_DEVICE
-    int Argmax() const
+    constexpr int Argmax() const
     {
         return ArgmaxImpl<1>(0);
     }
 
     // Returns true if Coord is non-zero
     CATLASS_HOST_DEVICE
-    explicit operator bool() const
+    constexpr explicit operator bool() const
     {
         return AnyImpl<0>();
     }
 
     // Return true if Coord is uniformly zero.
     CATLASS_HOST_DEVICE
-    bool operator!() const
+    constexpr bool operator!() const
     {
         return !AnyImpl<0>();
     }
 
     // Element-wise addition
     CATLASS_HOST_DEVICE
-    Coord operator+(Coord const& b) const
+    constexpr Coord operator+(Coord const& b) const
     {
         Coord c;
         AddCoordImpl<0>(c, b);
@@ -86,7 +86,7 @@ public:
 
     // Add a scalar to each element
     CATLASS_HOST_DEVICE
-    Coord operator+(const Index val) const
+    constexpr Coord operator+(const Index val) const
     {
         Coord c;
         AddScalarImpl<0>(c, val);
@@ -95,7 +95,7 @@ public:
 
     // Element-wise subtraction
     CATLASS_HOST_DEVICE
-    Coord operator-(Coord const& b) const
+    constexpr Coord operator-(Coord const& b) const
     {
         Coord c;
         SubCoordImpl<0>(c, b);
@@ -104,7 +104,7 @@ public:
 
     // Subtract a scalar from each element
     CATLASS_HOST_DEVICE
-    Coord operator-(Index const val) const
+    constexpr Coord operator-(Index const val) const
     {
         Coord c;
         SubScalarImpl<0>(c, val);
@@ -113,7 +113,7 @@ public:
 
     // Element-wise multiply
     CATLASS_HOST_DEVICE
-    Coord operator*(Coord const& b) const
+    constexpr Coord operator*(Coord const& b) const
     {
         Coord c;
         MulCoordImpl<0>(c, b);
@@ -122,7 +122,7 @@ public:
 
     // Element-wise division
     CATLASS_HOST_DEVICE
-    Coord operator/(Coord const& b) const
+    constexpr Coord operator/(Coord const& b) const
     {
         Coord c;
         DivCoordImpl<0>(c, b);
@@ -131,7 +131,7 @@ public:
 
     // Element-wise mod
     CATLASS_HOST_DEVICE
-    Coord operator%(Coord const& b) const
+    constexpr Coord operator%(Coord const& b) const
     {
         Coord c;
         ModCoordImpl<0>(c, b);
@@ -140,7 +140,7 @@ public:
 
     // In-place addition
     CATLASS_HOST_DEVICE
-    Coord& operator+=(Coord const& b)
+    constexpr Coord& operator+=(Coord const& b)
     {
         PlusEqualImpl<0>(b);
         return *this;
@@ -148,28 +148,26 @@ public:
 
     // In-place equal
     CATLASS_HOST_DEVICE
-    bool operator==(Coord const& b) const
+    constexpr bool operator==(Coord const& b) const
     {
         return EqualCoordImpl<0>(b);
     }
 
     // In-place equal
     CATLASS_HOST_DEVICE
-    bool operator==(Index const val) const
+    constexpr bool operator==(Index const val) const
     {
         return EqualScalarImpl<0>(val);
     }
 
     // Member acces operator
-    CATLASS_HOST_DEVICE
-    Index& operator[](int dim)
+    CATLASS_HOST_DEVICE constexpr Index& operator[](int dim)
     {
         return idx[dim];
     }
 
     // Member access operator
-    CATLASS_HOST_DEVICE
-    Index const& operator[](int dim) const
+    CATLASS_HOST_DEVICE constexpr Index const& operator[](int dim) const
     {
         return idx[dim];
     }
@@ -210,7 +208,7 @@ public:
     }
 
     CATLASS_HOST_DEVICE
-    static Coord Min(Coord const& a, Coord const& b)
+    static constexpr Coord Min(Coord const& a, Coord const& b)
     {
         Coord res;
         for (int i = 0; i < RANK; ++i) {
@@ -221,7 +219,7 @@ public:
 
 private:
     template <int N>
-    CATLASS_HOST_DEVICE int ArgminImpl(int i) const
+    CATLASS_HOST_DEVICE constexpr int ArgminImpl(int i) const
     {
         if constexpr (N == RANK) {
             return i;
@@ -231,7 +229,7 @@ private:
     }
 
     template <int N>
-    CATLASS_HOST_DEVICE int ArgmaxImpl(int i) const
+    CATLASS_HOST_DEVICE constexpr int ArgmaxImpl(int i) const
     {
         if constexpr (N == RANK) {
             return i;
@@ -241,7 +239,7 @@ private:
     }
 
     template <int N>
-    CATLASS_HOST_DEVICE bool AnyImpl() const
+    CATLASS_HOST_DEVICE constexpr bool AnyImpl() const
     {
         if constexpr (N == RANK) {
             return false;
@@ -251,7 +249,7 @@ private:
     }
 
     template <int N>
-    CATLASS_HOST_DEVICE void AddCoordImpl(Coord& c, Coord const& b) const
+    CATLASS_HOST_DEVICE constexpr void AddCoordImpl(Coord& c, Coord const& b) const
     {
         if constexpr (N < RANK) {
             c.idx[N] = idx[N] + b.idx[N];
@@ -260,7 +258,7 @@ private:
     }
 
     template <int N>
-    CATLASS_HOST_DEVICE void AddScalarImpl(Coord& c, Index const val) const
+    CATLASS_HOST_DEVICE constexpr void AddScalarImpl(Coord& c, Index const val) const
     {
         if constexpr (N < RANK) {
             c.idx[N] = idx[N] + val;
@@ -269,7 +267,7 @@ private:
     }
 
     template <int N>
-    CATLASS_HOST_DEVICE void SubCoordImpl(Coord& c, Coord const& b) const
+    CATLASS_HOST_DEVICE constexpr void SubCoordImpl(Coord& c, Coord const& b) const
     {
         if constexpr (N < RANK) {
             c.idx[N] = idx[N] - b.idx[N];
@@ -278,7 +276,7 @@ private:
     }
 
     template <int N>
-    CATLASS_HOST_DEVICE void SubScalarImpl(Coord& c, Index const val) const
+    CATLASS_HOST_DEVICE constexpr void SubScalarImpl(Coord& c, Index const val) const
     {
         if constexpr (N < RANK) {
             c.idx[N] = idx[N] - val;
@@ -287,7 +285,7 @@ private:
     }
 
     template <int N>
-    CATLASS_HOST_DEVICE void MulCoordImpl(Coord& c, Coord const& b) const
+    CATLASS_HOST_DEVICE constexpr void MulCoordImpl(Coord& c, Coord const& b) const
     {
         if constexpr (N < RANK) {
             c.idx[N] = idx[N] * b.idx[N];
@@ -296,7 +294,7 @@ private:
     }
 
     template <int N>
-    CATLASS_HOST_DEVICE void DivCoordImpl(Coord& c, Coord const& b) const
+    CATLASS_HOST_DEVICE constexpr void DivCoordImpl(Coord& c, Coord const& b) const
     {
         if constexpr (N < RANK) {
             c.idx[N] = idx[N] / b.idx[N];
@@ -305,7 +303,7 @@ private:
     }
 
     template <int N>
-    CATLASS_HOST_DEVICE void ModCoordImpl(Coord& c, Coord const& b) const
+    CATLASS_HOST_DEVICE constexpr void ModCoordImpl(Coord& c, Coord const& b) const
     {
         if constexpr (N < RANK) {
             c.idx[N] = idx[N] % b.idx[N];
@@ -314,7 +312,7 @@ private:
     }
 
     template <int N>
-    CATLASS_HOST_DEVICE void PlusEqualImpl(Coord const& b)
+    CATLASS_HOST_DEVICE constexpr void PlusEqualImpl(Coord const& b)
     {
         if constexpr (N < RANK) {
             idx[N] += b.idx[N];
@@ -323,7 +321,7 @@ private:
     }
 
     template <int N>
-    CATLASS_HOST_DEVICE bool EqualCoordImpl(Coord const& b) const
+    CATLASS_HOST_DEVICE constexpr bool EqualCoordImpl(Coord const& b) const
     {
         if constexpr (N == RANK) {
             return true;
@@ -333,7 +331,7 @@ private:
     }
 
     template <int N>
-    CATLASS_HOST_DEVICE bool EqualScalarImpl(Index const val) const
+    CATLASS_HOST_DEVICE constexpr bool EqualScalarImpl(Index const val) const
     {
         if constexpr (N == RANK) {
             return true;

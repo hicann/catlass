@@ -40,20 +40,17 @@ public:
 
 public:
     /// Constructor
-    CATLASS_HOST_DEVICE
-    RowMajor(Index rows = 0, Index cols = 0)
+    CATLASS_HOST_DEVICE constexpr RowMajor(Index rows = 0, Index cols = 0)
         : shape_(MakeCoord(rows, cols)), stride_(MakeCoord(LongIndex(cols), LongIndex(1)))
     {}
 
     /// Constructor
-    CATLASS_HOST_DEVICE
-    RowMajor(Index rows, Index cols, LongIndex ldm)
+    CATLASS_HOST_DEVICE constexpr RowMajor(Index rows, Index cols, LongIndex ldm)
         : shape_(MakeCoord(rows, cols)), stride_(MakeCoord(ldm, LongIndex(1)))
     {}
 
     /// Ctor
-    CATLASS_HOST_DEVICE
-    RowMajor(Shape shape, Stride stride) : shape_(shape), stride_(stride)
+    CATLASS_HOST_DEVICE constexpr RowMajor(Shape shape, Stride stride) : shape_(shape), stride_(stride)
     {}
 
     template <class Element>
@@ -90,8 +87,7 @@ public:
     }
 
     /// Returns the shape of the layout
-    CATLASS_HOST_DEVICE
-    Shape shape() const
+    CATLASS_HOST_DEVICE constexpr Shape shape() const
     {
         return shape_;
     }
@@ -104,8 +100,7 @@ public:
     }
 
     /// Returns the shape of the layout
-    CATLASS_HOST_DEVICE
-    typename Shape::Index shape(int idx) const
+    CATLASS_HOST_DEVICE constexpr typename Shape::Index shape(int idx) const
     {
         return shape_[idx];
     }
@@ -118,8 +113,7 @@ public:
     }
 
     /// Returns the stride of the layout
-    CATLASS_HOST_DEVICE
-    Stride stride() const
+    CATLASS_HOST_DEVICE constexpr Stride stride() const
     {
         return stride_;
     }
@@ -132,8 +126,7 @@ public:
     }
 
     /// Returns the stride of the layout
-    CATLASS_HOST_DEVICE
-    typename Stride::Index stride(int idx) const
+    CATLASS_HOST_DEVICE constexpr typename Stride::Index stride(int idx) const
     {
         return stride_[idx];
     }
@@ -186,20 +179,17 @@ public:
     // Methods
 
     /// Constructor
-    CATLASS_HOST_DEVICE
-    ColumnMajor(Index rows = 0, Index cols = 0)
+    CATLASS_HOST_DEVICE constexpr ColumnMajor(Index rows = 0, Index cols = 0)
         : shape_(MakeCoord(rows, cols)), stride_(MakeCoord(LongIndex(1), LongIndex(rows)))
     {}
 
     /// Constructor
-    CATLASS_HOST_DEVICE
-    ColumnMajor(Index rows, Index cols, LongIndex ldm)
+    CATLASS_HOST_DEVICE constexpr ColumnMajor(Index rows, Index cols, LongIndex ldm)
         : shape_(MakeCoord(rows, cols)), stride_(MakeCoord(LongIndex(1), ldm))
     {}
 
     /// Ctor
-    CATLASS_HOST_DEVICE
-    ColumnMajor(Shape shape, Stride stride) : shape_(shape), stride_(stride)
+    CATLASS_HOST_DEVICE constexpr ColumnMajor(Shape shape, Stride stride) : shape_(shape), stride_(stride)
     {}
 
     template <class Element>
@@ -229,8 +219,7 @@ public:
     }
 
     /// Returns the shape of the layout
-    CATLASS_HOST_DEVICE
-    Shape shape() const
+    CATLASS_HOST_DEVICE constexpr Shape shape() const
     {
         return shape_;
     }
@@ -243,8 +232,7 @@ public:
     }
 
     /// Returns the shape of the layout
-    CATLASS_HOST_DEVICE
-    typename Shape::Index shape(int idx) const
+    CATLASS_HOST_DEVICE constexpr typename Shape::Index shape(int idx) const
     {
         return shape_[idx];
     }
@@ -257,8 +245,7 @@ public:
     }
 
     /// Returns the stride of the layout
-    CATLASS_HOST_DEVICE
-    Stride stride() const
+    CATLASS_HOST_DEVICE constexpr Stride stride() const
     {
         return stride_;
     }
@@ -271,8 +258,7 @@ public:
     }
 
     /// Returns the stride of the layout
-    CATLASS_HOST_DEVICE
-    typename Stride::Index stride(int idx) const
+    CATLASS_HOST_DEVICE constexpr typename Stride::Index stride(int idx) const
     {
         return stride_[idx];
     }
@@ -384,8 +370,7 @@ public:
     }
 
     /// Returns the origin shape of the layout
-    CATLASS_HOST_DEVICE
-    typename OrgShape::Index orgShape(int idx) const
+    CATLASS_HOST_DEVICE constexpr typename OrgShape::Index orgShape(int idx) const
     {
         return orgShape_[idx];
     }
@@ -398,8 +383,7 @@ public:
     }
 
     /// Returns the shape of the layout
-    CATLASS_HOST_DEVICE
-    Shape shape() const
+    CATLASS_HOST_DEVICE constexpr Shape shape() const
     {
         return shape_;
     }
@@ -412,8 +396,7 @@ public:
     }
 
     /// Returns the shape of the layout
-    CATLASS_HOST_DEVICE
-    typename Shape::Index shape(int idx) const
+    CATLASS_HOST_DEVICE constexpr typename Shape::Index shape(int idx) const
     {
         return shape_[idx];
     }
@@ -426,8 +409,7 @@ public:
     }
 
     /// Returns the stride of the layout
-    CATLASS_HOST_DEVICE
-    Stride stride() const
+    CATLASS_HOST_DEVICE constexpr Stride stride() const
     {
         return stride_;
     }
@@ -440,8 +422,7 @@ public:
     }
 
     /// Returns the stride of the layout
-    CATLASS_HOST_DEVICE
-    typename Stride::Index stride(int idx) const
+    CATLASS_HOST_DEVICE constexpr typename Stride::Index stride(int idx) const
     {
         return stride_[idx];
     }
@@ -561,8 +542,7 @@ public:
     }
 
     /// Returns the origin shape of the layout
-    CATLASS_HOST_DEVICE
-    typename OrgShape::Index orgShape(int idx) const
+    CATLASS_HOST_DEVICE constexpr typename OrgShape::Index orgShape(int idx) const
     {
         return orgShape_[idx];
     }
@@ -575,8 +555,7 @@ public:
     }
 
     /// Returns the shape of the layout
-    CATLASS_HOST_DEVICE
-    Shape shape() const
+    CATLASS_HOST_DEVICE constexpr Shape shape() const
     {
         return shape_;
     }
@@ -589,8 +568,7 @@ public:
     }
 
     /// Returns the shape of the layout
-    CATLASS_HOST_DEVICE
-    typename Shape::Index shape(int idx) const
+    CATLASS_HOST_DEVICE constexpr typename Shape::Index shape(int idx) const
     {
         return shape_[idx];
     }
@@ -603,8 +581,7 @@ public:
     }
 
     /// Returns the stride of the layout
-    CATLASS_HOST_DEVICE
-    Stride stride() const
+    CATLASS_HOST_DEVICE constexpr Stride stride() const
     {
         return stride_;
     }
@@ -617,8 +594,7 @@ public:
     }
 
     /// Returns the stride of the layout
-    CATLASS_HOST_DEVICE
-    typename Stride::Index stride(int idx) const
+    CATLASS_HOST_DEVICE constexpr typename Stride::Index stride(int idx) const
     {
         return stride_[idx];
     }
@@ -881,8 +857,7 @@ public:
     }
 
     /// Returns the origin shape of the layout
-    CATLASS_HOST_DEVICE
-    typename OrgShape::Index orgShape(int idx) const
+    CATLASS_HOST_DEVICE constexpr typename OrgShape::Index orgShape(int idx) const
     {
         return orgShape_[idx];
     }
@@ -895,8 +870,7 @@ public:
     }
 
     /// Returns the shape of the layout
-    CATLASS_HOST_DEVICE
-    Shape shape() const
+    CATLASS_HOST_DEVICE constexpr Shape shape() const
     {
         return shape_;
     }
@@ -909,8 +883,7 @@ public:
     }
 
     /// Returns the shape of the layout
-    CATLASS_HOST_DEVICE
-    typename Shape::Index shape(int idx) const
+    CATLASS_HOST_DEVICE constexpr typename Shape::Index shape(int idx) const
     {
         return shape_[idx];
     }
@@ -923,8 +896,7 @@ public:
     }
 
     /// Returns the stride of the layout
-    CATLASS_HOST_DEVICE
-    Stride stride() const
+    CATLASS_HOST_DEVICE constexpr Stride stride() const
     {
         return stride_;
     }
@@ -937,8 +909,7 @@ public:
     }
 
     /// Returns the stride of the layout
-    CATLASS_HOST_DEVICE
-    typename Stride::Index stride(int idx) const
+    CATLASS_HOST_DEVICE constexpr typename Stride::Index stride(int idx) const
     {
         return stride_[idx];
     }

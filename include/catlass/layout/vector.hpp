@@ -40,12 +40,11 @@ public:
 public:
     // Methods
 
-    CATLASS_HOST_DEVICE
-    VectorLayout(Index size = 0) : shape_(MakeCoord(size)), stride_(MakeCoord(LongIndex(1)))
+    CATLASS_HOST_DEVICE constexpr VectorLayout(Index size = 0)
+        : shape_(MakeCoord(size)), stride_(MakeCoord(LongIndex(1)))
     {}
 
-    CATLASS_HOST_DEVICE
-    VectorLayout(Shape shape, Stride stride) : shape_(shape), stride_(stride)
+    CATLASS_HOST_DEVICE constexpr VectorLayout(Shape shape, Stride stride) : shape_(shape), stride_(stride)
     {}
 
     template <class Element>
@@ -69,8 +68,7 @@ public:
     }
 
     /// Returns the shape of the layout
-    CATLASS_HOST_DEVICE
-    Shape shape() const
+    CATLASS_HOST_DEVICE constexpr Shape shape() const
     {
         return shape_;
     }
@@ -83,8 +81,7 @@ public:
     }
 
     /// Returns the shape of the layout
-    CATLASS_HOST_DEVICE
-    typename Shape::Index shape(int idx) const
+    CATLASS_HOST_DEVICE constexpr typename Shape::Index shape(int idx) const
     {
         return shape_[idx];
     }
@@ -97,8 +94,7 @@ public:
     }
 
     /// Returns the stride of the layout
-    CATLASS_HOST_DEVICE
-    Stride stride() const
+    CATLASS_HOST_DEVICE constexpr Stride stride() const
     {
         return stride_;
     }
@@ -111,8 +107,7 @@ public:
     }
 
     /// Returns the stride of the layout
-    CATLASS_HOST_DEVICE
-    typename Stride::Index stride(int idx) const
+    CATLASS_HOST_DEVICE constexpr typename Stride::Index stride(int idx) const
     {
         return stride_[idx];
     }

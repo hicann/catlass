@@ -54,17 +54,17 @@ struct MatrixCoord : public Coord<2, uint32_t> {
 
     /// Constructs from Coord<2>
     CATLASS_HOST_DEVICE
-    MatrixCoord(Coord<2, Index> const& coord) : Base(coord)
+    constexpr MatrixCoord(Coord<2, Index> const& coord) : Base(coord)
     {}
 
     /// Helper to construct from a row and column
     CATLASS_HOST_DEVICE
-    MatrixCoord(Index row, Index column) : Base(MakeCoord(row, column))
+    constexpr MatrixCoord(Index row, Index column) : Base(MakeCoord(row, column))
     {}
 
     /// Helper to construct from a row and column, which are LongIndex based
     CATLASS_HOST_DEVICE
-    MatrixCoord(LongIndex row, LongIndex column) : Base(MakeCoord(Index(row), Index(column)))
+    constexpr MatrixCoord(LongIndex row, LongIndex column) : Base(MakeCoord(Index(row), Index(column)))
     {}
 
     /// Returns the row of the coordinate
@@ -97,14 +97,14 @@ struct MatrixCoord : public Coord<2, uint32_t> {
 
     /// Element-wise addition
     CATLASS_HOST_DEVICE
-    MatrixCoord operator+(Base const& b) const
+    constexpr MatrixCoord operator+(Base const& b) const
     {
         return MatrixCoord(Base::operator+(b));
     }
 
     /// In-place addition
     CATLASS_HOST_DEVICE
-    MatrixCoord& operator+=(Base const& b)
+    constexpr MatrixCoord& operator+=(Base const& b)
     {
         Base::operator+=(b);
         return *this;

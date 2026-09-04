@@ -48,6 +48,13 @@ function(testcase MODE ARCH)
             target_compile_definitions(${FILE_NAME}_stub_${ARCH} PRIVATE CATLASS_ARCH=${ARCH} __NPU_ARCH__=${ARCH})
             target_sources(catlass_unittest_${ARCH} PRIVATE $<TARGET_OBJECTS:${FILE_NAME}_stub_${ARCH}>)
         endif()
+
+        if(MODE STREQUAL CPU)
+            add_library(${FILE_NAME}_${ARCH} OBJECT ${SRC})
+            set_target_properties(${FILE_NAME}_${ARCH} PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+            target_sources(catlass_unittest_2201 PRIVATE $<TARGET_OBJECTS:${FILE_NAME}_${ARCH}>)
+            target_sources(catlass_unittest_3510 PRIVATE $<TARGET_OBJECTS:${FILE_NAME}_${ARCH}>)
+        endif()
     endforeach()
 endfunction()
 
@@ -86,6 +93,12 @@ endif()
 file(GLOB CATLASS_UNITTEST_SRCS_TILE_STUB ${CMAKE_CURRENT_SOURCE_DIR}/catlass/gemm/tile/*.cpp)
 testcase(STUB 2201 ${CATLASS_UNITTEST_SRCS_TILE_STUB})
 testcase(STUB 3510 ${CATLASS_UNITTEST_SRCS_TILE_STUB})
+
+file(GLOB CATLASS_UNITTEST_SRCS_COMMON
+    ${CMAKE_CURRENT_SOURCE_DIR}/catlass/*.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/catlass/layout/*.cpp
+)
+testcase(CPU COMMON ${CATLASS_UNITTEST_SRCS_COMMON})
 
 # Aggregative target for `--tests catlass_unittest`
 add_custom_target(catlass_unittest DEPENDS catlass_unittest_2201 catlass_unittest_3510)
