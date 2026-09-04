@@ -28,7 +28,7 @@ def test_parse_arch_scope_round_trips_supported_scopes() -> None:
 
 def test_get_localmem_capacity_bytes_accepts_arch_override() -> None:
     assert arch_mod.get_localmem_capacity_bytes("L1", arch="c310") == 512 * 1024
-    assert arch_mod.get_localmem_capacity_bytes("UB", arch="c310") == 248 * 1024
+    assert arch_mod.get_localmem_capacity_bytes("UB", arch="c310") == 256 * 1024
 
 
 def test_c220_is_no_longer_supported() -> None:

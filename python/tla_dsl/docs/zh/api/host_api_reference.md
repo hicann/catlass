@@ -301,7 +301,8 @@ tla.compile(func: Any, *args: Any, **kwargs: Any) -> JitCompiledFunction
 - *`func`*（`TlaJitFunction`）：被 `@tla.kernel` 装饰的函数。必填。
 - *`args`*（`Any`）：作为编译类型样本的 Host tensor / 标量 / `@dataclass` 实例
   （如 `from_dlpack` 或 `make_fake_tensor` 的返回值）。
-- *`kwargs`*：Host 编译参数。用 `options="--npu-arch 3510"` 指定芯片名。
+- *`kwargs`*：Host 编译参数。用 `options="--npu-arch 3510"` 指定芯片名，
+  全部可用取值见[编译选项](#编译选项)。
   缓存 / IR dump / 强制重编译由 `CATLASS_DSL_*` 环境变量控制。
 
 约束说明：
@@ -342,7 +343,8 @@ TlaJitFunction.compile(*, type_args: Sequence[Any] | None = None, **kwargs: Any)
 
 - *`type_args`*（`Sequence[Any] | None`）：作为编译类型样本的 Host tensor / 标量。
   可选，默认 `None`（不做张量特化）。
-- *`kwargs`*：Host 编译参数。用 `options="--npu-arch 3510"` 指定芯片名。
+- *`kwargs`*：Host 编译参数。用 `options="--npu-arch 3510"` 指定芯片名，
+  全部可用取值见[编译选项](#编译选项)。
   缓存 / IR dump 由 `CATLASS_DSL_*` 环境变量控制。
 
 约束说明：
@@ -356,6 +358,48 @@ TlaJitFunction.compile(*, type_args: Sequence[Any] | None = None, **kwargs: Any)
 compiled = my_kernel.compile(
     type_args=[tx, ty],
     options="--npu-arch 3510",
+)
+```
+
+---
+
+#### 编译选项
+
+`tla.compile` 与 `TlaJitFunction.compile` 的 `options` 接受一个字符串，按空格
+分隔解析。可用选项如下：
+
+| 选项 | 形式 | 说明 |
+| --- | --- | --- |
+| `--npu-arch <芯片名>` | 键值 | 指定目标芯片，例如 `3510`。 |
+| `--cce-disable-asc-reserved-ubuf` | 开关 | 释放编译器为 Ascend C 预留的 2 KB Unified Buffer。 |
+| `--cce-disable-vf-stack-reserved-ubuf` | 开关 | 释放编译器为 VF 栈预留的 6 KB Unified Buffer。 |
+
+约束说明：
+
+- 键值选项必须带取值，缺少取值时编译期报错。
+- 开关选项不带取值：写出即生效，不需要再写 `1` 或 `true`。
+- Unified Buffer 共 256 KB，编译器默认从中预留 8 KB（Ascend C 2 KB 与 VF 栈
+  6 KB），kernel 只能用剩下的 248 KB。上面两个开关分别释放这两段，释放后
+  kernel 可用的 Unified Buffer 相应变大。
+- **`--cce-disable-vf-stack-reserved-ubuf` 有风险。** VF 栈是编译器溢出（spill）
+  向量寄存器的去处；释放之后，若 kernel 触发溢出，编译器没有地方可写，而且
+  没有任何检查会报错——结果是静默写坏 Unified Buffer 中相邻的数据。只在确认
+  kernel 不会溢出时使用。
+- `tla.arch.get_capacity_in_bytes(tla.AddressSpace.ub)` 返回整块 256 KB，
+  而不是扣掉预留之后的大小。kernel 若按这个值划分缓冲又没有带上这两个开关，
+  申请量就会超过实际可用，启动时被拒绝。
+
+调用示例：
+
+```python
+compiled = tla.compile(
+    matmul_add,
+    ta, tb, tc,
+    options=(
+        "--npu-arch 3510"
+        " --cce-disable-asc-reserved-ubuf"
+        " --cce-disable-vf-stack-reserved-ubuf"
+    ),
 )
 ```
 

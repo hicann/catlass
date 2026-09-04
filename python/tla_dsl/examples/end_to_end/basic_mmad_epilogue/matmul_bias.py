@@ -26,7 +26,7 @@ import torch_npu  # noqa: F401
 
 from catlass.types import dtype_size_bytes
 
-from common import TilingParams, SwizzleParams
+from common import TilingParams, SwizzleParams, compute_ub_slot_elems
 
 # ---- kernel constants + @tla.kernel ----
 UB_SIZE = tla.arch.get_capacity_in_bytes(tla.AddressSpace.ub)
@@ -721,11 +721,9 @@ DESCRIPTION = "Matmul EVG bias: D=A@B+bias via L0C→GM workspace + AIV; dynamic
 
 def _compute_ub_slots(dtype_c: str) -> tuple[int, int]:
     """Compute UB_SLOT_ELEMS / SIMD_LANES according to the stages and element data type."""
-    _ELEM_C_BYTES = dtype_size_bytes(dtype_c)
-    _ub_slot = UB_SIZE // EVG_UB_NODES // EVG_UB_STAGES // _ELEM_C_BYTES
     return (
-        (_ub_slot + BYTE_PER_C0 - 1) // BYTE_PER_C0 * BYTE_PER_C0,
-        VECTOR_ELE // _ELEM_C_BYTES,
+        compute_ub_slot_elems(dtype_c, nodes=EVG_UB_NODES, stages=EVG_UB_STAGES),
+        VECTOR_ELE // dtype_size_bytes(dtype_c),
     )
 
 
@@ -781,7 +779,14 @@ def run(args: argparse.Namespace) -> int:
         ),
         _ub_slot_elements,
         _simd_lanes,
-        options="--npu-arch 3510",
+        # The slots below divide the whole 256 KB, which only fits once the
+        # compiler stops holding back its 8 KB reserve. The kernel does not spill,
+        # so releasing the VF stack half is safe here.
+        options=(
+            "--npu-arch 3510"
+            " --cce-disable-asc-reserved-ubuf"
+            " --cce-disable-vf-stack-reserved-ubuf"
+        ),
     )
     block_num = get_block_num(args.block_num, args.device, kind="cube")
     artifact(a_tensor, b_tensor, d_tensor, bias_tensor, wks_tensor, block_num=block_num)

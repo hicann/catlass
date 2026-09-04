@@ -363,6 +363,20 @@ Compile a decorated kernel and launch it on the NPU. Use `tla.compile` to obtain
 
 Build a device binary. Primary entry: `tla.compile`. `TlaJitFunction.compile` is a lower-level helper on the decorated function.
 
+`options` is one string, split on whitespace. A key option takes a value; a switch takes none and is on once written.
+
+| Option | Form | Meaning |
+| --- | --- | --- |
+| `--npu-arch <chip>` | key | Target chip, e.g. `3510`. |
+| `--cce-disable-asc-reserved-ubuf` | switch | Release the 2 KB of Unified Buffer the compiler holds back for Ascend C. |
+| `--cce-disable-vf-stack-reserved-ubuf` | switch | Release the 6 KB of Unified Buffer the compiler holds back for the VF stack. |
+
+The Unified Buffer is 256 KB, of which the compiler reserves 8 KB (2 KB Ascend C, 6 KB VF stack), leaving a kernel 248 KB. The two switches release those reserves, and both are spelled as bisheng spells them.
+
+`tla.arch.get_capacity_in_bytes(tla.AddressSpace.ub)` reports the whole 256 KB, not what is left after the reserve. A kernel that divides that figure into buffers without also passing the two switches asks for more than it is given, and is refused at launch.
+
+**`--cce-disable-vf-stack-reserved-ubuf` carries a risk.** The VF stack is where the compiler spills vector registers. Once it is released, a kernel that provokes a spill leaves the compiler nowhere to write, and nothing checks -- the result is a silent write over whatever sits next to it in the Unified Buffer. Use it only for a kernel you know does not spill.
+
 #### `compile`
 
 **Source:** [`catlass.base_dsl.compiler.CompileCallable.__call__`](../../../catlass/base_dsl/compiler.py#L11)
@@ -387,7 +401,8 @@ Parameters:
   as compile type samples (e.g. `from_dlpack` or `make_fake_tensor`
   results).
 - *`kwargs`*: Host compile kwargs. Pass `options="--npu-arch 3510"` to
-  select the public chip name. Cache / IR dump / force-recompile use
+  select the public chip name; see the option table above for every
+  accepted option. Cache / IR dump / force-recompile use
   `CATLASS_DSL_*` environment variables.
 
 Constraints:
@@ -396,7 +411,8 @@ Constraints:
 - `args` are compile-time type samples; they need not be bound NPU
   buffers (`make_fake_tensor` is valid).
 - Pass the public chip name with `options="--npu-arch 3510"`;
-  unsupported tokens raise at compile time.
+  unsupported tokens raise at compile time. Switch options such as
+  `--cce-disable-asc-reserved-ubuf` take no value.
 - Launch kwargs such as `block_num` / `stream` belong on the returned
   compiled function, not on `tla.compile`.
 
@@ -434,7 +450,8 @@ Parameters:
   compile type samples. Optional; default `None` (no tensor
   specialization).
 - *`kwargs`*: Host compile kwargs. Pass `options="--npu-arch 3510"` to
-  select the public chip name. Cache / IR-dump knobs use `CATLASS_DSL_*`
+  select the public chip name; see the option table above for every
+  accepted option. Cache / IR-dump knobs use `CATLASS_DSL_*`
   environment variables.
 
 Constraints:
@@ -442,7 +459,8 @@ Constraints:
 - `type_args` are compile-time type samples; they need not be bound NPU
   buffers (`make_fake_tensor` is valid).
 - Pass the public chip name with `options="--npu-arch 3510"`;
-  unsupported tokens raise at compile time.
+  unsupported tokens raise at compile time. Switch options such as
+  `--cce-disable-asc-reserved-ubuf` take no value.
 
 Example:
 
@@ -512,7 +530,7 @@ Dump frontend TLA IR without building a device binary or launching. See `TlaJitF
 
 #### `TlaJitFunction.dump_mlir`
 
-**Source:** [`catlass.dsl.TlaJitFunction.dump_mlir`](../../../catlass/dsl.py#L308)
+**Source:** [`catlass.dsl.TlaJitFunction.dump_mlir`](../../../catlass/dsl.py#L310)
 
 Description:
 

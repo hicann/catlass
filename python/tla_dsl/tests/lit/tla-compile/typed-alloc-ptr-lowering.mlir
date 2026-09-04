@@ -11,11 +11,26 @@ module {
   func.func private @sink(!tla.ptr<f16, l1, 512>, !tla.ptr<f32, ub, 256>, !tla.ptr<i16, l0c, 128>)
 }
 
-// Each address space owns an independent static offset range, so all three
-// first allocations lower to byte address zero. Function ABI conversion must
-// happen atomically with the pointer producers and call site.
+// UB is reserved through a symbol so that the object reports the bytes as
+// statically allocated; the runtime reads that when deciding where the SIMT
+// Data Cache starts, and a bare address would leave it reporting nothing. The
+// global is private because an externally visible one without an initializer is
+// only a declaration, which reserves no space.
+// CHECK: llvm.mlir.global private @tla_ub_scratch() {addr_space = 6 : i32} : !llvm.array<512 x i8>
+
 // CHECK-LABEL: func.func @typed_alloc_ptr
-// CHECK-COUNT-3: arith.constant {{.*}}0 : i64
+// The UB pointer is derived from that symbol rather than from a literal, which
+// is what keeps the reservation alive through to the linker.
+// CHECK-DAG: llvm.mlir.addressof @tla_ub_scratch
+// CHECK-DAG: llvm.ptrtoint
+
+// L1 and L0C keep bare addresses: UB is the only space the runtime partitions
+// against the Data Cache, so it is the only one the object must account for.
+// Each address space owns an independent offset range, so both start at zero.
+// CHECK-DAG: arith.constant {{.*}}0 : i64
+// CHECK-DAG: arith.constant {{.*}}0 : i64
+
+// Function ABI conversion happens atomically with the pointer producers.
 // CHECK: call @sink({{.*}}) : (i64, i64, i64) -> ()
 // CHECK-NOT: !tla.ptr
 // CHECK-NOT: tla.alloc_ptr

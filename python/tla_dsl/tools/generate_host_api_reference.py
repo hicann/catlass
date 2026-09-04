@@ -47,7 +47,30 @@ HOST_DIRECTORY_SECTIONS: list[tuple[str, str]] = [
         "Compile and Launch / Compile",
         "Build a device binary. Primary entry: `tla.compile`. "
         "`TlaJitFunction.compile` is a lower-level helper on the decorated "
-        "function.",
+        "function.\n\n"
+        "`options` is one string, split on whitespace. A key option takes a "
+        "value; a switch takes none and is on once written.\n\n"
+        "| Option | Form | Meaning |\n"
+        "| --- | --- | --- |\n"
+        "| `--npu-arch <chip>` | key | Target chip, e.g. `3510`. |\n"
+        "| `--cce-disable-asc-reserved-ubuf` | switch | Release the 2 KB of "
+        "Unified Buffer the compiler holds back for Ascend C. |\n"
+        "| `--cce-disable-vf-stack-reserved-ubuf` | switch | Release the 6 KB "
+        "of Unified Buffer the compiler holds back for the VF stack. |\n\n"
+        "The Unified Buffer is 256 KB, of which the compiler reserves 8 KB "
+        "(2 KB Ascend C, 6 KB VF stack), leaving a kernel 248 KB. The two "
+        "switches release those reserves, and both are spelled as bisheng "
+        "spells them.\n\n"
+        "`tla.arch.get_capacity_in_bytes(tla.AddressSpace.ub)` reports the "
+        "whole 256 KB, not what is left after the reserve. A kernel that "
+        "divides that figure into buffers without also passing the two "
+        "switches asks for more than it is given, and is refused at launch.\n\n"
+        "**`--cce-disable-vf-stack-reserved-ubuf` carries a risk.** The VF "
+        "stack is where the compiler spills vector registers. Once it is "
+        "released, a kernel that provokes a spill leaves the compiler nowhere "
+        "to write, and nothing checks -- the result is a silent write over "
+        "whatever sits next to it in the Unified Buffer. Use it only for a "
+        "kernel you know does not spill.",
     ),
     (
         "Compile and Launch / Launch",

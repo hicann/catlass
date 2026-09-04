@@ -10,7 +10,7 @@ def test_get_capacity_in_bytes_host_side_accepts_arch_tokens() -> None:
     assert tla.arch.get_capacity_in_bytes(tla.AddressSpace.l0a) == 64 * 1024
     assert tla.arch.get_capacity_in_bytes(tla.AddressSpace.l0b) == 64 * 1024
     assert tla.arch.get_capacity_in_bytes(tla.AddressSpace.l0c) == 256 * 1024
-    assert tla.arch.get_capacity_in_bytes(tla.AddressSpace.ub) == 248 * 1024
+    assert tla.arch.get_capacity_in_bytes(tla.AddressSpace.ub) == 256 * 1024
 
 
 def test_get_capacity_in_bytes_rejects_non_token_input() -> None:

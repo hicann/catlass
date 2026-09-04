@@ -22,7 +22,8 @@ class CompileCallable:
               as compile type samples (e.g. `from_dlpack` or `make_fake_tensor`
               results).
             - *`kwargs`*: Host compile kwargs. Pass `options="--npu-arch 3510"` to
-              select the public chip name. Cache / IR dump / force-recompile use
+              select the public chip name; see the option table above for every
+              accepted option. Cache / IR dump / force-recompile use
               `CATLASS_DSL_*` environment variables.
 
             Constraints:
@@ -30,7 +31,8 @@ class CompileCallable:
             - `args` are compile-time type samples; they need not be bound NPU
               buffers (`make_fake_tensor` is valid).
             - Pass the public chip name with `options="--npu-arch 3510"`;
-              unsupported tokens raise at compile time.
+              unsupported tokens raise at compile time. Switch options such as
+              `--cce-disable-asc-reserved-ubuf` take no value.
             - Launch kwargs such as `block_num` / `stream` belong on the returned
               compiled function, not on `tla.compile`.
 

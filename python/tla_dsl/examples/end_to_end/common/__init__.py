@@ -10,13 +10,21 @@
 
 from .golden import compare, tolerance
 from .params import TilingParams, SwizzleParams
-from .utils import create_tla_tensor, get_block_num, to_hf32
+from .utils import (
+    UB_ALLOC_ALIGN_BYTES,
+    compute_ub_slot_elems,
+    create_tla_tensor,
+    get_block_num,
+    to_hf32,
+)
 
 __all__ = [
     # struct-like params
     "TilingParams",
     "SwizzleParams",
     # helper function
+    "UB_ALLOC_ALIGN_BYTES",
+    "compute_ub_slot_elems",
     "create_tla_tensor",
     "get_block_num",
     "to_hf32",

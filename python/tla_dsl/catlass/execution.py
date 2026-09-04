@@ -198,6 +198,17 @@ class TlaCompileOption:
     )
     #: When True, dump IR across the lowering pipeline (env ``CATLASS_DSL_PRINT_IR``).
     print_ir: bool = False
+    # Unified Buffer the compiler holds back from the kernel, and which these
+    # release. Both are spelled exactly as bisheng spells them, since that is
+    # where they are ultimately understood.
+    #
+    # The reserve is 8 KB in total: 2 KB for Ascend C and 6 KB of VF stack that
+    # the compiler spills vector registers into. Releasing either hands those
+    # bytes to the kernel, and releasing the VF stack means the kernel must not
+    # provoke a spill -- nothing checks, and the consequence is a silent write
+    # into whatever sits above.
+    cce_disable_asc_reserved_ubuf: bool = False
+    cce_disable_vf_stack_reserved_ubuf: bool = False
 
 
 @dataclass(frozen=True)
@@ -241,8 +252,22 @@ _MEMORY_COMPILE_CACHE: dict[str, JitCompiledFunction] = {}
 _NATIVE_PRINT_TENSOR_STDOUT_LOCK = threading.RLock()
 
 
+#: Compile options that carry no value: naming one turns it on.
+_VALUELESS_COMPILE_OPTIONS = frozenset(
+    {
+        "cce_disable_asc_reserved_ubuf",
+        "cce_disable_vf_stack_reserved_ubuf",
+    }
+)
+
+
 def _parse_compile_options_from_str(options: Any) -> dict[str, str]:
-    """Parse an ``options="--key value"`` token string."""
+    """Parse an ``options="--key value"`` token string.
+
+    Most options are a key and a value. The few in
+    ``_VALUELESS_COMPILE_OPTIONS`` are switches instead: writing one turns it
+    on, and it takes no value.
+    """
     if options is None:
         return {}
     if not isinstance(options, str):
@@ -266,6 +291,10 @@ def _parse_compile_options_from_str(options: Any) -> dict[str, str]:
             continue
         if token.startswith("--"):
             key = token[2:].replace("-", "_")
+            if key in _VALUELESS_COMPILE_OPTIONS:
+                parsed[key] = ""
+                index += 1
+                continue
             if index + 1 >= len(tokens) or tokens[index + 1].startswith("-"):
                 raise ValueError(f"Missing value for compile option {token!r}")
             parsed[key] = tokens[index + 1]
@@ -1577,6 +1606,9 @@ def compile_option_from_kwargs(kwargs: Mapping[str, Any]) -> TlaCompileOption:
         kernel_mode=core_type,
         arch_scope=arch_scope,
         print_ir=_env_truthy("CATLASS_DSL_PRINT_IR", default="0"),
+        cce_disable_asc_reserved_ubuf="cce_disable_asc_reserved_ubuf" in parsed_options,
+        cce_disable_vf_stack_reserved_ubuf="cce_disable_vf_stack_reserved_ubuf"
+        in parsed_options,
     )
 
 
@@ -1678,6 +1710,8 @@ def _cache_key(
         "hivmc_fingerprint": _tool_fingerprint(hivmc),
         "mlir": tlair_mlir,
         "print_ir": compile_option.print_ir,
+        "cce_disable_asc_reserved_ubuf": compile_option.cce_disable_asc_reserved_ubuf,
+        "cce_disable_vf_stack_reserved_ubuf": compile_option.cce_disable_vf_stack_reserved_ubuf,
         "extern_compile_specs": extern_compile_identities,
         "extern_compile_environment": extern_compile_environment,
     }
@@ -2157,6 +2191,15 @@ def _build_hivmc_a5_command(
         str(mlir_path),
         "--target=Ascend950PR_9589",
     ]
+    reserve_flags = []
+    if compile_option.cce_disable_asc_reserved_ubuf:
+        reserve_flags.append("--cce-disable-asc-reserved-ubuf")
+    if compile_option.cce_disable_vf_stack_reserved_ubuf:
+        reserve_flags.append("--cce-disable-vf-stack-reserved-ubuf")
+    if reserve_flags:
+        # hivmc has no option of its own for these; it forwards whatever this
+        # carries on to bisheng, which is where they are understood.
+        command.append("--append-bisheng-options=" + " ".join(reserve_flags))
     if compile_option.kernel_mode == "mix":
         command.extend(
             [

@@ -644,7 +644,10 @@ def _vector_dynamic_packed_pointer_join_kernel(rows: int, choice: int) -> None:
         tla.allocate((64, 128), tla.Float16, tla.AddressSpace.ub, 256), layout
     )
     first_ptr = tla.allocate((64, 128), tla.Float16, tla.AddressSpace.ub, 256)
-    second_ptr = tla.allocate((64, 128), tla.Float16, tla.AddressSpace.ub, 256)
+    # Deliberately a different capacity from first_ptr: the join below is then
+    # genuinely unprovable, which is what drives the unknown-extent path. Both
+    # are large enough for the (64, 128) view, so nothing reads out of bounds.
+    second_ptr = tla.allocate((128, 128), tla.Float16, tla.AddressSpace.ub, 256)
     selected = first_ptr if choice == 0 else second_ptr
     packed = tla.make_tensor_like(selected, source, tla.arch.zN)
     with tla.vector():
@@ -675,7 +678,10 @@ def _vector_static_packed_pointer_join_kernel(choice: int) -> None:
         tla.allocate((64, 128), tla.Float16, tla.AddressSpace.ub, 256), layout
     )
     first_ptr = tla.allocate((64, 128), tla.Float16, tla.AddressSpace.ub, 256)
-    second_ptr = tla.allocate((64, 128), tla.Float16, tla.AddressSpace.ub, 256)
+    # Deliberately a different capacity from first_ptr: the join below is then
+    # genuinely unprovable, which is what drives the unknown-extent path. Both
+    # are large enough for the (64, 128) view, so nothing reads out of bounds.
+    second_ptr = tla.allocate((128, 128), tla.Float16, tla.AddressSpace.ub, 256)
     selected = first_ptr if choice == 0 else second_ptr
     packed = tla.make_tensor_like(selected, source, tla.arch.zN)
     with tla.vector():

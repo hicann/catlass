@@ -4,6 +4,7 @@
 #include "TlaScratchAllocation.h"
 
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/Func/Transforms/FuncConversions.h"
 #include "mlir/Dialect/SCF/Transforms/Patterns.h"
 
@@ -77,10 +78,57 @@ static Value materializePtrFromI64(OpBuilder& builder, ::tla::PtrType resultType
     return builder.create<::tla::IntToPtrOp>(loc, resultType, inputs.front());
 }
 
+// Name of the module-level symbol that reserves the kernel's UB scratch.
+static constexpr llvm::StringLiteral kUbScratchGlobalName = "tla_ub_scratch";
+
+// Highest UB byte the scratch plan touches. This is the number the backend must
+// see reserved: everything above it belongs to the compiler reserve and, for
+// SIMT, to the Data Cache.
+static uint64_t ubHighWaterBytes(const TlaScratchAllocationPlan& plan)
+{
+    uint64_t high = 0;
+    for (const TlaScratchAllocation& allocation : plan.allocations) {
+        if (allocation.addressSpace != ::AddressSpace::ub)
+            continue;
+        high = std::max(high, allocation.end);
+    }
+    return high;
+}
+
+// Reserve the kernel's UB as a symbol the toolchain can account for.
+//
+// Emitting the addresses as bare constants leaves nothing for the backend to
+// count, so the object reports no statically allocated UB of its own and the
+// runtime lays the SIMT Data Cache down over the kernel's own buffers -- the
+// small amount that appears to work being whatever the linked Ascend C template
+// happens to reserve.
+//
+// This is an LLVM global rather than a `memref.global` for two reasons. Only a
+// symbol carrying an explicit address space survives to the object: the core
+// type that the backend assigns by walking function bodies never reaches a
+// module-level `memref.global`, so it is dropped from mixed kernels. And the
+// linkage must be private -- an externally visible global with no initializer
+// is only a declaration, so the linker reserves nothing for it.
+static LLVM::GlobalOp createUbScratchGlobal(ModuleOp module, uint64_t bytes)
+{
+    MLIRContext* context = module.getContext();
+    if (bytes == 0)
+        return {};
+
+    OpBuilder builder(context);
+    builder.setInsertionPointToStart(module.getBody());
+    auto arrayType = LLVM::LLVMArrayType::get(IntegerType::get(context, 8), bytes);
+    return builder.create<LLVM::GlobalOp>(
+        module.getLoc(), arrayType, /*isConstant=*/false, LLVM::Linkage::Private, kUbScratchGlobalName,
+        /*value=*/Attribute(), /*alignment=*/0,
+        /*addrSpace=*/static_cast<unsigned>(hivm::AddressSpace::UB));
+}
+
 struct LowerAllocPtrPattern : public OpConversionPattern<::tla::AllocPtrOp> {
     LowerAllocPtrPattern(
-        TypeConverter& converter, MLIRContext* context, const llvm::DenseMap<Value, uint64_t>& offsetByAllocResult)
-        : OpConversionPattern(converter, context), offsetByAllocResult(offsetByAllocResult)
+        TypeConverter& converter, MLIRContext* context, const llvm::DenseMap<Value, uint64_t>& offsetByAllocResult,
+        LLVM::GlobalOp ubScratch)
+        : OpConversionPattern(converter, context), offsetByAllocResult(offsetByAllocResult), ubScratch(ubScratch)
     {}
 
     LogicalResult matchAndRewrite(::tla::AllocPtrOp op, OpAdaptor, ConversionPatternRewriter& rewriter) const override
@@ -89,14 +137,38 @@ struct LowerAllocPtrPattern : public OpConversionPattern<::tla::AllocPtrOp> {
         if (offset == offsetByAllocResult.end() ||
             offset->second > static_cast<uint64_t>(std::numeric_limits<int64_t>::max()))
             return rewriter.notifyMatchFailure(op, "missing or overflowing static scratch offset");
-        auto address = rewriter.create<arith::ConstantIntOp>(op.getLoc(), static_cast<int64_t>(offset->second), 64);
-        address->setAttr(kAllocSizeBytesMetadataAttrName, op.getSizeBytesAttr());
-        rewriter.replaceOp(op, address.getResult());
+        auto byteOffset = static_cast<int64_t>(offset->second);
+
+        // Only UB is declared through a symbol: it is the one space whose
+        // capacity the runtime partitions against the Data Cache, so it is the
+        // one the object has to account for. L1 and L0 keep bare addresses.
+        auto ptrType = dyn_cast<::tla::PtrType>(op.getResult().getType());
+        bool isUb = ptrType && ptrType.getAddrspace() == ::AddressSpace::ub;
+
+        Value address;
+        if (isUb && ubScratch) {
+            auto pointerType =
+                LLVM::LLVMPointerType::get(op.getContext(), static_cast<unsigned>(hivm::AddressSpace::UB));
+            Value scratch = rewriter.create<LLVM::AddressOfOp>(op.getLoc(), pointerType, kUbScratchGlobalName);
+            Value base = rewriter.create<LLVM::PtrToIntOp>(op.getLoc(), rewriter.getI64Type(), scratch);
+            if (byteOffset == 0) {
+                address = base;
+            } else {
+                Value slot = rewriter.create<arith::ConstantIntOp>(op.getLoc(), byteOffset, 64);
+                address = rewriter.create<arith::AddIOp>(op.getLoc(), base, slot);
+            }
+        } else {
+            address = rewriter.create<arith::ConstantIntOp>(op.getLoc(), byteOffset, 64);
+        }
+
+        address.getDefiningOp()->setAttr(kAllocSizeBytesMetadataAttrName, op.getSizeBytesAttr());
+        rewriter.replaceOp(op, address);
         return success();
     }
 
 private:
     const llvm::DenseMap<Value, uint64_t>& offsetByAllocResult;
+    LLVM::GlobalOp ubScratch;
 };
 
 struct LowerIntToPtrPattern : public OpConversionPattern<::tla::IntToPtrOp> {
@@ -173,7 +245,7 @@ public:
     void getDependentDialects(DialectRegistry& registry) const override
     {
         registry.insert<
-            arith::ArithDialect, cf::ControlFlowDialect, func::FuncDialect, ::tla::TlaDialect,
+            arith::ArithDialect, cf::ControlFlowDialect, func::FuncDialect, LLVM::LLVMDialect, ::tla::TlaDialect,
             mlir::memref::MemRefDialect, scf::SCFDialect>();
     }
 
@@ -187,6 +259,8 @@ public:
             signalPassFailure();
             return;
         }
+
+        LLVM::GlobalOp ubScratch = createUbScratchGlobal(module, ubHighWaterBytes(*allocationPlan));
 
         if (failed(resolveTensorPtrOps(module))) {
             signalPassFailure();
@@ -204,7 +278,7 @@ public:
 
         RewritePatternSet patterns(context);
         ConversionTarget target(*context);
-        patterns.add<LowerAllocPtrPattern>(converter, context, allocationPlan->offsetByAllocResult);
+        patterns.add<LowerAllocPtrPattern>(converter, context, allocationPlan->offsetByAllocResult, ubScratch);
         patterns.add<LowerIntToPtrPattern, LowerRecastPtrPattern, LowerPtrAddPattern>(converter, context);
         scf::populateSCFStructuralTypeConversionsAndLegality(converter, patterns, target);
         populateFunctionOpInterfaceTypeConversionPattern<func::FuncOp>(patterns, converter);
@@ -213,7 +287,8 @@ public:
         populateReturnOpTypeConversionPattern(patterns, converter);
 
         target.addLegalOp<ModuleOp>();
-        target.addLegalDialect<arith::ArithDialect, mlir::memref::MemRefDialect, ::tla::TlaDialect>();
+        target
+            .addLegalDialect<arith::ArithDialect, LLVM::LLVMDialect, mlir::memref::MemRefDialect, ::tla::TlaDialect>();
         target.addIllegalOp<::tla::AllocPtrOp, ::tla::RecastPtrOp, ::tla::TensorPtrOp, ::tla::PtrAddOp>();
         target.addDynamicallyLegalOp<::tla::IntToPtrOp>(isPointerConsumerBoundary);
         target.addLegalOp<::tla::MakeTensorOp, ::tla::MakeTensorLikeOp>();

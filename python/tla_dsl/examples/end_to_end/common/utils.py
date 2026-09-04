@@ -13,10 +13,44 @@ import torch_npu  # noqa: F401
 
 import catlass.tla as tla
 from catlass.tla.runtime import from_dlpack
+from catlass.types import dtype_size_bytes
+
+#: Byte alignment every Unified Buffer ``tla.allocate`` in the epilogue
+#: examples asks for.
+UB_ALLOC_ALIGN_BYTES = 256
 
 # ---------------------------------------------------------------------------
 # Helper functions below
 # ---------------------------------------------------------------------------
+
+
+def compute_ub_slot_elems(
+    dtype_c: str,
+    *,
+    nodes: int,
+    stages: int,
+    budget_bytes: int | None = None,
+) -> int:
+    """Size one UB slot so ``nodes * stages`` of them fit the buffer.
+
+    ``budget_bytes`` defaults to the whole Unified Buffer; pass a smaller
+    figure when the kernel reserves part of it for something else.
+
+    The slot is rounded DOWN to ``UB_ALLOC_ALIGN_BYTES``. Both directions of
+    getting this wrong end the same way -- the kernel reserves more UB than the
+    buffer holds and is refused at launch:
+
+    * rounding UP pushes the slots past the budget they were just divided out
+      of, so the parts come to more than the whole;
+    * rounding to anything finer than the allocation's own alignment leaves
+      each slot to be padded up to it, and that padding is invisible here.
+    """
+    elem_bytes = dtype_size_bytes(dtype_c)
+    if budget_bytes is None:
+        budget_bytes = tla.arch.get_capacity_in_bytes(tla.AddressSpace.ub)
+    align_elems = UB_ALLOC_ALIGN_BYTES // elem_bytes
+    slot_elems = budget_bytes // nodes // stages // elem_bytes
+    return slot_elems // align_elems * align_elems
 
 
 def get_block_num(block_num: int, device: int = 0, *, kind: str = "vector") -> int:

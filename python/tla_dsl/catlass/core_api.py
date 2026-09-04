@@ -7541,7 +7541,7 @@ def arch_get_capacity_in_bytes(mem_scope: AddressSpace) -> int:
     Example:
     ```python
     l1_bytes = tla.arch.get_capacity_in_bytes(tla.AddressSpace.l1)    # 512 * 1024 (host side)
-    ub_bytes = tla.arch.get_capacity_in_bytes(tla.AddressSpace.ub)    # 248 * 1024
+    ub_bytes = tla.arch.get_capacity_in_bytes(tla.AddressSpace.ub)    # 256 * 1024
 
     @tla.kernel
     def k(...):
