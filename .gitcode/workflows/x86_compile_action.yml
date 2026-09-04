@@ -46,7 +46,7 @@ jobs:
             cd ${{ steps.process_checkout.outputs.path }}
             export task_name=${{ inputs.task_name }}
             export target_branch=${{ env.TARGET_BRANCH }}
-            BuildAccelerate bash arm_compile.sh
+            bash pre_smoke.sh ${WORKSPACE}
           AC_SERVER_IP: ${{ vars.AC_SERVER_IP }}
       - name: upload
         uses: obs-upload
@@ -58,6 +58,6 @@ jobs:
           artifact-path: "${{ steps.process_checkout.outputs.path }}/output/*"
           object-prefix: ${{ env.obs_path }}/
     if: "${{ default() }}"
-    runs-on: [dedicate-hosted, arm64, xlarge]
+    runs-on: [dedicate-hosted, x64, xlarge]
     container:
       image: swr.cn-north-4.myhuaweicloud.com/hw-ascend/${{ inputs.image_version }}

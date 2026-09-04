@@ -77,12 +77,13 @@ jobs:
             export SK=${{secrets.SK}}
             export obs_smoke_path=${{ env.obs_smoke_path_A2 }}
             export obs_path=${{ env.obs_path }}
+            export WORKSPACE=${{ steps.process_checkout.outputs.path }}
             whoami
             pwd
             mkdir -p ~/taskspace && cd ~/taskspace
             wget -nv ${{ steps.process_upload.outputs.primary-url }}
             tar -zxf $(basename "${{ steps.process_upload.outputs.primary-url }}")
-            sudo bash ~/taskspace/pre_smoke.sh
+            sudo bash ~/taskspace/pre_smoke.sh $(pwd)
       -
         name: pre_smoke resource clean
         uses: manifest-management-plugin

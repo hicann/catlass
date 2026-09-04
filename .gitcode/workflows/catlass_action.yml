@@ -11,7 +11,7 @@ concurrency:
 on:
   pull_request_comment:
     types: [created]
-    branches: [ '*' ]
+    branches: [ '**' ]
     comments: [ '^(?:\/)?compile*' ]
   pr_comment:
       types: [ created ]
@@ -131,6 +131,20 @@ stages:
         with:
           task_name: 'arm_pre_smoke'
           image_version: ${{ jobs.JOB_image.outputs.PreSmoke }}
+      JOB_UT_ir:
+        name: UT_ir
+        uses: .gitcode/workflows/x86_compile_action.yml
+        with:
+          ut_type: 'ir'
+          task_name: 'UT_ir'
+          image_version: ${{ jobs.JOB_image.outputs.UT_dsl }}
+      JOB_UT_lit:
+        name: UT_lit
+        uses: .gitcode/workflows/x86_compile_action.yml
+        with:
+          ut_type: 'lit'
+          task_name: 'UT_lit'
+          image_version: ${{ jobs.JOB_image.outputs.UT_dsl }}
       JOB_staticcheck_markdown:
         name: staticcheck_markdown
         uses: .gitcode/workflows/staticcheck_action.yml
