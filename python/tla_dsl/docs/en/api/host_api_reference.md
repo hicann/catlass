@@ -573,7 +573,7 @@ Bind a real NPU buffer with `from_dlpack`, or a metadata-only sample with `make_
 
 #### `from_dlpack`
 
-**Source:** [`catlass.tla.runtime.from_dlpack`](../../../catlass/tla/runtime.py#L630)
+**Source:** [`catlass.tla.runtime.from_dlpack`](../../../catlass/tla/runtime.py#L606)
 
 Description:
 
@@ -635,7 +635,7 @@ ty = from_dlpack(
 
 #### `make_fake_tensor`
 
-**Source:** [`catlass.tla.runtime.make_fake_tensor`](../../../catlass/tla/runtime.py#L873)
+**Source:** [`catlass.tla.runtime.make_fake_tensor`](../../../catlass/tla/runtime.py#L849)
 
 Description:
 
@@ -692,7 +692,7 @@ Mark static layout extents dynamic. See also `docs/zh/kernel_development/core_co
 
 #### `Tensor.mark_layout_dynamic`
 
-**Source:** [`catlass.tla.runtime._Tensor.mark_layout_dynamic`](../../../catlass/tla/runtime.py#L274)
+**Source:** [`catlass.tla.runtime._Tensor.mark_layout_dynamic`](../../../catlass/tla/runtime.py#L268)
 
 Description:
 
@@ -734,7 +734,7 @@ artifact = tla.compile(my_kernel, ta, options="--npu-arch 3510")
 
 #### `Tensor.mark_compact_shape_dynamic`
 
-**Source:** [`catlass.tla.runtime._Tensor.mark_compact_shape_dynamic`](../../../catlass/tla/runtime.py#L351)
+**Source:** [`catlass.tla.runtime._Tensor.mark_compact_shape_dynamic`](../../../catlass/tla/runtime.py#L345)
 
 Description:
 

@@ -122,6 +122,45 @@ class _ManagedExport:
         return capsule
 
 
+def test_from_dlpack_preserves_column_major_logical_metadata() -> None:
+    tensor = from_dlpack(
+        _ManagedExport(shape=(3, 2), strides=(2, 1)),
+        layout_tag=tla.arch.ColumnMajor,
+    )
+
+    assert (tensor.shape, tensor.stride, tensor.origin_shape) == (
+        (2, 3),
+        (1, 2),
+        (2, 3),
+    )
+
+
+def test_from_dlpack_zn_uses_layout_leaves_for_launch() -> None:
+    tensor = from_dlpack(
+        _ManagedExport(),
+        layout_tag=tla.arch.zN,
+        origin_shape=(32, 64),
+    )
+
+    assert tensor.shape == ((16, 2), (8, 8))
+    assert tensor.stride == ((8, 128), (1, 256))
+    assert tensor.build_memref_launch_fields() == (
+        tensor.data_ptr,
+        tensor.data_ptr,
+        0,
+        16,
+        2,
+        8,
+        8,
+        8,
+        128,
+        1,
+        256,
+        32,
+        64,
+    )
+
+
 def test_parse_rejects_null_dlpack_strides() -> None:
     exporter = _ManagedExport(strides=None)
 

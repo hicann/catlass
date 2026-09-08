@@ -3063,18 +3063,27 @@ def test_pack_launch_args_builds_dynamic_memref_fields_once_per_tensor() -> None
 
         def build_memref_launch_fields(self):
             self.build_calls += 1
-            return {
-                "aligned": 0x1234,
-                "offset": 7,
-                "size_0": 31,
-                "stride_0": 1,
-            }
+            return (0x1234, 0x1234, 7, 31, 1, 1, 1, 1, 1, 1, 1, 31, 1)
 
-    fields = ("aligned", "offset", "size_0", "stride_0")
+    fields = (
+        "allocated",
+        "aligned",
+        "offset",
+        "size0",
+        "size1",
+        "size2",
+        "size3",
+        "stride0",
+        "stride1",
+        "stride2",
+        "stride3",
+        "originShape0",
+        "originShape1",
+    )
     layout = compiler_bridge.KernelAbiLayout(
-        schema_version=3,
+        schema_version=4,
         entrypoint="kernel",
-        total_size=32,
+        total_size=104,
         arguments=tuple(
             compiler_bridge.KernelAbiArgument(
                 index=index,
@@ -3095,7 +3104,9 @@ def test_pack_launch_args_builds_dynamic_memref_fields_once_per_tensor() -> None
     first = execution._pack_launch_args([tensor], layout)
     second = execution._pack_launch_args([tensor], layout)
 
-    assert first == struct.pack("<QQQQ", 0x1234, 7, 31, 1)
+    assert first == struct.pack(
+        "<13Q", 0x1234, 0x1234, 7, 31, 1, 1, 1, 1, 1, 1, 1, 31, 1
+    )
     assert second == first
     assert tensor.build_calls == 2
 
@@ -3334,7 +3345,7 @@ def test_build_kernel_launch_plan_uses_logical_mixed_handoff(tmp_path) -> None:
     class _Tensor:
         def __init__(self, ptr: int, shape: tuple[int, int]) -> None:
             self._ptr = ptr
-            self._shape_tuple = shape
+            self._flat_shape = shape
             self.stride = (shape[1], 1)
 
         def data_ptr(self) -> int:
@@ -3393,7 +3404,7 @@ def test_mixed_handoff_payload_follows_split_signature_not_fixed_four_args(
     class _Tensor:
         def __init__(self, ptr: int, shape: tuple[int, int]) -> None:
             self._ptr = ptr
-            self._shape_tuple = shape
+            self._flat_shape = shape
             self.stride = (shape[1], 1)
 
         def data_ptr(self) -> int:

@@ -62,10 +62,12 @@ def _bound_fake(
     return tensor
 
 
-def _memref_field_layout() -> compiler_bridge.KernelAbiLayout:
+def _memref_field_layout(
+    fields: tuple[str, ...] = _UNIFIED_FIELDS,
+) -> compiler_bridge.KernelAbiLayout:
     arguments = []
     offset = 0
-    for index, field in enumerate(_UNIFIED_FIELDS):
+    for index, field in enumerate(fields):
         arguments.append(
             compiler_bridge.KernelAbiArgument(
                 index=index,
@@ -88,79 +90,64 @@ def _memref_field_layout() -> compiler_bridge.KernelAbiLayout:
     )
 
 
-def test_build_memref_launch_fields_rank1() -> None:
-    tensor = _bound_fake((17,), tla.Int32, stride_args=(1,), coord_args=(0,), data_ptr=0xABCD00)
-    assert tensor.build_memref_launch_fields() == {
-        "allocated": 0xABCD00,
-        "aligned": 0xABCD00,
-        "offset": 0,
-        "size0": 17,
-        "size1": 1,
-        "size2": 1,
-        "size3": 1,
-        "stride0": 1,
-        "stride1": 1,
-        "stride2": 1,
-        "stride3": 1,
-        "originShape0": 17,
-        "originShape1": 1,
-    }
-
-
-def test_build_memref_launch_fields_rank2() -> None:
+@pytest.mark.parametrize(
+    ("shape", "dtype", "stride", "coord", "data_ptr", "expected"),
+    (
+        (
+            (17,),
+            tla.Int32,
+            (1,),
+            (0,),
+            0xABCD00,
+            (0xABCD00, 0xABCD00, 0, 17, 1, 1, 1, 1, 1, 1, 1, 17, 1),
+        ),
+        (
+            (4, 8),
+            tla.Float16,
+            (8, 1),
+            (0, 0),
+            0x1000,
+            (0x1000, 0x1000, 0, 4, 8, 1, 1, 8, 1, 1, 1, 4, 8),
+        ),
+    ),
+)
+def test_dynamic_memref_tuple_and_payload(
+    shape, dtype, stride, coord, data_ptr, expected
+) -> None:
     tensor = _bound_fake(
-        (4, 8), tla.Float16, stride_args=(8, 1), coord_args=(0, 0), data_ptr=0x1000
+        shape,
+        dtype,
+        stride_args=stride,
+        coord_args=coord,
+        data_ptr=data_ptr,
     )
-    assert tensor.build_memref_launch_fields() == {
-        "allocated": 0x1000,
-        "aligned": 0x1000,
-        "offset": 0,
-        "size0": 4,
-        "size1": 8,
-        "size2": 1,
-        "size3": 1,
-        "stride0": 8,
-        "stride1": 1,
-        "stride2": 1,
-        "stride3": 1,
-        "originShape0": 4,
-        "originShape1": 8,
-    }
+
+    assert tensor.build_memref_launch_fields() == expected
+    assert execution._pack_launch_args(
+        [tensor], _memref_field_layout()
+    ) == struct.pack("<13Q", *expected)
 
 
-def test_build_memref_launch_fields_reuses_metadata_and_tracks_pointer_change() -> None:
+def test_build_memref_launch_fields_tracks_pointer_change() -> None:
     tensor = _bound_fake(
         (4, 8), tla.Float16, stride_args=(8, 1), coord_args=(0, 0), data_ptr=0x1000
     )
 
     first = tensor.build_memref_launch_fields()
-    assert tensor.build_memref_launch_fields() is first
-
     tensor.data_ptr = 0x2000
     rebound = tensor.build_memref_launch_fields()
-    assert rebound is not first
-    assert rebound["allocated"] == 0x2000
-    assert rebound["aligned"] == 0x2000
-    assert rebound["offset"] == 0
-    assert {key: value for key, value in rebound.items() if key not in {"allocated", "aligned"}} == {
-        key: value for key, value in first.items() if key not in {"allocated", "aligned"}
-    }
+    assert rebound[:3] == (0x2000, 0x2000, 0)
+    assert rebound[3:] == first[3:]
 
 
-def test_pack_launch_args_expands_unified_memref_fields() -> None:
-    tensor = _bound_fake((17,), tla.Int32, stride_args=(1,), coord_args=(0,), data_ptr=0xABCD00)
-    payload = execution._pack_launch_args([tensor], _memref_field_layout())
-    assert len(payload) == 104
-    values = struct.unpack("<13Q", payload)
-    assert values == (0xABCD00, 0xABCD00, 0, 17, 1, 1, 1, 1, 1, 1, 1, 17, 1)
+def test_pack_launch_args_rejects_noncanonical_memref_fields() -> None:
+    fields = (_UNIFIED_FIELDS[1], _UNIFIED_FIELDS[0], *_UNIFIED_FIELDS[2:])
 
-
-def test_pack_launch_args_expands_rank2_unified_memref_fields() -> None:
-    tensor = _bound_fake((4, 8), tla.Float16, stride_args=(8, 1), coord_args=(0, 0), data_ptr=0x1000)
-    payload = execution._pack_launch_args([tensor], _memref_field_layout())
-    assert len(payload) == 104
-    values = struct.unpack("<13Q", payload)
-    assert values == (0x1000, 0x1000, 0, 4, 8, 1, 1, 8, 1, 1, 1, 4, 8)
+    with pytest.raises(
+        execution.TlaUnsupportedAbiError,
+        match="contiguous canonical 13-field run",
+    ):
+        execution._prepare_abi_packer(_memref_field_layout(fields))
 
 
 def _two_tensor_memref_field_layout() -> compiler_bridge.KernelAbiLayout:

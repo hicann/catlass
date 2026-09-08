@@ -371,18 +371,17 @@ def test_make_tensor_like_uses_ptr_dtype_instead_of_like_dtype() -> None:
 def _zn_l0a_tensor(*, origin_m: int = 32, origin_n: int = 32) -> tla.Tensor:
     from catlass.core_api import _remap_tensor_like_prefix_fields_for_layout_trees
 
-    trees = _remap_tensor_like_prefix_fields_for_layout_trees(
+    remapped = _remap_tensor_like_prefix_fields_for_layout_trees(
         (origin_m, origin_n), "f16", "zN"
     )
-    assert trees is not None
-    shape, stride, coord, origin = trees
+    assert remapped is not None
     return make_fake_tensor(
         tla.Float16,
-        shape,
-        stride,
+        remapped.shape,
+        remapped.stride,
         addrspace=tla.AddressSpace.l0a,
-        origin_shape=origin,
-        coord=coord,
+        origin_shape=remapped.origin_shape,
+        coord=remapped.coord,
         layout_tag=tla.arch.zN,
     )
 

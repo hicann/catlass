@@ -6,6 +6,7 @@ import builtins as _builtins
 import inspect
 import math
 import sys
+from dataclasses import dataclass
 from enum import Enum
 from itertools import chain
 from typing import TYPE_CHECKING, Any, Callable, Iterable, NoReturn, Sequence, TypeAlias
@@ -1722,6 +1723,24 @@ def _c0_geometry(element_bits: int) -> tuple[int, int]:
     return c0, c0 * _CATLASS_C0_NUM_PER_FRACTAL
 
 
+@dataclass(frozen=True, slots=True)
+class _RemappedTensorMetadata:
+    """Layout-specific trees and their canonical flat metadata views."""
+
+    # Compiler-facing shape tree; NZ-family layouts use a nested 2x2 tuple.
+    shape: tuple[Any, ...]
+    # Compiler-facing stride tree matching the structure of ``shape``.
+    stride: tuple[Any, ...]
+    # Flat logical coordinate tuple used by compiler tensor metadata.
+    coord: tuple[Any, ...]
+    # Flat logical origin shape shared by compiler metadata and launch packing.
+    origin_shape: tuple[Any, ...]
+    # Canonical preorder leaves of ``shape`` for launch packing.
+    flat_shape: tuple[Any, ...]
+    # Canonical preorder leaves of ``stride`` for launch packing.
+    flat_stride: tuple[Any, ...]
+
+
 def _ceil_div(a: int, b: int) -> int:
     if b <= 0:
         raise ValueError("ceil_div divisor must be positive")
@@ -2082,7 +2101,7 @@ def _remap_tensor_like_prefix_fields_for_layout_trees(
     layout: str,
     *,
     linear_stride_alignment_bytes: int | None = None,
-) -> tuple[tuple[Any, ...], tuple[Any, ...], tuple[Any, ...], tuple[Any, ...]] | None:
+) -> _RemappedTensorMetadata | None:
     """Derive shape/stride/coord/origin as nested tuple trees for ``layout`` (TLA-style when fractal).
 
     ``origin_shape`` must be a flat ``(N,)`` or ``(M, N)`` Tla index tree with ``int`` or
@@ -2097,7 +2116,10 @@ def _remap_tensor_like_prefix_fields_for_layout_trees(
             return None
         layout_tag = layout.strip()
         if layout_tag == "RowMajor":
-            return ((length,), (1,), (0,), (length,))
+            shape = (length,)
+            stride = (1,)
+            origin = (length,)
+            return _RemappedTensorMetadata(shape, stride, (0,), origin, shape, stride)
         return None
 
     origin_pair = _flat_dim_pair_from_tree(origin_shape)
@@ -2120,71 +2142,111 @@ def _remap_tensor_like_prefix_fields_for_layout_trees(
         leading_stride = (
             None if cols is None else _round_up(cols, linear_alignment_elements)
         )
-        return ((rows, cols), (leading_stride, 1), coord_tree, origin_shape_tree)
+        shape = (rows, cols)
+        stride = (leading_stride, 1)
+        return _RemappedTensorMetadata(
+            shape,
+            stride,
+            coord_tree,
+            origin_shape_tree,
+            shape,
+            stride,
+        )
     if layout_tag == "ColumnMajor":
         leading_stride = (
             None if rows is None else _round_up(rows, linear_alignment_elements)
         )
-        return ((rows, cols), (1, leading_stride), coord_tree, origin_shape_tree)
+        shape = (rows, cols)
+        stride = (1, leading_stride)
+        return _RemappedTensorMetadata(
+            shape,
+            stride,
+            coord_tree,
+            origin_shape_tree,
+            shape,
+            stride,
+        )
     if layout_tag in _MX_SCALE_GM_LAYOUT_TOKENS:
         # An e8m0 scale block in GM is a plain contiguous matrix; only its
         # orientation matters here. The fractal structure the copy needs is
         # rebuilt on the device side from rows / cols / pitch, so the descriptor
         # carries just the two leaves and no C0 rounding applies -- the scale C0
         # is 2, fixed by the format, not derived from the element width.
-        if is_row_major_layout(layout_tag):
-            return ((rows, cols), (cols, 1), coord_tree, origin_shape_tree)
-        return ((rows, cols), (1, rows), coord_tree, origin_shape_tree)
+        shape = (rows, cols)
+        stride = (cols, 1) if is_row_major_layout(layout_tag) else (1, rows)
+        return _RemappedTensorMetadata(
+            shape,
+            stride,
+            coord_tree,
+            origin_shape_tree,
+            shape,
+            stride,
+        )
     if layout_tag == "zN":
         rows_round_up = None if rows is None else _round_up(rows, c0_num_per_fractal)
         ceil_div_rows = None if rows is None else _ceil_div(rows, c0_num_per_fractal)
         ceil_div_cols = None if cols is None else _ceil_div(cols, ele_num_per_c0)
-        layout_shape = (
-            (c0_num_per_fractal, ceil_div_rows),
-            (ele_num_per_c0, ceil_div_cols),
-        )
         stride_scale = _mul_int_optional(rows_round_up, ele_num_per_c0)
-        layout_stride = (
-            (ele_num_per_c0, ele_num_per_fractal),
-            (1, stride_scale),
+        flat_shape = (c0_num_per_fractal, ceil_div_rows, ele_num_per_c0, ceil_div_cols)
+        flat_stride = (ele_num_per_c0, ele_num_per_fractal, 1, stride_scale)
+        shape = ((flat_shape[0], flat_shape[1]), (flat_shape[2], flat_shape[3]))
+        stride = ((flat_stride[0], flat_stride[1]), (flat_stride[2], flat_stride[3]))
+        return _RemappedTensorMetadata(
+            shape,
+            stride,
+            coord_tree,
+            origin_shape_tree,
+            flat_shape,
+            flat_stride,
         )
-        return layout_shape, layout_stride, coord_tree, origin_shape_tree
     if layout_tag == "nZ":
         cols_round_up = None if cols is None else _round_up(cols, c0_num_per_fractal)
         ceil_div_rows = None if rows is None else _ceil_div(rows, ele_num_per_c0)
         ceil_div_cols = None if cols is None else _ceil_div(cols, c0_num_per_fractal)
-        layout_shape = (
-            (ele_num_per_c0, ceil_div_rows),
-            (c0_num_per_fractal, ceil_div_cols),
-        )
         stride_scale = _mul_int_optional(cols_round_up, ele_num_per_c0)
-        layout_stride = (
-            (1, stride_scale),
-            (ele_num_per_c0, ele_num_per_fractal),
+        flat_shape = (ele_num_per_c0, ceil_div_rows, c0_num_per_fractal, ceil_div_cols)
+        flat_stride = (1, stride_scale, ele_num_per_c0, ele_num_per_fractal)
+        shape = ((flat_shape[0], flat_shape[1]), (flat_shape[2], flat_shape[3]))
+        stride = ((flat_stride[0], flat_stride[1]), (flat_stride[2], flat_stride[3]))
+        return _RemappedTensorMetadata(
+            shape,
+            stride,
+            coord_tree,
+            origin_shape_tree,
+            flat_shape,
+            flat_stride,
         )
-        return layout_shape, layout_stride, coord_tree, origin_shape_tree
     if layout_tag == "nNMxScale":
         rows_round_up = (
             None if rows is None else _round_up(rows, _MX_SCALE_ELE_NUM_PER_C0)
         )
-        layout_shape = (
-            (
-                _MX_SCALE_ELE_NUM_PER_C0,
-                None if rows is None else _ceil_div(rows, _MX_SCALE_ELE_NUM_PER_C0),
-            ),
-            (
-                c0_num_per_fractal,
-                None if cols is None else _ceil_div(cols, c0_num_per_fractal),
-            ),
+        ceil_div_rows = (
+            None if rows is None else _ceil_div(rows, _MX_SCALE_ELE_NUM_PER_C0)
         )
-        layout_stride = (
-            (1, _MX_SCALE_ELE_NUM_PER_FRACTAL),
-            (
-                _MX_SCALE_ELE_NUM_PER_C0,
-                _mul_int_optional(rows_round_up, c0_num_per_fractal),
-            ),
+        ceil_div_cols = None if cols is None else _ceil_div(cols, c0_num_per_fractal)
+        stride_scale = _mul_int_optional(rows_round_up, c0_num_per_fractal)
+        flat_shape = (
+            _MX_SCALE_ELE_NUM_PER_C0,
+            ceil_div_rows,
+            c0_num_per_fractal,
+            ceil_div_cols,
         )
-        return layout_shape, layout_stride, coord_tree, origin_shape_tree
+        flat_stride = (
+            1,
+            _MX_SCALE_ELE_NUM_PER_FRACTAL,
+            _MX_SCALE_ELE_NUM_PER_C0,
+            stride_scale,
+        )
+        shape = ((flat_shape[0], flat_shape[1]), (flat_shape[2], flat_shape[3]))
+        stride = ((flat_stride[0], flat_stride[1]), (flat_stride[2], flat_stride[3]))
+        return _RemappedTensorMetadata(
+            shape,
+            stride,
+            coord_tree,
+            origin_shape_tree,
+            flat_shape,
+            flat_stride,
+        )
     if layout_tag in ("zZ", "zZMxScale"):
         if layout_tag == "zZMxScale":
             ele_num_per_c0 = _MX_SCALE_ELE_NUM_PER_C0
@@ -2192,16 +2254,19 @@ def _remap_tensor_like_prefix_fields_for_layout_trees(
         cols_round_up = None if cols is None else _round_up(cols, ele_num_per_c0)
         ceil_div_rows = None if rows is None else _ceil_div(rows, c0_num_per_fractal)
         ceil_div_cols = None if cols is None else _ceil_div(cols, ele_num_per_c0)
-        layout_shape = (
-            (c0_num_per_fractal, ceil_div_rows),
-            (ele_num_per_c0, ceil_div_cols),
-        )
         stride_scale = _mul_int_optional(cols_round_up, c0_num_per_fractal)
-        layout_stride = (
-            (ele_num_per_c0, stride_scale),
-            (1, ele_num_per_fractal),
+        flat_shape = (c0_num_per_fractal, ceil_div_rows, ele_num_per_c0, ceil_div_cols)
+        flat_stride = (ele_num_per_c0, stride_scale, 1, ele_num_per_fractal)
+        shape = ((flat_shape[0], flat_shape[1]), (flat_shape[2], flat_shape[3]))
+        stride = ((flat_stride[0], flat_stride[1]), (flat_stride[2], flat_stride[3]))
+        return _RemappedTensorMetadata(
+            shape,
+            stride,
+            coord_tree,
+            origin_shape_tree,
+            flat_shape,
+            flat_stride,
         )
-        return layout_shape, layout_stride, coord_tree, origin_shape_tree
     if layout_tag == "L0Clayout":
         # Keep L0C consistent with tla::MakeLayout<..., L0C>, which uses
         # a fixed fractal element count (256) regardless of dtype.
@@ -2209,32 +2274,43 @@ def _remap_tensor_like_prefix_fields_for_layout_trees(
         rows_round_up = None if rows is None else _round_up(rows, c0_num_per_fractal)
         ceil_div_rows = None if rows is None else _ceil_div(rows, c0_num_per_fractal)
         ceil_div_cols = None if cols is None else _ceil_div(cols, c0_num_per_fractal)
-        layout_shape = (
-            (c0_num_per_fractal, ceil_div_rows),
-            (c0_num_per_fractal, ceil_div_cols),
-        )
         stride_scale = _mul_int_optional(rows_round_up, c0_num_per_fractal)
-        layout_stride = (
-            (c0_num_per_fractal, l0c_ele_num_per_fractal),
-            (1, stride_scale),
+        flat_shape = (
+            c0_num_per_fractal,
+            ceil_div_rows,
+            c0_num_per_fractal,
+            ceil_div_cols,
         )
-        return layout_shape, layout_stride, coord_tree, origin_shape_tree
+        flat_stride = (c0_num_per_fractal, l0c_ele_num_per_fractal, 1, stride_scale)
+        shape = ((flat_shape[0], flat_shape[1]), (flat_shape[2], flat_shape[3]))
+        stride = ((flat_stride[0], flat_stride[1]), (flat_stride[2], flat_stride[3]))
+        return _RemappedTensorMetadata(
+            shape,
+            stride,
+            coord_tree,
+            origin_shape_tree,
+            flat_shape,
+            flat_stride,
+        )
     if layout_tag == "zNUnAlign":
         # zNUnAlign is zN without M-axis fractal blocking: leaf[0] = rows (runtime,
         # not the compile-time C0_NUM_PER_FRACTAL), leaf[1] = 1. stride[1] = stride[3]
         # = rows * ele_num_per_c0 (runtime, not the compile-time ele_num_per_fractal).
         # N axis keeps the ele_num_per_c0 sub-blocking of zN.
         ceil_div_cols = None if cols is None else _ceil_div(cols, ele_num_per_c0)
-        layout_shape = (
-            (rows, 1),
-            (ele_num_per_c0, ceil_div_cols),
-        )
         stride_scale = _mul_int_optional(rows, ele_num_per_c0)
-        layout_stride = (
-            (ele_num_per_c0, stride_scale),
-            (1, stride_scale),
+        flat_shape = (rows, 1, ele_num_per_c0, ceil_div_cols)
+        flat_stride = (ele_num_per_c0, stride_scale, 1, stride_scale)
+        shape = ((flat_shape[0], flat_shape[1]), (flat_shape[2], flat_shape[3]))
+        stride = ((flat_stride[0], flat_stride[1]), (flat_stride[2], flat_stride[3]))
+        return _RemappedTensorMetadata(
+            shape,
+            stride,
+            coord_tree,
+            origin_shape_tree,
+            flat_shape,
+            flat_stride,
         )
-        return layout_shape, layout_stride, coord_tree, origin_shape_tree
     return None
 
 
@@ -2256,7 +2332,7 @@ def _remap_tensor_like_trees_for_layout(
     origin_shape: Any,
     dtype: str,
     layout: str,
-) -> tuple[tuple[Any, ...], tuple[Any, ...], tuple[Any, ...], tuple[Any, ...]] | None:
+) -> _RemappedTensorMetadata | None:
     return _remap_tensor_like_prefix_fields_for_layout_trees(
         origin_shape, dtype, layout
     )
@@ -2443,7 +2519,7 @@ def _format_tensor_type_descriptor(
     layout_remap = _remap_tensor_like_trees_for_layout(
         tile_shape, parent.element_type, parent.layout_tag
     )
-    shape = layout_remap[0] if layout_remap is not None else tile_shape
+    shape = layout_remap.shape if layout_remap is not None else tile_shape
     # ``tile_view`` follows the parent storage stride (TLA ``GetTileLayout``): only the
     # logical view shape/coord/origin update here; fractal stride is not re-derived from the tile.
     stride = parent.stride
@@ -4334,7 +4410,10 @@ def make_tensor_like(
         linear_stride_alignment_bytes=_CATLASS_BYTE_PER_C0,
     )
     if remapped is not None:
-        shape, stride, coord, origin = remapped
+        shape = remapped.shape
+        stride = remapped.stride
+        coord = remapped.coord
+        origin = remapped.origin_shape
     else:
         shape = like_type.shape
         stride = like_type.stride
@@ -4352,14 +4431,6 @@ def make_tensor_like(
         addrspace=addr,
         ptr_alignment=ptr_alignment,
     )
-    if remapped is not None:
-        shape, stride, coord, origin = remapped
-        result_desc = result_desc.with_updates(
-            shape=shape,
-            stride=stride,
-            coord=coord,
-            origin_shape=origin,
-        )
     ctx = loc.context if loc is not None else mlir_ir.Context.current
     layout_tag_attr = mlir_ir.Attribute.parse(f"#tla.layout_tag<{layout}>", ctx)
     op = mlir_ir.Operation.create(

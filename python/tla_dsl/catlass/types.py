@@ -661,12 +661,13 @@ def _try_remap_stride_coord_trees(
     ):
         return ((1,), (0,))
 
-    trees = _remap_tensor_like_prefix_fields_for_layout_trees(
+    remapped = _remap_tensor_like_prefix_fields_for_layout_trees(
         origin_components, dtype.strip().lower(), layout_token.strip()
     )
-    if trees is None:
+    if remapped is None:
         return (None, None)
-    _, stride_tree, coord_tree, _ = trees
+    stride_tree = remapped.stride
+    coord_tree = remapped.coord
     stride_ok = _tree_structure_mask(stride_tree) == _tree_structure_mask(comp)
     return (stride_tree if stride_ok else None, coord_tree)
 

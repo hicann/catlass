@@ -52,6 +52,22 @@ if TYPE_CHECKING:
 # CATLASS_DSL_KEEP tokens: ir / ir-debug / kernel.
 _KEEP_ALL_TOKENS: frozenset[str] = frozenset({"ir", "ir-debug", "kernel"})
 _POINTER_ABI_SIZE = 8
+_DYNAMIC_GM_MEMREF_FIELDS = (
+    "allocated",
+    "aligned",
+    "offset",
+    "size0",
+    "size1",
+    "size2",
+    "size3",
+    "stride0",
+    "stride1",
+    "stride2",
+    "stride3",
+    "originShape0",
+    "originShape1",
+)
+_DYNAMIC_GM_MEMREF_PACKER = struct.Struct("<13Q")
 _DEBUG_PRINT_WORKSPACE_SENTINEL_TEXT = b"TLA_PRNT"
 _DEBUG_PRINT_WORKSPACE_SENTINEL = int.from_bytes(
     _DEBUG_PRINT_WORKSPACE_SENTINEL_TEXT, byteorder="big"
@@ -223,7 +239,6 @@ class _PreparedAbiSlot:
 class _PreparedMemrefRun:
     logical_index: int
     start: int
-    fields: tuple[str, ...]
     packer: struct.Struct
 
 
@@ -953,12 +968,17 @@ def _prepare_abi_packer(
             fields.append(argument.field)
             previous_end = candidate.end
             index += 1
+        field_order = tuple(fields)
+        if field_order != _DYNAMIC_GM_MEMREF_FIELDS:
+            raise TlaUnsupportedAbiError(
+                "dynamic GM memref fields must be one contiguous canonical "
+                f"13-field run, got {field_order!r}"
+            )
         memref_runs.append(
             _PreparedMemrefRun(
                 logical_index=logical_index,
                 start=run_start,
-                fields=tuple(fields),
-                packer=struct.Struct("<" + "Q" * len(fields)),
+                packer=_DYNAMIC_GM_MEMREF_PACKER,
             )
         )
     return _PreparedAbiPacker(
@@ -1022,21 +1042,10 @@ def _pack_launch_args_prepared(
             )
         payload[slot.start : slot.end] = encoded
 
-    memref_fields: dict[int, Mapping[str, int]] = {}
     for run in packer.memref_runs:
         value = args[run.logical_index]
-        fields = memref_fields.get(run.logical_index)
-        if fields is None:
-            builder = getattr(value, "build_memref_launch_fields", None)
-            if not callable(builder):
-                raise TlaUnsupportedAbiError(
-                    "dynamic GM memref launch requires "
-                    "Tensor.build_memref_launch_fields()"
-                )
-            fields = builder()
-            memref_fields[run.logical_index] = fields
-        encoded_values = tuple(int(fields[field]) for field in run.fields)
-        run.packer.pack_into(payload, run.start, *encoded_values)
+        values = value.build_memref_launch_fields()
+        run.packer.pack_into(payload, run.start, *values)
     return bytes(payload)
 
 

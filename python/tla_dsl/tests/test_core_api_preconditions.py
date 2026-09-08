@@ -202,18 +202,17 @@ def _tensor_arg(
 
     dtype_token = str(getattr(dtype, "dtype", "")).strip().lower()
     layout_token = _resolve_arch_layout_tag(layout_tag, for_op="test")
-    trees = _remap_tensor_like_prefix_fields_for_layout_trees(
+    remapped = _remap_tensor_like_prefix_fields_for_layout_trees(
         origin_mn, dtype_token, layout_token
     )
-    assert trees is not None
-    _shape, stride, coord, origin = trees
+    assert remapped is not None
     return make_fake_tensor(
         dtype,
         (fractal[0], fractal[1]),
-        stride,
+        remapped.stride,
         addrspace=addrspace,
-        origin_shape=origin,
-        coord=coord,
+        origin_shape=remapped.origin_shape,
+        coord=remapped.coord,
         layout_tag=layout_tag,
     )
 

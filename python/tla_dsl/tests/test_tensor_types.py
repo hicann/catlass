@@ -197,7 +197,7 @@ def test_make_fake_tensor_is_unbound() -> None:
            )
     assert fake.data_ptr == 0
     assert fake._external_binding is False
-    assert fake._shape_tuple == (4, 8)
+    assert fake._flat_shape == (4, 8)
     assert fake.stride == (8, 1)
     assert isinstance(fake, tla.Tensor)
 

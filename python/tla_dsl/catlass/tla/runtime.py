@@ -167,6 +167,8 @@ class _Tensor(TensorABC):
         coord: Iterable[Any] | None = None,
         stride: Any | None = None,
         layout_tag: Any | None = None,
+        flat_shape: tuple[int, ...] | None = None,
+        flat_stride: tuple[int, ...] | None = None,
     ) -> None:
         self._external_binding = False
         self._assumed_align: int | None = None
@@ -175,56 +177,40 @@ class _Tensor(TensorABC):
         # keeps the producer object itself alive meanwhile.
         self._dlpack_source: Any = None
         self._dlpack_release: weakref.finalize | None = None
-        self._shape_components: tuple[Any, ...] | None = None
-        self._shape_tuple: tuple[int, ...] | None = None
+        self._shape: tuple[Any, ...] | None = None
+        self._stride: tuple[Any, ...] | None = None
+        self._flat_shape: tuple[int, ...] | None = None
+        self._flat_stride: tuple[int, ...] | None = None
         self._dynamic_shape_tree: Any | None = None
         self._dynamic_origin_shape_tree: Any | None = None
         self._dynamic_stride_tree: Any | None = None
-        self._memref_launch_fields_cache: dict[str, int] | None = None
 
         # None is treated as unbound (compile-time placeholder tensors).
         self.data_ptr = 0 if data_ptr is None else int(data_ptr)
         # Non-zero data_ptr means the host already owns a device buffer (e.g. torch).
         if self.data_ptr != 0:
             self._external_binding = True
-        self._initialize_metadata(
-            shape,
-            dtype,
-            addrspace=addrspace,
-            origin_shape=origin_shape,
-            coord=coord,
-            stride=stride,
-            layout_tag=layout_tag,
-        )
-
-    def _initialize_metadata(
-        self,
-        shape: Any,
-        dtype: Any,
-        *,
-        addrspace: Any,
-        origin_shape: Iterable[Any] | None,
-        coord: Iterable[Any] | None,
-        stride: Any | None,
-        layout_tag: Any | None,
-    ) -> None:
         from ..core_api import _resolve_arch_layout_tag
 
         self._dtype = _coerce_host_tensor_dtype(dtype)
         self.addrspace = _coerce_host_tensor_addrspace(addrspace)
         self.layout_tag = _resolve_arch_layout_tag(layout_tag, for_op="Tensor")
 
-        comp = _as_host_index_tree(shape, what="shape")
-        flat = tuple(_flatten_int_leaves_tree(comp))
-        self._shape_tuple = flat
-        self._shape_components = comp
+        shape_tree = _as_host_index_tree(shape, what="shape")
+        resolved_flat_shape = (
+            tuple(int(value) for value in _flatten_int_leaves_tree(shape_tree))
+            if flat_shape is None
+            else flat_shape
+        )
+        self._flat_shape = resolved_flat_shape
+        self._shape = shape_tree
 
         if origin_shape is None:
             raise TypeError("Tensor origin_shape is required")
         self.origin_shape = _as_host_index_tree(origin_shape, what="origin_shape")
 
         rs_stride, rs_coord = _try_remap_stride_coord_trees(
-            comp, self.origin_shape, self._dtype, self.layout_tag
+            shape_tree, self.origin_shape, self._dtype, self.layout_tag
         )
 
         if coord is None:
@@ -244,14 +230,22 @@ class _Tensor(TensorABC):
                     "Tensor(stride=None): cannot derive stride from layout remap "
                     "(remap stride tree must match shape tree); pass an explicit stride tree"
                 )
-            self._stride_components = rs_stride
+            self._stride = rs_stride
         else:
-            sc = _as_host_index_tree(stride, what="stride")
-            if _tree_structure_mask(sc) != _tree_structure_mask(comp):
+            stride_tree = _as_host_index_tree(stride, what="stride")
+            if _tree_structure_mask(stride_tree) != _tree_structure_mask(shape_tree):
                 raise ValueError(
                     "Tensor stride component tree must match shape tree structure"
                 )
-            self._stride_components = sc
+            self._stride = stride_tree
+        resolved_flat_stride = (
+            tuple(int(value) for value in _flatten_int_leaves_tree(self._stride))
+            if flat_stride is None
+            else flat_stride
+        )
+        self._flat_stride = resolved_flat_stride
+        if len(resolved_flat_stride) != len(resolved_flat_shape):
+            raise RuntimeTensorError("Tensor shape/stride flat metadata rank mismatch")
 
     @property
     def dtype(self) -> Any:
@@ -259,13 +253,13 @@ class _Tensor(TensorABC):
 
     @property
     def shape(self) -> Any:
-        if self._shape_components is None:
+        if self._shape is None:
             raise NotImplementedError(f"{type(self).__name__} does not expose shape")
-        return self._shape_components
+        return self._shape
 
     @property
     def stride(self) -> Any:
-        return self._stride_components
+        return self._stride
 
     def _require_bound(self) -> None:
         if not getattr(self, "_external_binding", False) or self.data_ptr == 0:
@@ -311,7 +305,7 @@ class _Tensor(TensorABC):
                 f"got coord={self.coord!r}"
             )
         flat_strides = _flat_layout_leaves(self.stride)
-        shape_tuple = self._shape_tuple or ()
+        shape_tuple = self._flat_shape or ()
         if leading_dim is None:
             from ..core_api import (
                 _COLUMN_MAJOR_LAYOUT_TOKENS,
@@ -388,7 +382,7 @@ class _Tensor(TensorABC):
                 "mark_*_dynamic requires a root tensor with zero coordinates; "
                 f"got coord={self.coord!r}"
             )
-        flat_shape = list(self._shape_tuple or ())
+        flat_shape = list(self._flat_shape or ())
         rank = len(flat_shape)
         if mode < 0 or mode >= rank:
             raise RuntimeTensorError(f"mode={mode} out of range for rank {rank}")
@@ -421,13 +415,13 @@ class _Tensor(TensorABC):
         return self
 
     def _mark_shape_modes_dynamic(self, modes: Any) -> None:
-        shape_components = self._shape_components
+        shape_components = self._shape
         if shape_components is None:
             raise TypeError(
                 "Tensor metadata is incomplete; construct tensors with tla.make_shape, "
                 "origin_shape, coord, and stride metadata"
             )
-        rank = len(self._shape_tuple or ())
+        rank = len(self._flat_shape or ())
         mode_indices = tuple(int(mode) for mode in modes)
         if any(mode < 0 or mode >= rank for mode in mode_indices):
             raise RuntimeTensorError(
@@ -478,62 +472,44 @@ class _Tensor(TensorABC):
             self.origin_shape, origin_leaves
         )
 
-    def build_memref_launch_fields(self) -> dict[str, int]:
-        """Build unified schema-v4 GM launch fields (13 slots, pad unused with 1)."""
+    def build_memref_launch_fields(self) -> tuple[int, ...]:
+        """Build unified schema-v4 GM launch values in canonical ABI order."""
         self._require_bound()
         data_ptr = int(self.data_ptr)
-        cached = self._memref_launch_fields_cache
-        if cached is not None and cached["allocated"] == data_ptr:
-            return cached
 
-        shape = tuple(int(dim) for dim in (self._shape_tuple or ()))
+        shape = self._flat_shape or ()
         if not shape:
             raise RuntimeTensorError(
                 "build_memref_launch_fields requires a concrete DLPack shape"
             )
-        strides = [int(s) for s in _flat_layout_leaves(self.stride)]
-        if len(strides) != len(shape):
+        rank = len(shape)
+        if rank > 4:
             raise RuntimeTensorError(
-                "build_memref_launch_fields shape/stride rank mismatch"
+                "build_memref_launch_fields supports at most 4 shape/stride "
+                f"leaves, got {rank}"
             )
+        strides = self._flat_stride
         # Concrete origin from construction (mark_* only shadows the type tree).
-        origin_leaves = [int(v) for v in _flat_layout_leaves(self.origin_shape)]
-        if not origin_leaves:
-            origin_leaves = list(shape)
+        origin = self.origin_shape
 
-        def _pad4(values: list[int]) -> list[int]:
-            if len(values) > 4:
-                raise RuntimeTensorError(
-                    f"build_memref_launch_fields supports at most 4 shape/stride "
-                    f"leaves, got {len(values)}"
-                )
-            return list(values) + [1] * (4 - len(values))
-
-        sizes = _pad4(list(shape))
-        stride_vals = _pad4(list(strides))
-        origin0 = int(origin_leaves[0]) if len(origin_leaves) >= 1 else 1
-        origin1 = int(origin_leaves[1]) if len(origin_leaves) >= 2 else 1
-
-        fields = {
-            "allocated": data_ptr,
-            "aligned": data_ptr,
-            "offset": 0,
-            "size0": sizes[0],
-            "size1": sizes[1],
-            "size2": sizes[2],
-            "size3": sizes[3],
-            "stride0": stride_vals[0],
-            "stride1": stride_vals[1],
-            "stride2": stride_vals[2],
-            "stride3": stride_vals[3],
-            "originShape0": origin0,
-            "originShape1": origin1,
-        }
-        self._memref_launch_fields_cache = fields
-        return fields
+        return (
+            data_ptr,
+            data_ptr,
+            0,
+            shape[0],
+            shape[1] if rank > 1 else 1,
+            shape[2] if rank > 2 else 1,
+            shape[3] if rank > 3 else 1,
+            strides[0],
+            strides[1] if rank > 1 else 1,
+            strides[2] if rank > 2 else 1,
+            strides[3] if rank > 3 else 1,
+            origin[0],
+            origin[1] if len(origin) > 1 else 1,
+        )
 
     def _layout_shape_components(self) -> tuple[Any, ...]:
-        shape_components = self._shape_components
+        shape_components = self._shape
         if shape_components is None:
             raise TypeError(
                 "Tensor metadata is incomplete; construct tensors with tla.make_shape, "
@@ -555,7 +531,7 @@ class _Tensor(TensorABC):
 
     def tla_tensor_type_descriptor(self) -> TlaTensorTypeDescriptor:
         """Structured ``!tla.tensor`` descriptor from host metadata."""
-        st = self._shape_tuple
+        st = self._flat_shape
         addr_kw = (self.addrspace or "gm").strip()
         if st is None or self.stride is None or self.layout_tag is None:
             raise TypeError(
@@ -713,8 +689,8 @@ def from_dlpack(
     except DlpackBridgeError as exc:
         raise RuntimeTensorError(str(exc)) from exc
 
-    phys_shape = tuple(int(dim) for dim in parsed["shape"])
-    phys_strides = tuple(int(stride) for stride in parsed["strides"])
+    phys_shape = parsed["shape"]
+    phys_strides = parsed["strides"]
     data_ptr = int(parsed["data_ptr"])
 
     device_type = int(parsed["device_type"])
@@ -832,24 +808,24 @@ def from_dlpack(
                 "from_dlpack origin_shape=... must be an int tree / tuple "
                 "(Kernel tla.make_shape is not a Host API)"
             )
-    trees = _remap_tensor_like_prefix_fields_for_layout_trees(
+    remapped = _remap_tensor_like_prefix_fields_for_layout_trees(
         logical_origin, dtype_token, layout_token
     )
-    if trees is None:
+    if remapped is None:
         raise RuntimeTensorError(
             f"from_dlpack cannot derive layout metadata for origin_shape={logical_origin!r} "
             f"layout={resolved_layout!r}"
         )
-    shape_tree, stride_tree, coord_tree, origin_tree = trees
-
     tensor = _Tensor(
-        shape_tree,
+        remapped.shape,
         dtype,
-        origin_shape=origin_tree,
-        coord=coord_tree,
-        stride=stride_tree,
+        origin_shape=remapped.origin_shape,
+        coord=remapped.coord,
+        stride=remapped.stride,
         layout_tag=resolved_layout,
         data_ptr=data_ptr,
+        flat_shape=remapped.flat_shape,
+        flat_stride=remapped.flat_stride,
     )
     if assumed_align is not None:
         tensor._assumed_align = int(assumed_align)
