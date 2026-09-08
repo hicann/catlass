@@ -113,6 +113,62 @@ TEST_P(TileCopyL0CToGmTlaAscend950Test, L0CToRowMajorTestNoQuant)
     ASSERT_EQ(dataCopyArg->unitFlag, unitFlag);
 }
 
+// Data-path: L0C → ColumnMajor (GM)
+// Element-type: no-except (float → float)
+// Speciality: NoQuant (TLA no-quant Fixpipe, nz2dn enabled)
+TEST_P(TileCopyL0CToGmTlaAscend950Test, L0CToColumnMajorTestNoQuant)
+{
+    using ElementAccumulator = float;
+    using ElementDst = float;
+    using LayoutSrc = detail::LayoutL0C;
+    using LayoutDstTag = layout::ColumnMajor;
+    using LayoutDst = detail::TagToLayout_t<ElementDst, LayoutDstTag>;
+    constexpr auto fixpipeFmt = AscendC::CO2Layout::COLUMN_MAJOR;
+    constexpr auto quantPre = CopyL0CToDstQuantMode<Arch::Ascend950, ElementAccumulator, ElementDst,
+        ScaleGranularity::NO_QUANT>::VALUE;
+
+    AscendC::LocalTensor<ElementAccumulator> l0cSrc;
+    AscendC::GlobalTensor<ElementDst> gmDst;
+
+    setShape<ElementDst>();
+    auto layoutSrc = tla::MakeLayoutL0C(_row, _col);
+    auto layoutDst = tla::MakeLayout<ElementDst, LayoutDstTag>(_dst_row, _dst_col);
+    L0CToGm950TensorSrc<ElementAccumulator, LayoutSrc> tensorL0C(l0cSrc, layoutSrc);
+    L0CToGm950TensorDst<ElementDst, LayoutDst> tensorGm(gmDst, layoutDst);
+
+    CopyL0CToGmTla<Arch::Ascend950, decltype(tensorL0C), decltype(tensorGm)> copyL0CToGm;
+    const uint8_t unitFlag = 0;
+    copyL0CToGm(tensorGm, tensorL0C, unitFlag);
+
+    auto logs = AscendCCallLogger::Instance().GetLogs();
+    ASSERT_EQ(logs.size(), 1);
+
+    const auto& logFixpipe = logs[0];
+    ASSERT_EQ(logFixpipe.name, "Fixpipe");
+    ASSERT_EQ(logFixpipe.args.size(), 3);
+    ASSERT_EQ(logFixpipe.GetArgsTAt(0).Type(), typeid(ElementDst));
+    ASSERT_EQ(logFixpipe.GetArgsTAt(1).Type(), typeid(ElementAccumulator));
+    ASSERT_EQ(logFixpipe.GetArgsAt(0).GetInstAddr(), 0);
+    ASSERT_EQ(logFixpipe.GetArgsAt(1).GetInstAddr(), 0);
+
+    const auto* fixpipeCfg = logFixpipe.GetArgsTAt(2).Value<AscendC::FixpipeConfig>();
+    ASSERT_EQ(fixpipeCfg->format, fixpipeFmt);
+    ASSERT_FALSE(fixpipeCfg->isToUB);
+
+    const auto* fixpipeArg = logFixpipe.GetArgsAt(2).Value<AscendC::FixpipeParamsC310<fixpipeFmt>>();
+    ASSERT_EQ(fixpipeArg->nSize, _col);
+    ASSERT_EQ(fixpipeArg->mSize, _row);
+    ASSERT_EQ(fixpipeArg->srcStride, _row_round);
+    ASSERT_EQ(fixpipeArg->dstStride, _row);
+    ASSERT_EQ(fixpipeArg->quantPre, quantPre);
+    ASSERT_EQ(fixpipeArg->reluEn, _0);
+    ASSERT_EQ(fixpipeArg->unitFlag, unitFlag);
+    ASSERT_EQ(fixpipeArg->params.dnNum, _1);
+    ASSERT_EQ(fixpipeArg->params.srcNzMatrixStride, _0);
+    ASSERT_EQ(fixpipeArg->params.dstDnMatrixStride, _0);
+    ASSERT_EQ(fixpipeArg->params.srcNzC0Stride, _1);
+}
+
 // Data-path: L0C → zN (GM)
 // Element-type: no-except (float → float)
 // Speciality: NoQuant (TLA no-quant DataCopy, channelSplit enabled, nz2nd off)
