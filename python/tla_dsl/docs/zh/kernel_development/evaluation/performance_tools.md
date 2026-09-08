@@ -27,7 +27,7 @@ nav_order: 20
 ### 基础依赖使能
 
 在进行 DSL 开发与测试前，请先行确认基础环境已准备完毕。详细步骤请参考 [快速上手](../../../../../../docs/zh/1_Practice/01_quick_start.md)，完成 CANN 的下载安装与环境变量使能。
-DSL 的底层编译依赖于 AscendNPU-IR。在执行后续编译操作前，请参阅 [环境准备](../../../../docs/zh/dsl_development/build_guide/index.md) 并按该文档指引完成至 [运行测试用例](../../../../docs/zh/dsl_development/build_guide/index.md#运行测试用例) 相关内容。
+DSL 的底层编译依赖于 AscendNPU-IR。在执行后续编译操作前，请参阅 [环境准备](../../dsl_development/build_guide/environment.md) 并按该文档指引完成至 [运行测试用例](../../dsl_development/build_guide/testing.md) 相关内容。
 
 ## 用msProf进行单算子性能分析
 

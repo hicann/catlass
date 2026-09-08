@@ -6,13 +6,10 @@ CATLASS DSL 是 CATLASS 的 Python 前端。它在 AscendNPU-IR 的基础上构�
 
 ## 文档
 
-- [环境准备](docs/zh/dsl_development/build_guide/index.md)：环境要求及安装入口。
-- [编译与测试](docs/zh/dsl_development/build_guide/index.md)：构建、pytest、lit 和端到端用例。
-- [Host API 参考](docs/zh/api/host_api_reference.md)：Host 侧 `@tla.kernel`、`tla.compile` / 启动、Host tensor。
-- [Kernel API 参考](docs/zh/api/kernel_api_reference.md)：Kernel 侧 Core API。
-- [API 文档生成](docs/zh/api/generate_api_docs.md)：从源码 docstring 重新生成英文 API 参考。
-- [AscendNPU-IR 构建](docs/zh/dsl_development/build_guide/ascend_npu_ir.md)：手动构建AscendNPU-IR。
-- [手动 CMake 构建](docs/zh/dsl_development/advanced/manual_cmake_build.md)：直接配置 `csrc/mlir` 的进阶用法。
+- [**快速开始**](docs/zh/quick_start.md)：安装与首个示例
+- [**Kernel 开发指南**](docs/zh/kernel_development/index.md)：核心概念（语法约束、控制流、Layout、Tensor 接入、编译启动）与调测优化
+- [**DSL 框架开发指南**](docs/zh/dsl_development/index.md)：环境搭建、构建测试、特性开发、进阶 CMake 调试
+- [**API 文档**](docs/zh/api/index.md)：Kernel / Host API 参考与文档生成
 
 ## 快速开始
 
@@ -32,7 +29,7 @@ CATLASS DSL 各版本支持的硬件平台及所需的最低 CANN 版本如下�
 - 系统：CANN 支持的 Linux
 - 软件依赖：Python `>= 3.10, < 3.14`、CMake `>= 3.28, < 4.0`、Ninja `>= 1.12`、Clang / Clang++ `>= 10`（构建 AscendNPU-IR 时；推荐 19）、lld、lit、FileCheck 与 LLVM 配套、AscendNPU-IR `feature/regbase@a07821269…`
 
-完整的环境要求与安装方式见[环境准备](docs/zh/dsl_development/build_guide/index.md#构建环境要求)。
+完整的环境要求与安装方式见[环境准备](docs/zh/dsl_development/build_guide/environment.md)。
 
 ## 目录概览
 
@@ -41,12 +38,11 @@ python/tla_dsl/
 ├── 3rdparty/AscendNPU-IR/  # AscendNPU-IR 子模块
 ├── catlass/                # Python 前端与运行时
 ├── csrc/mlir/              # TLA Dialect 与编译器实现
-├── docs/zh/                # 中文文档
-├── docs/en/                # 英文文档
+├── docs/                   # 文档
 ├── examples/               # 端到端示例
 ├── tests/                  # 单元、lit 与端到端测试
 ├── Dockerfile              # 开发环境镜像定义
 ├── build_docker_image.sh   # 镜像构建入口
 ├── build.sh                # 项目构建入口
-└── requirements.txt        # 非 CANN Python 依赖
+└── requirements.txt        # 开发 Python 依赖
 ```

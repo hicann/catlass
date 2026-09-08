@@ -4,7 +4,7 @@ nav_order: 50
 
 # CMake 目标调试
 
-TLA DSL 通过 [`build.sh`](../build_guide/index.md#构建-catlass-dsl) 统一准备 AscendNPU-IR 路径并配置 CMake。本文面向需要单独编译 CMake 目标或运行编译器回归测试的开发者。
+TLA DSL 通过 [`build.sh`](../build_guide/build.md) 统一准备 AscendNPU-IR 路径并配置 CMake。本文面向需要单独编译 CMake 目标或运行编译器回归测试的开发者。
 
 ## 配置和编译
 

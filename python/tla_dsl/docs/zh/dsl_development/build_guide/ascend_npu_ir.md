@@ -6,7 +6,7 @@ nav_order: 40
 
 CATLASS DSL 基于 AscendNPU-IR 的 Dialect 构建 TLA Dialect。构建所需的源码头文件、生成头文件、静态库、MLIR CMake 包和 Python bindings 均来自 AscendNPU-IR。
 
-AscendNPU-IR 的版本以 CATLASS 锁定的 revision 为准（即 `.gitmodules` 中 `python/tla_dsl/3rdparty/AscendNPU-IR` 指向的提交 `feature/regbase@a07821269…`）。具体的环境版本要求统一见[环境准备](index.md#构建环境要求)。
+AscendNPU-IR 的版本以 CATLASS 锁定的 revision 为准（即 `.gitmodules` 中 `python/tla_dsl/3rdparty/AscendNPU-IR` 指向的提交 `feature/regbase@a07821269…`）。具体的环境版本要求统一见[环境准备](environment.md#构建环境要求)。
 
 ## 获取源码
 
@@ -73,4 +73,4 @@ test -f build/install/lib/libMLIRHIVMDialect.a
 export CATLASS_DSL_PREBUILT_ASCENDNPU_IR="$PWD"
 ```
 
-然后返回 DSL 子项目并按照[编译与测试](index.md)继续。
+然后返回 DSL 子项目并按照[构建 CATLASS DSL](build.md)和[运行测试用例](testing.md)继续。
