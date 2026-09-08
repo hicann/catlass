@@ -2,15 +2,14 @@
 
 本目录下提供的系列样例是 **CATLASS DSL** 下的多种向量（Vector）操作示例。
 
-
 ## 功能说明
 
 向量运算是 NPU 上基础的计算原语，在 AIV 物理核上执行，整体执行流程包括：
+
 1. 构造 GM （Global memory）上的输入/输出 `tla.Tensor`；
 2. 启动MTE2，将数据搬运至 UB （Unified Buffer）；
 3. 加载至寄存器上，以 `VL`（向量寄存器位宽， 256 字节）为粒度分块执行各类向量指令；
 4. 输出回 UB，然后启动 MTE3，将数据搬运回 GM。
-
 
 ## 代码组织
 
@@ -62,7 +61,6 @@
 | [**`register_control_flow.py`**](register_control_flow.py) | 控制流示例，演示 for-loop 控制流及 `VectorSSA` 与 `MaskSSA` 跨循环边界存活。 |
 | [**`load_and_store_scalar_after_reduction.py`**](load_and_store_scalar_after_reduction.py) | UB 标量访问示例，对归约结果做标量 `load` / `store` 操作。 |
 
-
 ## 约束说明
 
  - 各样例支持的数据类型如下（`f32`、`f16`、`bf16`、`i8`、`i16`、`i32`）：
@@ -89,7 +87,6 @@
 | `load_and_store_scalar_after_reduction.py` | f32 |
 
  - 浮点类型（`f32`/`f16`/`bf16`）与整型（`i8`/`i16`/`i32`）在精度校验上采用不同的策略：浮点类型使用容差法进行精度判断（绝对误差可由 `--atol` 给定），整型则进行逐元素比对。
-
 
 ## 使用示例
 
