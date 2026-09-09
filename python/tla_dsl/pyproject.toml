@@ -14,7 +14,7 @@ name = "ascend-catlass-dsl"
 description = "Ascend CATLASS DSL (Tla IR / Python catlass), nested under the CATLASS repository."
 readme = "README.md"
 requires-python = ">=3.10,<3.14"
-license-files = ["LICENSE"]
+license-files = ["LICENSE", "LICENSE-APACHE"]
 authors = [
   { name = "Ascend CATLASS DSL Contributors" }
 ]
@@ -26,6 +26,8 @@ dynamic = ["version"]
 [project.optional-dependencies]
 docs = [
   "mkdocs>=1.6.1",
+  "mkdocs-material",
+  "mkdocs-static-i18n>=1.3.1,<2"
 ]
 
 # PEP 735 dependency groups. Install with:
