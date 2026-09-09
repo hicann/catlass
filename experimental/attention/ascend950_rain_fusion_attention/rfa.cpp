@@ -46,7 +46,7 @@ struct Options {
     uint32_t isVariedLen{0};
     uint32_t deviceId{0};
 
-    string dataPath = "../../examples/81_ascend950_rain_fusion_attention/data";
+    string dataPath = "../../examples/ascend950_rain_fusion_attention/data";
 
     Options() = default;
 

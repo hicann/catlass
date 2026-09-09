@@ -1,22 +1,27 @@
 # FlashAttentionInfer Example Readme
 
+> **注意**：本样例位于 `experimental/` 目录下，如需编译运行，请先将样例目录拷贝至 `examples/` 下，并在 `examples/CMakeLists.txt` 中添加样例名称 `ascend950_rain_fusion_attention`。
+
 ## 代码组织
 
 ```text
-├── 81_ascend950_rain_fusion_attention
-│   ├── CMakeLists.txt  # CMake编译文件
-│   ├── rfa_kernel.cpp
-│   ├── rfa_kernel_utils.cpp
-│   ├── rfa_tiling.cpp
-│   ├── rfa_tilingdata.h
-│   ├── rfa.cpp
-│   ├── gen_data.py
-│   └── README.md
+experimental
+├── attention
+│   └── ascend950_rain_fusion_attention
+│       ├── CMakeLists.txt  # CMake编译文件
+│       ├── rfa_kernel.cpp
+│       ├── rfa_kernel_utils.h
+│       ├── rfa_tiling.cpp
+│       ├── rfa_tilingdata.h
+│       ├── rfa.cpp
+│       ├── gen_data.py
+│       ├── test_81_ascend950_rain_fusion_attention.py
+│       └── README.md
 ```
 
 ## 使用示例
 
-- 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/zh/1_Practice/01_quick_start.md#算子编译)
+- 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../../docs/zh/1_Practice/01_quick_start.md#算子编译)
 
 - 接下来，先执行`gen_data.py`，生成测试样例，测试用例需要从命令行输入, 执行该命令后会在当前路径下生成data目录，包含算子的输入数据和用于精度验证的golden数据。
 - 然后执行算子，这里要注意的是执行算子的输入shape和上面第一步生成数据的shape一致。
@@ -42,12 +47,12 @@ innerPrec=0 # 仅gen_data.py使用，对应kernel逻辑固定为0
 function build() {
     rm -rf build
     rm -rf output
-    bash scripts/build.sh -DCATLASS_ARCH=3510 81_ascend950_rain_fusion_attention --clean
+    bash scripts/build.sh -DCATLASS_ARCH=3510 ascend950_rain_fusion_attention --clean
 }
 
 function gen_data() {
-    rm -rf examples/81_ascend950_rain_fusion_attention/data
-    python3 examples/81_ascend950_rain_fusion_attention/gen_data.py $batch $qSeqlen $kvSeqlen $numHeads $kvHeads $headSize $blockShapeX $blockShapeY \
+    rm -rf examples/ascend950_rain_fusion_attention/data
+    python3 examples/ascend950_rain_fusion_attention/gen_data.py $batch $qSeqlen $kvSeqlen $numHeads $kvHeads $headSize $blockShapeX $blockShapeY \
         "$dtype" $qInputLayout $kvInputLayout $isVariedLen
     echo "Data gen finished"
 }
@@ -55,7 +60,7 @@ function gen_data() {
 function run_kernel {
     echo 'Case: B=' $batch ' qS=' $qSeqlen ' kvS=' $kvSeqlen ' qN=' $numHeads ' kvN=' $kvHeads ' headSize=' $headSize ' bX=' $blockShapeX ' bY=' $blockShapeY
     cd output/bin/
-    ./81_ascend950_rain_fusion_attention $batch $qSeqlen $kvSeqlen $numHeads $kvHeads $headSize $blockShapeX $blockShapeY \
+    ./ascend950_rain_fusion_attention $batch $qSeqlen $kvSeqlen $numHeads $kvHeads $headSize $blockShapeX $blockShapeY \
         $dtype $qInputLayout $kvInputLayout $isVariedLen --device $device
 }
 

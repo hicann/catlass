@@ -12,6 +12,6 @@ set(RFA_SOURCES
     rfa.cpp)
 
 set_source_files_properties(${RFA_SOURCES} PROPERTIES LANGUAGE ASC)
-catlass_example_add_executable(81_ascend950_rain_fusion_attention mix ${RFA_SOURCES})
-target_include_directories(81_ascend950_rain_fusion_attention PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(81_ascend950_rain_fusion_attention PRIVATE m)
+catlass_example_add_executable(ascend950_rain_fusion_attention mix ${RFA_SOURCES})
+target_include_directories(ascend950_rain_fusion_attention PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(ascend950_rain_fusion_attention PRIVATE m)
