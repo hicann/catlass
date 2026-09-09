@@ -2923,6 +2923,13 @@ public:
             hivm_regbaseintrins::kDavinciCallingConvAttrName,
             hivm_regbaseintrins::SIMT_EntryAttr::get(ctx, static_cast<uint32_t>(blockDimX * blockDimY * blockDimZ)));
         vf->setAttr("noinline", BoolAttr::get(ctx, false));
+        // SIMT regions are always vector-core functions. A pure AIV module gets
+        // away without this attribute because hivm.module_core_type covers the
+        // whole module, but a mixed AIC+AIV module has no single core type, and
+        // hivmc-a5 rejects the outlined function with "Unknown core type". SIMT
+        // is inherently vector-core work, so mark it AIV outright rather than
+        // deriving it from the enclosing function or the pass order.
+        vf->setAttr(hivm::TFuncCoreTypeAttr::name, hivm::TFuncCoreTypeAttr::get(ctx, hivm::TFuncCoreType::AIV));
 
         Block* vfBody = vf.addEntryBlock();
         OpBuilder bodyBuilder(vfBody, vfBody->begin());
