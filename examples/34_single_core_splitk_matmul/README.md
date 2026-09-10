@@ -61,3 +61,8 @@ cd output/bin
 ```text
 Compare success.
 ```
+
+## 模板推荐场景
+
+本样例为单核切 K 模板（SingleCoreSplitk），L0C 容量不足以容纳放大后的 L1 tile 时，单核内沿 K 分轮累加；实测大尺寸场景较 `00_basic_matmul` 有 1.3~1.75 倍收益且 K 越大收益越高（详见[单核切K策略说明](./34_single_splitk_matmul.md)）。
+推荐 MNK 范围：`M、N ≥ 2048 且 K ≥ 4000` 的大尺寸场景（M、N 过小或 K 偏低会出现分核负载不均衡）。

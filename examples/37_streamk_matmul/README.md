@@ -35,3 +35,7 @@ Compare success.
 当`B / C > 1`且`B % C <= C * 0.8`时，采用该模板可能获取较优的性能。
 
 **测试性能建议注释掉精度比较代码。**
+
+## 模板推荐场景
+
+推荐 MNK 范围：设 `blocks = ceil(M/128)×ceil(N/256)`，推荐 `24 < blocks < 192 且 blocks % 24 ∈ [1, 19] 且 K > 3072`。具体以 `102_dynamic_optimized_matmul` 泛化工程的路由结论为准。

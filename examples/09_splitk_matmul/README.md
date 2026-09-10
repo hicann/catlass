@@ -28,3 +28,8 @@ cd output/bin
 ```text
 Compare success.
 ```
+
+## 模板推荐场景
+
+本样例为多核切 K 模板（MultiCoreSplitk），针对深 K 窄 C、分块数不足导致核数吃不满的场景，沿 K 切分提升并行度。
+推荐 MNK 范围：`基本块数 ceil(M/128)×ceil(N/256) ≤ 12 且 K > 5120`，或 `基本块数 ≤ 2 且 K > 1024`，输入非 512B 对齐时可参考 `22_padding_splitk_matmul`，具体以 `102_dynamic_optimized_matmul` 泛化工程的路由结论为准。

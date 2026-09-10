@@ -32,3 +32,8 @@ cd output/bin
 ```text
 Compare success.
 ```
+
+## 模板推荐场景
+
+本样例与 `06_optimized_matmul` 为同一模板的 TLA 抽象实现，推荐场景相同。
+推荐 MNK 范围：`M ≥ 256、N ≥ 256、256 < K ≤ 3072`，K/N 对齐与否均可，具体以 `102_dynamic_optimized_matmul` 泛化工程的路由结论为准。

@@ -32,3 +32,7 @@ cd /output/bin
 ```text
 Compare success.
 ```
+
+## 模板推荐场景
+
+本样例与 `06_optimized_matmul` 为同一模板（`MmadAtlasA2Preload` 调度策略、tile 一致），区别是 B 矩阵输入即 zN 分形格式（NZ 布局），GM→L1 读取 B 时无需 ND2NZ 随路转换。推荐 MNK 范围： `M ≥ 256、N ≥ 256、256 < K ≤ 3072`。

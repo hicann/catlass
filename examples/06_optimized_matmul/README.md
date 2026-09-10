@@ -78,3 +78,8 @@ static const uint32_t COMPUTE_LENGTH_B = 48 * 1024 / sizeof(ElementB);
 +static const uint32_t COMPUTE_LENGTH_A = 96 * 1024 / sizeof(ElementA);
 +static const uint32_t COMPUTE_LENGTH_B = 96 * 1024 / sizeof(ElementB);
 ```
+
+## 模板推荐场景
+
+本样例为 Preload 优化模板（Preload 预取 + ShuffleK + A/B padding 前处理）的经典接口实现。
+推荐 MNK 范围：`M ≥ 256、N ≥ 256、256 < K ≤ 3072`，K/N 对齐与否均可（对齐走 Preload 主力路径，非对齐自动启用 padding 前处理），具体以 `102_dynamic_optimized_matmul` 泛化工程的路由结论为准。

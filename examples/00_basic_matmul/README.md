@@ -84,3 +84,8 @@ BasicMatmul所涉及的关键模板参数如下:
     ```text
     Compare success.
     ```
+
+## 模板推荐场景
+
+本样例无 Padding/Preload/切K 等优化，为各优化样例的公共基线。
+推荐 MNK 范围：`M ≥ 256、N ≥ 256、256 < K ≤ 3072`，且 K、N 均 512B 对齐，具体以 `102_dynamic_optimized_matmul` 泛化工程的路由结论为准。

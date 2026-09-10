@@ -28,3 +28,7 @@ cd output/bin
 ```text
 Compare success.
 ```
+
+## 模板推荐场景
+
+推荐 MNK 范围：`M ≥ 256、N ≥ 256、256 < K ≤ 3072`，且 K 非 512B 对齐，具体以 `102_dynamic_optimized_matmul` 泛化工程的路由结论为准。

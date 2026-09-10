@@ -34,3 +34,8 @@ cd output/bin
 ```text
 Compare success.
 ```
+
+## 模板推荐场景
+
+本样例为小 shape 单波模板（SmallMatmul），在 basic_matmul 基础上减少不必要的 scalar 计算开销。
+推荐 MNK 范围：`基本块数 ceil(M/128)×ceil(N/256) ≤ 核数（24）且 K ≤ 256`，N 对齐 512B，具体以 `102_dynamic_optimized_matmul` 泛化工程的路由结论为准。

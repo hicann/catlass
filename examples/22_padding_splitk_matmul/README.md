@@ -32,3 +32,8 @@ cd output/bin
 ```text
 Compare success.
 ```
+
+## 模板推荐场景
+
+本样例为 `09_splitk_matmul` 的 padding 版本（A/B 做 padding 后再切 K 分核）。
+推荐 MNK 范围：`ceil(M/128)×ceil(N/256) ≤ 12 且 K > 5120`，或 `ceil(M/128)×ceil(N/256) ≤ 2 且 K > 1024`，且 K 非 512B 对齐。具体以 `102_dynamic_optimized_matmul` 泛化工程的路由结论为准。
