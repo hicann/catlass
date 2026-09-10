@@ -1214,9 +1214,6 @@ static LogicalResult lowerNestedVectorOp(Operation& op, OpBuilder& b, ModuleOp m
     }
 
     if (auto fullOp = dyn_cast<::tla::FullOp>(op)) {
-        Value source = lookupOrCloneScalarValue(b, fullOp.getValue(), valueMap);
-        if (!source)
-            return failure();
         // No vector operand to key off: the broadcast width comes from the result
         // VectorSSA element type.
         auto resultType = dyn_cast<::tla::VectorSSAType>(fullOp.getResult().getType());
@@ -1225,11 +1222,47 @@ static LogicalResult lowerNestedVectorOp(Operation& op, OpBuilder& b, ModuleOp m
         auto opCtx = deriveVecCtxForElement(resultType.getElementType());
         if (failed(opCtx))
             return fullOp.emitError("unsupported tla.full result element type"), failure();
+        // An optional tla mask predicates the broadcast lanes; all-true when absent.
+        Value mask;
+        if (fullOp.getMask()) {
+            mask = valueMap.lookup(fullOp.getMask());
+            if (!mask)
+                return failure();
+        } else {
+            mask = allTrueMaskFor(b, loc, opCtx->vecType, fullOp.getResult().getType());
+        }
+
+        // A one-lane vector fragment source (e.g. a tla.reduce result) is already
+        // register-resident; broadcast lane 0 across the register with AVE
+        // vector_broadcast. This stays entirely in the vector register file and
+        // avoids reading a vector lane into a scalar register, which the SIMD
+        // backend cannot legalize.
+        if (Value mapped = valueMap.lookup(fullOp.getValue())) {
+            if (auto srcVecType = dyn_cast<VectorType>(mapped.getType())) {
+                if (srcVecType.getElementType() != opCtx->elementType)
+                    return fullOp.emitError("tla.full source element type ")
+                               << srcVecType.getElementType() << " does not match vector element type "
+                               << opCtx->elementType,
+                           failure();
+                valueMap[fullOp.getResult()] =
+                    b.create<hivmave::VFBroadcastVectorOp>(loc, opCtx->vecType, mapped, mask, true).getRes();
+                return success();
+            }
+        }
+
+        // A plain scalar source broadcasts across the register via AVE broadcast
+        // (mask-capable scalar splat, lowers to vdups.z). i1 never reaches here:
+        // it is absent from the op's accepted value types, and an i1 result type
+        // fails deriveVecCtxForElement above.
+        Value source = lookupOrCloneScalarValue(b, fullOp.getValue(), valueMap);
+        if (!source)
+            return failure();
         if (source.getType() != opCtx->elementType)
             return fullOp.emitError("tla.full scalar type ")
                        << source.getType() << " does not match vector element type " << opCtx->elementType,
                    failure();
-        valueMap[fullOp.getResult()] = b.create<hivmave::VFBroadcastScalarOp>(loc, opCtx->vecType, source).getRes();
+        valueMap[fullOp.getResult()] =
+            b.create<hivmave::VFBroadcastScalarMaskOp>(loc, opCtx->vecType, source, mask).getRes();
         return success();
     }
 

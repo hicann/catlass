@@ -522,7 +522,26 @@ static mlir::LogicalResult verifyMaskMatchesVector(mlir::Operation* op, mlir::Va
         return mlir::success();                                                \
     }
 
-TLA_VERIFY_IN_VEC_FUNC(FullOp)
+// tla.full broadcasts a scalar, or a *one-lane* vector fragment such as a
+// tla.reduce result. A full-width VectorSSA source is rejected: the lowering
+// would silently splat lane 0 and drop the rest. The optional predicate must
+// match the result, checked with the same helper the binary ops use.
+mlir::LogicalResult FullOp::verify()
+{
+    if (!hasEnclosingRegion<VecFuncOp>(getOperation()))
+        return emitOpError("must be nested inside a tla.vec.func region");
+    auto resultType = mlir::dyn_cast<VectorSSAType>(getResult().getType());
+    if (!resultType)
+        return emitOpError("expected a !tla.vector result");
+    if (auto srcType = mlir::dyn_cast<VectorSSAType>(getValue().getType())) {
+        auto lanes = srcType.getValidLanes();
+        if (lanes != 1)
+            return emitOpError() << "vector source must be a one-lane fragment, got " << lanes
+                                 << " valid lanes; broadcasting a full-width vector would keep "
+                                    "lane 0 only";
+    }
+    return verifyMaskMatchesVector(getOperation(), getMask(), resultType);
+}
 
 #undef TLA_VERIFY_IN_VEC_FUNC
 

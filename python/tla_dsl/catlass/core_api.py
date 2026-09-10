@@ -820,9 +820,7 @@ def _const_f32(value: float, *, loc: mlir_ir.Location | None = None) -> mlir_ir.
     return op.results[0]
 
 
-_FULL_SUPPORTED_DTYPES = frozenset(
-    ("i1", "i8", "i16", "i32", "i64", "bf16", "f16", "f32")
-)
+_FULL_SUPPORTED_DTYPES = frozenset(("i8", "i16", "i32", "i64", "bf16", "f16", "f32"))
 
 _ARANGE_SUPPORTED_DTYPES = frozenset(("i8", "i16", "i32", "i64"))
 _ARANGE_ORDERS = frozenset(("increase", "decrease"))
@@ -1299,20 +1297,31 @@ def _mask_ssa_type_for_element_type(
     return TlaMaskSSATypeDescriptor(physical_lanes=_vector_lane_count(element_bytes))
 
 
-def _require_mask_matches_vector(
-    op_name: str, mask_value: mlir_ir.Value, vector_value: mlir_ir.Value
+def _require_mask_matches_element_type(
+    op_name: str, mask_value: mlir_ir.Value, element_type: str
 ) -> None:
+    """The lane check, against an element type rather than a vector value.
+
+    tla.full has to validate its mask against the *result* it is about to
+    build, which does not exist yet, so the check cannot start from a Value.
+    """
     mask_desc = _mask_ssa_type_for_mlir_value(mask_value)
-    vector_desc = _vector_ssa_type_for_mlir_value(vector_value)
     expected_physical_lanes = _mask_ssa_type_for_element_type(
-        vector_desc.element_type
+        element_type
     ).physical_lanes
     if mask_desc.physical_lanes != expected_physical_lanes:
         _op_error(
             op_name,
             f"mask has {mask_desc.physical_lanes} predicate lanes, expected "
-            f"{expected_physical_lanes} for {vector_desc.element_type} VectorSSA",
+            f"{expected_physical_lanes} for {element_type} VectorSSA",
         )
+
+
+def _require_mask_matches_vector(
+    op_name: str, mask_value: mlir_ir.Value, vector_value: mlir_ir.Value
+) -> None:
+    vector_desc = _vector_ssa_type_for_mlir_value(vector_value)
+    _require_mask_matches_element_type(op_name, mask_value, vector_desc.element_type)
 
 
 def _vector_ssa_type_from_tensor_descriptor(
@@ -5782,27 +5791,39 @@ def mmad_mx(
 
 @dsl_user_op
 def full(
-    value: bool | int | float | Numeric,
+    value: bool | int | float | Numeric | VectorSSA,
     dtype: type[Numeric],
     *,
+    mask: Any | None = None,
     loc: mlir_ir.Location | None = None,
 ) -> VectorSSA:
     """Directory: Vector Compute / Data Fill
     Description:
-        Fill a 1-D vector SSA with a Python scalar literal.
+        Fill a 1-D vector SSA with a Python scalar literal, or broadcast a
+        one-lane vector fragment (e.g. a `VectorSSA.reduce` result) across every lane.
 
         Parameters:
-        - `value` (`bool | int | float | Numeric`): Fill constant. Required.
+        - `value` (`bool | int | float | Numeric | VectorSSA`): Fill constant, or a
+          one-lane vector fragment to broadcast. Required.
         - `dtype` (`type[Numeric]`): Vector element type. Required.
+        - `mask` (`MaskSSA | None`): Predicates which lanes are written. Optional;
+          defaults to writing every lane.
 
         Constraints:
         - Must be called inside a `@tla.kernel`-decorated kernel function.
-        - Must be called inside `tla.vec.func()`; `value` must be a Python scalar literal.
+        - Must be called inside `tla.vec.func()`; `value` must be a Python scalar
+          literal, a host `Numeric`, or a one-lane vector fragment.
+        - A vector `value` must have exactly one valid lane and its element type
+          must match `dtype`.
+        - `mask`, when given, must match the result element type.
 
         Example:
         ```python
         with tla.vec.func(mode="simd"):
             zeros = tla.full(0.0, dtype=tla.Float32)
+            all_lanes, _ = tla.update_mask(64, tla.Float32)
+            total = src.reduce(tla.ReductionOp.ADD, mask=all_lanes)
+            spread = tla.full(total, dtype=tla.Float32)
         ```
     """
     state = _runtime._current_frontend_state()
@@ -5810,6 +5831,10 @@ def full(
         raise TlaCoreAPIError("tla.full is only allowed inside tla.vec.func")
     _runtime._require_enclosing_region("full", "vec.func")
     _require_dtype("full", "dtype", dtype, 1)
+    mask_value = None
+    if mask is not None:
+        _require_category("full", "mask", mask, "mask_ssa", 2)
+        mask_value = _as_value(mask)
     if not (
         isinstance(dtype, type)
         and issubclass(dtype, Numeric)
@@ -5820,13 +5845,6 @@ def full(
             f"invalid argument 'dtype' (position 1): expected concrete Numeric "
             f"(e.g. tla.Float32), got {_type_name(dtype)}",
         )
-    resolved = _resolve_bound_value(value)
-    if isinstance(resolved, Numeric):
-        if isinstance(resolved.value, mlir_ir.Value):
-            _op_error("full", "value must be a Python scalar literal or host Numeric")
-        resolved = resolved.value
-    if not isinstance(resolved, (bool, int, float)):
-        _op_error("full", "value must be a Python scalar literal or host Numeric")
     dtype_token = str(dtype.dtype).strip().lower()
     if dtype_token not in _FULL_SUPPORTED_DTYPES:
         _op_error(
@@ -5835,6 +5853,53 @@ def full(
             f"{', '.join(sorted(_FULL_SUPPORTED_DTYPES))}",
         )
     desc = _full_vector_ssa_descriptor(dtype_token)
+    if mask_value is not None:
+        # Against the result: a 64-lane f32 predicate is not valid for a
+        # 128-lane f16 result, and the lowering would forward it unchanged.
+        _require_mask_matches_element_type("full", mask_value, desc.element_type)
+
+    # A one-lane vector fragment (e.g. a VectorSSA.reduce result) can be broadcast
+    # directly across the register -- no scalar materialization needed, which
+    # matters because the SIMD backend cannot read a vector lane into a scalar
+    # register.
+    if _category(value) == "vector_ssa":
+        src_value = _as_value(value)
+        src_desc = _vector_ssa_type_for_mlir_value(src_value)
+        if src_desc.element_type != dtype_token:
+            _op_error(
+                "full",
+                f"invalid argument 'value' (position 0): fragment element type "
+                f"{src_desc.element_type} does not match dtype {dtype_token}",
+            )
+        # Only a one-lane fragment. A full-width vector would lower to the same
+        # AVE vector_broadcast, which keeps lane 0 and silently drops the rest.
+        if src_desc.valid_lanes != 1:
+            _op_error(
+                "full",
+                f"invalid argument 'value' (position 0): expected a one-lane "
+                f"vector fragment (e.g. a VectorSSA.reduce result), got "
+                f"{src_desc.valid_lanes} valid lanes; broadcasting a full-width "
+                f"vector would keep lane 0 only",
+            )
+        return VectorSSA(
+            _tla_ops_gen.full(_coerce_type(desc), src_value, mask=mask_value, loc=loc)
+        )
+
+    resolved = _resolve_bound_value(value)
+    if isinstance(resolved, Numeric):
+        if isinstance(resolved.value, mlir_ir.Value):
+            _op_error(
+                "full",
+                "value must be a Python scalar literal, host Numeric, or "
+                "one-lane vector fragment",
+            )
+        resolved = resolved.value
+    if not isinstance(resolved, (bool, int, float)):
+        _op_error(
+            "full",
+            "value must be a Python scalar literal, host Numeric, or one-lane "
+            "vector fragment",
+        )
     scalar_value = int(resolved) if isinstance(resolved, bool) else resolved
     context = loc.context if loc is not None else mlir_ir.Context.current
     scalar = _scalar_constant_for_element_type(
@@ -5843,7 +5908,7 @@ def full(
         desc.element_mlir_type(context),
         loc=loc,
     )
-    result = _tla_ops_gen.full(_coerce_type(desc), scalar, loc=loc)
+    result = _tla_ops_gen.full(_coerce_type(desc), scalar, mask=mask_value, loc=loc)
     return VectorSSA(result)
 
 

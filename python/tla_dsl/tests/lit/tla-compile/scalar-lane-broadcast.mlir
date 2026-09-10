@@ -1,6 +1,8 @@
 // RUN: %tla_compile %s -o - --mlir-print-ir-after=tla-vector-region 2>&1 | %filecheck %s
 
-// CHECK: ave.hir.scalar_broadcast
+// A plain (non-i1) scalar tla.full lowers to the mask-capable AVE broadcast
+// (all-true mask when none is given), which lowers to vdups.z.
+// CHECK: ave.hir.broadcast
 
 !t = !tla.tensor<!tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, RowMajor>, !tla.coord<0>, !tla.ptr<f32, ub, 4>>
 

@@ -806,15 +806,30 @@ def Tla_PtrAddOp : Tla_Op<"ptr_add", [Pure]> {
 }
 
 def Tla_FullOp : Tla_Op<"full", [Pure]> {
-  let summary = "Fill vector lanes with scalar";
+  let summary = "Fill vector lanes with a scalar or one-lane fragment";
   let description = [{
-    Broadcast a scalar value into the vector helper register type selected by the
-    enclosing vector lowering context.
+    Broadcast a value into the vector helper register type selected by the
+    enclosing vector lowering context. ``value`` is either a plain scalar
+    (lowered via AVE ``broadcast``, a mask-capable scalar splat) or a one-lane
+    vector fragment (a ``tla.reduce`` result, lowered via AVE
+    ``vector_broadcast``, which broadcasts lane 0 across the register). The
+    latter avoids materializing a scalar register, which the SIMD backend cannot
+    read from a vector lane.
+
+    ``i1`` is not supported: the AVE ``broadcast`` op does not accept an ``i1``
+    source, so boolean fills must be built another way.
+
+    An optional ``mask`` predicates the broadcast: masked-out lanes are not
+    written. It is passed through to the AVE broadcast op's lane mask; when
+    absent an all-true mask is used.
   }];
-  let arguments = (ins AnyTypeOf<[I1, I8, I16, I32, I64, BF16, F16, F32]>:$value);
+  let arguments = (ins AnyTypeOf<[I8, I16, I32, I64, BF16, F16, F32,
+                                  Tla_VectorSSAType]>:$value,
+                       Optional<Tla_MaskSSAType>:$mask);
   let results = (outs Tla_VectorSSAType:$result);
   let assemblyFormat = [{
-    $value attr-dict `:` type($value) `->` qualified(type($result))
+    $value (`mask` $mask^)? attr-dict `:` type($value)
+    (`mask` qualified(type($mask))^)? `->` qualified(type($result))
   }];
   let hasVerifier = 1;
 }
