@@ -2,11 +2,21 @@
 
 ## 环境准备
 
-> **说明**：请先行确认[基础依赖](../../../README.md#-软硬件配套说明)、[NPU驱动](https://www.hiascend.com/hardware/firmware-drivers/community)和固件已安装。
+### 0. **基础依赖确认**
+
+确认基础依赖（见[README-软硬件配套说明](../../../README.md#-软硬件配套说明)）满足要求，确认NPU驱动是否安装。
+
+```bash
+gcc --version
+cmake --version
+npu-smi info    # 若回显异常则参考下文 1.安装CANN 的在线安装方式完成驱动安装
+```
 
 ### 1. **安装CANN**
 
-根据您所使用的[昇腾产品](https://www.hiascend.com/document/detail/zh/AscendFAQ/ProduTech/productform/hardwaredesc_0001.html)类别，请下载对应的CANN开发套件包`Ascend-cann-toolkit_{version}_linux-{arch}.run`，下载链接见[CANN toolkit](https://www.hiascend.com/zh/developer/download/community/result?module=cann)（有关CATLASS的版本支持情况详见[软件硬件配套说明](../../../README.md#-软硬件配套说明)）。
+建议优先使用在线安装方式[CANN 快速安装](https://www.hiascend.com/cann/download)完成`CANN toolkit`和`NPU驱动`安装。
+
+或者，根据您所使用的[昇腾产品](https://www.hiascend.com/document/detail/zh/AscendFAQ/ProduTech/productform/hardwaredesc_0001.html)类别，请下载对应的CANN开发套件包`Ascend-cann-toolkit_{version}_linux-{arch}.run`，下载链接见[CANN toolkit](https://www.hiascend.com/zh/developer/download/community/result?module=cann)（有关CATLASS的版本支持情况详见[软件硬件配套说明](../../../README.md#-软硬件配套说明)）。
 
 随后安装CANN开发套件包（详情参考[CANN安装指南](https://www.hiascend.com/cann/download)）。
 
@@ -19,11 +29,7 @@ chmod +x Ascend-cann-toolkit_{version}_linux-{arch}.run
 
 - `{version}`: CANN包版本号。
 - `{arch}`: 系统架构。
-- `{install_path}`: 指定安装路径，默认为`/usr/local/Ascend`
-
-其他在线安装方式可参考[CANN 快速安装](https://www.hiascend.com/cann/download)。
-
-### 2. **使能CANN 环境**
+- `{install_path}`: 指定安装路径，默认为`/usr/local/Ascend`。
 
 安装完成后，执行下述指令即完成CANN环境使能。
 
@@ -34,7 +40,7 @@ source /usr/local/Ascend/ascend-toolkit/set_env.sh
 # source ${install_path}/set_env.sh
 ```
 
-### 3. **下载源码**
+### 2. **下载源码**
 
 将CATLASS代码仓下载到本地。
 
@@ -109,4 +115,4 @@ cd output/bin
 Compare success.
 ```
 
-请进一步参考[Host侧代码组装指南](./02_host_example_assembly.md)以开始第一个算子开发。
+请进一步参考[创新样例开发流程指南](./10_innovative_example_development_guide.md)开始第一个创新算子的完整开发，或参考[Host侧代码组装指南](./02_host_example_assembly.md)开始Host侧算子模板组装体验。

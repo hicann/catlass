@@ -1,12 +1,14 @@
 # 创新样例开发流程指南
 
-该文档面向需要在 CATLASS模板库中开发创新算子样例的开发者，以样例44 `quant_matmul_full_loadA_tla`（量化矩阵乘A矩阵全载）为案例，说明从需求分析、方案设计到组件开发、测试合入的完整流程，帮助开发者快速掌握创新样例的开发方法。
+该文档面向需要在 CATLASS模板库中开发创新算子样例的开发者，以[样例44](../../../examples/44_quant_matmul_full_loadA_tla/README.md) `quant_matmul_full_loadA_tla`（量化矩阵乘A矩阵全载）为案例，说明从需求分析、方案设计到组件开发、测试合入的完整流程，帮助开发者快速掌握创新样例的开发方法。
 
 ## 1. 什么是创新样例
 
 CATLASS模板库中的每个样例都是在已有样例基础上的创新和扩展，都带有各自的新特性。开发新样例的核心思路是：**最大化复用已有组件，仅在必要时进行创新开发**。当你的算子需求无法通过现有组件组合完全满足时——例如需要新的数据搬运策略、新的后处理计算逻辑、或新的多核调度方式——就需要在参考已有样例的基础上，开发新的Block层组件或Kernel逻辑。
 
-以样例44为例，它并非从零开始构建，而是结合了两个已有样例的特性：量化矩阵乘的后处理逻辑（BlockEpilogue）复用了样例42（`42_quant_optimized_matmul_tla`）的per-token反量化方案，A矩阵全载策略（包括BlockMmad和BlockScheduler）参考了样例25（`25_matmul_full_loadA`）。其BlockMmad组件（`block_mmad_pingpong_full_loadA_tla.hpp`）是在已有全载组件（`block_mmad_pingpong_full_loadA.hpp`）基础上做的TLA改写，BlockScheduler（`GemmIdentityBlockSwizzleL1FullLoad`）则直接复用了样例25的全载调度策略。样例44没有从零新增任何组件，所有模块均通过复用或TLA改写已有组件完成。
+算子样例可以在[examples](../../../examples/)目录下查询。
+
+以[样例44](../../../examples/44_quant_matmul_full_loadA_tla/README.md)为例，它并非从零开始构建，而是结合了两个已有样例的特性：量化矩阵乘的后处理逻辑（BlockEpilogue）复用了[样例42](../../../examples/42_quant_optimized_matmul_tla/README.md)（`42_quant_optimized_matmul_tla`）的per-token反量化方案，A矩阵全载策略（包括BlockMmad和BlockScheduler）参考了[样例25](../../../examples/25_matmul_full_loadA/README.md)（`25_matmul_full_loadA`）。其BlockMmad组件（`block_mmad_pingpong_full_loadA_tla.hpp`）是在已有全载组件（`block_mmad_pingpong_full_loadA.hpp`）基础上做的TLA改写，BlockScheduler（`GemmIdentityBlockSwizzleL1FullLoad`）则直接复用了[样例25](../../../examples/25_matmul_full_loadA/README.md)的全载调度策略。[样例44](../../../examples/44_quant_matmul_full_loadA_tla/README.md)没有从零新增任何组件，所有模块均通过复用或TLA改写已有组件完成。
 
 ## 2. 设计阶段
 

@@ -1,4 +1,6 @@
-# 模板库优化指引
+# 模板库矩阵乘基础优化指引
+
+> 优先基于**tiling调参**快速获取目标场景的矩阵乘性能提升，而后可以尝试不同的矩阵乘模板组合。
 
 ## CATLASS样例定位
 
@@ -14,14 +16,14 @@ CATLASS算子模板库的定位，是针对GEMM类算子提供的模板样例库
 
 ### Matmul硬件可视化
 
-参考[昇腾社区文档-基本架构](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/opdevg/Ascendcopdevg/atlas_ascendc_10_0008.html)。
+昇腾A2/A3产品硬件架构，参考[昇腾社区文档-基本架构](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/opdevg/Ascendcopdevg/atlas_ascendc_10_0008.html)。
 基础matmul切块、数据搬运、计算涉及的硬件架构如下图，由于使能了doubleBuffer，在L1/L0A/L0B上会保存两块Tile数据。
 
 <img src="https://www.hiascend.com/doc_center/source/zh/canncommercial/850/opdevg/Ascendcopdevg/figure/zh-cn_image_0000002502735896.png" width="80%">
 
 ### TileShape约束
 
-由上可知TileShape在设置时要保证不能超出L1/L0A/L0B/L0C空间大小，同时TileShape取值必须是16的倍数。
+由上可知TileShape在设置时要保证不能超出L1/L0A/L0B/L0C空间大小，同时TileShape取值必须是16的倍数。昇腾A2/A3系列产品相关硬件参数参考[Arch::AtlasA2](../../../include/catlass/arch/arch.hpp)，昇腾950系列产品相关硬件参数参考[Arch::Ascend950](../../../include/catlass/arch/arch.hpp)，下文以昇腾A2/A3系列产品为举例场景。
 
 - 场景一：fp16输入输出，L1TileShape<128,256,256>，L0TileShape<128,256,64>
 
@@ -110,7 +112,7 @@ struct MmadAtlasA2Preload : public MmadAtlasA2 {
 
 - 案例一
 
-场景描述：A矩阵RowMajor，B矩阵ColumnMajor，M 1024，N 576，K 6144，fp16输入输出，20个AIC。
+场景描述：A矩阵RowMajor，B矩阵ColumnMajor，M 1024，N 576，K 6144，fp16输入输出，20个AIC，NPU型号为910B3。
 
 使用06_optimized_matmul，按照默认的L1TileShape<128,256,256>、L0TileShape<128,256,64>，耗时为**72.5us**（不同芯片平台、cann包、驱动下性能表现存在一定差异，仅供参考）。
 
@@ -120,7 +122,7 @@ struct MmadAtlasA2Preload : public MmadAtlasA2 {
 
 - 案例二
 
-场景描述：A矩阵RowMajor，B矩阵zN，M 20，N 6144，K 16384，fp16输入输出，20个AIC。
+场景描述：A矩阵RowMajor，B矩阵zN，M 20，N 6144，K 16384，fp16输入输出，20个AIC，NPU型号为910B3。
 
 此时B矩阵为zN格式（同NZ格式），使用21_basic_matmul_preload_zN，按照默认的L1TileShape<128,256,256>、L0TileShape<128,256,64>，耗时为**181.4us**。
 
@@ -130,7 +132,7 @@ struct MmadAtlasA2Preload : public MmadAtlasA2 {
 
 - 案例三
 
-场景描述：A矩阵RowMajor，B矩阵ColumnMajor，M 1，N 768，K 5120，fp32输入输出，24个AIC。
+场景描述：A矩阵RowMajor，B矩阵ColumnMajor，M 1，N 768，K 5120，fp32输入输出，24个AIC，NPU型号为910B1。
 
 此时AB矩阵数据都沿K轴排布。而K轴512B对齐，直接使用00_basic_matmul，按照fp32数据类型常用的L1TileShape<128,128,256>、L0TileShape<128,128,64>，耗时为**36.3us**。
 
@@ -149,7 +151,7 @@ struct MmadAtlasA2Preload : public MmadAtlasA2 {
 
 - 案例一
 
-场景描述：A矩阵RowMajor，B矩阵zN，M 160，N 6144，K 2048，fp16输入输出，20个AIC。
+场景描述：A矩阵RowMajor，B矩阵zN，M 160，N 6144，K 2048，fp16输入输出，20个AIC，NPU型号为910B3。
 
 使用21_basic_matmul_preload_zN，按照默认的L1TileShape<128,256,256>、L0TileShape<128,256,64>，swizzle设置为<3, 1>，耗时为**40.6us**。swizzle设置为<4, 1>，耗时为**35.3us**。
 
