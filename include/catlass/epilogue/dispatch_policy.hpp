@@ -198,9 +198,10 @@ struct EpilogueAtlasA2Gemv {
 };
 ///////////////////////////
 // For Ascend950, fixpipe-opti
-template <bool SPLIT_M_>
+template <uint32_t UB_STAGES_, bool SPLIT_M_>
 struct EpilogueAscend950Fixpipe {
     using ArchTag = Arch::Ascend950;
+    static constexpr uint32_t UB_STAGES = UB_STAGES_;
     static constexpr bool SPLIT_M = SPLIT_M_;
 };
 // For Ascend950, full dequant

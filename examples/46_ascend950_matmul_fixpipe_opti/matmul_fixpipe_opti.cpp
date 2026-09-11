@@ -98,8 +98,8 @@ static void Run(const Options& options)
     constexpr bool useHF32 = false;
     using DispatchPolicy = Gemm::MmadPingpong<ArchTag, enableUnitFlag, useHF32>;
 
-    using L1TileShape = Shape<Int<256>, Int<256>, Int<128>>;
-    using L0TileShape = Shape<Int<256>, Int<256>, Int<64>>;
+    using L1TileShape = Shape<Int<128>, Int<256>, Int<128>>;
+    using L0TileShape = Shape<Int<128>, Int<256>, Int<64>>;
 
     auto layoutA = tla::MakeLayout<ElementA, LayoutTagA>(m, k);
     auto layoutB = tla::MakeLayout<ElementB, LayoutTagB>(k, n);
@@ -108,6 +108,7 @@ static void Run(const Options& options)
     // dualDstCtrl is not supported in quant/dequant scenarios
     using ElementAccumulator =
         typename Gemm::helper::ElementAccumulatorSelector<ElementA, ElementB>::ElementAccumulator;
+    constexpr uint32_t ubStages = 2;
     constexpr bool splitM = std::is_same_v<ElementC, ElementAccumulator>;
     constexpr auto copyMode = splitM ? Gemm::Tile::CopyL0CToUBMode::SPLIT_M : Gemm::Tile::CopyL0CToUBMode::NO_SPLIT;
 
@@ -116,7 +117,7 @@ static void Run(const Options& options)
     using TileMmad = Gemm::Tile::TileMmadTla<DispatchPolicy::ArchTag, ElementA, TileCopy::LayoutTagL1A>;
     using BlockMmad = Gemm::Block::BlockMmadTla<
         DispatchPolicy, L1TileShape, L0TileShape, ElementA, ElementB, ElementC, ElementBias, TileCopy, TileMmad>;
-    using EpilogueDispatchPolicy = Epilogue::EpilogueAscend950Fixpipe<splitM>;
+    using EpilogueDispatchPolicy = Epilogue::EpilogueAscend950Fixpipe<ubStages, splitM>;
     using BlockEpilogue = Epilogue::Block::BlockEpilogue<EpilogueDispatchPolicy, L0TileShape, ElementC, ElementC>;
 
     using BlockScheduler = typename Gemm::Block::BlockSchedulerAswt<L1TileShape, L0TileShape>;

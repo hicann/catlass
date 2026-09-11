@@ -62,21 +62,23 @@ public:
     using LayoutTagA = typename BlockMmad::TileCopy::LayoutTagA;
     using LayoutTagB = typename BlockMmad::TileCopy::LayoutTagB;
     using LayoutTagC = typename BlockMmad::TileCopy::LayoutTagC;
+    using L1TileShape = typename BlockMmad::L1TileShape;
 
     AscendC::GlobalTensor<ElementA> aGlobal_;
     AscendC::GlobalTensor<ElementB> bGlobal_;
     AscendC::GlobalTensor<ElementC> cGlobal_;
 
-    constexpr static uint32_t ML1_ = BlockMmad::ML1_;
-    constexpr static uint32_t NL1_ = BlockMmad::NL1_;
-    constexpr static uint32_t KL1_ = BlockMmad::KL1_;
+    static constexpr uint32_t L1_TILE_M = tla::get<0>(L1TileShape{});
+    static constexpr uint32_t L1_TILE_N = tla::get<1>(L1TileShape{});
+    static constexpr uint32_t L1_TILE_K = tla::get<2>(L1TileShape{});
 
-    constexpr static uint32_t ML0_ = BlockMmad::ML0_;
-    constexpr static uint32_t NL0_ = BlockMmad::NL0_;
-    constexpr static uint32_t KL0_ = BlockMmad::KL0_;
+    static constexpr uint32_t UB_STAGES = BlockEpilogue::UB_STAGES;
+    constexpr static bool ENABLE_DUAL_DST = AscendC::IsSameType<ElementC, ElementAccumulator>::value;
+    constexpr static uint32_t UB_TILE_ROWS = ENABLE_DUAL_DST ? CeilDiv(L1_TILE_M, 2U) : L1_TILE_M;
+    constexpr static uint32_t UB_TILE_COL_BYTES = RoundUp(L1_TILE_N * sizeof(ElementC), BYTE_PER_BLK);
+    constexpr static uint32_t UB_TILE_SIZE = UB_TILE_ROWS * UB_TILE_COL_BYTES;
 
-    constexpr static uint32_t UB_STAGES = 2;
-    constexpr static uint32_t UB_TILE_SIZE = ArchTag::UB_SIZE / UB_STAGES;
+    static_assert(UB_TILE_SIZE * UB_STAGES <= ArchTag::UB_SIZE, "The UB tile SIZE exceeds the UB space");
 
     struct Arguments {
         GemmCoord problemShape;
@@ -117,9 +119,8 @@ public:
         auto cTlaTensor = tla::MakeTensor(cGlobal_, layoutC, Arch::PositionGM{});
 
         // dualDstCtrl is not supported in quant/dequant scenarios
-        constexpr bool enableDualDst = (AscendC::IsSameType<ElementC, ElementAccumulator>::value);
         if ASCEND_IS_AIV {
-            if (!enableDualDst && AscendC::GetSubBlockIdx() > 0) {
+            if (!ENABLE_DUAL_DST && AscendC::GetSubBlockIdx() > 0) {
                 return;
             }
             curBlockIdx /= AscendC::GetTaskRation();
@@ -133,7 +134,6 @@ public:
             bs.UpdateTailTile();
         }
 
-        uint32_t ubPingPongFlag = UB_STAGES > 1 ? 1 : 0;
         uint32_t coreLoops = bs.round_;
         for (uint32_t loopIdx = 0; loopIdx < coreLoops; ++loopIdx) {
             bool isLastLoop = (loopIdx == coreLoops - 1 && curBlockIdx <= bs.endBlockIdx_);
@@ -155,7 +155,7 @@ public:
 
             auto cTileTensor = GetTile(cTlaTensor, tla::MakeCoord(mCoord, nCoord), tla::MakeShape(blockM, blockN));
 
-            uint32_t ubListId = (loopIdx / blockNum) & ubPingPongFlag;
+            uint32_t ubListId = loopIdx % UB_STAGES;
 
             int64_t alignN = RoundUp(blockN, static_cast<int64_t>(Catlass::BYTE_PER_BLK / sizeof(ElementC)));
             auto ubLayout = tla::MakeLayout<ElementC, LayoutTagC>(blockM, alignN);
@@ -164,7 +164,7 @@ public:
             if ASCEND_IS_AIC {
                 // Synchronize with aiv
                 AscendC::CrossCoreWaitFlag<AIC_SYNC_AIV_MODE_4, PIPE_FIX>(AIV_SYNC_AIC_FLAG + (ubListId));
-                if constexpr (enableDualDst) {
+                if constexpr (ENABLE_DUAL_DST) {
                     AscendC::CrossCoreWaitFlag<AIC_SYNC_AIV_MODE_4, PIPE_FIX>(
                         AIV_SYNC_AIC_FLAG + (ubListId) + FLAG_ID_MAX);
                 }
@@ -172,7 +172,7 @@ public:
                 blockMmadOp(aTileTensor, bTileTensor, cLocalTensor, blockShape);
                 // Notify aiv
                 AscendC::CrossCoreSetFlag<AIC_SYNC_AIV_MODE_4, PIPE_FIX>(AIC_SYNC_AIV_FLAG + (ubListId));
-                if constexpr (enableDualDst) {
+                if constexpr (ENABLE_DUAL_DST) {
                     AscendC::CrossCoreSetFlag<AIC_SYNC_AIV_MODE_4, PIPE_FIX>(
                         AIC_SYNC_AIV_FLAG + (ubListId) + FLAG_ID_MAX);
                 }

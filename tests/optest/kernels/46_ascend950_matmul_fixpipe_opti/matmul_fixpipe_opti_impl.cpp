@@ -67,12 +67,13 @@ constexpr bool enableUnitFlag = true;
 constexpr bool useHF32 = false;
 using DispatchPolicy = Gemm::MmadPingpong<ArchTag, enableUnitFlag, useHF32>;
 
-using BaseL1 = tuple<C<256>, C<256>, C<128>>;
-using BaseL0 = tuple<C<256>, C<256>, C<64>>;
+using BaseL1 = tuple<C<128>, C<256>, C<128>>;
+using BaseL0 = tuple<C<128>, C<256>, C<64>>;
 using L1TileShape = typename CatlassKernel::TileShapeScalerTLA<ElementA, half, BaseL1>::type;
 using L0TileShape = typename CatlassKernel::TileShapeScalerTLA<ElementA, half, BaseL0>::type;
 
 using ElementAccumulator = typename Gemm::helper::ElementAccumulatorSelector<ElementA, ElementB>::ElementAccumulator;
+constexpr uint32_t ubStages = 2;
 constexpr bool splitM = std::is_same_v<ElementC, ElementAccumulator>;
 constexpr auto copyMode = splitM ?
     Gemm::Tile::CopyL0CToUBMode::SPLIT_M :
@@ -83,7 +84,7 @@ using TileCopy = Gemm::Tile::PackedTileCopyTlaToUB<
 using TileMmad = Gemm::Tile::TileMmadTla<DispatchPolicy::ArchTag, ElementA, TileCopy::LayoutTagL1A>;
 using BlockMmad = Gemm::Block::BlockMmadTla<
     DispatchPolicy, L1TileShape, L0TileShape, ElementA, ElementB, ElementC, ElementBias, TileCopy, TileMmad>;
-using EpilogueDispatchPolicy = Epilogue::EpilogueAscend950Fixpipe<splitM>;
+using EpilogueDispatchPolicy = Epilogue::EpilogueAscend950Fixpipe<ubStages, splitM>;
 using BlockEpilogue = Epilogue::Block::BlockEpilogue<EpilogueDispatchPolicy, L0TileShape, ElementC, ElementC>;
 
 using BlockScheduler = typename Gemm::Block::BlockSchedulerAswt<L1TileShape, L0TileShape>;

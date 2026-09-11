@@ -22,14 +22,15 @@
 
 namespace Catlass::Epilogue::Block {
 
-template <class L0TileShape_, class ElementOut_, class ElementIn_, bool SPLIT_M_>
-class BlockEpilogue<EpilogueAscend950Fixpipe<SPLIT_M_>, L0TileShape_, ElementOut_, ElementIn_> {
+template <class L0TileShape_, class ElementOut_, class ElementIn_, uint32_t UB_STAGES_, bool SPLIT_M_>
+class BlockEpilogue<EpilogueAscend950Fixpipe<UB_STAGES_, SPLIT_M_>, L0TileShape_, ElementOut_, ElementIn_> {
 public:
-    using DispatchPolicy = EpilogueAscend950Fixpipe<SPLIT_M_>;
+    using DispatchPolicy = EpilogueAscend950Fixpipe<UB_STAGES_, SPLIT_M_>;
     using ArchTag = typename DispatchPolicy::ArchTag;
     using ElementOut = ElementOut_;
     using ElementIn = ElementIn_;
 
+    static constexpr uint32_t UB_STAGES = DispatchPolicy::UB_STAGES;
     static constexpr bool SPLIT_M = DispatchPolicy::SPLIT_M;
     static constexpr int64_t ML0_ = tla::get<0>(L0TileShape_{});
     static constexpr int64_t NL0_ = tla::get<1>(L0TileShape_{});
