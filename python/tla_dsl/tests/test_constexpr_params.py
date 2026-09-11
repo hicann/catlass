@@ -332,7 +332,9 @@ def _bound_operands():
     return tensors
 
 
-def test_compile_separates_named_constexpr_from_runtime_options() -> None:
+def test_compile_separates_named_constexpr_from_runtime_options(
+    require_bc,
+) -> None:
     a, b, c = _fake_operands()
     add = tla.compile(_selectable_binary, a, b, c, mode="add", options=_OPTIONS)
     sub = tla.compile(_selectable_binary, a, b, c, mode="sub", options=_OPTIONS)
@@ -343,7 +345,7 @@ def test_compile_separates_named_constexpr_from_runtime_options() -> None:
     assert add.cache_key != sub.cache_key
 
 
-def test_compiled_artifact_abi_excludes_the_constexpr() -> None:
+def test_compiled_artifact_abi_excludes_the_constexpr(require_bc) -> None:
     a, b, c = _fake_operands()
     compiled = tla.compile(
         _selectable_binary, a, b, c, mode="add", options=_OPTIONS
@@ -360,7 +362,7 @@ def _pack_payload(compiled, launch_args):
     return compiled.execution_args.generate_launch_payload(launch_args)
 
 
-def test_compiled_artifact_payload_matches_the_tensors_alone() -> None:
+def test_compiled_artifact_payload_matches_the_tensors_alone(require_bc) -> None:
     a, b, c = _bound_operands()
     compiled = tla.compile(
         _selectable_binary, a, b, c, mode="add", options=_OPTIONS

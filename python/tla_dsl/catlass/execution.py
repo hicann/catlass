@@ -28,6 +28,9 @@ from .base_dsl.arch import (
     resolve_npu_arch as _resolve_npu_arch,
 )
 from .base_dsl import BaseDSL, DSLLocation
+from .bc_compile import (
+    get_bc_paths as _get_bc_paths,
+)
 from .base_dsl.typing import Numeric
 from .compiler_bridge import (
     BridgeDiagnostic,
@@ -2256,26 +2259,13 @@ def _create_stamped_hivmc_input(
             if compile_option.kernel_mode == "mix"
             else _core_type_from_arch_scope(compile_option.arch_scope)
         )
-        helper = {
-            "aic": ("Cube", "print_tensor.aic.c310.bc"),
-            "aiv": ("Vector", "print_tensor.aiv.c310.bc"),
-        }.get(helper_core_type)
-        if helper is None:
-            raise TlaRuntimeUnavailableError(
-                "tla.print_tensor helper split could not be determined"
+        probe_bitcode = Path(
+            _get_bc_paths(
+                compile_option.kernel_mode,
+                bc_type="print_tensor",
+                core_type=helper_core_type,
             )
-        helper_dir, helper_name = helper
-        probe_candidates = [
-            build_dir / "bc" / helper_dir / helper_name
-            for build_dir in _mlir_build_dirs()
-        ]
-        probe_bitcode = next(
-            (path.resolve() for path in probe_candidates if path.exists()), None
         )
-        if probe_bitcode is None:
-            raise TlaRuntimeUnavailableError(
-                f"C310 {helper_core_type} print tensor bitcode was not built"
-            )
         helper_bytes = probe_bitcode.read_bytes()
         if _PRINT_TENSOR_HELPER_ABI_MARKER not in helper_bytes:
             raise TlaRuntimeUnavailableError(
@@ -2369,44 +2359,7 @@ def _mlir_build_dirs() -> list[Path]:
 
 
 def _resolve_hivm_template_bitcode(compile_option: TlaCompileOption) -> str:
-    candidates: list[Path] = []
-    if compile_option.kernel_mode == "mix":
-        repo_aic_candidates: list[Path] = []
-        aiv_candidates: list[Path] = []
-        for build_dir in _mlir_build_dirs():
-            repo_aic_candidates.append(build_dir / "bc" / "meta_op.aic.c310.bc")
-            aiv_candidates.append(build_dir / "bc" / "meta_op.aiv.c310.bc")
-        repo_aic = next(
-            (path.resolve() for path in repo_aic_candidates if path.exists()), None
-        )
-        aiv_bc = next(
-            (path.resolve() for path in aiv_candidates if path.exists()), None
-        )
-        if repo_aic is not None and aiv_bc is not None:
-            return f"{repo_aic},{aiv_bc}"
-        raise TlaRuntimeUnavailableError(
-            "C310 mix HIVM bitcode not found. Expected DSL-built "
-            "meta_op.aic.c310.bc and meta_op.aiv.c310.bc under the mlir build tree."
-        )
-
-    if _core_type_from_arch_scope(compile_option.arch_scope) == "aic":
-        for build_dir in _mlir_build_dirs():
-            candidates.extend(
-                [
-                    build_dir / "meta_op.aic.c310.bc",
-                    build_dir / "bc" / "meta_op.aic.c310.bc",
-                ]
-            )
-    else:
-        for build_dir in _mlir_build_dirs():
-            candidates.append(build_dir / "bc" / "meta_op.aiv.c310.bc")
-    existing = next((path.resolve() for path in candidates if path.exists()), None)
-    if existing is not None:
-        return str(existing)
-    raise TlaRuntimeUnavailableError(
-        "C310 HIVM bitcode not found. Build Tla DSL templates "
-        "(meta_op.aic.c310.bc / meta_op.aiv.c310.bc) under the mlir build tree."
-    )
+    return _get_bc_paths(compile_option.kernel_mode)
 
 
 def _run_checked(

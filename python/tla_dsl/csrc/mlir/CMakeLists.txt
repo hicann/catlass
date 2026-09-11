@@ -8,7 +8,6 @@ set(CMAKE_CXX_STANDARD 17)
 
 option(ENABLE_CPU_TRACE_INTRINSIC "If enable debug, use cpu compile." OFF)
 message("-- ENABLE_CPU_TRACE_INTRINSIC Value: ${ENABLE_CPU_TRACE_INTRINSIC}")
-option(BISHENGIR_BUILD_TEMPLATE "Build C310 HIVM template bitcode." ON)
 
 if(DEFINED ENV{ASCEND_HOME_PATH})
   set(ASCEND_HOME_PATH $ENV{ASCEND_HOME_PATH})
@@ -99,9 +98,8 @@ set(MLIR_DIR ${_catlass_dsl_ascendnpu_ir_install_dir}/lib/cmake/mlir)
 set(LLVM_DIR ${_catlass_dsl_ascendnpu_ir_install_dir}/lib/cmake/llvm)
 set(MLIR_TBLGEN_INCLUDE_DIR ${_catlass_dsl_ascendnpu_ir_install_dir}/include)
 
-if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bc/CMakeLists.txt")
-  add_subdirectory(bc)
-endif()
+# Install bc stubs + dependent headers for wheel packaging (see bc_compile.py).
+add_subdirectory(bc)
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter Development.Module)
 find_package(Threads REQUIRED)
@@ -239,9 +237,6 @@ add_subdirectory(python)
 
 # Convenience target: build all compiler tools.
 add_custom_target(tla-compiler DEPENDS TlaCompile _tla_type_bridge_native)
-if (TARGET bishengir_template_bitcode)
-  add_dependencies(tla-compiler bishengir_template_bitcode)
-endif()
 
 # Lit regression tests for compiler tools.
 set(CATLASS_DSL_TLA_COMPILE_TOOL

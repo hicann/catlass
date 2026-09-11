@@ -343,7 +343,7 @@ _export_toolchain_env
 
 echo "==> Using CATLASS_DSL_DIR=${CATLASS_DSL_DIR}"
 
-trap 'if [[ -n "${tla_dsl_wheel_site}" && -d "${tla_dsl_wheel_site}" ]]; then rm -rf "${tla_dsl_wheel_site}"; fi' EXIT
+trap 'if [[ -n "${tla_dsl_wheel_site}" && -d "${tla_dsl_wheel_site}" ]]; then rm -rf "${tla_dsl_wheel_site}"; fi; rm -rf "${HOME}/.cache/catlass/bc"' EXIT
 _prepare_tla_dsl
 
 if [[ ! -f "${CATLASS_DSL_DIR}/${BASIC_MMAD_REL}" ]]; then
@@ -552,6 +552,10 @@ fi
 #
 # Do NOT add -n/xdist here: that puts each case back in its own process and
 # throws the saving away. Several cases are order-dependent too.
+
+echo "==> Pre-compiling BC stubs"
+PYTHONPATH="${tla_dsl_wheel_site}:${PYTHONPATH:-}" \
+    python -m catlass.bc_compile
 
 echo "==> Running the DSL battery (tests/dsl_battery)"
 (

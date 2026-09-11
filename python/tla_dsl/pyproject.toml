@@ -69,7 +69,7 @@ dev = [
 include = ["catlass*"]
 
 [tool.setuptools.package-data]
-"catlass" = ["lib/bc/**/*.bc"]
+"catlass" = ["csrc/mlir/bc/**/*.cpp", "csrc/mlir/bc/**/*.h", "include/**/*.hpp"]
 
 [tool.setuptools_scm]
 write_to = "catlass/_version.py"

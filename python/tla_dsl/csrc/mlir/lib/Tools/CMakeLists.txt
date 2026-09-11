@@ -53,3 +53,11 @@ set_target_properties(_tla_type_bridge_native PROPERTIES
   INSTALL_RPATH "\$ORIGIN/_mlir/_mlir_libs"
   BUILD_WITH_INSTALL_RPATH ON
 )
+
+# Install into the cmake install prefix so setup.py can copy to the wheel
+# from a single location (build→install→wheel pattern).
+install(
+  TARGETS _tla_type_bridge_native
+  LIBRARY DESTINATION catlass
+  COMPONENT catlass_wheel
+)

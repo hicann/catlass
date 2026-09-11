@@ -607,7 +607,7 @@ def test_compile_artifact_propagates_and_persists_kernel_abi(
     template_bc = tmp_path / "bc" / "meta_op.aiv.c310.bc"
     template_bc.parent.mkdir(parents=True)
     template_bc.write_bytes(b"bc")
-    monkeypatch.setattr(execution, "_mlir_build_dirs", lambda: [tmp_path])
+    monkeypatch.setattr(execution, "_get_bc_paths", lambda kernel_mode: str(template_bc.resolve()))
     monkeypatch.setattr(
         base_dsl_mod.BaseDSL, "_lower", lambda *_a, **_k: _FakeLowered()
     )

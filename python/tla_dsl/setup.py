@@ -83,12 +83,10 @@ class CMakeExtension(Extension):
         *,
         sourcedir: str,
         target: str,
-        cmake_output_dir: str,
     ) -> None:
         super().__init__(name=name, sources=[])
         self.sourcedir = sourcedir
         self.cmake_target = target
-        self.cmake_output_dir = cmake_output_dir
 
 
 class CMakeBuild(build_ext):
@@ -127,8 +125,7 @@ class CMakeBuild(build_ext):
             return
 
         source_dir = (PROJECT_ROOT / ext.sourcedir).resolve()
-        extension_path = Path(self.get_ext_fullpath(ext.name)).resolve()
-        extension_dir = extension_path.parent
+        extension_dir = Path(self.get_ext_fullpath(ext.name)).resolve().parent
         extension_dir.mkdir(parents=True, exist_ok=True)
 
         build_type = os.environ.get(
@@ -155,6 +152,7 @@ class CMakeBuild(build_ext):
             str(build_dir),
             f"-DPython3_EXECUTABLE={sys.executable}",
             f"-DCMAKE_BUILD_TYPE={build_type}",
+            f"-DCMAKE_INSTALL_PREFIX={build_dir / 'install'}",
             # Use the host sysroot; CMAKE_ARGS appended later can override it.
             "-DCMAKE_SYSROOT=/",
         ]
@@ -178,6 +176,8 @@ class CMakeBuild(build_ext):
             check=True,
         )
 
+        # --- build → install → wheel pattern ---
+        # cmake build
         build_command = [
             "cmake",
             "--build",
@@ -197,38 +197,43 @@ class CMakeBuild(build_ext):
             check=True,
         )
 
-        cmake_out_dir = (build_dir / ext.cmake_output_dir).resolve()
-        produced = sorted(cmake_out_dir.glob("_tla_type_bridge_native*.so"))
+        # cmake install: all artifacts (.so, _mlir, bc stubs + headers) land in one prefix
+        install_prefix = build_dir / "install"
+        subprocess.run(
+            ["cmake", "--install", str(build_dir)],
+            cwd=PROJECT_ROOT,
+            check=True,
+        )
 
-        if not produced:
-            generated_files = "\n".join(
-                f"  {path.name}" for path in sorted(cmake_out_dir.glob("*"))
-            )
+        installed_catlass = install_prefix / "catlass"
+        if not installed_catlass.is_dir():
             raise RuntimeError(
-                "CMake completed, but the expected Python extension "
-                "was not generated:\n"
-                f"  expected pattern: {cmake_out_dir}/_tla_type_bridge_native*.so\n"
-                f"  output directory: {cmake_out_dir}\n"
-                f"  generated files:\n{generated_files or '  <none>'}"
+                f"cmake --install produced no catlass/ tree at {installed_catlass}"
             )
 
         if not self._inplace:
-            # release: copy runtime artifacts into the wheel staging dir.
-            self._install(produced[0], extension_path)
-            bc_dir = build_dir / "bc"
-            if bc_dir.is_dir():
-                self._install(bc_dir, extension_dir / "lib" / "bc")
-            if not extension_path.is_file():
+            # Copy cmake install artifacts INTO the setuptools wheel staging dir.
+            # Do NOT replace extension_dir — setuptools already populated it with
+            # Python source files (__init__.py etc.) via normal package discovery.
+            so_files = list(installed_catlass.glob("_tla_type_bridge_native*.so"))
+            if not so_files:
                 raise RuntimeError(
-                    f"Failed to relocate CMake extension to {extension_path}"
+                    f"_tla_type_bridge_native*.so not found in {installed_catlass}"
                 )
-        mlir_pkg = cmake_out_dir / "_mlir"
-        if mlir_pkg.is_dir():
-            if self._inplace:
-                destination = PROJECT_ROOT / "catlass" / "_mlir"
-            else:
-                destination = extension_dir / "_mlir"
-            self._install(mlir_pkg, destination)
+            for so in so_files:
+                self._install(so, extension_dir / so.name)
+            for subdir in ("_mlir", "csrc", "include"):
+                src = installed_catlass / subdir
+                if src.is_dir():
+                    self._install(src, extension_dir / subdir)
+        else:
+            # dev mode: symlink/copy _mlir and .so back to source tree
+            mlir_src = installed_catlass / "_mlir"
+            if mlir_src.is_dir():
+                self._install(mlir_src, PROJECT_ROOT / "catlass" / "_mlir")
+            so_files = list(installed_catlass.glob("_tla_type_bridge_native*.so"))
+            if so_files:
+                self._install(so_files[0], PROJECT_ROOT / "catlass" / so_files[0].name)
 
     def _get_build_directory(
         self,
@@ -297,7 +302,6 @@ setup(
             "catlass._tla_type_bridge_native",
             sourcedir="csrc/mlir",
             target="tla-compiler CatlassPythonModules",
-            cmake_output_dir="python/catlass",
         ),
     ],
     cmdclass={

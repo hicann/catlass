@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 from pathlib import Path
 from typing import Any
 
@@ -47,6 +48,24 @@ def _compiler_tlair(kernel: Any, *, type_args: tuple[Any, ...] | None = None) ->
         location=kernel.decorator_location,
     )
     return lowered.asm(generic=True)
+
+
+@pytest.fixture(scope="session")
+def require_bc() -> Path:
+    """Auto-compile BC into tests/.cache and return the cache root.
+
+    BC compilation is an install-step responsibility, so the test session
+    never touches the shared install/CLI cache. Artifacts live in the
+    repo-local ``tests/.cache`` (gitignored), which also works on machines
+    without a usable ``/tmp``. The cache is reused across sessions, so the
+    compile happens only once; drop ``tests/.cache`` to force a rebuild.
+    """
+    from catlass.bc_compile import init
+
+    cache_root = Path(__file__).resolve().parent / ".cache"
+    os.environ["CATLASS_DSL_CACHE_DIR"] = str(cache_root)
+    init()
+    return cache_root
 
 
 @pytest.fixture

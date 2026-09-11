@@ -57,7 +57,6 @@ lit -sv csrc/mlir/build/tests/lit
 | 配置项 | 默认值 | 含义 |
 | --- | --- | --- |
 | `ENABLE_CPU_TRACE_INTRINSIC` | `OFF` | 启用 CPU trace intrinsic |
-| `BISHENGIR_BUILD_TEMPLATE` | `ON` | 构建 HIVM template bitcode |
 | `CATLASS_INCLUDE_DIR` | `/path/to/catlass/include` | CATLASS 公共头文件目录 |
 
 例如关闭 HIVM template bitcode：
