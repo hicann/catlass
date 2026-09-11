@@ -65,7 +65,7 @@ public:
     static_assert(
         (sizeof(ElementMmOut) * L1_TILE_N) % BYTE_PER_BLK == 0, "ElementMmOut must be divisible by BYTE_PER_BLK");
 
-    static constexpr uint32_t MM_OUT_SIZE_PING = RoundUp<256>(L1_TILE_M / 2 * L1_TILE_N * sizeof(ElementMmOut));
+    static constexpr uint32_t MM_OUT_SIZE_PING = BlockEpilogue::SRC_UB_SIZE_PING;
     static constexpr uint32_t MM_OUT_SIZE = MM_OUT_SIZE_PING * UB_STAGES;
 
     static_assert((MM_OUT_SIZE <= ArchTag::UB_SIZE), "MM_OUT_SIZE must be less than or equal to UB_SIZE");

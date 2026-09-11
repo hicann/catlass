@@ -33,6 +33,7 @@ struct TileElemWiseGelu {
     static constexpr uint32_t COMPUTE_LENGTH = COMPUTE_LENGTH_;
     static constexpr float NEG_SQRT_EIGHT_OVER_PI = -1.595769121 * 0.044715;
     static constexpr float TANH_APPROX_FACTOR = 1 / 0.044715;
+    static constexpr float SAT_MAX_EXP_VAL = 80.0f;
 
     CATLASS_DEVICE
     TileElemWiseGelu()
@@ -50,6 +51,9 @@ struct TileElemWiseGelu {
         Axpy(dstLocal, srcLocal, TANH_APPROX_FACTOR, COMPUTE_LENGTH); // d: x / 0.044715 + x^3 , s: x
         // d: -1.5957691*0.044715(x/0.044715 + x^3), s: x
         Muls(dstLocal, dstLocal, NEG_SQRT_EIGHT_OVER_PI, COMPUTE_LENGTH);
+        // exeucte saturation (clip upper bound)
+        Mins(dstLocal, dstLocal, static_cast<ElementCompute>(SAT_MAX_EXP_VAL), COMPUTE_LENGTH);
+
         Exp(dstLocal, dstLocal, COMPUTE_LENGTH); // d: e^(-1.5957691*0.044715(x/0.044715 + x^3))
         // d: (1 + e^(-1.5957691*0.044715(x/0.044715 + x^3))
         Adds(dstLocal, dstLocal, (ElementCompute)1, COMPUTE_LENGTH);
@@ -71,7 +75,7 @@ struct TileElemWiseGeluRegBase {
     static_assert(std::is_same_v<ElementSrc, float32_t>, "ElementSrc must be float32_t");
     static_assert(std::is_same_v<ElementDst, half>, "ElementDst must be half");
 
-    static constexpr float NEG_SQRT_EIGHT_OVER_PI = -1.595769121 * 0.044715;
+    static constexpr float POS_SQRT_EIGHT_OVER_PI = 1.595769121 * 0.044715;
     static constexpr float TANH_APPROX_FACTOR = 1 / 0.044715;
 
     CATLASS_DEVICE
@@ -94,6 +98,7 @@ struct TileElemWiseGeluRegBase {
         MaskReg pregFullB32 = CreateMask<float, MaskPattern::ALL>();
         RegTensor<ElementSrc> srcVreg;
         RegTensor<float> computeVreg;
+        RegTensor<float> geluScaleReg;
         RegTensor<ElementDst> dstVreg;
 
         for (uint16_t rowIdx = 0; rowIdx < actualRowNum; rowIdx++) {
@@ -108,15 +113,24 @@ struct TileElemWiseGeluRegBase {
                 Mul(computeVreg, computeVreg, srcVreg, pregFullB32);         // d: x^3 , s:x
                 Axpy(computeVreg, srcVreg, TANH_APPROX_FACTOR, pregFullB32); // d: x / 0.044715 + x^3 , s: x
                 Muls(
-                    computeVreg, computeVreg, NEG_SQRT_EIGHT_OVER_PI,
-                    pregFullB32);                           // d: -1.5957691*0.044715(x/0.044715 + x^3), s: x
-                Exp(computeVreg, computeVreg, pregFullB32); // d: e^(-1.5957691*0.044715(x/0.044715 + x^3))
-                Adds(
-                    computeVreg, computeVreg, (float)1,
-                    pregFullB32); // d: (1 + e^(-1.5957691*0.044715(x/0.044715 + x^3)))
-                Div(computeVreg, srcVreg, computeVreg,
-                    pregFullB32); // d: x / (1 + e^(-1.5957691*0.044715(x/0.044715 + x^3)))
+                    computeVreg, computeVreg, POS_SQRT_EIGHT_OVER_PI,
+                    pregFullB32); // d: 1.5957691*0.044715(x/0.044715 + x^3), s: x
 
+                // tmp variable e1 = exp(min(t, 0))
+                Mins(geluScaleReg, computeVreg, 0.0f, pregFullB32); // d: min(t, 0), s: t
+                Exp(geluScaleReg, geluScaleReg, pregFullB32);       // d: e^(-1.5957691*0.044715(x/0.044715 + x^3))
+
+                // caculate e2 = x / ( 1 + exp(-|t|) )
+                Abs(computeVreg, computeVreg, pregFullB32);
+                Muls(computeVreg, computeVreg, -1.0f, pregFullB32);  // -|a|
+                Exp(computeVreg, computeVreg, pregFullB32);          // e^{-|a|} ∈ (0,1]
+                Adds(computeVreg, computeVreg, 1.0f, pregFullB32);   // 1+e^{-|a|}
+                Div(computeVreg, srcVreg, computeVreg, pregFullB32); // x/(1+e^{-|a|})
+
+                // caculate final result
+                Mul(computeVreg, computeVreg, geluScaleReg, pregFullB32); // gelu = ...·e^{min(a,0)}
+
+                // Cast out
                 Cast<ElementDst, float, castTraitB32ToB16>(dstVreg, computeVreg, pregFullB32);
                 StoreAlign<ElementDst, StoreDist::DIST_PACK_B32>(dstRowStart + offset, dstVreg, pregFullB32);
             }

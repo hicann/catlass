@@ -26,17 +26,6 @@ K = 256
 def _prefix_sum_group_list(group_sizes: tuple[int, ...]) -> torch.Tensor:
     return torch.tensor(group_sizes, dtype=torch.int64).cumsum(0).npu()
 
-def _grouped_matmul_reference(
-    a: torch.Tensor, b: torch.Tensor, group_sizes: tuple[int, ...]
-) -> torch.Tensor:
-    expected = []
-    offset = 0
-    for group_id, group_size in enumerate(group_sizes):
-        end = offset + group_size
-        expected.append(a[offset:end].float() @ b[group_id].float())
-        offset = end
-    return torch.cat(expected, dim=0)
-
 def group_matmul_reference(tensor_a, tensor_b, m_cumsum_list):
     if m_cumsum_list is None:
         return None
@@ -90,6 +79,25 @@ def test_grouped_matmul_slice_gelu():
     assert result.shape == (M_TOTAL, N)
     assert result.dtype == torch.float16
     assert result.device.type == "npu"
+    assert torch.allclose(result.cpu().float(), expected.cpu(), rtol=1e-2, atol=1e-2), (
+        f"max diff = {(result.cpu().float() - expected.cpu()).abs().max().item()}"
+    )
+
+
+@only_on_3510
+def test_grouped_matmul_slice_gelu_small_k_many_tiles():
+    group_sizes = (2304, 2304, 2304, 2304)
+    n = 576
+    k = 1
+
+    a = torch.rand(sum(group_sizes), k, dtype=torch.float16) - 0.5
+    b = torch.rand(len(group_sizes), k, n, dtype=torch.float16) - 0.5
+    grouplist = _prefix_sum_group_list(group_sizes)
+
+    result = torch_catlass.grouped_matmul_slice_m_gelu(a.npu(), b.npu(), grouplist)
+    _, expected = _grouped_matmul_slice_m_gelu_reference(a, b, grouplist.cpu(), gelu_flag=1)
+
+    assert result.shape == (sum(group_sizes), n)
     assert torch.allclose(result.cpu().float(), expected.cpu(), rtol=1e-2, atol=1e-2), (
         f"max diff = {(result.cpu().float() - expected.cpu()).abs().max().item()}"
     )

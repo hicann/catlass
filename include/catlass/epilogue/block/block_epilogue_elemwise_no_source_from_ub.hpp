@@ -52,16 +52,25 @@ public:
     static constexpr uint32_t UB_TILE_ROW = tla::get<0>(SrcUbShape_{});
     static constexpr uint32_t UB_TILE_COL = tla::get<1>(SrcUbShape_{});
 
-    static constexpr uint32_t GELU_OUT_SIZE_PING = RoundUp<256>(UB_TILE_ROW / 2 * UB_TILE_COL * sizeof(ElementDst));
+    // Fixpipe SPLIT_M writes one half of the MM output to each vector core. The
+    // epilogue converts that float input to ElementDst in place, so every
+    // epilogue stage must start at the corresponding MM-output stage boundary.
+    static constexpr uint32_t SRC_UB_SIZE_PING =
+        RoundUp<256>(CeilDiv<2>(UB_TILE_ROW) * UB_TILE_COL * sizeof(ElementSrc));
+    static constexpr uint32_t SRC_UB_SIZE = SRC_UB_SIZE_PING * UB_STAGES;
+    static constexpr uint32_t GELU_OUT_SIZE_PING =
+        RoundUp<256>(CeilDiv<2>(UB_TILE_ROW) * UB_TILE_COL * sizeof(ElementDst));
     static constexpr uint32_t GELU_OUT_SIZE = GELU_OUT_SIZE_PING * UB_STAGES;
+
+    static_assert(GELU_OUT_SIZE_PING <= SRC_UB_SIZE_PING, "In-place epilogue output must fit in its source stage");
+    static_assert(SRC_UB_SIZE <= ArchTag::UB_SIZE, "Epilogue source stages exceed the UB capacity");
 
     CATLASS_DEVICE
     BlockEpilogue(Arch::Resource<ArchTag>& resource, Params const& params) : params(params)
     {
-        uint64_t offset = 0; // 输出复用输入UB Buffer
         for (uint32_t i = 0; i < UB_STAGES; ++i) {
-            ubTemp[i] = resource.ubBuf.template GetBufferByByte<ElementDst>(offset);
-            offset += GELU_OUT_SIZE_PING;
+            // Output reuses the input buffer of the same ping-pong stage.
+            ubTemp[i] = resource.ubBuf.template GetBufferByByte<ElementDst>(i * SRC_UB_SIZE_PING);
 
             AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID0 + i);
         }
