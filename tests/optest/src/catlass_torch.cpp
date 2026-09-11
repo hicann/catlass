@@ -56,6 +56,7 @@
 #include "template/symm.h"
 #include "template/planar_complex_matmul.h"
 #include "template/matrix_inverse.h"
+#include "template/x_attention.h"
 // ── Workspace allocator bridge ──
 // 通过 dlsym 注入到 g_catlassWorkspaceAlloc，使 JIT 模板分配 NPU tensor
 // 而非裸 aclrtMalloc。tensor 保存在静态池中，kernel 执行期间有效。
@@ -433,6 +434,10 @@ REGISTER_TORCH_FUNC(planar_complex_matmul);
 // ── example 78_matrix_inverse ──
 static auto& matrix_inverse = MatrixInverseOp::Run;
 REGISTER_TORCH_FUNC(matrix_inverse);
+
+// ── example 78_x_attention ──
+static auto& x_attention = XAttentionOp::Run;
+REGISTER_TORCH_FUNC(x_attention);
 
 // ── example 82_ascend950_basic_syrk ──
 using Ascend950BasicSyrkOp = BasicSyrkLike<CatlassKernel::Ascend950BasicSyrk>;

@@ -63,6 +63,23 @@ struct FlashAttentionParams : public PrebuiltParams {
 };
 
 /**
+ * @brief Runtime parameters for example 78_x_attention.
+ */
+struct XAttentionParams : public PrebuiltParams {
+    uint32_t numTokens = 0;             ///< Total query tokens (batch * beam size).
+    uint32_t batch = 0;                 ///< Batch size.
+    uint32_t beamSize = 0;              ///< Number of beams per batch.
+    uint32_t sharedKvSeqLen = 0;        ///< Shared KV sequence length used for host tiling.
+    uint32_t numHeads = 0;              ///< Number of query heads.
+    uint32_t kvHeads = 0;               ///< Number of key/value heads.
+    uint32_t embeddingSize = 0;         ///< Per-head embedding dimension.
+    uint32_t maxDecodeStep = 0;         ///< Capacity of each unshared decode cache.
+    bool sharedPaged = true;            ///< True for shared paged + unshared continuous cache.
+    float scaleValue = 0.0f;            ///< Attention scale; zero selects 1/sqrt(embeddingSize).
+    aclDataType dataType = ACL_FLOAT16; ///< Input/output element type.
+};
+
+/**
  * @brief Runtime parameters for MLA examples.
  */
 struct MlaParams : public FlashAttentionParams {
@@ -128,6 +145,12 @@ __attribute__((weak)) void Mla(const uint32_t blockNum, aclrtStream stream, cons
  */
 __attribute__((weak)) void FlashAttentionInfer(
     const uint32_t blockNum, aclrtStream stream, const FlashAttentionParams& params);
+
+/**
+ * @brief Reserved prebuilt interface for example 78_x_attention.
+ */
+__attribute__((weak)) void XAttention(
+    const uint32_t blockNum, aclrtStream stream, const XAttentionParams& params);
 
 /**
  * @brief Reserved prebuilt interface for example 24_conv_bias.

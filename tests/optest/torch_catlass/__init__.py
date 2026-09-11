@@ -71,6 +71,7 @@ __all__ = [
     "ascend950_batched_matmul",
     "ascend950_streamk_matmul",
     "flash_attention_infer",
+    "x_attention",
     "conv_bias",
     "flash_attention_infer_tla",
     "ascend950_flash_attention_infer",

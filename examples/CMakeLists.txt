@@ -144,6 +144,7 @@ set(EXAMPLE_ATLASA2
     75_symm
     76_trmm
     77_planar_complex_matmul
+    78_x_attention
     102_dynamic_optimized_matmul
     103_dynamic_optimized_quant_matmul_per_token_basic
 )

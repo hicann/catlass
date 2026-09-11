@@ -722,6 +722,28 @@ def test_74_ascend950_weight_quant_a8w4_grouped_mx_matmul(build_env):
         # example args: group_num, m, n, k, device_id
         run_case(build_env, "74_ascend950_weight_quant_a8w4_grouped_mx_matmul", case_cpp + [DEVICE_ID])
 
+
+@only_on_2201
+def test_78_x_attention(build_env):
+    case_base = [str(i) for i in [1, 4, 512, 8, 2, 128, 32, 16, 0]]
+    dtype = "half"
+    subprocess.run(
+        [sys.executable, os.path.join(CMAKE_EXAMPLES_PATH, "78_x_attention", "gen_data.py")]
+        + case_base
+        + [dtype],
+        check=True,
+    )
+    case_cpp = case_base + [
+        "--dtype",
+        dtype,
+        "--datapath",
+        os.path.join(CMAKE_EXAMPLES_PATH, "78_x_attention", "data"),
+        "--device",
+        DEVICE_ID,
+    ]
+    run_case(build_env, "78_x_attention", case_cpp)
+
+
 @only_on_3510
 def test_80_ascned950_grouped_matmul_slice_m_gelu(build_env):
     case_py = [
