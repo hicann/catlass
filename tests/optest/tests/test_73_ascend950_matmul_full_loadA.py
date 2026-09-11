@@ -14,20 +14,9 @@ import torch
 import torch_npu
 import torch_catlass
 
+from common import only_on_3510
 
-def _is_ascend950() -> bool:
-    if torch_npu.npu.device_count() <= 0:
-        return False
-    name = torch_npu.npu.get_device_name()
-    return bool(re.search(r"Ascend950(PR|DT)", name, re.I))
-
-
-pytestmark = pytest.mark.skipif(
-    not _is_ascend950(),
-    reason="example 73_ascend950_matmul_full_loadA requires Ascend 950 NPU",
-)
-
-
+@only_on_3510
 def test_ascend950_matmul_full_loadA():
     """Compare CATLASS Ascend950 full-loadA matmul TLA against torch.matmul."""
     m, n, k = 512, 512, 256
@@ -45,7 +34,6 @@ def test_ascend950_matmul_full_loadA():
     assert torch.allclose(result.float(), expected.float(), rtol=rtol, atol=atol), (
         f"Results not close: max diff = {(result.float() - expected.float()).abs().max().item()}"
     )
-
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "-s"])

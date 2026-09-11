@@ -9,9 +9,8 @@
  * the software repository for the full text of the License.
  */
 
-#ifndef K_MAX_SHAPE_DIM
-#define K_MAX_SHAPE_DIM 0
-#endif
+#include <stdexcept>
+#include <string>
 
 #include "catlass/arch/arch.hpp"
 #include "catlass/catlass.hpp"
@@ -75,7 +74,7 @@ using DispatchPolicy = Gemm::MmadAscend950FullLoadA<
     enableUnitFlag, useHF32, l0CStages, enableL1Resident,
     l1AStages, l1BStages, l0AStages, l0BStages>;
 
-using BaseL1 = tuple<C<256>, C<256>, C<256>>;
+using BaseL1 = tuple<C<256>, C<256>, C<128>>;
 using BaseL0 = tuple<C<256>, C<256>, C<64>>;
 using L1TileShape = typename CatlassKernel::TileShapeScalerTLA<ElementA, half, BaseL1>::type;
 using L0TileShape = typename CatlassKernel::TileShapeScalerTLA<ElementA, half, BaseL0>::type;
@@ -118,6 +117,10 @@ extern "C" void run(uint32_t blockNum, aclrtStream stream, const CatlassKernel::
         layoutB,
         params->outputAddr[0],
         layoutC};
+
+    if (!MatmulKernel::CanImplement(arguments)) {
+        throw std::runtime_error("FullLoadA: shape cannot be implemented (L1 space insufficient)");
+    }
 
     Catlass::RunKernel<MatmulKernel>(arguments, stream, blockNum);
 }
