@@ -11,6 +11,65 @@
 3. 加载至寄存器上，以 `VL`（向量寄存器位宽， 256 字节）为粒度分块执行各类向量指令；
 4. 输出回 UB，然后启动 MTE3，将数据搬运回 GM。
 
+以下是一个最小示例，以 `tla.abs` 为例，一个 Vector 类 op 从 GM 搬运到 UB、加载到寄存器计算、再写回 GM 的完整过程：
+
+```python
+VECTOR_ELE = 400                              # 输入/输出 tensor 的元素个数
+VL_ELE = 64                                   # 单条向量指令处理的元素数（256B / 4B）
+LOOPS = (VECTOR_ELE + VL_ELE - 1) // VL_ELE   # 分块数
+_DTYPE = tla.Float32
+
+@tla.kernel
+def vector_op(mem_in: tla.Tensor, mem_out: tla.Tensor) -> None:
+    # 跨流水同步 flag：MTE2->VECTOR 表示“UB 数据已就绪”，
+    # VECTOR->MTE3 表示“寄存器计算已完成”。
+    ub_loaded = tla.flag("ub_loaded", tla.arch.MTE2, tla.arch.VECTOR)
+    vec_done = tla.flag("vec_done", tla.arch.VECTOR, tla.arch.MTE3)
+
+    # 在 GM 上建立输入/输出视图：形状 VECTOR_ELE，坐标从 0 开始。
+    gm_in = tla.tile_view(mem_in, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
+    gm_out = tla.tile_view(mem_out, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
+
+    # 在 UB 上申请缓冲区，并构造与 GM 视图同布局的 tensor。
+    # allocate(元素个数, dtype, 地址空间, 对齐字节数)
+    ub_in = tla.make_tensor_like(
+        tla.allocate(VECTOR_ELE, _DTYPE, tla.AddressSpace.ub, 256),
+        gm_in,
+        tla.arch.RowMajor,
+    )
+    ub_out = tla.make_tensor_like(
+        tla.allocate(VECTOR_ELE, _DTYPE, tla.AddressSpace.ub, 256),
+        gm_out,
+        tla.arch.RowMajor,
+    )
+
+    # 向量相关的搬运与计算统一放在 tla.vector() 上下文中。
+    with tla.vector():
+        # 1) GM -> UB（MTE2）；用 flag 保证搬运完成后才进入寄存器计算。
+        tla.copy(ub_in, gm_in)
+        tla.set_flag(ub_loaded)
+        tla.wait_flag(ub_loaded)
+
+        # 2) 寄存器级计算：以 VL 为粒度分块，load -> op -> store。
+        with tla.vec.func(mode="simd"):
+            for i in tla.range(LOOPS):
+                in_tile = tla.tile_view(ub_in, tla.make_shape(VL_ELE), tla.make_coord(i))
+                out_tile = tla.tile_view(ub_out, tla.make_shape(VL_ELE), tla.make_coord(i))
+
+                result_tile = tla.tile_view()
+
+                # vector op 操作
+                out_tile.store(tla.abs(in_tile.load()))
+
+        # 3) UB -> GM（MTE3）；用 flag 保证计算完成后才回写。
+        tla.set_flag(vec_done)
+        tla.wait_flag(vec_done)
+        tla.copy(gm_out, ub_out)
+
+        # 4) 流水收尾同步。
+        tla.pipe_barrier(tla.pipes.ALL)
+```
+
 ## 代码组织
 
 本目录组织结构及文件概述如下：
@@ -61,32 +120,7 @@
 | [**`register_control_flow.py`**](register_control_flow.py) | 控制流示例，演示 for-loop 控制流及 `VectorSSA` 与 `MaskSSA` 跨循环边界存活。 |
 | [**`load_and_store_scalar_after_reduction.py`**](load_and_store_scalar_after_reduction.py) | UB 标量访问示例，对归约结果做标量 `load` / `store` 操作。 |
 
-## 约束说明
-
- - 各样例支持的数据类型如下（`f32`、`f16`、`bf16`、`i8`、`i16`、`i32`）：
-
-| 文件 | 支持的数据类型 |
-|------|---------------|
-| `binary_op.py` | i8, i16, i32, f16, f32, bf16 |
-| `unary_ops.py` | i8, i16, i32, f16, f32, bf16（浮点类运算仅 f16/f32，bf16 不支持） |
-| `multi_binary.py` | i32, f32 |
-| `masked_binary.py` | i16, i32, f16, f32 |
-| `bitwise_ops.py` | f16, bf16, f32, i32, i16, i8 |
-| `compare_mask.py` | f32 |
-| `cast_multi.py` | f32 |
-| `arange_op.py` | i8, i16, i32 |
-| `gather_op.py` | f32 |
-| `interleave_op.py` | i8, i16, i32, f16, f32, bf16 |
-| `load_dintlv_op.py` | f32 |
-| `load_us_b8_op.py` | i8 |
-| `load_store_mask.py` | f32, f16, i8 |
-| `store_pack.py` | i32, i16 |
-| `reduction_ops.py` | f32 |
-| `squeeze_op.py` | f32, f16, i32 |
-| `register_control_flow.py` | f32 |
-| `load_and_store_scalar_after_reduction.py` | f32 |
-
- - 浮点类型（`f32`/`f16`/`bf16`）与整型（`i8`/`i16`/`i32`）在精度校验上采用不同的策略：浮点类型使用容差法进行精度判断（绝对误差可由 `--atol` 给定），整型则进行逐元素比对。
+ - 各样例支持的数据类型及其他约束见 [子测试项说明](#子测试项说明) 中各子节的 "约束说明"。
 
 ## 使用示例
 
@@ -109,7 +143,7 @@
 
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
-| `op` | -（位置参数，必填或与 `--batch-run` 二选一） | 待执行的算子名，取决于待执行的算子名。 |
+| `op` | -（位置参数，必填或与 `--batch-run` 二选一） | 待执行的算子名，取值见「各子测试项说明」。 |
 | `--sweep` | `None` | 全量扫描模式，对 `--dtypes` / `--shapes` / `--sizes` 的组合逐一执行，默认不启用。 |
 | `--batch-run` | - | 批量模式，将多个算子打包作多核并发执行。 |
 | `--device` | `2` | 上板执行使用的 NPU 设备号。 |
@@ -147,8 +181,6 @@ python examples/end_to_end/vector_ops/binary_op.py --batch-run add sub mul max
 
 # `gather_op.py` 执行（需显式 `--run` ）
 python examples/end_to_end/vector_ops/gather_op.py --run --device 0
-# `reduction_ops.py` 执行（需显式 `--run` ）
-python examples/end_to_end/vector_ops/reduction_ops.py add --run
 ```
 
 执行测试后，预期输出（以统一框架样例为例）：
@@ -162,3 +194,413 @@ first mismatch=None
 ```
 
 其中 `compile_ok`/`launch_ok` 表示编译与上板启动是否成功；`outputs equal expected <op>?` 为 `True` 或 `False`，表明 NPU 计算结果与 golden 参考值的精度校验是否通过；`kernel.o path` 为编译产物路径。
+
+ - 浮点类型（`f32`/`f16`/`bf16`）与整型（`i8`/`i16`/`i32`）在精度校验上采用不同的策略：浮点类型使用容差法进行精度判断（绝对误差可由 `--atol` 给定），整型则进行逐元素比对。
+
+## 子测试项说明
+
+以下是针对各子类向量运算测试脚本的具体说明。
+
+### 二元运算
+
+- 文件位置：
+  - `binary_op.py`：基础二元运算。
+  - `masked_binary.py`：带掩码的多算子二元运算。
+  - `multi_binary.py`：多级混合二元运算。
+
+- 功能说明：
+  - **`binary_op.py`** 统一二元运算示例，按 `op` 选择算子与搬运模式：
+
+    | Op 模式 | 语义 | 说明 |
+    |------|------|------|
+    | `add` / `sub` / `mul` / `div` | `z = x + y` / `x - y` / `x * y` / `x / y` | 逐元素四则运算 |
+    | `max` / `min` | `z = max(x, y)` / `min(x, y)` | 逐元素最大 / 最小 |
+    | `add_unalign` | `z = x + y` | 非对齐 load/store（`UnalignLoadParams` / `UnalignStoreParams`），逐元素精确比对 |
+    | `add_brc_b32` | `z = x + y` | 广播加载 + 加（仅 f32） |
+
+  - **`masked_binary.py`** 演示不同掩码下的带掩码计算与选择：
+
+    | 输出 | 计算 | 掩码 / 语义 |
+    |------|------|------|
+    | `radd` | `add(a, b)` | pattern `H`（前半），未命中通道置 0 |
+    | `rsub` | `sub(a, b)` | pattern `Q`（前 1/4），未命中通道置 0 |
+    | `rmul` | `mul(a, b)` | pattern `M4`（4 的倍数），未命中通道置 0 |
+    | `rdiv` | `div(a, b)` | pattern `H`（前半），未命中通道置 0 |
+    | `rsel` | `where(H, a+b, a-b)` | 前半取 `a+b`、后半取 `a-b`，所有 lane 均有定义（`ave.hir.vsel`） |
+
+  - **`multi_binary.py`**（i32, f32）——op `multi_binary`，多级混合计算 + 多种控制流结构：
+    - 每块中间量：`inter = b * c / d`；
+    - 按 `block_idx` 分流：`block_idx == 0` 写 `x = a + inter - e`，否则写 `t = a * inter + e`；
+    - `NUM_CHUNKS = 7` 个分块分别落在 `for` 循环与直线代码等不同控制流位置，覆盖跨 `tla.range` 边界的寄存器值处理。
+
+- 约束说明：
+  - 支持的数据类型：
+
+    | 文件 | 支持的数据类型 |
+    |------|---------------|
+    | `binary_op.py` | i8, i16, i32, f16, f32, bf16 |
+    | `masked_binary.py` | i16, i32, f16, f32 |
+    | `multi_binary.py` | i32, f32 |
+
+  - `binary_op.py`：`mul`/`div` 不支持 `i8`；`div` 不支持 `bf16`；`add_brc_b32` 仅支持 `f32`；`div` 要求 rhs 非零。
+  - `masked_binary.py`：掩码未命中的 lane 被置 0；末块越界由循环携带的 `tla.update_mask` 尾掩码约束。
+  - `multi_binary.py`：仅支持 4 字节 dtype（`i32`/`f32`，64 lane）；固定 7 块恰好覆盖 400 元素，不随 shape 泛化。
+
+- 执行示例：
+  ```bash
+  # 在本仓 python/tla_dsl 目录下执行
+  cd python/tla_dsl
+
+  # 基础二元：逐元素加（默认 dtype=f32, shape=400）
+  python examples/end_to_end/vector_ops/binary_op.py add --dtype f16 --shape 1024
+
+  # 非对齐搬运 / B32 广播变体（均仅支持 f32）
+  python examples/end_to_end/vector_ops/binary_op.py add_unalign --dtype f32
+  python examples/end_to_end/vector_ops/binary_op.py add_brc_b32 --dtype f32
+
+  # 批量多算子：一次打包 add/sub/mul/max 多核并发执行
+  python examples/end_to_end/vector_ops/binary_op.py --batch-run add sub mul max
+
+  # 带掩码的多算子二元 / 多级混合二元
+  python examples/end_to_end/vector_ops/masked_binary.py masked_binary --dtype f32
+  python examples/end_to_end/vector_ops/multi_binary.py multi_binary --dtype f32
+  ```
+
+### 一元运算
+
+- 文件位置：
+  - `unary_ops.py`：向量一元运算与带掩码一元运算。
+
+- 功能说明：
+  - **`unary_ops.py`** 一元运算示例：
+
+    | op | 语义 |
+    |------|------|
+    | `exp` / `log` / `sqrt` | 指数 / 对数 / 开方（仅 f16/f32） |
+    | `abs` / `neg` | 绝对值 / 取负 |
+    | `masked_unary` | 一次同时计算 exp/log/sqrt/abs 并施加不同掩码 |
+    | `masked_abs` / `masked_neg` | 带掩码的绝对值 / 取负 |
+
+- 约束说明：
+  - 支持的数据类型：
+
+    | 文件 | 支持的数据类型 |
+    |------|---------------|
+    | `unary_ops.py` | i8, i16, i32, f16, f32, bf16（浮点类运算仅 f16/f32，bf16 不支持） |
+
+  - `exp`/`log`/`sqrt` 仅支持 f16/f32（bf16 与整数跳过）。
+  - `abs`/`neg` 支持整数与 f16/f32（bf16 跳过）；`masked_unary` 仅 f16/f32；`masked_abs` 仅 i8/i16/i32；`masked_neg` 支持整数与 f16/f32。
+  - 输出 4 个（非 `masked_unary` 时其余用 sentinel 补齐）。
+
+- 执行示例：
+  ```bash
+  # 在本仓 python/tla_dsl 目录下执行
+  cd python/tla_dsl
+
+  # 指数运算（浮点类运算仅支持 f16/f32）
+  python examples/end_to_end/vector_ops/unary_ops.py exp --dtype f32 --device 0
+
+  # 带掩码的一元运算组合：一次计算 exp/log/sqrt/abs（仅 f16/f32）
+  python examples/end_to_end/vector_ops/unary_ops.py masked_unary --dtype f16 --device 0
+
+  # 带掩码的绝对值（仅整数 i8/i16/i32）
+  python examples/end_to_end/vector_ops/unary_ops.py masked_abs --dtype i32 --device 0
+  ```
+
+### 位运算与移位
+
+- 文件位置：
+  - `bitwise_ops.py`：MaskSSA 与 VectorSSA 的位运算。
+  - `shift_op.py`：寄存器/标量移位量的左移与右移。
+
+- 功能说明：
+  - **`bitwise_ops.py`** 按位运算示例。
+  - **`shift_op.py`** 移位运算示例。
+
+    | op | 语义 |
+    |------|------|
+    | `shift_left` | 寄存器移位量的左移（`tla.shift_left`，reg-reg） |
+    | `shift_right` | 寄存器移位量的右移（reg-reg） |
+    | `shift_lefts` | 标量移位量的左移（`tla.shift_left(..., int)`，reg-scalar） |
+    | `shift_rights` | 标量移位量的右移（reg-scalar） |
+
+- 约束说明：
+  - 支持的数据类型：
+
+    | 文件 | 支持的数据类型 |
+    |------|---------------|
+    | `bitwise_ops.py` | f16, bf16, f32, i32, i16, i8 |
+    | `shift_op.py` | i8, i16, i32 |
+
+  - `bitwise_ops.py`：全部列出的 dtype 均支持；`bf16` 下寄存器 `not` 路径退化（`_SUPPORTS_REG_NOT=False`）。
+  - `shift_op.py`：源为 signed `i8`/`i16`/`i32`；移位量须非负；右移为算术右移。
+
+- 执行示例：
+  ```bash
+  # 在本仓 python/tla_dsl 目录下执行
+  cd python/tla_dsl
+
+  # 位运算：掩码/寄存器的 not/and/or/xor（共 8 路输出）
+  python examples/end_to_end/vector_ops/bitwise_ops.py bitwise_ops --dtype i32 --device 0
+
+  # 移位：reg-reg 左移（移位量来自寄存器）
+  python examples/end_to_end/vector_ops/shift_op.py shift_left --dtype i32 --device 0
+
+  # 移位：reg-scalar 右移（移位量为标量，算术右移）
+  python examples/end_to_end/vector_ops/shift_op.py shift_rights --dtype i16 --device 0
+  ```
+
+### 比较与掩码搬运
+
+- 文件位置：
+  - `compare_mask.py`：比较掩码与 `tla.where` 选择。
+  - `load_store_mask.py`：MaskSSA 的 UB 往返搬运。
+
+- 功能说明：
+  - **`compare_mask.py`**（f32）：
+
+    | op | 语义 |
+    |------|------|
+    | `vector_vector_lt` / `le` / `gt` / `ge` / `eq` / `ne` | 向量-向量比较后用 `tla.where` 选 lhs/rhs |
+    | `vector_scalar_gt` / `ge` | 向量与 0.0 比较 |
+    | `masked_vector_vector_lt` | 带 `H` 掩码的向量-向量比较 |
+    | `cmp_masked_fused` | 比较 + masked add + 掩码 store 融合 |
+    | `static_dynamic_lt` | 静态首 chunk 参考与动态 chunk 混用 |
+
+  - **`load_store_mask.py`**（f32, f16, i8）：op `load_store_mask`，`create_mask(H)` → `store(MaskStoreParams)` → `load(MaskLoadParams)` → 以该掩码做 masked store 的往返。
+
+- 约束说明：
+  - 支持的数据类型：
+
+    | 文件 | 支持的数据类型 |
+    |------|---------------|
+    | `compare_mask.py` | f32 |
+    | `load_store_mask.py` | f32, f16, i8 |
+
+  - `compare_mask.py`：仅 f32；输入 2、输出 1；支持 batch。
+  - `load_store_mask.py`：shape 随 dtype 变化（f32→64、f16→128、i8→256），输出仅前 `ELE/2` lane 有效；掩码与伴随向量 dtype 一致。
+
+- 执行示例：
+  ```bash
+  # 在本仓 python/tla_dsl 目录下执行
+  cd python/tla_dsl
+
+  # 向量-向量比较（lt）后用 tla.where 选择 lhs/rhs
+  python examples/end_to_end/vector_ops/compare_mask.py vector_vector_lt --dtype f32 --device 0
+
+  # 比较 + masked add + 掩码 store 的融合
+  python examples/end_to_end/vector_ops/compare_mask.py cmp_masked_fused --dtype f32 --device 0
+
+  # MaskSSA 的 UB 存储 / 加载往返
+  python examples/end_to_end/vector_ops/load_store_mask.py load_store_mask --dtype f32 --device 0
+  ```
+
+### 类型转换
+
+- 文件位置：
+  - `cast_multi.py`：`tla.cast` 多级类型转换。
+
+- 功能说明：**`cast_multi.py`**（f32）——op `cast_multi`，单个内核在 4 个 64-lane chunk 上跑多条 cast 路径并汇总为 f32 输出，覆盖 f16/bf16/i32/i16/i8 与 f32 之间的 2x/4x 宽度转换。
+
+- `CastParams` 模式说明：
+
+  | 字段 | 取值 | 含义 |
+  |------|------|------|
+  | `reg_slot`（`tla.params.RegSlot`） | `ZERO` / `ONE` | 2x 宽度转换（如 f32→f16、i32↔i16）落到的寄存器位置：`ZERO`=`part_even`（偶位）、`ONE`=`part_odd`（奇位） |
+  | | `ZERO` / `ONE` / `TWO` / `THREE` | 4x 宽度转换（如 i32↔i8）的 pack 象限：`ZERO`=pp0、`ONE`=pp1、`TWO`=pp2、`THREE`=pp3 |
+  | `sat_mode`（`tla.params.SatMode`） | `NOSAT` / `SAT` / `UNKNOWN` | 溢出行为（AVE `sat`）：不饱和 / 饱和 / 未指定（当前 lowering 按不饱和处理） |
+  | `round_mode`（`tla.params.RoundMode`） | `CAST_ROUND` | 就近取整，平局远离 0 |
+  | | `CAST_FLOOR` | 向 -∞ 取整 |
+  | | `CAST_CEIL` | 向 +∞ 取整 |
+  | | `CAST_TRUNC` | 向 0 取整（截断） |
+
+  默认组合为 `CastParams(reg_slot=RegSlot.ZERO, sat_mode=SatMode.NOSAT, round_mode=RoundMode.CAST_ROUND)`。
+
+- 约束说明：
+  - 支持的数据类型：
+
+    | 文件 | 支持的数据类型 |
+    |------|---------------|
+    | `cast_multi.py` | f32 |
+
+  - `cast_multi.py`：输入/输出均为 f32，转换在内核内部进行；固定 256 元素 / 4 chunk；默认 atol 1e-2。
+  - 浮点→浮点收窄（f32→f16/bf16）的 `round_mode` 为亚 ULP 舍入；本示例输入可精确表示，故该处舍入不改变结果。
+  - 整数舍入（trunc/floor）在浮点→整数转换上可观测；`sat_mode=UNKNOWN` 被放在浮点→浮点转换上以避免影响数值。
+
+- 执行示例：
+  ```bash
+  # 在本仓 python/tla_dsl 目录下执行
+  cd python/tla_dsl
+
+  # 多级类型转换（输入/输出 f32，内核内部转换）
+  python examples/end_to_end/vector_ops/cast_multi.py cast_multi --dtype f32 --device 0
+  ```
+
+### 序列生成
+
+- 文件位置：
+  - `arange_op.py`：`tla.arange` 递增/递减序列生成。
+
+- 功能说明：**`arange_op.py`**（i8, i16, i32）
+
+  | op | 语义 |
+  |------|------|
+  | `increase` | 每个 chunk 生成递增序列 |
+  | `decrease` | 每个 chunk 生成递减序列 |
+
+- 约束说明：
+  - 支持的数据类型：
+
+    | 文件 | 支持的数据类型 |
+    |------|---------------|
+    | `arange_op.py` | i8, i16, i32 |
+
+  - `arange_op.py`：无 GM 输入（`input_count=0`）；输出 1 个；支持 batch。
+
+- 执行示例：
+  ```bash
+  # 在本仓 python/tla_dsl 目录下执行
+  cd python/tla_dsl
+
+  # 递增序列
+  python examples/end_to_end/vector_ops/arange_op.py increase --dtype i32 --device 0
+
+  # 递减序列
+  python examples/end_to_end/vector_ops/arange_op.py decrease --dtype i16 --device 0
+  ```
+
+### 数据搬运
+
+- 文件位置：
+  - `interleave_op.py`：交织/解交织。
+  - `load_dintlv_op.py`：双目标交织加载。
+  - `load_us_b8_op.py`：b8 上采样加载。
+  - `store_pack.py`：紧凑 PACK 存储。
+
+- 功能说明：
+  - **`interleave_op.py`**（i8, i16, i32, f16, f32, bf16）：
+
+    | op | 语义 |
+    |------|------|
+    | `interleave` | 两路输入交错为两路输出 |
+    | `deinterleave` | 两路输入解交错为两路输出 |
+
+  - **`load_dintlv_op.py`**（f32）：op `dintlv_b32`，按 `2*i*VL` 偏移读 `2*VL`，拆出偶数/奇数两路寄存器。
+  - **`load_us_b8_op.py`**（i8）：op `us_b8`，每 loop 读 `VL/2` 个 b8 并上采样为 VL 寄存器。
+  - **`store_pack.py`**（输入 i32/i16）：op `store_pack`，i32→i16（`DIST_PACK_B32`）、i16→i8（`DIST_PACK_B16`），抽取低半有效数位做紧凑存储。
+
+- 约束说明：
+  - 支持的数据类型：
+
+    | 文件 | 支持的数据类型 |
+    |------|---------------|
+    | `interleave_op.py` | i8, i16, i32, f16, f32, bf16 |
+    | `load_dintlv_op.py` | f32 |
+    | `load_us_b8_op.py` | i8 |
+    | `store_pack.py` | i32, i16 |
+
+  - `interleave_op.py`：全部列出 dtype；输入 2、输出 2；支持 batch。
+  - `load_dintlv_op.py`：仅 f32（i32/u32 不支持）；`VECTOR_ELE` 须为 `2*VL` 的倍数；仅写 `LOOPS*VL` lane，其余保留 sentinel。
+  - `load_us_b8_op.py`：仅 i8；仅写 `LOOPS*VL` lane，其余保留 sentinel。
+  - `store_pack.py`：输入 i32/i16，输出对应 i16/i8；固定 256 元素。
+
+- 执行示例：
+  ```bash
+  # 在本仓 python/tla_dsl 目录下执行
+  cd python/tla_dsl
+
+  # 交织 / 解交织（两路输入、两路输出）
+  python examples/end_to_end/vector_ops/interleave_op.py interleave --dtype f32 --device 0
+
+  # 双目标交织加载（仅 f32）
+  python examples/end_to_end/vector_ops/load_dintlv_op.py dintlv_b32 --dtype f32 --device 0
+
+  # b8 元素上采样加载（仅 i8）
+  python examples/end_to_end/vector_ops/load_us_b8_op.py us_b8 --dtype i8 --device 0
+
+  # 紧凑 PACK 存储（i32->i16，取低半有效数位）
+  python examples/end_to_end/vector_ops/store_pack.py store_pack --dtype i32 --device 0
+  ```
+
+### 归约、压缩与控制流
+
+- 文件位置：
+  - `reduction_ops.py`（独立脚本）：向量归约。
+  - `squeeze_op.py`：按掩码压缩 lane。
+  - `register_control_flow.py`：寄存器值跨循环控制流。
+
+- 功能说明：
+  - **`reduction_ops.py`**（f32，独立脚本）：
+
+    | op | 语义 |
+    |------|------|
+    | `add` / `max` / `min` | 求和 / 最大 / 最小归约 |
+
+    将 128 个 f32 归约为两个 1 元素结果：tile0（前 64）对齐存储、tile1（后 64）非对齐存储（`UnalignStoreParams`）。
+
+  - **`squeeze_op.py`**（f32, f16, i32）：op `squeeze`，按 `M4` 掩码压缩有效 lane 并紧凑写回。
+  - **`register_control_flow.py`**（f32）：op `register_carriers`，演示 `VectorSSA`/`MaskSSA` 作为 `scf.for` 的 iter_args/results 跨循环边界携带。
+
+- 约束说明：
+  - 支持的数据类型：
+
+    | 文件 | 支持的数据类型 |
+    |------|---------------|
+    | `reduction_ops.py` | f32 |
+    | `squeeze_op.py` | f32, f16, i32 |
+    | `register_control_flow.py` | f32 |
+
+  - `reduction_ops.py`：仅 f32；单 op 模式须 `--run`；`--batch-run` 与位置 op 互斥；默认 `--device 0`。
+  - `squeeze_op.py`：仅单次 VL（`VECTOR_ELE = VL_ELE = 64`）。
+  - `register_control_flow.py`：shape 必须恰好一个物理向量寄存器（f32 下为 64 元素）。
+
+- 执行示例：
+  ```bash
+  # 在本仓 python/tla_dsl 目录下执行
+  cd python/tla_dsl
+
+  # 求和归约（独立脚本，单 op 模式需显式 --run）
+  python examples/end_to_end/vector_ops/reduction_ops.py add --run --dtype f32 --device 0
+
+  # 批量归约：一次打包 add/max/min 多核并发
+  python examples/end_to_end/vector_ops/reduction_ops.py --batch-run --device 0
+
+  # 按 M4 掩码压缩有效 lane 并紧凑写回
+  python examples/end_to_end/vector_ops/squeeze_op.py squeeze --dtype f32 --device 0
+
+  # VectorSSA/MaskSSA 跨 scf.for 循环边界携带
+  python examples/end_to_end/vector_ops/register_control_flow.py register_carriers --dtype f32 --device 0
+  ```
+
+### 标量访问与收集（独立脚本）
+
+- 文件位置：
+  - `load_and_store_scalar_after_reduction.py`：UB 标量访问。
+  - `gather_op.py`：按索引收集。
+
+- 功能说明：
+  - **`load_and_store_scalar_after_reduction.py`**（f32）：对 f32 UB 向量归约后，分别在 `tla.vec.func` 内与 `tla.vector` 内直接做 UB 标量 `load`/`store`。
+  - **`gather_op.py`**（f32）：`tla.gather` 依据 int32 索引从源向量收集元素。
+
+- 约束说明：
+  - 支持的数据类型：
+
+    | 文件 | 支持的数据类型 |
+    |------|---------------|
+    | `load_and_store_scalar_after_reduction.py` | f32 |
+    | `gather_op.py` | f32 |
+
+  - `load_and_store_scalar_after_reduction.py`：dtype 固定 f32，无位置 op、无 `--run`，唯一参数 `--device`；固定写入索引 7（`vec.func` 内）与 8（`vector` 内）。
+  - `gather_op.py`：仅 f32；必须显式传 `--run`，否则退出。
+
+- 执行示例：
+  ```bash
+  # 在本仓 python/tla_dsl 目录下执行
+  cd python/tla_dsl
+
+  # UB 标量 load/store（无位置 op、无 --run，直接执行）
+  python examples/end_to_end/vector_ops/load_and_store_scalar_after_reduction.py --device 0
+
+  # 按索引收集（独立脚本，必须显式 --run）
+  python examples/end_to_end/vector_ops/gather_op.py --run --dtype f32 --device 0
+  ```
