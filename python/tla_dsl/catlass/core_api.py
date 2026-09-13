@@ -57,7 +57,6 @@ from .types import (
     TlaShape,
     TlaStride,
     TlaTensor,
-    TlaTile,
     dtype_size_bytes,
     dtype_size_bits,
     _replace_flat_leaves_in_tree,
@@ -1123,20 +1122,6 @@ def pack_from_irvalue(
     return list(tree_utils.rebuild_frontend_if_carried_values(wrapped, specs))
 
 
-def _const_attr(value: Any) -> mlir_ir.Attribute:
-    if isinstance(value, Numeric) and isinstance(value.value, (bool, int, float)):
-        value = value.value
-    if isinstance(value, bool):
-        return mlir_ir.BoolAttr.get(value)
-    if isinstance(value, int):
-        return mlir_ir.IntegerAttr.get(mlir_ir.IntegerType.get_signless(64), value)
-    if isinstance(value, float):
-        return mlir_ir.FloatAttr.get_f32(value)
-    if isinstance(value, str):
-        return mlir_ir.StringAttr.get(value)
-    return mlir_ir.StringAttr.get(str(value))
-
-
 def _coerce_type(type_like: Any) -> mlir_ir.Type:
     if isinstance(type_like, mlir_ir.Type):
         return type_like
@@ -1175,43 +1160,6 @@ def _const_int_value(value: Any) -> int | None:
                 if isinstance(attr, mlir_ir.IntegerAttr):
                     return int(attr.value)
     return None
-
-
-def _align_i64_value(
-    value: mlir_ir.Value,
-    byte_alignment: int,
-    *,
-    loc: mlir_ir.Location | None = None,
-) -> mlir_ir.Value:
-    alignment = _const_i64(byte_alignment, loc=loc)
-    alignment_minus_one = _const_i64(byte_alignment - 1, loc=loc)
-    aligned = mlir_ir.Operation.create(
-        "arith.addi",
-        operands=[value, alignment_minus_one],
-        results=[mlir_ir.IntegerType.get_signless(64)],
-        loc=loc,
-    ).results[0]
-    aligned = mlir_ir.Operation.create(
-        "arith.divui",
-        operands=[aligned, alignment],
-        results=[mlir_ir.IntegerType.get_signless(64)],
-        loc=loc,
-    ).results[0]
-    return mlir_ir.Operation.create(
-        "arith.muli",
-        operands=[aligned, alignment],
-        results=[mlir_ir.IntegerType.get_signless(64)],
-        loc=loc,
-    ).results[0]
-
-
-def _refine_pointer_alignment(current_alignment: int, offset: Any) -> int:
-    if current_alignment <= 1:
-        return 1
-    const_offset = _const_int_value(offset)
-    if const_offset is None:
-        return 1
-    return _builtins.max(1, math.gcd(current_alignment, abs(const_offset)))
 
 
 def _vector_ssa_type_for_mlir_value(
@@ -2347,21 +2295,6 @@ def _remap_tensor_like_trees_for_layout(
     )
 
 
-def _logical_tensor_shape_from_metadata(value: mlir_ir.Value) -> tuple[int | None, ...]:
-    """Recover the logical tensor shape from registered/frontend tensor metadata."""
-    for field in ("origin_shape", "shape"):
-        shape = _tensor_metadata_field(value, field)
-        if isinstance(shape, int):
-            return (shape,)
-        if isinstance(shape, tuple) and all(
-            dim is None or isinstance(dim, int) for dim in shape
-        ):
-            return shape
-    raise TlaLoweringError(
-        "expected flat tensor metadata shape/origin_shape for register fragment"
-    )
-
-
 # Shared by every matmul the frontend emits. There is one contract because there
 # is one entry point: tla.mmad. Which cube instruction it becomes is settled in
 # tla-cube-region from operand provenance, not here.
@@ -2876,16 +2809,6 @@ def _dtype_to_str(value: Any) -> str:
     return str(value)
 
 
-def _looks_dtype_literal(value: Any) -> bool:
-    if isinstance(value, mlir_ir.Type):
-        return True
-    return (
-        isinstance(value, type)
-        and issubclass(value, Numeric)
-        and bool(getattr(value, "dtype", ""))
-    )
-
-
 def _op_error(op_name: str, message: str) -> None:
     raise TlaCoreAPIError(f"tla.{op_name}: {message}")
 
@@ -2961,18 +2884,6 @@ def _name_token(value: Any) -> str | None:
         token = name.strip()
         return token or None
     return None
-
-
-def _require_arg_count(op_name: str, args: tuple[Any, ...], expected: int) -> None:
-    if len(args) != expected:
-        _op_error(op_name, f"expected {expected} argument(s), got {len(args)}")
-
-
-def _require_no_kwargs(op_name: str, kwargs: dict[str, Any]) -> None:
-    if kwargs:
-        _op_error(
-            op_name, f"does not accept keyword arguments: {', '.join(sorted(kwargs))}"
-        )
 
 
 def _require_index(op_name: str, name: str, value: Any, position: int) -> None:
@@ -3084,49 +2995,6 @@ def _require_categories(
             f"invalid argument '{name}' (position {position}): "
             f"expected one of {expected}, got {_type_name(value)}",
         )
-
-
-def _require_shape(op_name: str, value: Any, position: int) -> None:
-    if _category(value) == "shape":
-        return
-    if isinstance(value, tuple):
-        _check_shape(value, op_name=op_name, label="shape", position=position)
-        return
-    _op_error(
-        op_name,
-        f"invalid argument 'shape' (position {position}): expected shape, got {_type_name(value)}",
-    )
-
-
-def _require_coord(op_name: str, value: Any, position: int) -> None:
-    if _category(value) == "coord":
-        return
-    if isinstance(value, tuple):
-        _check_shape(
-            value,
-            op_name=op_name,
-            label="coord",
-            position=position,
-            require_positive_static_int=False,
-        )
-        return
-    _op_error(
-        op_name,
-        f"invalid argument 'coord' (position {position}): expected coord, got {_type_name(value)}",
-    )
-
-
-def _require_literal(op_name: str, name: str, value: Any, position: int) -> None:
-    if not isinstance(value, mlir_ir.Value):
-        bound = _runtime._resolve_frontend_bound_value(value)
-        if bound is not None:
-            raise TlaLoweringError(f"tla.{op_name} requires a literal")
-    if isinstance(value, (int, float, bool, str, mlir_ir.Type)):
-        return
-    _op_error(
-        op_name,
-        f"invalid argument '{name}' (position {position}): expected literal, got {_type_name(value)}",
-    )
 
 
 def _require_pipe(op_name: str, name: str, value: Any, position: int) -> None:
@@ -6212,31 +6080,6 @@ def _emit_vector_scalar_binary(
         loc=loc,
     )
     return VectorSSA(result)
-
-
-def _emit_commutative_vector_scalar_binary(
-    op_name: str,
-    lhs: Any,
-    rhs: Any,
-    *,
-    mask: Any | None = None,
-    loc: mlir_ir.Location | None = None,
-    scalar_op_name: str | None = None,
-) -> VectorSSA:
-    scalar_op_name = scalar_op_name or op_name
-    lhs_category = _category(lhs)
-    rhs_category = _category(rhs)
-    lhs_num = _as_vector_scalar_numeric(lhs)
-    rhs_num = _as_vector_scalar_numeric(rhs)
-    if lhs_category == "vector_ssa" and rhs_num is not None:
-        return _emit_vector_scalar_binary(
-            op_name, getattr(_tla_ops_gen, scalar_op_name), lhs, rhs, mask=mask, loc=loc
-        )
-    if lhs_num is not None and rhs_category == "vector_ssa":
-        return _emit_vector_scalar_binary(
-            op_name, getattr(_tla_ops_gen, scalar_op_name), rhs, lhs, mask=mask, loc=loc
-        )
-    _op_error(op_name, "expected vector-scalar operands")
 
 
 def _emit_vector_binary_or_scalar(
