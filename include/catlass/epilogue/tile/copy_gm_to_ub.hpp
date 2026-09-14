@@ -1,12 +1,17 @@
 /**
- * Copyright (c) 2025 Huawei Technologies Co., Ltd.
- * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
- * CANN Open Software License Agreement Version 2.0 (the "License").
- * Please refer to the License for details. You may not use this file except in compliance with the License.
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
- * See LICENSE in the root of the software repository for the full text of the License.
- */
+ * Copyright (c) 2025-2026 Huawei Technologies Co., Ltd.
+ * This program is free software, you can redistribute it
+ * and/or modify it under the terms and conditions of
+ * CANN Open Software License Agreement Version 2.0 (the
+ * "License").
+ * Please refer to the License for details. You may not use this file except in compliance with the
+ * License.
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR
+ * IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+ *
+ * See LICENSE in the root of the software repository for the full text of the License.
+ */
 
 #ifndef CATLASS_EPILOGUE_TILE_TILE_COPY_GM_TO_UB_HPP
 #define CATLASS_EPILOGUE_TILE_TILE_COPY_GM_TO_UB_HPP
@@ -198,7 +203,7 @@ struct CopyGm2Ub<Arch::Ascend950, Gemm::GemmType<Element, layout::VectorLayout>>
     {
         AscendC::DataCopyExtParams dataCopyParams(1, layoutSrc.shape(0) * sizeof(Element), 0, 0, 0);
         if constexpr (AscendC::Std::is_one_of_v<
-                          Element, float8_e4m3_t, float8_e5m2_t, float4_e2m1x2_t, float4_e1m2x2_t>) {
+                          Element, float8_e4m3_t, float8_e5m2_t, float8_e8m0_t, float4_e2m1x2_t, float4_e1m2x2_t>) {
             AscendC::DataCopyPadExtParams<uint8_t> padParams(false, 0, 0, 0);
             AscendC::DataCopyPad(
                 dstTensor.template ReinterpretCast<uint8_t>(), srcTensor.template ReinterpretCast<uint8_t>(),

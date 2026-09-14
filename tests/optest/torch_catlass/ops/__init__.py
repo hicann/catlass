@@ -123,6 +123,10 @@ from .matrix_inverse import matrix_inverse  # example 78
 from .x_attention import x_attention  # example 78
 from .ascend950_basic_syrk import ascend950_basic_syrk  # example 82
 
+from .ascend950_quant_matmul import (  # example 79, 81
+    ascend950_fp4_mx_quant_matmul,
+    ascend950_fp8_e4m3_quant_matmul,
+)
 __all__ = [
     "basic_matmul",  # example 00
     "batched_matmul",  # example 01
@@ -202,6 +206,8 @@ __all__ = [
     "ascend950_flash_attention_chunk_prefill",  # example 70
     "ascend950_rain_fusion_attention",  # example 76
     "ascend950_fp8_mx_grouped_matmul_finalize_routing",  # example 71
+    "ascend950_fp4_mx_quant_matmul",  # experimental/matmul
+    "ascend950_fp8_e4m3_quant_matmul",  # experimental/matmul
     "ascend950_fp8_mx_grouped_matmul_finalize_routing_no_deter",  # example 71 no_deter
     "ascend950_basic_conv2d_tla",  # example 56
     "ascend950_matmul_full_loadA",  # example 73

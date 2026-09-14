@@ -121,7 +121,7 @@ def ret_check(ret: subprocess.CompletedProcess):
     assert ret.returncode == 0, f"Return code is not zero: {ret.returncode}"
 
 
-def run_case(build_env, executable_name: str, args: list):
+def run_case(build_env, executable_name: str, args: list, *, cwd=None):
     """Build the case target (cmake --build + install) then run its bin."""
     subprocess.run(
         ["cmake", "--build", build_env, "--target", executable_name, "-j"],
@@ -136,8 +136,10 @@ def run_case(build_env, executable_name: str, args: list):
         [os.path.join(CMAKE_BINARY_PATH, executable_name)] + args,
         capture_output=True,
         check=False,
+        cwd=cwd,
     )
     ret_check(ret)
+    return ret
 
 
 # ---------------------------------------------------------------------------

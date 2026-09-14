@@ -50,6 +50,7 @@
 #include "template/a8w4_mx_matmul.h"
 #include "template/a8w4_grouped_mx_matmul.h"
 #include "template/svd_quant_matmul.h"
+#include "template/ascend950_quant_matmul.h"
 #include "template/basic_syrk.h"
 #include "template/trmm.h"
 #include "template/conv_bias.h"
@@ -377,6 +378,14 @@ REGISTER_TORCH_FUNC(ascend950_fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant);
 using Ascend950TailMultiCoreSplitkMatmulOp = MatmulLike<CatlassKernel::Ascend950TailMultiCoreSplitkMatmul>;
 static auto& ascend950_tail_multi_core_splitk_matmul = Ascend950TailMultiCoreSplitkMatmulOp::Run;
 REGISTER_TORCH_FUNC(ascend950_tail_multi_core_splitk_matmul);
+
+using Ascend950Fp4MxQuantMatmulOp = Fp4MxQuantMatmulLike<CatlassKernel::Ascend950Fp4MxQuantMatmul>;
+static auto& ascend950_fp4_mx_quant_matmul = Ascend950Fp4MxQuantMatmulOp::Run;
+REGISTER_TORCH_FUNC(ascend950_fp4_mx_quant_matmul);
+
+using Ascend950Fp8E4M3QuantMatmulOp = Fp8E4M3QuantMatmulLike<CatlassKernel::Ascend950Fp8E4M3QuantMatmul>;
+static auto& ascend950_fp8_e4m3_quant_matmul = Ascend950Fp8E4M3QuantMatmulOp::Run;
+REGISTER_TORCH_FUNC(ascend950_fp8_e4m3_quant_matmul);
 using Ascend950GroupedMatmulSliceMPerTokenDequantOp =
     GroupedQuantMatmulLike<CatlassKernel::Ascend950GroupedMatmulSliceMPerTokenDequant, GmmSliceDir::M>;
 static auto& ascend950_grouped_matmul_slice_m_per_token_dequant = Ascend950GroupedMatmulSliceMPerTokenDequantOp::Run;
