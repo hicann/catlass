@@ -1,0 +1,111 @@
+// RUN: sed -n '/^\/\/ BEGIN_MODE4_NO_AIV$/,/^\/\/ END_MODE4_NO_AIV$/p' %s | sed '1d;$d;s|^// ||' > %t.mode4-no-aiv.mlir && not %tla_compile %t.mode4-no-aiv.mlir -o %t 2>&1 | %filecheck %s --check-prefix=MODE4-NO-AIV
+// RUN: sed -n '/^\/\/ BEGIN_MODE2_WITH_AIV$/,/^\/\/ END_MODE2_WITH_AIV$/p' %s | sed '1d;$d;s|^// ||' > %t.mode2-with-aiv.mlir && not %tla_compile %t.mode2-with-aiv.mlir -o %t 2>&1 | %filecheck %s --check-prefix=MODE2-WITH-AIV
+// RUN: sed -n '/^\/\/ BEGIN_EXHAUSTED$/,/^\/\/ END_EXHAUSTED$/p' %s | sed '1d;$d;s|^// ||' > %t.exhausted.mlir && not %tla_compile %t.exhausted.mlir -o %t 2>&1 | %filecheck %s --check-prefix=EXHAUSTED
+// RUN: sed -n '/^\/\/ BEGIN_MODE_MISMATCH$/,/^\/\/ END_MODE_MISMATCH$/p' %s | sed '1d;$d;s|^// ||' > %t.mode-mismatch.mlir && not %tla_compile %t.mode-mismatch.mlir -o %t 2>&1 | %filecheck %s --check-prefix=MODE-MISMATCH
+
+// MODE4-NO-AIV: error:
+// MODE4-NO-AIV-SAME: mode 4 requires aiv_id
+// MODE2-WITH-AIV: error:
+// MODE2-WITH-AIV-SAME: aiv_id is only valid for mode 4
+// EXHAUSTED: error:
+// EXHAUSTED-SAME: cross flag id exhausted (legal range 0-15; maximum 16 flags)
+// Cross-mode dynamic selection is rejected by scf.if's generic type verifier
+// (mode 4 flag cannot be yielded as mode 2), not by a flag-specific check.
+// MODE-MISMATCH: error:
+// MODE-MISMATCH: should match input type
+
+// BEGIN_MODE4_NO_AIV
+// module {
+//   tla.func @flags() {
+//     "tla.vector"() ({
+//       %flag = tla.cross_flag "flag" -> !tla.cross_flag<4>
+//       tla.cross_core_set_flag %flag {pipe = #tla.pipe<fix>} : !tla.cross_flag<4>
+//     }) : () -> ()
+//     "tla.cube"() ({
+//     }) : () -> ()
+//     tla.return
+//   }
+// }
+// END_MODE4_NO_AIV
+
+// BEGIN_MODE2_WITH_AIV
+// module {
+//   tla.func @flags() {
+//     "tla.vector"() ({
+//       %flag = tla.cross_flag "flag" -> !tla.cross_flag<2>
+//       tla.cross_core_set_flag %flag {aiv_id = 0 : i64, pipe = #tla.pipe<fix>} : !tla.cross_flag<2>
+//     }) : () -> ()
+//     "tla.cube"() ({
+//     }) : () -> ()
+//     tla.return
+//   }
+// }
+// END_MODE2_WITH_AIV
+
+// BEGIN_EXHAUSTED
+// module {
+//   tla.func @flags() {
+//     "tla.vector"() ({
+//       %f00 = tla.cross_flag "flag_00" -> !tla.cross_flag<2>
+//       %f01 = tla.cross_flag "flag_01" -> !tla.cross_flag<2>
+//       %f02 = tla.cross_flag "flag_02" -> !tla.cross_flag<2>
+//       %f03 = tla.cross_flag "flag_03" -> !tla.cross_flag<2>
+//       %f04 = tla.cross_flag "flag_04" -> !tla.cross_flag<2>
+//       %f05 = tla.cross_flag "flag_05" -> !tla.cross_flag<2>
+//       %f06 = tla.cross_flag "flag_06" -> !tla.cross_flag<2>
+//       %f07 = tla.cross_flag "flag_07" -> !tla.cross_flag<2>
+//       %f08 = tla.cross_flag "flag_08" -> !tla.cross_flag<2>
+//       %f09 = tla.cross_flag "flag_09" -> !tla.cross_flag<2>
+//       %f10 = tla.cross_flag "flag_10" -> !tla.cross_flag<2>
+//       %f11 = tla.cross_flag "flag_11" -> !tla.cross_flag<2>
+//       %f12 = tla.cross_flag "flag_12" -> !tla.cross_flag<2>
+//       %f13 = tla.cross_flag "flag_13" -> !tla.cross_flag<2>
+//       %f14 = tla.cross_flag "flag_14" -> !tla.cross_flag<2>
+//       %f15 = tla.cross_flag "flag_15" -> !tla.cross_flag<2>
+//       %f16 = tla.cross_flag "flag_16" -> !tla.cross_flag<2>
+//       tla.cross_core_set_flag %f00 {pipe = #tla.pipe<fix>} : !tla.cross_flag<2>
+//       tla.cross_core_set_flag %f01 {pipe = #tla.pipe<fix>} : !tla.cross_flag<2>
+//       tla.cross_core_set_flag %f02 {pipe = #tla.pipe<fix>} : !tla.cross_flag<2>
+//       tla.cross_core_set_flag %f03 {pipe = #tla.pipe<fix>} : !tla.cross_flag<2>
+//       tla.cross_core_set_flag %f04 {pipe = #tla.pipe<fix>} : !tla.cross_flag<2>
+//       tla.cross_core_set_flag %f05 {pipe = #tla.pipe<fix>} : !tla.cross_flag<2>
+//       tla.cross_core_set_flag %f06 {pipe = #tla.pipe<fix>} : !tla.cross_flag<2>
+//       tla.cross_core_set_flag %f07 {pipe = #tla.pipe<fix>} : !tla.cross_flag<2>
+//       tla.cross_core_set_flag %f08 {pipe = #tla.pipe<fix>} : !tla.cross_flag<2>
+//       tla.cross_core_set_flag %f09 {pipe = #tla.pipe<fix>} : !tla.cross_flag<2>
+//       tla.cross_core_set_flag %f10 {pipe = #tla.pipe<fix>} : !tla.cross_flag<2>
+//       tla.cross_core_set_flag %f11 {pipe = #tla.pipe<fix>} : !tla.cross_flag<2>
+//       tla.cross_core_set_flag %f12 {pipe = #tla.pipe<fix>} : !tla.cross_flag<2>
+//       tla.cross_core_set_flag %f13 {pipe = #tla.pipe<fix>} : !tla.cross_flag<2>
+//       tla.cross_core_set_flag %f14 {pipe = #tla.pipe<fix>} : !tla.cross_flag<2>
+//       tla.cross_core_set_flag %f15 {pipe = #tla.pipe<fix>} : !tla.cross_flag<2>
+//       tla.cross_core_set_flag %f16 {pipe = #tla.pipe<fix>} : !tla.cross_flag<2>
+//     }) : () -> ()
+//     "tla.cube"() ({
+//     }) : () -> ()
+//     tla.return
+//   }
+// }
+// END_EXHAUSTED
+
+// BEGIN_MODE_MISMATCH
+// module {
+//   tla.func @flags() {
+//     "tla.vector"() ({
+//       %condition = arith.constant true
+//       %a = tla.cross_flag "a" -> !tla.cross_flag<2>
+//       %b = tla.cross_flag "b" -> !tla.cross_flag<4>
+//       %selected = scf.if %condition -> (!tla.cross_flag<2>) {
+//         scf.yield %a : !tla.cross_flag<2>
+//       } else {
+//         scf.yield %b : !tla.cross_flag<4>
+//       }
+//       tla.cross_core_set_flag %selected {pipe = #tla.pipe<fix>} : !tla.cross_flag<2>
+//     }) : () -> ()
+//     "tla.cube"() ({
+//     }) : () -> ()
+//     tla.return
+//   }
+// }
+// END_MODE_MISMATCH
+
