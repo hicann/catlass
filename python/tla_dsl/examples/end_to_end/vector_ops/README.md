@@ -56,8 +56,6 @@ def vector_op(mem_in: tla.Tensor, mem_out: tla.Tensor) -> None:
                 in_tile = tla.tile_view(ub_in, tla.make_shape(VL_ELE), tla.make_coord(i))
                 out_tile = tla.tile_view(ub_out, tla.make_shape(VL_ELE), tla.make_coord(i))
 
-                result_tile = tla.tile_view()
-
                 # vector op 操作
                 out_tile.store(tla.abs(in_tile.load()))
 

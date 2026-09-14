@@ -768,7 +768,11 @@ def from_dlpack(
     dtype_token = str(getattr(dtype, "dtype", "")).strip().lower()
     layout_token = _resolve_arch_layout_tag(resolved_layout, for_op="from_dlpack")
     if origin_shape is None:
-        row_major_compact = (
+        # A physically contiguous buffer is passed here (stride = (shape[1], 1)).
+        # A size-1 extent is exempt: torch is free to leave its stride at 1,
+        # which would otherwise make a transposed one-row buffer look non-compact.
+
+        compact = (
             len(phys_shape) == 2
             and (phys_shape[1] == 1 or phys_strides[1] == 1)
             and (phys_shape[0] == 1 or phys_strides[0] == phys_shape[1])
@@ -776,13 +780,7 @@ def from_dlpack(
         if (
             len(phys_shape) == 2
             and layout_token in ("RowMajor", "ColumnMajor")
-            and (
-                (layout_token == "RowMajor" and not row_major_compact)
-                or (
-                    layout_token == "ColumnMajor"
-                    and (phys_strides[1] != 1 or phys_strides[0] != phys_shape[1])
-                )
-            )
+            and not compact
         ):
             torch_hint = (
                 "tensor.contiguous()"
