@@ -160,20 +160,11 @@ static void Run(const Options& options)
     int32_t dTypeKey = (dataType == "half") ? 0 : 1;
     int32_t specStraKey = (numHeads == MLATiling::NUM128) ? 1 : 0;
 
-    // 3 bits for tilingKey(specStraKey : 1, dTypeKey : 2)
-    uint32_t dTypeKeyBitLen = 2;
-    uint32_t tilingKey = (specStraKey << dTypeKeyBitLen) + dTypeKey;
-
     // read qNtokens num
     void* qNtokens = nullptr;
     ACL_CHECK(aclrtMallocHost(&qNtokens, 1 * sizeof(int32_t)));
     ReadFile(dataPath + "/q_ntokens.bin", qNtokens, 1 * sizeof(int32_t));
     int32_t numTokens = static_cast<int32_t*>(qNtokens)[0];
-
-    if ((numHeads == MLATiling::NUM128) && (numTokens % aicCoreNum <= 10) && (batch <= 40)) {
-        tilingKey = (dTypeKey == 0) ? 7 : 8;
-    }
-    std::cout << "tilingKey : " << tilingKey << std::endl;
 
     // read qSeq
     void* qSeq = nullptr;
@@ -279,6 +270,8 @@ static void Run(const Options& options)
     mlaInfo.qSeqLen = static_cast<int32_t*>(qSeq);
     mlaInfo.kvSeqLen = static_cast<int32_t*>(kvSeq);
     MLATiling::GetMLATilingParam(mlaInfo, blockDim, (uint32_t*)tilingHost);
+    uint32_t tilingKey = MLATiling::GetMLATilingKey(numHeads, dTypeKey, (const uint32_t*)tilingHost);
+    std::cout << "tilingKey : " << tilingKey << std::endl;
 
     ACL_CHECK(aclrtMemcpy(tilingDevice, tilingSize, tilingHost, tilingSize, ACL_MEMCPY_HOST_TO_DEVICE));
 

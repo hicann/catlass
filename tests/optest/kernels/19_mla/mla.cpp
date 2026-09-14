@@ -63,7 +63,6 @@ void MLAImpl(const uint32_t blockNum, aclrtStream stream, const MlaParams &param
 
     uint32_t dTypeKey = (params.dataType == ACL_FLOAT16) ? 0 : 1;
     uint32_t specStraKey = (numHeads == MLATiling::NUM128) ? 1 : 0;
-    uint32_t tilingKey = (specStraKey << 2) + dTypeKey;
 
     uint64_t qoSize = static_cast<uint64_t>(numTokens) * numHeads * embeddingSize * sizeof(DType);
     uint64_t qRopeSize = static_cast<uint64_t>(numTokens) * numHeads * embeddingSizeRope * sizeof(DType);
@@ -127,6 +126,8 @@ void MLAImpl(const uint32_t blockNum, aclrtStream stream, const MlaParams &param
     mlaInfo.qSeqLen = const_cast<int32_t *>(params.qSeqHost.data());
     mlaInfo.kvSeqLen = const_cast<int32_t *>(params.kvSeqHost.data());
     MLATiling::GetMLATilingParam(mlaInfo, blockDim, reinterpret_cast<uint32_t *>(tilingHost));
+    uint32_t tilingKey = MLATiling::GetMLATilingKey(
+        numHeads, dTypeKey, reinterpret_cast<const uint32_t *>(tilingHost));
 
     ACL_CHECK(aclrtMemcpy(tilingDevice, tilingSize, tilingHost, tilingSize, ACL_MEMCPY_HOST_TO_DEVICE));
 
@@ -139,10 +140,6 @@ void MLAImpl(const uint32_t blockNum, aclrtStream stream, const MlaParams &param
 
     uint8_t *lDevice;
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&lDevice), lSize, ACL_MEM_MALLOC_HUGE_FIRST));
-
-    if ((numHeads == MLATiling::NUM128) && (numTokens % blockNum <= 10) && (batch <= 40)) {
-        tilingKey = (dTypeKey == 0) ? 7 : 8;
-    }
 
     uint64_t hardwareSyncAddr{0};
     ACL_CHECK(aclrtGetHardwareSyncAddr(reinterpret_cast<void**>(&hardwareSyncAddr)));

@@ -179,5 +179,51 @@ def test_mla_decode():
     )
 
 
+@only_on_2201
+def test_mla_tp1_task():
+    """Check all tokens should be written including the last partial core wave.
+    Zero queries and a constant value per batch give an exact expected output.
+    This detects missing tasks without precision tolerances.
+    """
+    import torch_catlass
+    torch.manual_seed(1)
+    batch = 35
+    q_seqlen = 1
+    kv_seqlen = 128
+    num_heads = 128
+    kv_heads = 1
+    head_dim = 512
+    rope_dim = 64
+    block_size = 128
+    sparse_mode = 0
+
+    num_tokens = batch * q_seqlen
+    blocks_per_sequence = kv_seqlen // block_size
+    num_blocks = batch * blocks_per_sequence
+    query_nope = torch.zeros(num_tokens, num_heads, head_dim, dtype=torch.float16, device="npu")
+    query_rope = torch.zeros(num_tokens, num_heads, rope_dim, dtype=torch.float16, device="npu")
+    key_rope_cache = torch.zeros(num_blocks, block_size, 1, rope_dim, dtype=torch.float16, device="npu")
+    actual_seq_lengths = torch.full((batch,), q_seqlen, dtype=torch.int32, device="npu")
+    actual_seq_lengths_kv = torch.full((batch,), kv_seqlen, dtype=torch.int32, device="npu")
+    block_table = torch.arange(num_blocks, dtype=torch.int32, device="npu").reshape(batch, -1)
+
+    values = torch.arange(1, batch + 1, dtype=torch.float32) / 16.0
+    key_cache = values.repeat_interleave(blocks_per_sequence).reshape(num_blocks, 1, 1, 1)
+    key_cache = key_cache.expand(num_blocks, block_size, 1, head_dim).contiguous().to(
+        device="npu", dtype=torch.float16
+    )
+    result = torch_catlass.mla(
+        query_nope, query_rope, key_cache, key_rope_cache,
+        actual_seq_lengths, actual_seq_lengths_kv, block_table,
+        num_heads, kv_heads, sparse_mode
+    )
+    expected = values.repeat_interleave(q_seqlen).reshape(num_tokens, 1, 1)
+    expected = expected.expand(num_tokens, num_heads, head_dim).to(dtype=torch.float16)
+    actual = result.cpu()
+    assert actual.shape == expected.shape
+    assert actual.dtype == torch.float16
+    assert torch.equal(actual, expected), "MLA did not write the expected value for every Q token"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "-s"])

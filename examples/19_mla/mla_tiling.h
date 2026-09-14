@@ -104,5 +104,16 @@ struct MLAInfo {
 };
 
 int32_t GetMLATilingParam(const MLAInfo& mlaInfo, uint32_t& blockDim, uint32_t* tilingHost);
+
+// Select the kernel from the completed tiling, so launch and task partitioning
+// cannot disagree when the runtime AIC core count changes. dTypeKey: FP16=0, BF16=1.
+inline uint32_t GetMLATilingKey(uint32_t numHeads, uint32_t dTypeKey, const uint32_t* tilingHost)
+{
+    if (numHeads != NUM128) {
+        return dTypeKey;
+    }
+    // AMLATp1Spec only processes former tasks; MLATp1Spec also processes tail tasks.
+    return tilingHost[TILING_TAILTASKNUM] > 0 ? (dTypeKey == 0 ? 7 : 8) : (NUM4 + dTypeKey);
+}
 } // namespace MLATiling
 #endif
