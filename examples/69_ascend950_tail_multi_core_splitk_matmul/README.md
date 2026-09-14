@@ -28,9 +28,7 @@ cd output/bin
 Compare success.
 ```
 
-## 使用场景说明
 
-设矩阵Shape为`M N K`, L1上的分块大小为`m1 n1 k1`，AI Core数量为`C`，那么可以划分出来的基本块数量为`B = CeilDiv(M, m1) * CeilDiv(N, n1)`，计算轮次为`B / C`，如果`B % C > 0`，那么还需要计算一个尾轮，
-当`B / C = 1`且`B % C <= C / 2`时候，采用该模板可能获取较优的性能。
+## 模板推荐场景
 
-**测试性能建议注释掉精度比较代码。**
+推荐 MNK 范围：约定L1上的分块大小为`m1 n1 k1`，设 `blocks = ceil(M/m1)×ceil(N/n1)`，推荐 `C < blocks < 1.5C 且 K > 1024`（C 为 AI Core 核数），即 1~1.5 波且尾轮有残余块的场景。

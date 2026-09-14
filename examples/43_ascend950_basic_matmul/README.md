@@ -75,3 +75,8 @@ BasicMatmul还支持DispatchPolicy MmadPreloadAsyncWithCallback，支持以下�
 第二个参数是`enableShuffleK`，该参数主要为了规避同地址访问冲突造成带宽损失，主要原理是错开各个核心的数据读取地址。950上不需要启用该参数。
 
 相比`MmadPingpong`，`MmadPreloadAsyncWithCallback`的优化点更多，但是逻辑也更复杂，Scalar开销更大，需要根据场景酌情使用，尤其是小Shape场景。
+
+## 模板推荐场景
+
+本样例为 950 基础 Matmul 模板，为各切K/尾轮负载均衡样例的公共基线。
+推荐 MNK 范围：`K ≤ 1024` 的常规中大 shape（M、N ≥ 256 量级），M/N 建议 256 倍数、K 建议 128 倍数；`K > 1024` 时仅基本块数整除核数、或尾块较重（≥ 0.8 倍核数）的场景推荐使用本模板。

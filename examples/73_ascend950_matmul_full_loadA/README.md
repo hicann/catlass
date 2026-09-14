@@ -37,3 +37,7 @@ cd output/bin
 ```text
 Compare success.
 ```
+
+## 模板推荐场景
+
+推荐 MNK 范围：`K ≤ 768`，`N` 越大收益越大，推荐大 N 的窄 A 场景（如 `N ≥ 2048`）。
