@@ -88,7 +88,8 @@ add_kernel(
 - entry 源文件收集到 `catlass_kernel_jit` 共享库
 - 模板文件安装到 `jit/templates/`
 - 公共头文件 (`kernels/common/`) 安装到 `jit/common/`
-- `jit_verify_template()` 在构建期验证模板
+- `jit_verify_template()` 在构建期验证模板（仅对 `CATLASS_ARCH_LIST` 中启用的架构，
+  与 prebuilt 模式一致；`--disable-ascend950` 时不会编译 3510 模板）
 
 ### 预编译模式
 

@@ -22,12 +22,18 @@ add_kernel(
 )
 
 foreach(_SRC ${_HSTU_950_SOURCES})
+    get_filename_component(_SRC_NAME ${_SRC} NAME)
     foreach(_ARCH 3510)
-        target_compile_definitions(${_LIB_NAME} PRIVATE L2_CACHE_HINT)
-        target_include_directories(${_LIB_NAME} PRIVATE
-            ${CMAKE_CURRENT_SOURCE_DIR}
-            ${CMAKE_CURRENT_SOURCE_DIR}/kernel
-            ${CMAKE_CURRENT_SOURCE_DIR}/launcher
-        )
+        foreach(_MS_SUFFIX "" "_ms")
+            set(_LIB_NAME "catlass_kernel_${_ARCH}_ascend950_hstu_infer${_MS_SUFFIX}")
+            if(TARGET ${_LIB_NAME})
+                target_compile_definitions(${_LIB_NAME} PRIVATE L2_CACHE_HINT)
+                target_include_directories(${_LIB_NAME} PRIVATE
+                    ${CMAKE_CURRENT_SOURCE_DIR}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/kernel
+                    ${CMAKE_CURRENT_SOURCE_DIR}/launcher
+                )
+            endif()
+        endforeach()
     endforeach()
 endforeach()

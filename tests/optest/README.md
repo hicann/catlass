@@ -195,7 +195,7 @@ pytest tests/ -v
 | `build.sh --build-type`     | CMake 构建类型                         | `Release`（默认）, `Debug`   |
 | `build.sh --skip-wheel`     | 跳过 wheel 打包，使用 editable install | —                            |
 | `build.sh --clean`          | 清理 JIT 缓存 + 构建产物               | —                            |
-| `CATLASS_ARCH_LIST` (CMake) | 限制 prebuilt kernel 编译的 NPU 架构   | 分号分隔列表，如 `2201;3510` |
+| `CATLASS_ARCH_LIST` (CMake) | 限制 kernel 编译/验证的 NPU 架构（prebuilt 编译 + JIT 模板构建期验证） | 分号分隔列表，如 `2201;3510` |
 
 > prebuilt kernel 默认为每个 arch 编译两份：普通版本和 `_ms` (sanitizer) 版本，无需额外选项。
 

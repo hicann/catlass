@@ -101,16 +101,30 @@ macro(add_kernel)
                 "${CMAKE_BINARY_DIR}"
             )
 
-            # 为每个 template 生成独立的 verify 目标（target 名按文件 stem 区分）
-            foreach(_TEMPLATE_FILE ${_K_TEMPLATE})
-                get_filename_component(_TEMPLATE_STEM ${_TEMPLATE_FILE} NAME_WE)
-                jit_verify_template(
-                    NAME "${_K_NAME}_${_TEMPLATE_STEM}"
-                    TEMPLATE "${_TEMPLATE_FILE}"
-                    NPU_ARCH_LIST ${_K_NPU_ARCH_LIST}
-                    INCLUDE_DIRS ${_JIT_INCLUDE_DIRS}
-                )
+            # 仅对 CATLASS_ARCH_LIST 中启用的架构做模板验证
+            set(_K_LEGAL_ARCH "")
+            foreach(_ARCH ${_K_NPU_ARCH_LIST})
+                list(FIND CATLASS_ARCH_LIST "${_ARCH}" _ARCH_INDEX)
+                if(NOT _ARCH_INDEX EQUAL -1)
+                    list(APPEND _K_LEGAL_ARCH "${_ARCH}")
+                endif()
             endforeach()
+
+            if(_K_LEGAL_ARCH)
+                # 为每个 template 生成独立的 verify 目标（target 名按文件 stem 区分）
+                foreach(_TEMPLATE_FILE ${_K_TEMPLATE})
+                    get_filename_component(_TEMPLATE_STEM ${_TEMPLATE_FILE} NAME_WE)
+                    jit_verify_template(
+                        NAME "${_K_NAME}_${_TEMPLATE_STEM}"
+                        TEMPLATE "${_TEMPLATE_FILE}"
+                        NPU_ARCH_LIST ${_K_LEGAL_ARCH}
+                        INCLUDE_DIRS ${_JIT_INCLUDE_DIRS}
+                    )
+                endforeach()
+            else()
+                message(STATUS "add_kernel: skip JIT template verification for '${_K_NAME}' "
+                    "(declared archs: ${_K_NPU_ARCH_LIST}; CATLASS_ARCH_LIST: ${CATLASS_ARCH_LIST})")
+            endif()
         endif()
 
     elseif("${_K_KERNEL_TYPE}" STREQUAL "prebuilt")
