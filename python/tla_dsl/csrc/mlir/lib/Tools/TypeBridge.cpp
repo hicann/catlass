@@ -2,6 +2,7 @@
 #include "Dialect/Tla/IR/TlaDialect.h"
 #include "Dialect/Tla/IR/TlaTypes.h"
 #include "Passes.h"
+#include "Passes/TlaSimtUbLimits.h"
 #include "Passes/TlaTensorDescriptor.h"
 #include "Tools/AddressSpaceConversion.h"
 #include "Tools/CompilePipeline.h"
@@ -805,6 +806,25 @@ py::dict lowerToMlir(
     result["diagnostics"] = std::move(diagnosticRecords);
     result["lowered_mlir"] = output;
     result["pass_ir_dump"] = passDump;
+    auto moduleU64 = [&](StringRef name) -> uint64_t {
+        auto attr = module->getAttrOfType<IntegerAttr>(name);
+        return attr ? attr.getValue().getZExtValue() : 0;
+    };
+    auto moduleI64 = [&](StringRef name, int64_t fallback) -> int64_t {
+        auto attr = module->getAttrOfType<IntegerAttr>(name);
+        return attr ? attr.getValue().getSExtValue() : fallback;
+    };
+    // What the compiler placed. Named for what it is: the launch-sized region is
+    // not part of it, so a bare "ub_bytes" reads as the kernel's whole footprint.
+    result["ub_static_bytes"] = moduleU64("tla.ub_static_bytes");
+    // The ceiling this kernel is held to. It already accounts for the mode and
+    // for a released compiler reserve, so the host never recomputes it.
+    result["ub_programmable_bytes"] = moduleU64("tla.ub_programmable_bytes");
+    // Where the launch-sized region starts, or -1 for a kernel that declares
+    // none. Zero is a real base -- a kernel can have a region and no static
+    // allocations at all -- so absence needs a value outside the range.
+    result["ub_dynamic_base"] = moduleI64("tla.ub_dynamic_base", -1);
+
     // A failed pass may leave partially rewritten functions behind. ABI
     // collection is meaningful only for successful lowering and must never
     // replace the compiler diagnostic that caused the failure.

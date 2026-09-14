@@ -28,13 +28,17 @@ pipe barrier, since they run on the same core and share ``ub_result``.
 
 The intermediate ``mid`` is stored to GM as well, so a failure can be pinned on
 the SIMD stage or the SIMT stage rather than just on the pipeline.
+
+It is also the worked example for launch-sized UB: three of its four UB buffers
+are compiled in with ``tla.allocate``, while the result buffer the SIMD and SIMT
+stages share comes from ``tla.arch.get_dyn_ub`` and is sized at launch with
+``ub=``. The two kinds sit in one kernel deliberately -- the dynamic region
+begins above the static high-water mark, so a kernel can mix them freely.
 """
 
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
-
 import catlass.tla as tla
 
 # M drives the UB footprint: each sub-block stages its own half of the rows, so
@@ -100,9 +104,15 @@ def simt_mixed(
     c_ub_ptr = tla.allocate(SIMD_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 256)
     addend_simd_ub_ptr = tla.allocate(SIMD_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 256)
     addend_simt_ub_ptr = tla.allocate(SIMD_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 256)
-    # The SIMT stage writes its result back into ub_result in place, so the two
-    # stages share one buffer rather than needing a third.
-    result_ub_ptr = tla.allocate(SIMD_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 256)
+    # The result buffer is the one piece of UB this kernel does not compile in:
+    # it comes from the launch-sized region, which starts above the three static
+    # allocations above. The SIMD and SIMT stages share it -- SIMT writes its
+    # result back in place -- so one region serves both.
+    #
+    # Sized per launch with `ub=`, the way CuTe DSL sizes dynamic shared memory
+    # with `launch(smem=...)`. Asking for only what is used matters here: this
+    # kernel has a SIMT stage, and whatever UB goes unclaimed becomes Data Cache.
+    result_ub_ptr = tla.arch.get_dyn_ub(_KERNEL_DTYPE, byte_alignment=256)
 
     # ---- cube: c = lhs @ rhs, delivered straight into UB ----
     with tla.cube():
@@ -242,8 +252,6 @@ def simt_mixed(
 # Host
 # ---------------------------------------------------------------------------
 
-EXAMPLE_DIR = Path(__file__).resolve().parent
-DEFAULT_CACHE_DIR = EXAMPLE_DIR / "artifacts" / "runtime-cache"
 _SENTINEL = -999.0
 
 
@@ -271,8 +279,6 @@ def run(args: argparse.Namespace) -> int:
 
     def as_tla(dev_buf):
         return from_dlpack(dev_buf.contiguous(), layout_tag=tla.arch.RowMajor)
-
-    cache_dir = str(Path(args.cache_dir).expanduser().resolve())
 
     _apply_cache_env(args)
 
@@ -313,7 +319,14 @@ def run(args: argparse.Namespace) -> int:
         *tensors,
         options=NPU_ARCH,
     )
-    artifact(*tensors, block_num=1)
+    # Back the region with exactly the result buffer it holds, and no more.
+    result_ub_bytes = SIMD_ELE * 4
+    print(
+        f"compiled UB {artifact.get_kernel_ub_size()} B static, "
+        f"launch adds {result_ub_bytes} B dynamic "
+        f"(up to {artifact.max_ub_bytes} B available)"
+    )
+    artifact(*tensors, block_num=1, ub=result_ub_bytes)
     torch.npu.synchronize()
 
     simd_ok = bool(torch.allclose(mid, expected_mid, rtol=1e-5, atol=1e-4))
@@ -342,7 +355,11 @@ def main() -> int:
         description="Compile and run a kernel mixing cube, SIMD and SIMT work through UB."
     )
     parser.add_argument("--device", type=int, default=0)
-    parser.add_argument("--cache-dir", default=str(DEFAULT_CACHE_DIR))
+    # Default None, not this example's own artifacts directory: setting it
+    # exports CATLASS_DSL_CACHE_DIR, and bc_compile resolves the *BC* cache
+    # through that same variable -- so a per-example default sends the BC
+    # lookup somewhere nothing has compiled it. Pass --cache-dir to opt in.
+    parser.add_argument("--cache-dir", default=None)
     parser.add_argument("--force-recompile", action="store_true")
     parser.add_argument("--no-cache", action="store_true")
     return run(parser.parse_args())

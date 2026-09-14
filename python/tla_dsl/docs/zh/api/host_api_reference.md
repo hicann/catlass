@@ -434,6 +434,12 @@ JitCompiledFunction.__call__(*launch_args: Any, *, block_num: int | None = None,
   不能与非空的 `*launch_args` 同时使用。
 - *`stream`*（`Any`，经 `**launch_kwargs`）：可选 ACL stream 句柄。
   省略时使用执行器所在设备的当前 stream。
+- *`ub`*（`int`，经 `**launch_kwargs`）：为 kernel 中 `tla.arch.get_dyn_ub`
+  声明的动态 UB 区域实际提供的字节数，与 CuTe DSL 用 `launch(smem=...)`
+  指定动态 shared memory 的方式对应。可选，默认 `0`。kernel 未声明该区域时
+  传入会报错；超过 `artifact.max_ub_bytes` 也会报错。按 kernel 实际使用量
+  申请即可：launch 只提供所申请的字节数，SIMT 场景下未被占用的 UB 会成为
+  Data Cache，申请过多会拖慢访存。
 
 约束说明：
 

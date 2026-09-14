@@ -1961,6 +1961,12 @@ tla.arch
   - `sync_threads()`：对当前 SIMT `tla.vec.func` 内线程做 barrier（仅
     `mode="simt"`）。
   - `get_capacity_in_bytes(mem_scope)`：返回编译目标上某片上存储空间的字节容量。入参为 `tla.AddressSpace`（`tla.AddressSpace.l1` / `l0a` / `l0b` / `l0c` / `ub`）。返回普通 `int`；host 侧与 kernel 内均可使用（kernel 内会折叠为常量）。
+  - `get_dyn_ub(dtype, byte_alignment=None)`：返回动态 UB 区域的指针——该区域
+    的大小由 launch 决定，而非编译期决定。区域起始于所有 `tla.allocate` 之上，
+    launch 时用 `ub=` 指定实际提供多少字节。每个 kernel 至多声明
+    一个区域：需要多块缓冲时，用指针算术在该区域内切分。按 kernel 实际使用量
+    申请即可——SIMT 场景下未被 kernel 占用的 UB 会成为 Data Cache，申请过多会
+    让 Data Cache 变小从而拖慢访存。
 
 约束说明：
 
@@ -1985,6 +1991,11 @@ nblocks = tla.arch.block_num()
 # 片上存储容量（host 侧或 kernel 内均可）：
 l1_bytes = tla.arch.get_capacity_in_bytes(tla.AddressSpace.l1)
 ub_bytes = tla.arch.get_capacity_in_bytes(tla.AddressSpace.ub)
+# 动态 UB：大小在 launch 时确定，基址为编译期常量。
+base = tla.arch.get_dyn_ub(tla.Float32, byte_alignment=256)
+lo = tla.make_tensor_like(base, gm_a, tla.arch.RowMajor)
+hi = tla.make_tensor_like(base + HALF, gm_b, tla.arch.RowMajor)
+# host 侧：artifact(..., ub=64 * 1024)
 ```
 
 ---

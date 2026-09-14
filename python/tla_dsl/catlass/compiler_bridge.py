@@ -303,6 +303,14 @@ class TlaLoweringResult:
     lowered_mlir: str
     pass_ir_dump: str = ""
     kernel_abi: KernelAbiLayout | None = None
+    # UB the kernel needs (its allocation high-water mark), the ceiling for its
+    # execution mode, and whether that mode has to declare a window at launch.
+    ub_static_bytes: int = 0
+    ub_programmable_bytes: int = 0
+    # Whether the kernel has a launch-sized region, and where it starts. Neither
+    # follows from ub_bytes: a kernel may have a region and no static
+    # allocations, and the base is the high-water mark rounded up.
+    ub_dynamic_base: int = -1
 
 
 def _bridge_diagnostic(value: Any) -> BridgeDiagnostic:
@@ -388,6 +396,9 @@ def lower_tlair_module_to_mlir(
         lowered_mlir=str(result["lowered_mlir"]),
         pass_ir_dump=pass_ir_dump,
         kernel_abi=kernel_abi_from_dict(result.get("kernel_abi")),
+        ub_static_bytes=int(result.get("ub_static_bytes", 0)),
+        ub_programmable_bytes=int(result.get("ub_programmable_bytes", 0)),
+        ub_dynamic_base=int(result.get("ub_dynamic_base", -1)),
     )
 
 

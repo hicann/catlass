@@ -25,8 +25,6 @@ redundantly doing the whole array.
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
-
 import catlass.tla as tla
 
 N_ELE = 65536
@@ -69,8 +67,6 @@ def multiple_blocks_simt(gm_a: tla.Tensor, gm_b: tla.Tensor, gm_c: tla.Tensor) -
 # Host
 # ---------------------------------------------------------------------------
 
-EXAMPLE_DIR = Path(__file__).resolve().parent
-DEFAULT_CACHE_DIR = EXAMPLE_DIR / "artifacts" / "runtime-cache"
 _SENTINEL = -999.0
 
 
@@ -98,8 +94,6 @@ def run(args: argparse.Namespace) -> int:
 
     def create_tla_tensor(dev_buf):
         return from_dlpack(dev_buf.contiguous(), layout_tag=tla.arch.RowMajor)
-
-    cache_dir = str(Path(args.cache_dir).expanduser().resolve())
 
     _apply_cache_env(args)
 
@@ -154,7 +148,11 @@ def main() -> int:
     parser.add_argument("--device", type=int, default=0)
     parser.add_argument("--block-dim", type=int, default=-1)
     parser.add_argument("--atol", type=float, default=1e-4)
-    parser.add_argument("--cache-dir", default=str(DEFAULT_CACHE_DIR))
+    # Default None, not this example's own artifacts directory: setting it
+    # exports CATLASS_DSL_CACHE_DIR, and bc_compile resolves the *BC* cache
+    # through that same variable -- so a per-example default sends the BC
+    # lookup somewhere nothing has compiled it. Pass --cache-dir to opt in.
+    parser.add_argument("--cache-dir", default=None)
     parser.add_argument("--force-recompile", action="store_true")
     parser.add_argument("--no-cache", action="store_true")
     return run(parser.parse_args())

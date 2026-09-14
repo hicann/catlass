@@ -8199,6 +8199,72 @@ def allocate(
 
 
 @dsl_user_op
+def arch_get_dyn_ub(
+    dtype: type[Numeric],
+    byte_alignment: int | None = None,
+    *,
+    loc: mlir_ir.Location | None = None,
+) -> Pointer:
+    """Directory: System Variable Access
+    Description:
+        Retrieve a pointer to the dynamic UB allocation — UB whose size is set
+        at launch instead of compiled in.
+
+        Static `tla.allocate` buffers sit at the bottom of UB; this region
+        begins just above them and the result pointer is offset appropriately.
+        How much of it is backed is set per launch with `ub=`.
+        The base is a compile-time constant, so only the extent is dynamic.
+
+        Ask for what the kernel uses, not for everything available. The launch
+        hands over exactly the requested extent, and on a SIMT kernel the UB
+        left unclaimed becomes Data Cache: measured on Ascend950PR, a
+        global-memory-bound SIMT kernel that claims the whole buffer runs 1.62x
+        slower than the same kernel claiming only the 2 KB it uses.
+
+        Parameters:
+        - `dtype` (`type[Numeric]`): Pointee element type. Required.
+        - `byte_alignment` (`int | None`): Pointer alignment in bytes, spelled
+          as `tla.allocate` spells it. Optional; defaults to the element type's
+          width.
+
+        Constraints:
+        - Must be called inside a `@tla.kernel`-decorated kernel function.
+        - UB only; no other memory has a launch-time size.
+        - At most one region per kernel: it has one base, so a second call would
+          alias the first. Carve it up with pointer arithmetic instead.
+        - The extent is not bounds-checked in the kernel. Going past what the
+          launch declared corrupts UB rather than reliably faulting.
+
+        Example:
+        ```python
+        base = tla.arch.get_dyn_ub(tla.Float32, byte_alignment=256)
+        lo = tla.make_tensor(base, layout)
+        hi = tla.make_tensor(base + HALF, layout)
+        ...
+        artifact(out, block_num=1, ub=64 * 1024)
+        ```
+    """
+    _require_frontend_state("arch.get_dyn_ub")
+    dtype, element_bits = _require_allocation_dtype("arch.get_dyn_ub", dtype)
+    if byte_alignment is None:
+        # The helper answers in bits. A sub-byte type packs several elements into
+        # a byte, so the smallest alignment it can be given is one byte.
+        # Not `max(...)`: this module rebinds `max` to the tla vector op above,
+        # so the builtin is not in scope here.
+        byte_alignment = element_bits // 8 or 1
+    align = _require_byte_alignment("arch.get_dyn_ub", byte_alignment, 1)
+
+    ctx = loc.context if loc is not None else mlir_ir.Context.current
+    ptr_ty = PtrType.get(dtype.mlir_type(ctx), str(AddressSpace.ub), align, context=ctx)
+    op = mlir_ir.Operation.create(
+        "tla.dynamic_ub_base", operands=[], results=[ptr_ty], loc=loc
+    )
+    # No alloc_size_bytes: the extent is not known here, and claiming one would
+    # let the scratch planner believe it owns bytes it has not reserved.
+    return _Pointer(op.results[0])
+
+
+@dsl_user_op
 def make_ptr(
     dtype: type[Numeric] | None,
     value: int | mlir_ir.Value | Numeric,
@@ -8404,6 +8470,12 @@ Parameters:
     space for the compile target. Takes a `tla.AddressSpace` token
     (`tla.AddressSpace.l1` / `l0a` / `l0b` / `l0c` / `ub`). Returns a plain
     `int`; valid on host and inside a kernel (folds to a constant).
+  - `get_dyn_ub(dtype, byte_alignment=None)`: Pointer to the dynamic UB
+    allocation -- UB whose size the launch chooses, rather than the compiler.
+    The region starts above every `tla.allocate`, and `ub=` at launch says
+    how much of it is backed. At most one per kernel: carve it up
+    with pointer arithmetic. Ask for what the kernel uses -- on SIMT the UB
+    left unclaimed becomes Data Cache.
 
 Constraints:
 - Layout tags / pipe identifiers / memory-scope tokens are ordinary attributes
@@ -8436,6 +8508,7 @@ arch._set("thread_block_dim", arch_thread_block_dim)
 arch._set("thread_idx", arch_thread_idx)
 arch._set("sync_threads", arch_sync_threads)
 arch._set("get_capacity_in_bytes", arch_get_capacity_in_bytes)
+arch._set("get_dyn_ub", arch_get_dyn_ub)
 arch._set("SCALAR", _runtime.pipes.SCALAR)
 arch._set("VECTOR", _runtime.pipes.VECTOR)
 arch._set("CUBE", _runtime.pipes.CUBE)

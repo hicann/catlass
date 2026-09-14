@@ -479,7 +479,7 @@ Run a compiled kernel on the NPU by calling the `JitCompiledFunction` returned b
 
 #### `JitCompiledFunction.__call__`
 
-**Source:** [`catlass.base_dsl.jit_executor.JitCompiledFunction.__call__`](../../../catlass/base_dsl/jit_executor.py#L407)
+**Source:** [`catlass.base_dsl.jit_executor.JitCompiledFunction.__call__`](../../../catlass/base_dsl/jit_executor.py#L515)
 
 Description:
 
@@ -505,6 +505,13 @@ Parameters:
   `*launch_args`.
 - *`stream`* (`Any`, via `**launch_kwargs`): Optional ACL stream handle.
   When omitted, uses the current stream for the executor's device.
+- *`ub`* (`int`, via `**launch_kwargs`): Bytes of UB to back the
+  kernel's `tla.arch.get_dyn_ub` region with, as CuTe DSL's
+  `launch(smem=...)` sizes dynamic shared memory. Optional, default
+  `0`. Rejected unless the kernel declares a region, and rejected
+  above `artifact.max_ub_bytes`. Ask for what the kernel uses: the
+  launch hands over exactly this much, and on SIMT the UB left
+  unclaimed becomes Data Cache.
 
 Constraints:
 

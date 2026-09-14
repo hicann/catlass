@@ -35,8 +35,6 @@ math.log into a vln_1d_float call the c310 bitcode does not export.
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
-
 import catlass.tla as tla
 
 N_ELE = 1024
@@ -142,8 +140,6 @@ def multi_ops_int_simt(
 # Host
 # ---------------------------------------------------------------------------
 
-EXAMPLE_DIR = Path(__file__).resolve().parent
-DEFAULT_CACHE_DIR = EXAMPLE_DIR / "artifacts" / "runtime-cache"
 _SENTINEL = -99
 
 
@@ -330,7 +326,11 @@ def main() -> int:
         choices=[*DTYPES, "all"],
         help=f"element type to run (default: {DEFAULT_DTYPE}); 'all' runs every type",
     )
-    parser.add_argument("--cache-dir", default=str(DEFAULT_CACHE_DIR))
+    # Default None, not this example's own artifacts directory: setting it
+    # exports CATLASS_DSL_CACHE_DIR, and bc_compile resolves the *BC* cache
+    # through that same variable -- so a per-example default sends the BC
+    # lookup somewhere nothing has compiled it. Pass --cache-dir to opt in.
+    parser.add_argument("--cache-dir", default=None)
     parser.add_argument("--force-recompile", action="store_true")
     parser.add_argument("--no-cache", action="store_true")
     return run(parser.parse_args())

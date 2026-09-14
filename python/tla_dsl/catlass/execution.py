@@ -437,6 +437,9 @@ def _compile_kernel(
                 uses_scalar_print=static_metadata.uses_scalar_print,
                 uses_tensor_print=static_metadata.uses_tensor_print,
                 logical_mixed_handoff=static_metadata.logical_mixed_handoff,
+                ub_static_bytes=int(cached.get("ub_static_bytes", 0)),
+                ub_programmable_bytes=int(cached.get("ub_programmable_bytes", 0)),
+                ub_dynamic_base=int(cached.get("ub_dynamic_base", -1)),
             )
             _set_memory_cached_function(compiled)
             _copy_kept_artifacts(compiled)
@@ -475,6 +478,9 @@ def _compile_kernel(
         has_logical_mixed_handoff=(static_metadata.logical_mixed_handoff is not None),
     )
     kernel_abi = getattr(lowering_result, "kernel_abi", None)
+    # Already accounts for a released reserve: the module is stamped before
+    # lowering, so the pass and the host agree on one number.
+    ub_programmable_bytes = lowering_result.ub_programmable_bytes
     expected_entrypoint = (
         static_metadata.logical_mixed_handoff.entrypoint
         if static_metadata.logical_mixed_handoff is not None
@@ -552,6 +558,10 @@ def _compile_kernel(
         "hivmc": str(hivmc),
         "arch_scope": resolved_option.arch_scope,
         "kernel_abi": kernel_abi_to_dict(kernel_abi),
+        # Read back on a cache hit, where lowering never runs to produce them.
+        "ub_static_bytes": lowering_result.ub_static_bytes,
+        "ub_programmable_bytes": ub_programmable_bytes,
+        "ub_dynamic_base": lowering_result.ub_dynamic_base,
     }
     if extern_compile_specs:
         _, builtin_include_roots = _ascendc_compiler_inputs()
@@ -576,6 +586,9 @@ def _compile_kernel(
         uses_scalar_print=static_metadata.uses_scalar_print,
         uses_tensor_print=static_metadata.uses_tensor_print,
         logical_mixed_handoff=static_metadata.logical_mixed_handoff,
+        ub_static_bytes=lowering_result.ub_static_bytes,
+        ub_programmable_bytes=ub_programmable_bytes,
+        ub_dynamic_base=lowering_result.ub_dynamic_base,
     )
     if compile_option.cache_enabled:
         _set_memory_cached_function(compiled)
@@ -620,6 +633,9 @@ def _new_jit_compiled_function(
     uses_scalar_print: bool,
     uses_tensor_print: bool,
     logical_mixed_handoff: _LogicalMixedHandoff | None,
+    ub_static_bytes: int = 0,
+    ub_programmable_bytes: int = 0,
+    ub_dynamic_base: int = -1,
 ) -> "JitCompiledFunction":
     """Build a compiled function from validated, device-independent state."""
     from .base_dsl.jit_executor import (
@@ -675,6 +691,9 @@ def _new_jit_compiled_function(
             print_metadata=print_metadata,
             print_helper_core=print_helper_core,
             print_tensor_position=print_tensor_position,
+            ub_static_bytes=ub_static_bytes,
+            ub_programmable_bytes=ub_programmable_bytes,
+            ub_dynamic_base=ub_dynamic_base,
         ),
         artifacts=JitFunctionArtifacts(
             MLIR=tlair_mlir,
@@ -2457,6 +2476,36 @@ def _run_tla_lowering_to_mlir(
         )
 
 
+def _mark_ub_reserve_released(
+    lowered_module: Any, compile_option: "TlaCompileOption | None"
+) -> None:
+    """Tell the pass the caller took the compiler's 8 KB UB reserve.
+
+    The UB ceiling is enforced in ``tla-lower-ptr``, which sees only the module
+    -- bisheng options never reach it. Without this a kernel that legitimately
+    fills the whole buffer, having asked for the reserve, is refused before the
+    host can say otherwise.
+
+    Only both switches together release it; one alone leaves the other half of
+    the reserve in place, and assuming otherwise would let a kernel through that
+    faults at launch instead of failing to compile.
+    """
+    if compile_option is None:
+        return
+    if not (
+        compile_option.cce_disable_asc_reserved_ubuf
+        and compile_option.cce_disable_vf_stack_reserved_ubuf
+    ):
+        return
+    from catlass._mlir import ir as mlir_ir
+
+    operation = getattr(lowered_module, "operation", None)
+    if operation is None:
+        return
+    with lowered_module.context:
+        operation.attributes["tla.ub_reserve_released"] = mlir_ir.UnitAttr.get()
+
+
 def _run_typed_bridge_to_mlir(
     *,
     lowered_module: Any | None,
@@ -2468,6 +2517,7 @@ def _run_typed_bridge_to_mlir(
             "Python runtime compilation requires a live MLIR module. "
             "String TLA MLIR lowering is not supported."
         )
+    _mark_ub_reserve_released(lowered_module, compile_option)
     try:
         # Host surface is a single PRINT_IR switch; bridge still takes
         # pass-print flags — enable full pipeline dump when requested.

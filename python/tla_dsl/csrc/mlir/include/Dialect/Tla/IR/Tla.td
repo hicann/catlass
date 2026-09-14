@@ -1069,6 +1069,28 @@ def Tla_AllocPtrOp : Tla_Op<"alloc_ptr", [Pure]> {
   let hasVerifier = 1;
 }
 
+def Tla_DynamicUbBaseOp : Tla_Op<"dynamic_ub_base", [Pure]> {
+  let summary = "Base address of the launch-sized UB region";
+  let description = [{
+    Yields the address just above every static ``tla.alloc_ptr`` in UB -- the
+    start of a region whose size is chosen at launch rather than compiled in.
+
+    Reserves nothing. Static allocations occupy the bottom of UB, so the region
+    always begins at their high-water mark: a compile-time constant even though
+    its extent is not. ``tla-lower-ptr`` replaces the result with that address,
+    rounded up to the pointer's alignment.
+
+    How much of the region is backed by real UB is set per launch. Touching
+    past it is not diagnosed and does not reliably fault; it corrupts whatever
+    the unclaimed UB is being used for.
+  }];
+  let results = (outs Tla_PtrType:$ptr);
+  let assemblyFormat = [{
+    attr-dict `->` qualified(type($ptr))
+  }];
+  let hasVerifier = 1;
+}
+
 def Tla_MakeTensorLikeOp : Tla_Op<"make_tensor_like", []> {
   let summary = "Make tensor like";
   let description = [{

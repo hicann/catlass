@@ -3591,6 +3591,7 @@ def test_execute_kernel_uses_typed_launch_payload(monkeypatch, tmp_path) -> None
             "stream": 99,
             "block_num": 1,
             "payload": struct.pack("<I4x", 123),
+            "dyn_ubuf_bytes": 0,
             "uses_scalar_print": False,
             "uses_tensor_print": False,
             "is_mixed": False,
@@ -3627,6 +3628,7 @@ def test_execute_kernel_conveys_scalar_print_intent_to_loader(
             "payload": struct.pack(
                 "<QQ", 7, int.from_bytes(b"TLA_PRNT", byteorder="big")
             ),
+            "dyn_ubuf_bytes": 0,
             "uses_scalar_print": True,
             "uses_tensor_print": False,
             "is_mixed": False,
@@ -3681,6 +3683,7 @@ def test_execute_kernel_uses_empty_payload_for_zero_arg(monkeypatch, tmp_path) -
             "stream": 99,
             "block_num": 1,
             "payload": b"",
+            "dyn_ubuf_bytes": 0,
             "uses_scalar_print": False,
             "uses_tensor_print": False,
             "is_mixed": False,
@@ -3868,3 +3871,126 @@ def test_compiled_function_rejects_launch_after_device_switch(
         compiled()
 
     assert launches == [1]
+def test_launch_config_declares_dyn_ubuf_size_only_when_needed() -> None:
+    """A SIMT kernel's UB must reach the launch as ACL's dyn_ubuf_size attribute.
+
+    The SIMT Data Cache occupies whatever UB the kernel does not declare, so an
+    undeclared kernel can only safely use the small compiler reserve. PyACL
+    marshals ``cfg`` as ``{"id", "value"}`` dicts, and an empty list must keep
+    the launch untouched for every kernel that declares nothing.
+    """
+    from catlass.base_dsl.runtime import ascend as ascend_mod
+
+    assert ascend_mod._launch_config(0) == []
+    assert ascend_mod._launch_config(221184) == [{"id": 2, "value": 221184}]
+
+
+def _ub_module(**overrides):
+    from catlass.base_dsl.jit_executor import ExecutionArgs, JitModule
+    from pathlib import Path
+
+    defaults = dict(
+        kernel_binary_path=Path("kernel.o"),
+        entrypoint="kernel",
+        kernel_mode="aiv",
+        execution_args=ExecutionArgs(kernel_abi=None, abi_packer=None),
+        uses_scalar_print=False,
+        uses_tensor_print=False,
+        is_mixed=False,
+        print_metadata=None,
+        print_helper_core=None,
+    )
+    defaults.update(overrides)
+    return JitModule(**defaults)
+
+
+def test_dynamic_ub_request_over_the_limit_names_the_maximum() -> None:
+    """Asking for too much must say how much the kernel can actually be given.
+
+    The region starts above the static allocations, so the usable amount is the
+    kernel's limit less that base -- not the limit itself. A caller who is told
+    only the limit would subtract the wrong number.
+    """
+    from catlass.base_dsl.jit_executor import _resolved_dyn_ubuf_bytes
+    from catlass.execution import TlaExecutionError
+
+    module = _ub_module(
+        ub_static_bytes=512,
+        ub_programmable_bytes=221184,
+        ub_dynamic_base=512,
+    )
+    # 220672 = 221184 - 512 is the most this kernel can take, and the launch
+    # declares that extent rather than where the region ends.
+    assert _resolved_dyn_ubuf_bytes(module, 220672) == 220672
+
+    with pytest.raises(TlaExecutionError) as excinfo:
+        _resolved_dyn_ubuf_bytes(module, 220673)
+    message = str(excinfo.value)
+    assert "at most 220672 bytes" in message
+    assert "starts at 512 bytes" in message
+
+
+def test_dynamic_ub_request_without_a_region_is_rejected() -> None:
+    """A kernel with no dynamic region has nothing to size."""
+    from catlass.base_dsl.jit_executor import _resolved_dyn_ubuf_bytes
+    from catlass.execution import TlaExecutionError
+
+    module = _ub_module(ub_static_bytes=512, ub_programmable_bytes=221184)
+    with pytest.raises(TlaExecutionError, match="declares no dynamic"):
+        _resolved_dyn_ubuf_bytes(module, 4096)
+
+
+def test_the_launch_declares_the_extent_not_the_end() -> None:
+    """The launch attribute is the region's size, not where it ends.
+
+    The runtime adds it to the static footprint recorded in the binary, so
+    declaring base + extent counts the static allocations twice and costs the
+    caller its own static footprint off the top of the ceiling -- measured as a
+    refused launch at exactly the advertised maximum.
+    """
+    from catlass.base_dsl.jit_executor import _resolved_dyn_ubuf_bytes
+
+    module = _ub_module(
+        ub_static_bytes=1024,
+        ub_programmable_bytes=253952,
+        ub_dynamic_base=1024,
+    )
+
+    assert _resolved_dyn_ubuf_bytes(module, 6144) == 6144
+
+
+def test_the_launch_backs_the_alignment_gap_too() -> None:
+    """The region's base is rounded up, and that gap has to be backed as well.
+
+    The launch attribute is measured from the static footprint the binary
+    records, but the kernel addresses the region from its base -- the footprint
+    rounded up to the pointer's alignment. Declaring only the extent leaves the
+    rounding gap unbacked at the top, and the kernel writes past what it was
+    given without faulting.
+
+    Every kernel measured while developing this had a footprint that was already
+    aligned, so the gap was zero and the bug was invisible.
+    """
+    from catlass.base_dsl.jit_executor import _resolved_dyn_ubuf_bytes
+
+    module = _ub_module(
+        ub_static_bytes=1000,  # not a multiple of the region's 256-byte alignment
+        ub_programmable_bytes=253952,
+        ub_dynamic_base=1024,  # 1000 rounded up: a 24-byte gap
+    )
+
+    assert _resolved_dyn_ubuf_bytes(module, 6144) == 24 + 6144
+
+
+def test_a_region_at_zero_is_not_mistaken_for_absence() -> None:
+    """A kernel can declare a region and allocate nothing statically.
+
+    Its base is then 0, which is why absence is -1 rather than a falsy base.
+    """
+    from catlass.base_dsl.jit_executor import _resolved_dyn_ubuf_bytes
+
+    module = _ub_module(
+        ub_static_bytes=0, ub_programmable_bytes=253952, ub_dynamic_base=0
+    )
+
+    assert _resolved_dyn_ubuf_bytes(module, 4096) == 4096

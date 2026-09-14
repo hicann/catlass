@@ -169,6 +169,26 @@ static bool isSupportedCmpMode(llvm::StringRef mode)
     return llvm::StringSwitch<bool>(mode).Cases("lt", "le", "gt", "ge", true).Cases("eq", "ne", true).Default(false);
 }
 
+mlir::LogicalResult DynamicUbBaseOp::verify()
+{
+    auto resTy = llvm::dyn_cast<PtrType>(getResult().getType());
+    if (!resTy)
+        return emitOpError("result must be !tla.ptr");
+    if (resTy.getAlignment() == 0)
+        return emitOpError("result pointer alignment must be positive");
+    // UB only: the launch-time declaration this region relies on is the UB/Data
+    // Cache boundary, and no other memory has one.
+    if (resTy.getAddrspace() != AddressSpace::ub)
+        return emitOpError("dynamic_ub_base requires a ub !tla.ptr");
+    // In bits, as alloc_ptr does: a packed fp4 buffer has an i4 pointee, which
+    // has no whole-byte width but is still a fixed-width scalar. Asking for
+    // bytes here rejected every sub-byte type, and said so with a message that
+    // blamed the type for not being fixed-width.
+    if (getBitSizeOfFixedWidthScalarType(resTy.getPointee()) <= 0)
+        return emitOpError("dynamic_ub_base pointee must be a fixed-width scalar type");
+    return mlir::success();
+}
+
 mlir::LogicalResult AllocPtrOp::verify()
 {
     auto resTy = llvm::dyn_cast<PtrType>(getResult().getType());

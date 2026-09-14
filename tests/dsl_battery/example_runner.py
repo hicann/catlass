@@ -23,6 +23,7 @@ from __future__ import annotations
 import contextlib
 import importlib.abc
 import importlib.util
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -104,6 +105,13 @@ def run_case(argv: list[str]) -> int:
     script = Path(argv[0])
     module = load_example(script)
     saved_argv = sys.argv
+    # Restored for the same reason as sys.argv: every case runs in this one
+    # process, so a variable an example exports would otherwise stay set for all
+    # the cases after it. Not hypothetical -- an example whose --cache-dir has a
+    # default exports CATLASS_DSL_CACHE_DIR unconditionally, pointing at its own
+    # artifacts directory, and that redirects the next case's compile *and BC*
+    # cache lookups to a directory nothing has populated.
+    saved_environ = dict(os.environ)
     sys.argv = list(argv)
     try:
         # A cached module may still import a sibling lazily, inside run().
@@ -113,6 +121,8 @@ def run_case(argv: list[str]) -> int:
         rc = exc.code if isinstance(exc.code, int) else (0 if exc.code is None else 1)
     finally:
         sys.argv = saved_argv
+        os.environ.clear()
+        os.environ.update(saved_environ)
     return int(rc or 0)
 
 

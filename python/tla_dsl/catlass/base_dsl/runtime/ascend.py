@@ -13,6 +13,11 @@ from types import ModuleType
 from ...execution import TlaRuntimeUnavailableError
 
 # acl_rt.h — PyACL does not export these macros; pass numeric literals.
+# ACL_ERROR_INVALID_PARAM. The runtime returns it for a launch whose parameters
+# it will not accept -- among them a dynamic UB size larger than the binary's own
+# accounting allows, which is the one case a caller can act on.
+ACL_ERROR_INVALID_PARAM = 107000
+
 _ACL_RT_BINARY_LOAD_OPT_MAGIC = 2
 _ACL_RT_BINARY_MAGIC_ELF_AICORE = 0x43554245
 _ACL_RT_BINARY_MAGIC_ELF_VECTOR_CORE = 0x41415246
@@ -46,7 +51,11 @@ def check_acl_errors(
     if int(ret) == 0:
         return
     cls = error_cls if error_cls is not None else TlaRuntimeUnavailableError
-    raise cls(f"{op_name} failed with ret={int(ret)}")
+    error = cls(f"{op_name} failed with ret={int(ret)}")
+    # The numeric code, so a caller that handles one specific failure can test
+    # for it rather than grepping the message.
+    error.ret = int(ret)  # type: ignore[attr-defined]
+    raise error
 
 
 def _acl_status(result: object) -> int:
@@ -60,7 +69,7 @@ def _binary_load_options_for_mode(kernel_mode: str) -> list[dict[str, int]]:
     """Build PyACL ``binary_load_from_data`` options for ``kernel_mode``.
 
     Must use ``binary_load_from_data`` (not FromFile): FromFile rejects
-    ``ACL_RT_BINARY_LOAD_OPT_MAGIC`` with 107000. See
+    ``ACL_RT_BINARY_LOAD_OPT_MAGIC`` with ``ACL_ERROR_INVALID_PARAM``. See
     ``scripts/aclrt_poc/mre_binary_load_magic.cpp``.
 
     - aiv: VECTOR_CORE magic → AIV slot
@@ -134,12 +143,32 @@ def load_binary(
     return loaded.binary_handle, loaded.function_handle
 
 
+# ``ACL_RT_LAUNCH_KERNEL_ATTR_DYN_UBUF_SIZE`` from ``acl_rt.h``. PyACL marshals
+# ``cfg`` as a list of ``{"id", "value"}`` dicts, so both go in as plain ints.
+_ACL_LAUNCH_ATTR_DYN_UBUF_SIZE = 2
+
+
+def _launch_config(dyn_ubuf_bytes: int) -> list[dict[str, int]]:
+    """Ask the launch for ``dyn_ubuf_bytes`` of UB beyond what the binary declares.
+
+    The size of the launch-sized region, not where it ends: the runtime adds it
+    to the static footprint recorded in the binary. An empty list leaves the
+    launch untouched, which is what a kernel whose UB the compiler placed in
+    full wants -- and on SIMT it also leaves the Data Cache its full extent,
+    since the cache takes whatever UB goes unclaimed.
+    """
+    if dyn_ubuf_bytes <= 0:
+        return []
+    return [{"id": _ACL_LAUNCH_ATTR_DYN_UBUF_SIZE, "value": int(dyn_ubuf_bytes)}]
+
+
 def launch_kernel(
     *,
     function_handle: int,
     stream: int,
     block_num: int,
     payload: bytes,
+    dyn_ubuf_bytes: int = 0,
     uses_scalar_print: bool = False,
     uses_tensor_print: bool = False,
     is_mixed: bool = False,
@@ -150,6 +179,7 @@ def launch_kernel(
     import acl
 
     block_num = int(block_num)
+    cfg = _launch_config(dyn_ubuf_bytes)
 
     def _acl_launch(launch_payload: bytes) -> None:
         launch_payload = launch_payload or (b"\x00" * ctypes.sizeof(ctypes.c_uint64))
@@ -177,7 +207,7 @@ def launch_kernel(
                     int(function_handle),
                     int(block_num),
                     int(stream),
-                    [],
+                    cfg,
                     args_handle,
                     0,
                 )

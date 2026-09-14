@@ -191,6 +191,66 @@ class JitModule:
     print_metadata: tuple[Any, ...] | None
     print_helper_core: str | None
     print_tensor_position: str | None = None
+    # UB accounting. ub_bytes is the kernel's requirement; the window is what a
+    # SIMT kernel declares at launch, and 0 for a kernel that declares nothing.
+    ub_static_bytes: int = 0
+    ub_programmable_bytes: int = 0
+    ub_dynamic_base: int = -1
+
+
+def _has_dynamic_region(module: "JitModule") -> bool:
+    """Whether the kernel declared a launch-sized UB region.
+
+    Carried as the base itself rather than a separate flag: zero is a real base,
+    since a kernel can declare a region and allocate nothing statically, so the
+    absent case needs a value outside the range.
+    """
+    return module.ub_dynamic_base >= 0
+
+
+def _resolved_dyn_ubuf_bytes(
+    module: "JitModule",
+    requested_ub_bytes: int,
+) -> int:
+    """UB to declare at launch, and where the cumulative bound is checked.
+
+    The dynamic region is measured from its own base, not from the static byte
+    count: the base is the high-water mark rounded up to the region's alignment,
+    and a kernel may have a region with no static allocations at all. Exceeding
+    the ceiling does not reliably fault -- it corrupts the reserve or the cache
+    -- so it is rejected here.
+    """
+    from .. import execution as execution_mod
+
+    if requested_ub_bytes > 0:
+        if not _has_dynamic_region(module):
+            raise execution_mod.TlaExecutionError(
+                "ub= was given but this kernel declares no dynamic UB region. "
+                "Call tla.arch.get_dyn_ub in the kernel, or drop the argument."
+            )
+        limit = module.ub_programmable_bytes
+        available = max(0, limit - module.ub_dynamic_base)
+        if requested_ub_bytes > available:
+            raise execution_mod.TlaExecutionError(
+                f"ub={requested_ub_bytes} is more than this kernel "
+                f"can be given: at most {available} bytes are available for the "
+                f"dynamic region. It starts at {module.ub_dynamic_base} bytes, "
+                f"above the kernel's static allocations, and the kernel's UB "
+                f"limit is {limit} bytes."
+            )
+    if not _has_dynamic_region(module):
+        # Nothing to declare: the compiler placed every byte this kernel uses.
+        return 0
+    # The attribute is measured from the static footprint the binary records,
+    # not from the region's base, and the two are not the same address: the base
+    # is rounded up to the region pointer's alignment. Declaring the extent alone
+    # leaves that rounding gap unbacked, and the kernel writes off the end of what
+    # the launch actually handed it -- silently, since nothing faults.
+    #
+    # Declaring the end offset instead would count the static allocations twice
+    # and cost the caller its whole static footprint off the top of the ceiling.
+    alignment_gap = max(0, module.ub_dynamic_base - module.ub_static_bytes)
+    return alignment_gap + requested_ub_bytes
 
 
 class JitExecutor:
@@ -251,6 +311,9 @@ class JitExecutor:
                 prepare_for_launch()
 
         module = self.jit_module
+        dyn_ubuf_bytes = _resolved_dyn_ubuf_bytes(
+            module, int(launch_kwargs.get("ub", 0) or 0)
+        )
         uses_tensor_print = module.uses_tensor_print
         print_metadata = module.print_metadata
         if uses_tensor_print:
@@ -301,17 +364,40 @@ class JitExecutor:
             stream = as_stream(raw_stream, device=self.device)
 
         def launch() -> None:
-            execution_mod.launch_kernel(
-                function_handle=self.function_handle,
-                stream=int(stream),
-                block_num=block_num,
-                payload=payload,
-                uses_scalar_print=module.uses_scalar_print,
-                uses_tensor_print=uses_tensor_print,
-                is_mixed=module.is_mixed,
-                print_tensor_position=module.print_tensor_position,
-                device_id=self.device,
-            )
+            try:
+                execution_mod.launch_kernel(
+                    function_handle=self.function_handle,
+                    stream=int(stream),
+                    block_num=block_num,
+                    payload=payload,
+                    dyn_ubuf_bytes=dyn_ubuf_bytes,
+                    uses_scalar_print=module.uses_scalar_print,
+                    uses_tensor_print=uses_tensor_print,
+                    is_mixed=module.is_mixed,
+                    print_tensor_position=module.print_tensor_position,
+                    device_id=self.device,
+                )
+            except execution_mod.TlaRuntimeUnavailableError as exc:
+                from .runtime import ascend as ascend_rt
+
+                # The runtime's own UB accounting is not the one computed here:
+                # it reads the binary, whose recorded footprint can differ from
+                # what the compiler placed, and it does not expose that figure
+                # for us to use. Our bound is therefore an upper bound, and a
+                # refusal here is a size problem, not a broken runtime -- say
+                # so, rather than leaving a bare ACL code.
+                if dyn_ubuf_bytes <= 0 or getattr(exc, "ret", None) != (
+                    ascend_rt.ACL_ERROR_INVALID_PARAM
+                ):
+                    raise
+                raise execution_mod.TlaExecutionError(
+                    f"the runtime refused a launch declaring {dyn_ubuf_bytes} bytes of "
+                    f"dynamic UB, which is within the {module.ub_programmable_bytes}-byte "
+                    f"bound computed for this kernel. That bound is an upper "
+                    f"bound: the runtime accounts for the binary's own footprint, "
+                    f"which the compiler's figure need not match. Retry with a "
+                    f"smaller ub=."
+                ) from exc
 
         if print_metadata is None:
             launch()
@@ -390,6 +476,28 @@ class JitCompiledFunction:
     def kernel_mode(self) -> str:
         return self.jit_module.kernel_mode
 
+    def get_kernel_ub_size(self) -> int:
+        """Total Unified Buffer this kernel allocates statically, in bytes.
+
+        The launch-sized region is not counted: its extent is chosen per launch,
+        not compiled in. Named after CuTe DSL's ``get_kernel_smem_size``, which
+        answers the same question about shared memory.
+        """
+        return self.jit_module.ub_static_bytes
+
+    @property
+    def max_ub_bytes(self) -> int:
+        """Largest ``ub=`` this kernel can be launched with.
+
+        An upper bound, not a recommendation: the launch hands over exactly what
+        it is asked for, and on a SIMT kernel whatever is left over becomes Data
+        Cache. Passing this number claims the buffer and starves the cache.
+        """
+        module = self.jit_module
+        if not _has_dynamic_region(module):
+            return 0
+        return max(0, module.ub_programmable_bytes - module.ub_dynamic_base)
+
     @property
     def execution_args(self) -> ExecutionArgs:
         return self.jit_module.execution_args
@@ -428,6 +536,13 @@ class JitCompiledFunction:
               `*launch_args`.
             - *`stream`* (`Any`, via `**launch_kwargs`): Optional ACL stream handle.
               When omitted, uses the current stream for the executor's device.
+            - *`ub`* (`int`, via `**launch_kwargs`): Bytes of UB to back the
+              kernel's `tla.arch.get_dyn_ub` region with, as CuTe DSL's
+              `launch(smem=...)` sizes dynamic shared memory. Optional, default
+              `0`. Rejected unless the kernel declares a region, and rejected
+              above `artifact.max_ub_bytes`. Ask for what the kernel uses: the
+              launch hands over exactly this much, and on SIMT the UB left
+              unclaimed becomes Data Cache.
 
         Constraints:
             - `*launch_args` and `args=` must not both be non-empty

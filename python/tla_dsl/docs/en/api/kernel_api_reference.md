@@ -470,7 +470,7 @@ dst = tla.make_tensor_like(ptr, like=src_tile, layoutTag=tla.arch.RowMajor)
 
 ### `make_ptr`
 
-**Source:** [`catlass.core_api.make_ptr`](../../../catlass/core_api.py#L8202)
+**Source:** [`catlass.core_api.make_ptr`](../../../catlass/core_api.py#L8268)
 
 Description:
 
@@ -505,7 +505,7 @@ ptr = tla.make_ptr(tla.Float16, addr, mem_space=tla.AddressSpace.gm)
 
 ### `recast_ptr`
 
-**Source:** [`catlass.core_api.recast_ptr`](../../../catlass/core_api.py#L8256)
+**Source:** [`catlass.core_api.recast_ptr`](../../../catlass/core_api.py#L8322)
 
 Description:
 
@@ -835,7 +835,7 @@ Mask creation and tail-mask updates.
 
 #### `create_mask`
 
-**Source:** [`catlass.core_api.create_mask`](../../../catlass/core_api.py#L8521)
+**Source:** [`catlass.core_api.create_mask`](../../../catlass/core_api.py#L8594)
 
 Description:
 
@@ -891,7 +891,7 @@ with tla.vec.func(mode="simd"):
 
 #### `update_mask`
 
-**Source:** [`catlass.core_api.update_mask`](../../../catlass/core_api.py#L8585)
+**Source:** [`catlass.core_api.update_mask`](../../../catlass/core_api.py#L8658)
 
 Description:
 
@@ -1962,7 +1962,7 @@ Architecture attributes on `tla.arch` (layout tags, pipe identifiers, block help
 
 ### `arch`
 
-**Source:** [`catlass.core_api.arch`](../../../catlass/core_api.py#L8380)
+**Source:** [`catlass.core_api.arch`](../../../catlass/core_api.py#L8446)
 
 Description:
 
@@ -1998,6 +1998,12 @@ Parameters:
     space for the compile target. Takes a `tla.AddressSpace` token
     (`tla.AddressSpace.l1` / `l0a` / `l0b` / `l0c` / `ub`). Returns a plain
     `int`; valid on host and inside a kernel (folds to a constant).
+  - `get_dyn_ub(dtype, byte_alignment=None)`: Pointer to the dynamic UB
+    allocation -- UB whose size the launch chooses, rather than the compiler.
+    The region starts above every `tla.allocate`, and `ub=` at launch says
+    how much of it is backed. At most one per kernel: carve it up
+    with pointer arithmetic. Ask for what the kernel uses -- on SIMT the UB
+    left unclaimed becomes Data Cache.
 
 Constraints:
 
