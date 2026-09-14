@@ -112,6 +112,7 @@ ARANGE_OP_REL="examples/end_to_end/vector_ops/arange_op.py"
 INTERLEAVE_OP_REL="examples/end_to_end/vector_ops/interleave_op.py"
 LOAD_DINTLV_OP_REL="examples/end_to_end/vector_ops/load_dintlv_op.py"
 LOAD_US_B8_OP_REL="examples/end_to_end/vector_ops/load_us_b8_op.py"
+LOAD_DIST_OPS_REL="examples/end_to_end/vector_ops/load_dist_ops.py"
 LOAD_STORE_MASK_REL="examples/end_to_end/vector_ops/load_store_mask.py"
 STORE_PACK_REL="examples/end_to_end/vector_ops/store_pack.py"
 SQUEEZE_OP_REL="examples/end_to_end/vector_ops/squeeze_op.py"
@@ -168,6 +169,17 @@ Run end-to-end validation for:
   - load_dintlv_op (load_dintlv_op.py dintlv_b32 --all-dtypes; f32 only)
   - load_us_b8_op (load_us_b8_op.py us_b8 --sweep --shapes 512; i8 only:
     DIST_US_B8 2x up-sample load of b8 elements)
+  - load_dist_ops (load_dist_ops.py <op> --sweep --shapes 512; one script for
+    the issue-519 load distribution modes, op in brc_b16/us_b16/unpack_b16/
+    e2b_b16/e2b_b32/blk:
+    brc_b16 broadcasts one b16 element to a VL register (i16 only),
+    us_b16 2x up-samples b16 elements (i16 only),
+    unpack_b16 unpacks b16 elements with a zero interleaved after each
+    (i16 only),
+    e2b_b16/e2b_b32 broadcast one element per 32-byte DataBlock (i16/i32
+    only),
+    blk replicates one 32-byte DataBlock across all 8 DBs (i16 smoke only;
+    any element size works))
   - load_store_mask (load_store_mask.py load_store_mask --all-dtypes:
     MaskSSA load/store round-trip via MaskLoadParams/MaskStoreParams for
     b8/b16/b32 UB carriers; companion vector fixed to f32)
@@ -420,6 +432,10 @@ if [[ ! -f "${CATLASS_DSL_DIR}/${LOAD_STORE_SCALAR_AFTER_REDUCTION_REL}" ]]; the
 fi
 if [[ ! -f "${CATLASS_DSL_DIR}/${COMPARE_MASK_REL}" ]]; then
     echo "error: missing ${COMPARE_MASK_REL} under ${CATLASS_DSL_DIR}" >&2
+    exit 1
+fi
+if [[ ! -f "${CATLASS_DSL_DIR}/${LOAD_DIST_OPS_REL}" ]]; then
+    echo "error: missing ${LOAD_DIST_OPS_REL} under ${CATLASS_DSL_DIR}" >&2
     exit 1
 fi
 if [[ ! -f "${CATLASS_DSL_DIR}/${UNARY_OPS_REL}" ]]; then

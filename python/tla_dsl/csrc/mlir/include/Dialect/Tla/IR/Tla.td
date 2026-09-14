@@ -325,11 +325,23 @@ def Tla_LoadDist_Norm : I32EnumAttrCase<"norm", 0>;
 def Tla_LoadDist_BrcB32 : I32EnumAttrCase<"brc_b32", 1>;
 def Tla_LoadDist_DintlvB32 : I32EnumAttrCase<"dintlv_b32", 2>;
 def Tla_LoadDist_UsB8 : I32EnumAttrCase<"us_b8", 3>;
+def Tla_LoadDist_BrcB16 : I32EnumAttrCase<"brc_b16", 4>;
+def Tla_LoadDist_UsB16 : I32EnumAttrCase<"us_b16", 5>;
+def Tla_LoadDist_UnpackB16 : I32EnumAttrCase<"unpack_b16", 7>;
+def Tla_LoadDist_E2bB16 : I32EnumAttrCase<"e2b_b16", 8>;
+def Tla_LoadDist_E2bB32 : I32EnumAttrCase<"e2b_b32", 9>;
+def Tla_LoadDist_Blk : I32EnumAttrCase<"blk", 10>;
 def Tla_LoadDistEnum : Tla_I32Enum<"LoadDist", "Load distribution for tla.load.", [
   Tla_LoadDist_Norm,
   Tla_LoadDist_BrcB32,
   Tla_LoadDist_DintlvB32,
-  Tla_LoadDist_UsB8
+  Tla_LoadDist_UsB8,
+  Tla_LoadDist_BrcB16,
+  Tla_LoadDist_UsB16,
+  Tla_LoadDist_UnpackB16,
+  Tla_LoadDist_E2bB16,
+  Tla_LoadDist_E2bB32,
+  Tla_LoadDist_Blk
 ]>;
 def Tla_LoadDistAttr : Tla_EnumAttr<"LoadDist", "load_dist"> {
   let parameters = (ins EnumParameter<Tla_LoadDistEnum>:$load_dist);
@@ -341,6 +353,29 @@ def Tla_LoadDistAttr : Tla_EnumAttr<"LoadDist", "load_dist"> {
     ``us_b8`` is single-destination 2x up-sample load (AscendC
     ``LoadDist::DIST_US_B8``): loads ``VL/2`` b8 elements and repeats each
     twice to fill a VL-wide ``b8`` register; b8 element type only.
+    ``brc_b16`` is single-destination broadcast load (AscendC
+    ``LoadDist::DIST_BRC_B16``): reads one b16 element and replicates it
+    across all lanes of a VL-wide ``b16`` register; b16 element type only.
+    ``us_b16`` is single-destination 2x up-sample load (AscendC
+    ``LoadDist::DIST_US_B16``): loads ``VL/2`` b16 elements and repeats
+    each twice to fill a VL-wide ``b16`` register; b16 element type only.
+    ``unpack_b16`` is single-destination unpack load (AscendC
+    ``LoadDist::DIST_UNPACK_B16``, HIVMAVE ``UNPK_B16``): loads ``VL/2``
+    b16 elements and inserts one zero b16 element after each to fill a
+    VL-wide ``b16`` register; b16 element type only.
+    ``e2b_b16`` / ``e2b_b32`` are element-to-DataBlock broadcast loads (AscendC
+    ``LoadDist::DIST_E2B_B16`` / ``DIST_E2B_B32``, HIVMAVE ``E2B_B16`` /
+    ``E2B_B32``): reads ``VL/DB`` (= 8, with ``DB`` a 32-byte DataBlock)
+    elements from the tile view base and replicates each element across all
+    lanes of its destination DataBlock to fill a VL-wide register;
+    ``e2b_b16`` requires a 2-byte element type (f16/bf16/i16/u16, 16 lanes
+    per DataBlock), ``e2b_b32`` a 4-byte element type (f32/i32/u32, 8 lanes
+    per DataBlock).
+    ``blk`` is a DataBlock broadcast load (AscendC ``LoadDist::DIST_BLK``,
+    HIVMAVE ``BLK``): reads the ``32-byte`` DataBlock (``DB``) worth of
+    elements at the tile view base (``b8``: 32, ``b16``: 16, ``b32``: 8
+    elements) and replicates it across all ``VL/DB`` (= 8) DataBlocks to
+    fill a VL-wide register; works for any element size.
   }];
 }
 

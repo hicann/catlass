@@ -382,6 +382,20 @@ def _cases(device: int) -> Iterator[tuple[str, list[list[str]]]]:
         [["vector_ops/load_us_b8_op.py", "us_b8", "--sweep", "--shapes", "512", *dev]],
     )
     yield (
+        "vector-load-dist-ops",
+        [
+            [
+                "vector_ops/load_dist_ops.py",
+                op,
+                "--sweep",
+                "--shapes",
+                "512",
+                *dev,
+            ]
+            for op in ("brc_b16", "us_b16", "e2b_b16", "e2b_b32", "blk", "unpack_b16")
+        ],
+    )
+    yield (
         "vector-load-store-mask",
         [["vector_ops/load_store_mask.py", "load_store_mask", "--all-dtypes", *dev]],
     )

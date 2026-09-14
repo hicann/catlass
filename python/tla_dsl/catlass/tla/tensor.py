@@ -324,6 +324,30 @@ class _Tensor(TensorABC):
             isinstance(params, NormalLoadParams)
             and params.load_dist == LoadDist.DIST_US_B8
         )
+        is_brc_b16 = (
+            isinstance(params, NormalLoadParams)
+            and params.load_dist == LoadDist.DIST_BRC_B16
+        )
+        is_us_b16 = (
+            isinstance(params, NormalLoadParams)
+            and params.load_dist == LoadDist.DIST_US_B16
+        )
+        is_unpack_b16 = (
+            isinstance(params, NormalLoadParams)
+            and params.load_dist == LoadDist.DIST_UNPACK_B16
+        )
+        is_e2b_b16 = (
+            isinstance(params, NormalLoadParams)
+            and params.load_dist == LoadDist.DIST_E2B_B16
+        )
+        is_e2b_b32 = (
+            isinstance(params, NormalLoadParams)
+            and params.load_dist == LoadDist.DIST_E2B_B32
+        )
+        is_blk = (
+            isinstance(params, NormalLoadParams)
+            and params.load_dist == LoadDist.DIST_BLK
+        )
 
         load_kwargs: dict[str, Any] = {"loc": loc}
         if isinstance(params, UnalignLoadParams):
@@ -367,6 +391,59 @@ class _Tensor(TensorABC):
                     "DIST_US_B8 requires a 1-byte (b8: i8/u8) element type "
                     f"(got {source_desc.element_type})"
                 )
+            result_desc = _full_vector_ssa_descriptor(source_desc.element_type)
+        elif is_brc_b16 or is_us_b16:
+            # AscendC LoadDist::DIST_BRC_B16 / DIST_US_B16: b16-only modes.
+            # BRC_B16 reads one b16 element and replicates it across all lanes;
+            # US_B16 reads VL/2 b16 elements and repeats each twice. Either way
+            # the result is a full VL register (f16/bf16/i16/u16 -> 128 lanes)
+            # regardless of the source origin_shape.
+            elem = str(source_desc.element_type).strip().lower()
+            if dtype_size_bytes(elem) != 2:
+                mode = "DIST_BRC_B16" if is_brc_b16 else "DIST_US_B16"
+                raise TlaLoweringError(
+                    f"{mode} requires a 2-byte (b16: f16/bf16/i16/u16) "
+                    f"element type (got {source_desc.element_type})"
+                )
+            result_desc = _full_vector_ssa_descriptor(source_desc.element_type)
+        elif is_unpack_b16:
+            # AscendC LoadDist::DIST_UNPACK_B16 (HIVMAVE UNPK_B16): b16-only
+            # unpack. The transfer reads VL/2 b16 elements and inserts one
+            # zero b16 element after each to fill a VL-wide b16 register, so
+            # the result is a full VL vector regardless of the source
+            # origin_shape.
+            elem = str(source_desc.element_type).strip().lower()
+            if dtype_size_bytes(elem) != 2:
+                raise TlaLoweringError(
+                    "DIST_UNPACK_B16 requires a 2-byte (b16: f16/bf16/i16/u16) "
+                    f"element type (got {source_desc.element_type})"
+                )
+            result_desc = _full_vector_ssa_descriptor(source_desc.element_type)
+        elif is_e2b_b16 or is_e2b_b32:
+            # AscendC LoadDist::DIST_E2B_B16 / DIST_E2B_B32 (HIVMAVE E2B_B16 /
+            # E2B_B32): element-to-DataBlock broadcast. The transfer reads
+            # VL/DB = 8 source elements (DB = 32-byte DataBlock) and
+            # replicates each element across all lanes of its destination
+            # DataBlock, so the result is a full VL register (b16 -> 128
+            # lanes / b32 -> 64 lanes) regardless of the source origin_shape.
+            elem = str(source_desc.element_type).strip().lower()
+            mode = "DIST_E2B_B16" if is_e2b_b16 else "DIST_E2B_B32"
+            want_bytes = 2 if is_e2b_b16 else 4
+            if dtype_size_bytes(elem) != want_bytes:
+                raise TlaLoweringError(
+                    f"{mode} requires a {want_bytes}-byte element type "
+                    "(b16: f16/bf16/i16/u16; b32: f32/i32/u32; "
+                    f"got {source_desc.element_type})"
+                )
+            result_desc = _full_vector_ssa_descriptor(source_desc.element_type)
+        elif is_blk:
+            # AscendC LoadDist::DIST_BLK (HIVMAVE BLK): DataBlock broadcast.
+            # The transfer reads one 32-byte DataBlock worth of elements
+            # (b8: 32, b16: 16, b32: 8) from the tile view base and
+            # replicates it across all VL/DB (= 8) DataBlocks to fill a
+            # VL-wide register. Unlike the suffixed modes, ``blk`` works for
+            # any element size, so there is no dtype check here; the result
+            # is a full VL vector regardless of the source origin_shape.
             result_desc = _full_vector_ssa_descriptor(source_desc.element_type)
         else:
             result_desc = _vector_ssa_type_from_tensor_descriptor(source_desc)
