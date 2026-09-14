@@ -230,7 +230,7 @@ compiled_ep(tx, ty, block_num=1)  # abs_epilogue omitted at launch
 
 ### `dataclass`
 
-**Source:** [`dataclasses.dataclass`](../../../catlass/execution_lowering.py#L850)
+**Source:** [`dataclasses.dataclass`](../../../catlass/execution_lowering.py#L857)
 
 Description:
 

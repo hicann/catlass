@@ -465,6 +465,12 @@ def _cases(device: int) -> Iterator[tuple[str, list[list[str]]]]:
         [["scalar_arg_alignment/scalar_arg_alignment.py", *dev]],
     )
 
+    # --- mixed Dynamic-GM and static memref arguments ---
+    yield (
+        "mixed-memref-arguments",
+        [["mixed_memref_arguments/mixed_memref_arguments.py", *dev]],
+    )
+
     # --- dataclass_arg (stdlib @dataclass unpacked into scalar kernel args) ---
     yield (
         "dataclass-arg",

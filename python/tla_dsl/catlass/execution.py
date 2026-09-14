@@ -245,6 +245,7 @@ class _PreparedMemrefRun:
     logical_index: int
     start: int
     packer: struct.Struct
+    value_indices: tuple[int, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -993,6 +994,7 @@ def _prepare_abi_packer(
 
     slots: list[_PreparedAbiSlot] = []
     memref_runs: list[_PreparedMemrefRun] = []
+    memref_logical_indices: set[int] = set()
     index = 0
     while index < len(all_slots):
         slot = all_slots[index]
@@ -1003,6 +1005,11 @@ def _prepare_abi_packer(
         fields = []
         run_start = slot.start
         logical_index = slot.logical_index
+        if logical_index in memref_logical_indices:
+            raise TlaUnsupportedAbiError(
+                "memref fields must form one contiguous group per logical argument"
+            )
+        memref_logical_indices.add(logical_index)
         previous_end = slot.start
         while index < len(all_slots):
             candidate = all_slots[index]
@@ -1018,20 +1025,42 @@ def _prepare_abi_packer(
                     f"kernel ABI memref_field argument {argument.index} "
                     "requires a field name"
                 )
+            if argument.mlir_type != slot.argument.mlir_type:
+                raise TlaUnsupportedAbiError(
+                    "memref fields in a logical group must have the same MLIR type"
+                )
             fields.append(argument.field)
             previous_end = candidate.end
             index += 1
         field_order = tuple(fields)
+        value_indices = None
+        run_packer = _DYNAMIC_GM_MEMREF_PACKER
         if field_order != _DYNAMIC_GM_MEMREF_FIELDS:
-            raise TlaUnsupportedAbiError(
-                "dynamic GM memref fields must be one contiguous canonical "
-                f"13-field run, got {field_order!r}"
+            # General strided memrefs use 3 + 2R fields, not the
+            # rank-4 Dynamic-GM descriptor plus its two origin parameters.
+            # Type validity is checked by the compiler; ABI fields define packing.
+            rank = (len(field_order) - 3) // 2
+            expected = (
+                ("allocated", "aligned", "offset")
+                + tuple(f"size{dim}" for dim in range(rank))
+                + tuple(f"stride{dim}" for dim in range(rank))
             )
+            if not 1 <= rank <= 4 or field_order != expected:
+                raise TlaUnsupportedAbiError(
+                    "memref fields must be one contiguous canonical 13-field run "
+                    "or a rank-1..4 descriptor group, "
+                    f"got {field_order!r} for {slot.argument.mlir_type}"
+                )
+            value_indices = tuple(
+                _DYNAMIC_GM_MEMREF_FIELDS.index(field) for field in field_order
+            )
+            run_packer = struct.Struct(f"<{len(value_indices)}Q")
         memref_runs.append(
             _PreparedMemrefRun(
                 logical_index=logical_index,
                 start=run_start,
-                packer=_DYNAMIC_GM_MEMREF_PACKER,
+                packer=run_packer,
+                value_indices=value_indices,
             )
         )
     return _PreparedAbiPacker(
@@ -1098,6 +1127,16 @@ def _pack_launch_args_prepared(
     for run in packer.memref_runs:
         value = args[run.logical_index]
         values = value.build_memref_launch_fields()
+        if run.value_indices is not None:
+            # Projection would hide missing or extra canonical fields.
+            field_count = len(values)
+            if field_count != len(_DYNAMIC_GM_MEMREF_FIELDS):
+                raise TlaUnsupportedAbiError(
+                    f"kernel ABI argument {run.logical_index} descriptor provider "
+                    f"returned {field_count} fields, expected "
+                    f"{len(_DYNAMIC_GM_MEMREF_FIELDS)} canonical fields"
+                )
+            values = tuple(values[index] for index in run.value_indices)
         run.packer.pack_into(payload, run.start, *values)
     return bytes(payload)
 

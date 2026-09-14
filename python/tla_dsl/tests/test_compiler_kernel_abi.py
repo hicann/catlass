@@ -18,6 +18,23 @@ runtime_mod = pytest.importorskip("catlass.runtime", exc_type=ImportError)
 mlir_ir = pytest.importorskip("catlass._mlir.ir", exc_type=ImportError)
 
 
+_DYNAMIC_GM_FIELDS = (
+    "allocated",
+    "aligned",
+    "offset",
+    "size0",
+    "size1",
+    "size2",
+    "size3",
+    "stride0",
+    "stride1",
+    "stride2",
+    "stride3",
+    "originShape0",
+    "originShape1",
+)
+
+
 @tla.kernel
 def _native_kernel_abi_types(
     output: tla.Tensor,
@@ -55,6 +72,16 @@ def _gm_i32_tensor() -> tla.Tensor:
                origin_shape=(1,),
                layout_tag=tla.arch.RowMajor,
            )
+
+
+def _gm_f16_rank2_tensor() -> tla.Tensor:
+    return make_fake_tensor(
+        tla.Float16,
+        (4, 8),
+        (8, 1),
+        origin_shape=(4, 8),
+        layout_tag=tla.arch.RowMajor,
+    )
 
 
 def _native_lower(kernel, *, type_args=None):
@@ -744,6 +771,13 @@ def _native_dynamic_rank1_gm_abi(buf: tla.Tensor) -> None:
 
 
 @tla.kernel
+def _native_mixed_dynamic_static_gm_abi(
+    dynamic: tla.Tensor, static: tla.Tensor, output: tla.Tensor
+) -> None:
+    pass
+
+
+@tla.kernel
 def _native_dynamic_rank1_gm_reads_origin(buf: tla.Tensor) -> None:
     _ = buf.origin_shape[0]
 
@@ -789,6 +823,138 @@ def test_native_bridge_dynamic_rank1_gm_emits_memref_fields() -> None:
         ("memref_field", "originShape1", 0, 8),
     ]
     assert result.kernel_abi.total_size == 104
+
+
+@pytest.mark.parametrize(
+    ("static_tensor", "static_fields", "total_size"),
+    [
+        pytest.param(
+            _gm_i32_tensor,
+            ("allocated", "aligned", "offset", "size0", "stride0"),
+            184,
+            id="rank1",
+        ),
+        pytest.param(
+            _gm_f16_rank2_tensor,
+            ("allocated", "aligned", "offset", "size0", "size1", "stride0", "stride1"),
+            216,
+            id="rank2",
+        ),
+    ],
+)
+def test_native_bridge_mixed_gm_memrefs_use_descriptor_fields_for_all_gm_args(
+    static_tensor, static_fields, total_size
+) -> None:
+    result = _native_lower(
+        _native_mixed_dynamic_static_gm_abi,
+        type_args=(
+            _dynamic_gm_rank1_tensor(),
+            static_tensor(),
+            static_tensor(),
+        ),
+    )
+
+    assert result.kernel_abi is not None
+    assert result.kernel_abi.schema_version == 4
+    fields = [
+        (argument.logical_index, argument.field)
+        for argument in result.kernel_abi.arguments
+    ]
+    assert fields == [
+        *((0, field) for field in _DYNAMIC_GM_FIELDS),
+        *((1, field) for field in static_fields),
+        *((2, field) for field in static_fields),
+    ]
+    assert result.kernel_abi.total_size == total_size
+
+
+def _lower_memref_entry(memref, *, dynamic_gm=False):
+    from catlass import _tla_type_bridge
+
+    marker = " {tla.dynamic_gm}" if dynamic_gm else ""
+    with mlir_ir.Context() as context:
+        context.allow_unregistered_dialects = True
+        _tla_type_bridge.load_tla_dialect(context)
+        module = mlir_ir.Module.parse(
+            "module { func.func @memref_entry("
+            f"%buffer: {memref}{marker}, %first: index, %second: index, "
+            "%output: memref<1xf32, 1>) attributes {hacc.entry} { return } }"
+        )
+        return compiler_bridge.lower_tlair_module_to_mlir(module)
+
+
+@pytest.mark.parametrize(
+    "layout,descriptor",
+    [
+        ("strided<[3, 1], offset: 0>", False),
+        ("strided<[6, 1], offset: 0>", False),
+        ("strided<[?, 1], offset: 0>", True),
+        ("strided<[6, 1], offset: ?>", True),
+        ("strided<[?, 1], offset: ?>", True),
+    ],
+)
+def test_static_shape_memref_abi_accounts_for_strides_and_offset(layout, descriptor):
+    abi = _lower_memref_entry(f"memref<2x3xf32, {layout}, 1>").kernel_abi
+    assert abi is not None
+    fields = [(arg.logical_index, arg.field) for arg in abi.arguments]
+    if descriptor:
+        assert fields == [
+            *(
+                (0, field)
+                for field in (
+                    "allocated",
+                    "aligned",
+                    "offset",
+                    "size0",
+                    "size1",
+                    "stride0",
+                    "stride1",
+                )
+            ),
+            (1, None),
+            (2, None),
+            *(
+                (3, field)
+                for field in ("allocated", "aligned", "offset", "size0", "stride0")
+            ),
+        ]
+        assert abi.total_size == 112
+    else:
+        assert fields == [(0, None), (1, None), (2, None), (3, None)]
+        assert abi.total_size == 32
+
+
+@pytest.mark.parametrize("dynamic_gm", [False, True])
+def test_origin_arguments_are_folded_only_for_marked_dynamic_gm(dynamic_gm):
+    abi = _lower_memref_entry(
+        "memref<?x?x?x?xf32, strided<[?, ?, ?, ?], offset: ?>, 1>",
+        dynamic_gm=dynamic_gm,
+    ).kernel_abi
+    assert abi is not None
+    fields = [(arg.logical_index, arg.field) for arg in abi.arguments]
+    output_fields = ("allocated", "aligned", "offset", "size0", "stride0")
+    if dynamic_gm:
+        assert fields == [(0, field) for field in _DYNAMIC_GM_FIELDS] + [
+            (1, field) for field in output_fields
+        ]
+    else:
+        assert fields == [(0, field) for field in _DYNAMIC_GM_FIELDS[:-2]] + [
+            (1, None),
+            (2, None),
+            *((3, field) for field in output_fields),
+        ]
+
+
+@pytest.mark.parametrize(
+    "memref,dynamic_gm",
+    [
+        ("memref<2x3xf32, strided<[?, 1], offset: ?>, 1>", True),
+        ("memref<?x?x?x?x?xf32, 1>", False),
+        ("memref<2x3xf32, affine_map<(d0, d1) -> (d0 floordiv 2, d1)>, 1>", False),
+    ],
+)
+def test_unrepresentable_memref_abi_is_not_emitted(memref, dynamic_gm):
+    assert _lower_memref_entry(memref, dynamic_gm=dynamic_gm).kernel_abi is None
 
 
 def test_native_dynamic_gm_origin_shape_uses_prologue_metadata() -> None:

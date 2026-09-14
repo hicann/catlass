@@ -336,6 +336,13 @@ def _build_tla_func(
         "sym_name": mlir_ir.StringAttr.get(fn_name),
         "function_type": mlir_ir.TypeAttr.get(fn_type),
     }
+    if dynamic_gm_tensor_tys:
+        arg_attrs = [{} for _ in mlir_arg_types]
+        for name in dynamic_gm_tensor_tys:
+            arg_attrs[block_slots[name][0]]["tla.dynamic_gm"] = mlir_ir.UnitAttr.get()
+        func_attrs["arg_attrs"] = mlir_ir.ArrayAttr.get(
+            [mlir_ir.DictAttr.get(attrs) for attrs in arg_attrs]
+        )
     if auto_sync == "v0":
         func_attrs["tla.auto_sync"] = mlir_ir.StringAttr.get("v0")
     func_op = mlir_ir.Operation.create(

@@ -618,7 +618,11 @@ static bool appendDynamicGmMemrefFields(
 {
     // Schema v4: unified 13-slot descriptor for all dynamic GM ranks.
     // Device signature is unified dynamic GM memref + originShape0/1 index args.
-    if (memrefType.getRank() != 4)
+    SmallVector<int64_t, 4> strides;
+    int64_t memrefOffset;
+    if (memrefType.getRank() != 4 || !llvm::all_of(memrefType.getShape(), ShapedType::isDynamic) ||
+        failed(getStridesAndOffset(memrefType, strides, memrefOffset)) || !ShapedType::isDynamic(memrefOffset) ||
+        !llvm::all_of(strides, ShapedType::isDynamic))
         return false;
     std::string mlirType = printType(memrefType);
     static constexpr const char* kFields[] = {"allocated", "aligned",      "offset",      "size0",   "size1",
@@ -632,6 +636,49 @@ static bool appendDynamicGmMemrefFields(
     return true;
 }
 
+// The supported hivmc-a5 pipeline falls back to descriptors for the entire entry
+// when a GM memref cannot use bare pointers. Shape, strides and offset must all
+// be static for bare-pointer conversion.
+static FailureOr<bool> requiresGmMemrefDescriptor(MemRefType memrefType)
+{
+    SmallVector<int64_t, 4> strides;
+    int64_t memrefOffset;
+    if (failed(getStridesAndOffset(memrefType, strides, memrefOffset)))
+        return failure();
+    return !memrefType.hasStaticShape() || ShapedType::isDynamic(memrefOffset) ||
+           llvm::any_of(strides, ShapedType::isDynamic);
+}
+
+static bool appendGmMemrefFields(
+    py::list& arguments, unsigned& abiIndex, unsigned logicalIndex, MemRefType memrefType, uint64_t& offset)
+{
+    unsigned rank = memrefType.getRank();
+    if (rank == 0 || rank > 4)
+        return false;
+
+    std::string mlirType = printType(memrefType);
+    appendAbiArgument(
+        arguments, abiIndex++, logicalIndex, "memref_field", std::nullopt, mlirType, offset, /*storageSize=*/8,
+        "allocated");
+    appendAbiArgument(
+        arguments, abiIndex++, logicalIndex, "memref_field", std::nullopt, mlirType, offset, /*storageSize=*/8,
+        "aligned");
+    appendAbiArgument(
+        arguments, abiIndex++, logicalIndex, "memref_field", std::nullopt, mlirType, offset, /*storageSize=*/8,
+        "offset");
+    SmallVector<std::string, 8> fields;
+    fields.reserve(2 * rank);
+    for (unsigned dim = 0; dim < rank; ++dim)
+        fields.push_back((Twine("size") + Twine(dim)).str());
+    for (unsigned dim = 0; dim < rank; ++dim)
+        fields.push_back((Twine("stride") + Twine(dim)).str());
+    for (const std::string& field : fields)
+        appendAbiArgument(
+            arguments, abiIndex++, logicalIndex, "memref_field", std::nullopt, mlirType, offset, /*storageSize=*/8,
+            field.c_str());
+    return true;
+}
+
 std::optional<py::dict> buildKernelAbi(ModuleOp module, const KernelPointerProvenance& provenance)
 {
     SmallVector<py::dict, 2> layouts;
@@ -639,7 +686,6 @@ std::optional<py::dict> buildKernelAbi(ModuleOp module, const KernelPointerProve
     bool sawMixAiv = false;
     std::optional<std::string> mixAicBase;
     std::optional<std::string> mixAivBase;
-    bool anyMemrefField = false;
     for (func::FuncOp function : module.getOps<func::FuncOp>()) {
         if (function.isDeclaration() || !function->hasAttr("hacc.entry"))
             continue;
@@ -669,6 +715,17 @@ std::optional<py::dict> buildKernelAbi(ModuleOp module, const KernelPointerProve
         unsigned abiIndex = 0;
         unsigned skipOriginIndexArgs = 0;
         ArrayRef<Type> argTypes = function.getArgumentTypes();
+        bool requiresMemrefDescriptors = false;
+        for (Type type : argTypes) {
+            auto memrefType = dyn_cast<MemRefType>(type);
+            if (!memrefType || !::tla::isGmMemRef(memrefType))
+                continue;
+            FailureOr<bool> requiresDescriptor = requiresGmMemrefDescriptor(memrefType);
+            if (failed(requiresDescriptor))
+                return std::nullopt;
+            requiresMemrefDescriptors |= *requiresDescriptor;
+        }
+        bool anyMemrefField = false;
         for (auto [index, type] : llvm::enumerate(argTypes)) {
             if (function.getArgAttr(index, "tla.debug_print.workspace") ||
                 function.getArgAttr(index, "tla.print_tensor.workspace") ||
@@ -688,9 +745,10 @@ std::optional<py::dict> buildKernelAbi(ModuleOp module, const KernelPointerProve
                 supported = false;
                 break;
             }
-            if (auto memrefType = dyn_cast<MemRefType>(type);
-                memrefType && ::tla::isGmMemRef(memrefType) && !memrefType.hasStaticShape()) {
-                if (!appendDynamicGmMemrefFields(arguments, abiIndex, logicalIndex, memrefType, offset)) {
+            if (function.getArgAttr(index, "tla.dynamic_gm")) {
+                auto memrefType = dyn_cast<MemRefType>(type);
+                if (!memrefType || !::tla::isGmMemRef(memrefType) ||
+                    !appendDynamicGmMemrefFields(arguments, abiIndex, logicalIndex, memrefType, offset)) {
                     supported = false;
                     break;
                 }
@@ -703,6 +761,17 @@ std::optional<py::dict> buildKernelAbi(ModuleOp module, const KernelPointerProve
                 anyMemrefField = true;
                 ++logicalIndex;
                 continue;
+            }
+            if (requiresMemrefDescriptors) {
+                if (auto memrefType = dyn_cast<MemRefType>(type); memrefType && ::tla::isGmMemRef(memrefType)) {
+                    if (!appendGmMemrefFields(arguments, abiIndex, logicalIndex, memrefType, offset)) {
+                        supported = false;
+                        break;
+                    }
+                    anyMemrefField = true;
+                    ++logicalIndex;
+                    continue;
+                }
             }
             bool pointer = isa<MemRefType, LLVM::LLVMPointerType>(type) ||
                            (provenanceIndex < pointerArgs.size() && pointerArgs[provenanceIndex] > 0);
@@ -729,7 +798,7 @@ std::optional<py::dict> buildKernelAbi(ModuleOp module, const KernelPointerProve
             return std::nullopt;
         offset = (offset + 7) & ~uint64_t(7);
         py::dict layout;
-        // schema v4 when any dynamic GM memref_field is present; otherwise keep v3
+        // schema v4 when any GM memref_field is present; otherwise keep v3
         // for backward-compatible static pointer/scalar layouts.
         layout["schema_version"] = anyMemrefField ? 4 : 3;
         layout["entrypoint"] = logicalName.str();

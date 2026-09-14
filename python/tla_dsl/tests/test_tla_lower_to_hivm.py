@@ -1274,7 +1274,7 @@ def test_vector_dynamic_gm_memref_keeps_real_descriptor() -> None:
     assert re.search(
         r"func\.func @_vector_dynamic_gm_descriptor_kernel\("
         r"%arg0: memref<\?x\?x\?x\?xf32, strided<\[\?, \?, \?, \?\], offset: \?>, "
-        r"#hivm\.address_space<gm>>, %arg1: index, %arg2: index",
+        r"#hivm\.address_space<gm>> \{tla.dynamic_gm\}, %arg1: index, %arg2: index",
         output,
     ), output
     assert "memref.dim %arg0" in output
