@@ -35,10 +35,10 @@ enum class LayoutTag : uint32_t
     zNUnAlign = 7,
     zZMxScale = 8,
     nNMxScale = 9,
-    rowMajorMxScaleA = 10,
-    colMajorMxScaleA = 11,
-    rowMajorMxScaleB = 12,
-    colMajorMxScaleB = 13,
+    RowMajorMxScaleA = 10,
+    ColMajorMxScaleA = 11,
+    RowMajorMxScaleB = 12,
+    ColMajorMxScaleB = 13,
 };
 
 /// Unified 4D (12-field) tensor descriptor. Linear layouts (RowMajor/
@@ -260,74 +260,63 @@ CATLASS_DEVICE auto makeMxScalenNTlaLayout(const TensorDesc& desc)
 
 // GM-side MX scale tensors, one per (side, orientation).
 //
-// The shape/stride *rank structure* is what Catlass dispatches on: its
-// isMxScaleForRowMajorA / ColumnMajorA / RowMajorB / ColumnMajorB predicates key
-// off whether each stride leaf is a scalar or a pair, and off whether one
-// particular leaf is the literal constant 2. These mirror
-// tla::MakeMxScaleLayout<e8m0, RowMajor|ColumnMajor, isMxScaleB>, except the
-// pitch comes from the descriptor instead of being assumed contiguous: a tile
-// view into a wider scale buffer has a pitch wider than its own extent.
-//
-// Match the structure and Catlass's own tested copy runs; miss it and the
-// TileCopyTla static_assert fires.
+// The IR descriptor now carries the NZFamily 2x2 tree -- shape
+// ((1, rows), (C0, colGroups)) or ((C0, rowGroups), (1, cols)), with the
+// leading (1, dim) pair's first leaf at stride 0 -- following
+// tla::MakeMxScaleLayout with the rank-1 extent made 2-D. Catlass's copy
+// predicates (isMxScaleForRowMajorA / ColumnMajorA / RowMajorB / ColumnMajorB)
+// key on the *original* rank structure, where the plain matrix dimension is a
+// scalar leaf, so this converts back to that form: the 4 desc leaves name the
+// same rows / groups / pitch values the old reconstruction used, just at
+// different slots.
 template <LayoutTag Tag>
 CATLASS_DEVICE auto makeGMMxScaleTensor(memref_t<__gm__ uint8_t, 2>* memref, const TensorDesc& desc)
 {
     auto g = makeGlobalTensor(reinterpret_cast<__gm__ float8_e8m0_t*>(basePtr(memref)));
     constexpr uint32_t C0 = 2; // e8m0 scale C0, fixed by the format
-    const uint32_t rows = desc.shape0;
-    const uint32_t cols = desc.shape1;
-    const uint32_t colGroups = (cols + C0 - 1) / C0;
-    const uint32_t rowGroups = (rows + C0 - 1) / C0;
     const auto origin = tla::MakeShape(desc.originShape0, desc.originShape1);
     const auto coord = makeTlaTileCoord(desc);
 
-    if constexpr (Tag == LayoutTag::rowMajorMxScaleA) {
-        // A side: stride0 is a scalar row pitch, and must not be the constant 2.
+    if constexpr (Tag == LayoutTag::RowMajorMxScaleA) {
+        // desc: shape (1, rows, C0, colGroups); stride (0, pitch, 1, C0).
         return tla::MakeTensor(
             g,
             tla::MakeLayout(
-                tla::MakeShape(rows, tla::MakeShape(tla::Int<C0>{}, colGroups)),
-                tla::MakeStride(desc.stride0, tla::MakeStride(tla::Int<1>{}, tla::Int<C0>{})), origin),
+                tla::MakeShape(desc.shape1, tla::MakeShape(tla::Int<C0>{}, desc.shape3)),
+                tla::MakeStride(desc.stride1, tla::MakeStride(tla::Int<1>{}, tla::Int<C0>{})), origin),
             coord, Catlass::Arch::PositionGM{});
-    } else if constexpr (Tag == LayoutTag::colMajorMxScaleA) {
-        // Not the same bytes as row-major A. Catlass reaches this one through
-        // ND2NZ where row-major A uses the transposing DN2NZ, so the GM block
-        // must arrive with its groups interleaved in C0-sized pairs and the row
-        // index running fastest between pairs. That is forced by the copy moving
-        // e8m0 reinterpreted as half: each 16-bit unit has to hold two groups of
-        // the *same* row, which a plain transpose breaks by pairing two rows.
-        //
-        // Hence the row stride is the literal C0 -- which is also what the
-        // isMxScaleForColumnMajorA predicate keys on -- and the pair stride is
-        // desc.stride1 * C0, desc.stride1 being the row count.
+    } else if constexpr (Tag == LayoutTag::ColMajorMxScaleA) {
+        // desc: shape (1, rows, C0, colGroups); stride (0, C0, 1, rows*C0).
+        // Catlass reaches this one through ND2NZ where row-major A uses the
+        // transposing DN2NZ, so the GM block arrives with its groups
+        // interleaved in C0-sized pairs and the row index running fastest
+        // between pairs; the row stride is the literal C0 -- which is also
+        // what the isMxScaleForColumnMajorA predicate keys on.
         return tla::MakeTensor(
             g,
             tla::MakeLayout(
-                tla::MakeShape(rows, tla::MakeShape(tla::Int<C0>{}, colGroups)),
-                tla::MakeStride(tla::Int<C0>{}, tla::MakeStride(tla::Int<1>{}, desc.stride1 * C0)), origin),
+                tla::MakeShape(desc.shape1, tla::MakeShape(tla::Int<C0>{}, desc.shape3)),
+                tla::MakeStride(tla::Int<C0>{}, tla::MakeStride(tla::Int<1>{}, desc.stride3)), origin),
             coord, Catlass::Arch::PositionGM{});
-    } else if constexpr (Tag == LayoutTag::rowMajorMxScaleB) {
-        // B side: the ranks flip -- leaf 0 becomes the pair, leaf 1 the scalar.
-        // The mirror of column-major A above, and ND2NZ for the same reason: the
-        // block arrives with its groups interleaved in C0-sized pairs, the
-        // column index running fastest between pairs, and the pair stride is
-        // desc.stride0 * C0 with desc.stride0 the column count.
+    } else if constexpr (Tag == LayoutTag::RowMajorMxScaleB) {
+        // desc: shape (C0, rowGroups, 1, cols); stride (1, cols*C0, 0, C0).
+        // The mirror of column-major A above, and ND2NZ for the same reason.
         return tla::MakeTensor(
             g,
             tla::MakeLayout(
-                tla::MakeShape(tla::MakeShape(tla::Int<C0>{}, rowGroups), cols),
-                tla::MakeStride(tla::MakeStride(tla::Int<1>{}, desc.stride0 * C0), tla::Int<C0>{}), origin),
+                tla::MakeShape(tla::MakeShape(tla::Int<C0>{}, desc.shape1), desc.shape3),
+                tla::MakeStride(tla::MakeStride(tla::Int<1>{}, desc.stride1), tla::Int<C0>{}), origin),
             coord, Catlass::Arch::PositionGM{});
     } else {
         static_assert(
-            Tag == LayoutTag::colMajorMxScaleB,
-            "GM MX scale supports rowMajorMxScaleA / colMajorMxScaleA / rowMajorMxScaleB / colMajorMxScaleB");
+            Tag == LayoutTag::ColMajorMxScaleB,
+            "GM MX scale supports RowMajorMxScaleA / ColMajorMxScaleA / RowMajorMxScaleB / ColMajorMxScaleB");
+        // desc: shape (C0, rowGroups, 1, cols); stride (1, C0, 0, pitch).
         return tla::MakeTensor(
             g,
             tla::MakeLayout(
-                tla::MakeShape(tla::MakeShape(tla::Int<C0>{}, rowGroups), cols),
-                tla::MakeStride(tla::MakeStride(tla::Int<1>{}, tla::Int<C0>{}), desc.stride1), origin),
+                tla::MakeShape(tla::MakeShape(tla::Int<C0>{}, desc.shape1), desc.shape3),
+                tla::MakeStride(tla::MakeStride(tla::Int<1>{}, tla::Int<C0>{}), desc.stride3), origin),
             coord, Catlass::Arch::PositionGM{});
     }
 }

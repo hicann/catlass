@@ -14,24 +14,24 @@
 namespace tla {
 ::mlir::LogicalResult getTlaIndexTreeLeaves(::llvm::ArrayRef<int64_t> tree, ::llvm::SmallVectorImpl<int64_t>& leaves);
 
+/// GM-side MX scale blocks. NZFamily descriptors -- the 2x2 nested tree of
+/// tla::MakeMxScaleLayout with the plain matrix dimension spelled as a
+/// (1, dim) pair whose leading leaf carries stride 0. The tag records which
+/// side (A / B) and orientation, which is what selects the copy; the bc layer
+/// re-derives the rank structure Catlass's copy predicates key on device-side.
+inline bool isMxScaleGmLayout(::LayoutTag layoutTag)
+{
+    return layoutTag == ::LayoutTag::RowMajorMxScaleA || layoutTag == ::LayoutTag::ColMajorMxScaleA ||
+           layoutTag == ::LayoutTag::RowMajorMxScaleB || layoutTag == ::LayoutTag::ColMajorMxScaleB;
+}
+
 /// The single source of truth for layouts whose shape and stride each have
 /// four physical leaves in tensor descriptors.
 inline bool isNZFamilyLayout(::LayoutTag layoutTag)
 {
     return layoutTag == ::LayoutTag::zN || layoutTag == ::LayoutTag::nZ || layoutTag == ::LayoutTag::zZ ||
            layoutTag == ::LayoutTag::L0Clayout || layoutTag == ::LayoutTag::zNUnAlign ||
-           layoutTag == ::LayoutTag::zZMxScale || layoutTag == ::LayoutTag::nNMxScale;
-}
-
-/// GM-side MX scale blocks. Linear as far as the descriptor is concerned -- a
-/// contiguous matrix with a pitch -- so they travel with two leaves, and the
-/// fractal structure Catlass's copies expect is rebuilt device-side. The tag
-/// records which side (A / B) and orientation, which is what selects the copy.
-
-inline bool isMxScaleGmLayout(::LayoutTag layoutTag)
-{
-    return layoutTag == ::LayoutTag::rowMajorMxScaleA || layoutTag == ::LayoutTag::colMajorMxScaleA ||
-           layoutTag == ::LayoutTag::rowMajorMxScaleB || layoutTag == ::LayoutTag::colMajorMxScaleB;
+           layoutTag == ::LayoutTag::zZMxScale || layoutTag == ::LayoutTag::nNMxScale || isMxScaleGmLayout(layoutTag);
 }
 
 inline int64_t getByteSizeOfFixedWidthScalarType(::mlir::Type type)

@@ -614,6 +614,150 @@ private:
     DenseMap<Value, Value>& loweredMemrefByValue;
 };
 
+// Materialize a flat rank-2 `!tla.shape` / `!tla.coord` aggregate operand into
+// two index SSA values: static leaves become constants, dynamic leaves come from
+// the defining make op's dyn operands. Mirrors the descriptor derivation's
+// index-pair decoding, but emits through the pattern's rewriter.
+static FailureOr<std::array<Value, 2>> materializeFillIndexPair(
+    Operation* op, PatternRewriter& rewriter, Value aggregate, StringRef kind)
+{
+    ArrayRef<int64_t> tree;
+    Operation* makeOp = nullptr;
+    if (kind == "shape") {
+        auto shapeTy = dyn_cast<::tla::ShapeType>(aggregate.getType());
+        if (!shapeTy) {
+            op->emitError("expected a tla.shape operand for tla.fill");
+            return failure();
+        }
+        tree = shapeTy.getTree();
+        makeOp = aggregate.getDefiningOp<::tla::MakeShapeOp>();
+    } else {
+        auto coordTy = dyn_cast<::tla::CoordType>(aggregate.getType());
+        if (!coordTy) {
+            op->emitError("expected a tla.coord operand for tla.fill");
+            return failure();
+        }
+        tree = coordTy.getTree();
+        makeOp = aggregate.getDefiningOp<::tla::MakeCoordOp>();
+    }
+
+    SmallVector<int64_t, 4> leaves;
+    if (failed(::tla::getTlaIndexTreeLeaves(tree, leaves)) || tree.size() != 2 || leaves.size() != 2) {
+        op->emitError() << "tla.fill " << kind << " operand must be a flat rank-2 aggregate";
+        return failure();
+    }
+    if (llvm::any_of(leaves, [](int64_t leaf) { return leaf == ShapedType::kDynamic; }) && !makeOp) {
+        op->emitError() << "dynamic tla.fill " << kind << " operands must come from a tla.make " << kind << " op";
+        return failure();
+    }
+
+    size_t dynamicIndex = 0;
+    std::array<Value, 2> result{};
+    SmallVector<Value, 2> dynamicValues;
+    if (auto makeShape = llvm::dyn_cast_or_null<::tla::MakeShapeOp>(makeOp)) {
+        dynamicValues.append(makeShape.getDynElems().begin(), makeShape.getDynElems().end());
+    } else if (auto makeCoord = llvm::dyn_cast_or_null<::tla::MakeCoordOp>(makeOp)) {
+        dynamicValues.append(makeCoord.getDynElems().begin(), makeCoord.getDynElems().end());
+    }
+    for (auto [index, leaf] : llvm::enumerate(leaves)) {
+        if (leaf == ShapedType::kDynamic) {
+            if (dynamicIndex >= dynamicValues.size()) {
+                op->emitError() << "tla.fill " << kind << " dynamic element count mismatch";
+                return failure();
+            }
+            Value dynamicValue = dynamicValues[dynamicIndex++];
+            if (!dynamicValue.getType().isIndex()) {
+                op->emitError() << "tla.fill " << kind << " dynamic operands must be index type";
+                return failure();
+            }
+            result[index] = dynamicValue;
+            continue;
+        }
+        result[index] = rewriter.create<arith::ConstantIndexOp>(op->getLoc(), leaf);
+    }
+    return result;
+}
+
+// tla.fill lowers to an inlinable L1 fill runtime template on the AIC core. The
+// payload carries the destination's 12-field descriptor, the flat rank-2 fill
+// region (coord + extent, both cropped by the frontend against the tile's origin
+// shape), and the i32 fill bit pattern.
+struct LowerTlaFillPattern : public OpRewritePattern<::tla::FillOp> {
+    LowerTlaFillPattern(
+        MLIRContext* ctx, DenseMap<Value, TensorDescriptor>& tensorDescriptorByValue,
+        SmallVectorImpl<Operation*>& toErase, DenseMap<Value, Value>& loweredMemrefByValue)
+        : OpRewritePattern<::tla::FillOp>(ctx),
+          tensorDescriptorByValue(tensorDescriptorByValue),
+          toErase(toErase),
+          loweredMemrefByValue(loweredMemrefByValue)
+    {}
+
+    LogicalResult matchAndRewrite(::tla::FillOp op, PatternRewriter& rewriter) const override
+    {
+        Value dstTile = op.getDst();
+        auto dstIt = tensorDescriptorByValue.find(dstTile);
+        if (dstIt == tensorDescriptorByValue.end()) {
+            op.emitError() << "missing descriptor for tla.fill dst tile; expected a tla.tensor_desc "
+                              "operand materialized by tla-lower-tensor-desc";
+            return failure();
+        }
+        const TensorDescriptor& dstDesc = dstIt->second;
+        if (!::tla::validateTensorDescriptor(op, dstDesc, "malformed descriptor for tla.fill dst tile operand")) {
+            return failure();
+        }
+
+        std::string calleeName = ::tla::getFillCallee(dstDesc.layoutTag, dstDesc.elementType);
+        if (calleeName.empty()) {
+            op.emitError() << "tla.fill layout/element-type combination is unsupported: " << dstDesc.addrspace << "("
+                           << ::stringifyLayoutTag(dstDesc.layoutTag) << ") " << dstDesc.elementType;
+            return failure();
+        }
+
+        // Base memref, materialized the same way the copy routes do it.
+        FailureOr<Value> baseMemref = ::tla::getOrMaterializeDescriptorBaseMemref(
+            rewriter, op.getLoc(), dstDesc, op.getOperation(), loweredMemrefByValue);
+        if (failed(baseMemref))
+            return failure();
+        auto baseType = dyn_cast<MemRefType>((*baseMemref).getType());
+        if (!baseType)
+            return failure();
+        FailureOr<Value> runtimeMemref =
+            ::tla::castMemrefToType(rewriter, op.getLoc(), *baseMemref, ::tla::getDynamicStridedMemrefType(baseType));
+        if (failed(runtimeMemref))
+            return failure();
+
+        auto coordPair = materializeFillIndexPair(op, rewriter, op.getCoord(), "coord");
+        if (failed(coordPair))
+            return failure();
+        auto shapePair = materializeFillIndexPair(op, rewriter, op.getShape(), "shape");
+        if (failed(shapePair))
+            return failure();
+
+        SmallVector<Value, 18> payload = ::tla::buildCopyPayloadForDescriptor(rewriter, op.getLoc(), dstDesc);
+        for (Value v : *coordPair)
+            payload.push_back(::tla::castValueToI64(rewriter, op.getLoc(), v));
+        for (Value v : *shapePair)
+            payload.push_back(::tla::castValueToI64(rewriter, op.getLoc(), v));
+        payload.push_back(op.getValue());
+
+        SmallVector<Type, 18> operandTypes = {(*runtimeMemref).getType()};
+        for (Value payloadValue : payload)
+            operandTypes.push_back(payloadValue.getType());
+        SmallVector<Value, 18> operands = {*runtimeMemref};
+        operands.append(payload.begin(), payload.end());
+
+        auto callee = ::tla::getOrCreateRuntimeCall(op->getParentOfType<ModuleOp>(), calleeName, operandTypes);
+        rewriter.create<func::CallOp>(op.getLoc(), callee, operands);
+        toErase.push_back(op.getOperation());
+        return success();
+    }
+
+private:
+    DenseMap<Value, TensorDescriptor>& tensorDescriptorByValue;
+    SmallVectorImpl<Operation*>& toErase;
+    DenseMap<Value, Value>& loweredMemrefByValue;
+};
+
 // Flatten a tla.cube region by splicing its body into the parent block.
 struct LowerTlaCubePattern : public OpRewritePattern<::tla::CubeOp> {
     using OpRewritePattern<::tla::CubeOp>::OpRewritePattern;
@@ -736,6 +880,20 @@ public:
             PatternRewriter rewriter(op.getContext());
             rewriter.setInsertionPoint(op);
             if (failed(lowerCopyMx.matchAndRewrite(op, rewriter)))
+                passFailed = true;
+        }
+
+        // tla.fill: explicit L1 pad-region initialization (zN/nZ destinations),
+        // lowered like the copy routes so the region lands in the same MTE2 window.
+        LowerTlaFillPattern lowerFill(&getContext(), tensorDescriptorByValue, toErase, lowering.loweredMemrefByValue);
+        SmallVector<::tla::FillOp, 8> fillOps;
+        root->walk([&](::tla::FillOp op) { fillOps.push_back(op); });
+        for (::tla::FillOp op : fillOps) {
+            if (!op || !op->getBlock())
+                continue;
+            PatternRewriter rewriter(op.getContext());
+            rewriter.setInsertionPoint(op);
+            if (failed(lowerFill.matchAndRewrite(op, rewriter)))
                 passFailed = true;
         }
 

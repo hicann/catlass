@@ -306,15 +306,36 @@ class _Tensor(TensorABC):
             )
         flat_strides = _flat_layout_leaves(self.stride)
         shape_tuple = self._flat_shape or ()
+        from ..core_api import (
+            _MX_SCALE_GM_DYNAMIC_STRIDE_LEAF,
+            _MX_SCALE_GM_LAYOUT_TOKENS,
+        )
+
+        if leading_dim is None and self.layout_tag in _MX_SCALE_GM_LAYOUT_TOKENS:
+            # NZFamily GM MxScale trees have no linear leading dimension: the
+            # structural constants (0 broadcast, 1, e8m0 scale C0 = 2) stay
+            # static and only the pitch leaf goes dynamic. The linear
+            # leading-dim inference below would either pick a 0-stride leaf and
+            # reject it, or freeze a pitch that must stay runtime-varying.
+            pitch_leaf = _MX_SCALE_GM_DYNAMIC_STRIDE_LEAF[self.layout_tag]
+            new_stride_leaves = [
+                None if index == pitch_leaf else int(leaf)
+                for index, leaf in enumerate(flat_strides)
+            ]
+            self._dynamic_stride_tree = _replace_flat_leaves_in_tree(
+                self.stride, new_stride_leaves
+            )
+            self._mark_shape_modes_dynamic(range(len(shape_tuple)))
+            return self
         if leading_dim is None:
             from ..core_api import (
                 _COLUMN_MAJOR_LAYOUT_TOKENS,
-                is_row_major_layout,
+                _ROW_MAJOR_LAYOUT_TOKENS,
             )
 
             # Prefer layout-tag semantics when unit strides are ambiguous
             # (e.g. ColumnMajor with shape[0]==1 → strides (1,1)).
-            if is_row_major_layout(self.layout_tag):
+            if self.layout_tag in _ROW_MAJOR_LAYOUT_TOKENS:
                 leading_dim = len(flat_strides) - 1
             elif self.layout_tag in _COLUMN_MAJOR_LAYOUT_TOKENS:
                 leading_dim = 0
@@ -675,6 +696,7 @@ def from_dlpack(
         UInt64,
     )
     from ..core_api import (
+        _MX_SCALE_GM_LAYOUT_TOKENS,
         _remap_tensor_like_prefix_fields_for_layout_trees,
         _resolve_arch_layout_tag,
     )
@@ -767,6 +789,14 @@ def from_dlpack(
     resolved_layout = layout_tag
     dtype_token = str(getattr(dtype, "dtype", "")).strip().lower()
     layout_token = _resolve_arch_layout_tag(resolved_layout, for_op="from_dlpack")
+    if layout_token in _MX_SCALE_GM_LAYOUT_TOKENS and dtype_token != "f8e8m0":
+        # The GM MxScale tags describe an e8m0 shared-exponent block; carrying
+        # any other element type under them would be a silent reinterpretation
+        # downstream, where the bc layer hands the buffer to e8m0-typed copies.
+        raise RuntimeTensorError(
+            f"from_dlpack layout_tag={layout_token!r} requires element_type "
+            f"tla.Float8E8M0, got {dtype_token!r}"
+        )
     if origin_shape is None:
         # A physically contiguous buffer is passed here (stride = (shape[1], 1)).
         # A size-1 extent is exempt: torch is free to leave its stride at 1,
@@ -806,8 +836,20 @@ def from_dlpack(
                 "from_dlpack origin_shape=... must be an int tree / tuple "
                 "(Kernel tla.make_shape is not a Host API)"
             )
+    # A stride counts elements between physically adjacent rows, and rows sit
+    # at byte addresses: for a sub-byte element the leading linear stride must
+    # land on a whole byte, i.e. round up to whole element slots. A packed fp4
+    # row of ceil(cols/2) bytes carries round_up(cols, 2) slots -- without the
+    # rounding an odd cols yields a half-byte stride, and every GM tile whose
+    # base sits past row 0 is addressed one byte off per row. Byte-width (and
+    # wider) elements keep the exact stride: round_up(cols, 1) is cols.
+    element_bits = int(getattr(dtype, "width", 8))
+    linear_stride_alignment_bytes = 1 if 0 < element_bits < 8 else None
     remapped = _remap_tensor_like_prefix_fields_for_layout_trees(
-        logical_origin, dtype_token, layout_token
+        logical_origin,
+        dtype_token,
+        layout_token,
+        linear_stride_alignment_bytes=linear_stride_alignment_bytes,
     )
     if remapped is None:
         raise RuntimeTensorError(

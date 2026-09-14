@@ -8,15 +8,16 @@ riding the L1->L0 load, and steering the cube onto mad_mx -- on a kernel shaped
 like the other matmul examples rather than a one-tile special case.
 
 fp8 and fp4 share `mx_mmad_kernel`. They can, because the fp4-ness is not spelled
-at the matmul: the operand element type carries it. The two paths therefore
-differ only in which element type the tiles are allocated with -- everything
-else, the scale tiles, the flags, the pipeline, the `tla.mmad_mx`, is identical.
+anywhere on the device side: the operand element type carries it, and the tiles
+take their dtype straight off the operands (`gm_a.ptr.dtype`). Everything else,
+the scale tiles, the flags, the pipeline, the `tla.mmad_mx`, is identical.
 
 What genuinely differs is host-side: fp8 quantises with torch's float8 dtypes,
 while fp4 needs a 16-entry LUT and nibble packing. Hence two `quantize_mx_*`
 functions over one shared scale packing.
 
-Scale blocks go over as the plain (M, K/32) and (K/32, N) matrices. The GM->L1
+Scale blocks go over as the plain (M, ceil(K/32)) and (ceil(K/32), N) matrices,
+padded to an even group count. The GM->L1
 DMA does the zZ / nN fractal reorder, steered by the GM-side layout tag, so the
 host never pre-swizzles them.
 """
@@ -51,13 +52,9 @@ C0_NUM_PER_FRACTAL = 16
 MX_SCALE_ELE_NUM_PER_C0 = 2
 MX_SCALE_ELE_NUM_PER_FRACTAL = 32
 
-# Which fp4 element type a case wants, selected by index. A plain int rather
-# than a Constexpr[str]: a str-typed Constexpr does not deliver its value at
-# trace time (it arrives as None), which silently made every fp4 kernel decode
-# as e2m1.
-FP8_SEL = -1
-FP4_SEL = {"f4e2m1": 0, "f4e1m2": 1}
-FP4_DTYPES = (tla.Float4E2M1, tla.Float4E1M2)
+# Host-side only: which tla element type an fp4 case's GM tensors carry. The
+# kernel reads the dtype off the operands, so the selection never reaches it.
+FP4_SEL = {"f4e2m1": tla.Float4E2M1, "f4e1m2": tla.Float4E1M2}
 
 
 @dataclass(frozen=True)
@@ -66,8 +63,8 @@ class MxTilingParams:
 
     Fixed constants, independent of the problem shape: they size the on-chip
     buffers, which `tla.allocate` reserves at compile time. The kernel derives
-    the grid and the K-tile count from the operands, so one compile serves any
-    M, N and K that divide by these.
+    the grid and the K-tile count from the operands, and partial boundary tiles
+    are handled by tile_view cropping, so one compile serves any M, N and K.
     """
 
     tm: tla.Constexpr[int] = MX_L1_TM
@@ -83,18 +80,9 @@ def mx_mmad_kernel(
     gm_sb: tla.Tensor,
     gm_c: tla.Tensor,
     _tiling: MxTilingParams,
-    fp4_sel: tla.Constexpr[int],
 ) -> None:
-    # Resolved here, at trace time, so the loop body below stays free of
-    # compile-time branching.
-    is_fp4 = fp4_sel >= 0
-
-    # The element type is the whole story for fp4: it states the 4-bit width --
-    # which is what puts 64 elements in a 32-byte C0 -- and the encoding, and
-    # the i8 buffer underneath is a lowering detail the kernel never mentions.
-    # fp8 tiles take their type from the operand, so either pair may mix formats.
-    dtype_a = FP4_DTYPES[fp4_sel] if is_fp4 else gm_a.ptr.dtype
-    dtype_b = FP4_DTYPES[fp4_sel] if is_fp4 else gm_b.ptr.dtype
+    dtype_a = gm_a.ptr.dtype
+    dtype_b = gm_b.ptr.dtype
 
     c0 = 0
     c1 = 1
@@ -106,9 +94,7 @@ def mx_mmad_kernel(
     tm = _tiling.tm
     tn = _tiling.tn
     tk = _tiling.tk
-    # The scale tile that accompanies a tk-wide operand tile: one e8m0 exponent
-    # per group of 32 along K. Constexpr for the same reason -- it sizes l1sa/l1sb.
-    sk = tk // MX_SCALE_GROUP_NUM
+    sk = (tk // MX_SCALE_GROUP_NUM + 1) // 2 * 2
 
     # Derived, not passed: the extents come off the operands and the tile widths
     # off the tiling, so the two cannot disagree. All runtime values -- same
@@ -179,21 +165,78 @@ def mx_mmad_kernel(
                     gm_sb, tla.make_shape(sk, tn), tla.make_coord(kk, block_col)
                 )
 
-                # No layout tag: the L1 tile takes the orientation of the GM tile it
-                # is loaded from, so --layout-a / --layout-b reach the kernel without
-                # it having to know about them. The L0 tiles below are always zN / nZ
-                # -- that is what the cube reads -- and the transposing L1 -> L0 load
-                # bridges the two when the operand is the other way round.
-                t_l1a = tla.make_tensor_like(l1a, gm_a_t)
-                t_l1b = tla.make_tensor_like(l1b, gm_b_t)
+                # The MX cube consumes whole 64-K tiles, but the GM copy brings
+                # only the valid K of this chunk. So the L1 tiles are built with
+                # the K extent rounded up to 64 (via make_layout_with_tag, which
+                # takes the extent straight from the caller instead of from a
+                # reference tile), the valid part is copied from GM, and the pad
+                # tail is zero-filled explicitly below. Direction still follows
+                # the GM tile -- exactly what make_tensor_like inferred before --
+                # so the GM -> L1 routes are unchanged.
+                m_valid = gm_a_t.origin_shape[0]
+                n_valid = gm_b_t.origin_shape[1]
+                k_valid = gm_a_t.origin_shape[1]
+                k_l0 = (k_valid + 63) // 64 * 64
+                a_tag = (
+                    tla.arch.zN
+                    if gm_a_t.layout_tag in ("RowMajor", "zN")
+                    else tla.arch.nZ
+                )
+                b_tag = (
+                    tla.arch.nZ
+                    if gm_b_t.layout_tag in ("ColumnMajor", "nZ")
+                    else tla.arch.zN
+                )
+                t_l1a = tla.make_tensor(
+                    l1a, tla.make_layout_with_tag((m_valid, k_l0), dtype_a, a_tag)
+                )
+                t_l1b = tla.make_tensor(
+                    l1b, tla.make_layout_with_tag((k_l0, n_valid), dtype_b, b_tag)
+                )
                 t_l1sa = tla.make_tensor_like(l1sa, gm_sa_t, tla.arch.zZMxScale)
                 t_l1sb = tla.make_tensor_like(l1sb, gm_sb_t, tla.arch.nNMxScale)
 
                 tla.wait_flag(l1_avail)
-                tla.copy(t_l1a, gm_a_t)
-                tla.copy(t_l1b, gm_b_t)
+                # Copy only the valid extents: the L1 tiles are 64-K aligned but
+                # the GM tiles stop at k_valid, so a full-tile copy would read
+                # past the GM tensor.
+                tla.copy(
+                    tla.tile_view(
+                        t_l1a, tla.make_shape(m_valid, k_valid), tla.make_coord(0, 0)
+                    ),
+                    gm_a_t,
+                )
+                tla.copy(
+                    tla.tile_view(
+                        t_l1b, tla.make_shape(k_valid, n_valid), tla.make_coord(0, 0)
+                    ),
+                    gm_b_t,
+                )
                 tla.copy(t_l1sa, gm_sa_t)
                 tla.copy(t_l1sb, gm_sb_t)
+                # Zero the pad tail [k_valid, k_l0) before the L1 -> L0 load.
+                # Two device mechanisms share the work, complementary and
+                # non-overlapping:
+                #   - the GM -> L1 copy above zero-fills the destination's final
+                #     partial C0 column. The DMA pads the last block of the copied
+                #     extent; that covers the residue
+                #     [k_valid, roundUp_C0(k_valid)) inside the last partially
+                #     filled C0 column.
+                #   - tla.fill below is whole-C0-column granular, so it covers
+                #     only the [roundUp_C0(k_valid), k_l0) columns the copy did
+                #     not touch.
+                pad_a = tla.get_tile(
+                    t_l1a,
+                    tla.make_coord(0, k_valid),
+                    tla.make_shape(m_valid, k_l0 - k_valid),
+                )
+                pad_a.fill(0)
+                pad_b = tla.get_tile(
+                    t_l1b,
+                    tla.make_coord(k_valid, 0),
+                    tla.make_shape(k_l0 - k_valid, n_valid),
+                )
+                pad_b.fill(0)
                 tla.set_flag(ab_ready)
                 tla.wait_flag(ab_ready)
 
@@ -281,6 +324,14 @@ def _scale_bytes(scale: torch.Tensor, rows: int, nb: int) -> torch.Tensor:
 def quantize_mx_fp8(matrix: torch.Tensor, axis: int, fp8_dtype):
     """Split ``matrix`` into fp8 mantissas plus e8m0 block scales along ``axis``.
 
+    K is padded up to a whole scale group before quantising, then the pad is
+    trimmed back off the quantized and dequantized matrices -- only the scale
+    keeps the padded group count, rounded up to an even number of groups for
+    the 16-bit e8m0 DMA units (gen_data.py's pad-then-trim plus its
+    ``padded_blocks`` rounding). The operands go over at their real K and the
+    DMA adapts to the unaligned tail; the pad elements, quantized zeros, exist
+    only so the boundary block can be built.
+
     Returns ``(fp8_values, e8m0_scale_bytes, dequantized_fp32)``. The
     dequantized tensor is what the device actually multiplies, so the reference
     is built from it -- only accumulation order then differs.
@@ -289,17 +340,34 @@ def quantize_mx_fp8(matrix: torch.Tensor, axis: int, fp8_dtype):
     work = matrix if axis == 1 else matrix.transpose(0, 1)
     work = work.float().contiguous()
     rows, cols = work.shape
-    assert cols % MX_SCALE_GROUP_NUM == 0, "K must be a multiple of 32 for this slice"
-    nb = cols // MX_SCALE_GROUP_NUM
+    nb = (cols + MX_SCALE_GROUP_NUM - 1) // MX_SCALE_GROUP_NUM
+    padded_cols = nb * MX_SCALE_GROUP_NUM
+    if padded_cols != cols:
+        work = torch.cat([work, work.new_zeros(rows, padded_cols - cols)], dim=1)
 
     blocks = work.view(rows, nb, MX_SCALE_GROUP_NUM)
     exp = _e8m0_exp(blocks.abs().amax(dim=-1), fmt["emax"])
     scale = torch.exp2(exp.float())
     scaled = (blocks / scale.unsqueeze(-1)).clamp(-fmt["max_value"], fmt["max_value"])
     q = scaled.to(fp8_dtype)
-    dequant = (q.float() * scale.unsqueeze(-1)).reshape(rows, cols)
-    q = q.reshape(rows, cols)
+    dequant = (q.float() * scale.unsqueeze(-1)).reshape(rows, padded_cols)
+    q = q.reshape(rows, padded_cols)
+    # Trim the pad back off; the scale keeps the padded group count.
+    if padded_cols != cols:
+        q = q[:, :cols].reshape(rows, cols)
+        dequant = dequant[:, :cols].reshape(rows, cols)
     scale_bytes = _scale_bytes(scale, rows, nb)
+    # Pad the scale to an even group count, as gen_data.py's ``padded_blocks``
+    # rounding does: the GM MxScale layout moves e8m0 as 16-bit units -- two
+    # groups per unit -- so an odd group total cannot be moved. Padded groups
+    # carry the e8m0 byte for 1.0 and land on operand pad that is quantized
+    # zeros (the bc-side K alignment zeroes the L1 pad too), so 1.0-scaled
+    # zeros add nothing.
+    sk_pad = (nb + 1) // 2 * 2
+    if sk_pad != nb:
+        scale_bytes = torch.cat(
+            [scale_bytes, scale_bytes.new_full((rows, sk_pad - nb), 127)], dim=1
+        )
 
     if axis == 1:
         return q, scale_bytes, dequant
@@ -331,14 +399,24 @@ def quantize_mx_fp4(matrix: torch.Tensor, axis: int, fmt: str):
     """Split ``matrix`` into fp4 nibble indices plus e8m0 block scales.
 
     Returns ``(packed_uint8, e8m0_scale_bytes, dequantized_fp32)``. Packing is
-    two elements per byte, element 2i in the low nibble (as gen_data.py does).
+    two elements per byte, element 2i in the low nibble (as gen_data.py does);
+    an odd K puts the last element in a final byte whose high nibble carries
+    the zero pad element.
+
+    As in the fp8 path, K is padded up to a whole scale group before quantising
+    and the pad is trimmed back off afterwards -- the packed operand goes over
+    at its real K (``ceil(K/2)`` bytes per row) and only the scale keeps the
+    padded group count, rounded up to an even number of groups for the 16-bit
+    e8m0 DMA units.
     """
     cfg = _FP4_FORMATS[fmt]
     lut = _fp4_lut(fmt)
     work = (matrix if axis == 1 else matrix.transpose(0, 1)).float().contiguous()
     rows, cols = work.shape
-    assert cols % MX_SCALE_GROUP_NUM == 0, "K must be a multiple of 32 for this slice"
-    nb = cols // MX_SCALE_GROUP_NUM
+    nb = (cols + MX_SCALE_GROUP_NUM - 1) // MX_SCALE_GROUP_NUM
+    padded_cols = nb * MX_SCALE_GROUP_NUM
+    if padded_cols != cols:
+        work = torch.cat([work, work.new_zeros(rows, padded_cols - cols)], dim=1)
 
     blocks = work.view(rows, nb, MX_SCALE_GROUP_NUM)
     max_abs = blocks.abs().amax(dim=-1)
@@ -348,12 +426,34 @@ def quantize_mx_fp4(matrix: torch.Tensor, axis: int, fmt: str):
 
     scaled = (blocks / scale.unsqueeze(-1)).clamp(-cfg["max_value"], cfg["max_value"])
     # Nearest representable value; ties go to the lower index, matching argmin.
+    # The index IS the fp4 bit pattern (the LUT is addressed by encoding:
+    # sign/exp/mantissa), so the nibbles packed below are what the device
+    # stores -- gen_data.py recovers the same indices by re-running the LUT
+    # argmin over the quantized values, an identity except for -0 -> +0, which
+    # this argmin never picks anyway (the tie goes to +0's lower index).
     idx = (scaled.unsqueeze(-1) - lut).abs().argmin(dim=-1)
-    dequant = (lut[idx] * scale.unsqueeze(-1)).reshape(rows, cols)
-    idx = idx.reshape(rows, cols).to(torch.uint8)
+    dequant = (lut[idx] * scale.unsqueeze(-1)).reshape(rows, padded_cols)
+    idx = idx.reshape(rows, padded_cols)
+    # Trim the pad back off, then pack whole bytes: an odd tail element takes a
+    # zero pad nibble in the high half of its byte.
+    if padded_cols != cols:
+        dequant = dequant[:, :cols].reshape(rows, cols)
+        idx = idx[:, :cols]
+    if cols % 2 != 0:
+        idx = torch.cat([idx, torch.zeros(rows, 1, dtype=idx.dtype)], dim=1)
+    idx = idx.to(torch.uint8)
 
     packed = (idx[:, 0::2] | (idx[:, 1::2] << 4)).to(torch.uint8)
     scale_bytes = _scale_bytes(scale, rows, nb)
+    # Same even-group scale padding as the fp8 path (gen_data.py's
+    # ``padded_blocks`` rounding): the GM MxScale layout moves e8m0 as 16-bit
+    # units -- two groups per unit. Padded groups carry the e8m0 byte for 1.0
+    # and land on operand pad that is quantized zeros, so they add nothing.
+    sk_pad = (nb + 1) // 2 * 2
+    if sk_pad != nb:
+        scale_bytes = torch.cat(
+            [scale_bytes, scale_bytes.new_full((rows, sk_pad - nb), 127)], dim=1
+        )
 
     if axis == 1:
         return packed, scale_bytes, dequant
@@ -388,15 +488,7 @@ def run(args: argparse.Namespace) -> int:
 
     torch.npu.set_device(args.device)
     m, n, k = args.m, args.n, args.k
-    # Fixed tile extents, as in basic_matmul: the kernel derives the grid and the
-    # K-tile count from the operands, so the host states no shape-dependent
-    # tiling. Whole tiles only -- the kernel has no partial-tile predication and
-    # a scale group must not straddle a K tile.
-    tm, tn = min(m, MX_L1_TM), min(n, MX_L1_TN)
-    tk = min(k, MX_L1_TK)
-    assert m % tm == 0, "M must divide evenly into the L1 M-tile height"
-    assert n % tn == 0, "N must divide evenly into the L1 N-tile width"
-    assert k % tk == 0, "K must divide evenly into the L1 K-tile width"
+    tm, tn, tk = MX_L1_TM, MX_L1_TN, MX_L1_TK
     is_fp4 = args.fp4_case is not None
 
     # Packed fp4 pairs two elements per byte along K, and the fractal layout
@@ -418,13 +510,13 @@ def run(args: argparse.Namespace) -> int:
         fmt = args.fp4_case
         print(
             f"--- mx fp4 mnk=({m},{n},{k}) fmt={fmt} "
-            f"grid={m // tm}x{n // tn} k_tiles={k // tk} ---"
+            f"grid={(m + tm - 1) // tm}x{(n + tn - 1) // tn} k_tiles={(k + tk - 1) // tk} ---"
         )
     else:
         print(
             f"--- mx fp8 mnk=({m},{n},{k}) "
             f"dtype={args.dtype_a}/{args.dtype_b} "
-            f"grid={m // tm}x{n // tn} k_tiles={k // tk} ---"
+            f"grid={(m + tm - 1) // tm}x{(n + tn - 1) // tn} k_tiles={(k + tk - 1) // tk} ---"
         )
     torch.manual_seed(0)
 
@@ -453,10 +545,9 @@ def run(args: argparse.Namespace) -> int:
     # operand is handed over as the transposed contiguous buffer.
     if layout_a == "col":
         qa = qa.permute(1, 0).contiguous()
-    # fp4's B side comes back already packed as (N, K/2) -- the column-major
-    # form -- because the nibble pairing runs along K. fp8's is (K, N).
-    # fp4's B side comes back already packed as (N, K/2) -- the column-major
-    # form, because the nibble pairing runs along K. fp8's is (K, N).
+    # fp4's B side comes back already packed as (N, ceil(K/2)) -- the
+    # column-major form, because the nibble pairing runs along K. fp8's is
+    # (K, N).
     if (layout_b == "row") if is_fp4 else (layout_b == "col"):
         qb = qb.permute(1, 0).contiguous()
     # Packed blocks are stacked per chunk along rows so chunk kk is at (kk, 0).
@@ -478,7 +569,7 @@ def run(args: argparse.Namespace) -> int:
     def _pair_interleave_a(t):  # (M, G) -> pairs of groups, M fastest between
         rows, groups = t.shape
         inter = t.view(rows, groups // C0, C0).permute(1, 0, 2).contiguous().reshape(-1)
-        return torch.as_strided(inter, (rows, groups), (1, rows))
+        return inter.view(rows, groups)
 
     def _pair_interleave_b(t):  # (G, N) -> pairs of groups, N fastest between
         groups, cols = t.shape
@@ -487,7 +578,7 @@ def run(args: argparse.Namespace) -> int:
 
     sa_npu = sa_packed.view(torch.int8).contiguous().npu()
     sb_npu = sb_packed.view(torch.int8).contiguous().npu()
-    # colMajorMxScaleA and rowMajorMxScaleB reach L1 through ND2NZ and need the
+    # ColMajorMxScaleA and RowMajorMxScaleB reach L1 through ND2NZ and need the
     # groups interleaved in C0-sized pairs; their DN2NZ counterparts take the
     # block as it comes.
     if layout_a == "col":
@@ -495,7 +586,7 @@ def run(args: argparse.Namespace) -> int:
     if layout_b == "row":
         sb_npu = _pair_interleave_b(sb_npu)
     else:
-        sb_npu = sb_npu.transpose(0, 1).contiguous().transpose(0, 1)
+        sb_npu = sb_npu.permute(1, 0).contiguous()
 
     if is_fp4:
         # The GM tile carries the fp4 element type, exactly as the fp8 branch
@@ -504,7 +595,7 @@ def run(args: argparse.Namespace) -> int:
         # create_tla_tensor only because origin_shape has to state the count in
         # fp4 ELEMENTS while the buffer holds half that many, and the helper
         # takes no origin_shape.
-        fp4_t = FP4_DTYPES[FP4_SEL[fmt]]
+        fp4_t = FP4_SEL[fmt]
         a_t = from_dlpack(
             a_npu,
             layout_tag=tla.arch.RowMajor,
@@ -517,29 +608,27 @@ def run(args: argparse.Namespace) -> int:
             origin_shape=(k, n),
             element_type=fp4_t,
         ).mark_layout_dynamic()
-        fp4_sel = FP4_SEL[fmt]
     else:
         a_t = create_tla_tensor(a_npu, layout_a, _FP8[args.dtype_a][1])
         b_t = create_tla_tensor(b_npu, layout_b, _FP8[args.dtype_b][1])
-        fp4_sel = FP8_SEL
     c_t = create_tla_tensor(c_npu, "row")
-    sk_total = k // MX_SCALE_GROUP_NUM
-    tag_a = (
-        tla.arch.rowMajorMxScaleA if layout_a == "row" else tla.arch.colMajorMxScaleA
+    tag_sa = (
+        tla.arch.RowMajorMxScaleA if layout_a == "row" else tla.arch.ColMajorMxScaleA
     )
-    tag_b = (
-        tla.arch.rowMajorMxScaleB if layout_b == "row" else tla.arch.colMajorMxScaleB
+    tag_sb = (
+        tla.arch.RowMajorMxScaleB if layout_b == "row" else tla.arch.ColMajorMxScaleB
     )
+    sk_pad = sa_packed.shape[1]
     sa_t = from_dlpack(
         sa_npu,
-        layout_tag=tag_a,
-        origin_shape=(m, sk_total),
+        layout_tag=tag_sa,
+        origin_shape=(m, sk_pad),
         element_type=tla.Float8E8M0,
     ).mark_layout_dynamic()
     sb_t = from_dlpack(
         sb_npu,
-        layout_tag=tag_b,
-        origin_shape=(sk_total, n),
+        layout_tag=tag_sb,
+        origin_shape=(sk_pad, n),
         element_type=tla.Float8E8M0,
     ).mark_layout_dynamic()
 
@@ -551,7 +640,6 @@ def run(args: argparse.Namespace) -> int:
         sb_t,
         c_t,
         MxTilingParams(tm=tm, tn=tn, tk=tk),
-        fp4_sel,
         options="--npu-arch 3510",
     )
     block_num = get_block_num(args.block_num, args.device, kind="cube")
@@ -598,9 +686,9 @@ def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--device", type=int, default=0)
     p.add_argument("--block-num", type=int, default=-1)
-    p.add_argument("--m", type=int, default=128)
-    p.add_argument("--n", type=int, default=128)
-    p.add_argument("--k", type=int, default=128)
+    p.add_argument("--m", type=int, default=333)
+    p.add_argument("--n", type=int, default=444)
+    p.add_argument("--k", type=int, default=535)
     # One per side: the operand and its scale block share an orientation.
     p.add_argument("--layout-a", choices=("row", "col"), default="row")
     p.add_argument("--layout-b", choices=("row", "col"), default="col")

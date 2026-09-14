@@ -400,10 +400,10 @@ REGISTER_L1_TO_L0B_MX_FP4(nZ, float4_e1m2x2_t)
             src, dst, TENSOR_DESC_12(src), TENSOR_DESC_12(dst));                                                 \
     }
 
-REGISTER_GM_TO_L1_MX_SCALE(rowMajorMxScaleA, zZMxScale)
-REGISTER_GM_TO_L1_MX_SCALE(colMajorMxScaleA, zZMxScale)
-REGISTER_GM_TO_L1_MX_SCALE(rowMajorMxScaleB, nNMxScale)
-REGISTER_GM_TO_L1_MX_SCALE(colMajorMxScaleB, nNMxScale)
+REGISTER_GM_TO_L1_MX_SCALE(RowMajorMxScaleA, zZMxScale)
+REGISTER_GM_TO_L1_MX_SCALE(ColMajorMxScaleA, zZMxScale)
+REGISTER_GM_TO_L1_MX_SCALE(RowMajorMxScaleB, nNMxScale)
+REGISTER_GM_TO_L1_MX_SCALE(ColMajorMxScaleB, nNMxScale)
 
 #endif
 }

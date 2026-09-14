@@ -143,10 +143,10 @@ def Tla_LayoutTag_nNMxScale : I32EnumAttrCase<"nNMxScale", 9>;
 // indistinguishable, and they select different copies. The four match Catlass's
 // isMxScaleFor{Row,Column}Major{A,B} predicates one-to-one; scaleA reaches L1 as
 // zZ and scaleB as nN either way.
-def Tla_LayoutTag_rowMajorMxScaleA : I32EnumAttrCase<"rowMajorMxScaleA", 10>;
-def Tla_LayoutTag_colMajorMxScaleA : I32EnumAttrCase<"colMajorMxScaleA", 11>;
-def Tla_LayoutTag_rowMajorMxScaleB : I32EnumAttrCase<"rowMajorMxScaleB", 12>;
-def Tla_LayoutTag_colMajorMxScaleB : I32EnumAttrCase<"colMajorMxScaleB", 13>;
+def Tla_LayoutTag_RowMajorMxScaleA : I32EnumAttrCase<"RowMajorMxScaleA", 10>;
+def Tla_LayoutTag_ColMajorMxScaleA : I32EnumAttrCase<"ColMajorMxScaleA", 11>;
+def Tla_LayoutTag_RowMajorMxScaleB : I32EnumAttrCase<"RowMajorMxScaleB", 12>;
+def Tla_LayoutTag_ColMajorMxScaleB : I32EnumAttrCase<"ColMajorMxScaleB", 13>;
 def Tla_LayoutTagEnum : Tla_I32Enum<"LayoutTag", "Tensor layout tag for tla.tensor types.", [
   Tla_LayoutTag_Unknown,
   Tla_LayoutTag_RowMajor,
@@ -158,14 +158,14 @@ def Tla_LayoutTagEnum : Tla_I32Enum<"LayoutTag", "Tensor layout tag for tla.tens
   Tla_LayoutTag_zNUnAlign,
   Tla_LayoutTag_zZMxScale,
   Tla_LayoutTag_nNMxScale,
-  Tla_LayoutTag_rowMajorMxScaleA,
-  Tla_LayoutTag_colMajorMxScaleA,
-  Tla_LayoutTag_rowMajorMxScaleB,
-  Tla_LayoutTag_colMajorMxScaleB]>;
+  Tla_LayoutTag_RowMajorMxScaleA,
+  Tla_LayoutTag_ColMajorMxScaleA,
+  Tla_LayoutTag_RowMajorMxScaleB,
+  Tla_LayoutTag_ColMajorMxScaleB]>;
 def Tla_LayoutTagAttr : Tla_I32EnumAttr<"layout_tag", Tla_LayoutTagEnum> {
   let description = [{
     tla layout_tag RowMajor,ColumnMajor,zN,nZ,zZ,L0Clayout,zNUnAlign for generic data types,
-    and zZMxScale,nNMxScale,rowMajorMxScaleA,colMajorMxScaleA,rowMajorMxScaleB,colMajorMxScaleB for mxfp4/mxfp8 scale.
+    and zZMxScale,nNMxScale,RowMajorMxScaleA,ColMajorMxScaleA,RowMajorMxScaleB,ColMajorMxScaleB for mxfp4/mxfp8 scale.
   }];
 }
 
@@ -908,9 +908,11 @@ def Tla_CopyMxOp : Tla_Op<"copy_mx", []> {
     established when the operand lands in L0.
 
     ``scale`` is an L1 tile of OCP ``e8m0`` shared exponents, one per
-    ``MX_SCALE_GROUP_NUM`` (32) elements along K, carried as ``u8`` storage
-    because MLIR has no e8m0 type. It must be tagged ``zZ`` for an L0A
-    destination and ``nN`` for an L0B destination.
+    ``MX_SCALE_GROUP_NUM`` (32) elements along K. Its element type is the
+    dialect's own ``!tla.f8e8m0`` (``tla.Float8E8M0`` on the Python side); like
+    the other cube element formats it carries no LLVM lowering, so at the
+    memref boundary it is buffered as i8, one byte per exponent. It must be
+    tagged ``zZMxScale`` for an L1A and ``nNMxScale`` for an L1B.
 
     The destination L0 tile is what makes the matmul an MX matmul, so it must be
     consumed by ``tla.mmad_mx`` rather than ``tla.mmad``.
@@ -919,6 +921,31 @@ def Tla_CopyMxOp : Tla_Op<"copy_mx", []> {
   let assemblyFormat = [{
     $dst `,` $src `,` $scale attr-dict `:`
     qualified(type($dst)) `,` qualified(type($src)) `,` qualified(type($scale))
+  }];
+  let hasVerifier = 1;
+}
+
+def Tla_FillOp : Tla_Op<"fill", []> {
+  let summary = "Fill a region of an L1 zN/nZ tile with a scalar bit pattern";
+  let description = [{
+    Fill ``dst`` with ``value`` over the region ``[coord, coord + shape)``.
+    Cube only: the destination must be an L1 tile tagged ``zN`` or ``nZ``, with
+    a fp4/fp8 element type, and ``value`` must be 0 -- the op exists to
+    zero the K-pad tail of an MX operand tile, nothing else.
+
+    ``value`` travels as its i32 bit pattern (a uint16 pattern for the
+    fp4/fp8 storage). The frontend crops ``shape`` against the tile's origin
+    shape and the given coord before this op is formed. The device helper
+    aligns the coordinate up to the C0 boundary (32 bytes) along the layout's
+    C0 axis before filling, so a fill that starts or ends inside a C0 block
+    degrades to the enclosing aligned blocks and a zero-length fill is a
+    no-op.
+  }];
+  let arguments = (ins Tla_TensorType:$dst, I32:$value,
+                         Tla_CoordType:$coord, Tla_ShapeType:$shape);
+  let assemblyFormat = [{
+    $dst `,` $value `,` $coord `,` $shape attr-dict `:`
+    qualified(type($dst)) `,` type($value) `,` type($coord) `,` type($shape)
   }];
   let hasVerifier = 1;
 }

@@ -161,7 +161,7 @@ def _mx_mmad_kernel(elem_a, elem_b):
             tla.allocate((128, 128), tla.Float32, tla.AddressSpace.l1, 512),
             tla.make_layout(tla.make_shape(128, 128), tla.make_stride(128, 1)),
         )
-        # One e8m0 exponent per 32 elements along K, carried as i8 storage.
+        # One e8m0 exponent per 32 elements along K.
         sa_p = tla.make_tensor(
             tla.allocate((128, 2), tla.Float8E8M0, tla.AddressSpace.l1, 512),
             tla.make_layout(tla.make_shape(128, 2), tla.make_stride(2, 1)),

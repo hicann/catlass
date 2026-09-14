@@ -223,8 +223,7 @@ mlir::LogicalResult TensorDescOp::verify()
     auto tensorType = getResult().getType();
     auto layout = tensorType.getLayout();
     auto layoutTag = layout.getLayoutTag();
-    bool isLinear =
-        layoutTag == LayoutTag::RowMajor || layoutTag == LayoutTag::ColumnMajor || isMxScaleGmLayout(layoutTag);
+    bool isLinear = layoutTag == LayoutTag::RowMajor || layoutTag == LayoutTag::ColumnMajor;
     bool isNZFamily = isNZFamilyLayout(layoutTag);
     if (!isLinear && !isNZFamily)
         return emitOpError("result must use a supported linear or NZFamily layout");
@@ -405,18 +404,44 @@ mlir::LogicalResult CopyMxOp::verify()
     if (scale != AddressSpace::l1)
         return emitOpError("MX scale tile must live in l1");
 
-    // The scale block is e8m0. i8 storage stays accepted so a caller that only
-    // has bytes to hand is not forced to relabel them, but the dialect type is
-    // the spelling that says what the bytes mean.
+    // The scale block is e8m0, end to end: the frontend binds GM scale buffers
+    // through from_dlpack(Float8E8M0) and the L1 tile is allocated as
+    // Float8E8M0 too. Only the materialized memref stores bytes (i8), which is
+    // the storageElementType boundary, not a spelling callers should rely on.
     auto scaleElem = scaleTy.getPtr().getPointee();
-    if (!::llvm::isa<::tla::Float8E8M0Type>(scaleElem) && !scaleElem.isInteger(8))
-        return emitOpError("MX scale tile must be f8e8m0 (or i8/u8 storage)");
+    if (!::llvm::isa<::tla::Float8E8M0Type>(scaleElem))
+        return emitOpError("MX scale tile must be f8e8m0");
     // A-side scales feed L0A and must be zZ; B-side feed L0B and must be nN.
     LayoutTag expected = dst == AddressSpace::l0a ? LayoutTag::zZMxScale : LayoutTag::nNMxScale;
     if (scaleTy.getLayout().getLayoutTag() != expected)
         return emitOpError("MX scale tile for an ")
                << (dst == AddressSpace::l0a ? "l0a" : "l0b") << " destination must be tagged "
                << (dst == AddressSpace::l0a ? "zZMxScale" : "nNMxScale");
+    return mlir::success();
+}
+
+mlir::LogicalResult FillOp::verify()
+{
+    if (!hasEnclosingRegion<CubeOp>(getOperation()))
+        return emitOpError("must be nested inside a tla.cube region");
+    auto dstTy = mlir::dyn_cast<TlaTensorType>(getDst().getType());
+    if (!dstTy)
+        return mlir::success(); // Operand type verifier handles malformed tensors.
+
+    if (dstTy.getPtr().getAddrspace() != AddressSpace::l1)
+        return emitOpError("fill destination must be an l1 tile");
+    LayoutTag tag = dstTy.getLayout().getLayoutTag();
+    if (tag != LayoutTag::zN && tag != LayoutTag::nZ)
+        return emitOpError("fill destination must be tagged zN or nZ");
+    // Fill exists for the MX pad use case: zeroing a packed fp4/fp8 operand
+    // tile. Wider types and the e8m0 scale format have no fill route in the
+    // bc layer, so refuse them here rather than at lowering time.
+    ::mlir::Type elem = dstTy.getPtr().getPointee();
+    if (!::tla::isPackedFp4Type(elem) && !mlir::isa<::mlir::Float8E4M3FNType, ::mlir::Float8E5M2Type>(elem))
+        return emitOpError("fill destination element type must be fp4 or fp8");
+    ::llvm::APInt valueBits;
+    if (mlir::matchPattern(getValue(), mlir::m_ConstantInt(&valueBits)) && !valueBits.isZero())
+        return emitOpError("fill value must be 0");
     return mlir::success();
 }
 // One thread block may hold at most this many threads on the supported targets.

@@ -738,12 +738,12 @@ std::string getCopyRouteCallee(
         isScaleElem(dstElem)) {
         StringRef src, dst;
         if (dstLayout == LayoutTag::zZMxScale &&
-            (srcLayout == LayoutTag::rowMajorMxScaleA || srcLayout == LayoutTag::colMajorMxScaleA)) {
+            (srcLayout == LayoutTag::RowMajorMxScaleA || srcLayout == LayoutTag::ColMajorMxScaleA)) {
             src = stringifyLayoutTag(srcLayout);
             dst = stringifyLayoutTag(dstLayout);
         } else if (
             dstLayout == LayoutTag::nNMxScale &&
-            (srcLayout == LayoutTag::rowMajorMxScaleB || srcLayout == LayoutTag::colMajorMxScaleB)) {
+            (srcLayout == LayoutTag::RowMajorMxScaleB || srcLayout == LayoutTag::ColMajorMxScaleB)) {
             src = stringifyLayoutTag(srcLayout);
             dst = stringifyLayoutTag(dstLayout);
         }
@@ -853,6 +853,28 @@ std::string getCopyRouteCallee(
     return {};
 }
 
+std::string getFillCallee(::LayoutTag dstLayout, Type dstElementType)
+{
+    // Fill covers only the packed cube operand formats, zero-only (the MX pad
+    // use case); the verifier rejects everything else before lowering. fp4
+    // packs two elements per byte, so the bc wrapper instantiates the fp4 x2
+    // encoding over byte storage -- the same rule as the GM->L1 fp4 copy.
+    StringRef suffix;
+    if (::tla::isPackedFp4Type(dstElementType)) {
+        suffix = ::llvm::isa<::tla::Float4E1M2Type>(dstElementType) ? StringRef("float4_e1m2x2_t") :
+                                                                      StringRef("float4_e2m1x2_t");
+    } else if (::mlir::isa<::mlir::Float8E4M3FNType, ::mlir::Float8E5M2Type>(dstElementType)) {
+        suffix = copyRuntimeElemSuffix(dstElementType);
+    }
+    if (suffix.empty())
+        return {};
+    if (dstLayout == LayoutTag::zN)
+        return (Twine("fill_l1_zN_") + suffix).str();
+    if (dstLayout == LayoutTag::nZ)
+        return (Twine("fill_l1_nZ_") + suffix).str();
+    return {};
+}
+
 // Unified 12-field (4D) descriptor payload for every copy route. Linear
 // (RowMajor/ColumnMajor) descriptors carry shape[2]=shape[3]=stride[2]=stride[3]=1
 // (enforced by validateTensorDescriptor), so the same 12-field encoding serves
@@ -903,6 +925,9 @@ static bool isAicTemplateRuntimeCall(StringRef name)
         return true;
     // MX scale GM -> L1 with the reorder done by the DMA.
     if (name.starts_with("copy_gm_") && name.find("MxScale") != StringRef::npos && name.ends_with("_uint8_t"))
+        return true;
+    // L1 fill templates (zN/nZ destinations, cube core).
+    if (name.starts_with("fill_l1_zN_") || name.starts_with("fill_l1_nZ_"))
         return true;
     if (!(name.starts_with("copy_")))
         return false;

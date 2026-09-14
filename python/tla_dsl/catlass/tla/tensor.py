@@ -525,6 +525,70 @@ class _Tensor(TensorABC):
             **store_kwargs,
         )
 
+    @dsl_user_op
+    def fill(
+        self,
+        value: int | float,
+        *,
+        loc: mlir_ir.Location | None = None,
+    ) -> None:
+        """Directory: Data fill
+        Description:
+            Fill this whole L1 zN/nZ tile with a value. The
+            fill region is the tile itself: ``[self.coord, self.coord +
+            self.origin_shape)`` over the tile's logical 2-D (M, N) axes.
+            Along the layout's C0 axis (32 bytes) the start coordinate is
+            aligned up to the C0 boundary before filling, so only whole
+            C0 units inside the tile are written and partial elements at
+            the start are left untouched (cover the residue another way
+            -- in the MX pad flow the GM->L1 copy brings it).
+
+            For a concrete fp8 (one C0 unit = 32 bytes) zN example, take
+            a tile (e.g. from `tla.get_tile`) at coord ``(0, 40)`` with
+            ``origin_shape = (16, 56)``:
+
+            ```text
+                N   0               32  40          64              96
+                                                    ^   C0 boundary: start 40 aligns up to 64
+                M
+                0   - - - - - - - - - - + + + + + + * * * * * * * *
+                1   - - - - - - - - - - + + + + + + * * * * * * * *
+                :   (rows 2 .. 14 identical)
+               15   - - - - - - - - - - + + + + + + * * * * * * * *
+            ```
+
+            Legend: `*` = written by the device: the whole C0 units
+            ``[64, 96)`` (the tile end 40 + 56 = 96 is already C0-aligned).
+            `+` = inside the tile but not written: cols 40..63 are a
+            partial C0 unit. `-` = outside the tile. The M axis has no
+            C0 alignment here: for zN the C0 axis is N.
+
+            Parameters:
+            - `value` (`int | float`): Trace-time scalar; only ``0`` is
+              supported (the device writes the zero bit pattern).
+
+            Constraints:
+            - Must be called inside a `@tla.kernel`-decorated kernel function and
+              nested inside `tla.cube()`.
+            - Destination must be an L1 tensor tagged ``zN`` or ``nZ``.
+            - Supported element types: the packed fp4/fp8 operand formats
+              (``f4e2m1``/``f4e1m2``/``f8e4m3fn``/``f8e5m2``), zero only.
+              Wider types, 8-bit integers and e8m0 scale tiles are not
+              supported.
+
+            Example:
+            ```python
+            # Zero the K-pad tail of an L1 A tile: tile first, then fill.
+            pad = tla.get_tile(t_l1a, tla.make_coord(0, k_valid),
+                               tla.make_shape(m, k_l0 - k_valid))
+            pad.fill(0)
+            ```
+        """
+        from ..core_api import _tensor_fill_impl
+
+        loc = _normalize_user_loc(loc)
+        _tensor_fill_impl(self, value, loc=loc)
+
     def _check_can_scalar_load_store(self) -> None:
         """Phase-1 GM/UB scalar access preconditions."""
         if self.addrspace not in ("gm", "ub"):

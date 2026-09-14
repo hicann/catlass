@@ -1454,7 +1454,7 @@ def _materialize_dynamic_gm_root_tensor_descriptor(
             shape_vals.append(_const_index(int(extent), loc=loc))
 
     abi_strides: list[mlir_ir.Value] | None = None
-    is_row_major = is_row_major_layout(layout_tag)
+    is_row_major = layout_tag in _ROW_MAJOR_LAYOUT_TOKENS
     is_column_major = layout_tag in _COLUMN_MAJOR_LAYOUT_TOKENS
     if (is_row_major or is_column_major or is_nz_family) and any(
         leaf is None for leaf in stride_leaves
@@ -1629,27 +1629,27 @@ def _require_resolved_metadata_leaves(
 _CATLASS_BYTE_PER_C0 = 32
 _CATLASS_C0_NUM_PER_FRACTAL = 16
 _MX_SCALE_GM_LAYOUT_TOKENS = frozenset(
-    {"rowMajorMxScaleA", "colMajorMxScaleA", "rowMajorMxScaleB", "colMajorMxScaleB"}
+    {"RowMajorMxScaleA", "ColMajorMxScaleA", "RowMajorMxScaleB", "ColMajorMxScaleB"}
 )
-_LINEAR_LAYOUT_TOKENS = (
-    frozenset({"RowMajor", "ColumnMajor"}) | _MX_SCALE_GM_LAYOUT_TOKENS
-)
+_LINEAR_LAYOUT_TOKENS = frozenset({"RowMajor", "ColumnMajor"})
 # Orientation of a linear layout, named once. Everything downstream -- stride
 # derivation, the dynamic GM prologue, leading-dim inference -- must ask these
 # rather than compare against "RowMajor"/"ColumnMajor" literally: a tag that is
 # row-major but not spelled RowMajor otherwise falls into a column-major
 # fallback that no validator can see, because the tag is a perfectly valid
 # linear tag.
-_ROW_MAJOR_LAYOUT_TOKENS = frozenset(
-    {"RowMajor", "rowMajorMxScaleA", "rowMajorMxScaleB"}
-)
+_ROW_MAJOR_LAYOUT_TOKENS = frozenset({"RowMajor"})
 _COLUMN_MAJOR_LAYOUT_TOKENS = _LINEAR_LAYOUT_TOKENS - _ROW_MAJOR_LAYOUT_TOKENS
-
-
-def is_row_major_layout(layout_tag: str) -> bool:
-    """True when a linear layout is row-major (unit stride on the last axis)."""
-    return layout_tag in _ROW_MAJOR_LAYOUT_TOKENS
-
+# Which flat stride leaf of each GM MxScale tag is the runtime pitch (everything
+# else is a structural constant: the 0 broadcast, unit strides, and the e8m0
+# scale C0 = 2). mark_layout_dynamic keeps the constants static and marks only
+# this leaf dynamic.
+_MX_SCALE_GM_DYNAMIC_STRIDE_LEAF = {
+    "RowMajorMxScaleA": 1,
+    "ColMajorMxScaleA": 3,
+    "RowMajorMxScaleB": 1,
+    "ColMajorMxScaleB": 3,
+}
 
 _NZ_FAMILY_LAYOUT_TOKENS = frozenset(
     {
@@ -1661,6 +1661,7 @@ _NZ_FAMILY_LAYOUT_TOKENS = frozenset(
         "zZMxScale",
         "nNMxScale",
     }
+    | _MX_SCALE_GM_LAYOUT_TOKENS
 )
 _MAKE_TENSOR_LIKE_ON_CHIP_ADDRSPACES = frozenset({"l1", "l0a", "l0b", "l0c", "ub"})
 _BITS_PER_BYTE = 8
@@ -1813,7 +1814,7 @@ def _validate_static_make_tensor_layout(
     if layout_tag in _LINEAR_LAYOUT_TOKENS:
         if len(shape_const_tree) == 1:
             checks = ((stride_const_tree[0], 1),)
-        elif is_row_major_layout(layout_tag):
+        elif layout_tag in _ROW_MAJOR_LAYOUT_TOKENS:
             checks = ((stride_const_tree[1], 1),)
         else:
             checks = ((stride_const_tree[0], 1),)
@@ -1844,6 +1845,38 @@ def _validate_static_make_tensor_layout(
                 (shape10, _CATLASS_C0_NUM_PER_FRACTAL),
                 (stride00, 1),
                 (stride01, _MX_SCALE_ELE_NUM_PER_FRACTAL),
+            )
+        elif layout_tag == "RowMajorMxScaleA":
+            checks = (
+                (shape00, 1),
+                (shape10, _MX_SCALE_ELE_NUM_PER_C0),
+                (stride00, 0),
+                (stride10, 1),
+                (stride11, _MX_SCALE_ELE_NUM_PER_C0),
+            )
+        elif layout_tag == "ColMajorMxScaleA":
+            checks = (
+                (shape00, 1),
+                (shape10, _MX_SCALE_ELE_NUM_PER_C0),
+                (stride00, 0),
+                (stride01, _MX_SCALE_ELE_NUM_PER_C0),
+                (stride10, 1),
+            )
+        elif layout_tag == "RowMajorMxScaleB":
+            checks = (
+                (shape00, _MX_SCALE_ELE_NUM_PER_C0),
+                (shape10, 1),
+                (stride00, 1),
+                (stride10, 0),
+                (stride11, _MX_SCALE_ELE_NUM_PER_C0),
+            )
+        elif layout_tag == "ColMajorMxScaleB":
+            checks = (
+                (shape00, _MX_SCALE_ELE_NUM_PER_C0),
+                (shape10, 1),
+                (stride00, 1),
+                (stride01, _MX_SCALE_ELE_NUM_PER_C0),
+                (stride10, 0),
             )
         elif layout_tag in ("zZ", "zZMxScale"):
             c0 = ele_num_per_c0
@@ -1968,14 +2001,74 @@ def _materialize_layout_trees_from_origin(
             origin_shape,
         )
     if layout in _MX_SCALE_GM_LAYOUT_TOKENS:
-        # e8m0 scale blocks are contiguous matrices, and no 32-byte C0 rounding
-        # applies: the scale C0 is 2, fixed by the format rather than derived from
-        # the element width. A-side is row-major, B-side column-major, as the tag
-        # name says -- and the pitch has to land on the leaf Catlass reads
-        # (stride0 for A, stride1 for B), or the copy strides by one element.
-        if is_row_major_layout(layout):
-            return ((rows, cols), (cols, 1), coord, origin_shape)
-        return ((rows, cols), (1, rows), coord, origin_shape)
+        # The GM MxScale tags are NZFamily: a 2x2 nested tree following
+        # tla::MakeMxScaleLayout, except the rank-1 extent (the plain matrix
+        # dimension) is spelled as a (1, dim) pair whose leading leaf carries
+        # stride 0 -- addressing is unchanged, but the tree now has the four
+        # leaves every NZFamily consumer expects. The scale C0 is 2, fixed by
+        # the e8m0 format, and no 32-byte C0 rounding applies. The pitch has to
+        # land on the leaf the bc layer reads (stride<0,1> for A, stride<1,1>
+        # for B), or the copy strides by one element.
+        rows_ru = _round_up_expr(rows, _MX_SCALE_ELE_NUM_PER_C0)
+        cols_ru = _round_up_expr(cols, _MX_SCALE_ELE_NUM_PER_C0)
+        if layout == "RowMajorMxScaleA":
+            return (
+                (
+                    (1, rows),
+                    (
+                        _MX_SCALE_ELE_NUM_PER_C0,
+                        _ceil_div_expr(cols, _MX_SCALE_ELE_NUM_PER_C0),
+                    ),
+                ),
+                ((0, cols_ru), (1, _MX_SCALE_ELE_NUM_PER_C0)),
+                coord,
+                origin_shape,
+            )
+        if layout == "ColMajorMxScaleA":
+            return (
+                (
+                    (1, rows),
+                    (
+                        _MX_SCALE_ELE_NUM_PER_C0,
+                        _ceil_div_expr(cols, _MX_SCALE_ELE_NUM_PER_C0),
+                    ),
+                ),
+                ((0, _MX_SCALE_ELE_NUM_PER_C0), (1, rows * _MX_SCALE_ELE_NUM_PER_C0)),
+                coord,
+                origin_shape,
+            )
+        if layout == "RowMajorMxScaleB":
+            return (
+                (
+                    (
+                        _MX_SCALE_ELE_NUM_PER_C0,
+                        _ceil_div_expr(rows, _MX_SCALE_ELE_NUM_PER_C0),
+                    ),
+                    (1, cols),
+                ),
+                (
+                    (1, cols * _MX_SCALE_ELE_NUM_PER_C0),
+                    (0, _MX_SCALE_ELE_NUM_PER_C0),
+                ),
+                coord,
+                origin_shape,
+            )
+        # ColMajorMxScaleB
+        return (
+            (
+                (
+                    _MX_SCALE_ELE_NUM_PER_C0,
+                    _ceil_div_expr(rows, _MX_SCALE_ELE_NUM_PER_C0),
+                ),
+                (1, cols),
+            ),
+            (
+                (1, _MX_SCALE_ELE_NUM_PER_C0),
+                (0, rows_ru),
+            ),
+            coord,
+            origin_shape,
+        )
     if layout == "zN":
         rows_ru = _round_up_expr(rows, c0_num_per_fractal)
         return (
@@ -2124,20 +2217,38 @@ def _remap_tensor_like_prefix_fields_for_layout_trees(
             stride,
         )
     if layout_tag in _MX_SCALE_GM_LAYOUT_TOKENS:
-        # An e8m0 scale block in GM is a plain contiguous matrix; only its
-        # orientation matters here. The fractal structure the copy needs is
-        # rebuilt on the device side from rows / cols / pitch, so the descriptor
-        # carries just the two leaves and no C0 rounding applies -- the scale C0
-        # is 2, fixed by the format, not derived from the element width.
-        shape = (rows, cols)
-        stride = (cols, 1) if is_row_major_layout(layout_tag) else (1, rows)
+        # NZFamily 2x2 trees per tla::MakeMxScaleLayout, with the rank-1 extent
+        # spelled as a (1, dim) pair whose leading leaf carries stride 0 -- the
+        # scale C0 is 2, fixed by the e8m0 format. The pitch lands on the leaf
+        # the bc layer reads (stride<0,1> for A, stride<1,1> for B). Static
+        # leaves (the 0/1/2 structural constants) stay int; runtime-varying
+        # extents/strides become None, as in the other NZFamily branches.
+        c0 = _MX_SCALE_ELE_NUM_PER_C0
+        rows_ru = None if rows is None else _round_up(rows, c0)
+        cols_ru = None if cols is None else _round_up(cols, c0)
+        ceil_rows = None if rows is None else _ceil_div(rows, c0)
+        ceil_cols = None if cols is None else _ceil_div(cols, c0)
+        if layout_tag == "RowMajorMxScaleA":
+            flat_shape = (1, rows, c0, ceil_cols)
+            flat_stride = (0, cols_ru, 1, c0)
+        elif layout_tag == "ColMajorMxScaleA":
+            flat_shape = (1, rows, c0, ceil_cols)
+            flat_stride = (0, c0, 1, _mul_int_optional(rows, c0))
+        elif layout_tag == "RowMajorMxScaleB":
+            flat_shape = (c0, ceil_rows, 1, cols)
+            flat_stride = (1, _mul_int_optional(cols, c0), 0, c0)
+        else:  # ColMajorMxScaleB
+            flat_shape = (c0, ceil_rows, 1, cols)
+            flat_stride = (1, c0, 0, rows_ru)
+        shape = ((flat_shape[0], flat_shape[1]), (flat_shape[2], flat_shape[3]))
+        stride = ((flat_stride[0], flat_stride[1]), (flat_stride[2], flat_stride[3]))
         return _RemappedTensorMetadata(
             shape,
             stride,
             coord_tree,
             origin_shape_tree,
-            shape,
-            stride,
+            flat_shape,
+            flat_stride,
         )
     if layout_tag == "zN":
         rows_round_up = None if rows is None else _round_up(rows, c0_num_per_fractal)
@@ -4009,6 +4120,128 @@ def make_layout(
     )
 
 
+_MAKE_LAYOUT_WITH_TAG_TOKENS = frozenset(
+    {
+        "RowMajor",
+        "ColumnMajor",
+        "zN",
+        "nZ",
+        "zZ",
+        "zZMxScale",
+        "nNMxScale",
+        "L0Clayout",
+        "zNUnAlign",
+    }
+)
+
+# The on-chip MxScale tags pin the C0 geometry at 2 elements / 32 bytes, which
+# is only true for e8m0. Any other element type under them compiles into a
+# silently wrong layout.
+_MAKE_LAYOUT_WITH_TAG_MX_TOKENS = frozenset({"zZMxScale", "nNMxScale"})
+
+
+@dsl_user_op
+def make_layout_with_tag(
+    shape: tuple,
+    dtype: Any,
+    layoutTag: _LayoutTag | None = None,
+    *,
+    loc: mlir_ir.Location | None = None,
+) -> TlaLayout:
+    """Directory: Basic Data Types and Operations
+
+    Description:
+        Compose a `!tla.layout` directly from a flat 2D logical shape, an element
+        type and a layout tag (maps to
+        `tla.make_layout` after the front end remaps the physical trees).
+
+        `make_layout_with_tag` takes the extent straight from the
+        caller, so an on-chip tile can be larger than the GM tile it is fed from
+        (e.g. a K extent rounded up to 64 for MX mmad).
+
+        Parameters:
+        - `shape` (`tuple`): Flat 2D logical extent `(rows, cols)`. Each leaf is
+          an `int` or a runtime `Numeric` (dynamic leaf). Required.
+        - `dtype` (`Numeric` subclass): Element type; drives the C0/fractal
+          geometry of the remapped physical trees. Required.
+        - `layoutTag` (`_LayoutTag | None`): Layout tag (e.g. `tla.arch.zN`).
+          Optional, default `None` (RowMajor).
+
+        Constraints:
+        - Must be called inside a `@tla.kernel`-decorated kernel function.
+        - Only for on-chip tensor layouts: the composed layout is meant to be
+          landed on an on-chip pointer via `tla.make_tensor(ptr, layout)`, not
+          bound to GM host memory.
+        - `shape` must be a flat 2-tuple; nested trees and `None` leaves are
+          rejected — the whole extent is caller-owned.
+        - The origin shape of the resulting layout equals `shape` (the aligned
+          extent); pair with `tla.make_tensor(ptr, layout)` to land it on an
+          on-chip pointer.
+        - On-chip tags only: `zZMxScale` / `nNMxScale` require element type
+          `tla.Float8E8M0` (their C0 is fixed at 2 elements / 32 bytes by the
+          e8m0 format). The GM-side MxScale tags (`RowMajorMxScaleA`,
+          `ColMajorMxScaleA`, `RowMajorMxScaleB`, `ColMajorMxScaleB`) are
+          rejected.
+
+        Example:
+        ```python
+        # fp8 zN tile with M cropped at runtime and K rounded up to 64:
+        lay = tla.make_layout_with_tag((m_valid, k_l0), dtype_a, tla.arch.zN)
+        t_l1a = tla.make_tensor(l1a, lay)
+        ```
+    """
+    _require_frontend_state("make_layout_with_tag")
+    if (
+        not isinstance(shape, tuple)
+        or len(shape) != 2
+        or any(isinstance(leaf, (tuple, list)) for leaf in shape)
+    ):
+        _op_error(
+            "make_layout_with_tag",
+            "expected a flat 2D logical shape tuple (rows, cols) with int or "
+            f"Numeric leaves; got {shape!r}",
+        )
+    try:
+        dtype_str = _dtype_to_str(dtype)
+    except TypeError as exc:
+        raise TlaLoweringError(
+            "tla.make_layout_with_tag cannot derive element type from dtype "
+            f"{dtype!r}: {exc}"
+        ) from exc
+    if dtype_size_bits(dtype_str) <= 0:
+        _op_error(
+            "make_layout_with_tag",
+            f"unsupported element type for layout construction: {dtype_str}",
+        )
+    layout_token = _resolve_arch_layout_tag(layoutTag, for_op="make_layout_with_tag")
+    if layout_token not in _MAKE_LAYOUT_WITH_TAG_TOKENS:
+        _op_error(
+            "make_layout_with_tag",
+            f"unsupported layout tag '{layout_token}'; expected one of "
+            + ", ".join(sorted(_MAKE_LAYOUT_WITH_TAG_TOKENS)),
+        )
+    if layout_token in _MAKE_LAYOUT_WITH_TAG_MX_TOKENS:
+        dtype_token = str(getattr(dtype, "dtype", "")).strip().lower()
+        if dtype_token != "f8e8m0":
+            _op_error(
+                "make_layout_with_tag",
+                f"layout tag '{layout_token}' requires element type "
+                f"tla.Float8E8M0, got {dtype_token!r}",
+            )
+    trees = _materialize_layout_trees_from_origin(shape, dtype_str, layout_token)
+    if trees is None:
+        _op_error(
+            "make_layout_with_tag",
+            f"cannot materialize layout trees for shape={shape!r}, "
+            f"dtype={dtype_str}, layoutTag='{layout_token}'",
+        )
+    shape_tree, stride_tree, _coord_tree, origin_tree = trees
+    sh = make_shape(*shape_tree, loc=loc)
+    st = make_stride(*stride_tree, loc=loc)
+    og = make_shape(*origin_tree, loc=loc)
+    return make_layout(sh, st, origin_shape=og, layoutTag=layoutTag, loc=loc)
+
+
 def _emit_tile_view(
     source: Any,
     shape: _Shape,
@@ -4108,6 +4341,163 @@ def tile_view(
         source,
         shape,
         make_coord(*normalized_coord, loc=loc),
+        loc=loc,
+    )
+
+
+@dsl_user_op
+def get_tile(
+    tensor: Tensor,
+    coord: TlaCoord,
+    shape: TlaShape,
+    *,
+    loc: mlir_ir.Location | None = None,
+) -> TlaTensor:
+    """Directory: Basic Data Types and Operations
+
+    Description:
+        Extract a sub-tile of a tensor as a new `!tla.tensor` built with
+        `tla.make_tensor` over the source's backing pointer.
+
+        The returned tensor shares the source's buffer geometry -- the
+        `stride` tree passes through unchanged -- and carries:
+
+        - `coord`: `coord + source.coord` (element offsets, per dim);
+        - `origin_shape`: `shape` cropped against the source's `origin_shape`
+          (per dim `min(shape[d], origin[d] - coord[d])`), so the tile never
+          runs past the source's logical extent;
+        - `shape`: the physical packing regenerated from the cropped extent
+          (for zN/nZ the same fractal decomposition `make_layout_with_tag`
+          would produce; for RowMajor/ColumnMajor the extent itself).
+
+        Downstream ops see the tile's absolute coord and its own logical
+        extent; for example `Tensor.fill` on the result covers exactly this
+        tile.
+
+        Parameters:
+        - `tensor` (`Tensor`): Source `!tla.tensor`. Required.
+        - `coord` (`TlaCoord`): Tile start from `tla.make_coord`, flat 2-D
+          element offsets relative to the source. Required.
+        - `shape` (`TlaShape`): Requested tile extent from `tla.make_shape`,
+          flat 2-D. Required.
+
+        Constraints:
+        - Must be called inside a `@tla.kernel`-decorated kernel function.
+        - `coord` offsets must stay within the source's `origin_shape` -- the
+          crop only trims the extent, it does not clamp the offsets.
+        - Supported layout tags follow `tla.make_tensor` (RowMajor, ColumnMajor,
+          zN, nZ, zZ, L0Clayout, zNUnAlign).
+
+        Example:
+        ```python
+        # Zero the K-pad tail of an L1 A tile (see Tensor.fill):
+        pad = tla.get_tile(t_l1a, tla.make_coord(0, k_valid),
+                           tla.make_shape(m, k_l0 - k_valid))
+        pad.fill(0)
+        ```
+    """
+    op_name = "get_tile"
+    _require_category(op_name, "tensor", tensor, "tensor", 0)
+    if not isinstance(coord, _Coord) or not isinstance(shape, _Shape):
+        _op_error(
+            op_name,
+            "expected coord from tla.make_coord (TlaCoord) and shape from "
+            f"tla.make_shape (TlaShape); got coord={_type_name(coord)}, "
+            f"shape={_type_name(shape)}",
+        )
+    _require_frontend_state(op_name)
+
+    coord_components = coord._components
+    shape_components = shape._components
+    if (
+        len(coord_components) != 2
+        or any(isinstance(leaf, (tuple, str)) for leaf in coord_components)
+        or len(shape_components) != 2
+        or any(isinstance(leaf, (tuple, str)) for leaf in shape_components)
+    ):
+        _op_error(
+            op_name,
+            "get_tile expects a flat 2-D coord and shape; got coord="
+            f"{coord_components}, shape={shape_components}",
+        )
+
+    source_value = _as_value(tensor)
+    parent_shape = _tensor_metadata_field(source_value, "shape")
+    parent_stride = _tensor_metadata_field(source_value, "stride")
+    parent_coord = _tensor_metadata_field(source_value, "coord")
+    parent_origin = _tensor_metadata_field(source_value, "origin_shape")
+    parent_tag = _tensor_metadata_field(source_value, "layout_tag")
+    for name, tree in (
+        ("coord", parent_coord),
+        ("origin_shape", parent_origin),
+        ("shape", parent_shape),
+        ("stride", parent_stride),
+    ):
+        if not isinstance(tree, tuple) or any(isinstance(leaf, str) for leaf in tree):
+            _op_error(
+                op_name,
+                f"get_tile source {name} must be a resolved tree of int leaves, "
+                f"got {tree!r}",
+            )
+    if (
+        not isinstance(parent_coord, tuple)
+        or len(parent_coord) != 2
+        or not isinstance(parent_origin, tuple)
+        or len(parent_origin) != 2
+    ):
+        _op_error(
+            op_name,
+            "get_tile source coord and origin_shape must be flat 2-D trees; got "
+            f"coord={parent_coord}, origin_shape={parent_origin}",
+        )
+
+    # New coord = passed coord + the source's own coord, per dim; extent =
+    # passed shape cropped against the source's origin (per dim
+    # min(shape[d], origin[d] - coord[d])). Static leaves fold in Python;
+    # dynamic leaves emit arith.minsi.
+    new_coord_components = tuple(
+        leaf + base for leaf, base in zip(coord_components, parent_coord, strict=True)
+    )
+    cropped = tuple(
+        _tree_crop_origin(origin_leaf, shape_leaf, coord_leaf)
+        for origin_leaf, shape_leaf, coord_leaf in zip(
+            parent_origin, shape_components, coord_components, strict=True
+        )
+    )
+
+    # Regenerate the physical shape from the cropped logical extent instead of
+    # passing the parent's through: the tile carries its own extents. The
+    # stride tree stays the source's -- the tile addresses the parent buffer,
+    # whose pitch (e.g. zN's rows-ru stride leaf, RowMajor's column alignment)
+    # follows the parent extent, not the tile's.
+    if parent_tag in _LINEAR_LAYOUT_TOKENS:
+        new_shape_tree = tuple(cropped)
+    else:
+        dtype_str = str(_tensor_metadata_field(source_value, "dtype"))
+        materialized = _materialize_layout_trees_from_origin(
+            tuple(cropped), dtype_str, str(parent_tag)
+        )
+        if materialized is None:
+            _op_error(
+                op_name,
+                f"cannot materialize a physical shape for the cropped extent "
+                f"{cropped!r} with dtype={dtype_str}, layoutTag={parent_tag!r}; "
+                "falling back to the source's physical shape is not supported",
+            )
+        new_shape_tree = materialized[0]
+
+    layout = make_layout(
+        make_shape(*new_shape_tree, loc=loc),
+        make_stride(*parent_stride, loc=loc),
+        origin_shape=make_shape(*cropped, loc=loc),
+        layoutTag=_LayoutTag(str(parent_tag)),
+        loc=loc,
+    )
+    ptr = _emit_tensor_ptr(source_value, loc=loc)
+    return make_tensor(
+        ptr,
+        layout,
+        coord=make_coord(*new_coord_components, loc=loc),
         loc=loc,
     )
 
@@ -4499,6 +4889,80 @@ _COPY_CUBE_ROUTES = {
 _COPY_VECTOR_ROUTES = {("gm", "ub"), ("ub", "gm"), ("ub", "l1")}
 
 
+# tla.fill (Tensor.fill) element rules: only the packed fp4/fp8 cube operand
+# formats are supported, and only to zero the tile (the MX pad use case) --
+# wider types and non-zero patterns are refused up front.
+_FILL_SUPPORTED_ELEMENT_TYPES = frozenset({"f4e2m1", "f4e1m2", "f8e4m3fn", "f8e5m2"})
+
+
+def _fill_value_bits(op_name: str, element_type: str, value: Any) -> int:
+    """Convert a trace-time scalar to the i32 bit pattern consumed by tla.fill."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        _op_error(
+            op_name,
+            f"fill value must be a trace-time int or float, got {type(value).__name__}",
+        )
+    if value != 0:
+        _op_error(
+            op_name,
+            f"fill of {element_type} supports only value 0, got {value!r}",
+        )
+    return 0
+
+
+def _tensor_fill_impl(
+    tensor: Tensor,
+    value: int | float,
+    *,
+    loc: mlir_ir.Location | None = None,
+) -> None:
+    """Implementation behind ``Tensor.fill``; not exported as a free function.
+
+    The fill region is the tile itself: the emitted coord is the tensor's own
+    coord and the extent is its ``origin_shape`` -- no caller-side region, no
+    cropping. Sub-regions are expressed by tiling first (``tla.get_tile``).
+    """
+    op_name = "fill"
+    _require_frontend_state(op_name)
+    _runtime._require_enclosing_region("fill", "cube")
+
+    dest = _as_value(tensor)
+    dest_desc = _tla_tensor_type_for_mlir_value(dest)
+    if dest_desc.addrspace.lower() != "l1":
+        _op_error(
+            op_name,
+            "invalid argument 'tensor' (position 0): expected addrspace l1, "
+            f"got {dest_desc.addrspace}",
+        )
+    layout_tag = dest_desc.layout_tag
+    if layout_tag not in ("zN", "nZ"):
+        _op_error(
+            op_name,
+            "invalid argument 'tensor' (position 0): expected layout tag zN or nZ, "
+            f"got {layout_tag!r}",
+        )
+    element_type = str(dest_desc.element_type).strip().lower()
+    if element_type not in _FILL_SUPPORTED_ELEMENT_TYPES:
+        _op_error(
+            op_name,
+            f"unsupported element type {element_type!r}: fill supports only the "
+            "packed fp4/fp8 operand formats (f4e2m1/f4e1m2/f8e4m3fn/f8e5m2), "
+            "zero only",
+        )
+
+    # The region is the tile itself. bc places the fill relative to the buffer
+    # base without adding the descriptor coord, so the tensor's own coord must
+    # travel in the emitted coord.
+    coord_tree = tensor.coord
+    origin_tree = tensor.origin_shape
+
+    value_bits = _fill_value_bits(op_name, element_type, value)
+    value_val = _const_i32(value_bits, loc=loc)
+    coord_val = _pack_coord(tuple(coord_tree), loc=loc)
+    shape_val = _pack_shape(tuple(origin_tree), loc=loc)
+    _tla_ops_gen.fill(dest, value_val, coord_val, shape_val, loc=loc)
+
+
 @dsl_user_op
 def copy(
     dst: Tensor,
@@ -4624,17 +5088,10 @@ def copy(
     # (_ArgProxy) do not expose Python .dtype / .addrspace attributes.
     src_dtype = src_desc.element_type.lower()
     dst_dtype = dst_desc.element_type.lower()
-    # An e8m0 scale block is the only route where the two sides legitimately
-    # disagree: the host cannot produce an e8m0 buffer, so GM holds plain bytes
-    # while the L1 tile carries the format. fp4 operands do not need this any
-    # more -- a GM fp4 tile names its own element type, like every other operand.
-    _reinterprets_scale_bytes = (
-        src_dtype in ("i8", "u8")
-        and dst_dtype == "f8e8m0"
-        and src_desc.addrspace == "gm"
-        and dst_desc.addrspace == "l1"
-    )
-    same_dtype = src_dtype == dst_dtype or _reinterprets_scale_bytes
+    # GM scale buffers enter through from_dlpack as tla.Float8E8M0, so both
+    # sides of an MX scale route name their own format and the dtype check is
+    # plain equality, like every other copy route.
+    same_dtype = src_dtype == dst_dtype
     src_layout = src_desc.layout_tag
     dst_layout = dst_desc.layout_tag
 
@@ -4798,11 +5255,8 @@ def copy(
             )
         if src_desc.element_type != dst_desc.element_type:
             _op_error("copy", "src and dst element types must match")
-        if scale_desc.element_type not in ("f8e8m0", "i8", "u8"):
-            _op_error(
-                "copy",
-                "scale must be an f8e8m0 tile (i8/u8 storage is still accepted)",
-            )
+        if scale_desc.element_type != "f8e8m0":
+            _op_error("copy", "scale must be an f8e8m0 tile")
         expected_scale_layout = (
             "zZMxScale" if dst_desc.addrspace == "l0a" else "nNMxScale"
         )
@@ -7994,10 +8448,10 @@ arch._set("nZ", _LayoutTag("nZ"))
 arch._set("zZ", _LayoutTag("zZ"))
 arch._set("zZMxScale", _LayoutTag("zZMxScale"))
 arch._set("nNMxScale", _LayoutTag("nNMxScale"))
-arch._set("rowMajorMxScaleA", _LayoutTag("rowMajorMxScaleA"))
-arch._set("colMajorMxScaleA", _LayoutTag("colMajorMxScaleA"))
-arch._set("rowMajorMxScaleB", _LayoutTag("rowMajorMxScaleB"))
-arch._set("colMajorMxScaleB", _LayoutTag("colMajorMxScaleB"))
+arch._set("RowMajorMxScaleA", _LayoutTag("RowMajorMxScaleA"))
+arch._set("ColMajorMxScaleA", _LayoutTag("ColMajorMxScaleA"))
+arch._set("RowMajorMxScaleB", _LayoutTag("RowMajorMxScaleB"))
+arch._set("ColMajorMxScaleB", _LayoutTag("ColMajorMxScaleB"))
 arch._set("nN", _LayoutTag("nN"))
 arch._set("RowMajor", _LayoutTag("RowMajor"))
 arch._set("ColumnMajor", _LayoutTag("ColumnMajor"))
@@ -8322,6 +8776,7 @@ __all__ = [
     "create_mask",
     "update_mask",
     "tile_view",
+    "get_tile",
     "make_tensor",
     "make_tensor_like",
     "copy",
@@ -8374,6 +8829,7 @@ __all__ = [
     "make_coord",
     "make_stride",
     "make_layout",
+    "make_layout_with_tag",
     "IndexTree",
     "range_constexpr",
     "_Pointer",

@@ -44,6 +44,11 @@ std::string getCopyRouteCallee(
     mlir::MLIRContext* ctx, llvm::StringRef srcAddrspace, llvm::StringRef dstAddrspace, ::LayoutTag srcLayout,
     ::LayoutTag dstLayout, mlir::Type srcElementType, mlir::Type dstElementType, llvm::StringRef extraDesc = "");
 
+/// Runtime template symbol for an L1 fill of an element type, or "" if the
+/// (layout-tag, element-type) combination is unsupported. Symbols are
+/// `fill_l1_<zN|nZ>_<elem-suffix>`.
+std::string getFillCallee(::LayoutTag dstLayout, mlir::Type dstElementType);
+
 /// The 24-element i64 runtime payload for a copy route: the src tile's 12-field
 /// (4D) layout descriptor followed by the dst tile's. Linear descriptors carry
 /// shape[2]=shape[3]=stride[2]=stride[3]=1 (enforced by validateTensorDescriptor),
