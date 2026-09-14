@@ -190,6 +190,7 @@ class JitModule:
     is_mixed: bool
     print_metadata: tuple[Any, ...] | None
     print_helper_core: str | None
+    print_tensor_position: str | None = None
 
 
 class JitExecutor:
@@ -223,6 +224,15 @@ class JitExecutor:
     ) -> TlaExecutionResult:
         """Launch using this executor's prepared binary state."""
         from .. import execution as execution_mod
+        from .runtime.ascend_stream_adapter import current_device
+
+        launch_device = int(current_device())
+        if launch_device != self.device:
+            raise execution_mod.TlaUnsupportedAbiError(
+                f"compiled kernel was loaded on device {self.device}, but the "
+                f"current device is {launch_device}; create a new compiled "
+                "function after switching devices"
+            )
 
         if launch_args and args is not None:
             raise execution_mod.TlaUnsupportedAbiError(
@@ -268,6 +278,17 @@ class JitExecutor:
                 )
             )
             payload = bytes(extension)
+        if module.print_tensor_position in {"L1", "L0C"}:
+            extension = bytearray(payload)
+            execution_mod._align_payload(extension, execution_mod._POINTER_ABI_SIZE)
+            extension.extend(
+                execution_mod._DEBUG_TUNNEL_STATE_SENTINEL.to_bytes(
+                    execution_mod._POINTER_ABI_SIZE,
+                    byteorder="little",
+                    signed=False,
+                )
+            )
+            payload = bytes(extension)
 
         raw_stream = launch_kwargs.get("stream")
         if raw_stream is None:
@@ -288,6 +309,8 @@ class JitExecutor:
                 uses_scalar_print=module.uses_scalar_print,
                 uses_tensor_print=uses_tensor_print,
                 is_mixed=module.is_mixed,
+                print_tensor_position=module.print_tensor_position,
+                device_id=self.device,
             )
 
         if print_metadata is None:

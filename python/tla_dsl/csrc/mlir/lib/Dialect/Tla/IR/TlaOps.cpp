@@ -1,5 +1,6 @@
 #include "Dialect/Tla/IR/TlaOps.h"
 
+#include <array>
 #include <limits>
 #include <numeric>
 #include <optional>
@@ -13,6 +14,7 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/OpImplementation.h"
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/Support/raw_ostream.h"
@@ -27,6 +29,20 @@ static constexpr unsigned kDebugPrintMaxFormatFields = 8;
 static constexpr uint64_t kDebugPrintFifoBytes = 1024 * 1024;
 static constexpr uint64_t kDebugPrintFormatTlvBytes = 24;
 static constexpr uint64_t kDebugPrintFormatSlotBytes = 8;
+
+static std::optional<uint64_t> getLocalPrintTensorByteOffset(
+    const std::array<uint64_t, 4>& packedCoord, llvm::ArrayRef<int64_t> packedStride, uint64_t elementBytes)
+{
+    uint64_t elementOffset = 0;
+    uint64_t maxElementOffset = std::numeric_limits<uint32_t>::max() / elementBytes;
+    for (size_t index = 0; index < packedCoord.size(); ++index) {
+        uint64_t stride = static_cast<uint64_t>(packedStride[index]);
+        if (stride != 0 && packedCoord[index] > (maxElementOffset - elementOffset) / stride)
+            return std::nullopt;
+        elementOffset += packedCoord[index] * stride;
+    }
+    return elementOffset * elementBytes;
+}
 
 struct DebugPrintFormatInfo {
     unsigned fieldCount = 0;
@@ -952,7 +968,6 @@ mlir::LogicalResult CmpOp::verify()
         return emitOpError("must be nested inside a tla.vec.func region");
     if (!isSupportedCmpMode(getMode()))
         return emitOpError() << "mode must be one of lt, le, gt, ge, eq, ne, got \"" << getMode() << "\"";
-
     auto lhsType = getLhs().getType();
     mlir::Type lhsElementType = lhsType.getElementType();
     if (!isSupportedCmpElementType(lhsElementType))
@@ -1015,8 +1030,9 @@ mlir::LogicalResult PrintTensorOp::verify()
     auto tensorType = getValue().getType();
     auto ptr = tensorType.getPtr();
     auto elementType = ptr.getPointee();
-    if (ptr.getAddrspace() != AddressSpace::gm && ptr.getAddrspace() != AddressSpace::ub)
-        return emitOpError("requires a GM- or UB-resident tensor");
+    if (ptr.getAddrspace() != AddressSpace::gm && ptr.getAddrspace() != AddressSpace::ub &&
+        ptr.getAddrspace() != AddressSpace::l1 && ptr.getAddrspace() != AddressSpace::l0c)
+        return emitOpError("requires a GM-, UB-, L1-, or L0C-resident tensor");
     if (!elementType.isF16() && !elementType.isF32() && !isSupportedPrintTensorInteger(elementType)) {
         std::string diagnostic = "unsupported dtype " + printTensorDiagnosticTypeToken(elementType) +
                                  "; supported dtypes: " + kPrintTensorSupportedDtypes.str();
@@ -1028,17 +1044,107 @@ mlir::LogicalResult PrintTensorOp::verify()
         if (!hasEnclosingRegion<VectorOp>(getOperation()))
             return emitOpError("requires UB tensors to be nested in a tla.vector region");
     }
+    if (ptr.getAddrspace() == AddressSpace::l1) {
+        if (!hasEnclosingRegion<CubeOp>(getOperation()))
+            return emitOpError("requires L1 tensors to be nested in a tla.cube region");
+        auto layoutTag = tensorType.getLayout().getLayoutTag();
+        if (layoutTag != LayoutTag::zN && layoutTag != LayoutTag::nZ)
+            return emitOpError("requires an L1 zN or nZ tensor");
+        llvm::SmallVector<int64_t, 4> originShape;
+        llvm::SmallVector<int64_t, 4> packedShape;
+        llvm::SmallVector<int64_t, 4> packedStride;
+        llvm::SmallVector<int64_t, 4> coords;
+        if (failed(getIndexTreeLeavesForVerify(
+                getOperation(), tensorType.getLayout().getOrigin(), originShape, "tensor origin shape")) ||
+            failed(getIndexTreeLeavesForVerify(
+                getOperation(), tensorType.getLayout().getShape(), packedShape, "tensor packed shape")) ||
+            failed(getIndexTreeLeavesForVerify(
+                getOperation(), tensorType.getLayout().getStride(), packedStride, "tensor packed stride")) ||
+            failed(getIndexTreeLeavesForVerify(getOperation(), tensorType.getCoord(), coords, "tensor coordinates")))
+            return mlir::failure();
+        if (originShape.size() != 2 || packedShape.size() != 4 || packedStride.size() != 4 || coords.size() != 2)
+            return emitOpError("requires a static rank-2 L1 view");
+        int64_t rows = originShape[0];
+        int64_t cols = originShape[1];
+        int64_t row = coords[0];
+        int64_t col = coords[1];
+        uint64_t elementBytes = elementType.getIntOrFloatBitWidth() / 8;
+        uint64_t c0Elements = 32 / elementBytes;
+        if (rows < 1 || cols < 1 || row < 0 || col < 0 ||
+            llvm::any_of(packedShape, [](int64_t value) { return value <= 0; }) ||
+            llvm::any_of(packedStride, [](int64_t value) { return value < 0; }))
+            return emitOpError("requires static valid L1 shape, stride, and coordinates");
+        if (layoutTag == LayoutTag::zN) {
+            if (cols != static_cast<int64_t>(c0Elements))
+                return emitOpError("requires zN L1 logical C0 width ") << c0Elements << " elements";
+        } else {
+            if (rows != static_cast<int64_t>(c0Elements))
+                return emitOpError("requires nZ L1 logical C0 width ") << c0Elements << " elements";
+        }
+        std::array<uint64_t, 4> packedCoord = {
+            static_cast<uint64_t>(row % packedShape[0]), static_cast<uint64_t>(row / packedShape[0]),
+            static_cast<uint64_t>(col % packedShape[2]), static_cast<uint64_t>(col / packedShape[2])};
+        auto byteOffset = getLocalPrintTensorByteOffset(packedCoord, packedStride, elementBytes);
+        if (!byteOffset)
+            return emitOpError("requires an L1 byte offset representable as uint32");
+        if (std::gcd<uint64_t>(ptr.getAlignment(), *byteOffset) < 32)
+            return emitOpError("requires a statically proven 32-byte aligned L1 address");
+    }
+    if (ptr.getAddrspace() == AddressSpace::l0c) {
+        if (!hasEnclosingRegion<CubeOp>(getOperation()))
+            return emitOpError("requires L0C tensors to be nested in a tla.cube region");
+        if (tensorType.getLayout().getLayoutTag() != LayoutTag::L0Clayout)
+            return emitOpError("requires an L0C tensor with L0Clayout");
+        llvm::SmallVector<int64_t, 4> originShape;
+        llvm::SmallVector<int64_t, 4> packedShape;
+        llvm::SmallVector<int64_t, 4> packedStride;
+        llvm::SmallVector<int64_t, 4> coords;
+        if (failed(getIndexTreeLeavesForVerify(
+                getOperation(), tensorType.getLayout().getOrigin(), originShape, "tensor origin shape")) ||
+            failed(getIndexTreeLeavesForVerify(
+                getOperation(), tensorType.getLayout().getShape(), packedShape, "tensor packed shape")) ||
+            failed(getIndexTreeLeavesForVerify(
+                getOperation(), tensorType.getLayout().getStride(), packedStride, "tensor packed stride")) ||
+            failed(getIndexTreeLeavesForVerify(getOperation(), tensorType.getCoord(), coords, "tensor coordinates")))
+            return mlir::failure();
+        if (originShape.size() != 2 || packedShape.size() != 4 || packedStride.size() != 4 || coords.size() != 2)
+            return emitOpError("requires a static rank-2 L0C view");
+        int64_t rows = originShape[0];
+        int64_t cols = originShape[1];
+        int64_t row = coords[0];
+        int64_t col = coords[1];
+        if (rows < 16 || cols < 16 || row < 0 || col < 0 ||
+            llvm::any_of(packedShape, [](int64_t value) { return value <= 0; }) ||
+            llvm::any_of(packedStride, [](int64_t value) { return value < 0; }))
+            return emitOpError("requires a complete 16x16 L0C tile inside the logical shape");
+        if (row % 16 != 0 || col % 16 != 0)
+            return emitOpError("requires L0C coordinates aligned to a 16x16 fractal");
+        std::array<uint64_t, 4> packedCoord = {
+            static_cast<uint64_t>(row % packedShape[0]), static_cast<uint64_t>(row / packedShape[0]),
+            static_cast<uint64_t>(col % packedShape[2]), static_cast<uint64_t>(col / packedShape[2])};
+        uint64_t elementBytes = elementType.getIntOrFloatBitWidth() / 8;
+        auto byteOffset = getLocalPrintTensorByteOffset(packedCoord, packedStride, elementBytes);
+        if (!byteOffset)
+            return emitOpError("requires an L0C byte offset representable as uint32");
+        if (std::gcd<uint64_t>(ptr.getAlignment(), *byteOffset) < 32)
+            return emitOpError("requires a statically proven 32-byte aligned L0C address");
+    }
     if (getShape().size() < 1 || getShape().size() > 2)
         return emitOpError("shape must have rank 1 or 2");
     llvm::SmallVector<int64_t, 4> tensorShape;
-    if (failed(getIndexTreeLeavesForVerify(
-            getOperation(), tensorType.getLayout().getShape(), tensorShape, "tensor shape")))
-        return mlir::failure();
-    if (tensorShape.size() > 2) {
-        tensorShape.clear();
-        if (failed(getIndexTreeLeavesForVerify(
-                getOperation(), tensorType.getLayout().getOrigin(), tensorShape, "tensor logical shape")))
+    if (ptr.getAddrspace() == AddressSpace::l0c) {
+        tensorShape.assign({16, 16});
+    } else {
+        auto shapeType = ptr.getAddrspace() == AddressSpace::l1 ? tensorType.getLayout().getOrigin() :
+                                                                  tensorType.getLayout().getShape();
+        if (failed(getIndexTreeLeavesForVerify(getOperation(), shapeType, tensorShape, "tensor shape")))
             return mlir::failure();
+        if (tensorShape.size() > 2) {
+            tensorShape.clear();
+            if (failed(getIndexTreeLeavesForVerify(
+                    getOperation(), tensorType.getLayout().getOrigin(), tensorShape, "tensor logical shape")))
+                return mlir::failure();
+        }
     }
     if (getShape().size() != tensorShape.size())
         return emitOpError("shape must match the logical tensor shape");
@@ -1064,10 +1170,15 @@ mlir::LogicalResult PrintTensorOp::verify()
         if (!lengthAttr)
             return emitOpError("constant length must be an integer");
         int64_t length = lengthAttr.getInt();
-        if (length < 1 || length > kMaxFloat32Elements)
-            return emitOpError("length must be between 1 and 262112 elements");
+        int64_t maxLength = ptr.getAddrspace() == AddressSpace::l1  ? 8 :
+                            ptr.getAddrspace() == AddressSpace::l0c ? 256 :
+                                                                      kMaxFloat32Elements;
+        if (length < 1 || length > maxLength)
+            return emitOpError() << "length must be between 1 and " << maxLength << " elements";
         if (product && length > *product)
             return emitOpError("length must not exceed the tensor element count");
+        if (ptr.getAddrspace() == AddressSpace::l0c && length != 256)
+            return emitOpError("L0C tensor printing requires exactly 256 elements");
     }
     return mlir::success();
 }

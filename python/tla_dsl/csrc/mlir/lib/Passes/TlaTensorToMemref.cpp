@@ -882,7 +882,7 @@ SmallVector<Value, 24> buildCopyPayloadForRoute(
 static bool isAicTemplateRuntimeCall(StringRef name)
 {
     if (name == "mmad_float_float_float" || name == "mmad_half_half_float" || name == "mmad_bf16_bf16_float" ||
-        name == "mmad_int8_int8_int32")
+        name == "mmad_int8_int8_int32" || name == "tla_print_tensor_l1_f32")
         return true;
     // FP8 MMAD: one symbol per operand-format pairing (the two formats can mix).
     // The BC symbols are named after the C++ element type the wrapper

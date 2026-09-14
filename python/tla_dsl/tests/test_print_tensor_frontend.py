@@ -8,7 +8,6 @@ import inspect
 import pytest
 
 import catlass.tla as tla
-import catlass.runtime as runtime_mod
 
 
 def _host_tensor(
@@ -77,9 +76,7 @@ def _aiv_print_tensor_prefix(value: tla.Tensor) -> None:
 
 
 @tla.kernel
-def _aiv_print_tensor_runtime_length(
-    value: tla.Tensor, length: tla.Int32
-) -> None:
+def _aiv_print_tensor_runtime_length(value: tla.Tensor, length: tla.Int32) -> None:
     with tla.vector():
         tla.print(value, length)
 
@@ -113,6 +110,44 @@ def _aic_print_tensor(value: tla.Tensor) -> None:
         tla.print(value)
 
 
+def _l0c_print_kernel(
+    dtype: type[tla.Numeric],
+    length: int = 256,
+    *,
+    alignment: int = 512,
+):
+    @tla.kernel
+    def kernel(value: tla.Tensor) -> None:
+        ptr = tla.allocate(256, dtype, tla.AddressSpace.l0c, alignment)
+        local = tla.make_tensor_like(ptr, value, tla.arch.L0Clayout)
+        with tla.cube():
+            tla.print(local, length)
+
+    return kernel
+
+
+def _l1_print_kernel(
+    dtype: type[tla.Numeric] = tla.Float32,
+    *,
+    layout: object = tla.arch.zN,
+    length: int = 8,
+    alignment: int = 256,
+    vector: bool = False,
+):
+    @tla.kernel
+    def kernel(value: tla.Tensor) -> None:
+        ptr = tla.allocate(40, dtype, tla.AddressSpace.l1, alignment)
+        local = tla.make_tensor_like(ptr, value, layout)
+        if vector:
+            with tla.vector():
+                tla.print(local, length)
+        else:
+            with tla.cube():
+                tla.print(local, length)
+
+    return kernel
+
+
 @tla.kernel
 def _aiv_print_ub_tensor(value: tla.Tensor) -> None:
     with tla.vector():
@@ -120,9 +155,7 @@ def _aiv_print_ub_tensor(value: tla.Tensor) -> None:
 
 
 @tla.kernel
-def _aiv_print_dynamic_internal_ub_tensor(
-    value: tla.Tensor, dim: "index"
-) -> None:
+def _aiv_print_dynamic_internal_ub_tensor(value: tla.Tensor, dim: "index") -> None:
     ptr = tla.allocate(64, tla.Float32, tla.AddressSpace.ub, 256)
     shape = tla.make_shape(dim, 4)
     stride = tla.make_stride(4, 1)
@@ -257,6 +290,7 @@ def test_print_tensor_accepts_dynamic_control_flow(
 
     assert control_flow_op in mlir
     assert "tla.print_tensor" in mlir
+    assert "dynamic_execution" in mlir
     assert mlir.index(control_flow_op) < mlir.index("tla.print_tensor")
 
 
@@ -279,19 +313,27 @@ def test_print_tensor_requires_explicit_length_for_dynamic_shape() -> None:
 
 
 def test_print_tensor_accepts_aligned_aiv_ub_tensor() -> None:
-    pytest.skip("UB Host type samples removed with make_fake_tensor; Host is from_dlpack/GM only")
+    pytest.skip(
+        "UB Host type samples removed with make_fake_tensor; Host is from_dlpack/GM only"
+    )
 
 
 def test_print_tensor_accepts_aligned_aiv_ub_offset() -> None:
-    pytest.skip("UB Host type samples removed with make_fake_tensor; Host is from_dlpack/GM only")
+    pytest.skip(
+        "UB Host type samples removed with make_fake_tensor; Host is from_dlpack/GM only"
+    )
 
 
 def test_print_tensor_defers_ub_base_alignment_to_runtime() -> None:
-    pytest.skip("UB Host type samples removed with make_fake_tensor; Host is from_dlpack/GM only")
+    pytest.skip(
+        "UB Host type samples removed with make_fake_tensor; Host is from_dlpack/GM only"
+    )
 
 
 def test_print_tensor_defers_ub_offset_alignment_to_runtime() -> None:
-    pytest.skip("UB Host type samples removed with make_fake_tensor; Host is from_dlpack/GM only")
+    pytest.skip(
+        "UB Host type samples removed with make_fake_tensor; Host is from_dlpack/GM only"
+    )
 
 
 @pytest.mark.parametrize(
@@ -305,9 +347,7 @@ def test_print_tensor_defers_ub_offset_alignment_to_runtime() -> None:
     ),
 )
 def test_print_tensor_accepts_generic_layouts(layout: object) -> None:
-    mlir = _aiv_print_tensor_prefix.dump_mlir(
-        type_args=(_host_packed_tensor(layout),)
-    )
+    mlir = _aiv_print_tensor_prefix.dump_mlir(type_args=(_host_packed_tensor(layout),))
 
     assert "tla.print_tensor" in mlir
     assert "shape = [32, 32]" in mlir or "shape = array<i64: 32, 32>" in mlir
@@ -331,9 +371,7 @@ def test_print_tensor_accepts_column_major_layout() -> None:
 
 @pytest.mark.parametrize(
     ("tensor", "match"),
-    (
-        (_host_tensor((262_113,)), "explicit length"),
-    ),
+    ((_host_tensor((262_113,)), "explicit length"),),
 )
 def test_print_tensor_rejects_unsupported_tensor_contract(
     tensor: tla.Tensor, match: str
@@ -369,16 +407,16 @@ def test_print_tensor_rejects_host_call() -> None:
 
 
 def test_print_tensor_accepts_dynamic_aiv_ub_shape_at_aligned_base() -> None:
-    pytest.skip("UB Host type samples removed with make_fake_tensor; Host is from_dlpack/GM only")
+    pytest.skip(
+        "UB Host type samples removed with make_fake_tensor; Host is from_dlpack/GM only"
+    )
 
 
 def test_print_tensor_accepts_dynamic_internal_ub_shape() -> None:
     tensor = _host_tensor()
     tensor.mark_compact_shape_dynamic(0)
 
-    mlir = _aiv_print_dynamic_internal_ub_tensor.dump_mlir(
-        type_args=(tensor, 4)
-    )
+    mlir = _aiv_print_dynamic_internal_ub_tensor.dump_mlir(type_args=(tensor, 4))
 
     assert "tla.make_shape %" in mlir
     assert "!tla.shape<?,4>" in mlir
@@ -417,15 +455,34 @@ def test_print_tensor_rejects_length_above_tensor_size() -> None:
         kernel.dump_mlir(type_args=(_host_tensor((4,)),))
 
 
-def test_print_tensor_accepts_exact_fifo_capacity() -> None:
-    @tla.kernel
-    def kernel(value: tla.Tensor) -> None:
-        with tla.vector():
-            tla.print(value, 262_112)
-
-    mlir = kernel.dump_mlir(type_args=(_host_tensor((262_112,)),))
-    assert "arith.constant 262112 : i64" in mlir
-    assert "length = %" in mlir
+@pytest.mark.parametrize(
+    ("kernel", "tensor", "match"),
+    (
+        (
+            _l0c_print_kernel(tla.Float32, alignment=16),
+            _host_tensor((16, 16)),
+            "32-byte aligned L0C address",
+        ),
+        (_l0c_print_kernel(tla.Float32), _host_tensor((8, 16)), "complete 16x16"),
+        (_l0c_print_kernel(tla.Float32, 128), _host_tensor((16, 16)), "exactly 256"),
+        (_l1_print_kernel(vector=True), _host_tensor((4, 8)), "requires AIC placement"),
+        (
+            _l1_print_kernel(layout=tla.arch.RowMajor),
+            _host_tensor((4, 8)),
+            "requires a zN or nZ layout",
+        ),
+        (_l1_print_kernel(), _host_tensor((4, 4)), r"logical shape \[M, 8\]"),
+        (
+            _l1_print_kernel(alignment=4),
+            _host_tensor((4, 8)),
+            "32-byte aligned L1 address",
+        ),
+        (_l1_print_kernel(length=9), _host_tensor((4, 8)), "between 1 and 8 elements"),
+    ),
+)
+def test_print_tensor_rejects_invalid_local_contract(kernel, tensor, match) -> None:
+    with pytest.raises(tla.TlaCoreAPIError, match=match):
+        kernel.dump_mlir(type_args=(tensor,))
 
 
 def test_print_tensor_rejects_keyword_argument() -> None:

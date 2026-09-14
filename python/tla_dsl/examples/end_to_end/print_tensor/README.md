@@ -59,18 +59,33 @@ CATLASS_DSL_FORCE_RECOMPILE=1 python print_tensor.py --run --storage ub --case a
 CATLASS_DSL_FORCE_RECOMPILE=1 python print_tensor.py --run --storage ub --case dynamic --device 0 --block-num 1
 ```
 
+Native AIC L1 printing uses CANN's C310 debug bus and opens the required
+DebugTunnel automatically. The battery covers both layouts, all dtypes,
+aligned offsets, repeated calls, cache reuse, and a two-core block-dependent
+case. The host state follows CANN 9.1's private ABI; other releases require
+separate validation.
+
+Run it with `--storage l1 --layout zn --arch-scope aic.c310`.
+
+Native AIC L0C printing dumps one 16x16 CO1 view. `float32` and `int32` are
+native accumulator types; other dtypes are byte-preserving views. It shares
+L1's DebugTunnel/FIFO envelope, while CANN performs the transfer without a
+debug-bus address.
+
+Run it with `--storage l0c --dtype f32 --arch-scope aic.c310`.
+
 ## Support matrix
 
 | Property | Supported | Rejected |
 | --- | --- | --- |
-| Core scope | AIV via `tla.vector()` (inferred from IR) | Host `--core-type` / `compile(core_type=...)` |
-| Launch grid | One block | Multi-block launches |
-| Storage | GM; 32-byte-aligned effective UB address on AIV | L1, L0, or host invocation |
-| Dtype | `float32` | Every other dtype |
+| Core scope | AIV for GM/UB; AIC for L1/L0C (inferred from IR) | Host `--core-type` / `compile(core_type=...)` |
+| Launch grid | One or more blocks for static print sites | Multi-block dynamic-control-flow example |
+| Storage | GM; 32-byte-aligned effective UB address; aligned A1 L1 address; aligned CO1 L0C fractal | L0A/L0B or host invocation |
+| Dtype | GM/UB/L1/L0C: `f16`, `f32`, `i8`, `i16`, `i32`, `u8`, `u16`, `u32` | Other dtypes |
 | Shape | Rank-1/rank-2 static or runtime-shaped tensors | Empty, rank above 2, or mismatched runtime metadata |
 | Length | Static or integer-SSA 1–262,112 element prefix, no greater than runtime tensor size | Zero, negative, over 262,112, or over tensor size |
 | Dynamic control flow | GM print sites under runtime `if` and `tla.range` | multi-block or dynamic-shape variants of this example case |
-| Layout | Row-major, column-major, padded/strided, and packed TLA layouts | Layouts outside the TLA layout enum |
+| Layout | GM/UB TLA layouts; L1 `zN [M,C0]` and `nZ [C0,N]`, where C0 is 32 bytes; one aligned 16x16 `L0Clayout` tile | Other L1/L0C layouts or partial L0C tiles |
 | Baseline | Ascend950PR, CANN 9.1.0 or later | Other device/CANN combinations are not declared |
 
 `tla.print(value, length, /)` derives dtype and the concrete runtime shape from
@@ -98,4 +113,6 @@ but does not gather through strides or reorder packed storage. Runtime guards
 reject invalid counts and misaligned effective addresses by emitting no native
 record, which the host reports as an execution error. `tla.print` does not
 insert producer synchronization; callers must complete writes to UB before
-printing.
+printing. L1 requires the MTE2-to-MTE1 handoff; L0C requires MMAD-to-FIX.
+CANN publishes A1 directly and converts one CO1 fractal to ND. L0C tile
+coordinates remain relative to the root accumulator and its stride.

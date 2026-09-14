@@ -1,0 +1,51 @@
+// RUN: %tla_compile %s -o - | %filecheck %s --check-prefixes=COMMON,F32
+// RUN: sed 's/f32/f16/g' %s | %tla_compile - -o - | %filecheck %s --check-prefix=F16
+// RUN: sed 's/f32/i8/g' %s | %tla_compile - -o - | %filecheck %s --check-prefix=I8
+// RUN: sed 's/f32/i16/g' %s | %tla_compile - -o - | %filecheck %s --check-prefix=I16
+// RUN: sed 's/f32/i32/g' %s | %tla_compile - -o - | %filecheck %s --check-prefix=I32
+// RUN: sed 's/f32/ui8/g' %s | %tla_compile - -o - | %filecheck %s --check-prefix=U8
+// RUN: sed 's/f32/ui16/g' %s | %tla_compile - -o - | %filecheck %s --check-prefix=U16
+// RUN: sed 's/f32/ui32/g' %s | %tla_compile - -o - | %filecheck %s --check-prefix=U32
+
+module {
+  tla.func @print_tensor_l0c(%tag: i32) {
+    %ptr = "tla.alloc_ptr"() <{size_bytes = 4096 : i64}> : () -> !tla.ptr<f32, l0c, 512>
+    %shape = "tla.make_shape"() : () -> !tla.shape<(16,2),(16,2)>
+    %stride = "tla.make_stride"() : () -> !tla.stride<(16,256),(1,512)>
+    %origin = "tla.make_shape"() : () -> !tla.shape<32,32>
+    %layout = "tla.make_layout"(%shape, %stride, %origin) <{layoutTag = #tla.layout_tag<L0Clayout>}> : (!tla.shape<(16,2),(16,2)>, !tla.stride<(16,256),(1,512)>, !tla.shape<32,32>) -> !tla.layout<!tla.shape<(16,2),(16,2)>, !tla.stride<(16,256),(1,512)>, !tla.shape<32,32>, L0Clayout>
+    %coord = "tla.make_coord"() : () -> !tla.coord<16,0>
+    %value = "tla.make_tensor"(%ptr, %layout, %coord) : (!tla.ptr<f32, l0c, 512>, !tla.layout<!tla.shape<(16,2),(16,2)>, !tla.stride<(16,256),(1,512)>, !tla.shape<32,32>, L0Clayout>, !tla.coord<16,0>) -> !tla.tensor<!tla.layout<!tla.shape<(16,2),(16,2)>, !tla.stride<(16,256),(1,512)>, !tla.shape<32,32>, L0Clayout>, !tla.coord<16,0>, !tla.ptr<f32, l0c, 512>>
+    %length = arith.constant 256 : i64
+    "tla.cube"() ({
+      tla.print_tensor %value length = %length shape = [16, 16] : !tla.tensor<!tla.layout<!tla.shape<(16,2),(16,2)>, !tla.stride<(16,256),(1,512)>, !tla.shape<32,32>, L0Clayout>, !tla.coord<16,0>, !tla.ptr<f32, l0c, 512>>, i64
+    }) : () -> ()
+    "tla.vector"() ({
+      %one = arith.constant 1 : i32
+      %unused = arith.addi %tag, %one : i32
+    }) : () -> ()
+    tla.return
+  }
+}
+
+// COMMON: func.func private @tla_print_tensor_l0c_f32(i64, memref<?xf32, {{.*}}cc{{.*}}, i64, i64, i64, i64)
+// COMMON-LABEL: func.func @print_tensor_l0c_mix_aic(
+// COMMON-SAME: %[[WORKSPACE:arg[0-9]+]]: i64 {{.*}}tla.print_tensor.workspace
+// COMMON-SAME: %[[STATE:arg[0-9]+]]: i64 {{.*}}tla.debug_tunnel.state
+// COMMON-COUNT-1: call @_mlir_ciface_init_debug(%[[STATE]])
+// COMMON-NOT: memref.extract_aligned_pointer_as_index
+// F32: call @tla_print_tensor_l0c_f32
+// F16: call @tla_print_tensor_l0c_f16
+// I8: call @tla_print_tensor_l0c_i8
+// I16: call @tla_print_tensor_l0c_i16
+// I32: call @tla_print_tensor_l0c_i32
+// U8: call @tla_print_tensor_l0c_u8
+// U16: call @tla_print_tensor_l0c_u16
+// U32: call @tla_print_tensor_l0c_u32
+// COMMON-COUNT-1: call @_mlir_ciface_finish_debug(%[[STATE]])
+// COMMON-LABEL: func.func @print_tensor_l0c_mix_aiv(
+// COMMON-SAME: %{{arg[0-9]+}}: i64 {{.*}}tla.print_tensor.workspace
+// COMMON-SAME: %{{arg[0-9]+}}: i64 {{.*}}tla.debug_tunnel.state
+// COMMON-NOT: _mlir_ciface_init_debug
+// COMMON-NOT: _mlir_ciface_finish_debug
+// COMMON-NOT: tla.print_tensor

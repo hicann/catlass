@@ -28,8 +28,8 @@
 # python/tla_dsl/examples/end_to_end/scalar_arg_alignment (scalar_arg_alignment.py).
 # python/tla_dsl/examples/end_to_end/dataclass_arg (dataclass_arg.py: stdlib
 # @dataclass instance unpacked into scalar kernel args).
-# python/tla_dsl/examples/end_to_end/print_tensor (print_tensor.py: all eight
-# supported GM/UB dtypes plus multi-block and multi-call cases).
+# python/tla_dsl/examples/end_to_end/print_tensor (print_tensor.py: GM/UB/L1/L0C
+# tensor dumps plus multi-block and multi-call cases).
 # python/tla_dsl/examples/end_to_end/basic_mmad_epilogue (matmul_add.py, matmul_add_ub.py,
 # matmul_bias.py, matmul_leaky_relu.py, matmul_sigmoid.py, matmul_silu.py, matmul_tanh.py).
 # python/tla_dsl/examples/end_to_end/flash_attention_infer (flash_attention_infer.py).
@@ -185,7 +185,7 @@ Run end-to-end validation for:
   - scalar_arg_alignment (scalar_arg_alignment.py: tensor-i16-tensor host ABI)
   - dataclass_arg (dataclass_arg.py: stdlib @dataclass instance unpacked into
     per-field scalar kernel args; constexpr + tensor + scalar fields)
-  - print_tensor (print_tensor.py: all supported GM/UB dtypes with AIV/AIC
+  - print_tensor (print_tensor.py: supported GM/UB/L1/L0C dumps with AIV/AIC
     multi-block and multi-call coverage)
   - basic_mmad_epilogue (matmul_add.py, ...: CV fused examples)
   - flash_attention_infer (flash_attention_infer.py)

@@ -46,9 +46,7 @@ def _load_debug_print_example(*, mixed: bool = False):
             dependency_spec.loader.exec_module(dependency)
         filename = "debug_print_mixed.py" if mixed else "debug_print.py"
         path = example_dir / filename
-        spec = importlib.util.spec_from_file_location(
-            f"{path.stem}_example", path
-        )
+        spec = importlib.util.spec_from_file_location(f"{path.stem}_example", path)
         assert spec and spec.loader
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
@@ -163,8 +161,6 @@ def test_print_tensor_output_formats_ub_physical_copy_shape() -> None:
     )
 
 
-
-
 @pytest.mark.parametrize(
     ("case", "kernel_name"),
     (
@@ -175,14 +171,12 @@ def test_print_tensor_output_formats_ub_physical_copy_shape() -> None:
 )
 def test_print_tensor_example_selects_ub_kernel(case, kernel_name) -> None:
     example = _load_print_tensor_example()
-    args = types.SimpleNamespace(
-        storage="ub", case=case, calls=1
-    )
+    args = types.SimpleNamespace(storage="ub", case=case, calls=1)
 
     assert example._kernel(args).fn.__name__ == kernel_name
 
 
-def test_prepare_hivmc_input_selects_aic_print_tensor_helper(
+def test_prepare_hivmc_input_uses_aic_aggregate_print_tensor_helper(
     require_bc, tmp_path
 ) -> None:
     mlir_path = tmp_path / "lowered.mlir"
@@ -191,62 +185,49 @@ def test_prepare_hivmc_input_selects_aic_print_tensor_helper(
     )
     # BC is compiled by the require_bc fixture into tests/.cache (see conftest.py).
     template_bc = execution._get_bc_paths("aic")
-    helper_bc = execution._get_bc_paths(
-        "aic", bc_type="print_tensor", core_type="aic"
-    )
 
     compiler_input, selected = execution._create_stamped_hivmc_input(
         mlir_path,
-        execution.TlaCompileOption(
-            kernel_mode="aic", arch_scope="aic.c310"
-        ),
+        execution.TlaCompileOption(kernel_mode="aic", arch_scope="aic.c310"),
     )
 
     assert compiler_input != mlir_path
-    assert selected == f"{template_bc},{helper_bc}"
+    assert selected == template_bc
     assert "hivm.aic_bitcode" in compiler_input.read_text()
 
 
-def test_prepare_hivmc_input_rejects_outdated_print_tensor_helper(
+def test_prepare_hivmc_input_rejects_outdated_print_tensor_aggregate(
     require_bc, monkeypatch, tmp_path
 ) -> None:
     mlir_path = tmp_path / "lowered.mlir"
     mlir_path.write_text(
         "module { func.func @kernel(%workspace: i64 {tla.print_tensor.workspace}) }"
     )
-    template_bc = execution._get_bc_paths("aiv")
-    # Simulate an outdated helper by stripping the ABI marker from the real
-    # precompiled print_tensor bitcode.
-    helper_bc = Path(
-        execution._get_bc_paths("aiv", bc_type="print_tensor", core_type="aiv")
-    )
-    stale_helper = tmp_path / "print_tensor.aiv.c310.bc"
-    stale_helper.write_bytes(
-        helper_bc.read_bytes().replace(execution._PRINT_TENSOR_HELPER_ABI_MARKER, b"")
+    template_bc = Path(execution._get_bc_paths("aiv"))
+    stale_aggregate = tmp_path / "meta_op.aiv.c310.bc"
+    stale_aggregate.write_bytes(
+        template_bc.read_bytes().replace(
+            execution._PRINT_TENSOR_HELPER_ABI_MARKER, b""
+        )
     )
 
-    def override_bc_paths(kernel_mode, *, bc_type="meta_op", core_type=None, **kw):
-        return str(stale_helper.resolve()) if bc_type == "print_tensor" else template_bc
+    def override_bc_paths(kernel_mode, **_kwargs):
+        return str(stale_aggregate.resolve())
 
     monkeypatch.setattr(execution, "_get_bc_paths", override_bc_paths)
 
     with pytest.raises(execution.TlaRuntimeUnavailableError, match="ABI marker"):
         execution._create_stamped_hivmc_input(
             mlir_path,
-            execution.TlaCompileOption(
-                kernel_mode="aiv", arch_scope="aiv.c310"
-            ),
+            execution.TlaCompileOption(kernel_mode="aiv", arch_scope="aiv.c310"),
         )
 
 
 @pytest.mark.parametrize(
     "print_split",
-    (
-        "aic",
-        "aiv",
-    ),
+    ("aic", "aiv"),
 )
-def test_prepare_hivmc_input_selects_mixed_split_print_tensor_helper(
+def test_prepare_hivmc_input_uses_mixed_split_aggregate_print_tensor_helper(
     require_bc,
     tmp_path,
     print_split,
@@ -266,16 +247,13 @@ def test_prepare_hivmc_input_selects_mixed_split_print_tensor_helper(
         "}\n"
     )
     template_bc = execution._get_bc_paths("mix")
-    helper_bc = execution._get_bc_paths(
-        "mix", bc_type="print_tensor", core_type=print_split
-    )
 
     _, selected = execution._create_stamped_hivmc_input(
         mlir_path,
         execution.TlaCompileOption(kernel_mode="mix"),
     )
 
-    assert selected == f"{template_bc},{helper_bc}"
+    assert selected == template_bc
 
 
 def test_debug_print_output_accepts_unordered_f32_records_from_distinct_blocks() -> (
@@ -520,8 +498,7 @@ def test_debug_print_mixed_exposes_full_scalar_matrix() -> None:
 @pytest.mark.parametrize(
     ("print_region", "dtype", "expected_value", "output"),
     (
-        ("cube", "u32", "4294967295",
-         "TLA printf: core=0 block=0 x=4294967295"),
+        ("cube", "u32", "4294967295", "TLA printf: core=0 block=0 x=4294967295"),
         (
             "vector",
             "i8",
@@ -606,8 +583,6 @@ def test_debug_print_mixed_output_rejects_invalid_native_frames(
 
     with pytest.raises(RuntimeError, match="expected"):
         example._verify_mixed_debug_output(output, print_region=print_region)
-
-
 
 
 @pytest.mark.parametrize(
@@ -882,9 +857,7 @@ def test_force_recompile_refreshes_launched_artifact_in_memory_cache(
     monkeypatch.setattr(
         base_dsl_mod.BaseDSL,
         "_lower",
-        lambda *_args, **_kwargs: _FakeLowered(
-            tlair_mlir, module=lowered_module
-        ),
+        lambda *_args, **_kwargs: _FakeLowered(tlair_mlir, module=lowered_module),
     )
     monkeypatch.setattr(execution, "resolve_bridge_extension_path", lambda: None)
     monkeypatch.setattr(execution, "_resolve_hivmc_a5", lambda: hivm_compile)
@@ -985,9 +958,7 @@ def test_force_recompile_refreshes_launched_artifact_in_memory_cache(
     assert launched_functions == [201, 202]
 
 
-def test_compile_rejects_invalid_kernel_abi_before_hivmc(
-    monkeypatch, tmp_path
-) -> None:
+def test_compile_rejects_invalid_kernel_abi_before_hivmc(monkeypatch, tmp_path) -> None:
     tlair_mlir = "module { tla.func @zero_arg_kernel() { tla.return } }"
     hivmc = tmp_path / "hivmc-a5"
     hivmc.write_text("")
@@ -1346,7 +1317,9 @@ def test_lower_tlair_module_to_mlir_ignores_malformed_diagnostic_elements(
     )
 
 
-def test_typed_bridge_preserves_diagnostics_on_runtime_error(monkeypatch, tmp_path) -> None:
+def test_typed_bridge_preserves_diagnostics_on_runtime_error(
+    monkeypatch, tmp_path
+) -> None:
     diagnostic = compiler_bridge.BridgeDiagnostic(
         severity="error",
         message="invalid operation",
@@ -1854,6 +1827,8 @@ def _launch_and_capture(
         uses_scalar_print=launch["uses_scalar_print"],
         uses_tensor_print=launch["uses_tensor_print"],
         is_mixed=launch["is_mixed"],
+        print_tensor_position=launch.get("print_tensor_position"),
+        device_id=launch.get("device_id"),
     )
 
 
@@ -1875,7 +1850,9 @@ def test_print_tensor_workspace_preserves_user_argument_and_uses_abi_marker(
     assert plan.uses_tensor_print is True
 
 
-def _install_fake_launch_context(monkeypatch, *, device: int = 7, stream: int = 99) -> None:
+def _install_fake_launch_context(
+    monkeypatch, *, device: int = 7, stream: int = 99
+) -> None:
     from types import ModuleType
 
     from catlass.base_dsl.runtime import ascend_stream_adapter as stream_mod
@@ -1906,9 +1883,7 @@ def _execute_kernel_with_new_context(
 
 def _install_print_tensor_loader(monkeypatch, output: str) -> None:
     _install_fake_launch_context(monkeypatch, device=1, stream=99)
-    monkeypatch.setattr(
-        execution, "load_binary", lambda **kwargs: (11, 12)
-    )
+    monkeypatch.setattr(execution, "load_binary", lambda **kwargs: (11, 12))
 
     def _launch_kernel(**kwargs) -> None:
         assert kwargs["uses_tensor_print"] is True
@@ -2314,7 +2289,7 @@ def test_mixed_aiv_print_tensor_capacity_counts_both_subblocks(
         )
 
 
-def test_print_tensor_capacity_allows_multiple_static_calls_within_each_core_record(
+def test_print_tensor_capacity_rejects_static_calls_exceeding_each_core_record(
     tmp_path,
 ) -> None:
     artifact = _two_print_tensor_artifact(tmp_path)
@@ -2330,14 +2305,13 @@ def test_print_tensor_capacity_allows_multiple_static_calls_within_each_core_rec
         ),
     )
 
-    plan = _launch_and_capture(
-        artifact=artifact,
-        compile_option=execution.TlaCompileOption(),
-        launch_args=[_TypedPointer(0x1000)],
-        block_num=1,
-    )
-
-    assert plan.block_num == 1
+    with pytest.raises(execution.TlaExecutionError, match="statically executed"):
+        _launch_and_capture(
+            artifact=artifact,
+            compile_option=execution.TlaCompileOption(),
+            launch_args=[_TypedPointer(0x1000)],
+            block_num=1,
+        )
 
 
 def test_print_tensor_capacity_allows_partial_dynamic_output(
@@ -2357,12 +2331,39 @@ def test_print_tensor_capacity_allows_partial_dynamic_output(
     )
     assert [record.count for record in metadata] == [None, 2]
 
-    plan = _launch_and_capture(
-        artifact=artifact,
-        compile_option=execution.TlaCompileOption(),
-        launch_args=[_TypedPointer(0x1000)],
-        block_num=1,
+    with pytest.warns(RuntimeWarning, match="cannot be validated"):
+        plan = _launch_and_capture(
+            artifact=artifact,
+            compile_option=execution.TlaCompileOption(),
+            launch_args=[_TypedPointer(0x1000)],
+            block_num=1,
+        )
+
+    assert plan.block_num == 1
+
+
+def test_print_tensor_capacity_warns_for_dynamic_control_flow(tmp_path) -> None:
+    artifact = _two_print_tensor_artifact(tmp_path)
+    artifact = _replace_prepared_test_compiled_function(
+        artifact,
+        tlair_mlir=artifact.artifacts.MLIR.replace(
+            "shape = array<i64: 2, 2>",
+            "shape = array<i64: 2, 2>, dynamic_execution",
+            1,
+        ),
     )
+    metadata = execution._print_tensor_static_metadata_records(
+        artifact.artifacts.MLIR, entrypoint=artifact.entrypoint
+    )
+    assert metadata[0].dynamic_execution is True
+
+    with pytest.warns(RuntimeWarning, match="runtime control flow"):
+        plan = _launch_and_capture(
+            artifact=artifact,
+            compile_option=execution.TlaCompileOption(),
+            launch_args=[_TypedPointer(0x1000)],
+            block_num=1,
+        )
 
     assert plan.block_num == 1
 
@@ -2385,7 +2386,11 @@ def test_print_tensor_metadata_reads_generic_tlair_shape() -> None:
 
     assert execution._print_tensor_static_metadata_records(mlir) == (
         execution._PrintTensorMetadata(
-            shape=(2, 3), count=None, dtype="f32", position="GM"
+            shape=(2, 3),
+            count=None,
+            dtype="f32",
+            position="GM",
+            dynamic_execution=True,
         ),
     )
 
@@ -2401,7 +2406,11 @@ def test_print_tensor_metadata_reads_ub_storage() -> None:
 
     assert execution._print_tensor_static_metadata_records(mlir) == (
         execution._PrintTensorMetadata(
-            shape=(2, 3), count=None, dtype="f32", position="UB"
+            shape=(2, 3),
+            count=None,
+            dtype="f32",
+            position="UB",
+            dynamic_execution=True,
         ),
     )
 
@@ -2417,7 +2426,11 @@ def test_print_tensor_metadata_reads_dynamic_shape_pattern() -> None:
 
     assert execution._print_tensor_static_metadata_records(mlir) == (
         execution._PrintTensorMetadata(
-            shape=(-1, 4), count=None, dtype="f32", position="GM"
+            shape=(-1, 4),
+            count=None,
+            dtype="f32",
+            position="GM",
+            dynamic_execution=True,
         ),
     )
 
@@ -2777,6 +2790,28 @@ def test_print_tensor_workspace_abi_manifest_requires_current_revision(
     assert execution._cache_manifest_has_current_print_tensor_workspace_abi(manifest)
 
 
+@pytest.mark.parametrize("tunnel_revision", [None, "debug-tunnel-state-i64-v0"])
+def test_combined_workspace_abi_manifest_requires_current_tunnel_revision(
+    tunnel_revision,
+) -> None:
+    manifest = {
+        "debug_print_workspace_abi_revision": (
+            execution._DEBUG_PRINT_WORKSPACE_ABI_REVISION
+        ),
+        "print_tensor_workspace_abi_revision": (
+            execution._PRINT_TENSOR_WORKSPACE_ABI_REVISION
+        ),
+    }
+    if tunnel_revision is not None:
+        manifest["debug_tunnel_state_abi_revision"] = tunnel_revision
+
+    assert not execution._cache_manifest_has_current_workspace_abis(manifest)
+    manifest["debug_tunnel_state_abi_revision"] = (
+        execution._DEBUG_TUNNEL_STATE_ABI_REVISION
+    )
+    assert execution._cache_manifest_has_current_workspace_abis(manifest)
+
+
 def _kernel_abi(
     *arguments: tuple[str, str, str, int, int, int],
     total_size: int,
@@ -2866,7 +2901,7 @@ def test_online_cache_key_serializes_kernel_abi_version(monkeypatch, tmp_path) -
     )
 
     assert len(payloads) == 1
-    assert payloads[0]["cache_abi_version"] == 5
+    assert payloads[0]["cache_abi_version"] == 8
 
 
 @pytest.mark.parametrize(
@@ -3266,9 +3301,7 @@ def test_compiler_produced_kernel_abi_is_validated_before_artifact() -> None:
     layout = _kernel_abi(total_size=0, entrypoint="other")
 
     with pytest.raises(execution.TlaKernelCompileError, match="does not match"):
-        execution._prepare_compiled_abi_packer(
-            layout, expected_entrypoint="kernel"
-        )
+        execution._prepare_compiled_abi_packer(layout, expected_entrypoint="kernel")
 
 
 def test_corrupt_manifest_layout_is_compile_error() -> None:
@@ -3561,6 +3594,8 @@ def test_execute_kernel_uses_typed_launch_payload(monkeypatch, tmp_path) -> None
             "uses_scalar_print": False,
             "uses_tensor_print": False,
             "is_mixed": False,
+            "print_tensor_position": None,
+            "device_id": 7,
         },
     ) in launches
 
@@ -3589,10 +3624,14 @@ def test_execute_kernel_conveys_scalar_print_intent_to_loader(
             "function_handle": 12,
             "stream": 99,
             "block_num": 1,
-            "payload": struct.pack("<QQ", 7, int.from_bytes(b"TLA_PRNT", byteorder="big")),
+            "payload": struct.pack(
+                "<QQ", 7, int.from_bytes(b"TLA_PRNT", byteorder="big")
+            ),
             "uses_scalar_print": True,
             "uses_tensor_print": False,
             "is_mixed": False,
+            "print_tensor_position": None,
+            "device_id": 7,
         }
     ]
 
@@ -3645,6 +3684,8 @@ def test_execute_kernel_uses_empty_payload_for_zero_arg(monkeypatch, tmp_path) -
             "uses_scalar_print": False,
             "uses_tensor_print": False,
             "is_mixed": False,
+            "print_tensor_position": None,
+            "device_id": 7,
         },
     ) in launches
 
@@ -3705,9 +3746,7 @@ def _runtime_cached_compiled_function(
     )
 
 
-def test_jit_compiled_function_owns_one_lazy_executor(
-    monkeypatch, tmp_path
-) -> None:
+def test_jit_compiled_function_owns_one_lazy_executor(monkeypatch, tmp_path) -> None:
     loads: list[tuple[str, str]] = []
     _install_fake_launch_context(monkeypatch, device=4, stream=90)
 
@@ -3799,3 +3838,33 @@ def test_compiled_function_queries_current_stream_for_each_launch(
 
     assert len(loads) == 1
     assert launches == [41, 42]
+
+
+def test_compiled_function_rejects_launch_after_device_switch(
+    monkeypatch, tmp_path
+) -> None:
+    from catlass.base_dsl.runtime import ascend_stream_adapter as stream_mod
+
+    devices = [3]
+    monkeypatch.setattr(stream_mod, "current_device", lambda: devices[0])
+    monkeypatch.setattr(stream_mod, "current_stream", lambda _device: 99)
+    monkeypatch.setattr(execution, "load_acl", lambda: types.ModuleType("fake_acl"))
+    monkeypatch.setattr(execution, "load_binary", lambda **_kwargs: (101, 202))
+    launches: list[int] = []
+    monkeypatch.setattr(
+        execution,
+        "launch_kernel",
+        lambda **_kwargs: launches.append(1),
+    )
+
+    compiled = _runtime_cached_compiled_function(tmp_path, cache_key="device-affinity")
+    compiled()
+    devices[0] = 4
+
+    with pytest.raises(
+        execution.TlaUnsupportedAbiError,
+        match="loaded on device 3, but the current device is 4",
+    ):
+        compiled()
+
+    assert launches == [1]

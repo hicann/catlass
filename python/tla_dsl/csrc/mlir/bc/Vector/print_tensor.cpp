@@ -75,7 +75,7 @@ template <typename ElementType>
 
 extern "C" {
 
-__attribute__((used, section(".tla_print_tensor_abi"))) const char __tla_print_tensor_abi[] = "__tla_print_tensor_abi";
+__attribute__((used, section(".tla_print_tensor_abi"))) const char tla_print_tensor_abi[] = "tla_print_tensor_abi";
 
 #if ((defined(__NPU_ARCH__) && __NPU_ARCH__ == 3510) || (defined(CATLASS_ARCH) && CATLASS_ARCH == 3510))
 #define TLA_PRINT_TENSOR_WRAPPER(SUFFIX, TYPE)                                                         \

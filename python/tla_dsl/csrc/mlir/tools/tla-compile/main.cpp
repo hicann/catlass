@@ -2,6 +2,7 @@
 #include "Tools/CompilePipeline.h"
 
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/DialectRegistry.h"
 #include "mlir/Parser/Parser.h"
 #include "mlir/Pass/PassManager.h"
@@ -75,6 +76,7 @@ int main(int argc, char** argv)
 
     llvm::SourceMgr sourceMgr;
     sourceMgr.AddNewSourceBuffer(std::move(file), llvm::SMLoc());
+    SourceMgrDiagnosticHandler diagnosticHandler(sourceMgr, &context);
     ParserConfig parseConfig(&context);
     OwningOpRef<ModuleOp> moduleRef = parseSourceFile<ModuleOp>(sourceMgr, parseConfig);
     if (!moduleRef) {

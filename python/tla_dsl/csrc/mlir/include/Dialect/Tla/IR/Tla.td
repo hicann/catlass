@@ -1215,21 +1215,22 @@ def Tla_CallExternOp : Tla_Op<"call_extern", [MemoryEffects<[MemRead, MemWrite]>
 }
 
 def Tla_PrintTensorOp : Tla_Op<"print_tensor", [MemoryEffects<[MemWrite]>]> {
-  let summary = "Print a prefix of one contiguous supported GM or UB tensor";
+  let summary = "Print a supported tensor prefix from GM, UB, L1, or L0C";
   let description = [{
     Side-effecting native tensor print marker. The Python API accepts rank-1 or
-    rank-2 GM or UB tensors with element type f16, f32, i8, i16, i32, u8, u16,
-    or u32. GM tensors are supported in a single AIC or AIV region; UB tensors
-    are supported in a single AIV region. Values are read as a contiguous
+    rank-2 tensors with element type f16, f32, i8, i16, i32, u8, u16, or u32.
+    GM is supported in AIC and AIV regions, UB in AIV regions, and the supported
+    zN/nZ L1 and L0C layouts in AIC regions. Values are read as a contiguous
     physical prefix from the effective tensor address; ``shape`` is logical
     display metadata, not a request to gather through tensor strides. Dynamic
     shape leaves use ``-1`` and are materialized from the descriptor during
-    lowering. ``length`` may be a runtime i64; static values are verified in
-    the FIFO-safe range. Multiple static call sites and multiple launch blocks
-    are supported.
+    lowering. ``length`` may be a runtime i64. ``dynamic_execution`` records
+    that the site is nested under runtime control flow so the host warns rather
+    than rejecting an aggregate FIFO bound that cannot be known statically.
   }];
   let arguments = (ins Tla_TensorType:$value, I64:$length,
-                       DenseI64ArrayAttr:$shape);
+                       DenseI64ArrayAttr:$shape,
+                       OptionalAttr<UnitAttr>:$dynamic_execution);
   let assemblyFormat = [{
     $value `length` `=` $length `shape` `=` $shape attr-dict `:`
     type($value) `,` type($length)

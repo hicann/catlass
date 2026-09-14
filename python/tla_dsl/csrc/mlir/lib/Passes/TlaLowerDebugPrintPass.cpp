@@ -2,6 +2,7 @@
 #include "PassesInternal.h"
 #include "Passes/TlaTensorToMemref.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/SmallPtrSet.h"
 
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 
@@ -12,6 +13,7 @@ namespace tla {
 constexpr StringLiteral kDebugPrintWorkspaceAttrName = "tla.debug_print.workspace";
 constexpr StringLiteral kDebugPrintFormatCallAttrName = "tla.debug_print.format";
 constexpr StringLiteral kPrintTensorWorkspaceAttrName = "tla.print_tensor.workspace";
+constexpr StringLiteral kDebugTunnelStateAttrName = "tla.debug_tunnel.state";
 constexpr StringLiteral kPrintTensorSupportedDtypes = "f16, f32, i8, i16, i32, u8, u16, u32";
 constexpr StringLiteral kStringFormatCalleeName = "_mlir_ciface_tla_printf_format_string";
 constexpr StringLiteral kValuesFormatCalleeName = "_mlir_ciface_tla_printf_format_values";
@@ -309,6 +311,27 @@ static BlockArgument getOrAppendPrintTensorWorkspaceArg(func::FuncOp funcOp)
     return workspaceArg;
 }
 
+static BlockArgument getOrAppendDebugTunnelStateArg(func::FuncOp funcOp)
+{
+    MLIRContext* ctx = funcOp.getContext();
+    for (BlockArgument arg : funcOp.getArguments()) {
+        if (funcOp.getArgAttr(arg.getArgNumber(), kDebugTunnelStateAttrName))
+            return arg;
+    }
+    FunctionType oldType = funcOp.getFunctionType();
+    SmallVector<Type, 8> inputs(oldType.getInputs().begin(), oldType.getInputs().end());
+    Type stateType = IntegerType::get(ctx, 64);
+    inputs.push_back(stateType);
+    funcOp.setType(FunctionType::get(ctx, inputs, oldType.getResults()));
+    Block& entry = funcOp.getBody().front();
+    unsigned argIndex = entry.getNumArguments();
+    BlockArgument stateArg = entry.addArgument(stateType, funcOp.getLoc());
+    funcOp.setArgAttr(argIndex, kDebugTunnelStateAttrName, UnitAttr::get(ctx));
+    funcOp.setArgAttr(
+        argIndex, hacc::KernelArgTypeAttr::name, hacc::KernelArgTypeAttr::get(ctx, hacc::KernelArgType::kWorkspace));
+    return stateArg;
+}
+
 static bool isMixedSplitFunction(func::FuncOp funcOp)
 {
     return funcOp->hasAttr(hivm::TPartOfMixAttr::name);
@@ -329,6 +352,22 @@ static BlockArgument getOrCreatePrintTensorWorkspaceArg(func::FuncOp funcOp, Mod
     if (auto peer = module.lookupSymbol<func::FuncOp>(peerName))
         (void)getOrAppendPrintTensorWorkspaceArg(peer);
     return getOrAppendPrintTensorWorkspaceArg(funcOp);
+}
+
+static BlockArgument getOrCreateDebugTunnelStateArg(func::FuncOp funcOp, ModuleOp module)
+{
+    if (!isMixedSplitFunction(funcOp))
+        return getOrAppendDebugTunnelStateArg(funcOp);
+
+    StringRef name = funcOp.getSymName();
+    constexpr StringLiteral aicSuffix = "_mix_aic";
+    constexpr StringLiteral aivSuffix = "_mix_aiv";
+    StringRef suffix = name.ends_with(aicSuffix) ? aicSuffix : aivSuffix;
+    StringRef peerSuffix = suffix == aicSuffix ? aivSuffix : aicSuffix;
+    std::string peerName = (name.drop_back(suffix.size()) + peerSuffix).str();
+    if (auto peer = module.lookupSymbol<func::FuncOp>(peerName))
+        (void)getOrAppendDebugTunnelStateArg(peer);
+    return getOrAppendDebugTunnelStateArg(funcOp);
 }
 
 static void annotatePrintfRuntimeCall(func::FuncOp funcOp)
@@ -544,9 +583,37 @@ static LogicalResult lowerPrintTensor(
         ::tla::getOrMaterializeDescriptorBaseMemref(rewriter, op.getLoc(), desc, op, baseMemrefCache);
     if (failed(materialized))
         return op.emitError("could not materialize the tensor base");
-    Value tensorPtr = rewriter.create<::mlir::memref::ExtractAlignedPointerAsIndexOp>(op.getLoc(), *materialized);
     auto tensorType = op.getValue().getType();
     Type elementType = tensorType.getPtr().getPointee();
+    bool isL1 = tensorType.getPtr().getAddrspace() == AddressSpace::l1;
+    bool isL0C = tensorType.getPtr().getAddrspace() == AddressSpace::l0c;
+    bool isLocalDump = isL1 || isL0C;
+    if (isLocalDump && !op.getLength().getDefiningOp<arith::ConstantOp>()) {
+        if (isL1) {
+            op.emitWarning(
+                "dynamic L1 tensor print length is not runtime-validated; "
+                "it must stay within 1..8 elements at an aligned address, "
+                "or no native record is emitted");
+        } else {
+            op.emitWarning(
+                "dynamic L0C tensor print length is not runtime-validated; "
+                "it must equal 256 elements, or no native record is emitted");
+        }
+    }
+    Value localRuntimeMemref;
+    Value tensorPtr;
+    if (isLocalDump) {
+        auto materializedType = dyn_cast<MemRefType>((*materialized).getType());
+        if (!materializedType)
+            return op.emitError("could not materialize the local tensor memref");
+        FailureOr<Value> runtimeMemref = ::tla::castMemrefToType(
+            rewriter, op.getLoc(), *materialized, ::tla::getDynamicStridedMemrefType(materializedType));
+        if (failed(runtimeMemref))
+            return op.emitError("could not lower the local tensor memref ABI");
+        localRuntimeMemref = *runtimeMemref;
+    } else {
+        tensorPtr = rewriter.create<::mlir::memref::ExtractAlignedPointerAsIndexOp>(op.getLoc(), *materialized);
+    }
     Value elementOffset;
     if (::tla::isLinearLayout(desc.layoutTag)) {
         Value rowElements = rewriter.createOrFold<arith::MulIOp>(op.getLoc(), desc.coord[0], desc.stride[0]);
@@ -559,26 +626,35 @@ static LogicalResult lowerPrintTensor(
         Value rowDivisor = desc.shape[0];
         if (desc.layoutTag == ::LayoutTag::zNUnAlign)
             rowDivisor = rewriter.createOrFold<arith::DivSIOp>(op.getLoc(), desc.stride[3], desc.shape[2]);
-        Value physical0 = rewriter.createOrFold<arith::RemSIOp>(op.getLoc(), desc.coord[0], rowDivisor);
-        Value physical1 = rewriter.createOrFold<arith::DivSIOp>(op.getLoc(), desc.coord[0], rowDivisor);
-        Value physical2 = rewriter.createOrFold<arith::RemSIOp>(op.getLoc(), desc.coord[1], desc.shape[2]);
-        Value physical3 = rewriter.createOrFold<arith::DivSIOp>(op.getLoc(), desc.coord[1], desc.shape[2]);
-        Value term0 = rewriter.createOrFold<arith::MulIOp>(op.getLoc(), physical0, desc.stride[0]);
-        Value term1 = rewriter.createOrFold<arith::MulIOp>(op.getLoc(), physical1, desc.stride[1]);
-        Value term2 = rewriter.createOrFold<arith::MulIOp>(op.getLoc(), physical2, desc.stride[2]);
-        Value term3 = rewriter.createOrFold<arith::MulIOp>(op.getLoc(), physical3, desc.stride[3]);
+        Value packed0 = rewriter.createOrFold<arith::RemSIOp>(op.getLoc(), desc.coord[0], rowDivisor);
+        Value packed1 = rewriter.createOrFold<arith::DivSIOp>(op.getLoc(), desc.coord[0], rowDivisor);
+        Value packed2 = rewriter.createOrFold<arith::RemSIOp>(op.getLoc(), desc.coord[1], desc.shape[2]);
+        Value packed3 = rewriter.createOrFold<arith::DivSIOp>(op.getLoc(), desc.coord[1], desc.shape[2]);
+        Value term0 = rewriter.createOrFold<arith::MulIOp>(op.getLoc(), packed0, desc.stride[0]);
+        Value term1 = rewriter.createOrFold<arith::MulIOp>(op.getLoc(), packed1, desc.stride[1]);
+        Value term2 = rewriter.createOrFold<arith::MulIOp>(op.getLoc(), packed2, desc.stride[2]);
+        Value term3 = rewriter.createOrFold<arith::MulIOp>(op.getLoc(), packed3, desc.stride[3]);
         Value rowElements = rewriter.createOrFold<arith::AddIOp>(op.getLoc(), term0, term1);
         Value colElements = rewriter.createOrFold<arith::AddIOp>(op.getLoc(), term2, term3);
         elementOffset = rewriter.createOrFold<arith::AddIOp>(op.getLoc(), rowElements, colElements);
     }
     Value elementBytes = rewriter.create<arith::ConstantIndexOp>(op.getLoc(), elementType.getIntOrFloatBitWidth() / 8);
     Value byteOffset = rewriter.create<arith::MulIOp>(op.getLoc(), elementOffset, elementBytes);
-    tensorPtr = rewriter.create<arith::AddIOp>(op.getLoc(), tensorPtr, byteOffset);
-    Value tensorI64 = rewriter.create<arith::IndexCastOp>(op.getLoc(), rewriter.getI64Type(), tensorPtr);
+    Value tensorI64;
+    Value byteOffsetI64;
+    if (isLocalDump) {
+        byteOffsetI64 = ::tla::castValueToI64(rewriter, op.getLoc(), byteOffset);
+    } else {
+        tensorPtr = rewriter.create<arith::AddIOp>(op.getLoc(), tensorPtr, byteOffset);
+        tensorI64 = rewriter.create<arith::IndexCastOp>(op.getLoc(), rewriter.getI64Type(), tensorPtr);
+    }
     Value count = op.getLength();
     Value shape0;
     Value shape1;
-    if (::tla::isNZFamilyLayout(desc.layoutTag)) {
+    if (isL0C) {
+        shape0 = rewriter.create<arith::ConstantIntOp>(op.getLoc(), 16, 64);
+        shape1 = rewriter.create<arith::ConstantIntOp>(op.getLoc(), 16, 64);
+    } else if (::tla::isNZFamilyLayout(desc.layoutTag)) {
         shape0 = ::tla::castValueToI64(rewriter, op.getLoc(), desc.originShape[0]);
         shape1 = ::tla::castValueToI64(rewriter, op.getLoc(), desc.originShape[1]);
     } else if (op.getShape().size() == 1) {
@@ -596,16 +672,39 @@ static LogicalResult lowerPrintTensor(
     FailureOr<StringRef> helperSuffix = getPrintTensorHelperSuffix(elementType, diagnostic);
     if (failed(helperSuffix))
         return op.emitError(diagnostic);
-    std::string calleeName = tensorType.getPtr().getAddrspace() == AddressSpace::ub ?
-                                 "_mlir_ciface_tla_print_tensor_ub_" :
-                                 "_mlir_ciface_tla_print_tensor_gm_";
+    std::string calleeName;
+    if (isL1) {
+        calleeName = "tla_print_tensor_l1_";
+    } else if (isL0C) {
+        calleeName = "tla_print_tensor_l0c_";
+    } else {
+        calleeName = tensorType.getPtr().getAddrspace() == AddressSpace::ub ? "_mlir_ciface_tla_print_tensor_ub_" :
+                                                                              "_mlir_ciface_tla_print_tensor_gm_";
+    }
     calleeName.append(helperSuffix->data(), helperSuffix->size());
     BlockArgument workspace = getOrCreatePrintTensorWorkspaceArg(funcOp, module);
-    auto callee = getOrCreateRuntimeCall(
-        module, calleeName,
-        {workspace.getType(), tensorI64.getType(), count.getType(), packedShape.getType(), encodedCallId.getType()});
-    rewriter.create<func::CallOp>(
-        op.getLoc(), callee, ValueRange{workspace, tensorI64, count, packedShape, encodedCallId});
+    BlockArgument debugTunnelState = isLocalDump ? getOrCreateDebugTunnelStateArg(funcOp, module) : BlockArgument();
+    SmallVector<Type> calleeTypes;
+    SmallVector<Value> callOperands;
+    if (isLocalDump) {
+        calleeTypes = {workspace.getType(), localRuntimeMemref.getType(), byteOffsetI64.getType(),
+                       count.getType(),     packedShape.getType(),        encodedCallId.getType()};
+        callOperands = {workspace, localRuntimeMemref, byteOffsetI64, count, packedShape, encodedCallId};
+    } else {
+        calleeTypes = {
+            workspace.getType(), tensorI64.getType(), count.getType(), packedShape.getType(), encodedCallId.getType()};
+        callOperands = {workspace, tensorI64, count, packedShape, encodedCallId};
+    }
+    auto callee = getOrCreateRuntimeCall(module, calleeName, calleeTypes);
+    if (isLocalDump) {
+        callee->setAttr(
+            hivm::TFuncCoreTypeAttr::name,
+            hivm::TFuncCoreTypeAttr::get(rewriter.getContext(), hivm::TFuncCoreType::AIC));
+    }
+    if (debugTunnelState) {
+        callee->setAttr("llvm.emit_c_interface", UnitAttr::get(rewriter.getContext()));
+    }
+    rewriter.create<func::CallOp>(op.getLoc(), callee, callOperands);
     rewriter.eraseOp(op);
     return success();
 }
@@ -633,6 +732,13 @@ public:
         ModuleOp module = getOperation();
         SmallVector<::tla::DebugPrintOp, 8> ops;
         module.walk([&](::tla::DebugPrintOp op) { ops.push_back(op); });
+        SmallVector<::tla::PrintTensorOp, 8> printOps;
+        module.walk([&](::tla::PrintTensorOp op) { printOps.push_back(op); });
+        if (!ops.empty() && !printOps.empty()) {
+            printOps.front().emitError("scalar debug FIFO and native tensor print cannot share a kernel module");
+            signalPassFailure();
+            return;
+        }
         for (::tla::DebugPrintOp op : ops) {
             if (!op || !op->getBlock())
                 continue;
@@ -643,9 +749,9 @@ public:
                 return;
             }
         }
-        SmallVector<::tla::PrintTensorOp, 8> printOps;
-        module.walk([&](::tla::PrintTensorOp op) { printOps.push_back(op); });
         llvm::DenseMap<Operation*, uint32_t> nextCallId;
+        llvm::SmallPtrSet<Operation*, 4> tunnelFunctionSet;
+        SmallVector<func::FuncOp, 4> tunnelFunctions;
         for (::tla::PrintTensorOp op : printOps) {
             if (!op || !op->getBlock())
                 continue;
@@ -687,9 +793,54 @@ public:
             }
             PatternRewriter rewriter(op.getContext());
             rewriter.setInsertionPoint(op);
+            auto tensorType = op.getValue().getType();
+            AddressSpace addressSpace = tensorType.getPtr().getAddrspace();
+            bool usesDebugTunnel = addressSpace == AddressSpace::l1 || addressSpace == AddressSpace::l0c;
             if (failed(lowerPrintTensor(op, rewriter, module, *callId))) {
                 signalPassFailure();
                 return;
+            }
+            if (usesDebugTunnel && tunnelFunctionSet.insert(funcOp.getOperation()).second)
+                tunnelFunctions.push_back(funcOp);
+        }
+        constexpr StringLiteral kInitDebugTunnel = "_mlir_ciface_init_debug";
+        constexpr StringLiteral kFinishDebugTunnel = "_mlir_ciface_finish_debug";
+        for (func::FuncOp funcOp : tunnelFunctions) {
+            BlockArgument stateArg;
+            for (BlockArgument arg : funcOp.getArguments()) {
+                if (funcOp.getArgAttr(arg.getArgNumber(), kDebugTunnelStateAttrName)) {
+                    stateArg = arg;
+                    break;
+                }
+            }
+            if (!stateArg) {
+                funcOp.emitError("local tensor DebugTunnel lifecycle is missing its hidden state argument");
+                signalPassFailure();
+                return;
+            }
+            auto makeTunnelLifecycleCall = [&](StringRef name) {
+                auto lifecycle = getOrCreateRuntimeCall(module, name, ArrayRef<Type>{stateArg.getType()});
+                lifecycle->setAttr(
+                    hivm::TFuncCoreTypeAttr::name,
+                    hivm::TFuncCoreTypeAttr::get(funcOp.getContext(), hivm::TFuncCoreType::AIC));
+                lifecycle->setAttr("llvm.emit_c_interface", UnitAttr::get(funcOp.getContext()));
+                return lifecycle;
+            };
+            auto init = makeTunnelLifecycleCall(kInitDebugTunnel);
+            auto finish = makeTunnelLifecycleCall(kFinishDebugTunnel);
+            OpBuilder entryBuilder(funcOp.getContext());
+            entryBuilder.setInsertionPointToStart(&funcOp.getBody().front());
+            entryBuilder.create<func::CallOp>(funcOp.getLoc(), init, ValueRange{stateArg});
+            SmallVector<func::ReturnOp, 2> returns;
+            funcOp.walk([&](func::ReturnOp returnOp) { returns.push_back(returnOp); });
+            if (returns.empty()) {
+                funcOp.emitError("local tensor DebugTunnel lifecycle requires a kernel return");
+                signalPassFailure();
+                return;
+            }
+            for (func::ReturnOp returnOp : returns) {
+                OpBuilder exitBuilder(returnOp);
+                exitBuilder.create<func::CallOp>(returnOp.getLoc(), finish, ValueRange{stateArg});
             }
         }
     }

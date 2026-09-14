@@ -479,7 +479,7 @@ Run a compiled kernel on the NPU by calling the `JitCompiledFunction` returned b
 
 #### `JitCompiledFunction.__call__`
 
-**Source:** [`catlass.base_dsl.jit_executor.JitCompiledFunction.__call__`](../../../catlass/base_dsl/jit_executor.py#L384)
+**Source:** [`catlass.base_dsl.jit_executor.JitCompiledFunction.__call__`](../../../catlass/base_dsl/jit_executor.py#L407)
 
 Description:
 

@@ -16,6 +16,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Iterable, Mapping, Sequence
 
@@ -79,12 +80,12 @@ _PRINT_TENSOR_WORKSPACE_SENTINEL_TEXT = b"TLA_TPRN"
 _PRINT_TENSOR_WORKSPACE_SENTINEL = int.from_bytes(
     _PRINT_TENSOR_WORKSPACE_SENTINEL_TEXT, byteorder="big"
 )
+_DEBUG_TUNNEL_STATE_SENTINEL = int.from_bytes(b"TLA_DTUN", byteorder="big")
 # Cache compatibility tokens; change only when the corresponding ABI changes.
 _DEBUG_PRINT_WORKSPACE_ABI_REVISION = "debug-print-workspace-i64-v1"
-_PRINT_TENSOR_WORKSPACE_ABI_REVISION = (
-    "print-tensor-workspace-i64-dynamic-shape-typed-multirecord-mixed-subblock"
-)
-_PRINT_TENSOR_HELPER_ABI_MARKER = b"__tla_print_tensor_abi"
+_PRINT_TENSOR_WORKSPACE_ABI_REVISION = "print-tensor-workspace-i64-dynamic-shape-typed-multirecord-mixed-subblock-l1-l0c-local-memref-abi"
+_DEBUG_TUNNEL_STATE_ABI_REVISION = "debug-tunnel-state-i64-v1"
+_PRINT_TENSOR_HELPER_ABI_MARKER = b"tla_print_tensor_abi"
 _PRINT_TENSOR_MAX_BLOCKS = 1 << 16  # uint16_t block_idx
 _PRINT_TENSOR_CORE_RECORDS = 108  # RuntimeWrapper::kDebugCoreRecords
 _PRINT_TENSOR_FIFO_BYTES = 1 << 20  # kRingBufferBytes
@@ -110,7 +111,7 @@ _HIVM_TEMPLATE_BITCODE_ATTRS = {
     "meta_op.aiv.c310.bc": ("hivm.aiv_bitcode", "hivm.aiv_bitcode"),
 }
 _MAX_KERNEL_ABI_PAYLOAD_SIZE = 1 << 20
-_ONLINE_CACHE_ABI_VERSION = 5
+_ONLINE_CACHE_ABI_VERSION = 8
 
 
 class TlaExecutionError(RuntimeError):
@@ -164,6 +165,7 @@ class _PrintTensorMetadata:
     dtype: str
     position: str
     call: int = 0
+    dynamic_execution: bool = False
 
 
 @dataclass(frozen=True)
@@ -539,6 +541,7 @@ def _compile_kernel(
         "cache_key": cache_key,
         "debug_print_workspace_abi_revision": (_DEBUG_PRINT_WORKSPACE_ABI_REVISION),
         "print_tensor_workspace_abi_revision": (_PRINT_TENSOR_WORKSPACE_ABI_REVISION),
+        "debug_tunnel_state_abi_revision": _DEBUG_TUNNEL_STATE_ABI_REVISION,
         "entrypoint": entrypoint,
         "kernel_binary": kernel_binary_path.name,
         "lowered_mlir": mlir_path.name,
@@ -646,6 +649,16 @@ def _new_jit_compiled_function(
             else None
         )
     )
+    local_print_positions = {
+        metadata.position
+        for metadata in (print_metadata or ())
+        if metadata.position in {"L1", "L0C"}
+    }
+    if len(local_print_positions) > 1:
+        raise TlaExecutionError("one kernel cannot mix L1 and L0C tensor prints")
+    print_tensor_position = (
+        next(iter(local_print_positions)) if len(local_print_positions) == 1 else None
+    )
 
     return JitCompiledFunction(
         jit_module=JitModule(
@@ -661,6 +674,7 @@ def _new_jit_compiled_function(
             is_mixed=is_mixed,
             print_metadata=print_metadata,
             print_helper_core=print_helper_core,
+            print_tensor_position=print_tensor_position,
         ),
         artifacts=JitFunctionArtifacts(
             MLIR=tlair_mlir,
@@ -754,16 +768,33 @@ def _validate_print_tensor_fifo_capacity(
             f"{_PRINT_TENSOR_CORE_RECORDS} core records; got {core_records} "
             f"from {block_count} blocks"
         )
-    # Dynamic control flow can execute any site zero or multiple times. Keep
-    # the native per-record bound, but do not reserve the FIFO for every
-    # statically visible site.
+    static_bytes = 0
+    dynamic_sites = 0
     for item in metadata:
         record_bytes = _print_tensor_native_wire_bytes(item)
-        if record_bytes > _PRINT_TENSOR_FIFO_BYTES:
+        if item.dynamic_execution or item.count is None:
+            dynamic_sites += 1
+        else:
+            static_bytes += record_bytes
+        if item.count is not None and record_bytes > _PRINT_TENSOR_FIFO_BYTES:
             raise TlaExecutionError(
                 "tla.print_tensor record exceeds the per-print FIFO capacity: "
                 f"{record_bytes} bytes, capacity is {_PRINT_TENSOR_FIFO_BYTES} bytes"
             )
+    if static_bytes > _PRINT_TENSOR_FIFO_BYTES:
+        raise TlaExecutionError(
+            "statically executed tla.print_tensor aggregate output exceeds the per-core "
+            f"FIFO capacity: {static_bytes} bytes, capacity is "
+            f"{_PRINT_TENSOR_FIFO_BYTES} bytes"
+        )
+    if dynamic_sites:
+        warnings.warn(
+            "tla.print_tensor uses runtime length, dynamic shape, or runtime "
+            "control flow; aggregate use of the fixed 1 MiB per-core FIFO "
+            "cannot be validated and excessive output may be truncated or omitted",
+            RuntimeWarning,
+            stacklevel=3,
+        )
 
 
 def _runtime_arg_values(arg: Any) -> list[int]:
@@ -1329,7 +1360,9 @@ def _parse_print_tensor_static_metadata(
         raise TlaExecutionError(
             "tla.print_tensor static shape metadata is missing from the compiled artifact"
         )
-    operand_match = re.search(r"!tla\.ptr<\s*([^,\s>]+)\s*,\s*(gm|ub)\s*,", op_text)
+    operand_match = re.search(
+        r"!tla\.ptr<\s*([^,\s>]+)\s*,\s*(gm|ub|l1|l0c)\s*,", op_text
+    )
     if operand_match is None:
         raise TlaExecutionError(
             "tla.print_tensor operand type metadata is missing or malformed"
@@ -1344,8 +1377,15 @@ def _parse_print_tensor_static_metadata(
     length_match = re.search(r"\blength\s*=\s*(\d+)", op_text)
     if length is None and length_match is not None:
         length = int(length_match.group(1))
+    max_length = (
+        8
+        if position == "L1"
+        else 256
+        if position == "L0C"
+        else _PRINT_TENSOR_MAX_F32_ELEMENTS
+    )
     if length is not None and (
-        not 1 <= length <= _PRINT_TENSOR_MAX_F32_ELEMENTS
+        not 1 <= length <= max_length
         or (all(extent > 0 for extent in shape) and length > math.prod(shape))
     ):
         raise TlaExecutionError(
@@ -1363,6 +1403,11 @@ def _parse_print_tensor_static_metadata(
         dtype=dtype,
         position=position,
         call=call,
+        dynamic_execution=(
+            length is None
+            or any(extent < 0 for extent in shape)
+            or "dynamic_execution" in op_text
+        ),
     )
 
 
@@ -2241,8 +2286,8 @@ def _create_stamped_hivmc_input(
 
     Ordinary and external-function kernels rely on ``--link-aicore-bitcode``.
     Debug / ``print_tensor`` helpers also need module attrs
-    ``hivm.aiv_bitcode`` / ``hivm.aic_bitcode`` (and optionally helper bitcode),
-    so copy and stamp a private ``*.hivmc-input.mlir`` only for those kernels.
+    ``hivm.aiv_bitcode`` / ``hivm.aic_bitcode``, so copy and stamp a private
+    ``*.hivmc-input.mlir`` only for those kernels.
     """
     compiler_text = mlir_path.read_text()
     if (
@@ -2259,19 +2304,23 @@ def _create_stamped_hivmc_input(
             if compile_option.kernel_mode == "mix"
             else _core_type_from_arch_scope(compile_option.arch_scope)
         )
-        probe_bitcode = Path(
-            _get_bc_paths(
-                compile_option.kernel_mode,
-                bc_type="print_tensor",
-                core_type=helper_core_type,
-            )
-        )
-        helper_bytes = probe_bitcode.read_bytes()
-        if _PRINT_TENSOR_HELPER_ABI_MARKER not in helper_bytes:
+        if helper_core_type not in {"aic", "aiv"}:
             raise TlaRuntimeUnavailableError(
-                "C310 print tensor helper does not provide the required ABI marker"
+                "tla.print_tensor helper split could not be determined"
             )
-        template_bitcode = f"{template_bitcode},{probe_bitcode}"
+        aggregate_candidates = [
+            Path(path)
+            for path in template_bitcode.split(",")
+            if Path(path).name == f"meta_op.{helper_core_type}.c310.bc"
+        ]
+        if len(aggregate_candidates) != 1:
+            raise TlaRuntimeUnavailableError(
+                f"C310 {helper_core_type} aggregate print tensor bitcode was not selected"
+            )
+        if _PRINT_TENSOR_HELPER_ABI_MARKER not in aggregate_candidates[0].read_bytes():
+            raise TlaRuntimeUnavailableError(
+                "C310 aggregate print tensor bitcode does not provide the required ABI marker"
+            )
     _stamp_hivm_template_bitcode_attrs(compiler_input, template_bitcode)
     return compiler_input, template_bitcode
 
@@ -2624,9 +2673,12 @@ def _cache_manifest_has_current_print_tensor_workspace_abi(
 def _cache_manifest_has_current_workspace_abis(
     manifest: Mapping[str, Any],
 ) -> bool:
-    return _cache_manifest_has_current_debug_print_workspace_abi(
-        manifest
-    ) and _cache_manifest_has_current_print_tensor_workspace_abi(manifest)
+    return (
+        _cache_manifest_has_current_debug_print_workspace_abi(manifest)
+        and _cache_manifest_has_current_print_tensor_workspace_abi(manifest)
+        and manifest.get("debug_tunnel_state_abi_revision")
+        == _DEBUG_TUNNEL_STATE_ABI_REVISION
+    )
 
 
 def _prepared_kernel_abi_from_manifest(

@@ -1,6 +1,6 @@
 """Host-side Ascend debug FIFO transport (Python port of RuntimeWrapper AscDebugFifo).
 
-Allocates the CANN print FIFO, swaps workspace sentinels into the launch payload,
+Allocates the CANN print FIFO, swaps workspace sentinels into launch args,
 then D2H-decodes scalar / tensor records to stdout with the same text formats
 e2e tests capture (``TLA printf:`` / ``DumpTensor:``).
 """
@@ -11,13 +11,14 @@ import ctypes
 import os
 import struct
 from dataclasses import dataclass
-from typing import Callable
+from typing import Any, Callable
 
 from ...execution import TlaRuntimeUnavailableError
 from .ascend import check_acl_errors
 
 DEBUG_PRINT_WORKSPACE_SENTINEL = int.from_bytes(b"TLA_PRNT", "big")
 PRINT_TENSOR_WORKSPACE_SENTINEL = int.from_bytes(b"TLA_TPRN", "big")
+DEBUG_TUNNEL_STATE_SENTINEL = int.from_bytes(b"TLA_DTUN", "big")
 
 _DEBUG_CORE_RECORDS = 108
 _RING_BUFFER_BYTES = 1 << 20
@@ -26,6 +27,8 @@ _PRINT_TENSOR_DESCRIPTOR_NAMESPACE = 0x54500000
 _PRINT_TENSOR_DESCRIPTOR_NAMESPACE_MASK = 0xFFFC0000
 _GLOBAL_MEMORY_POSITION = 0
 _UNIFIED_BUFFER_POSITION = 1
+_LEVEL1_MEMORY_POSITION = 2
+_LEVEL0C_MEMORY_POSITION = 5
 
 _FIFO_SCALAR = 1
 _FIFO_TENSOR = 2
@@ -48,6 +51,18 @@ _PRINT_FMT_OFFSET_BASE = 16
 _ACL_MEM_MALLOC_HUGE_FIRST = 0
 _ACL_MEMCPY_HOST_TO_DEVICE = 1
 _ACL_MEMCPY_DEVICE_TO_HOST = 2
+_DRIVER_PROCESS_CP1 = 0
+_DRIVER_RESOURCE_DEBUG_ADDRESS = 0x10
+
+
+class _DriverResourceMapInfo(ctypes.Structure):
+    _fields_ = [
+        ("target_proc_type", ctypes.c_uint32),
+        ("res_type", ctypes.c_uint32),
+        ("res_id", ctypes.c_uint32),
+        ("flag", ctypes.c_uint32),
+        ("rsv", ctypes.c_uint32 * 1),
+    ]
 
 
 def _align_up(value: int, alignment: int) -> int:
@@ -69,10 +84,209 @@ class _FifoData:
     block_length: int
     ring_buffer_offset: int
     ring_buffer_bytes: int
+    debug_bus_mappings: tuple[_DebugBusMapping, ...] = ()
 
 
 class AscDebugFifoError(TlaRuntimeUnavailableError):
     """Raised when FIFO open/close/decode fails."""
+
+
+@dataclass
+class _DebugBusMapping:
+    device: int
+    info: _DriverResourceMapInfo
+    address: int
+    unmap_resource: Any
+    closed: bool = False
+
+    @classmethod
+    def open(
+        cls,
+        device: int,
+        resource_id: int,
+        *,
+        driver_hal: tuple[Any, Any] | None = None,
+    ) -> _DebugBusMapping:
+        map_resource, unmap_resource = (
+            _driver_hal() if driver_hal is None else driver_hal
+        )
+        info = _DriverResourceMapInfo(
+            _DRIVER_PROCESS_CP1,
+            _DRIVER_RESOURCE_DEBUG_ADDRESS,
+            int(resource_id),
+            0,
+            (0,),
+        )
+        address = ctypes.c_ulong(0)
+        length = ctypes.c_uint(0)
+        result = int(
+            map_resource(
+                int(device),
+                ctypes.byref(info),
+                ctypes.byref(address),
+                ctypes.byref(length),
+            )
+        )
+        if result or not address.value or not length.value:
+            if not result and address.value:
+                unmap_resource(int(device), ctypes.byref(info))
+            detail = (
+                f"driver error {result}"
+                if result
+                else "a null address"
+                if not address.value
+                else "a zero-length mapping"
+            )
+            raise AscDebugFifoError(
+                f"halResMap(RES_DBG_ADDR, res_id={resource_id}) returned {detail}"
+            )
+        return cls(
+            device=int(device),
+            info=info,
+            address=int(address.value),
+            unmap_resource=unmap_resource,
+        )
+
+    def close(self) -> None:
+        if self.closed:
+            return
+        # HAL has no retry contract, so relinquish ownership before unmapping.
+        self.closed = True
+        result = int(self.unmap_resource(self.device, ctypes.byref(self.info)))
+        if result:
+            raise AscDebugFifoError(
+                f"halResUnmap(RES_DBG_ADDR) failed with driver error {result}"
+            )
+
+
+_DEBUG_TUNNEL_LOG_BUFFER_BYTES = 16 * 1024
+_DEBUG_TUNNEL_LOG_PADDING_BYTES = 64
+_DEBUG_TUNNEL_PHYSICAL_BLOCKS_PER_LOGICAL = 3
+
+
+class _DebugTunnelPrintPayloadData(ctypes.Structure):
+    _fields_ = [
+        ("log_whole_region", ctypes.c_void_p),
+        ("block_num", ctypes.c_uint32),
+        ("log_buffer_size", ctypes.c_size_t),
+        ("kernel_write_type", ctypes.c_uint32),
+    ]
+
+
+class _DebugTunnelData(ctypes.Structure):
+    _fields_ = [
+        ("print_data", _DebugTunnelPrintPayloadData),
+        ("ffts_addr", ctypes.c_void_p),
+    ]
+
+
+if ctypes.sizeof(_DebugTunnelPrintPayloadData) != 32:
+    raise RuntimeError("CANN DebugTunnel PrintPayloadData host ABI must be 32 bytes")
+if ctypes.sizeof(_DebugTunnelData) != 40:
+    raise RuntimeError("CANN DebugTunnelData host ABI must be 40 bytes")
+
+
+def _debug_tunnel_payload_bytes(block_num: int) -> int:
+    return (
+        (_DEBUG_TUNNEL_LOG_BUFFER_BYTES + _DEBUG_TUNNEL_LOG_PADDING_BYTES)
+        * int(block_num)
+        * _DEBUG_TUNNEL_PHYSICAL_BLOCKS_PER_LOGICAL
+    )
+
+
+@dataclass
+class _DebugTunnelHostState:
+    state_ptr: int
+    payload_ptr: int
+    closed: bool = False
+
+    @classmethod
+    def open(cls, block_num: int) -> _DebugTunnelHostState:
+        if block_num <= 0:
+            raise AscDebugFifoError("CANN DebugTunnel requires a positive block count")
+        payload_ptr = 0
+        host_payload_ptr = 0
+        state_ptr = 0
+        try:
+            payload_bytes = _debug_tunnel_payload_bytes(block_num)
+            payload_ptr = _acl_malloc(payload_bytes)
+            if not payload_ptr:
+                raise AscDebugFifoError("CANN DebugTunnel payload allocation is null")
+            host_payload_ptr = _acl_malloc_host(payload_bytes)
+            if not host_payload_ptr:
+                raise AscDebugFifoError("CANN DebugTunnel host allocation is null")
+            ctypes.memset(host_payload_ptr, 0, payload_bytes)
+            _acl_memcpy(
+                payload_ptr,
+                host_payload_ptr,
+                payload_bytes,
+                _ACL_MEMCPY_HOST_TO_DEVICE,
+            )
+            host_payload_to_free, host_payload_ptr = host_payload_ptr, 0
+            _acl_free_host(host_payload_to_free)
+
+            host_state = _DebugTunnelData(
+                _DebugTunnelPrintPayloadData(
+                    ctypes.c_void_p(payload_ptr),
+                    int(block_num),
+                    _DEBUG_TUNNEL_LOG_BUFFER_BYTES,
+                    0,
+                ),
+                ctypes.c_void_p(),
+            )
+            state_ptr = _acl_malloc(ctypes.sizeof(host_state))
+            if not state_ptr:
+                raise AscDebugFifoError("CANN DebugTunnel state allocation is null")
+            _acl_memcpy(
+                state_ptr,
+                ctypes.addressof(host_state),
+                ctypes.sizeof(host_state),
+                _ACL_MEMCPY_HOST_TO_DEVICE,
+            )
+            return cls(state_ptr=state_ptr, payload_ptr=payload_ptr)
+        except Exception as primary_error:
+            cleanup_error: Exception | None = None
+            for ptr, free in (
+                (host_payload_ptr, _acl_free_host),
+                (state_ptr, _acl_free),
+                (payload_ptr, _acl_free),
+            ):
+                if ptr:
+                    try:
+                        free(ptr)
+                    except Exception as exc:
+                        if cleanup_error is None:
+                            cleanup_error = exc
+            if cleanup_error is not None:
+                raise primary_error from cleanup_error
+            raise
+
+    def close(self) -> None:
+        if self.closed:
+            return
+        first_error: Exception | None = None
+
+        def attempt(action: Callable[[], None]) -> None:
+            nonlocal first_error
+            try:
+                action()
+            except Exception as exc:
+                if first_error is None:
+                    first_error = exc
+
+        if self.payload_ptr:
+            payload_ptr, self.payload_ptr = self.payload_ptr, 0
+            attempt(lambda: _acl_free(payload_ptr))
+        if self.state_ptr:
+            state_ptr, self.state_ptr = self.state_ptr, 0
+            attempt(lambda: _acl_free(state_ptr))
+        self.closed = True
+        if first_error is not None:
+            raise first_error
+
+
+# Retain launch resources when asynchronous completion is unknown.
+_UNQUIESCED_LAUNCH_RESOURCES: list[tuple[_FifoData, _DebugTunnelHostState | None]] = []
 
 
 def _acl_malloc(size: int) -> int:
@@ -119,12 +333,57 @@ def _acl_memcpy(dst: int, src: int, size: int, kind: int) -> None:
     )
 
 
-def open_fifo(block_num: int, *, mixed_handoff: bool = False) -> _FifoData:
+def _driver_hal() -> tuple[Any, Any]:
+    try:
+        lib = ctypes.CDLL("libascend_hal.so")
+        get_max = lib.halGetMaxResMapType
+        map_resource = lib.halResMap
+        unmap_resource = lib.halResUnmap
+    except (OSError, AttributeError) as exc:
+        raise AscDebugFifoError(
+            "L1 tensor printing requires driver HAL support for "
+            "halGetMaxResMapType, halResMap, and halResUnmap"
+        ) from exc
+    get_max.restype = ctypes.c_uint
+    map_resource.argtypes = [
+        ctypes.c_uint,
+        ctypes.POINTER(_DriverResourceMapInfo),
+        ctypes.POINTER(ctypes.c_ulong),
+        ctypes.POINTER(ctypes.c_uint),
+    ]
+    map_resource.restype = ctypes.c_int
+    unmap_resource.argtypes = [ctypes.c_uint, ctypes.POINTER(_DriverResourceMapInfo)]
+    unmap_resource.restype = ctypes.c_int
+    if int(get_max()) < _DRIVER_RESOURCE_DEBUG_ADDRESS:
+        raise AscDebugFifoError(
+            "L1 tensor printing requires a driver that supports RES_DBG_ADDR"
+        )
+    return map_resource, unmap_resource
+
+
+def _debug_bus_support_error() -> str | None:
+    """Return why the loaded driver lacks DebugBus support, if applicable."""
+
+    try:
+        _driver_hal()
+    except AscDebugFifoError as exc:
+        return str(exc)
+    return None
+
+
+def open_fifo(
+    block_num: int,
+    *,
+    mixed_handoff: bool = False,
+    needs_debug_bus: bool = False,
+    device: int = 0,
+) -> _FifoData:
     ring_offset = _ring_buffer_offset()
     block_length = _align_up(ring_offset + _RING_BUFFER_BYTES + _WRITE_SIZE, 64)
     region_size = block_length * _DEBUG_CORE_RECORDS
     device_ptr = _acl_malloc(region_size)
     host_ptr = 0
+    debug_bus_mappings: list[_DebugBusMapping] = []
     try:
         host_ptr = _acl_malloc_host(region_size)
         ctypes.memset(host_ptr, 0, region_size)
@@ -159,19 +418,40 @@ def open_fifo(block_num: int, *, mixed_handoff: bool = False) -> _FifoData:
             if len(write) != _WRITE_SIZE:
                 raise AscDebugFifoError("internal FIFO write-info size mismatch")
             buf[write_off : write_off + _WRITE_SIZE] = write
+        if needs_debug_bus:
+            # Publish each core's DebugBus aperture in its matching FIFO header.
+            driver_hal = _driver_hal()
+            for i in range(_DEBUG_CORE_RECORDS):
+                mapping = _DebugBusMapping.open(device, i, driver_hal=driver_hal)
+                debug_bus_mappings.append(mapping)
+                ctypes.c_uint64.from_address(
+                    host_ptr + i * block_length + 32
+                ).value = mapping.address
         _acl_memcpy(device_ptr, host_ptr, region_size, _ACL_MEMCPY_HOST_TO_DEVICE)
-    except Exception:
+        host_ptr_to_free, host_ptr = host_ptr, 0
+        _acl_free_host(host_ptr_to_free)
+    except Exception as primary_error:
+        cleanup_error: Exception | None = None
+        for mapping in reversed(debug_bus_mappings):
+            try:
+                mapping.close()
+            except Exception as exc:
+                if cleanup_error is None:
+                    cleanup_error = exc
         if host_ptr:
             try:
                 _acl_free_host(host_ptr)
-            except Exception:
-                pass
+            except Exception as exc:
+                if cleanup_error is None:
+                    cleanup_error = exc
         try:
             _acl_free(device_ptr)
-        except Exception:
-            pass
+        except Exception as exc:
+            if cleanup_error is None:
+                cleanup_error = exc
+        if cleanup_error is not None:
+            raise primary_error from cleanup_error
         raise
-    _acl_free_host(host_ptr)
     return _FifoData(
         device_ptr=device_ptr,
         region_size=region_size,
@@ -181,64 +461,97 @@ def open_fifo(block_num: int, *, mixed_handoff: bool = False) -> _FifoData:
         block_length=block_length,
         ring_buffer_offset=ring_offset,
         ring_buffer_bytes=_RING_BUFFER_BYTES,
+        debug_bus_mappings=tuple(debug_bus_mappings),
     )
 
 
 def destroy_fifo(fifo: _FifoData | None) -> None:
     if fifo is None:
         return
-    try:
-        if fifo.device_ptr:
-            _acl_free(fifo.device_ptr)
-    finally:
-        fifo.device_ptr = 0
+    first_error: Exception | None = None
+    if fifo.device_ptr:
+        device_ptr, fifo.device_ptr = fifo.device_ptr, 0
+        try:
+            _acl_free(device_ptr)
+        except Exception as exc:
+            first_error = exc
+    mappings, fifo.debug_bus_mappings = fifo.debug_bus_mappings, ()
+    for mapping in reversed(mappings):
+        try:
+            mapping.close()
+        except Exception as exc:
+            if first_error is None:
+                first_error = exc
+    if first_error is not None:
+        raise first_error
 
 
-def _payload_to_u64_list(payload: bytes) -> list[int]:
-    if len(payload) % 8 != 0:
+def _args_to_u64_list(args: bytes) -> list[int]:
+    if len(args) % 8 != 0:
         raise AscDebugFifoError(
             "debug workspace kernel arguments must be a multiple of 8 bytes"
         )
-    return list(struct.unpack("<" + "Q" * (len(payload) // 8), payload))
+    return list(struct.unpack("<" + "Q" * (len(args) // 8), args))
 
 
-def _u64_list_to_payload(values: list[int]) -> bytes:
+def _u64_list_to_args(values: list[int]) -> bytes:
     return struct.pack("<" + "Q" * len(values), *values) if values else b""
 
 
-def prepare_launch_payload(
-    payload: bytes,
+def prepare_launch_args(
+    args: bytes,
     *,
-    uses_scalar_print: bool,
-    uses_tensor_print: bool,
-    is_mixed: bool,
+    expects_debug_fifo: bool,
+    expects_print_tensor: bool,
+    mixed_tensor_handoff: bool = False,
     fifo_device_ptr: int,
+    expects_debug_tunnel: bool = False,
+    debug_tunnel_device_ptr: int = 0,
 ) -> bytes:
-    values = _payload_to_u64_list(payload)
-    if uses_scalar_print and uses_tensor_print:
+    values = _args_to_u64_list(args)
+    if mixed_tensor_handoff and not expects_print_tensor:
+        raise AscDebugFifoError("mixed tensor handoff requires native tensor print")
+    debug_tunnel_value: int | None = None
+    if expects_debug_tunnel:
+        if not values or values[-1] != DEBUG_TUNNEL_STATE_SENTINEL:
+            raise AscDebugFifoError(
+                "debug tunnel state marker must occupy the final packed kernel argument"
+            )
+        if not debug_tunnel_device_ptr:
+            raise AscDebugFifoError("debug tunnel state allocation is null")
+        values.pop()
+        debug_tunnel_value = int(debug_tunnel_device_ptr)
+    if expects_debug_fifo and expects_print_tensor:
         raise AscDebugFifoError(
             "scalar debug FIFO and native tensor print cannot share a launch"
         )
-    if uses_scalar_print:
+    if expects_debug_fifo:
         if not values or values[-1] != DEBUG_PRINT_WORKSPACE_SENTINEL:
             raise AscDebugFifoError(
                 "debug print FIFO marker must occupy the final packed kernel argument"
             )
         values[-1] = int(fifo_device_ptr)
-        return _u64_list_to_payload(values)
-    if uses_tensor_print:
+        if debug_tunnel_value is not None:
+            values.append(debug_tunnel_value)
+        return _u64_list_to_args(values)
+    if expects_print_tensor:
         if not values or values[-1] != PRINT_TENSOR_WORKSPACE_SENTINEL:
             raise AscDebugFifoError(
                 "tensor print FIFO marker must occupy the final packed kernel argument"
             )
         workspace = int(fifo_device_ptr)
-        if is_mixed:
+        if mixed_tensor_handoff:
             values[-1] = workspace
         else:
             values.pop()
             values.insert(0, workspace)
-        return _u64_list_to_payload(values)
-    return payload
+        if debug_tunnel_value is not None:
+            values.append(debug_tunnel_value)
+        return _u64_list_to_args(values)
+    if debug_tunnel_value is not None:
+        values.append(debug_tunnel_value)
+        return _u64_list_to_args(values)
+    return args
 
 
 def _write_stdout(text: str) -> None:
@@ -460,7 +773,12 @@ def _render_tensor(tlv: memoryview, shape_tlv: memoryview, logical_block: int) -
     name, width = dtype
     count = dump_size // width
     payload = bytes(tlv[_PRINT_TENSOR_TLV_SIZE : _PRINT_TENSOR_TLV_SIZE + dump_size])
-    pos_name = "GM" if position == _GLOBAL_MEMORY_POSITION else "UB"
+    pos_name = {
+        _GLOBAL_MEMORY_POSITION: "GM",
+        _UNIFIED_BUFFER_POSITION: "UB",
+        _LEVEL1_MEMORY_POSITION: "L1",
+        _LEVEL0C_MEMORY_POSITION: "L0C",
+    }[position]
     parts = [f"DumpTensor: call={desc & 0xFFFF}, block={logical_block}, "]
     subblock = _decode_subblock(desc)
     if subblock >= 0:
@@ -494,7 +812,12 @@ def _validate_tensor_tlv(tlv: memoryview, total: int, shape_tlv: memoryview) -> 
     if dtype is None:
         raise AscDebugFifoError("malformed tensor print FIFO: unsupported tensor dtype")
     _name, width = dtype
-    if position not in (_GLOBAL_MEMORY_POSITION, _UNIFIED_BUFFER_POSITION):
+    if position not in (
+        _GLOBAL_MEMORY_POSITION,
+        _UNIFIED_BUFFER_POSITION,
+        _LEVEL1_MEMORY_POSITION,
+        _LEVEL0C_MEMORY_POSITION,
+    ):
         raise AscDebugFifoError(
             "malformed tensor print FIFO: unsupported tensor position"
         )
@@ -539,6 +862,7 @@ def _validate_tensor_tlv(tlv: memoryview, total: int, shape_tlv: memoryview) -> 
         raise AscDebugFifoError(
             "malformed tensor print FIFO: missing or invalid tensor shape record"
         )
+    # CANN leaves shape slots beyond the declared rank untouched.
     shape_elements = 1
     for index, extent in enumerate(shape_extents):
         if index < shape_dim:
@@ -547,10 +871,6 @@ def _validate_tensor_tlv(tlv: memoryview, total: int, shape_tlv: memoryview) -> 
                     "malformed tensor print FIFO: tensor shape contains a zero extent"
                 )
             shape_elements *= extent
-        elif extent != 0:
-            raise AscDebugFifoError(
-                "malformed tensor print FIFO: tensor shape contains trailing metadata"
-            )
     if shape_elements < dump_size // width:
         raise AscDebugFifoError(
             "malformed tensor print FIFO: tensor shape is smaller than the dump size"
@@ -642,19 +962,13 @@ def _decode_tensor_records(host: memoryview, fifo: _FifoData) -> None:
 
 def close_fifo(
     fifo: _FifoData,
-    stream: int,
     *,
     tensor_only: bool,
 ) -> None:
-    import acl
-
     host_ptr = 0
+    primary_error: Exception | None = None
+    cleanup_error: Exception | None = None
     try:
-        check_acl_errors(
-            acl.rt.synchronize_stream(int(stream)),
-            "acl.rt.synchronize_stream(AscDebugFifo)",
-            error_cls=AscDebugFifoError,
-        )
         host_ptr = _acl_malloc_host(fifo.region_size)
         _acl_memcpy(
             host_ptr,
@@ -668,13 +982,35 @@ def close_fifo(
             _decode_tensor_records(view, fifo)
         else:
             _print_scalar_records(view, fifo)
-    finally:
-        if host_ptr:
-            try:
-                _acl_free_host(host_ptr)
-            except Exception:
-                pass
+    except Exception as exc:
+        primary_error = exc
+    if host_ptr:
+        host_ptr_to_free, host_ptr = host_ptr, 0
+        try:
+            _acl_free_host(host_ptr_to_free)
+        except Exception as exc:
+            cleanup_error = exc
+    try:
         destroy_fifo(fifo)
+    except Exception as exc:
+        if cleanup_error is None:
+            cleanup_error = exc
+    if primary_error is not None:
+        if cleanup_error is not None:
+            raise primary_error from cleanup_error
+        raise primary_error
+    if cleanup_error is not None:
+        raise cleanup_error
+
+
+def _synchronize_launch(stream: int) -> None:
+    import acl
+
+    check_acl_errors(
+        acl.rt.synchronize_stream(int(stream)),
+        "acl.rt.synchronize_stream(AscDebugFifo)",
+        error_cls=AscDebugFifoError,
+    )
 
 
 def launch_with_debug_fifo(
@@ -682,50 +1018,110 @@ def launch_with_debug_fifo(
     launch_kernel: Callable[[bytes], None],
     payload: bytes,
     block_num: int,
+    device: int,
     stream: int,
     uses_scalar_print: bool,
     uses_tensor_print: bool,
     is_mixed: bool,
+    print_tensor_position: str | None = None,
 ) -> None:
-    """Open FIFO, rewrite the payload, invoke ``launch_kernel``, then close."""
-    uses_print_fifo = uses_scalar_print or uses_tensor_print
-    if not uses_print_fifo:
-        launch_kernel(payload)
+    """Open FIFO if needed, rewrite args, invoke ``launch_kernel``, then close."""
+    args = payload
+    expects_debug_fifo = uses_scalar_print
+    expects_print_tensor = uses_tensor_print
+    mixed_tensor_handoff = is_mixed and uses_tensor_print
+    expects_debug_tunnel = print_tensor_position in {"L1", "L0C"}
+    needs_fifo = bool(expects_debug_fifo) or bool(expects_print_tensor)
+    if not needs_fifo:
+        launch_kernel(args)
         return
 
-    mixed_tensor_print = is_mixed and uses_tensor_print
-    fifo = open_fifo(block_num, mixed_handoff=mixed_tensor_print)
+    needs_debug_bus = print_tensor_position == "L1"
+    fifo = open_fifo(
+        block_num,
+        mixed_handoff=mixed_tensor_handoff,
+        needs_debug_bus=needs_debug_bus,
+        device=device,
+    )
+    debug_tunnel_state: _DebugTunnelHostState | None = None
     try:
-        rewritten_payload = prepare_launch_payload(
-            payload,
-            uses_scalar_print=uses_scalar_print,
-            uses_tensor_print=uses_tensor_print,
-            is_mixed=is_mixed,
+        if expects_debug_tunnel:
+            debug_tunnel_state = _DebugTunnelHostState.open(block_num)
+        rewritten = prepare_launch_args(
+            args,
+            expects_debug_fifo=bool(expects_debug_fifo),
+            expects_print_tensor=expects_print_tensor,
+            mixed_tensor_handoff=mixed_tensor_handoff,
             fifo_device_ptr=fifo.device_ptr,
+            expects_debug_tunnel=expects_debug_tunnel,
+            debug_tunnel_device_ptr=(
+                debug_tunnel_state.state_ptr if debug_tunnel_state is not None else 0
+            ),
         )
-        try:
-            launch_kernel(rewritten_payload)
-        except Exception:
-            destroy_fifo(fifo)
-            raise
-        close_fifo(
-            fifo,
-            stream,
-            tensor_only=uses_tensor_print,
-        )
-    except Exception:
-        if fifo.device_ptr:
+    except Exception as primary_error:
+        cleanup_error: Exception | None = None
+        if debug_tunnel_state is not None:
             try:
-                destroy_fifo(fifo)
-            except Exception:
-                pass
+                debug_tunnel_state.close()
+            except Exception as exc:
+                cleanup_error = exc
+        try:
+            destroy_fifo(fifo)
+        except Exception as exc:
+            if cleanup_error is None:
+                cleanup_error = exc
+        if cleanup_error is not None:
+            raise primary_error from cleanup_error
         raise
+
+    launch_error: Exception | None = None
+    try:
+        launch_kernel(rewritten)
+    except Exception as exc:
+        launch_error = exc
+
+    try:
+        _synchronize_launch(stream)
+    except Exception as sync_error:
+        _UNQUIESCED_LAUNCH_RESOURCES.append((fifo, debug_tunnel_state))
+        if launch_error is not None:
+            raise launch_error from sync_error
+        raise AscDebugFifoError(
+            f"{sync_error}; launch resources were retained because stream "
+            "completion is unknown; reset the device context before continuing"
+        ) from sync_error
+
+    cleanup_error: Exception | None = None
+    if debug_tunnel_state is not None:
+        try:
+            debug_tunnel_state.close()
+        except Exception as exc:
+            cleanup_error = exc
+
+    if launch_error is not None:
+        try:
+            destroy_fifo(fifo)
+        except Exception as exc:
+            if cleanup_error is None:
+                cleanup_error = exc
+        if cleanup_error is not None:
+            raise launch_error from cleanup_error
+        raise launch_error
+
+    try:
+        close_fifo(fifo, tensor_only=bool(expects_print_tensor))
+    except Exception as exc:
+        if cleanup_error is None:
+            cleanup_error = exc
+    if cleanup_error is not None:
+        raise cleanup_error
 
 
 __all__ = [
     "AscDebugFifoError",
     "DEBUG_PRINT_WORKSPACE_SENTINEL",
     "PRINT_TENSOR_WORKSPACE_SENTINEL",
+    "DEBUG_TUNNEL_STATE_SENTINEL",
     "launch_with_debug_fifo",
-    "prepare_launch_payload",
+    "prepare_launch_args",
 ]

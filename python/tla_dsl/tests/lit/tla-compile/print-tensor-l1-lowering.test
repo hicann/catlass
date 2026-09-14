@@ -1,0 +1,30 @@
+// RUN: %tla_compile %s -o - | %filecheck %s
+
+module {
+  tla.func @print_tensor_l1(
+      %gm: !tla.tensor<!tla.layout<!tla.shape<8,8>, !tla.stride<8,1>, !tla.shape<8,8>, RowMajor>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>) {
+    %raw = "tla.alloc_ptr"() <{size_bytes = 512 : i64}> : () -> !tla.ptr<i8, l1, 256>
+    %ptr = "tla.recast_ptr"(%raw) : (!tla.ptr<i8, l1, 256>) -> !tla.ptr<f32, l1, 256>
+    %l1 = "tla.make_tensor_like"(%ptr, %gm) <{layoutTag = #tla.layout_tag<zN>}> : (!tla.ptr<f32, l1, 256>, !tla.tensor<!tla.layout<!tla.shape<8,8>, !tla.stride<8,1>, !tla.shape<8,8>, RowMajor>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>) -> !tla.tensor<!tla.layout<!tla.shape<(16,1),(8,1)>, !tla.stride<(8,128),(1,128)>, !tla.shape<8,8>, zN>, !tla.coord<0,0>, !tla.ptr<f32, l1, 256>>
+    %length = arith.constant 4 : i64
+    "tla.cube"() ({
+      tla.print_tensor %l1 length = %length shape = [8, 8] : !tla.tensor<!tla.layout<!tla.shape<(16,1),(8,1)>, !tla.stride<(8,128),(1,128)>, !tla.shape<8,8>, zN>, !tla.coord<0,0>, !tla.ptr<f32, l1, 256>>, i64
+      tla.print_tensor %l1 length = %length shape = [8, 8] : !tla.tensor<!tla.layout<!tla.shape<(16,1),(8,1)>, !tla.stride<(8,128),(1,128)>, !tla.shape<8,8>, zN>, !tla.coord<0,0>, !tla.ptr<f32, l1, 256>>, i64
+    }) : () -> ()
+    tla.return
+  }
+
+}
+
+// CHECK: func.func private @tla_print_tensor_l1_f32(i64, memref<?xf32, {{.*}}cbuf{{.*}}, i64, i64, i64, i64)
+// CHECK-LABEL: func.func @print_tensor_l1(
+// CHECK-SAME: %[[WORKSPACE:arg0]]: i64 {{.*}}tla.print_tensor.workspace
+// CHECK-SAME: %[[STATE:arg2]]: i64 {{.*}}tla.debug_tunnel.state
+// CHECK: %[[LENGTH:.*]] = {{(arith\.constant 4 : i64|llvm\.mlir\.constant\(4 : i64\) : i64)}}
+// CHECK-COUNT-1: call @_mlir_ciface_init_debug(%[[STATE]])
+// CHECK-NOT: memref.extract_aligned_pointer_as_index
+// CHECK-COUNT-2: call @tla_print_tensor_l1_f32(%[[WORKSPACE]], {{.*}}, {{.*}}, %[[LENGTH]], {{.*}}, {{.*}})
+// CHECK-COUNT-1: call @_mlir_ciface_finish_debug(%[[STATE]])
+// CHECK-NOT: tla.debug_tunnel.initialized
+// CHECK-NOT: _mlir_ciface_tla_print_tensor_ub_f32
+// CHECK-NOT: tla.print_tensor

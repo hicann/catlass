@@ -15,14 +15,12 @@ module {
     %src = tla.make_tensor %src_ptr, %layout, %coord : !tla.ptr<f32, ub, 256>, !layout, !coord -> !ub
     %dst = tla.make_tensor %dst_ptr, %layout, %coord : !tla.ptr<f32, ub, 256>, !layout, !coord -> !ub
     %length = arith.constant 4 : i64
-    %scalar = arith.constant 7 : i32
     "tla.vector"() ({
       "tla.vec.func"() ({
         %value = tla.load %src : !ub -> !tla.vector<64xf32>
         tla.store %dst, %value : !ub, !tla.vector<64xf32>
       }) : () -> ()
       tla.print_tensor %src length = %length shape = [64] : !ub, i64
-      tla.debug_print %scalar : i32
     }) : () -> ()
     tla.return
   }
@@ -39,9 +37,8 @@ module {
 // CHECK: tla.store
 // CHECK: tla.mutex_unlock %[[DST]][<vector>] : !tla.mutex
 // CHECK-NEXT: tla.mutex_unlock %[[SRC]][<vector>] : !tla.mutex
-// print_tensor and debug_print are deliberately outside the instruction lock
-// scope and do not receive their own automatic synchronization.
+// print_tensor is deliberately outside the instruction lock scope and does
+// not receive its own automatic synchronization.
 // CHECK-NEXT: tla.print_tensor
-// CHECK-NEXT: tla.debug_print
 // CHECK-NOT: tla.mutex_lock
 // CHECK: return

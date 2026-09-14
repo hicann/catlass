@@ -119,7 +119,12 @@ kernel.o=<cache-dir>/kernel.o
 - `tla.print` 只能在 `tla.cube()` 或 `tla.vector()` 区域内使用。
 - 一个 kernel 中只能使用标量打印或 Tensor 打印中的一种；纯字符串和格式化字符串均属于标量打印。
 - `tla.print` 可能明显影响 kernel 性能，建议仅在调试阶段使用，正式运行时删除所有调测代码。
-- Tensor 打印只接受 GM 或 UB Tensor，暂不支持打印 L1、L0A、L0B、L0C 等 buffer 中的数值。
+- Tensor 打印支持 GM、UB，以及 C310 上的 AIC L1/L0C Tensor。L1 仅支持
+  32 字节对齐的 zN/nZ 稠密前缀，C0 维度须占 32 字节，最多打印 8 个元素；
+  L0C 仅支持 32 字节对齐的 L0Clayout 16x16 完整分形（256 个元素）。两者
+  支持 `f16`、`f32`、`i8`、`i16`、`i32`、`u8`、`u16`、`u32`。该本地
+  buffer 路径依赖经验证的 CANN 9.1 DebugTunnel ABI，L1 还要求驱动提供
+  `halGetMaxResMapType`、`halResMap` 和 `halResUnmap`。L0A/L0B 暂不支持。
 - 在大 shape 精度调试时，可使用 `--block-num 1` 减少并发打印核数，避免不同 block 的输出相互交错。它不保证减少 tile 内打印的总行数。
 - 打印调试接口的底层实现调用 AscendC 调测接口，可阅读以下文档获取更多信息：
   - [AscendC::DumpTensor](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/910/API/ascendcopapi/docs/api/SIMD-API/%E5%9F%BA%E7%A1%80API/%E8%B0%83%E8%AF%95%E6%8E%A5%E5%8F%A3/%E4%B8%8A%E6%9D%BF%E6%89%93%E5%8D%B0/DumpTensor.md)

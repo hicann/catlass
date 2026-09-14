@@ -64,8 +64,6 @@ _SOURCE_SUBDIR: dict[str, str] = {
     "aiv": "Vector",
 }
 
-_EXCLUDE_FROM_META_OP = {"print_tensor.cpp"}
-
 # Mix kernels are not compiled as a dedicated core type: they reuse the plain
 # ``aic`` + ``aiv`` meta_op bitcode, linked together by hivmc at runtime.
 _MODE_CORE_TYPES: dict[str, list[str]] = {
@@ -235,8 +233,6 @@ def build_meta_op(core_type: str, cache: Path, cfg: BCConfig) -> Path:
 
     individual: list[Path] = []
     for cpp in sorted(src_dir.glob("*.cpp")):
-        if cpp.name in _EXCLUDE_FROM_META_OP:
-            continue
         bc_name = cpp.stem + f".{core_type}.{cfg.cce_arch}.bc"
         bc_path = cache / bc_name
         if not bc_path.exists():

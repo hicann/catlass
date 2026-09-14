@@ -2042,7 +2042,7 @@ kernel 内标量 / tensor 调试打印。
 
 功能说明：
 
-在 `cube` / `vector` 区域内打印标量、格式化标量字符串，或打印 GM/UB tensor 的物理前缀。
+在 `cube` / `vector` 区域内打印标量、格式化标量字符串，或打印 GM、UB、L1、L0C tensor 的物理前缀。
 
 函数原型：
 
@@ -2058,7 +2058,11 @@ tla.print(*args: object, **kwargs: object) -> None
 约束说明：
 
 - 须在 `@tla.kernel` 装饰的 kernel 函数体内调用。
-- 须在 `tla.cube()` 或 `tla.vector()` 内调用；tensor 打印仅支持 GM/UB 且 dtype 受限。
+- 须在 `tla.cube()` 或 `tla.vector()` 内调用。
+- GM/UB 支持 rank-1/rank-2 物理前缀；L1/L0C 仅支持 C310 AIC 和经验证的 CANN 9.1 DebugTunnel ABI。
+- L1 须为 32 字节对齐的 zN/nZ 稠密前缀，C0 维度占 32 字节，最多打印 8 个元素，并要求驱动提供 DebugBus HAL 映射接口。
+- L0C 须为 32 字节对齐的 L0Clayout 16x16 完整分形（256 个元素）；L0A/L0B 不支持。
+- Tensor dtype 支持 `f16`、`f32`、`i8`、`i16`、`i32`、`u8`、`u16`、`u32`。
 
 调用示例：
 

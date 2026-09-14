@@ -3352,6 +3352,7 @@ def _emit_formatted_print(
 # for the tensor TLV. Its 32-byte payload alignment leaves 262_112 f32 values:
 # floor((1 MiB - 48 - 72) / 32) * (32 / sizeof(f32)).
 _PRINT_TENSOR_MAX_F32_ELEMENTS = 262_112
+_LOCAL_PRINT_MAX_BYTE_OFFSET = (1 << 32) - 1
 
 
 def _print_tensor_shape_pattern_leaves(tree: Any) -> tuple[int, ...]:
@@ -3367,10 +3368,40 @@ def _print_tensor_shape_pattern_leaves(tree: Any) -> tuple[int, ...]:
     _op_error("print", "requires static or dynamic integer shape metadata")
 
 
+def _static_nz_physical_element_offset(
+    descriptor: TlaTensorTypeDescriptor, coord: tuple[int, int]
+) -> int:
+    """Map a root-relative logical coordinate through an NZ-family packed layout."""
+
+    packed_shape = _print_tensor_shape_pattern_leaves(descriptor.shape)
+    packed_stride = _print_tensor_shape_pattern_leaves(descriptor.stride)
+    if (
+        len(packed_shape) != 4
+        or len(packed_stride) != 4
+        or any(value <= 0 for value in packed_shape)
+        or any(value < 0 for value in packed_stride)
+    ):
+        _op_error(
+            "print",
+            "L1 tensor printing requires static packed shape and stride metadata",
+        )
+    row, col = coord
+    packed_coord = (
+        row % packed_shape[0],
+        row // packed_shape[0],
+        col % packed_shape[2],
+        col // packed_shape[2],
+    )
+    return sum(
+        index * stride
+        for index, stride in zip(packed_coord, packed_stride, strict=True)
+    )
+
+
 def _emit_tensor_print(
     value: Any, length: Any, *, loc: mlir_ir.Location | None
 ) -> None:
-    """Dump a physical prefix of one rank-1/rank-2 supported GM or UB tensor.
+    """Dump a physical prefix of one rank-1/rank-2 supported GM, UB, L1, or L0C tensor.
 
     The logical tensor shape is display metadata; values are read contiguously
     from the effective physical address without gathering through strides.
@@ -3394,8 +3425,8 @@ def _emit_tensor_print(
         _op_error("print", "expected a TLA tensor")
     descriptor = _tla_tensor_type_for_mlir_value(value)
     addrspace = descriptor.addrspace.lower()
-    if addrspace not in ("gm", "ub"):
-        _op_error("print", "requires a GM- or UB-resident tensor")
+    if addrspace not in ("gm", "ub", "l1", "l0c"):
+        _op_error("print", "requires a GM-, UB-, L1-, or L0C-resident tensor")
     if descriptor.element_type not in _PRINT_TENSOR_SUPPORTED_DTYPES:
         _op_error(
             "print",
@@ -3404,9 +3435,20 @@ def _emit_tensor_print(
         )
     if addrspace == "ub" and not in_vector:
         _op_error("print", "UB tensor printing requires AIV placement")
+    if addrspace == "l1":
+        if not in_cube:
+            _op_error("print", "L1 tensor printing requires AIC placement")
+        if descriptor.layout_tag not in ("zN", "nZ"):
+            _op_error("print", "L1 tensor printing requires a zN or nZ layout")
+    if addrspace == "l0c":
+        if not in_cube:
+            _op_error("print", "L0C tensor printing requires AIC placement")
+        if descriptor.layout_tag != "L0Clayout":
+            _op_error("print", "L0C tensor printing requires L0Clayout")
     logical_shape = (
         descriptor.origin_shape
-        if descriptor.layout_tag
+        if addrspace in ("l1", "l0c")
+        or descriptor.layout_tag
         in (
             "zN",
             "nZ",
@@ -3425,12 +3467,88 @@ def _emit_tensor_print(
         _op_error("print", "tensor element count must be positive")
 
     dynamic_shape = any(extent < 0 for extent in shape)
+    if addrspace == "l1":
+        coord = _print_tensor_shape_pattern_leaves(descriptor.coord)
+        if (
+            len(shape) != 2
+            or len(coord) != 2
+            or any(value < 0 for value in (*shape, *coord))
+        ):
+            _op_error(
+                "print",
+                "L1 tensor printing requires static rank-2 shape and coordinates",
+            )
+        rows, cols = shape
+        row, col = coord
+        c0_elements, _ = _c0_geometry(dtype_size_bits(descriptor.element_type))
+        if descriptor.layout_tag == "zN":
+            if cols != c0_elements:
+                _op_error(
+                    "print",
+                    "zN L1 tensor printing requires logical shape "
+                    f"[M, {c0_elements}] for {descriptor.element_type}",
+                )
+        else:
+            if rows != c0_elements:
+                _op_error(
+                    "print",
+                    "nZ L1 tensor printing requires logical shape "
+                    f"[{c0_elements}, N] for {descriptor.element_type}",
+                )
+        element_offset = _static_nz_physical_element_offset(descriptor, (row, col))
+        element_bytes = dtype_size_bytes(descriptor.element_type)
+        byte_offset = element_offset * element_bytes
+        if byte_offset > _LOCAL_PRINT_MAX_BYTE_OFFSET:
+            _op_error("print", "requires an L1 byte offset representable as uint32")
+        if math.gcd(descriptor.ptr_alignment, _builtins.abs(byte_offset)) < 32:
+            _op_error(
+                "print", "requires a statically proven 32-byte aligned L1 address"
+            )
+    elif addrspace == "l0c":
+        coord = _print_tensor_shape_pattern_leaves(descriptor.coord)
+        if (
+            len(shape) != 2
+            or len(coord) != 2
+            or any(value < 0 for value in (*shape, *coord))
+        ):
+            _op_error(
+                "print",
+                "L0C tensor printing requires static rank-2 shape and coordinates",
+            )
+        rows, cols = shape
+        row, col = coord
+        if rows < 16 or cols < 16:
+            _op_error(
+                "print",
+                "L0C print requires a complete 16x16 tile inside the logical shape",
+            )
+        if row % 16 or col % 16:
+            _op_error(
+                "print", "L0C tensor coordinates must be aligned to a 16x16 fractal"
+            )
+        element_offset = _static_nz_physical_element_offset(descriptor, (row, col))
+        element_bytes = dtype_size_bytes(descriptor.element_type)
+        byte_offset = element_offset * element_bytes
+        if byte_offset > _LOCAL_PRINT_MAX_BYTE_OFFSET:
+            _op_error("print", "requires an L0C byte offset representable as uint32")
+        if math.gcd(descriptor.ptr_alignment, _builtins.abs(byte_offset)) < 32:
+            _op_error(
+                "print", "requires a statically proven 32-byte aligned L0C address"
+            )
+        shape = (16, 16)
     element_count = None if dynamic_shape else math.prod(shape)
+    max_length = (
+        8
+        if addrspace == "l1"
+        else 256
+        if addrspace == "l0c"
+        else _PRINT_TENSOR_MAX_F32_ELEMENTS
+    )
     if length is None:
         if dynamic_shape:
             _op_error("print", "dynamic-shaped tensors require an explicit length")
         assert element_count is not None
-        if element_count > _PRINT_TENSOR_MAX_F32_ELEMENTS:
+        if element_count > max_length:
             _op_error(
                 "print",
                 "tensors exceeding the print capacity require an explicit length",
@@ -3452,24 +3570,33 @@ def _emit_tensor_print(
             _op_error("print", "length must be an integer or integer SSA value")
         static_length = resolved_length if isinstance(resolved_length, int) else None
     if static_length is not None:
-        if not 1 <= static_length <= _PRINT_TENSOR_MAX_F32_ELEMENTS:
+        if not 1 <= static_length <= max_length:
             _op_error(
                 "print",
-                f"length must be between 1 and {_PRINT_TENSOR_MAX_F32_ELEMENTS} elements",
+                f"length must be between 1 and {max_length} elements",
             )
         if element_count is not None and static_length > element_count:
             _op_error("print", "length must not exceed the tensor element count")
+        if addrspace == "l0c" and static_length != 256:
+            _op_error("print", "L0C tensor printing requires exactly 256 elements")
     length_value = _as_i64_value(
         static_length if static_length is not None else length, loc=loc
     )
 
-    _tla_ops_gen.print_tensor(value, length_value, shape, loc=loc)
+    print_op = _tla_ops_gen.print_tensor(value, length_value, shape, loc=loc)
+    operation = print_op.operation
+    parent = operation.parent
+    while parent is not None:
+        if parent.name in {"scf.if", "scf.for", "scf.while"}:
+            operation.attributes["dynamic_execution"] = mlir_ir.UnitAttr.get()
+            break
+        parent = parent.parent
 
 
 def print(*args: object, **kwargs: object) -> None:
     """Directory: Debug APIs
     Description:
-        Print a scalar, a formatted scalar string, or a physical prefix of a GM/UB tensor inside a `cube` / `vector` region.
+        Print a scalar, a formatted scalar string, or a supported physical tensor prefix from GM, UB, L1, or L0C inside a `cube` / `vector` region.
 
         Parameters:
         - *`args`* (`object`): Values to print (variadic positional arguments). Required.
@@ -3477,13 +3604,20 @@ def print(*args: object, **kwargs: object) -> None:
 
         Constraints:
         - Must be called inside a `@tla.kernel`-decorated kernel function.
-        - Must be called inside `tla.cube()` or `tla.vector()`; tensor printing supports GM/UB only with restricted dtypes.
+        - Must be called inside `tla.cube()` or `tla.vector()`.
+        - GM/UB support the documented tensor dtypes and a rank-1/rank-2 physical prefix.
+        - L1 requires AIC placement, a supported dtype, a 32-byte-aligned zN/nZ dense prefix whose C0 dimension spans 32 bytes, and at most 8 elements.
+        - L0C requires AIC placement, a supported dtype, L0Clayout, and exactly one 32-byte-aligned 16x16 typed view (256 elements).
+        - Aggregate FIFO use is checked for statically executed tensor prints. Runtime lengths, dynamic shapes, and prints under dynamic control flow emit a warning because their aggregate output cannot be bounded before launch; excessive output may be truncated or omitted.
 
         Example:
         ```python
         with tla.vector():
             tla.print(x_scalar)
             tla.print(x_ub, 64)  # tensor + prefix length
+
+        with tla.cube():
+            tla.print(x_l0c, 256)  # one aligned 16x16 CO1 tile
         ```
     """
     if kwargs:

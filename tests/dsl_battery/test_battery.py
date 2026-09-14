@@ -55,6 +55,7 @@ PRINT_TENSOR_UB_VARIANTS = (
     ("base", "2", "2", ("--all-dtypes",)),
     ("aligned-offset", "1", "1", ("--all-dtypes",)),
 )
+LOCAL_PRINT_CASE_ID = "print-tensor-local-memory"
 
 EVG_OPS = (
     "add",
@@ -466,6 +467,41 @@ def _cases(device: int) -> Iterator[tuple[str, list[list[str]]]]:
             ]],
         )
 
+    # --- print_tensor, local AIC storage ---
+    # Base cases sweep dtypes; repeated entries verify in-process cache reuse.
+    local_common = [
+        "print_tensor/print_tensor.py", "--run", *dev,
+        "--arch-scope", "aic.c310",
+    ]
+    l1_zn_base = [*local_common, "--storage", "l1", "--layout", "zn", "--all-dtypes"]
+    l1_nz_base = [*local_common, "--storage", "l1", "--layout", "nz", "--all-dtypes"]
+    l0c_base = [*local_common, "--storage", "l0c", "--all-dtypes"]
+    yield (
+        LOCAL_PRINT_CASE_ID,
+        [
+            l1_zn_base,
+            list(l1_zn_base),
+            l1_nz_base,
+            l0c_base,
+            list(l0c_base),
+            [*local_common, "--storage", "l1", "--layout", "zn", "--case", "aligned-offset", "--dtype", "i8"],
+            [*local_common, "--storage", "l1", "--layout", "nz", "--case", "aligned-offset", "--dtype", "f16"],
+            [*local_common, "--storage", "l1", "--layout", "zn", "--calls", "2"],
+            [
+                *local_common,
+                "--storage", "l1", "--layout", "zn",
+                "--case", "block-dependent", "--dtype", "f32",
+                "--block-num", "2",
+            ],
+            [
+                *local_common,
+                "--storage", "l0c",
+                "--case", "larger-origin",
+                "--all-dtypes",
+            ],
+        ],
+    )
+
 
 def battery_cases(device: int = 0) -> list[tuple[str, list[list[str]]]]:
     """The whole battery as data. Used for the tests, and to audit coverage."""
@@ -480,6 +516,12 @@ def _ids() -> list[str]:
 @pytest.mark.parametrize("case_id", _ids())
 def test_case(case_id: str, device: int) -> None:
     import example_runner
+
+    if case_id == LOCAL_PRINT_CASE_ID:
+        from catlass.base_dsl.runtime import ascend_debug_fifo
+
+        if reason := ascend_debug_fifo._debug_bus_support_error():
+            pytest.skip(reason)
 
     argvs = dict(battery_cases(device))[case_id]
     for argv in argvs:

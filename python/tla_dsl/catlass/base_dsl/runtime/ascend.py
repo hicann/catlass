@@ -143,6 +143,8 @@ def launch_kernel(
     uses_scalar_print: bool = False,
     uses_tensor_print: bool = False,
     is_mixed: bool = False,
+    print_tensor_position: str | None = None,
+    device_id: int | None = None,
 ) -> None:
     """Launch via PyACL ``kernel_args_*`` + ``launch_kernel_with_config`` (Host args)."""
     import acl
@@ -195,6 +197,8 @@ def launch_kernel(
             uses_scalar_print=uses_scalar_print,
             uses_tensor_print=uses_tensor_print,
             is_mixed=is_mixed,
+            print_tensor_position=print_tensor_position,
+            device=int(device_id or 0),
         )
         return
 

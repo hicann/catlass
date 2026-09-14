@@ -48,6 +48,14 @@ def as_stream(stream: Any, *, device: int) -> int:
     """Normalize a user-supplied stream to an RT integer handle."""
     if stream is None:
         return current_stream(device)
+    stream_device = getattr(stream, "device", None)
+    if stream_device is not None:
+        stream_device = getattr(stream_device, "index", stream_device)
+        if stream_device is not None and int(stream_device) != int(device):
+            raise TlaRuntimeUnavailableError(
+                f"stream belongs to device {int(stream_device)}, but the loaded "
+                f"kernel belongs to device {int(device)}"
+            )
     npu_stream = getattr(stream, "npu_stream", None)
     if npu_stream is not None:
         return int(npu_stream)

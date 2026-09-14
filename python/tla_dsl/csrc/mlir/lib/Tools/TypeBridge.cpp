@@ -670,7 +670,8 @@ std::optional<py::dict> buildKernelAbi(ModuleOp module, const KernelPointerProve
         ArrayRef<Type> argTypes = function.getArgumentTypes();
         for (auto [index, type] : llvm::enumerate(argTypes)) {
             if (function.getArgAttr(index, "tla.debug_print.workspace") ||
-                function.getArgAttr(index, "tla.print_tensor.workspace"))
+                function.getArgAttr(index, "tla.print_tensor.workspace") ||
+                function.getArgAttr(index, "tla.debug_tunnel.state"))
                 continue;
             // originShape0/1 are already folded into the 13-slot memref_field list.
             if (skipOriginIndexArgs > 0) {
