@@ -9,7 +9,7 @@ default_merge_method: squash
 require_labels:
   - label: lgtm
     operator: "cann-robot"
-  - label: approve
+  - label: approved
     operator: "cann-robot"
   - label: cann-cla/yes
     operator: "cann-robot"
