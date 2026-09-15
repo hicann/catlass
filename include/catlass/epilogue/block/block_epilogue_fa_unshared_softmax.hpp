@@ -99,39 +99,46 @@ public:
     {
         uint32_t subBlockIdx = AscendC::GetSubBlockIdx();
         uint32_t subBlockNum = AscendC::GetSubBlockNum();
-        uint32_t curHeadSplitSubBlock = headNum / subBlockNum;
-        uint32_t curHeadThisSubBlock = (subBlockIdx == 0) ? curHeadSplitSubBlock : (headNum - curHeadSplitSubBlock);
-        uint64_t headOffset = (subBlockIdx == 0) ? 0 : curHeadSplitSubBlock;
+        // Split rows even when there is only one KV group. Each sub-core's UB holds at most 64 rows.
+        // An even split offset also keeps the half-precision P write aligned to 32 bytes.
+        uint32_t rowNum = headNum * groupSize;
+        uint32_t rowSplitSubBlock = (rowNum / subBlockNum + 1) / 2 * 2;
+        uint32_t rowOffsetSubBlock = subBlockIdx * rowSplitSubBlock;
+        uint32_t rowNumThisSubBlock = (subBlockIdx == 0) ? rowSplitSubBlock : (rowNum - rowSplitSubBlock);
+        if (rowNumThisSubBlock == 0) {
+            return;
+        }
 
         uint32_t kSeqTileRound = (maxDecodeStep * headNum + SEQ_TILE_SIZE - 1) / SEQ_TILE_SIZE * SEQ_TILE_SIZE;
         AscendC::Duplicate(
-            unsharedMaskUbTensor, std::numeric_limits<float>::lowest(),
-            kSeqTileRound * curHeadThisSubBlock * groupSize);
+            unsharedMaskUbTensor, std::numeric_limits<float>::lowest(), kSeqTileRound * rowNumThisSubBlock);
         AscendC::PipeBarrier<PIPE_V>();
-        for (uint32_t round = 0; round < curHeadThisSubBlock; ++round) {
+        for (uint32_t rowStart = 0; rowStart < rowNumThisSubBlock;) {
+            uint32_t globalRow = rowOffsetSubBlock + rowStart;
+            uint32_t rowsThisHead = AscendC::Std::min(groupSize - globalRow % groupSize, rowNumThisSubBlock - rowStart);
             uint8_t repeatStride = kSeqTileRound * sizeof(ElementInput) / 32;
-            uint32_t colOffset = (headOffset + round) * maxDecodeStep;
+            uint32_t colOffset = (globalRow / groupSize) * maxDecodeStep;
             uint32_t colOffsetFloor = colOffset / FLOAT_BLOCK_SIZE * FLOAT_BLOCK_SIZE;
             uint32_t floorSub = colOffset - colOffsetFloor;
-            uint64_t rowOffset = round * groupSize * kSeqTileRound;
+            uint64_t rowOffset = rowStart * kSeqTileRound;
             uint64_t totalOffset = rowOffset + colOffsetFloor;
             auto totalDupLen = unsharedKvSeqLen + floorSub;
             if (totalDupLen > FLOAT_VECTOR_SIZE) {
-                for (uint32_t loopIdx = 0; loopIdx < groupSize; ++loopIdx) {
+                for (uint32_t loopIdx = 0; loopIdx < rowsThisHead; ++loopIdx) {
                     AscendC::Duplicate(
                         unsharedMaskUbTensor[totalOffset + loopIdx * kSeqTileRound], float(0.f),
                         static_cast<int32_t>(totalDupLen));
                 }
             } else {
                 AscendC::Duplicate(
-                    unsharedMaskUbTensor[totalOffset], float(0.f), static_cast<uint64_t>(totalDupLen), groupSize, 1,
+                    unsharedMaskUbTensor[totalOffset], float(0.f), static_cast<uint64_t>(totalDupLen), rowsThisHead, 1,
                     repeatStride);
             }
             AscendC::PipeBarrier<PIPE_V>();
 
             if (floorSub > 0) {
                 if (floorSub > FLOAT_VECTOR_SIZE) {
-                    for (uint32_t loopIdx = 0; loopIdx < groupSize; ++loopIdx) {
+                    for (uint32_t loopIdx = 0; loopIdx < rowsThisHead; ++loopIdx) {
                         AscendC::Duplicate(
                             unsharedMaskUbTensor[totalOffset + loopIdx * kSeqTileRound],
                             std::numeric_limits<float>::lowest(), static_cast<int32_t>(floorSub));
@@ -139,10 +146,11 @@ public:
                 } else {
                     AscendC::Duplicate(
                         unsharedMaskUbTensor[totalOffset], std::numeric_limits<float>::lowest(),
-                        static_cast<uint64_t>(floorSub), groupSize, 1, repeatStride);
+                        static_cast<uint64_t>(floorSub), rowsThisHead, 1, repeatStride);
                 }
                 AscendC::PipeBarrier<PIPE_V>();
             }
+            rowStart += rowsThisHead;
         }
         AscendC::ResetMask();
     }
@@ -265,7 +273,7 @@ public:
     void SubCoreCompute(
         AscendC::GlobalTensor<ElementOutput> gOutput, AscendC::GlobalTensor<ElementInput> gInput,
         AscendC::GlobalTensor<ElementInput> gmOutput, AscendC::GlobalTensor<ElementInput> glOutput,
-        const LayoutOutput& layoutOutput, const LayoutInput& layoutInput, uint32_t curHeadNum, uint32_t headOffset)
+        const LayoutOutput& layoutOutput, const LayoutInput& layoutInput, uint32_t rowOffset)
     {
         uint32_t curRowNum = layoutInput.shape(0);
         uint32_t kSeqTile = layoutInput.shape(1);
@@ -281,7 +289,6 @@ public:
         // muls scale_value
         AscendC::Muls(lsUbTensor, lsUbTensor, tor, curRowNum * kSeqTileRound);
         AscendC::PipeBarrier<PIPE_V>();
-        uint32_t groupSize = curRowNum / curHeadNum;
         AscendC::Add(lsUbTensor, lsUbTensor, unsharedMaskUbTensor, curRowNum * kSeqTileRound);
         AscendC::PipeBarrier<PIPE_V>();
         AscendC::WaitFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID3);
@@ -306,22 +313,15 @@ public:
         AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID3);
         AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID3);
 
-        uint16_t blockCount = 1;
-        uint16_t blockLen = curRowNum * kSeqTileRound / T_BLOCK_SIZE;
-        uint16_t srcStride = 0;
-        uint16_t dstStride = 0;
-        AscendC::DataCopy(
-            gOutput, tvUbTensor16,
-            AscendC::DataCopyParams(
-                blockCount, // blockCount
-                blockLen,   // blockLen
-                srcStride,  // srcGap
-                dstStride));
+        // Do not truncate a final half-block (e.g. three rows with an eight-element stride).
+        AscendC::DataCopyExtParams copyPParams{
+            1, static_cast<uint32_t>(curRowNum * kSeqTileRound * sizeof(ElementOutput)), 0, 0, 0};
+        AscendC::DataCopyPad(gOutput, tvUbTensor16, copyPParams);
 
-        auto copyLen = curHeadNum * groupSize;
+        auto copyLen = curRowNum;
         if (copyLen % FLOAT_BLOCK_SIZE == 0) {
-            AscendC::DataCopy(gmOutput[headOffset * groupSize], lmUbTensor, copyLen);
-            AscendC::DataCopy(glOutput[headOffset * groupSize], llUbTensor, copyLen);
+            AscendC::DataCopy(gmOutput[rowOffset], lmUbTensor, copyLen);
+            AscendC::DataCopy(glOutput[rowOffset], llUbTensor, copyLen);
         } else {
             AscendC::DataCopyExtParams copyOutParams;
             copyOutParams.blockCount = 1;
@@ -329,8 +329,8 @@ public:
             copyOutParams.srcStride = 0;
             copyOutParams.dstStride = 0;
             copyOutParams.rsv = 0;
-            AscendC::DataCopyPad(gmOutput[headOffset * groupSize], lmUbTensor, copyOutParams);
-            AscendC::DataCopyPad(glOutput[headOffset * groupSize], llUbTensor, copyOutParams);
+            AscendC::DataCopyPad(gmOutput[rowOffset], lmUbTensor, copyOutParams);
+            AscendC::DataCopyPad(glOutput[rowOffset], llUbTensor, copyOutParams);
         }
         AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID3);
     }
@@ -344,16 +344,14 @@ public:
     {
         uint32_t rowActual = actualBlockShape.m();
         uint32_t nActual = actualBlockShape.n();
-        uint32_t tokenNumPerHead = rowActual / curHeadNum;
 
         uint32_t subBlockIdx = AscendC::GetSubBlockIdx();
         uint32_t subBlockNum = AscendC::GetSubBlockNum();
 
-        uint32_t curHeadSplitSubBlock = curHeadNum / subBlockNum;
-        uint32_t curHeadThisSubBlock = (subBlockIdx == 0) ? curHeadSplitSubBlock : (curHeadNum - curHeadSplitSubBlock);
-
-        uint32_t rowActualThisSubBlock = curHeadThisSubBlock * tokenNumPerHead;
-        uint32_t rowOffsetSubBlock = subBlockIdx * curHeadSplitSubBlock * tokenNumPerHead;
+        // Keep this partition identical to InitUnsharedMaskV2, including splits within a GQA group.
+        uint32_t rowSplitSubBlock = (rowActual / subBlockNum + 1) / 2 * 2;
+        uint32_t rowActualThisSubBlock = (subBlockIdx == 0) ? rowSplitSubBlock : (rowActual - rowSplitSubBlock);
+        uint32_t rowOffsetSubBlock = subBlockIdx * rowSplitSubBlock;
 
         if (rowActualThisSubBlock > 0) {
             int64_t offsetInput = layoutInput.GetOffset(MatrixCoord(rowOffsetSubBlock, 0));
@@ -366,7 +364,7 @@ public:
             AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID3);
             SubCoreCompute(
                 gOutputThisSubBlock, gInputThisSubBlock, gmOutput, glOutput, layoutOutputThisSubBlock,
-                layoutInputThisSubBlock, curHeadThisSubBlock, (subBlockIdx == 0) ? 0 : curHeadSplitSubBlock);
+                layoutInputThisSubBlock, rowOffsetSubBlock);
             AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID3);
             AscendC::WaitFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID3);
         }

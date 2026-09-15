@@ -832,6 +832,11 @@ public:
 
     template <>
     CATLASS_DEVICE void operator()<AscendC::AIV>(XAttnKernelParams const &params) {
+        uint32_t coreIdx = AscendC::GetBlockIdx() / AscendC::GetSubBlockNum();
+        if (coreIdx >= faTilingData->combineCoreNum) {
+            return;
+        }
+
         AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID0);
         AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID1);
         AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID2);
@@ -853,7 +858,6 @@ public:
         uint32_t combineTailRowNum = faTilingData->combineTailRowNum;
         uint32_t numTokens = faTilingData->numTokens;
         uint32_t qHeads = faTilingData->numHeads;
-        uint32_t coreIdx = AscendC::GetBlockIdx() / AscendC::GetSubBlockNum();
         uint32_t coreNum = AscendC::GetBlockNum();
         uint32_t currentCoreRowNum = 0;
         uint32_t embed = faTilingData->embeddingSize;
@@ -865,9 +869,6 @@ public:
         uint32_t sharedSumMaxGmOffset = numTokens * qHeads * SOFTMAX_BROAD_SIZE;
         uint32_t unsharedSumMaxGmOffset = numTokens * qHeads;
         uint32_t attnOutputOffset = numTokens * qHeads * embed;
-        if (coreIdx >= faTilingData->combineCoreNum) {
-            return;
-        }
 
         if (coreIdx < combineFormerCoreNum) {
             currentCoreRowNum = combineFormerRowNum;

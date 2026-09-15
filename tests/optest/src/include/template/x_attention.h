@@ -178,7 +178,22 @@ struct XAttentionOp {
 
         aclrtStream stream = c10_npu::getCurrentNPUStream().stream(false);
         uint32_t aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
-        RUN_NPU_FUNC(CatlassKernel::XAttention, aicCoreNum, stream, params);
+        // params contains raw addresses. Keep their tensors alive until the queued
+        // launcher has submitted the kernel to the NPU stream.
+        const std::array<at::Tensor, 9> inputs{
+            query, shared_key_block, shared_value_block, unshared_key_block,
+            unshared_value_block, unshared_block_table, shared_kv_lens,
+            decode_step, shared_block_table};
+        TORCH_CHECK(CatlassKernel::XAttention != nullptr, "x_attention kernel is not available");
+        at_npu::native::OpCommand::RunOpApiV2(
+            "CatlassKernel::XAttention", [inputs, output, aicCoreNum, stream, params]() -> aclError {
+                try {
+                    CatlassKernel::XAttention(aicCoreNum, stream, params);
+                } catch (...) {
+                    return ACL_ERROR_INTERNAL_ERROR;
+                }
+                return ACL_SUCCESS;
+            });
         return output;
     }
 };

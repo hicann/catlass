@@ -183,8 +183,10 @@ public:
                     AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0ABPingPongFlag);
                     AscendC::WaitFlag<AscendC::HardEvent::MTE1_M>(l0ABPingPongFlag);
                     bool initMmad = kL1Idx == 0 && kL0Idx == 0;
+                    // Keep matrix mode for a single output row; only actual rows are copied back to GM.
+                    uint32_t mMmad = mL1Actual == 1 ? 16 : mL1Actual;
                     tileMmad(
-                        l0CTensor[l0CPingPongFlag], l0ATensor[l0ABPingPongFlag], l0BTensor[l0ABPingPongFlag], mL1Actual,
+                        l0CTensor[l0CPingPongFlag], l0ATensor[l0ABPingPongFlag], l0BTensor[l0ABPingPongFlag], mMmad,
                         embed, kL0Actual, initMmad);
                     AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(l0ABPingPongFlag);
                     l0ABPingPongFlag = 1 - l0ABPingPongFlag;

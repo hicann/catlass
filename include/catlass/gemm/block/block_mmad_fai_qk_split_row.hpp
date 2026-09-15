@@ -195,8 +195,10 @@ public:
                     AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0ABPingPongFlag);
                     AscendC::WaitFlag<AscendC::HardEvent::MTE1_M>(l0ABPingPongFlag);
                     bool initMmad = kL0Idx == 0;
+                    // L0A uses a matrix layout; M=1 would select the incompatible GEMV layout on Atlas A2.
+                    uint32_t mMmad = mL0Actual == 1 ? 16 : mL0Actual;
                     tileMmad(
-                        l0CTensor[l0CPingPongFlag], l0ATensor[l0ABPingPongFlag], l0BTensor[l0ABPingPongFlag], mL0Actual,
+                        l0CTensor[l0CPingPongFlag], l0ATensor[l0ABPingPongFlag], l0BTensor[l0ABPingPongFlag], mMmad,
                         nActual, kL0Actual, initMmad);
                     AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(l0ABPingPongFlag);
                     l0ABPingPongFlag = 1 - l0ABPingPongFlag;
