@@ -1,0 +1,122 @@
+// RUN: %tla_compile %s -o %t
+// RUN: %filecheck %s --check-prefix=BLOCK_LOAD < %t
+// RUN: %filecheck %s --check-prefix=BLOCK_LOAD_HALF < %t
+// RUN: %filecheck %s --check-prefix=BLOCK_LOAD_INT < %t
+// RUN: %filecheck %s --check-prefix=BLOCK_LOAD_POST < %t
+
+!fvec = !tla.tensor<!tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, RowMajor>, !tla.coord<0>, !tla.ptr<f32, ub, 4>>
+!hvec = !tla.tensor<!tla.layout<!tla.shape<128>, !tla.stride<1>, !tla.shape<128>, RowMajor>, !tla.coord<0>, !tla.ptr<f16, ub, 2>>
+!ivec = !tla.tensor<!tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, RowMajor>, !tla.coord<0>, !tla.ptr<i32, ub, 4>>
+
+module {
+  // ----- f32 strided block load -----
+  func.func @block_load_lowering(
+      %src_memref: memref<64xf32, #hivm.address_space<ub>>,
+      %dst_memref: memref<64xf32, #hivm.address_space<ub>>) {
+    %src_c0 = arith.constant 0 : index
+    %src_c1 = arith.constant 1 : index
+    %src_c64 = arith.constant 64 : index
+    %src = tla.tensor_desc %src_memref shape [%src_c1, %src_c64, %src_c1, %src_c1] stride [%src_c64, %src_c1, %src_c1, %src_c1] origin_shape [%src_c1, %src_c64] coord [%src_c0, %src_c0] : memref<64xf32, #hivm.address_space<ub>> -> !fvec
+    %dst_c0 = arith.constant 0 : index
+    %dst_c1 = arith.constant 1 : index
+    %dst_c64 = arith.constant 64 : index
+    %dst = tla.tensor_desc %dst_memref shape [%dst_c1, %dst_c64, %dst_c1, %dst_c1] stride [%dst_c64, %dst_c1, %dst_c1, %dst_c1] origin_shape [%dst_c1, %dst_c64] coord [%dst_c0, %dst_c0] : memref<64xf32, #hivm.address_space<ub>> -> !fvec
+    "tla.vector"() ({
+      "tla.vec.func"() ({
+        %shape = "tla.make_shape"() : () -> !tla.shape<64>
+        %coord = "tla.make_coord"() : () -> !tla.coord<0>
+        %src_tile = "tla.tile_view"(%src, %shape, %coord) : (!fvec, !tla.shape<64>, !tla.coord<0>) -> !fvec
+        %dst_tile = "tla.tile_view"(%dst, %shape, %coord) : (!fvec, !tla.shape<64>, !tla.coord<0>) -> !fvec
+        %loaded = tla.load %src_tile {block_stride = 32 : i32} : !fvec -> !tla.vector<64xf32>
+        tla.store %dst_tile, %loaded : !fvec, !tla.vector<64xf32>
+      }) {mode = "simd"} : () -> ()
+    }) : () -> ()
+    return
+  }
+  // ----- f16 strided block load -----
+  func.func @block_load_lowering_half(
+      %src_memref: memref<128xf16, #hivm.address_space<ub>>,
+      %dst_memref: memref<128xf16, #hivm.address_space<ub>>) {
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    %c128 = arith.constant 128 : index
+    %src = tla.tensor_desc %src_memref shape [%c1, %c128, %c1, %c1] stride [%c128, %c1, %c1, %c1] origin_shape [%c1, %c128] coord [%c0, %c0] : memref<128xf16, #hivm.address_space<ub>> -> !hvec
+    %dst = tla.tensor_desc %dst_memref shape [%c1, %c128, %c1, %c1] stride [%c128, %c1, %c1, %c1] origin_shape [%c1, %c128] coord [%c0, %c0] : memref<128xf16, #hivm.address_space<ub>> -> !hvec
+    "tla.vector"() ({
+      "tla.vec.func"() ({
+        %shape = "tla.make_shape"() : () -> !tla.shape<128>
+        %coord = "tla.make_coord"() : () -> !tla.coord<0>
+        %src_tile = "tla.tile_view"(%src, %shape, %coord) : (!hvec, !tla.shape<128>, !tla.coord<0>) -> !hvec
+        %dst_tile = "tla.tile_view"(%dst, %shape, %coord) : (!hvec, !tla.shape<128>, !tla.coord<0>) -> !hvec
+        %loaded = tla.load %src_tile {block_stride = 8 : i32} : !hvec -> !tla.vector<128xf16>
+        tla.store %dst_tile, %loaded : !hvec, !tla.vector<128xf16>
+      }) {mode = "simd"} : () -> ()
+    }) : () -> ()
+    return
+  }
+  // ----- i32 strided block load -----
+  func.func @block_load_lowering_int(
+      %src_memref: memref<64xi32, #hivm.address_space<ub>>,
+      %dst_memref: memref<64xi32, #hivm.address_space<ub>>) {
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    %c64 = arith.constant 64 : index
+    %src = tla.tensor_desc %src_memref shape [%c1, %c64, %c1, %c1] stride [%c64, %c1, %c1, %c1] origin_shape [%c1, %c64] coord [%c0, %c0] : memref<64xi32, #hivm.address_space<ub>> -> !ivec
+    %dst = tla.tensor_desc %dst_memref shape [%c1, %c64, %c1, %c1] stride [%c64, %c1, %c1, %c1] origin_shape [%c1, %c64] coord [%c0, %c0] : memref<64xi32, #hivm.address_space<ub>> -> !ivec
+    "tla.vector"() ({
+      "tla.vec.func"() ({
+        %shape = "tla.make_shape"() : () -> !tla.shape<64>
+        %coord = "tla.make_coord"() : () -> !tla.coord<0>
+        %src_tile = "tla.tile_view"(%src, %shape, %coord) : (!ivec, !tla.shape<64>, !tla.coord<0>) -> !ivec
+        %dst_tile = "tla.tile_view"(%dst, %shape, %coord) : (!ivec, !tla.shape<64>, !tla.coord<0>) -> !ivec
+        %loaded = tla.load %src_tile {block_stride = 4 : i32} : !ivec -> !tla.vector<64xi32>
+        tla.store %dst_tile, %loaded : !ivec, !tla.vector<64xi32>
+      }) {mode = "simd"} : () -> ()
+    }) : () -> ()
+    return
+  }
+  // ----- f32 strided block load with POST_MODE_NORMAL pre-offset -----
+  func.func @block_load_lowering_post(
+      %src_memref: memref<64xf32, #hivm.address_space<ub>>,
+      %dst_memref: memref<64xf32, #hivm.address_space<ub>>) {
+    %src_c0 = arith.constant 0 : index
+    %src_c1 = arith.constant 1 : index
+    %src_c64 = arith.constant 64 : index
+    %src = tla.tensor_desc %src_memref shape [%src_c1, %src_c64, %src_c1, %src_c1] stride [%src_c64, %src_c1, %src_c1, %src_c1] origin_shape [%src_c1, %src_c64] coord [%src_c0, %src_c0] : memref<64xf32, #hivm.address_space<ub>> -> !fvec
+    %dst_c0 = arith.constant 0 : index
+    %dst_c1 = arith.constant 1 : index
+    %dst_c64 = arith.constant 64 : index
+    %dst = tla.tensor_desc %dst_memref shape [%dst_c1, %dst_c64, %dst_c1, %dst_c1] stride [%dst_c64, %dst_c1, %dst_c1, %dst_c1] origin_shape [%dst_c1, %dst_c64] coord [%dst_c0, %dst_c0] : memref<64xf32, #hivm.address_space<ub>> -> !fvec
+    "tla.vector"() ({
+      "tla.vec.func"() ({
+        %shape = "tla.make_shape"() : () -> !tla.shape<64>
+        %coord = "tla.make_coord"() : () -> !tla.coord<0>
+        %src_tile = "tla.tile_view"(%src, %shape, %coord) : (!fvec, !tla.shape<64>, !tla.coord<0>) -> !fvec
+        %dst_tile = "tla.tile_view"(%dst, %shape, %coord) : (!fvec, !tla.shape<64>, !tla.coord<0>) -> !fvec
+        %loaded = tla.load %src_tile {block_stride = 16 : i32, repeat_stride = 2 : i32} : !fvec -> !tla.vector<64xf32>
+        tla.store %dst_tile, %loaded : !fvec, !tla.vector<64xf32>
+      }) {mode = "simd"} : () -> ()
+    }) : () -> ()
+    return
+  }
+}
+
+// BLOCK_LOAD-LABEL: block_load_lowering
+// BLOCK_LOAD: load_with_stride_float
+// BLOCK_LOAD-NOT: tla.load
+// BLOCK_LOAD: return
+
+// BLOCK_LOAD_HALF-LABEL: block_load_lowering_half
+// BLOCK_LOAD_HALF: load_with_stride_half
+// BLOCK_LOAD_HALF-NOT: tla.load
+// BLOCK_LOAD_HALF: return
+
+// BLOCK_LOAD_INT-LABEL: block_load_lowering_int
+// BLOCK_LOAD_INT: load_with_stride_int32
+// BLOCK_LOAD_INT-NOT: tla.load
+// BLOCK_LOAD_INT: return
+
+// BLOCK_LOAD_POST-LABEL: block_load_lowering_post
+// BLOCK_LOAD_POST: load_with_stride_float
+// BLOCK_LOAD_POST-NOT: tla.load
+// BLOCK_LOAD_POST: return

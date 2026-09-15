@@ -253,6 +253,7 @@ class _Tensor(TensorABC):
         )
         from ..execution_lowering import TlaLoweringError
         from ..params import (
+            BlockLoadParams,
             LoadDist,
             MaskLoadDist,
             MaskLoadParams,
@@ -299,17 +300,22 @@ class _Tensor(TensorABC):
 
         if params is None:
             params = NormalLoadParams()
-        elif not isinstance(params, (NormalLoadParams, UnalignLoadParams)):
+        elif not isinstance(
+            params, (NormalLoadParams, UnalignLoadParams, BlockLoadParams)
+        ):
             raise TlaLoweringError(
-                "load params must be NormalLoadParams, UnalignLoadParams, or "
-                f"MaskLoadParams, got {type(params).__name__}"
+                "load params must be NormalLoadParams, UnalignLoadParams, "
+                f"BlockLoadParams, or MaskLoadParams, got {type(params).__name__}"
             )
 
         if params.post_mode != PostMode.POST_MODE_NORMAL:
             raise NotImplementedError(
                 f"currently unsupported post_mode {params.post_mode!r}"
             )
-        if params.post_update_stride != 0:
+        # BlockLoadParams gives post_update_stride the POST_MODE_NORMAL
+        # compile-time pre-offset meaning (vsldb repeat_stride); for the other
+        # param types it stays unsupported.
+        if params.post_update_stride != 0 and not isinstance(params, BlockLoadParams):
             raise NotImplementedError(
                 f"currently unsupported post_update_stride {params.post_update_stride}"
             )
@@ -348,6 +354,29 @@ class _Tensor(TensorABC):
             isinstance(params, NormalLoadParams)
             and params.load_dist == LoadDist.DIST_BLK
         )
+        is_block_load = isinstance(params, BlockLoadParams)
+        if is_block_load:
+            # vsldb packs each stride into a 16-bit immediate field: reject
+            # out-of-range values at compile time (Issue 519 acceptance).
+            for stride_name, stride_value in (
+                ("block_stride", params.block_stride),
+                ("post_update_stride", params.post_update_stride),
+            ):
+                if not 0 <= stride_value <= 0xFFFF:
+                    raise TlaLoweringError(
+                        f"BlockLoadParams.{stride_name} must be in [0, 65535] "
+                        "(16-bit vsldb immediate field), got "
+                        f"{stride_value}"
+                    )
+            # vsldb stubs cover 2/4-byte lanes (f32/f16/bf16/i32/u32/i16/u16);
+            # b8 has no VectorReg shim yet.
+            elem = str(source_desc.element_type).strip().lower()
+            if dtype_size_bytes(elem) not in (2, 4):
+                raise TlaLoweringError(
+                    "BlockLoadParams requires a 2/4-byte element type "
+                    "(f32/f16/bf16/i32/u32/i16/u16), got "
+                    f"{source_desc.element_type}"
+                )
 
         load_kwargs: dict[str, Any] = {"loc": loc}
         if isinstance(params, UnalignLoadParams):
@@ -445,6 +474,11 @@ class _Tensor(TensorABC):
             # any element size, so there is no dtype check here; the result
             # is a full VL vector regardless of the source origin_shape.
             result_desc = _full_vector_ssa_descriptor(source_desc.element_type)
+        elif is_block_load:
+            # AscendC vsldb strided block load: one instruction gathers 8
+            # DataBlocks (256B) into a full VL register regardless of the
+            # source origin_shape; the tile view only supplies the address.
+            result_desc = _full_vector_ssa_descriptor(source_desc.element_type)
         else:
             result_desc = _vector_ssa_type_from_tensor_descriptor(source_desc)
 
@@ -453,7 +487,20 @@ class _Tensor(TensorABC):
             results = _tla_ops_gen.load(result_type, result_type, source, **load_kwargs)
             return tuple(VectorSSA(result) for result in results)
 
-        result = _tla_ops_gen.load(result_type, None, source, **load_kwargs)
+        block_stride_attr = params.block_stride if is_block_load else None
+        repeat_stride_attr = (
+            params.post_update_stride
+            if is_block_load and params.post_update_stride != 0
+            else None
+        )
+        result = _tla_ops_gen.load(
+            result_type,
+            None,
+            source,
+            block_stride=block_stride_attr,
+            repeat_stride=repeat_stride_attr,
+            **load_kwargs,
+        )
         return VectorSSA(result)
 
     @dsl_user_op

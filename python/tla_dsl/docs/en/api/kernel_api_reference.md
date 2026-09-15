@@ -681,7 +681,7 @@ with tla.vec.func(mode="simd"):
 
 ### `Tensor.store`
 
-**Source:** [`catlass.tla.tensor._Tensor.store`](../../../catlass/tla/tensor.py#L460)
+**Source:** [`catlass.tla.tensor._Tensor.store`](../../../catlass/tla/tensor.py#L507)
 
 Description:
 
@@ -2304,7 +2304,7 @@ with tla.vector():
 
 ### `Tensor.fill`
 
-**Source:** [`catlass.tla.tensor._Tensor.fill`](../../../catlass/tla/tensor.py#L636)
+**Source:** [`catlass.tla.tensor._Tensor.fill`](../../../catlass/tla/tensor.py#L683)
 
 Description:
 

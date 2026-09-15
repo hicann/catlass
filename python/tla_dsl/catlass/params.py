@@ -168,6 +168,22 @@ class UnalignLoadParams(LoadParams):
 
 
 @dataclass
+class BlockLoadParams(LoadParams):
+    """UB Block load with stride (AscendC ``vsldb``).
+
+    One instruction gathers 8 DataBlocks whose heads are ``block_stride``
+    DataBlocks (32B units) apart; ``block_stride == 0`` repeats the first
+    DataBlock into all 8 slots. ``post_update_stride`` is the
+    POST_MODE_NORMAL compile-time address pre-offset in 32B DataBlocks.
+    Both strides must fit in 16 bits ([0, 65535]).
+    """
+
+    block_stride: int = 0
+    post_mode: str = PostMode.POST_MODE_NORMAL
+    post_update_stride: int = 0
+
+
+@dataclass
 class MaskLoadParams(LoadParams):
     """Continuous-aligned MaskSSA load (1/2/4-byte UB / ``plds``).
 

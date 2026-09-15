@@ -1077,6 +1077,13 @@ def Tla_LoadOp : Tla_Op<"load", []> {
       Dual-destination ``dintlv_b32`` produces a second result (even/odd b32
       elements), lowering to ``ave.hir.vload <DINTLV_B32>``. Unaligned path
       lowers to ``ave.hir.vload`` with ``vldas``/``vldus`` via HIVMAVE.
+      Optional compile-time ``block_stride`` (i32 attribute) enables strided
+      block load (AscendC ``vsldb``): one instruction gathers 8 DataBlocks
+      whose heads are ``block_stride`` DataBlocks (32B units) apart;
+      ``block_stride == 0`` repeats the first DataBlock. ``repeat_stride``
+      (POST_MODE_NORMAL) is a compile-time address pre-offset in 32B
+      DataBlocks. Strided load is mutually exclusive with ``load_dist`` and
+      the dual result.
     * ``!tla.mask`` — continuous-aligned MaskReg load (AscendC
       ``LoadAlign(MaskReg&)`` / ``DIST_NORM`` / ``plds``). Source UB element
       type must be a 1/2/4-byte scalar (int or float). ``N`` on
@@ -1087,6 +1094,8 @@ def Tla_LoadOp : Tla_Op<"load", []> {
     Must be nested inside a ``tla.vec.func`` region.
   }];
   let arguments = (ins Tla_TensorType:$source,
+                       OptionalAttr<I32Attr>:$block_stride,
+                       OptionalAttr<I32Attr>:$repeat_stride,
                        OptionalAttr<Tla_LoadDistAttr>:$load_dist,
                        OptionalAttr<UnitAttr>:$unaligned_ub_access);
   let results = (outs AnyTypeOf<[Tla_VectorSSAType, Tla_MaskSSAType]>:$result,

@@ -101,8 +101,8 @@ module {
         %mask_bitwise_or = "tla.bitwise_or"(%mask_bitwise_or_all, %m4, %all) : (!tla.mask<64>, !tla.mask<64>, !tla.mask<64>) -> !tla.mask<64>
         %mask_bitwise_xor_all = "tla.bitwise_xor"(%h, %m4) : (!tla.mask<64>, !tla.mask<64>) -> !tla.mask<64>
         %mask_bitwise_xor = "tla.bitwise_xor"(%mask_bitwise_xor_all, %m4, %all) : (!tla.mask<64>, !tla.mask<64>, !tla.mask<64>) -> !tla.mask<64>
-        %reg0 = "tla.load"(%src0_tile) : (!vec) -> !tla.vector<64xi32>
-        %reg1 = "tla.load"(%src1_tile) : (!vec) -> !tla.vector<64xi32>
+        %reg0 = "tla.load"(%src0_tile) <{operandSegmentSizes = array<i32: 1, 0, 0>}> : (!vec) -> !tla.vector<64xi32>
+        %reg1 = "tla.load"(%src1_tile) <{operandSegmentSizes = array<i32: 1, 0, 0>}> : (!vec) -> !tla.vector<64xi32>
         %zero = arith.constant 0 : i32
         %zero_reg = "tla.full"(%zero) : (i32) -> !tla.vector<64xi32>
         %out_mask_not = "tla.where"(%mask_bitwise_not, %reg0, %zero_reg) : (!tla.mask<64>, !tla.vector<64xi32>, !tla.vector<64xi32>) -> !tla.vector<64xi32>

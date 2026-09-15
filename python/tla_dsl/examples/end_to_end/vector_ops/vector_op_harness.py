@@ -248,8 +248,11 @@ class DirectVectorOpHarness:
                 f"but output_count={self.config.output_count}"
             )
 
+        # Bind each input with its true buffer extent: kernels whose source is
+        # larger than the kernel shape (e.g. stride gather) rely on the origin
+        # shape to size the GM->UB copy; tile_view crops views to this extent.
         tla_inputs = tuple(
-            make_tla_tensor(input_tensor, tla_dtype, self.config.get_kernel_shape())
+            make_tla_tensor(input_tensor, tla_dtype, tuple(input_tensor.shape))
             for input_tensor in inputs
         )
         tla_outputs = tuple(

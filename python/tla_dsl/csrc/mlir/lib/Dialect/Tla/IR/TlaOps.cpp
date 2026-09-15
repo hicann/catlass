@@ -759,6 +759,8 @@ mlir::LogicalResult LoadOp::verify()
             return emitOpError("second result is not valid when loading !tla.mask");
         if (getLoadDist())
             return emitOpError("load_dist is not supported when loading !tla.mask");
+        if (getBlockStride() || getRepeatStride())
+            return emitOpError("block_stride/repeat_stride is not supported when loading !tla.mask");
         if (getUnalignedUbAccess())
             return emitOpError("unaligned_ub_access is not supported when loading !tla.mask");
         int64_t sourceElemBytes = getByteSizeOfFixedWidthScalarType(sourceType.getPtr().getPointee());
@@ -774,6 +776,27 @@ mlir::LogicalResult LoadOp::verify()
 
     if (!mlir::isa<VectorSSAType>(getResult().getType()))
         return emitOpError("result must be !tla.vector or !tla.mask");
+
+    // Strided block load (vsldb): mutually exclusive with load_dist, the dual
+    // result, and the MaskSSA path (checked above: mask result rejects
+    // load_dist but block_stride is rejected here for clarity).
+    if (auto blockStrideAttr = getBlockStrideAttr()) {
+        if (getLoadDist())
+            return emitOpError("block_stride is mutually exclusive with load_dist");
+        if (getUnalignedUbAccess())
+            return emitOpError("block_stride is mutually exclusive with unaligned_ub_access");
+        if (getResult2())
+            return emitOpError("block_stride is not valid with a second (dual-destination) result");
+        // vsldb packs each stride into a 16-bit immediate field.
+        if (blockStrideAttr.getInt() < 0 || blockStrideAttr.getInt() > 0xFFFF)
+            return emitOpError("block_stride must fit the 16-bit vsldb immediate field [0, 65535]");
+    }
+    if (auto repeatStrideAttr = getRepeatStrideAttr()) {
+        if (!getBlockStrideAttr())
+            return emitOpError("repeat_stride requires block_stride (POST_MODE_NORMAL pre-offset)");
+        if (repeatStrideAttr.getInt() < 0 || repeatStrideAttr.getInt() > 0xFFFF)
+            return emitOpError("repeat_stride must fit the 16-bit vsldb immediate field [0, 65535]");
+    }
 
     bool isDintlv = false;
     if (auto loadDistAttr = getLoadDist())

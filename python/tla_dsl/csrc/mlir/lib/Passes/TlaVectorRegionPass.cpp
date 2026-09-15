@@ -555,6 +555,24 @@ static void annotateStoreWithStrideLibraryCall(func::FuncOp callee)
     callee->setAttr(hivm::TFuncCoreTypeAttr::name, hivm::TFuncCoreTypeAttr::get(ctx, hivm::TFuncCoreType::AIV));
 }
 
+// Strided block load (vsldb) library call names, mirroring the AVE bc stubs in
+// bc/Vector/load.cpp: one symbol per element type.
+static std::string getLoadWithStrideLibraryCallName(Type elementType)
+{
+    if (elementType.isF32()) {
+        return "load_with_stride_float";
+    } else if (elementType.isF16()) {
+        return "load_with_stride_half";
+    } else if (elementType.isBF16()) {
+        return "load_with_stride_bf16";
+    } else if (elementType.isInteger(32)) {
+        return elementType.isUnsignedInteger() ? "load_with_stride_uint32" : "load_with_stride_int32";
+    } else if (elementType.isInteger(16)) {
+        return elementType.isUnsignedInteger() ? "load_with_stride_uint16" : "load_with_stride_int16";
+    }
+    return {};
+}
+
 static func::FuncOp getOrCreateStoreWithStrideLibraryCall(
     ModuleOp module, Location loc, Type vecType, Type memRefType, StringRef calleeName)
 {
@@ -566,6 +584,27 @@ static func::FuncOp getOrCreateStoreWithStrideLibraryCall(
     OpBuilder moduleBuilder(module.getBodyRegion());
     auto fnType = FunctionType::get(
         ctx, {vecType, memRefType, IntegerType::get(ctx, 32), VectorType::get({256}, IntegerType::get(ctx, 1))}, {});
+    auto callee = moduleBuilder.create<func::FuncOp>(loc, calleeName, fnType);
+    annotateStoreWithStrideLibraryCall(callee);
+    return callee;
+}
+
+// Strided block load (vsldb) library call: (memref, blockStride, repeatStride,
+// preg) -> vecType. Annotated the same way as the store-with-stride call.
+static func::FuncOp getOrCreateLoadWithStrideLibraryCall(
+    ModuleOp module, Location loc, Type vecType, Type memRefType, StringRef calleeName)
+{
+    auto ctx = module.getContext();
+    if (auto existing = module.lookupSymbol<func::FuncOp>(calleeName)) {
+        annotateStoreWithStrideLibraryCall(existing);
+        return existing;
+    }
+    OpBuilder moduleBuilder(module.getBodyRegion());
+    auto fnType = FunctionType::get(
+        ctx,
+        {memRefType, IntegerType::get(ctx, 32), IntegerType::get(ctx, 32),
+         VectorType::get({256}, IntegerType::get(ctx, 1))},
+        {vecType});
     auto callee = moduleBuilder.create<func::FuncOp>(loc, calleeName, fnType);
     annotateStoreWithStrideLibraryCall(callee);
     return callee;
@@ -1166,6 +1205,31 @@ static LogicalResult lowerNestedVectorOp(Operation& op, OpBuilder& b, ModuleOp m
                        "dintlv load_dist requires exactly two results; other "
                        "load_dist values require one"),
                    failure();
+        // Strided block load (vsldb): lower through a library call like the
+        // store-with-stride path. The tile memref supplies the base address;
+        // the gather reads all 8 DataBlocks, so the predicate is all-true.
+        if (auto blockStrideAttr = loadOp.getBlockStrideAttr()) {
+            Value blockStrideVal = b.create<arith::ConstantIntOp>(loc, blockStrideAttr.getInt(), 32);
+            int64_t repeatStrideImm = loadOp.getRepeatStrideAttr() ? loadOp.getRepeatStrideAttr().getInt() : 0;
+            Value repeatStrideVal = b.create<arith::ConstantIntOp>(loc, repeatStrideImm, 32);
+            std::string calleeName = getLoadWithStrideLibraryCallName(sourceType.getElementType());
+            if (calleeName.empty())
+                return loadOp.emitError("unsupported element type for tla.load with block_stride: ")
+                           << sourceType.getElementType(),
+                       failure();
+            auto callee =
+                getOrCreateLoadWithStrideLibraryCall(module, loc, opCtx->vecType, source.getType(), calleeName);
+            if (!callee)
+                return failure();
+            // The gather reads all 8 DataBlocks, so the predicate is all-true;
+            // build it via PgePattern::ALL like the other no-mask lowerings
+            // (a dense<true> arith constant is not selectable in bisheng).
+            Value allTrue = allTrueMaskFor(b, loc, opCtx->vecType, loadOp.getResult().getType());
+            auto call =
+                b.create<func::CallOp>(loc, callee, ValueRange{source, blockStrideVal, repeatStrideVal, allTrue});
+            valueMap[loadOp.getResult()] = call.getResult(0);
+            return success();
+        }
         // DINTLV_* still takes a VL-wide tile view (same as AVE ProcessVsstb /
         // HIVM2VLLoadOpLowering): the distribution pattern reads 2*VL from that
         // base address. Do not widen the memref to 2*VL — that breaks hivmc ABI.

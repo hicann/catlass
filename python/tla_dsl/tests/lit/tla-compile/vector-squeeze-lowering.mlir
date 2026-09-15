@@ -22,7 +22,7 @@ module {
       %src_tile = "tla.tile_view"(%src, %shape, %coord) : (!fvec, !tla.shape<64>, !tla.coord<0>) -> !fvec
       %dst_tile = "tla.tile_view"(%dst, %shape, %coord) : (!fvec, !tla.shape<64>, !tla.coord<0>) -> !fvec
       %mask = "tla.create_mask"() {pattern = "VL8", dtype = f32} : () -> !tla.mask<64>
-      %v0 = "tla.load"(%src_tile) : (!fvec) -> !tla.vector<64xf32>
+      %v0 = "tla.load"(%src_tile) <{operandSegmentSizes = array<i32: 1, 0, 0>}> : (!fvec) -> !tla.vector<64xf32>
       %v1 = "tla.squeeze"(%v0, %mask) : (!tla.vector<64xf32>, !tla.mask<64>) -> !tla.vector<64xf32>
       "tla.store"(%dst_tile, %v1) <{operandSegmentSizes = array<i32: 1, 1, 0, 0>}> : (!fvec, !tla.vector<64xf32>) -> ()
     }) {mode = "simd"} : () -> ()
@@ -46,7 +46,7 @@ module {
       %src_tile = "tla.tile_view"(%src, %shape, %coord) : (!hvec, !tla.shape<128>, !tla.coord<0>) -> !hvec
       %dst_tile = "tla.tile_view"(%dst, %shape, %coord) : (!hvec, !tla.shape<128>, !tla.coord<0>) -> !hvec
       %mask = "tla.create_mask"() {pattern = "VL8", dtype = f16} : () -> !tla.mask<128>
-      %v0 = "tla.load"(%src_tile) : (!hvec) -> !tla.vector<128xf16>
+      %v0 = "tla.load"(%src_tile) <{operandSegmentSizes = array<i32: 1, 0, 0>}> : (!hvec) -> !tla.vector<128xf16>
       %v1 = "tla.squeeze"(%v0, %mask) : (!tla.vector<128xf16>, !tla.mask<128>) -> !tla.vector<128xf16>
       "tla.store"(%dst_tile, %v1) <{operandSegmentSizes = array<i32: 1, 1, 0, 0>}> : (!hvec, !tla.vector<128xf16>) -> ()
     }) {mode = "simd"} : () -> ()
@@ -70,7 +70,7 @@ module {
       %src_tile = "tla.tile_view"(%src, %shape, %coord) : (!ivec, !tla.shape<64>, !tla.coord<0>) -> !ivec
       %dst_tile = "tla.tile_view"(%dst, %shape, %coord) : (!ivec, !tla.shape<64>, !tla.coord<0>) -> !ivec
       %mask = "tla.create_mask"() {pattern = "VL8", dtype = i32} : () -> !tla.mask<64>
-      %v0 = "tla.load"(%src_tile) : (!ivec) -> !tla.vector<64xi32>
+      %v0 = "tla.load"(%src_tile) <{operandSegmentSizes = array<i32: 1, 0, 0>}> : (!ivec) -> !tla.vector<64xi32>
       %v1 = "tla.squeeze"(%v0, %mask) : (!tla.vector<64xi32>, !tla.mask<64>) -> !tla.vector<64xi32>
       "tla.store"(%dst_tile, %v1) <{operandSegmentSizes = array<i32: 1, 1, 0, 0>}> : (!ivec, !tla.vector<64xi32>) -> ()
     }) {mode = "simd"} : () -> ()

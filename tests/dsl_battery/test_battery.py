@@ -408,6 +408,18 @@ def _cases(device: int) -> Iterator[tuple[str, list[list[str]]]]:
         [["vector_ops/store_first_element_op.py", "store_first_element", "--all-dtypes", *dev]],
     )
     yield (
+        "vector-load-stride",
+        [["vector_ops/load_stride_op.py", "stride", "--all-dtypes", *dev]],
+    )
+    yield (
+        "vector-load-stride-repeat",
+        [["vector_ops/load_stride_op.py", "repeat", "--all-dtypes", *dev]],
+    )
+    yield (
+        "vector-load-stride-post",
+        [["vector_ops/load_stride_op.py", "post", "--all-dtypes", *dev]],
+    )
+    yield (
         "vector-squeeze-op",
         [["vector_ops/squeeze_op.py", "squeeze", "--sweep", "--shapes", "64", *dev]],
     )
