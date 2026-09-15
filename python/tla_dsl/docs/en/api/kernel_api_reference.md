@@ -660,14 +660,33 @@ tile.load(params: LoadParams | None = None) -> MaskSSA | VectorSSA | tuple[Vecto
 Parameters:
 
 - `params` (`LoadParams | None`): Load mode. `None` / `NormalLoadParams` /
-  `UnalignLoadParams` → `VectorSSA` (or a pair for `DIST_DINTLV_B32`);
-  `MaskLoadParams` → `MaskSSA`. Optional, default `None`.
+  `UnalignLoadParams` / `BlockLoadParams` → `VectorSSA` (or a pair for
+  `DIST_DINTLV_B32`); `MaskLoadParams` → `MaskSSA`.
+  `NormalLoadParams.load_dist` selects an AscendC distribution mode:
+  `norm` (default), `brc_b32` (broadcast one b32 element to all lanes),
+  `dintlv_b32` (f32 deinterleave, dual results), `us_b8` / `us_b16`
+  (2x up-sample), `brc_b16` (broadcast one b16 element),
+  `unpack_b16` (zero-extend b16 to double width),
+  `e2b_b16` / `e2b_b32` (element-to-DataBlock broadcast),
+  `blk` (one 32-byte DataBlock broadcast to all 8).
+  `BlockLoadParams` is the `vsldb` strided gather: one instruction
+  gathers 8 DataBlocks whose heads are `block_stride` DataBlocks
+  (32B units) apart; `block_stride == 0` repeats the first DataBlock
+  into all 8 slots; `post_update_stride` is the compile-time address
+  pre-offset in 32B DataBlocks. Optional, default `None`.
 
 Constraints:
 
 - Must be called inside a `@tla.kernel`-decorated kernel function.
 - Must be called inside `tla.vec.func()`; source tile must be UB.
 - Mask load requires a 1/2/4-byte scalar UB element type.
+- Distribution modes fix the element width: `us_b8` needs i8/u8;
+  `brc_b16` / `us_b16` / `unpack_b16` / `e2b_b16` need 2-byte
+  (f16/bf16/i16/u16); `e2b_b32` needs 4-byte (f32/i32/u32);
+  `dintlv_b32` needs f32; `blk` works for any element size.
+- `BlockLoadParams` requires a 2/4-byte element type
+  (f32/f16/bf16/i32/u32/i16/u16); `block_stride` and
+  `post_update_stride` must fit in [0, 65535].
 
 Example:
 
@@ -675,13 +694,16 @@ Example:
 with tla.vec.func(mode="simd"):
     x_reg = x_ub.load()
     x_unalign = x_ub.load(tla.params.UnalignLoadParams())
+    x_blk = x_ub.load(tla.params.NormalLoadParams(
+        load_dist=tla.params.LoadDist.DIST_BLK))
+    x_gather = x_ub.load(tla.params.BlockLoadParams(block_stride=4))
 ```
 
 ---
 
 ### `Tensor.store`
 
-**Source:** [`catlass.tla.tensor._Tensor.store`](../../../catlass/tla/tensor.py#L507)
+**Source:** [`catlass.tla.tensor._Tensor.store`](../../../catlass/tla/tensor.py#L529)
 
 Description:
 
@@ -698,14 +720,21 @@ Parameters:
 - `value` (`VectorSSA | MaskSSA`): `VectorSSA` or `MaskSSA` to store. Required.
 - `params` (`StoreParams | None`): Store mode. `None` / `NormalStoreParams` /
   `UnalignStoreParams` / `BlockStoreParams` → vector store;
-  `MaskStoreParams` → mask store. Optional, default `None`.
-- `mask` (`MaskSSA | None`): Optional predicate for vector stores; not
-  allowed with `MaskStoreParams`. Optional, default `None`.
+  `MaskStoreParams` → mask store. `NormalStoreParams.store_dist`
+  additionally selects the first-element modes `first_element_b8` /
+  `first_element_b16` / `first_element_b32`: write only lane 0 of
+  the source register to the tile base, with the suffix fixing the
+  stored element width in bytes. Optional, default `None`.
+- `mask` (`MaskSSA | None`): Optional predicate for vector stores;
+  rejected by `MaskStoreParams` and first-element modes. Default `None`.
 
 Constraints:
 
 - Must be called inside a `@tla.kernel`-decorated kernel function.
 - Must be called inside `tla.vec.func()`; destination tile must be UB.
+- First-element modes require the stored value and the dest tile to
+  use the suffix-matching element width (b8 → 1-byte, b16 → 2-byte,
+  b32 → 4-byte); passing a predicate mask raises an error.
 
 Example:
 
@@ -713,6 +742,8 @@ Example:
 with tla.vec.func(mode="simd"):
     y_ub.store(y_reg)
     y_ub.store(y_reg, tla.params.UnalignStoreParams())
+    y_ub.store(y_reg, tla.params.NormalStoreParams(
+        store_dist=tla.params.StoreDist.DIST_FIRST_ELEMENT_B16))
 ```
 
 ---
@@ -2304,7 +2335,7 @@ with tla.vector():
 
 ### `Tensor.fill`
 
-**Source:** [`catlass.tla.tensor._Tensor.fill`](../../../catlass/tla/tensor.py#L683)
+**Source:** [`catlass.tla.tensor._Tensor.fill`](../../../catlass/tla/tensor.py#L720)
 
 Description:
 

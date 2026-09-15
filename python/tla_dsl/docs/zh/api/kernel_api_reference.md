@@ -518,14 +518,29 @@ tile.load(params: LoadParams | None = None) -> MaskSSA | VectorSSA | tuple[Vecto
 参数说明：
 
 - `params`（`LoadParams | None`）：载入模式。`None` / `NormalLoadParams` /
-  `UnalignLoadParams` → `VectorSSA`（`DIST_DINTLV_B32` 时可为二元组）；
-  `MaskLoadParams` → `MaskSSA`。可选，默认 `None`。
+  `UnalignLoadParams` / `BlockLoadParams` → `VectorSSA`（`DIST_DINTLV_B32`
+  时可为二元组）；`MaskLoadParams` → `MaskSSA`。
+  `NormalLoadParams.load_dist` 选择 AscendC 分发模式：`norm`（默认）、
+  `brc_b32`（单个 b32 元素广播到全部 lane）、`dintlv_b32`（f32 解交织，
+  双返回值）、`us_b8` / `us_b16`（2 倍上采样）、`brc_b16`（单个 b16 元素
+  广播）、`unpack_b16`（b16 零扩展到双倍宽度）、`e2b_b16` / `e2b_b32`
+  （元素到 DataBlock 广播）、`blk`（一个 32 字节 DataBlock 广播到全部 8 个）。
+  `BlockLoadParams` 为 `vsldb` 跨步收集：一条指令收集 8 个 DataBlock，
+  块头间隔 `block_stride` 个 DataBlock（32B 单位）；`block_stride == 0`
+  时将首个 DataBlock 复制到全部 8 槽；`post_update_stride` 为编译期地址
+  预偏移，单位 32B DataBlock。可选，默认 `None`。
 
 约束说明：
 
 - 须在 `@tla.kernel` 装饰的 kernel 函数体内调用。
 - 须在 `tla.vec.func()` 内调用；源 tile 须位于 UB。
 - Mask 载入要求 UB 元素类型为 1/2/4 字节标量。
+- 分发模式限定元素宽度：`us_b8` 要求 i8/u8；`brc_b16` / `us_b16` /
+  `unpack_b16` / `e2b_b16` 要求 2 字节（f16/bf16/i16/u16）；`e2b_b32`
+  要求 4 字节（f32/i32/u32）；`dintlv_b32` 要求 f32；`blk` 适用于任意
+  元素宽度。
+- `BlockLoadParams` 要求 2/4 字节元素类型（f32/f16/bf16/i32/u32/i16/u16）；
+  `block_stride` 与 `post_update_stride` 须在 [0, 65535] 范围内。
 
 调用示例：
 
@@ -533,13 +548,16 @@ tile.load(params: LoadParams | None = None) -> MaskSSA | VectorSSA | tuple[Vecto
 with tla.vec.func(mode="simd"):
     x_reg = x_ub.load()
     x_unalign = x_ub.load(tla.params.UnalignLoadParams())
+    x_blk = x_ub.load(tla.params.NormalLoadParams(
+        load_dist=tla.params.LoadDist.DIST_BLK))
+    x_gather = x_ub.load(tla.params.BlockLoadParams(block_stride=4))
 ```
 
 ---
 
 ### `Tensor.store`
 
-**源码：** [`catlass.tla.tensor._Tensor.store`](../../../catlass/tla/tensor.py#L383)
+**源码：** [`catlass.tla.tensor._Tensor.store`](../../../catlass/tla/tensor.py#L529)
 
 功能说明：
 
@@ -555,13 +573,19 @@ tile.store(value: VectorSSA | MaskSSA, params: StoreParams | None = None, *, mas
 
 - `value`（`VectorSSA | MaskSSA`）：要写入的 `VectorSSA` 或 `MaskSSA`。必填。
 - `params`（`StoreParams | None`）：写回模式。`None` / `NormalStoreParams` /
-  `UnalignStoreParams` / `BlockStoreParams` → vector 写回；`MaskStoreParams` → mask 写回。可选，默认 `None`。
-- `mask`（`MaskSSA | None`）：vector 写回的可选谓词；与 `MaskStoreParams` 不可同时使用。可选，默认 `None`。
+  `UnalignStoreParams` / `BlockStoreParams` → vector 写回；`MaskStoreParams` → mask 写回。
+  `NormalStoreParams.store_dist` 另可选 first-element 模式：`first_element_b8` /
+  `first_element_b16` / `first_element_b32`——仅将源寄存器 lane 0 写入 tile
+  基址，后缀限定写出的元素字节宽度。可选，默认 `None`。
+- `mask`（`MaskSSA | None`）：vector 写回的可选谓词；与 `MaskStoreParams` 及
+  first-element 模式均不可同时使用。默认 `None`。
 
 约束说明：
 
 - 须在 `@tla.kernel` 装饰的 kernel 函数体内调用。
 - 须在 `tla.vec.func()` 内调用；目标 tile 须位于 UB。
+- first-element 模式要求被写值与目标 tile 的元素宽度匹配后缀
+  （b8 → 1 字节，b16 → 2 字节，b32 → 4 字节）；该模式忽略谓词 mask。
 
 调用示例：
 
@@ -569,6 +593,8 @@ tile.store(value: VectorSSA | MaskSSA, params: StoreParams | None = None, *, mas
 with tla.vec.func(mode="simd"):
     y_ub.store(y_reg)
     y_ub.store(y_reg, tla.params.UnalignStoreParams())
+    y_ub.store(y_reg, tla.params.NormalStoreParams(
+        store_dist=tla.params.StoreDist.DIST_FIRST_ELEMENT_B16))
 ```
 
 ---
