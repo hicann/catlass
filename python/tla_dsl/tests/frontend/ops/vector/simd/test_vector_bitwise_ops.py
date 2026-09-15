@@ -150,7 +150,7 @@ def test_vector_ssa_bitwise_bindings_and_public_ops_emit_mlir(
 def test_bitwise_ops_are_in_vector_lowering_info() -> None:
     pass_source = Path(
         __file__
-    ).parents[1] / "csrc/mlir/lib/Passes/TlaVectorRegionPass.cpp"
+    ).parents[5] / "csrc/mlir/lib/Passes/TlaVectorRegionPass.cpp"
     source = pass_source.read_text(encoding="utf-8")
 
     for op_name in ("BitwiseNotOp", "BitwiseAndOp", "BitwiseOrOp", "BitwiseXorOp"):

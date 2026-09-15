@@ -16,35 +16,33 @@ Rule: assertion contains `hivm.*` → lit; otherwise → pytest.
 ```
 tests/
 ├── conftest.py / _bootstrap.py        # shared infra only
-├── api/                               # op API preconditions, generated op surface
-├── frontend/                          # language layer: control flow / decorators / AST / constexpr
-├── types/                             # numeric types, tensor types, dlpack
-├── ops/
-│   ├── vector/{simd,simt}/
-│   ├── scalar/
-│   ├── tensor/
-│   ├── load-store/
-│   ├── sync/
-│   ├── extern/
-│   └── print/
-├── compiler/                          # compile/execute chain, kernel ABI
-├── runtime/                           # JIT, execution args, stream, launch ABI
-├── arch/                              # arch metadata, capacity queries
-└── infra/                             # build scripts, API doc generation, pretest bootstrap
+├── frontend/                          # frontend-layer tests
+│   └── ops/                           # Tla.td op tests; subdirs mirror lit topics
+│       ├── vector/{simd,simt}/
+│       ├── scalar/
+│       ├── tensor/
+│       ├── load-store/
+│       ├── sync/
+│       └── print/
+├── fixtures/                          # shared test data
+└── test_*.py                          # flat cases; further topical grouping in follow-up PRs
 ```
 
-**lit** (`lit/`):
+**lit** (`lit/`, op-lowering topics directly under lit/, no extra grouping layer):
 
 ```
 lit/
-├── sync/{event,cross-core,mutex}/
+├── sync/                              # sync ops; cross-core/ + mutex/ subtopics
 ├── copy/
 ├── mmad/
 ├── vector/{simd,simt}/
-├── control-flow/
 ├── scalar/
 ├── tensor/
-└── print/
+├── control-flow/
+├── print/
+├── extern/
+├── arch/                              # block/ub capacity limits
+└── kernel/                            # kernel-level structure & ABI, regression template
 ```
 
 ### Naming

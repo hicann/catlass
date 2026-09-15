@@ -7,7 +7,7 @@ pin that split, which is easy to break by touching ``_binary_op`` in
 same arith op in the end and every kernel still passes.
 
 The lowering itself (``tla.simt_* -> arith.*``) is covered by the lit test
-``lit/tla-compile/simt-scalar-ops-lowering.mlir``.
+``lit/vector/simt/simt-scalar-ops-lowering.mlir``.
 """
 
 from __future__ import annotations

@@ -99,7 +99,7 @@ def test_native_bridge_returns_anonymous_mlir_provenance_on_pipeline_failure() -
     fixture = (
         Path(__file__).parent
         / "lit"
-        / "tla-compile"
+        / "sync"
         / "mixed-split-symbol-conflict.mlir"
     )
     with mlir_ir.Context() as context:
@@ -140,7 +140,7 @@ def test_native_bridge_omits_unknown_location_from_rendered_diagnostic() -> None
     fixture = (
         Path(__file__).parent
         / "lit"
-        / "tla-compile"
+        / "sync"
         / "mixed-split-symbol-conflict.mlir"
     )
     with mlir_ir.Context() as context:

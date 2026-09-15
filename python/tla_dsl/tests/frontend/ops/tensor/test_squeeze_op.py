@@ -51,4 +51,4 @@ def test_squeeze_op_emits_mlir() -> None:
     squeeze_lines = [line for line in mlir.splitlines() if "tla.squeeze" in line]
     assert len(squeeze_lines) == 1
     # tla-to-vector lowering (vsqueeze_* bitcode call) is covered by
-    # tests/lit/tla-compile/vector-squeeze-lowering.mlir
+    # tests/lit/vector/simd/vector-squeeze-lowering.mlir

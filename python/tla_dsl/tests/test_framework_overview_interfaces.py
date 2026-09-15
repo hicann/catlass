@@ -570,8 +570,8 @@ def test_interface_mmad_nested_shape_contract_lowers_at_frontend(
 # -----------------------------------------------------------------------------
 # 7c. tla.copy (GM RowMajor → l1 zN): two f32 copies share one 4096B L1 buffer
 #     (pointer_cast reuse). TLA MLIR / TlaCompile 期望见
-#     tests/lit/tla-compile/framework-overview-copy-gm-l1-zn-two-tiles.mlir；
-#     同路由参考 tests/lit/tla-compile/copy-gm-row-major-to-l1-zn.mlir。
+#     tests/lit/copy/framework-overview-copy-gm-l1-zn-two-tiles.mlir；
+#     同路由参考 tests/lit/copy/copy-gm-row-major-to-l1-zn.mlir。
 # -----------------------------------------------------------------------------
 
 

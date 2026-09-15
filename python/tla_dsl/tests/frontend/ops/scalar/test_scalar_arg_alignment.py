@@ -4,7 +4,7 @@ import ast
 from pathlib import Path
 
 
-_CATLASS_DSL_ROOT = Path(__file__).resolve().parents[1]
+_CATLASS_DSL_ROOT = Path(__file__).resolve().parents[4]
 _EXAMPLE = (
     _CATLASS_DSL_ROOT
     / "examples"
