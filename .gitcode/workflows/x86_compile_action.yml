@@ -26,7 +26,7 @@ jobs:
         uses: obs-download
         with:
           endpoint: "https://obs.cn-north-4.myhuaweicloud.com"
-          bucket: "ascend-cann-open"
+          bucket: "ascend-ci"
           access-key: ${{ secrets.AK }}
           secret-key: ${{ secrets.SK }}
           key: |
@@ -52,12 +52,12 @@ jobs:
         uses: obs-upload
         with:
           endpoint: "https://obs.cn-north-4.myhuaweicloud.com"
-          bucket: "ascend-cann-open"
+          bucket: "ascend-ci"
           access-key: ${{ secrets.AK }}
           secret-key: ${{ secrets.SK }}
           artifact-path: "${{ steps.process_checkout.outputs.path }}/output/*"
           object-prefix: ${{ env.obs_path }}/
     if: "${{ default() }}"
-    runs-on: [self_hosted, arch=x64, spec=xlarge]
+    runs-on: [self-hosted, arch=x64, spec=xlarge]
     container:
       image: swr.cn-north-4.myhuaweicloud.com/hw-ascend/${{ inputs.image_version }}

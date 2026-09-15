@@ -29,84 +29,30 @@ env:
 
 stages:
   stage1:
-    name: image
+    name: PreBuild
     jobs:
       JOB_image:
-        name: image
+        name: Test_image
         steps:
           - name: revise_image
             identifier: revise_image
             uses: cann/.gitcode/actions/revise-img@master
             with:
-              repo_name: "catlass"
+              repo_name: 'catlass'
               target_branch: ${{ env.TARGET_BRANCH }}
-              repo_url: ${{ vars.CI_PATH }}
+              comment: ${{ atomgit.event.comment.body }}
+              token: ${{ secrets.TESTTOKEN }}
           -
             name: show_output
             run: |
-              echo "image: ${{ steps.revise_image.outputs.Compile_Ascend_X86  }}"
+              echo "image: ${{ steps.revise_image.outputs.Compile_Ascend_X86 }}"
         if: "${{ default() }}"
-        runs-on: [self_hosted, arch=x64, spec=small]
+        runs-on: ["self-hosted", "arch=x64", "spec=small"]
         container:
           image: swr.cn-north-4.myhuaweicloud.com/ci_cann/ubuntu20.04.05_x86:k8s_v1.1006
-      JOB_pr:
-        name: get_pr_files
-        steps:
-          -
-            name: Checkout
-            identifier: process_checkout
-            uses: checkout
-            with:
-              ref: ${{ atomgit.event.pull_request.merge_commit_sha || atomgit.sha }}
-              token: ${{secrets.GIT_TOKEN}}
-          -
-            name: get_pr
-            identifier: get_pr
-            uses: cann/.gitcode/actions/get-pr@master
-            with:
-              workspace: ${{ steps.process_checkout.outputs.path }}
-              target_branch: ${{ env.TARGET_BRANCH }}
-              git_token: ${{secrets.GIT_TOKEN}}
-          -
-            name: upload
-            uses: obs-upload
-            with:
-              endpoint: "https://obs.cn-north-4.myhuaweicloud.com"
-              bucket: "ascend-cann-open"
-              access-key: ${{secrets.AK}}
-              secret-key: ${{secrets.SK}}
-              artifact-path: |
-                ${{ steps.process_checkout.outputs.path }}/pr_filelist.txt
-                ${{ steps.process_checkout.outputs.path }}/pr_filelist_mod.txt
-                ${{ steps.process_checkout.outputs.path }}/pr_filelist_precommit.txt
-                ${{ steps.process_checkout.outputs.path }}/update_file_detail.txt
-              object-prefix: ${{ env.obs_path }}/
-        runs-on:
-        - default
-      JOB_shell:
-        name: get_shell_files
-        steps:
-          -
-            name: Checkout
-            identifier: process_checkout
-            uses: checkout
-            with:
-              ref: master
-              token: ${{secrets.GIT_TOKEN}}
-          -
-            name: upload
-            uses: obs-upload
-            with:
-              endpoint: "https://obs.cn-north-4.myhuaweicloud.com"
-              bucket: "ascend-cann-open"
-              access-key: ${{secrets.AK}}
-              secret-key: ${{secrets.SK}}
-              artifact-path: |
-                ${{ steps.process_checkout.outputs.path }}/.gitcode/scripts/*
-              object-prefix: ${{ env.obs_path }}/
-        if: "${{ default() }}"
-        runs-on:
-        - default
+      JOB_pre:
+        name: Test_PreBuild
+        uses: cann/.gitcode/.gitcode/workflows/pre_action.yml@master
     pre:
     - type: auto
     fail-fast: true
@@ -178,3 +124,8 @@ stages:
     pre:
     - type: auto
     fail-fast: true
+post:
+  jobs:
+    job_post:
+      name: Test_post
+      uses: cann/.gitcode/.gitcode/workflows/post_action.yml@master

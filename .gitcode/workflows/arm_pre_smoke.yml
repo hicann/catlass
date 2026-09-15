@@ -34,7 +34,7 @@ jobs:
         uses: obs-download
         with:
           endpoint: "https://obs.cn-north-4.myhuaweicloud.com"
-          bucket: "ascend-cann-open"
+          bucket: "ascend-ci"
           access-key: ${{ secrets.AK }}
           secret-key: ${{ secrets.SK }}
           key: |
@@ -54,7 +54,7 @@ jobs:
         uses: obs-upload
         with:
           endpoint: "https://obs.cn-north-4.myhuaweicloud.com"
-          bucket: "ascend-cann-open"
+          bucket: "ascend-ci"
           access-key: ${{secrets.AK}}
           secret-key: ${{secrets.SK}}
           artifact-path: |
