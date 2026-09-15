@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import dataclasses
 import inspect
 import linecache
-from dataclasses import dataclass
+from dataclasses import dataclass, field as dataclass_field
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -20,6 +19,17 @@ from .base_dsl.ast_preprocessor import (
     validate_language_boundaries,
 )
 from .base_dsl import BaseDSL, DSLLocation
+from .base_dsl.runtime.argument_tree import (
+    ArgumentTreeError,
+    build_runtime_argument_trees,
+    runtime_leaf_templates,
+)
+from .base_dsl.runtime.argument_binding import (
+    RuntimeArgumentTree,
+    RuntimeLeafBinding,
+    _RuntimeArgumentProxy,
+)
+from .base_dsl.utils.tree_utils import tree_unflatten
 from .base_dsl.typing import Numeric, is_constexpr_annotation
 from .dsl import (
     _jit_helper_inline,
@@ -88,6 +98,10 @@ class LoweredTlaIR:
     generic: bool = False
     _asm: str | None = None
     extern_compile_specs: tuple[ExternCompileSpec, ...] = ()
+    # One entry per non-Constexpr parameter; annotation-only arguments have no tree.
+    argument_trees: tuple[RuntimeArgumentTree | None, ...] = dataclass_field(
+        default_factory=tuple
+    )
 
     def asm(self, *, generic: bool | None = None) -> str:
         emit_generic = self.generic if generic is None else bool(generic)
@@ -156,16 +170,13 @@ def lower_jit_to_tlair_module_by_execution(
     sig = BaseDSL()._get_signature(fn)
     params = list(sig.parameters.values())
     arg_names = [p.name for p in params]
-    constexpr_names = {p.name for p in params if _is_constexpr_annotation(p.annotation)}
+    constexpr_names = {p.name for p in params if is_constexpr_annotation(p.annotation)}
     kw_only = inspect.Parameter.KEYWORD_ONLY
     keyword_only_names = {p.name for p in params if p.kind is kw_only}
     call_args = _prepare_call_args(arg_names=arg_names, type_args=type_args)
     for name, value in zip(arg_names, call_args, strict=False):
         if name in constexpr_names:
-            # Constexpr host values are not ABI leaves, but user-defined callable
-            # class instances are still outside the Phase-1 allowlist
-            # (def / lambda / partial / @tla.jit). Type tokens used as
-            # Constexpr[type] remain allowed (classes, not instances).
+            # Constexpr values are compile-time inputs, not runtime ABI leaves.
             if (
                 callable(value)
                 and not isinstance(value, type)
@@ -179,12 +190,19 @@ def lower_jit_to_tlair_module_by_execution(
     ctx.allow_unregistered_dialects = True
     with ctx:
         _load_execution_dialects(ctx)
+        try:
+            runtime_argument_trees = build_runtime_argument_trees(
+                arg_names, call_args, constexpr_names, ctx
+            )
+        except ArgumentTreeError as exc:
+            raise TlaLoweringError(str(exc)) from exc
+        arg_values_for_types = {
+            name: value
+            for name, value in zip(arg_names, call_args, strict=False)
+            if name not in runtime_argument_trees
+        }
         arg_types = _resolve_execution_arg_types(
-            fn=fn,
-            arg_names=arg_names,
-            arg_values=dict(zip(arg_names, call_args, strict=False))
-            if call_args
-            else None,
+            arg_values=arg_values_for_types or None,
             ctx=ctx,
             constexpr_names=constexpr_names,
         )
@@ -192,7 +210,7 @@ def lower_jit_to_tlair_module_by_execution(
             module = mlir_ir.Module.create()
             with mlir_ir.InsertionPoint(module.body):
                 fn_loc = _coerce_location(ctx, location)
-                extern_compile_specs = _build_tla_func(
+                extern_compile_specs, argument_trees = _build_tla_func(
                     fn=fn,
                     module=module,
                     fn_name=fn.__name__,
@@ -204,12 +222,14 @@ def lower_jit_to_tlair_module_by_execution(
                     ctx=ctx,
                     fn_loc=fn_loc,
                     auto_sync=auto_sync,
+                    runtime_argument_trees=runtime_argument_trees,
                 )
     lowered = LoweredTlaIR(
         context=ctx,
         module=module,
         generic=bool(generic),
         extern_compile_specs=extern_compile_specs,
+        argument_trees=argument_trees,
     )
     lowered._asm = module.operation.get_asm(
         print_generic_op_form=bool(generic),
@@ -256,6 +276,230 @@ def _prepare_call_args(
     return tuple(type_args)
 
 
+@dataclass
+class _BoundTreeLeaf:
+    template: Any
+    binding: RuntimeLeafBinding
+    slots: tuple[int, ...]
+
+
+@dataclass
+class _RuntimePhysicalArgumentLayout:
+    """Physical MLIR slots derived from one runtime argument tree pass.
+
+    The tree remains the logical representation.  This object only carries the
+    physical information needed by ``_build_tla_func``: block argument types,
+    logical-to-physical slot ranges, and the compile-time host templates used to
+    rebuild device proxies.
+    """
+
+    mlir_arg_types: tuple[Any, ...]
+    block_slots: dict[str, tuple[int, ...]]
+    tree_records: dict[str, tuple[_BoundTreeLeaf, ...]]
+
+
+def _dynamic_gm_block_types(
+    tensor_ty: Any,
+    *,
+    bridge_ext: Any,
+    ctx: mlir_ir.Context,
+    index_ty: Any,
+) -> tuple[Any, Any, Any]:
+    """Return the three device block argument types for one Dynamic-GM leaf."""
+
+    gm_memref = bridge_ext.dynamic_gm_memref_type(tensor_ty.to_mlir_type(ctx))
+    return gm_memref, index_ty, index_ty
+
+
+def _bind_tree_leaves(
+    tree: RuntimeArgumentTree,
+    templates: tuple[Any, ...],
+    *,
+    start_slot: int,
+    bridge_ext: Any,
+    ctx: mlir_ir.Context,
+    index_ty: Any,
+) -> tuple[tuple[Any, ...], tuple[_BoundTreeLeaf, ...]]:
+    """Allocate physical types and slots together for one argument tree."""
+
+    from .core_api import is_dynamic_gm_tensor_arg
+
+    if len(templates) != tree.runtime_leaf_count:
+        raise TlaLoweringError(
+            f"runtime tree has {len(templates)} leaves but "
+            f"{tree.runtime_leaf_count} bindings"
+        )
+
+    physical_types: list[Any] = []
+    records: list[_BoundTreeLeaf] = []
+    for binding, template in zip(tree.bindings, templates, strict=True):
+        if binding.kind == "dynamic_gm":
+            if not is_dynamic_gm_tensor_arg(template):
+                raise TlaLoweringError(
+                    f"runtime tree leaf {binding.path!r} is marked Dynamic-GM "
+                    "but its host value is not a Dynamic-GM Tensor"
+                )
+            tensor_ty = template.tla_tensor_type_descriptor()
+            leaf_types = _dynamic_gm_block_types(
+                tensor_ty,
+                bridge_ext=bridge_ext,
+                ctx=ctx,
+                index_ty=index_ty,
+            )
+        else:
+            leaf_types = (_coerce_type(ctx, binding.mlir_type),)
+        first_slot = start_slot + len(physical_types)
+        slots = tuple(range(first_slot, first_slot + len(leaf_types)))
+        physical_types.extend(leaf_types)
+        records.append(_BoundTreeLeaf(template, binding, slots))
+    return tuple(physical_types), tuple(records)
+
+
+def _build_runtime_physical_argument_layout(
+    *,
+    runtime_arg_names: Sequence[str],
+    arg_names: Sequence[str],
+    arg_types: Mapping[str, Any],
+    call_args: Sequence[Any],
+    runtime_argument_trees: Mapping[str, RuntimeArgumentTree],
+    ctx: mlir_ir.Context,
+    bridge_ext: Any,
+    index_ty: Any,
+) -> _RuntimePhysicalArgumentLayout:
+    """Build the flat MLIR signature while preserving logical tree bindings."""
+
+    call_args_by_name = dict(zip(arg_names, call_args, strict=True))
+
+    mlir_arg_types: list[Any] = []
+    block_slots: dict[str, tuple[int, ...]] = {}
+    tree_records: dict[str, tuple[_BoundTreeLeaf, ...]] = {}
+    for name in runtime_arg_names:
+        tree = runtime_argument_trees.get(name)
+        if tree is not None:
+            templates = runtime_leaf_templates(call_args_by_name[name], tree.treedef)
+            start = len(mlir_arg_types)
+            physical_types, records = _bind_tree_leaves(
+                tree,
+                templates,
+                start_slot=start,
+                bridge_ext=bridge_ext,
+                ctx=ctx,
+                index_ty=index_ty,
+            )
+            mlir_arg_types.extend(physical_types)
+            tree_records[name] = records
+            continue
+
+        spec = arg_types.get(name)
+        if spec is None:
+            host = call_args_by_name[name]
+            raise TlaLoweringError(
+                f"kernel argument {name!r} has no runtime type: a "
+                f"{type(host).__name__} value cannot be a kernel argument. "
+                "Annotate it ``tla.Constexpr[...]`` to pass it as a "
+                "compile-time constant, or pass a tensor / numeric value."
+            )
+        start = len(mlir_arg_types)
+        mlir_arg_types.append(_coerce_type(ctx, spec))
+        block_slots[name] = (start,)
+
+    return _RuntimePhysicalArgumentLayout(
+        mlir_arg_types=tuple(mlir_arg_types),
+        block_slots=block_slots,
+        tree_records=tree_records,
+    )
+
+
+def _materialize_tree_dynamic_gm_descriptors(
+    *,
+    pending_tree_rebuilds: Mapping[int, RuntimeArgumentTree],
+    arg_names: Sequence[str],
+    tree_records: Mapping[str, tuple[_BoundTreeLeaf, ...]],
+    entry: Any,
+    fn_loc: Any,
+) -> dict[tuple[int, int], tuple[Any, Any, dict[str, Any]]]:
+    """Materialize Dynamic-GM leaves before frontend emission."""
+
+    from .core_api import (
+        _materialize_dynamic_gm_root_tensor_descriptor,
+    )
+
+    descriptors: dict[tuple[int, int], tuple[Any, Any, dict[str, Any]]] = {}
+    for index in pending_tree_rebuilds:
+        name = arg_names[index]
+        records = tree_records[name]
+        for binding_index, record in enumerate(records):
+            template, binding, slots = record.template, record.binding, record.slots
+            if binding.kind == "dynamic_gm":
+                tensor_ty = template.tla_tensor_type_descriptor()
+                desc, metadata = _materialize_dynamic_gm_root_tensor_descriptor(
+                    entry.arguments[slots[0]],
+                    entry.arguments[slots[1]],
+                    entry.arguments[slots[2]],
+                    tensor_ty,
+                    loc=fn_loc,
+                )
+                descriptors[(index, binding_index)] = (desc, tensor_ty, metadata)
+    return descriptors
+
+
+def _rebuild_tree_argument_proxies(
+    *,
+    pending_tree_rebuilds: Mapping[int, RuntimeArgumentTree],
+    arg_names: Sequence[str],
+    tree_records: Mapping[str, tuple[_BoundTreeLeaf, ...]],
+    tree_dynamic_descriptors: Mapping[tuple[int, int], tuple[Any, Any, dict[str, Any]]],
+    entry: Any,
+    ctx: mlir_ir.Context,
+    frontend_state: Any,
+    call_args_for_fn: list[Any],
+) -> None:
+    """Rebuild logical argument trees from device-side proxy leaves."""
+
+    from .core_api import _wrap_frontend_value
+
+    for index, tree in pending_tree_rebuilds.items():
+        leaves: list[Any] = []
+        name = arg_names[index]
+        records = tree_records[name]
+        for binding_index, record in enumerate(records):
+            template, binding, slots = record.template, record.binding, record.slots
+            if binding.kind == "dynamic_gm":
+                desc, _, _ = tree_dynamic_descriptors[(index, binding_index)]
+                proxy_value = _RuntimeArgumentProxy()
+                frontend_state.arg_bindings[id(proxy_value)] = (proxy_value, desc)
+                frontend_state.category_bindings[id(proxy_value)] = (
+                    proxy_value,
+                    "tensor",
+                )
+                frontend_state.category_bindings[id(desc)] = (desc, "tensor")
+                frontend_state.tensor_host_by_value[desc] = template
+            elif isinstance(template, Numeric):
+                ssa = entry.arguments[slots[0]]
+                proxy_value = type(template)(ssa)
+                frontend_state.category_bindings[id(proxy_value)] = (
+                    proxy_value,
+                    "numeric",
+                )
+                frontend_state.category_bindings[id(ssa)] = (ssa, "numeric")
+            elif isinstance(template, Tensor):
+                ssa = entry.arguments[slots[0]]
+                frontend_state.tensor_host_by_value[ssa] = template
+                proxy_value = _wrap_frontend_value(ssa)
+            else:
+                ssa = entry.arguments[slots[0]]
+                proxy_value = _wrap_frontend_value(ssa)
+                category = _category_from_type_like(ctx, binding.mlir_type)
+                if category is not None:
+                    frontend_state.category_bindings[id(proxy_value)] = (
+                        proxy_value,
+                        category,
+                    )
+                    frontend_state.category_bindings[id(ssa)] = (ssa, category)
+            leaves.append(proxy_value)
+        call_args_for_fn[index] = tree_unflatten(leaves, tree.treedef)
+
+
 def _build_tla_func(
     *,
     fn: Any,
@@ -269,77 +513,45 @@ def _build_tla_func(
     ctx: mlir_ir.Context,
     fn_loc: mlir_ir.Location,
     auto_sync: str | None,
-) -> tuple[ExternCompileSpec, ...]:
-    # Return compilation requirements for all called extern sources.
+    runtime_argument_trees: Mapping[str, RuntimeArgumentTree],
+) -> tuple[
+    tuple[ExternCompileSpec, ...],
+    tuple[RuntimeArgumentTree | None, ...],
+]:
     runtime_arg_names = [name for name in arg_names if name not in constexpr_names]
 
     # Dynamic GM host tensors enter as unified GM memref + originShape0/1 index args.
-    from .core_api import (
-        is_dynamic_gm_tensor_arg,
-        _materialize_dynamic_gm_root_tensor_descriptor,
-    )
-
-    resolved_arg_types: dict[str, Any] = dict(arg_types)
-    dynamic_gm_tensor_tys: dict[str, Any] = {}
-    for name in runtime_arg_names:
-        host = None
-        for i, arg_name in enumerate(arg_names):
-            if arg_name == name:
-                host = call_args[i]
-                break
-        if host is not None and is_dynamic_gm_tensor_arg(host):
-            tensor_ty = host.tla_tensor_type_descriptor()
-            dynamic_gm_tensor_tys[name] = tensor_ty
-            resolved_arg_types[name] = ("dynamic_gm", tensor_ty)
-
     bridge_ext = _tla_type_bridge._load_bridge_extension()
     index_ty = mlir_ir.IndexType.get(ctx)
-    mlir_arg_types: list[Any] = []
-    # name -> (memref_block_idx, origin0_idx, origin1_idx) or (single_idx,)
-    block_slots: dict[str, tuple[int, ...]] = {}
-    for name in runtime_arg_names:
-        spec = resolved_arg_types.get(name)
-        if isinstance(spec, tuple) and len(spec) == 2 and spec[0] == "dynamic_gm":
-            tensor_ty = spec[1]
-            gm_memref = bridge_ext.dynamic_gm_memref_type(tensor_ty.to_mlir_type(ctx))
-            start = len(mlir_arg_types)
-            mlir_arg_types.extend([gm_memref, index_ty, index_ty])
-            block_slots[name] = (start, start + 1, start + 2)
-        elif isinstance(spec, tuple) and len(spec) == 2 and spec[0] == "scalar_group":
-            # Dataclass args lower to one scalar block arg per field.
-            group_types = spec[1]
-            start = len(mlir_arg_types)
-            mlir_arg_types.extend(_coerce_type(ctx, ty) for ty in group_types)
-            block_slots[name] = tuple(range(start, start + len(group_types)))
-        else:
-            start = len(mlir_arg_types)
-            spec = resolved_arg_types.get(name)
-            if spec is None:
-                # Name the parameter and its host value: the generic "could not
-                # resolve a concrete runtime argument type" from ``_coerce_type``
-                # gives no clue which argument is at fault, and the usual cause
-                # is a compile-time-only value that was not marked Constexpr.
-                host = next(
-                    (call_args[i] for i, n in enumerate(arg_names) if n == name), None
-                )
-                raise TlaLoweringError(
-                    f"kernel argument {name!r} has no runtime type: a "
-                    f"{type(host).__name__} value cannot be a kernel argument. "
-                    "Annotate it ``tla.Constexpr[...]`` to pass it as a "
-                    "compile-time constant, or pass a tensor / numeric value."
-                )
-            mlir_arg_types.append(_coerce_type(ctx, spec))
-            block_slots[name] = (start,)
+    physical_layout = _build_runtime_physical_argument_layout(
+        runtime_arg_names=runtime_arg_names,
+        arg_names=arg_names,
+        arg_types=arg_types,
+        call_args=call_args,
+        runtime_argument_trees=runtime_argument_trees,
+        ctx=ctx,
+        bridge_ext=bridge_ext,
+        index_ty=index_ty,
+    )
+    mlir_arg_types = list(physical_layout.mlir_arg_types)
+    block_slots = physical_layout.block_slots
+    tree_records = physical_layout.tree_records
 
     fn_type = mlir_ir.FunctionType.get(mlir_arg_types, [])
     func_attrs = {
         "sym_name": mlir_ir.StringAttr.get(fn_name),
         "function_type": mlir_ir.TypeAttr.get(fn_type),
     }
-    if dynamic_gm_tensor_tys:
+    dynamic_gm_slots = [
+        record.slots[0]
+        for records in tree_records.values()
+        for record in records
+        if record.binding.kind == "dynamic_gm"
+    ]
+    if dynamic_gm_slots:
         arg_attrs = [{} for _ in mlir_arg_types]
-        for name in dynamic_gm_tensor_tys:
-            arg_attrs[block_slots[name][0]]["tla.dynamic_gm"] = mlir_ir.UnitAttr.get()
+        for slot in dynamic_gm_slots:
+            arg_attrs[slot]["tla.dynamic_gm"] = mlir_ir.UnitAttr.get()
         func_attrs["arg_attrs"] = mlir_ir.ArrayAttr.get(
             [mlir_ir.DictAttr.get(attrs) for attrs in arg_attrs]
         )
@@ -353,180 +565,41 @@ def _build_tla_func(
     )
     entry = func_op.regions[0].blocks.append(*mlir_arg_types)
 
-    # Use distinct proxy objects for runtime parameters so names like `dim` resolve to block
-    # SSA values, not type_args constants. Then make_shape(dim, 16) gets a dynamic `?` dim
-    # while make_shape(4, 8, 16) keeps static dimensions from literals.
-    class _ArgProxy:
-        __slots__ = ()
-
-        @property
-        def ptr(self) -> Any:
-            """``arg.ptr`` for kernel-argument proxies — mirrors ``_Tensor.ptr``.
-
-            Resolves the proxy to its block-argument SSA value and emits
-            ``tla.tensor_ptr`` so ``lhs.ptr + offset`` works in execution-mode
-            lowering the same way as on a frontend ``_Tensor``.
-            """
-            from .base_dsl.op import _capture_user_loc
-            from .core_api import _as_value, _emit_tensor_ptr
-
-            loc = (
-                _capture_user_loc()
-                if runtime._current_frontend_state() is not None
-                else None
-            )
-            return _emit_tensor_ptr(_as_value(self), loc)
-
-        def _metadata(self, field: str) -> Any:
-            from .core_api import _as_value, _tensor_metadata_field
-
-            return _tensor_metadata_field(_as_value(self), field)
-
-        @property
-        def shape(self) -> Any:
-            return self._metadata("shape")
-
-        @property
-        def stride(self) -> Any:
-            return self._metadata("stride")
-
-        @property
-        def origin_shape(self) -> Any:
-            return self._metadata("origin_shape")
-
-        def __getitem__(self, crd: Any) -> Any:
-            """Tensor indexing for kernel-argument proxies."""
-            from .base_dsl.op import _capture_user_loc
-            from .tla.tensor import _Tensor
-
-            loc = (
-                _capture_user_loc()
-                if runtime._current_frontend_state() is not None
-                else None
-            )
-            return _Tensor.__getitem__(self, crd, loc=loc)
-
-        def __setitem__(self, crd: Any, data: Any) -> None:
-            """Scalar store for kernel-argument proxies."""
-            from .base_dsl.op import _capture_user_loc
-            from .tla.tensor import _Tensor
-
-            loc = (
-                _capture_user_loc()
-                if runtime._current_frontend_state() is not None
-                else None
-            )
-            return _Tensor.__setitem__(self, crd, data, loc=loc)
-
     call_args_for_fn = list(call_args)
     arg_bindings: dict[int, tuple[Any, Any]] = {}
     category_bindings: dict[int, tuple[Any, Any]] = {}
-    #: ``arg index -> (dataclass instance, block slots)`` — rebuilt inside the
-    #: frontend emission context so the field Numerics auto-bind to their SSA.
-    pending_dataclass_rebuilds: dict[int, tuple[Any, tuple[int, ...]]] = {}
+    pending_tree_rebuilds: dict[int, RuntimeArgumentTree] = {}
     for i, name in enumerate(arg_names):
         if name in constexpr_names:
             continue
-        host_arg = call_args[i]
-        if _is_dataclass_instance(host_arg):
-            _validate_dataclass_kernel_arg(host_arg)
-            # Rebuilt later (inside the frontend emission context) from its
-            # dynamic block args plus its compile-time ``Constexpr`` host values.
-            pending_dataclass_rebuilds[i] = (host_arg, block_slots[name])
+        tree = runtime_argument_trees.get(name)
+        if tree is not None:
+            # Rebuild recursively once the frontend emission state is active.
+            # The tree is also used by ExecutionArgs for launch flattening.
+            pending_tree_rebuilds[i] = tree
             continue
         slots = block_slots[name]
         ssa = entry.arguments[slots[0]]
-        # Numeric host args must stay typed Numeric around the block SSA so
-        # operators (``a + b``, ``a // 2``, …) lower via Numeric.__*__.
-        if isinstance(host_arg, Numeric):
-            num = type(host_arg)(ssa)
-            call_args_for_fn[i] = num
-            category_bindings[id(num)] = (num, "numeric")
-            category_bindings[id(ssa)] = (ssa, "numeric")
-        elif isinstance(host_arg, int) and not isinstance(host_arg, bool):
-            # Kernel ``int`` args are i32 Numerics (not MLIR index / ArgProxy).
-            from .base_dsl.typing import Int32
-
-            num = Int32(ssa)
-            call_args_for_fn[i] = num
-            category_bindings[id(num)] = (num, "numeric")
-            category_bindings[id(ssa)] = (ssa, "numeric")
-        else:
-            proxy = _ArgProxy()
-            call_args_for_fn[i] = proxy
-            arg_bindings[id(proxy)] = (proxy, ssa)
-            # Dynamic GM proxies bind to tensor_desc after prologue (below).
-            category = _category_from_type_like(
-                ctx, arg_types.get(name) if name not in dynamic_gm_tensor_tys else None
-            )
-            if name in dynamic_gm_tensor_tys:
-                category = "tensor"
-            if category is not None:
-                category_bindings[id(proxy)] = (proxy, category)
-                category_bindings[id(ssa)] = (ssa, category)
+        proxy = _RuntimeArgumentProxy()
+        call_args_for_fn[i] = proxy
+        arg_bindings[id(proxy)] = (proxy, ssa)
+        category = _category_from_type_like(ctx, arg_types.get(name))
+        if category is not None:
+            category_bindings[id(proxy)] = (proxy, category)
+            category_bindings[id(ssa)] = (ssa, category)
     call_args_for_fn = tuple(call_args_for_fn)
 
     tensor_host_by_value: dict[Any, Any] = {}
-    for pos, name in enumerate(arg_names):
-        if name in constexpr_names:
-            continue
-        v = call_args[pos]
-        if isinstance(v, Tensor) and name not in dynamic_gm_tensor_tys:
-            tensor_host_by_value[entry.arguments[block_slots[name][0]]] = v
-
-    # Dataclass tensor fields also map block SSA -> host tensor for metadata.
-    for pos, name in enumerate(arg_names):
-        if name in constexpr_names:
-            continue
-        host = call_args[pos]
-        if not _is_dataclass_instance(host):
-            continue
-        constexpr_names = _dataclass_constexpr_field_names(host)
-        slots = block_slots[name]
-        slot_iter = iter(slots)
-        for field in dataclasses.fields(host):
-            if field.name in constexpr_names:
-                continue
-            field_value = getattr(host, field.name)
-            if isinstance(field_value, Tensor):
-                if is_dynamic_gm_tensor_arg(field_value):
-                    raise TlaLoweringError(
-                        f"dataclass field {name}.{field.name} is a dynamic-GM tensor, "
-                        "which is not supported inside a dataclass; use a static tensor "
-                        "or a top-level kernel argument"
-                    )
-                tensor_host_by_value[entry.arguments[next(slot_iter)]] = field_value
-            else:
-                next(slot_iter)
 
     with mlir_ir.InsertionPoint(entry):
-        # Materialize dynamic GM root descriptors before the user body so
-        # origin_shape/shape/stride reads hit side-table SSA (memref.dim).
-        pending_dynamic_gm: list[tuple[Any, Any, dict[str, Any]]] = []
-        for name in runtime_arg_names:
-            tensor_ty = dynamic_gm_tensor_tys.get(name)
-            if tensor_ty is None:
-                continue
-            mem_i, o0_i, o1_i = block_slots[name]
-            desc, metadata = _materialize_dynamic_gm_root_tensor_descriptor(
-                entry.arguments[mem_i],
-                entry.arguments[o0_i],
-                entry.arguments[o1_i],
-                tensor_ty,
-                loc=fn_loc,
-            )
-            # Rebind the matching ArgProxy to the tensor_desc result.
-            for i, arg_name in enumerate(arg_names):
-                if arg_name != name:
-                    continue
-                proxy = call_args_for_fn[i]
-                arg_bindings[id(proxy)] = (proxy, desc)
-                category_bindings[id(desc)] = (desc, "tensor")
-                host = call_args[i]
-                if isinstance(host, Tensor):
-                    tensor_host_by_value[desc] = host
-                pending_dynamic_gm.append((desc, tensor_ty, metadata))
-                break
+        # Descriptor metadata must exist before the user body reads shape/stride.
+        tree_dynamic_descriptors = _materialize_tree_dynamic_gm_descriptors(
+            pending_tree_rebuilds=pending_tree_rebuilds,
+            arg_names=arg_names,
+            tree_records=tree_records,
+            entry=entry,
+            fn_loc=fn_loc,
+        )
 
         with runtime._frontend_emission(
             arg_bindings=arg_bindings,
@@ -540,40 +613,21 @@ def _build_tla_func(
             )
 
             # Descriptor emission ran before emission state existed; register now.
-            for desc, tensor_ty, metadata in pending_dynamic_gm:
+            for desc, tensor_ty, metadata in tree_dynamic_descriptors.values():
                 _register_tla_tensor_type(desc, tensor_ty)
                 _register_tla_tensor_metadata(desc, metadata)
-            if pending_dataclass_rebuilds:
-                from .core_api import _wrap_frontend_value
-
+            if pending_tree_rebuilds:
                 call_args_for_fn = list(call_args_for_fn)
-                for index, (instance, slots) in pending_dataclass_rebuilds.items():
-                    # Rebuild the stdlib dataclass in field order: ``Constexpr``
-                    # fields keep their host value (compile-time constant), dynamic
-                    # fields consume one block arg wrapped in the matching frontend
-                    # object (Numeric for scalars, _Tensor for tensors).
-                    constexpr_names = _dataclass_constexpr_field_names(instance)
-                    slot_iter = iter(slots)
-                    field_names: list[str] = []
-                    rebuilt_values: list[Any] = []
-                    for field in dataclasses.fields(instance):
-                        field_names.append(field.name)
-                        if field.name in constexpr_names:
-                            rebuilt_values.append(getattr(instance, field.name))
-                        else:
-                            rebuilt_values.append(
-                                _wrap_frontend_value(entry.arguments[next(slot_iter)])
-                            )
-                    # kw_only dataclasses reject positional args; keyword
-                    # reconstruction works for both kw_only and plain dataclasses.
-                    kwargs = dict(zip(field_names, rebuilt_values))
-                    if constexpr_names:
-                        ro_cls = _constexpr_readonly_dataclass_cls(
-                            type(instance), constexpr_names
-                        )
-                        call_args_for_fn[index] = ro_cls(**kwargs)
-                    else:
-                        call_args_for_fn[index] = type(instance)(**kwargs)
+                _rebuild_tree_argument_proxies(
+                    pending_tree_rebuilds=pending_tree_rebuilds,
+                    arg_names=arg_names,
+                    tree_records=tree_records,
+                    tree_dynamic_descriptors=tree_dynamic_descriptors,
+                    entry=entry,
+                    ctx=ctx,
+                    frontend_state=frontend_state,
+                    call_args_for_fn=call_args_for_fn,
+                )
                 call_args_for_fn = tuple(call_args_for_fn)
             helper_cache: dict[int, tuple[Any, Any]] = {}
             active_jit_helpers: list[Any] = []
@@ -694,7 +748,12 @@ def _build_tla_func(
                 ) in source_compile_configs.items()
             )
         mlir_ir.Operation.create("tla.return", loc=fn_loc)
-    return extern_compile_specs
+    # Return external compile requirements and the same tree plans used by
+    # device reconstruction and host launch.
+    return (
+        extern_compile_specs,
+        tuple(runtime_argument_trees.get(name) for name in runtime_arg_names),
+    )
 
 
 def _coerce_location(
@@ -745,8 +804,6 @@ def _category_from_type_like(ctx: mlir_ir.Context, type_like: Any) -> str | None
 
 def _resolve_execution_arg_types(
     *,
-    fn: Any,
-    arg_names: Sequence[str],
     arg_values: Mapping[str, Any] | None,
     ctx: mlir_ir.Context,
     constexpr_names: set[str] | None = None,
@@ -765,206 +822,24 @@ def _resolve_execution_arg_types(
             if callable(mlir_types_getter):
                 resolved_types = mlir_types_getter(ctx)
                 if resolved_types:
-                    if len(resolved_types) == 1:
-                        resolved[name] = resolved_types[0]
-                    else:
-                        resolved[name] = ("scalar_group", tuple(resolved_types))
+                    if len(resolved_types) != 1:
+                        raise TlaLoweringError(
+                            f"kernel argument {name!r} exposes "
+                            f"{len(resolved_types)} runtime values; use a supported "
+                            "ordered container to expose multiple values"
+                        )
+                    resolved[name] = resolved_types[0]
                     continue
             if is_jit_callable(value):
-                # Compile-time helpers are not runtime ABI leaves.
+                # Compile-time helpers do not consume runtime ABI slots.
                 continue
-            if _is_dataclass_instance(value):
-                # Unpack a stdlib dataclass into one scalar type per field.
-                resolved[name] = (
-                    "scalar_group",
-                    _resolve_dataclass_field_types(value, ctx),
-                )
-                continue
-            if isinstance(value, bool):
-                resolved[name] = "i1"
-            elif isinstance(value, int):
-                resolved[name] = "i32"
-            elif isinstance(value, float):
-                resolved[name] = "f32"
     return resolved
-
-
-def _resolve_dataclass_field_types(value: Any, ctx: mlir_ir.Context) -> tuple[Any, ...]:
-    """Resolve one MLIR type per **dynamic** field of a stdlib dataclass instance.
-
-    Fields annotated ``tla.Constexpr[...]`` are compile-time constants: they
-    produce no MLIR type and no kernel block arg. Mirrors ``_get_typed_call_args``:
-    any other field value exposing ``__get_mlir_types__`` (``tla.*`` Numerics,
-    ``tla.Tensor``, …) contributes its own type; plain ``bool``/``int``/``float``
-    map to ``i1``/``i32``/``f32``.
-    """
-    constexpr_names = _dataclass_constexpr_field_names(value)
-    field_types: list[Any] = []
-    for field in dataclasses.fields(value):
-        if field.name in constexpr_names:
-            continue
-        field_value = getattr(value, field.name)
-        mlir_types_getter = getattr(field_value, "__get_mlir_types__", None)
-        if callable(mlir_types_getter):
-            resolved = mlir_types_getter(ctx)
-            if not resolved:
-                raise TlaLoweringError(
-                    f"dataclass field {field.name!r} resolved to no MLIR type"
-                )
-            field_types.append(resolved[0])
-        elif isinstance(field_value, bool):
-            field_types.append("i1")
-        elif isinstance(field_value, int):
-            field_types.append("i32")
-        elif isinstance(field_value, float):
-            field_types.append("f32")
-        else:
-            raise TlaLoweringError(
-                f"unsupported dataclass field {field.name!r} type "
-                f"{type(field_value).__name__}; fields must expose __get_mlir_types__ "
-                "(e.g. tla.Int32 / tla.Float32 / tla.Tensor) or be plain bool/int/float"
-            )
-    return tuple(field_types)
 
 
 def _load_execution_dialects(ctx: mlir_ir.Context) -> None:
     _tla_type_bridge.load_tla_dialect(ctx)
     for dialect in ("arith", "scf", "memref"):
         ctx.dialects[dialect]
-
-
-def _is_dataclass_instance(value: Any) -> bool:
-    """True when ``value`` is a stdlib ``@dataclass`` instance (not the class)."""
-    return dataclasses.is_dataclass(value) and not isinstance(value, type)
-
-
-#: stdlib ``@dataclass`` options that must keep their default values for a TLA
-#: kernel-argument dataclass. Only ``frozen`` and ``kw_only`` may be customized.
-#: The env's ``_DataclassParams`` may not record every option, so each check is
-#: guarded by ``hasattr``.
-_DATACLASS_DEFAULT_ONLY_PARAMS: tuple[tuple[str, object], ...] = (
-    ("init", True),
-    ("repr", True),
-    ("eq", True),
-    ("order", False),
-    ("unsafe_hash", False),
-    ("match_args", True),
-    ("slots", False),
-    ("weakref_slot", False),
-)
-
-
-def _validate_dataclass_kernel_arg(instance: Any) -> None:
-    """Directory: Decorators
-    Description:
-        Pack Host-side kernel arguments with the Python stdlib `@dataclass`.
-        Instances created on the Host can be passed to `tla.compile` / launch;
-        fields may also be constructed inside a kernel.
-
-    Parameters:
-        - *`frozen`* (`bool`): If `True`, instances are immutable. Default
-          `False`.
-        - *`kw_only`* (`bool`): If `True`, fields must be passed by keyword.
-          Default `False`.
-
-    Constraints:
-        - For kernel arguments, only `frozen` / `kw_only` may be set; other
-          stdlib options such as `slots=True` or `init=False` raise at compile
-          time.
-        - Supported field types:
-
-          | Kind | Types | Constraints |
-          | --- | --- | --- |
-          | Tensor | `tla.Tensor` | No dynamic-GM; use a static tensor field or a top-level tensor argument |
-          | Python scalars | `bool` / `int` / `float` | — |
-          | `tla` scalars | `Bool`, `Int8/16/32/64`, `UInt8/16/32/64`, `Float16/32`, `BFloat16` | — |
-          | Compile-time | `tla.Constexpr[...]` | Not in kernel ABI / IR; read-only inside the kernel |
-
-    Example:
-    ```python
-    from dataclasses import dataclass
-    import catlass.tla as tla
-
-    @dataclass(frozen=True, kw_only=True)
-    class TilingData:
-        TILE_M: tla.Constexpr[int]
-        tiling_int: int
-        out: tla.Tensor
-
-    @tla.kernel
-    def struct_arg_kernel(tiling: TilingData) -> None:
-        # TILE_M is a compile-time constant; tiling_int is a runtime scalar.
-        ...
-
-    tiling = TilingData(TILE_M=128, tiling_int=64, out=tout)
-    artifact = tla.compile(struct_arg_kernel, tiling, options="--npu-arch 3510")
-    artifact(tiling, block_num=1)
-    ```
-
-    """
-    cls = type(instance)
-    params = getattr(cls, "__dataclass_params__", None)
-    if params is not None:
-        for name, default in _DATACLASS_DEFAULT_ONLY_PARAMS:
-            if hasattr(params, name) and getattr(params, name) != default:
-                raise TlaLoweringError(
-                    f"dataclass {cls.__name__} is used as a kernel argument but was "
-                    f"declared with {name}={getattr(params, name)!r} (default "
-                    f"{default!r}); only frozen= and kw_only= may be customized"
-                )
-    # ``slots=True`` is not recorded in ``_DataclassParams`` on some builds;
-    # a slots dataclass defines ``__slots__`` on the class itself.
-    if getattr(cls, "__slots__", None):
-        raise TlaLoweringError(
-            f"dataclass {cls.__name__} is used as a kernel argument but was declared "
-            "with slots=True; only frozen= and kw_only= may be customized"
-        )
-
-
-def _dataclass_constexpr_field_names(value: Any) -> frozenset[str]:
-    """Names of dataclass fields annotated ``tla.Constexpr[...]`` (compile-time)."""
-    return frozenset(
-        field.name
-        for field in dataclasses.fields(value)
-        if is_constexpr_annotation(field.type)
-    )
-
-
-_CONSTEXPR_RO_CLASS_CACHE: dict[tuple[Any, tuple[str, ...]], type] = {}
-
-
-def _constexpr_readonly_dataclass_cls(
-    cls: type, constexpr_names: frozenset[str]
-) -> type:
-    """Return a subclass of ``cls`` whose ``tla.Constexpr`` fields are read-only.
-
-    The first write to a field (during ``__init__``) is allowed; any later
-    assignment to a constexpr field raises ``AttributeError``, so compile-time
-    constants cannot be reassigned inside a kernel body. ``super().__setattr__``
-    preserves frozen-dataclass semantics for non-constexpr fields.
-    """
-    key = (cls, tuple(sorted(constexpr_names)))
-    cached = _CONSTEXPR_RO_CLASS_CACHE.get(key)
-    if cached is not None:
-        return cached
-
-    def __setattr__(self: Any, name: str, value: Any) -> None:
-        if name in constexpr_names and name in self.__dict__:
-            raise AttributeError(
-                f"{cls.__name__}.{name} is a tla.Constexpr field and is read-only "
-                "(compile-time constant)"
-            )
-        cls.__setattr__(self, name, value)
-
-    ro_cls = type(f"{cls.__name__}ConstexprRO", (cls,), {"__setattr__": __setattr__})
-    _CONSTEXPR_RO_CLASS_CACHE[key] = ro_cls
-    return ro_cls
-
-
-def _is_constexpr_annotation(annotation: Any) -> bool:
-    if annotation is inspect._empty:
-        return False
-    return is_constexpr_annotation(annotation)
 
 
 __all__ = [

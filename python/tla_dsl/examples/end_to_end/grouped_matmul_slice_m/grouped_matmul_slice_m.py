@@ -69,8 +69,8 @@ def grouped_matmul_slice_m_kernel(
     gm_b: tla.Tensor,
     group_list: tla.Tensor,
     gm_c: tla.Tensor,
-    _tiling: TilingParams,
-    _swizzle: SwizzleParams,
+    _tiling: tla.Constexpr[TilingParams],
+    _swizzle: tla.Constexpr[SwizzleParams],
 ) -> None:
     c0 = 0
     c1 = 1

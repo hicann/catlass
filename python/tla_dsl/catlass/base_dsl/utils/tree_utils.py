@@ -1,15 +1,196 @@
-"""PyTree helpers for Tla frontend control-flow lowering.
+"""Ordered tree helpers for TLA frontend and runtime argument lowering.
 
-This mirrors the role of ``base_dsl/utils/tree_utils.py`` for
-branch-carried values in dynamic control flow.
+The frontend helpers in this module describe branch-carried values.  The
+runtime tree types describe the structure of host kernel arguments.  They use
+the same node/leaf vocabulary, but runtime ABI binding remains in
+``base_dsl.runtime.argument_binding``.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field, fields, is_dataclass
-from typing import Any
+from typing import Any, Callable, Iterable, Literal, Sequence, TypeAlias
 
 from ...runtime import TlaCoreAPIError
+
+
+class ArgumentTreeError(TypeError):
+    """Raised when a runtime argument cannot form a stable parameter tree."""
+
+
+@dataclass(frozen=True)
+class NodeType:
+    """Describe how an ordered aggregate node is iterated and rebuilt."""
+
+    name: str
+    to_iterable: Callable[
+        [Any, TreeMetadata | None], tuple[TreeMetadata, Sequence[Any]]
+    ] = field(compare=False, hash=False, repr=False)
+    from_iterable: Callable[[TreeMetadata, Iterable[Any]], Any] = field(
+        compare=False, hash=False, repr=False
+    )
+
+
+LeafKind = Literal["unit", "constexpr", "runtime"]
+
+
+@dataclass(frozen=True)
+class Leaf:
+    """A structural terminal; dynamic types live in runtime bindings."""
+
+    kind: LeafKind = "unit"
+    const_value: Any = field(default=None, compare=False, hash=False, repr=False)
+    binding_index: int | None = None
+
+    def __post_init__(self) -> None:
+        if self.kind not in {"unit", "constexpr", "runtime"}:
+            raise ValueError(f"unsupported argument leaf kind {self.kind!r}")
+        if self.is_runtime:
+            if self.binding_index is None or self.binding_index < 0:
+                raise ValueError("runtime leaves require a nonnegative binding index")
+        elif self.binding_index is not None:
+            raise ValueError(f"{self.kind} leaves cannot have a runtime binding")
+
+    @property
+    def is_none(self) -> bool:
+        return self.kind == "unit"
+
+    @property
+    def is_constexpr(self) -> bool:
+        return self.kind == "constexpr"
+
+    @property
+    def is_runtime(self) -> bool:
+        return self.kind == "runtime"
+
+
+@dataclass(frozen=True)
+class PyTreeDef:
+    """Immutable structure definition for an ordered runtime argument tree."""
+
+    node_type: NodeType
+    node_metadata: TreeMetadata
+    child_treedefs: tuple["TreeDef", ...]
+
+
+TreeDef: TypeAlias = PyTreeDef | Leaf
+
+
+@dataclass(frozen=True)
+class TreeMetadata:
+    """Immutable container type, field order and static-field positions."""
+
+    python_type: type[Any] = field(compare=False, repr=False)
+    child_keys: tuple[Any, ...]
+    fields: tuple[Any, ...] = ()
+    constexpr_indices: tuple[int, ...] = ()
+
+    @property
+    def constexpr_fields(self) -> tuple[Any, ...]:
+        names = self.fields or self.child_keys
+        return tuple(names[index] for index in self.constexpr_indices)
+
+
+def is_namedtuple_instance(value: Any) -> bool:
+    """Return whether *value* is an instance of a ``typing.NamedTuple``."""
+
+    value_type = type(value)
+    return (
+        isinstance(value, tuple)
+        and hasattr(value_type, "_fields")
+        and isinstance(value_type._fields, tuple)
+    )
+
+
+def _walk_runtime_tree(
+    value: Any,
+    treedef: TreeDef,
+    *,
+    leaf_handler: Callable[[Any, Leaf, tuple[Any, ...]], Iterable[Any]],
+) -> tuple[Any, ...]:
+    """Replay a compiled tree through the same ``NodeType`` adapters."""
+
+    values: list[Any] = []
+
+    _visit_runtime_tree(value, treedef, (), set(), leaf_handler, values)
+    return tuple(values)
+
+
+def _visit_runtime_tree(
+    item: Any,
+    node: TreeDef,
+    path: tuple[Any, ...],
+    active: set[int],
+    leaf_handler: Callable[[Any, Leaf, tuple[Any, ...]], Iterable[Any]],
+    values: list[Any],
+) -> None:
+    """Visit without allocating a self-referencing closure on every launch."""
+
+    if isinstance(node, Leaf):
+        values.extend(leaf_handler(item, node, path))
+        return
+
+    expected_type = node.node_metadata.python_type
+    if type(item) is not expected_type:
+        raise ArgumentTreeError(
+            f"runtime argument structure changed at {path!r}: "
+            f"expected exact type {expected_type!r}, got {type(item)!r}"
+        )
+    identity = id(item)
+    if identity in active:
+        raise ArgumentTreeError(f"cyclic runtime argument at {path!r}")
+    active.add(identity)
+    try:
+        metadata, children_values = node.node_type.to_iterable(item, node.node_metadata)
+        keys = metadata.child_keys
+        if len(children_values) != len(node.child_treedefs):
+            raise ArgumentTreeError(
+                f"runtime argument structure changed at {path!r}: "
+                f"expected {len(node.child_treedefs)} children, "
+                f"got {len(children_values)}"
+            )
+        for key, child_value, child_node in zip(
+            keys, children_values, node.child_treedefs, strict=True
+        ):
+            if isinstance(child_node, Leaf):
+                values.extend(leaf_handler(child_value, child_node, path + (key,)))
+                continue
+            _visit_runtime_tree(
+                child_value,
+                child_node,
+                path + (key,),
+                active,
+                leaf_handler,
+                values,
+            )
+    finally:
+        active.remove(identity)
+
+
+def tree_unflatten(leaves: Iterable[Any], treedef: TreeDef) -> Any:
+    """Rebuild a Python/device-proxy value from dynamic leaves."""
+
+    iterator = iter(leaves)
+
+    def visit(node: TreeDef) -> Any:
+        if isinstance(node, Leaf):
+            if node.is_none:
+                return None
+            if node.is_constexpr:
+                return node.const_value
+            try:
+                return next(iterator)
+            except StopIteration as exc:
+                raise ArgumentTreeError("too few frontend argument leaves") from exc
+        children = [visit(child) for child in node.child_treedefs]
+        return node.node_type.from_iterable(node.node_metadata, children)
+
+    result = visit(treedef)
+    try:
+        next(iterator)
+    except StopIteration:
+        return result
+    raise ArgumentTreeError("extra frontend argument leaves")
 
 
 @dataclass(frozen=True)

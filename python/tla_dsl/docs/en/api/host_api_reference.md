@@ -34,6 +34,55 @@ These APIs are called from Python Host scripts, **outside** a `@tla.kernel` func
 
 Host-side `@tla.kernel` entry, `@tla.jit` device helpers, `@tla.extern` declarations, and Host `@dataclass` packing. Decorated kernel, helper, and extern declaration bodies are not executed on the Host.
 
+### `dataclass`
+
+**Source:** [`dataclasses.dataclass`](../../../catlass/base_dsl/runtime/jit_arg_adapters.py#L135)
+
+Description:
+
+Pack a Host-side kernel argument dataclass through the recursive
+struct-like argument tree.  Runtime fields become ordered ABI leaves;
+``tla.Constexpr`` fields remain compile-time values.
+
+Prototype:
+
+```python
+dataclasses.dataclass(cls: type, *, frozen: bool = False, kw_only: bool = False) -> type
+```
+
+Parameters:
+
+- *``cls``*: The class decorated with ``@dataclass``.
+- *``frozen``*: Whether Python field assignment is disabled (default false).
+- *``kw_only``*: Whether construction requires keyword arguments (default false).
+
+Constraints:
+
+- Fields must be supported leaves or supported ordered aggregates.
+- Reconstruction calls ``cls(**fields)``: the constructor must accept
+  every declared field as a keyword argument. A generated constructor
+  does not accept ``field(init=False)`` fields.
+- Construction, including ``__post_init__``, runs during compilation.
+- ``slots=True`` and non-default dataclass options are rejected by the
+  argument-tree validator.
+- ``Constexpr`` fields are not compared at launch. Recompile after
+  changing static configuration; an existing kernel keeps its specialization.
+
+Example:
+
+```python
+@dataclass(frozen=True)
+class Aux:
+    tile: tla.Constexpr[int]
+    bias: tla.Tensor
+    limit: float
+
+compiled = tla.compile(kernel, Aux(128, bias, 0.5), ...)
+compiled(Aux(128, bias, 0.5), ...)
+```
+
+---
+
 ### `kernel`
 
 **Source:** [`catlass.dsl.kernel`](../../../catlass/catlass_dsl/catlass.py#L27)
@@ -228,67 +277,6 @@ compiled_ep(tx, ty, block_num=1)  # abs_epilogue omitted at launch
 
 ---
 
-### `dataclass`
-
-**Source:** [`dataclasses.dataclass`](../../../catlass/execution_lowering.py#L857)
-
-Description:
-
-Pack Host-side kernel arguments with the Python stdlib `@dataclass`.
-Instances created on the Host can be passed to `tla.compile` / launch;
-fields may also be constructed inside a kernel.
-
-Prototype:
-
-```python
-dataclasses.dataclass(cls: type, *, frozen: bool = False, kw_only: bool = False) -> type
-```
-
-Parameters:
-
-- *`frozen`* (`bool`): If `True`, instances are immutable. Default
-  `False`.
-- *`kw_only`* (`bool`): If `True`, fields must be passed by keyword.
-  Default `False`.
-
-Constraints:
-
-- For kernel arguments, only `frozen` / `kw_only` may be set; other
-  stdlib options such as `slots=True` or `init=False` raise at compile
-  time.
-- Supported field types:
-
-  | Kind | Types | Constraints |
-  | --- | --- | --- |
-  | Tensor | `tla.Tensor` | No dynamic-GM; use a static tensor field or a top-level tensor argument |
-  | Python scalars | `bool` / `int` / `float` | — |
-  | `tla` scalars | `Bool`, `Int8/16/32/64`, `UInt8/16/32/64`, `Float16/32`, `BFloat16` | — |
-  | Compile-time | `tla.Constexpr[...]` | Not in kernel ABI / IR; read-only inside the kernel |
-
-Example:
-
-```python
-from dataclasses import dataclass
-import catlass.tla as tla
-
-@dataclass(frozen=True, kw_only=True)
-class TilingData:
-    TILE_M: tla.Constexpr[int]
-    tiling_int: int
-    out: tla.Tensor
-
-@tla.kernel
-def struct_arg_kernel(tiling: TilingData) -> None:
-    # TILE_M is a compile-time constant; tiling_int is a runtime scalar.
-    ...
-
-tiling = TilingData(TILE_M=128, tiling_int=64, out=tout)
-artifact = tla.compile(struct_arg_kernel, tiling, options="--npu-arch 3510")
-artifact(tiling, block_num=1)
-```
-
----
-
 ### `extern`
 
 **Source:** [`catlass.tla.ffi.extern`](../../../catlass/tla/ffi.py#L70)
@@ -428,7 +416,7 @@ compiled(tx, ty, block_num=1)  # launch again with the same binary
 
 #### `TlaJitFunction.compile`
 
-**Source:** [`catlass.dsl.TlaJitFunction.compile`](../../../catlass/dsl.py#L249)
+**Source:** [`catlass.dsl.TlaJitFunction.compile`](../../../catlass/dsl.py#L198)
 
 Description:
 
@@ -479,7 +467,7 @@ Run a compiled kernel on the NPU by calling the `JitCompiledFunction` returned b
 
 #### `JitCompiledFunction.__call__`
 
-**Source:** [`catlass.base_dsl.jit_executor.JitCompiledFunction.__call__`](../../../catlass/base_dsl/jit_executor.py#L515)
+**Source:** [`catlass.base_dsl.jit_executor.JitCompiledFunction.__call__`](../../../catlass/base_dsl/jit_executor.py#L614)
 
 Description:
 
@@ -537,7 +525,7 @@ Dump frontend TLA IR without building a device binary or launching. See `TlaJitF
 
 #### `TlaJitFunction.dump_mlir`
 
-**Source:** [`catlass.dsl.TlaJitFunction.dump_mlir`](../../../catlass/dsl.py#L310)
+**Source:** [`catlass.dsl.TlaJitFunction.dump_mlir`](../../../catlass/dsl.py#L259)
 
 Description:
 
@@ -580,7 +568,7 @@ Bind a real NPU buffer with `from_dlpack`, or a metadata-only sample with `make_
 
 #### `from_dlpack`
 
-**Source:** [`catlass.tla.runtime.from_dlpack`](../../../catlass/tla/runtime.py#L627)
+**Source:** [`catlass.tla.runtime.from_dlpack`](../../../catlass/tla/runtime.py#L625)
 
 Description:
 
@@ -642,7 +630,7 @@ ty = from_dlpack(
 
 #### `make_fake_tensor`
 
-**Source:** [`catlass.tla.runtime.make_fake_tensor`](../../../catlass/tla/runtime.py#L889)
+**Source:** [`catlass.tla.runtime.make_fake_tensor`](../../../catlass/tla/runtime.py#L887)
 
 Description:
 

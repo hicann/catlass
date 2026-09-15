@@ -3,8 +3,7 @@ from __future__ import annotations
 from catlass.tla.runtime import make_fake_tensor
 
 import struct
-
-from dataclasses import replace
+from dataclasses import dataclass, replace
 
 import pytest
 
@@ -17,6 +16,15 @@ tla = pytest.importorskip("catlass.tla", exc_type=ImportError)
 jit_executor = pytest.importorskip(
     "catlass.base_dsl.jit_executor", exc_type=ImportError
 )
+
+from catlass.base_dsl import BaseDSL
+from catlass._mlir import ir as mlir_ir
+from catlass.base_dsl.runtime.argument_tree import (
+    build_runtime_argument_tree,
+    flatten_runtime_leaves,
+)
+from catlass.execution_lowering import TlaLoweringError
+
 
 _UNIFIED_FIELDS = (
     "allocated",
@@ -33,6 +41,59 @@ _UNIFIED_FIELDS = (
     "originShape0",
     "originShape1",
 )
+
+
+@pytest.mark.parametrize("nested", [False, True])
+@pytest.mark.parametrize("prepared", [False, True])
+def test_descriptor_provider_validation_at_payload_boundary(nested, prepared):
+    from catlass.base_dsl.runtime.argument_tree import build_runtime_argument_tree
+    from catlass.base_dsl.runtime.jit_arg_adapters import _PointerLaunchArg
+
+    class Provider:
+        def __init__(self, values):
+            self.values = values
+
+        def build_memref_launch_fields(self):
+            return self.values
+
+    class BrokenProvider:
+        def build_memref_launch_fields(self):
+            raise ValueError("unbound descriptor")
+
+    def wrap(value):
+        return ([value, None],) if nested else value
+
+    sample = make_fake_tensor(tla.Float32, (8,), (1,)).mark_compact_shape_dynamic(0)
+    layout = _memref_field_layout()
+    binder = jit_executor.ExecutionArgs(
+        argument_trees=(build_runtime_argument_tree(wrap(sample)),),
+        kernel_abi=layout,
+        abi_packer=execution._prepare_abi_packer(layout) if prepared else None,
+    )
+    values = (4096, 4096, 0, 8, 1, 1, 1, 1, 1, 1, 1, 8, 1)
+    provider = Provider(values)
+    assert binder.generate_launch_payload((wrap(provider),)) == struct.pack(
+        "<13Q", *values
+    )
+    provider.values = (8192, 8192, *values[2:])
+    assert binder.generate_launch_payload((wrap(provider),)) == struct.pack(
+        "<13Q", *provider.values
+    )
+    for invalid, error_type, message in (
+        (sample, RuntimeError, "Tensor buffer is not bound"),
+        (_PointerLaunchArg(4096), AttributeError, "build_memref_launch_fields"),
+        (object(), AttributeError, "build_memref_launch_fields"),
+        (BrokenProvider(), ValueError, "unbound descriptor"),
+        (Provider(None), TypeError, "iterable"),
+        (Provider(values[:-1]), struct.error, "expected 13"),
+        (Provider((*values, 1)), struct.error, "expected 13"),
+        (Provider((-1, *values[1:])), struct.error, None),
+        (Provider((2**64, *values[1:])), struct.error, None),
+        (Provider(("bad", *values[1:])), struct.error, "required argument"),
+    ):
+        with pytest.raises(error_type, match=message) as error:
+            binder.generate_launch_payload((wrap(invalid),))
+        assert type(error.value) is error_type
 
 
 def _bound_fake(
@@ -440,3 +501,114 @@ def test_mixed_handoff_uses_logical_abi_count_for_dynamic_gm(
     values = struct.unpack("<26Q", payload)
     assert values[0:13] == (0x1000, 0x1000, 0, 32, 16, 1, 1, 16, 1, 1, 1, 32, 16)
     assert values[13:26] == (0x2000, 0x2000, 0, 16, 32, 1, 1, 32, 1, 1, 1, 16, 32)
+
+
+def _structured_tensor(shape=(8,), stride=(1,), dtype=tla.Float32, *, layout_tag=tla.arch.RowMajor):
+    return make_fake_tensor(dtype, shape, stride, layout_tag=layout_tag)
+
+def test_dynamic_gm_is_one_logical_leaf_with_three_block_arguments() -> None:
+    dynamic = _structured_tensor((8,), (1,)).mark_compact_shape_dynamic(0)
+    value = (dynamic, 3)
+
+    tree = build_runtime_argument_tree(value)
+
+    assert tree.runtime_leaf_count == 2
+    assert [binding.kind for binding in tree.bindings] == ["dynamic_gm", "scalar"]
+    assert flatten_runtime_leaves(value, tree) == value
+    # Descriptor capability is checked by the final ABI packer.
+    assert flatten_runtime_leaves((128, 3), tree) == (128, 3)
+
+    def kernel(aux):
+        _ = aux[0][0] + aux[1].to(tla.Float32)
+
+    lowered = BaseDSL()._lower(kernel, kind="kernel", options={}, type_args=(value,))
+    entry = lowered.module.body.operations[0].regions[0].blocks[0]
+    assert len(entry.arguments) == 4
+    assert mlir_ir.MemRefType.isinstance(entry.arguments[0].type)
+    assert [str(arg.type) for arg in entry.arguments[1:]] == ["index", "index", "i32"]
+
+def test_nested_dynamic_gm_enters_execution_lowering() -> None:
+    def kernel(aux) -> None:
+        dynamic = aux[0]
+        bias = aux[1]
+        _ = dynamic[0] + bias[0]
+
+    dynamic = _structured_tensor((8,), (1,)).mark_compact_shape_dynamic(0)
+    bias = _structured_tensor((8,), (1,))
+    lowered = BaseDSL()._lower(
+        kernel,
+        kind="kernel",
+        options={},
+        type_args=((dynamic, bias),),
+    )
+
+    tree = lowered.argument_trees[0]
+    assert tree is not None
+    assert [binding.kind for binding in tree.bindings] == [
+        "dynamic_gm",
+        "pointer",
+    ]
+    entry = lowered.module.body.operations[0].regions[0].blocks[0]
+    assert len(entry.arguments) == 4
+    assert mlir_ir.MemRefType.isinstance(entry.arguments[0].type)
+    assert all(str(entry.arguments[i].type) == "index" for i in (1, 2))
+    assert entry.arguments[3].type == bias.__get_mlir_types__(lowered.context)[0]
+
+def test_nested_dynamic_gm_unsupported_rank_fails_before_device_launch() -> None:
+    dynamic = make_fake_tensor(
+        tla.Float16,
+        (2, 3, 4),
+        (12, 4, 1),
+        origin_shape=(2, 3, 4),
+        coord=(0, 0, 0),
+        layout_tag=tla.arch.RowMajor,
+    ).mark_layout_dynamic()
+
+    def kernel(aux) -> None:
+        _ = aux[0][0]
+
+    with pytest.raises(TlaLoweringError, match="rank-1/rank-2"):
+        BaseDSL()._lower(
+            kernel,
+            kind="kernel",
+            options={},
+            type_args=((dynamic,),),
+        )
+
+@dataclass
+class _DynamicPair:
+    left: tla.Tensor
+    right: tla.Tensor
+
+def test_multiple_dynamic_gm_leaves_keep_struct_order_and_descriptor_arity() -> None:
+    left = _structured_tensor((8,), (1,)).mark_compact_shape_dynamic(0)
+    right = _structured_tensor((8,), (1,)).mark_compact_shape_dynamic(0)
+    value = _DynamicPair(left, right)
+
+    tree = build_runtime_argument_tree(value)
+    assert tree.runtime_leaf_count == 2
+    assert [binding.kind for binding in tree.bindings] == [
+        "dynamic_gm",
+        "dynamic_gm",
+    ]
+    assert flatten_runtime_leaves(value, tree) == (left, right)
+
+    def kernel(prefix, aux, suffix) -> None:
+        _ = prefix + 1
+        _ = aux.left[0] + aux.right[0]
+        _ = suffix + 1.0
+
+    lowered = BaseDSL()._lower(
+        kernel,
+        kind="kernel",
+        options={},
+        type_args=(1, value, 0.5),
+    )
+    assert lowered.argument_trees[1] is not None
+    entry = lowered.module.body.operations[0].regions[0].blocks[0]
+    assert len(entry.arguments) == 8
+    assert all(mlir_ir.MemRefType.isinstance(entry.arguments[i].type) for i in (1, 4))
+    assert str(entry.arguments[0].type) == "i32"
+    assert str(entry.arguments[7].type) == "f32"
+    assert all(str(entry.arguments[i].type) == "index" for i in (2, 3, 5, 6))
+    assert lowered.asm(generic=True).count("tla.tensor_desc") == 2

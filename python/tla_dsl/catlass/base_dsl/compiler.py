@@ -45,11 +45,7 @@ class CompileCallable:
 
         """
         from ..execution import TlaUnsupportedAbiError
-        from ..dsl import (
-            TlaJitFunction,
-            _bind_kernel_call_args,
-            _get_typed_call_args,
-        )
+        from ..dsl import TlaJitFunction, _bind_kernel_call_args
 
         if func is None:
             raise TlaUnsupportedAbiError("Function is not set or invalid.")
@@ -63,8 +59,7 @@ class CompileCallable:
             )
         # Kernel args passed by name arrive mixed in with the compile options.
         args, kwargs = _bind_kernel_call_args(func.fn, args, kwargs)
-        type_args = _get_typed_call_args(args, fn=func.fn) if args else None
-        return func.compile(type_args=type_args, **kwargs)
+        return func.compile(type_args=args if args else None, **kwargs)
 
 
 compile = CompileCallable()

@@ -5,25 +5,23 @@ as a constexpr and its value was silently dropped: the kernel body saw ``None``,
 traced the wrong branch, and — because the compile cache key hashes the emitted
 MLIR — every variant collapsed onto one cached kernel.
 
-The later sections work outward from the binding helpers to the public
-``tla.compile(...)`` entry point, ending with the launch payload it hands to the
-device. No test here needs an NPU: the payload is packed with the real ABI
+The later sections exercise the public ``tla.compile(...)`` entry point,
+ending with the launch payload it hands to the device. No test here needs an
+NPU: the payload is packed with the real ABI
 packer against fake operands.
 """
 
 from __future__ import annotations
 
 import dataclasses
+from unittest.mock import Mock
 
 import pytest
 
 import catlass.tla as tla
 from catlass import execution
 from catlass.base_dsl.typing import is_constexpr_annotation
-from catlass.dsl import (
-    _bind_kernel_call_args,
-    _get_typed_call_args,
-)
+from catlass.execution_lowering import TlaLoweringError, UnsupportedExecutionLowering
 from catlass.tla.runtime import make_fake_tensor
 
 
@@ -70,17 +68,75 @@ def test_str_constexpr_is_distinguishable_from_none(value: str) -> None:
     )
 
 
-def test_str_constexpr_survives_typed_call_args() -> None:
-    def fn(out, sel: tla.Constexpr[str]) -> None: ...
+@pytest.mark.parametrize("value", ["wide", "narrow", (4, 8)])
+def test_compile_preserves_constexpr_value(monkeypatch, value) -> None:
+    @tla.kernel
+    def fn(out, sel: tla.Constexpr) -> None: ...
 
-    assert _get_typed_call_args((None, "wide"), fn) == (None, "wide")
-    assert _get_typed_call_args((None, "narrow"), fn) == (None, "narrow")
+    compile_spy = Mock()
+    monkeypatch.setattr(fn, "compile", compile_spy)
+    assert tla.compile(fn, None, value) is compile_spy.return_value
+    compile_spy.assert_called_once_with(type_args=(None, value))
+    assert compile_spy.call_args.kwargs["type_args"][1] is value
 
 
-def test_non_constexpr_args_are_still_erased() -> None:
-    def fn(out, sel) -> None: ...
+@pytest.mark.parametrize("aux", [(), [], None, (3, [None, 2.0])])
+def test_compile_preserves_structured_sample(monkeypatch, aux) -> None:
+    @tla.kernel
+    def fn(aux) -> None: ...
 
-    assert _get_typed_call_args((None, object()), fn) is None
+    compile_spy = Mock()
+    monkeypatch.setattr(fn, "compile", compile_spy)
+    tla.compile(fn, aux)
+    compile_spy.assert_called_once_with(type_args=(aux,))
+    assert compile_spy.call_args.kwargs["type_args"][0] is aux
+
+
+@tla.kernel
+def _runtime_sample(aux) -> None: ...
+
+
+@tla.kernel
+def _runtime_pair(value, aux) -> None: ...
+
+
+@pytest.mark.parametrize(
+    "samples",
+    [
+        (object(),),
+        ("bad",),
+        (None, object()),
+        (1, object()),
+        (None, "bad"),
+        (1, "bad"),
+        ((object(),),),
+        (([None, "bad"],),),
+    ],
+)
+def test_compile_rejects_invalid_samples_without_erasing_them(samples) -> None:
+    kernel = _runtime_sample if len(samples) == 1 else _runtime_pair
+    with pytest.raises(
+        TlaLoweringError, match="has no runtime type|unsupported runtime"
+    ) as error:
+        tla.compile(kernel, *samples)
+    assert "requires type_args" not in str(error.value)
+
+
+def test_compile_keeps_all_none_runtime_positions(monkeypatch) -> None:
+    compile_spy = Mock()
+    monkeypatch.setattr(_runtime_pair, "compile", compile_spy)
+    tla.compile(_runtime_pair, None, None)
+    compile_spy.assert_called_once_with(type_args=(None, None))
+
+
+def test_compile_without_parameters_passes_no_samples(monkeypatch) -> None:
+    @tla.kernel
+    def fn() -> None: ...
+
+    compile_spy = Mock()
+    monkeypatch.setattr(fn, "compile", compile_spy)
+    tla.compile(fn)
+    compile_spy.assert_called_once_with(type_args=None)
 
 
 @tla.kernel
@@ -157,70 +213,99 @@ def test_unrelated_annotations_are_not_constexpr(form: str) -> None:
 # --------------------------------------------------------------------------
 
 
-def test_omitted_constexpr_param_uses_its_default() -> None:
-    def fn(a, mode: tla.Constexpr[str] = "wide") -> None: ...
+@pytest.mark.parametrize("samples", [(), (None,)])
+def test_omitted_constexpr_param_uses_its_default(monkeypatch, samples) -> None:
+    @tla.kernel
+    def fn(a=None, mode: tla.Constexpr[str] = "wide") -> None: ...
 
-    assert _get_typed_call_args((None,), fn) == (None, "wide")
+    compile_spy = Mock()
+    monkeypatch.setattr(fn, "compile", compile_spy)
+    tla.compile(fn, *samples)
+    compile_spy.assert_called_once_with(type_args=(None, "wide"))
 
 
-def test_constexpr_passed_by_keyword_is_bound_positionally() -> None:
+def test_constexpr_passed_by_keyword_is_bound_positionally(monkeypatch) -> None:
+    @tla.kernel
     def fn(a, mode: tla.Constexpr[str]) -> None: ...
 
-    args, kwargs = _bind_kernel_call_args(fn, (None,), {"mode": "wide"})
-    assert args == (None, "wide")
-    assert kwargs == {}
+    compile_spy = Mock()
+    monkeypatch.setattr(fn, "compile", compile_spy)
+    tla.compile(fn, mode="wide", a=None)
+    compile_spy.assert_called_once_with(type_args=(None, "wide"))
 
 
-def test_runtime_options_are_not_bound_as_kernel_args() -> None:
+def test_runtime_options_are_not_bound_as_kernel_args(monkeypatch) -> None:
+    @tla.kernel
     def fn(a, mode: tla.Constexpr[str]) -> None: ...
 
-    args, kwargs = _bind_kernel_call_args(
-        fn, (None,), {"mode": "wide", "block_num": 4, "options": "--npu-arch 3510"}
+    compile_spy = Mock()
+    monkeypatch.setattr(fn, "compile", compile_spy)
+    tla.compile(fn, None, mode="wide", options="--npu-arch 3510")
+    compile_spy.assert_called_once_with(
+        type_args=(None, "wide"), options="--npu-arch 3510"
     )
-    assert args == (None, "wide")
-    assert kwargs == {"block_num": 4, "options": "--npu-arch 3510"}
 
 
-def test_keyword_constexpr_behind_a_defaulted_param() -> None:
+def test_keyword_constexpr_behind_a_defaulted_param(monkeypatch) -> None:
     # The defaulted `b` must not end the scan: `sel` would then stay in the
     # runtime options and be silently replaced by its own default.
+    @tla.kernel
     def fn(a, b=1, sel: tla.Constexpr[str] = "narrow") -> None: ...
 
-    args, kwargs = _bind_kernel_call_args(fn, (None,), {"sel": "wide"})
-    assert args == (None, 1, "wide")
-    assert kwargs == {}
+    compile_spy = Mock()
+    monkeypatch.setattr(fn, "compile", compile_spy)
+    tla.compile(fn, None, sel="wide")
+    compile_spy.assert_called_once_with(type_args=(None, 1, "wide"))
 
 
-def test_sparse_keyword_constexprs() -> None:
+def test_sparse_keyword_constexprs(monkeypatch) -> None:
+    @tla.kernel
     def fn(a, x: tla.Constexpr[int] = 1, y: tla.Constexpr[str] = "narrow") -> None: ...
 
-    args, kwargs = _bind_kernel_call_args(fn, (None,), {"y": "wide"})
-    assert args == (None, 1, "wide")
-    assert kwargs == {}
+    compile_spy = Mock()
+    monkeypatch.setattr(fn, "compile", compile_spy)
+    tla.compile(fn, None, y="wide")
+    compile_spy.assert_called_once_with(type_args=(None, 1, "wide"))
 
 
 def test_unfillable_gap_stops_binding_rather_than_shifting() -> None:
+    @tla.kernel
     def fn(a, b, sel: tla.Constexpr[str]) -> None: ...
 
-    args, kwargs = _bind_kernel_call_args(fn, (None,), {"sel": "wide"})
-    assert args == (None,), "a gap with no default must not pull `sel` into `b`"
-    assert kwargs == {"sel": "wide"}
+    with pytest.raises(TlaLoweringError, match="expected 3, got 1"):
+        tla.compile(fn, None, sel="wide")
 
 
-def test_variadic_signature_is_left_untouched() -> None:
+def test_variadic_signature_is_left_untouched(monkeypatch) -> None:
     # No fixed parameter list to bind positional host values against.
+    @tla.kernel
     def fn(a, *rest, sel: tla.Constexpr[str] = "narrow") -> None: ...
 
-    args, kwargs = _bind_kernel_call_args(fn, (None,), {"sel": "wide"})
-    assert args == (None,)
-    assert kwargs == {"sel": "wide"}
+    compile_spy = Mock()
+    monkeypatch.setattr(fn, "compile", compile_spy)
+    tla.compile(fn, None, sel="wide")
+    compile_spy.assert_called_once_with(type_args=(None,), sel="wide")
 
 
 def test_param_colliding_with_a_runtime_option_is_reported() -> None:
+    @tla.kernel
     def fn(options: tla.Constexpr[str]) -> None: ...
 
     with pytest.raises(TypeError, match="collides with the runtime option"):
-        _bind_kernel_call_args(fn, (), {"options": "wide"})
+        tla.compile(fn, options="wide")
+
+
+@pytest.mark.parametrize(
+    "samples, error_type, message",
+    [
+        ((), UnsupportedExecutionLowering, "requires type_args"),
+        ((None,), TlaLoweringError, "expected 2, got 1"),
+        ((None, None, None), TlaLoweringError, "expected 2, got 3"),
+    ],
+)
+def test_compile_reports_missing_or_extra_samples(samples, error_type, message) -> None:
+    with pytest.raises(error_type, match=message):
+        tla.compile(_runtime_pair, *samples)
 
 
 @tla.kernel
@@ -228,12 +313,16 @@ def _keyword_only_constexpr(*, sel: tla.Constexpr[str]) -> None:
     _alloc(64 if sel == "wide" else 16)
 
 
-def test_keyword_only_constexpr_param() -> None:
+def test_keyword_only_constexpr_param(monkeypatch) -> None:
     # Keyword-only params are ordinary entries in `arg_names`; the kernel body
     # must not be called with them positionally.
     assert _keyword_only_constexpr.dump_mlir(
         type_args=("wide",)
     ) != _keyword_only_constexpr.dump_mlir(type_args=("narrow",))
+    compile_spy = Mock()
+    monkeypatch.setattr(_keyword_only_constexpr, "compile", compile_spy)
+    tla.compile(_keyword_only_constexpr, sel="wide")
+    compile_spy.assert_called_once_with(type_args=("wide",))
 
 
 # --------------------------------------------------------------------------
@@ -247,8 +336,8 @@ def _unmarked_str_param(sel: str) -> None:
 
 
 def test_unmarked_compile_time_param_names_itself() -> None:
-    with pytest.raises(Exception) as excinfo:
-        _unmarked_str_param.dump_mlir(type_args=("wide",))
+    with pytest.raises(TlaLoweringError) as excinfo:
+        tla.compile(_unmarked_str_param, "wide")
     message = str(excinfo.value)
     assert "'sel'" in message
     assert "Constexpr" in message
@@ -259,7 +348,7 @@ def test_unmarked_compile_time_param_names_itself() -> None:
 #
 # ``tla.compile(...)`` takes kernel arguments and runtime options in one
 # ``**kwargs`` and must keep constexpr values out of the launch ABI. The tests
-# above pin the binding helpers directly; these exercise the public API.
+# above stop at the compile boundary or lowering; these also verify artifacts.
 # --------------------------------------------------------------------------
 
 VECTOR_ELE = 64

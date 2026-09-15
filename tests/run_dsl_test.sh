@@ -28,6 +28,8 @@
 # python/tla_dsl/examples/end_to_end/scalar_arg_alignment (scalar_arg_alignment.py).
 # python/tla_dsl/examples/end_to_end/dataclass_arg (dataclass_arg.py: stdlib
 # @dataclass instance unpacked into scalar kernel args).
+# python/tla_dsl/examples/end_to_end/structured_arguments (recursive arguments,
+# Tensor interfaces, scalar subclasses and mixed memref ABI).
 # python/tla_dsl/examples/end_to_end/print_tensor (print_tensor.py: GM/UB/L1/L0C
 # tensor dumps plus multi-block and multi-call cases).
 # python/tla_dsl/examples/end_to_end/basic_mmad_epilogue (matmul_add.py, matmul_add_ub.py,

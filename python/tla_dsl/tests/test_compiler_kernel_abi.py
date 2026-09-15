@@ -590,6 +590,7 @@ def test_kernel_abi_from_dict_rejects_incoherent_structured_scalar(
 class _FakeLowered:
     module = object()
     extern_compile_specs = ()
+    argument_trees = ()
 
     def asm(self, *, generic: bool = False) -> str:
         del generic

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, make_dataclass, replace
+from enum import IntEnum
+from typing import NamedTuple
 from pathlib import Path
 import importlib.util
 import math
@@ -22,6 +24,10 @@ ascend_runtime = pytest.importorskip(
 jit_executor_mod = pytest.importorskip(
     "catlass.base_dsl.jit_executor", exc_type=ImportError
 )
+
+
+from catlass.base_dsl.runtime.argument_tree import ArgumentTreeError
+from catlass.tla.runtime import make_fake_tensor
 
 
 def _load_debug_print_example(*, mixed: bool = False):
@@ -603,10 +609,16 @@ def test_debug_print_aic_output_uses_scalar_frame(
 
 
 class _FakeLowered:
-    def __init__(self, text: str, module: object | None = None) -> None:
+    def __init__(
+        self,
+        text: str,
+        module: object | None = None,
+        argument_trees: tuple[object | None, ...] = (),
+    ) -> None:
         self.module = module
         self.extern_compile_specs = ()
         self._text = text
+        self.argument_trees = argument_trees
 
     def asm(self, *, generic: bool = False) -> str:
         del generic
@@ -927,7 +939,9 @@ def test_force_recompile_refreshes_launched_artifact_in_memory_cache(
     assert memory_hit is not first
     assert memory_hit.artifacts == first.artifacts
     assert memory_hit.kernel_mode == first.kernel_mode
-    assert memory_hit.jit_module is first.jit_module
+    assert memory_hit.jit_module is not first.jit_module
+    assert memory_hit.execution_args is not first.execution_args
+    assert memory_hit.execution_args.kernel_abi is first.execution_args.kernel_abi
     assert memory_hit._executor is None
     assert execution._MEMORY_COMPILE_CACHE[first.cache_key] is memory_hit
 
@@ -956,6 +970,140 @@ def test_force_recompile_refreshes_launched_artifact_in_memory_cache(
     assert compiled_binaries == [b"obj-1", b"obj-2"]
     assert loaded_binaries == [b"obj-1", b"obj-2"]
     assert launched_functions == [201, 202]
+
+
+def test_cache_hit_preserves_recursive_tree_and_launches_same_payload(
+    monkeypatch, tmp_path
+) -> None:
+    """A cached artifact must retain the logical tree used by the launcher."""
+
+    from catlass.base_dsl.runtime.argument_tree import build_runtime_argument_tree
+    from catlass.tla.runtime import make_fake_tensor
+
+    tensor = make_fake_tensor(
+        tla.Float32,
+        (8,),
+        (1,),
+        origin_shape=(8,),
+        layout_tag=tla.arch.RowMajor,
+    )
+    tensor.data_ptr = 0x1234
+    tensor._external_binding = True
+    value = (tensor, 3)
+    tree = build_runtime_argument_tree(value)
+    tlair_mlir = "module { func.func @aggregate_kernel(!llvm.ptr, i32) }"
+    layout = compiler_bridge.KernelAbiLayout(
+        schema_version=3,
+        entrypoint="aggregate_kernel",
+        total_size=16,
+        arguments=(
+            compiler_bridge.KernelAbiArgument(
+                index=0,
+                kind=compiler_bridge.KernelAbiArgumentKind.POINTER,
+                scalar=None,
+                mlir_type="!llvm.ptr",
+                offset=0,
+                storage_size=8,
+                alignment=4,
+            ),
+            compiler_bridge.KernelAbiArgument(
+                index=1,
+                kind=compiler_bridge.KernelAbiArgumentKind.SCALAR,
+                scalar=compiler_bridge.KernelAbiScalarDescriptor(
+                    compiler_bridge.KernelAbiScalarCategory.INTEGER,
+                    32,
+                    compiler_bridge.KernelAbiIntegerSignedness.SIGNLESS,
+                    None,
+                ),
+                mlir_type="i32",
+                offset=8,
+                storage_size=4,
+                alignment=4,
+            ),
+        ),
+    )
+
+    hivm_compile = tmp_path / "hivmc-a5"
+    hivm_compile.write_text("")
+    template_bc = tmp_path / "bc" / "meta_op.aiv.c310.bc"
+    template_bc.parent.mkdir(parents=True)
+    template_bc.write_bytes(b"bc")
+    monkeypatch.setattr(execution, "_MEMORY_COMPILE_CACHE", {})
+    monkeypatch.setattr(
+        base_dsl_mod.BaseDSL,
+        "_lower",
+        lambda *_args, **_kwargs: _FakeLowered(
+            tlair_mlir, module=object(), argument_trees=(tree,)
+        ),
+    )
+    monkeypatch.setattr(execution, "resolve_bridge_extension_path", lambda: None)
+    monkeypatch.setattr(execution, "_resolve_hivmc_a5", lambda: hivm_compile)
+    monkeypatch.setattr(execution, "_tool_version", lambda _path: "test-version")
+    monkeypatch.setattr(execution, "_mlir_build_dirs", lambda: [tmp_path])
+    monkeypatch.setattr(
+        execution,
+        "lower_tlair_module_to_mlir",
+        lambda *_args, **_kwargs: compiler_bridge.TlaLoweringResult(
+            "module { func.func @aggregate_kernel(!llvm.ptr, i32) }\n",
+            kernel_abi=layout,
+        ),
+    )
+
+    compiled_binaries: list[bytes] = []
+
+    def fake_run_checked(_cmd, *, label, cwd, stdin_text=None):
+        del stdin_text
+        assert label == "hivmc-a5"
+        binary = f"obj-{len(compiled_binaries) + 1}".encode()
+        compiled_binaries.append(binary)
+        Path(cwd, "kernel.o").write_bytes(binary)
+
+    monkeypatch.setattr(execution, "_run_checked", fake_run_checked)
+
+    compile_option = execution.TlaCompileOption(
+        cache_enabled=True, cache_dir=tmp_path / "cache"
+    )
+    first = execution.compile_and_cache(
+        lambda _aux: None,
+        kind="kernel",
+        options={},
+        compile_option=compile_option,
+        type_args=(value,),
+    )
+    second = execution.compile_and_cache(
+        lambda current_aux: None,
+        kind="kernel",
+        options={},
+        compile_option=compile_option,
+        type_args=(value,),
+    )
+
+    assert compiled_binaries == [b"obj-1"]
+    assert second is not first
+    assert second.jit_module is not first.jit_module
+    assert tuple(second.execution_args.signature.parameters) == ("current_aux",)
+    assert tuple(first.execution_args.signature.parameters) == ("_aux",)
+    assert second.execution_args.argument_trees == (tree,)
+    assert second.execution_args.generate_launch_payload([value])[:8] == (
+        0x1234
+    ).to_bytes(8, byteorder="little")
+    assert (
+        int.from_bytes(
+            second.execution_args.generate_launch_payload([value])[8:12],
+            byteorder="little",
+            signed=True,
+        )
+        == 3
+    )
+
+
+def test_artifact_manifest_does_not_require_a_python_tree() -> None:
+    manifest = {
+        "debug_print_workspace_abi_revision": execution._DEBUG_PRINT_WORKSPACE_ABI_REVISION,
+        "print_tensor_workspace_abi_revision": execution._PRINT_TENSOR_WORKSPACE_ABI_REVISION,
+        "debug_tunnel_state_abi_revision": execution._DEBUG_TUNNEL_STATE_ABI_REVISION,
+    }
+    assert execution._cache_manifest_has_current_workspace_abis(manifest)
 
 
 def test_compile_rejects_invalid_kernel_abi_before_hivmc(monkeypatch, tmp_path) -> None:
@@ -2901,7 +3049,9 @@ def test_online_cache_key_serializes_kernel_abi_version(monkeypatch, tmp_path) -
     )
 
     assert len(payloads) == 1
-    assert payloads[0]["cache_abi_version"] == 8
+    assert payloads[0]["cache_abi_version"] == execution._ONLINE_CACHE_ABI_VERSION
+    assert "runtime_argument_tree_schemas" not in payloads[0]
+    assert "runtime_argument_tree_protocol_version" not in payloads[0]
 
 
 @pytest.mark.parametrize(
@@ -2999,6 +3149,45 @@ def test_pack_launch_args_rejects_plain_python_scalar_for_pointer(value) -> None
 
     with pytest.raises(execution.TlaUnsupportedAbiError, match="pointer"):
         execution._pack_launch_args([value], layout)
+
+
+class _HostInt(int):
+    pass
+
+
+class _HostFloat(float):
+    pass
+
+
+class _HostEnum(IntEnum):
+    THREE = 3
+
+
+@pytest.mark.parametrize(
+    "abi_type,pack_format,valid,invalid",
+    [
+        ("i1", "?", False, [1, tla.Int8(1), "yes"]),
+        ("i32", "i", 3, [1.0, True, 2**31, -(2**31) - 1, tla.Int64(3)]),
+        ("f32", "f", 3.0, [1, True, 1e100, tla.Float16(3)]),
+        ("i32", "i", _HostInt(3), [_HostInt(2**31), 1.0, True]),
+        ("i32", "i", _HostEnum.THREE, [True, 3.0, 2**31]),
+        ("f32", "f", _HostFloat(3), [_HostFloat(1e100), 3, True]),
+        ("ui8", "B", tla.UInt8(255), [1, tla.Int8(1), tla.UInt16(1)]),
+        ("ui32", "I", tla.UInt32(2**32 - 1), [1, tla.Int32(1), tla.UInt16(1)]),
+        ("i64", "q", tla.Int64(-3), [1, tla.Int32(1)]),
+        ("f16", "e", tla.Float16(3), [3.0, tla.Float32(3)]),
+        ("f32", "f", tla.Float32(3), [3, tla.Float16(3)]),
+    ],
+)
+def test_pack_launch_args_checks_scalar_types_and_ranges(abi_type, pack_format, valid, invalid):
+    size = struct.calcsize("<" + pack_format)
+    layout = _kernel_abi(("scalar", abi_type, abi_type, 0, size, 4), total_size=8)
+    value = valid.value if isinstance(valid, tla.Numeric) else valid
+    expected = struct.pack("<" + pack_format, value) + bytes(8 - size)
+    assert execution._pack_launch_args([valid], layout) == expected
+    for value in invalid:
+        with pytest.raises(execution.TlaUnsupportedAbiError):
+            execution._pack_launch_args([value], layout)
 
 
 def test_pack_scalar_argument_rejects_float_descriptor_without_format() -> None:
@@ -3994,3 +4183,183 @@ def test_a_region_at_zero_is_not_mistaken_for_absence() -> None:
     )
 
     assert _resolved_dyn_ubuf_bytes(module, 4096) == 4096
+
+
+@tla.kernel
+def _cache_sequence_kernel(out: tla.Tensor, aux):
+    out[0] = aux[0][0] + aux[1]
+
+@tla.kernel
+def _cache_dataclass_kernel(out: tla.Tensor, aux):
+    out[0] = aux.bias[0] + aux.limit
+
+@tla.kernel
+def _cache_static_kernel(out: tla.Tensor, aux):
+    out[0] = aux.tile[0]
+
+
+@tla.kernel
+def _cache_dynamic_ub_kernel(out: tla.Tensor, aux):
+    static_ptr = tla.allocate(250, tla.Float32, tla.AddressSpace.ub, 32)
+    dynamic_ptr = tla.arch.get_dyn_ub(tla.Float32, byte_alignment=256)
+    static = tla.make_tensor_like(static_ptr, out, tla.arch.RowMajor)
+    dynamic = tla.make_tensor_like(dynamic_ptr, out, tla.arch.RowMajor)
+    with tla.vector():
+        static[0] = aux[0][0]
+        dynamic[0] = static[0] + aux[1]
+        out[0] = dynamic[0]
+
+
+@pytest.mark.parametrize("storage", ("memory", "disk"))
+@pytest.mark.parametrize("structure", ("sequence", "namedtuple", "dataclass"))
+def test_cache_reuses_code_with_current_argument_binding(
+    storage, structure, monkeypatch, isolated_compile_cache
+) -> None:
+    if structure == "sequence":
+        first_type, second_type = tuple, list
+        first_value, second_value = (3.0,), [5.0]
+        kernel = _cache_sequence_kernel
+    elif structure == "namedtuple":
+        first_type = NamedTuple("SameAux", [("bias", tla.Tensor), ("limit", float)])
+        second_type = NamedTuple("SameAux", [("bias", tla.Tensor), ("limit", float)])
+        kernel = _cache_sequence_kernel
+    else:
+        first_type = make_dataclass("SameAux", [("bias", tla.Tensor), ("limit", float)])
+        second_type = make_dataclass(
+            "SameAux", [("bias", tla.Tensor), ("limit", float)]
+        )
+        kernel = _cache_dataclass_kernel
+
+    out, first_bias, second_bias = (
+        make_fake_tensor(tla.Float32, (8,), (1,)) for _ in range(3)
+    )
+    for i, tensor in enumerate((out, first_bias, second_bias), 1):
+        tensor.data_ptr = i * 0x1000
+        tensor._external_binding = True
+    if structure == "sequence":
+        first_value = (first_bias, *first_value)
+        second_value = [second_bias, *second_value]
+    else:
+        assert first_type is not second_type
+        assert first_type.__qualname__ == second_type.__qualname__
+        assert first_type.__module__ == second_type.__module__
+        first_value = first_type(first_bias, 3.0)
+        second_value = second_type(second_bias, 5.0)
+
+    monkeypatch.setattr(execution, "_MEMORY_COMPILE_CACHE", {})
+    builds = []
+    original_run = execution._run_checked
+
+    def run_checked(cmd, **kwargs):
+        if kwargs.get("label") == "hivmc-a5":
+            builds.append(tuple(cmd))
+        return original_run(cmd, **kwargs)
+
+    monkeypatch.setattr(execution, "_run_checked", run_checked)
+    monkeypatch.setenv("CATLASS_DSL_CACHE", "1")
+    monkeypatch.setenv("CATLASS_DSL_FORCE_RECOMPILE", "0")
+    options = dict(options="--npu-arch 3510")
+    first = tla.compile(kernel, out, first_value, **options)
+    if storage == "disk":
+        execution._MEMORY_COMPILE_CACHE.clear()
+    second = tla.compile(kernel, out, second_value, **options)
+
+    assert len(builds) == 1
+    assert first.cache_key == second.cache_key
+    assert first.kernel_binary_path == second.kernel_binary_path
+    assert first.execution_args is not second.execution_args
+    assert (
+        first.execution_args.argument_trees[1]
+        is not second.execution_args.argument_trees[1]
+    )
+    assert first.execution_args.generate_launch_payload((out, first_value))
+    payload = second.execution_args.generate_launch_payload((out, second_value))
+    assert payload == execution._pack_launch_args(
+        (out, second_bias, 5.0), second.execution_args.kernel_abi
+    )
+    with pytest.raises(ArgumentTreeError, match="exact type"):
+        first.execution_args.generate_launch_payload((out, second_value))
+    with pytest.raises(ArgumentTreeError, match="exact type"):
+        second.execution_args.generate_launch_payload((out, first_value))
+
+
+@pytest.mark.parametrize("storage", ("memory", "disk"))
+def test_structured_cache_preserves_dynamic_ub_launch_metadata(
+    storage, monkeypatch, isolated_compile_cache
+) -> None:
+    out, bias = (make_fake_tensor(tla.Float32, (8,), (1,)) for _ in range(2))
+    for index, tensor in enumerate((out, bias), 1):
+        tensor.data_ptr = index * 0x1000
+        tensor._external_binding = True
+    first_value, second_value = (bias, 3.0), [bias, 5.0]
+    monkeypatch.setattr(execution, "_MEMORY_COMPILE_CACHE", {})
+    monkeypatch.setenv("CATLASS_DSL_CACHE", "1")
+    monkeypatch.setenv("CATLASS_DSL_FORCE_RECOMPILE", "0")
+    first = tla.compile(
+        _cache_dynamic_ub_kernel, out, first_value, options="--npu-arch 3510"
+    )
+    if storage == "disk":
+        execution._MEMORY_COMPILE_CACHE.clear()
+    monkeypatch.setattr(
+        execution,
+        "_run_tla_lowering_to_mlir",
+        lambda **_kwargs: pytest.fail("cache hit must not lower the kernel again"),
+    )
+    second = tla.compile(
+        _cache_dynamic_ub_kernel, out, second_value, options="--npu-arch 3510"
+    )
+    assert first.cache_key == second.cache_key
+    assert first.kernel_binary_path == second.kernel_binary_path
+    assert first.execution_args is not second.execution_args
+    assert (
+        first.execution_args.argument_trees[1]
+        is not second.execution_args.argument_trees[1]
+    )
+    with pytest.raises(ArgumentTreeError, match="exact type"):
+        first.execution_args.generate_launch_payload((out, second_value))
+    with pytest.raises(ArgumentTreeError, match="exact type"):
+        second.execution_args.generate_launch_payload((out, first_value))
+
+    _install_fake_launch_context(monkeypatch)
+    monkeypatch.setattr(execution, "load_binary", lambda **_kwargs: (11, 12))
+    launches = []
+    monkeypatch.setattr(
+        execution, "launch_kernel", lambda **kwargs: launches.append(kwargs)
+    )
+    for compiled, value in ((first, first_value), (second, second_value)):
+        module = compiled.jit_module
+        assert (module.ub_static_bytes, module.ub_dynamic_base) == (1000, 1024)
+        assert module.ub_programmable_bytes == 253952
+        assert compiled.get_kernel_ub_size() == 1000
+        assert compiled.max_ub_bytes == 253952 - 1024
+        expected = execution._pack_launch_args(
+            (out, bias, value[1]), compiled.execution_args.kernel_abi
+        )
+        for ub in (4096, 8192):
+            compiled(out, value, ub=ub)
+            assert launches[-1]["dyn_ubuf_bytes"] == ub + 24
+            assert launches[-1]["payload"] == expected
+
+
+def test_recompile_static_value_uses_ir_identity(
+    monkeypatch, isolated_compile_cache
+) -> None:
+    @dataclass
+    class Config:
+        tile: tla.Constexpr[list]
+
+    monkeypatch.setattr(execution, "_MEMORY_COMPILE_CACHE", {})
+    out = make_fake_tensor(tla.Float32, (8,), (1,))
+    config = Config([128])
+    monkeypatch.setenv("CATLASS_DSL_CACHE", "1")
+    monkeypatch.setenv("CATLASS_DSL_FORCE_RECOMPILE", "0")
+    options = dict(options="--npu-arch 3510")
+    first = tla.compile(_cache_static_kernel, out, config, **options)
+    original_key = first.cache_key
+    original_ir = first.artifacts.MLIR
+    config.tile[0] = 64
+    assert first.cache_key == original_key
+    assert first.artifacts.MLIR == original_ir
+    second = tla.compile(_cache_static_kernel, out, config, **options)
+    assert second.cache_key != original_key
+    assert second.artifacts.MLIR != original_ir

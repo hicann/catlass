@@ -38,7 +38,7 @@ def batched_matmul_kernel(
     gm_a: tla.Tensor,
     gm_b: tla.Tensor,
     gm_c: tla.Tensor,
-    _tiling: TilingParams,
+    _tiling: tla.Constexpr[TilingParams],
 ) -> None:
     c0 = 0
     c1 = 1

@@ -37,7 +37,7 @@ def basic_mmad_kernel(
     gm_a: tla.Tensor,
     gm_b: tla.Tensor,
     gm_c: tla.Tensor,
-    _tiling: TilingParams,
+    _tiling: tla.Constexpr[TilingParams],
     hf32_mode: tla.Constexpr[tla.params.HF32Mode],
     acc_is_int: tla.Constexpr[bool],
 ) -> None:

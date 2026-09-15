@@ -67,9 +67,9 @@ def tail_multi_core_splitk_mmad_kernel(
     gm_b: tla.Tensor,
     gm_c: tla.Tensor,
     gm_w: tla.Tensor,
-    _tiling: TilingParams,
-    _swizzle: SwizzleParams,
-    _tail_splitk: TailSplitKParams,
+    _tiling: tla.Constexpr[TilingParams],
+    _swizzle: tla.Constexpr[SwizzleParams],
+    _tail_splitk: tla.Constexpr[TailSplitKParams],
 ) -> None:
     """Normal tiles write GM C; tail tiles split-K via workspace and AIV ReduceAdd."""
     c0 = 0

@@ -53,8 +53,8 @@ def matmul_evg_add_ub_kernel(
     gm_a: tla.Tensor,
     gm_b: tla.Tensor,
     gm_c: tla.Tensor,
-    _tiling: TilingParams,
-    _swizzle: SwizzleParams,
+    _tiling: tla.Constexpr[TilingParams],
+    _swizzle: tla.Constexpr[SwizzleParams],
     UB_SLOT_ELEMS: tla.Constexpr[int],
     SIMD_LANES: tla.Constexpr[int],
 ) -> None:

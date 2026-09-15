@@ -9,6 +9,8 @@ nav_order: 45
 [DSL Tensor 接入](tensor_binding.md)，接口完整签名见
 [Host API 参考](../../api/host_api_reference.md)。
 
+tuple/list、dataclass 等复合参数的传递方式见 [结构化 Kernel 参数](structured_arguments.md)。
+
 ---
 
 ## 基本流程

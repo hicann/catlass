@@ -2,12 +2,64 @@ from __future__ import annotations
 
 import inspect
 import threading
-from dataclasses import dataclass, fields, is_dataclass
+from dataclasses import dataclass, field, fields, is_dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Mapping, Sequence
 
 if TYPE_CHECKING:
     from ..execution import TlaExecutionResult
+
+
+@lru_cache(maxsize=1)
+def _argument_tree_runtime():
+    # Resolve after runtime initialization to avoid the execution import cycle.
+    from .runtime import argument_tree
+
+    return argument_tree
+
+
+def _rectify_legacy_launch_args(launch_args: Sequence[Any]) -> tuple[Any, ...]:
+    """Normalize a binder created without a compiled argument-tree plan.
+
+    ``ExecutionArgs`` is also used directly by existing master-level ABI tests
+    and callers that provide a hand-built ``KernelAbiLayout``.  Keep that
+    direct ABI behavior isolated from the compiled recursive-tree path.
+    """
+
+    from .runtime.jit_arg_adapters import (
+        JitArgAdapterRegistry,
+        _adapt_from_data_ptr,
+    )
+    from .typing import Numeric, as_numeric, is_constexpr_annotation
+
+    # Tensor/pointer providers are already in the representation consumed by
+    # the prepared ABI packer. This is the common kernel-launch fast path.
+    if all(hasattr(arg, "__c_pointers__") for arg in launch_args):
+        return tuple(launch_args)
+
+    rectified: list[Any] = []
+    for arg in launch_args:
+        if is_dataclass(arg) and not isinstance(arg, type):
+            # This path is used only when no compiled argument tree was
+            # supplied.  A compiled kernel always uses the shared tree plan.
+            for field in fields(arg):
+                if is_constexpr_annotation(field.type):
+                    continue
+                value = getattr(arg, field.name)
+                if isinstance(value, Numeric) or hasattr(value, "__c_pointers__"):
+                    rectified.append(value)
+                else:
+                    rectified.append(as_numeric(value))
+            continue
+        if isinstance(arg, Numeric) or hasattr(arg, "__c_pointers__"):
+            rectified.append(arg)
+            continue
+        adapter = JitArgAdapterRegistry.get_registered_adapter(arg)
+        rectified.append(
+            adapter(arg) if adapter is not None else _adapt_from_data_ptr(arg)
+        )
+    return tuple(rectified)
 
 
 @dataclass(frozen=True)
@@ -42,14 +94,76 @@ class ExecutionArgs:
     kernel_abi: Any | None = None
     abi_packer: Any | None = None
     signature: inspect.Signature | None = None
+    # One entry per logical (non-Constexpr) top-level argument when a compiled
+    # tree plan is available. ``None`` means the legacy ABI-only binder path.
+    argument_trees: tuple[Any | None, ...] | None = None
+    _runtime_argument_count: int | None = field(
+        default=None, init=False, repr=False, compare=False
+    )
+    _flat_runtime_arguments: bool = field(
+        default=False, init=False, repr=False, compare=False
+    )
+    _direct_abi_arguments: bool = field(
+        default=False, init=False, repr=False, compare=False
+    )
+    _adapt_launch_args: Callable[[Sequence[Any]], Sequence[Any]] = field(
+        init=False, repr=False, compare=False
+    )
 
     def __post_init__(self) -> None:
+        # Resolve after runtime initialization, not on each launch. The adapter
+        # reads the live registry so later registrations still take effect.
+        from .runtime.jit_arg_adapters import _adapt_registered_launch_args
+
+        object.__setattr__(self, "_adapt_launch_args", _adapt_registered_launch_args)
         if self.original_signature is not None and self.signature is None:
             object.__setattr__(
                 self,
                 "signature",
                 self.filter_runtime_signature(self.original_signature),
             )
+        if self.signature is not None:
+            runtime_count = sum(
+                1
+                for param in self.signature.parameters.values()
+                if param.kind
+                not in (
+                    inspect.Parameter.VAR_POSITIONAL,
+                    inspect.Parameter.VAR_KEYWORD,
+                )
+            )
+        elif self.argument_trees is not None:
+            runtime_count = len(self.argument_trees)
+        else:
+            runtime_count = None
+        object.__setattr__(self, "_runtime_argument_count", runtime_count)
+        if (
+            self.argument_trees is not None
+            and len(self.argument_trees) != runtime_count
+        ):
+            raise ValueError(
+                "compiled runtime argument tree plan does not match kernel "
+                f"signature: got {len(self.argument_trees)}, expected {runtime_count}"
+            )
+        if self.argument_trees is not None:
+            from .utils.tree_utils import Leaf
+
+            if all(
+                tree is not None
+                and isinstance(tree.treedef, Leaf)
+                and tree.treedef.is_runtime
+                for tree in self.argument_trees
+            ):
+                object.__setattr__(self, "_flat_runtime_arguments", True)
+                object.__setattr__(
+                    self,
+                    "_direct_abi_arguments",
+                    all(
+                        tree.bindings[tree.treedef.binding_index].kind
+                        in ("pointer", "scalar")
+                        for tree in self.argument_trees
+                    ),
+                )
 
     @classmethod
     def from_callable(
@@ -71,6 +185,7 @@ class ExecutionArgs:
     def filter_runtime_signature(self, sig: inspect.Signature) -> inspect.Signature:
         """Drop Constexpr parameters from a signature."""
         from .runtime.jit_arg_adapters import is_arg_annotation_constexpr
+        from .typing import is_constexpr_annotation
 
         filtered_params = []
         for index, (name, param) in enumerate(sig.parameters.items()):
@@ -80,7 +195,14 @@ class ExecutionArgs:
             ):
                 filtered_params.append(param)
                 continue
-            if is_arg_annotation_constexpr(param.annotation, name, index, None):
+            # Execution lowering classifies explicit kernel parameters by
+            # annotation, after callable/method binding has taken place.
+            is_static = (
+                is_constexpr_annotation(param.annotation)
+                if self.argument_trees is not None
+                else is_arg_annotation_constexpr(param.annotation, name, index, None)
+            )
+            if is_static:
                 continue
             filtered_params.append(param)
         return sig.replace(parameters=filtered_params)
@@ -91,21 +213,12 @@ class ExecutionArgs:
         full_kwargs: Mapping[str, Any] | None = None,
     ) -> tuple[Any, ...]:
         """Strip Constexpr parameters from a full kernel call argument list."""
-        from .runtime.jit_arg_adapters import is_arg_annotation_constexpr
-
         sig = self.original_signature
         runtime_sig = self.signature
         assert sig is not None and runtime_sig is not None
 
-        runtime_arity = sum(
-            1
-            for param in runtime_sig.parameters.values()
-            if param.kind
-            not in (
-                inspect.Parameter.VAR_POSITIONAL,
-                inspect.Parameter.VAR_KEYWORD,
-            )
-        )
+        runtime_arity = self._runtime_argument_count
+        assert runtime_arity is not None
         # Already-stripped launch args: do not re-bind against the original
         # signature (Constexpr slots between runtime params would shift).
         if len(full_args) == runtime_arity and not full_kwargs:
@@ -113,8 +226,8 @@ class ExecutionArgs:
 
         bound = sig.bind_partial(*full_args, **dict(full_kwargs or {}))
         bound.apply_defaults()
-        for index, (name, param) in enumerate(sig.parameters.items()):
-            if is_arg_annotation_constexpr(param.annotation, name, index, None):
+        for name in sig.parameters:
+            if name not in runtime_sig.parameters:
                 bound.arguments.pop(name, None)
 
         runtime_bound = inspect.BoundArguments(runtime_sig, bound.arguments)
@@ -124,43 +237,28 @@ class ExecutionArgs:
         self, launch_args: Sequence[Any], **_kwargs: Any
     ) -> tuple[Any, ...]:
         """Normalize call args before packing (adapters + passthrough)."""
-        # Tensor/pointer providers are already in the representation consumed by
-        # the prepared ABI packer. This is the common kernel-launch fast path.
-        if all(hasattr(arg, "__c_pointers__") for arg in launch_args):
-            return tuple(launch_args)
+        if self.argument_trees is not None:
+            # Only top-level Constexpr parameters are omitted; zero-leaf trees
+            # retain their logical positions.
+            expected_count = self._runtime_argument_count
+            assert expected_count is not None
+            if len(launch_args) != expected_count:
+                raise ValueError(
+                    "runtime argument count does not match compiled kernel signature: "
+                    f"got {len(launch_args)}, expected {expected_count}"
+                )
+            if self._flat_runtime_arguments:
+                return tuple(self._adapt_launch_args(launch_args))
 
-        from .runtime.jit_arg_adapters import (
-            JitArgAdapterRegistry,
-            _adapt_from_data_ptr,
-        )
-        from .typing import Numeric, as_numeric, is_constexpr_annotation
-
-        rectified: list[Any] = []
-        for arg in launch_args:
-            if is_dataclass(arg) and not isinstance(arg, type):
-                # Unpack a stdlib dataclass into one entry per **dynamic** field,
-                # matching the frontend's scalar_group block args / ABI slots.
-                # ``Constexpr`` fields are compile-time constants with no ABI slot.
-                # Numerics and tensor-like fields (``__c_pointers__``) pass through;
-                # plain scalars become Numerics via ``as_numeric``.
-                for field in fields(arg):
-                    if is_constexpr_annotation(field.type):
-                        continue
-                    value = getattr(arg, field.name)
-                    if isinstance(value, Numeric) or hasattr(value, "__c_pointers__"):
-                        rectified.append(value)
-                    else:
-                        rectified.append(as_numeric(value))
-                continue
-            if isinstance(arg, Numeric) or hasattr(arg, "__c_pointers__"):
+            tree_runtime = _argument_tree_runtime()
+            rectified: list[Any] = []
+            for arg, tree in zip(launch_args, self.argument_trees, strict=True):
+                if tree is not None:
+                    rectified.extend(tree_runtime.flatten_runtime_leaves(arg, tree))
+                    continue
                 rectified.append(arg)
-            else:
-                adapter = JitArgAdapterRegistry.get_registered_adapter(arg)
-                if adapter is not None:
-                    rectified.append(adapter(arg))
-                else:
-                    rectified.append(_adapt_from_data_ptr(arg))
-        return tuple(rectified)
+            return tuple(self._adapt_launch_args(rectified))
+        return _rectify_legacy_launch_args(launch_args)
 
     def generate_launch_payload(self, launch_args: Sequence[Any]) -> bytes:
         """Pack ``launch_args`` into the Ascend host launch byte buffer."""
@@ -171,7 +269,13 @@ class ExecutionArgs:
                 "A compiler-produced kernel ABI layout is required before packing "
                 "launch arguments."
             )
-        rectified = self.get_rectified_args(launch_args)
+        # Plain leaves already occupy their ABI positions. The packer checks
+        # count, pointer/scalar kinds and scalar ranges without tree replay.
+        rectified = (
+            self._adapt_launch_args(launch_args)
+            if self._direct_abi_arguments
+            else self.get_rectified_args(launch_args)
+        )
         if self.abi_packer is not None:
             return execution_mod._pack_launch_args_prepared(rectified, self.abi_packer)
         return execution_mod._pack_launch_args(rectified, self.kernel_abi)
@@ -304,11 +408,6 @@ class JitExecutor:
             block_num = 1
         if not isinstance(block_num, int):
             raise execution_mod.TlaUnsupportedAbiError("`block_num` must be an int.")
-
-        for arg in args:
-            prepare_for_launch = getattr(arg, "prepare_for_launch", None)
-            if callable(prepare_for_launch):
-                prepare_for_launch()
 
         module = self.jit_module
         dyn_ubuf_bytes = _resolved_dyn_ubuf_bytes(

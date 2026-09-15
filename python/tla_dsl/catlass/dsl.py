@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import contextvars
-from dataclasses import dataclass, is_dataclass
+from dataclasses import dataclass
 import functools
 import inspect
 from typing import Any, Callable, Mapping, Sequence
@@ -13,7 +13,6 @@ from . import runtime as _runtime
 from .base_dsl import BaseDSL, DSLLocation
 from .base_dsl.compiler import CompileCallable, compile
 from .base_dsl.jit_executor import ExecutionArgs, JitCompiledFunction
-from .base_dsl.runtime.jit_arg_adapters import is_arg_annotation_constexpr
 from .catlass_dsl.catlass import TlaDSL
 
 
@@ -92,17 +91,6 @@ def _bind_kernel_call_args(
     return tuple(values), remaining
 
 
-def _constexpr_param_mask(fn: Callable[..., Any] | None) -> tuple[bool, ...]:
-    """One flag per kernel parameter: is it annotated ``tla.Constexpr[...]``?"""
-    sig = _kernel_signature(fn)
-    if sig is None:
-        return ()
-    return tuple(
-        is_arg_annotation_constexpr(p.annotation, p.name, index, fn)
-        for index, p in enumerate(sig.parameters.values())
-    )
-
-
 def _strip_constexpr_launch_args(
     args: Sequence[Any], fn: Callable[..., Any] | None
 ) -> tuple[Any, ...]:
@@ -112,45 +100,6 @@ def _strip_constexpr_launch_args(
     return ExecutionArgs(
         original_signature=BaseDSL()._get_signature(fn)
     ).get_rectified_args_from_original_args(args)
-
-
-def _get_typed_call_args(
-    args: Sequence[Any], fn: Callable[..., Any] | None = None
-) -> Sequence[Any] | None:
-    # ``Constexpr`` params are compile-time host values with no MLIR type and no
-    # kernel block arg, so they are passed through verbatim whatever their type
-    # (``str``, tuple, enum, Callable, …). Without this they would fall into the
-    # ``None`` branch below and the kernel body would silently see ``None``
-    # instead of the value — and every variant would collapse onto one cached
-    # kernel.
-    mask = _constexpr_param_mask(fn)
-    args, _ = _bind_kernel_call_args(fn, args)
-    inferred: list[Any] = []
-    has_constexpr_value = False
-    for pos, arg in enumerate(args):
-        if pos < len(mask) and mask[pos]:
-            inferred.append(arg)
-            if arg is not None:
-                has_constexpr_value = True
-            continue
-        resolver = getattr(arg, "__get_mlir_types__", None)
-        if callable(resolver):
-            inferred.append(arg)
-        elif is_jit_callable(arg):
-            inferred.append(arg)
-        elif is_dataclass(arg) and not isinstance(arg, type):
-            # Plain stdlib ``@dataclass`` instances are unpacked into per-field
-            # scalar kernel args; keep the instance so lowering can read fields.
-            inferred.append(arg)
-        elif isinstance(arg, (bool, int, float)):
-            # Preserve host literals for ``tla.Constexpr[...]`` / numeric params.
-            # Plain ints must not be erased to None or Constexpr lowering sees NoneType.
-            inferred.append(arg)
-        else:
-            inferred.append(None)
-    if not has_constexpr_value and all(item is None for item in inferred):
-        return None
-    return tuple(inferred)
 
 
 _TLA_JIT_MARKER = "_tla_jit"

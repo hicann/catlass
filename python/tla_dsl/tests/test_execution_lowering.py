@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+from enum import IntEnum
+from typing import NamedTuple
+
 from catlass.tla.runtime import make_fake_tensor
 
 
 import pytest
 
 import catlass.tla as tla
-import catlass.runtime as runtime_mod
 from catlass.base_dsl import BaseDSL
 from catlass.mixed_kernel_attrs import (
     MixedKernelModuleAttrInputs,
@@ -14,6 +17,8 @@ from catlass.mixed_kernel_attrs import (
     build_mixed_kernel_module_attrs,
     target_system_spec_contains_arch,
 )
+
+
 
 
 def test_execution_lowering_validates_make_shape_components() -> None:
@@ -159,3 +164,118 @@ def test_mixed_kernel_module_attr_inputs_reject_empty_fields(
             module_core_type=module_core_type,
             target_system_spec=target_system_spec,
         )
+
+
+def _structured_tensor(dtype=tla.Float32):
+    return make_fake_tensor(dtype, (8,), (1,))
+
+class _NamedAux(NamedTuple):
+    bias: tla.Tensor
+    limit: float
+
+@pytest.mark.parametrize(
+    "container", ["direct", "tuple", "list", "namedtuple", "dataclass"]
+)
+def test_static_tensor_frontend_interface_is_independent_of_container(container):
+    @dataclass
+    class Config:
+        bias: tla.Tensor
+
+    tensor = _structured_tensor()
+    values = {
+        "direct": tensor,
+        "tuple": (tensor,),
+        "list": [tensor],
+        "namedtuple": _NamedAux(tensor, 0.5),
+        "dataclass": Config(tensor),
+    }
+
+    def get_tensor(aux):
+        if container == "direct":
+            return aux
+        if container in ("tuple", "list"):
+            return aux[0]
+        return aux.bias
+
+    def kernel(aux, output):
+        src = get_tensor(aux)
+        _ = (src.dtype, src.addrspace, src.layout_tag)
+        tla.make_shape(*src.shape)
+        tla.make_shape(*src.origin_shape)
+        tla.make_stride(*src.stride)
+        tla.make_coord(*src.coord)
+        tla.allocate((8,), src.element_type, tla.AddressSpace.ub, 32)
+        _ = src.ptr
+        _ = src.__extract_mlir_values__()
+        output[0] = src[0]
+
+    lowered = BaseDSL()._lower(
+        kernel, kind="kernel", options={}, type_args=(values[container], tensor)
+    )
+    asm = lowered.asm(generic=True)
+    assert '"tla.scalar_load"' in asm
+    assert '"tla.scalar_store"' in asm
+    assert '"tla.tensor_ptr"' in asm
+
+@dataclass
+class _StaticConfig:
+    tile: tla.Constexpr[int] = 128
+    width: tla.Constexpr[int] = 256
+
+class _HostInt(int):
+    pass
+
+class _HostFloat(float):
+    pass
+
+class _HostEnum(IntEnum):
+    THREE = 3
+
+@pytest.mark.parametrize("value,dtype,op", [
+    (_HostInt(3), tla.Int32, "arith.addi"),
+    (_HostEnum.THREE, tla.Int32, "arith.addi"),
+    (_HostFloat(3), tla.Float32, "arith.addf"),
+])
+def test_numeric_subclass_uses_tree_lowering(value, dtype, op) -> None:
+
+    def kernel(value, out):
+        out[0] = value + value
+
+    lowered = BaseDSL()._lower(
+        kernel,
+        kind="kernel",
+        options={},
+        type_args=(value, _structured_tensor(dtype=dtype)),
+    )
+    assert lowered.argument_trees[0].runtime_leaf_count == 1
+    assert lowered.argument_trees[1] is not None
+    assert op in lowered.module.operation.get_asm()
+
+def test_top_level_constexpr_config_is_available_during_lowering() -> None:
+    @tla.kernel
+    def kernel(config: tla.Constexpr[_StaticConfig]) -> None:
+        tla.allocate(config.tile, tla.Float32, tla.AddressSpace.ub, 256)
+
+    narrow = kernel.dump_mlir(type_args=(_StaticConfig(tile=64),))
+    wide = kernel.dump_mlir(type_args=(_StaticConfig(tile=128),))
+    assert narrow != wide
+    assert "tla.func @kernel()" in narrow
+
+def test_recursive_tree_enters_execution_lowering() -> None:
+    def kernel(x: tla.Tensor, aux) -> None:
+        _bias = aux[0]
+        _limit = aux[1][0]
+        tla.make_coord(0, 0)
+
+    x = _structured_tensor()
+    bias = _structured_tensor()
+    lowered = BaseDSL()._lower(
+        kernel,
+        kind="kernel",
+        options={},
+        type_args=(x, (bias, [3.0, None])),
+    )
+    assert len(lowered.argument_trees) == 2
+    assert lowered.argument_trees[1] is not None
+    assert lowered.argument_trees[1].runtime_leaf_count == 2
+    assert lowered.asm(generic=True).count("tla.func") == 1

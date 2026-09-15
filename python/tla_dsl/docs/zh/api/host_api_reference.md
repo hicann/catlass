@@ -213,7 +213,7 @@ compiled_ep(tx, ty, block_num=1)  # 不再传 abs_epilogue
 
 ### `dataclass`
 
-**源码：** [`dataclasses.dataclass`](../../../catlass/execution_lowering.py#L850)
+**源码：** [`dataclasses.dataclass`](../../../catlass/base_dsl/runtime/jit_arg_adapters.py)
 
 功能说明：
 
@@ -239,10 +239,14 @@ dataclasses.dataclass(cls: type, *, frozen: bool = False, kw_only: bool = False)
 
   | 类别 | 类型 | 约束 |
   | --- | --- | --- |
-  | Tensor | `tla.Tensor` | 不支持动态 GM；请改用静态 tensor 字段或顶层 tensor 入参 |
+  | Tensor | `tla.Tensor` | 普通 Tensor 和受支持的 Dynamic-GM 描述符均可作为字段 |
   | Python 标量 | `bool` / `int` / `float` | — |
   | `tla` 标量 | `Bool`、`Int8/16/32/64`、`UInt8/16/32/64`、`Float16/32`、`BFloat16` | — |
   | 编译期常量 | `tla.Constexpr[...]` | 不进入 kernel ABI / IR，且在 kernel 内只读 |
+  | 嵌套结构 | tuple/list/NamedTuple/dataclass | 按有序叶子递归绑定 |
+  | 空值 | `None` | 保留结构位置，不生成运行时 payload |
+
+完整用法见[结构化 kernel 参数](../kernel_development/core_concepts/structured_arguments.md)。
 
 调用示例：
 

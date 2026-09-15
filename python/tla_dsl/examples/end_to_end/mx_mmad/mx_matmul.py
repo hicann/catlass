@@ -79,7 +79,7 @@ def mx_mmad_kernel(
     gm_sa: tla.Tensor,
     gm_sb: tla.Tensor,
     gm_c: tla.Tensor,
-    _tiling: MxTilingParams,
+    _tiling: tla.Constexpr[MxTilingParams],
 ) -> None:
     dtype_a = gm_a.ptr.dtype
     dtype_b = gm_b.ptr.dtype

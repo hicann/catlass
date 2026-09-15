@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Callable
+from unittest.mock import Mock
 
 import pytest
 
@@ -10,7 +11,7 @@ import catlass.tla as tla
 from catlass.base_dsl import BaseDSL
 from catlass.base_dsl.jit_executor import ExecutionArgs
 from catlass.base_dsl.runtime.jit_arg_adapters import is_arg_annotation_constexpr
-from catlass.dsl import _get_typed_call_args, _strip_constexpr_launch_args
+from catlass.dsl import _strip_constexpr_launch_args
 from catlass.execution_lowering import TlaLoweringError
 from catlass.tla.runtime import make_fake_tensor
 
@@ -32,6 +33,11 @@ def _abs_epilogue(value):
 
 def _neg_epilogue(value):
     return tla.neg(value)
+
+
+@tla.jit
+def _jit_abs_epilogue(value):
+    return tla.abs(value)
 
 
 @tla.kernel
@@ -71,12 +77,16 @@ def test_is_arg_annotation_constexpr_matches_tla_marker() -> None:
     assert not is_arg_annotation_constexpr("TensorAlias", "src", 0, None)
 
 
-def test_get_typed_call_args_preserves_constexpr_callable() -> None:
+@pytest.mark.parametrize("epilogue", [_abs_epilogue, _jit_abs_epilogue])
+def test_compile_preserves_constexpr_callable(monkeypatch, epilogue) -> None:
     src = _ub_tensor()
-    typed = _get_typed_call_args((src, _abs_epilogue), _constexpr_callable_kernel.fn)
-    assert typed is not None
+    compile_spy = Mock()
+    monkeypatch.setattr(_constexpr_callable_kernel, "compile", compile_spy)
+    tla.compile(_constexpr_callable_kernel, src, epilogue)
+    compile_spy.assert_called_once_with(type_args=(src, epilogue))
+    typed = compile_spy.call_args.kwargs["type_args"]
     assert typed[0] is src
-    assert typed[1] is _abs_epilogue
+    assert typed[1] is epilogue
 
 
 def test_get_rectified_args_from_original_args_drops_callable() -> None:
@@ -101,9 +111,10 @@ def test_strip_constexpr_launch_args_keeps_runtime_arity() -> None:
     assert stripped == (src,)
 
 
-def test_constexpr_callable_inlines_into_device_ir() -> None:
+@pytest.mark.parametrize("epilogue", [_abs_epilogue, _jit_abs_epilogue])
+def test_constexpr_callable_inlines_into_device_ir(epilogue) -> None:
     src = _ub_tensor()
-    mlir = _constexpr_callable_kernel.dump_mlir(type_args=(src, _abs_epilogue))
+    mlir = _constexpr_callable_kernel.dump_mlir(type_args=(src, epilogue))
     assert "_constexpr_callable_kernel" in mlir
     assert "%arg1" not in mlir
     assert "tla.func @_constexpr_callable_kernel(%arg0:" in mlir
@@ -138,10 +149,11 @@ def test_lambda_constexpr_callable_inlines() -> None:
     assert "exp" in mlir.lower()
 
 
-def test_runtime_callable_argument_is_rejected() -> None:
+@pytest.mark.parametrize("epilogue", [_abs_epilogue, _jit_abs_epilogue])
+def test_runtime_callable_argument_is_rejected(epilogue) -> None:
     src = _ub_tensor()
     with pytest.raises(TlaLoweringError, match="has no runtime type"):
-        _bad_runtime_callable_kernel.dump_mlir(type_args=(src, _abs_epilogue))
+        tla.compile(_bad_runtime_callable_kernel, src, epilogue)
 
 
 def test_filter_runtime_signature_drops_top_level_constexpr() -> None:
@@ -219,6 +231,4 @@ def test_user_defined_callable_class_is_rejected() -> None:
         TypeError,
         match=r"user-defined class '_UserCallableEpilogue' is not supported",
     ):
-        _constexpr_callable_kernel.dump_mlir(
-            type_args=(src, epilogue),
-        )
+        tla.compile(_constexpr_callable_kernel, src, epilogue)

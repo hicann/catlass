@@ -578,6 +578,7 @@ class _Tensor(TensorABC):
         return str(self.tla_tensor_type_descriptor().to_mlir_type())
 
     def __c_pointers__(self) -> list[int]:
+        self._require_bound()
         return [int(self.data_ptr)]
 
     def __get_mlir_types__(
@@ -588,9 +589,6 @@ class _Tensor(TensorABC):
     def __new_from_mlir_values__(self, values: list[Any]) -> "_Tensor":
         del values
         return self
-
-    def prepare_for_launch(self) -> None:
-        self._require_bound()
 
     def __setitem__(self, index: int | slice, value: Any) -> None:
         raise TypeError("runtime Tensor is not indexable")

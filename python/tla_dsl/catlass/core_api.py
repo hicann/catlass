@@ -5084,8 +5084,8 @@ def copy(
     else:
         raise TlaLoweringError(f"unsupported copy route {_route}")
 
-    # Read dtype/addrspace from MLIR descriptors — kernel-arg proxies
-    # (_ArgProxy) do not expose Python .dtype / .addrspace attributes.
+    # Read dtype/addrspace from MLIR descriptors; runtime argument proxies do
+    # not expose Python .dtype / .addrspace attributes.
     src_dtype = src_desc.element_type.lower()
     dst_dtype = dst_desc.element_type.lower()
     # GM scale buffers enter through from_dlpack as tla.Float8E8M0, so both
@@ -8369,8 +8369,8 @@ def _emit_tensor_ptr(
     """Emit ``tla.tensor_ptr`` extracting the backing ``!tla.ptr`` of a tensor value.
 
     Shared by :meth:`catlass.tla.tensor._Tensor.ptr` and the execution-mode
-    ``_ArgProxy.ptr`` so kernel-argument proxies support ``arg.ptr`` the same way as
-    frontend ``_Tensor`` values.
+    runtime argument proxy so kernel arguments support ``arg.ptr`` the same way
+    as frontend ``_Tensor`` values.
     """
     _require_frontend_state("tensor_ptr")
     ptr_ty = _tla_type_bridge.tensor_ptr_type_get(source.type)

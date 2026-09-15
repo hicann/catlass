@@ -5,6 +5,7 @@ from __future__ import annotations
 import ctypes
 from dataclasses import dataclass, replace
 import hashlib
+import inspect
 import json
 import math
 import os
@@ -348,6 +349,8 @@ def _compile_kernel(
     hivmc = _resolve_hivmc_a5()
     target = _resolve_kernel_target(compile_option)
     cache_dir = compile_option.cache_dir or _default_cache_dir()
+    lowered_argument_trees = lowered.argument_trees
+    original_signature = BaseDSL()._get_signature(fn)
     cache_key = _cache_key(
         tlair_mlir=tlair_mlir,
         entrypoint=entrypoint,
@@ -378,7 +381,11 @@ def _compile_kernel(
     if can_reuse_cache:
         cached_memory = _get_memory_cached_function(cache_key)
         if cached_memory is not None:
-            compiled = _new_jit_compiled_function_from_cached(cached_memory)
+            compiled = _new_jit_compiled_function_from_cached(
+                cached_memory,
+                argument_trees=lowered_argument_trees,
+                original_signature=original_signature,
+            )
             _set_memory_cached_function(compiled)
             _copy_kept_artifacts(compiled)
             return compiled
@@ -441,6 +448,8 @@ def _compile_kernel(
                 ub_static_bytes=int(cached.get("ub_static_bytes", 0)),
                 ub_programmable_bytes=int(cached.get("ub_programmable_bytes", 0)),
                 ub_dynamic_base=int(cached.get("ub_dynamic_base", -1)),
+                argument_trees=lowered_argument_trees,
+                original_signature=original_signature,
             )
             _set_memory_cached_function(compiled)
             _copy_kept_artifacts(compiled)
@@ -590,6 +599,8 @@ def _compile_kernel(
         ub_static_bytes=lowering_result.ub_static_bytes,
         ub_programmable_bytes=ub_programmable_bytes,
         ub_dynamic_base=lowering_result.ub_dynamic_base,
+        argument_trees=lowered_argument_trees,
+        original_signature=original_signature,
     )
     if compile_option.cache_enabled:
         _set_memory_cached_function(compiled)
@@ -637,6 +648,8 @@ def _new_jit_compiled_function(
     ub_static_bytes: int = 0,
     ub_programmable_bytes: int = 0,
     ub_dynamic_base: int = -1,
+    argument_trees: Sequence[Any | None] | None = None,
+    original_signature: inspect.Signature | None = None,
 ) -> "JitCompiledFunction":
     """Build a compiled function from validated, device-independent state."""
     from .base_dsl.jit_executor import (
@@ -683,8 +696,12 @@ def _new_jit_compiled_function(
             entrypoint=entrypoint,
             kernel_mode=compile_option.kernel_mode,
             execution_args=ExecutionArgs(
+                original_signature=original_signature,
                 kernel_abi=kernel_abi,
                 abi_packer=abi_packer,
+                argument_trees=(
+                    None if argument_trees is None else tuple(argument_trees)
+                ),
             ),
             uses_scalar_print=uses_scalar_print,
             uses_tensor_print=uses_tensor_print,
@@ -711,12 +728,21 @@ def _new_jit_compiled_function(
 
 def _new_jit_compiled_function_from_cached(
     cached: "JitCompiledFunction",
+    *,
+    argument_trees: Sequence[Any | None],
+    original_signature: inspect.Signature,
 ) -> "JitCompiledFunction":
-    """Create a fresh launch owner while reusing immutable compile state."""
+    """Reuse compiled artifacts while binding the current Python arguments."""
     from .base_dsl.jit_executor import JitCompiledFunction
 
+    execution_args = replace(
+        cached.execution_args,
+        original_signature=original_signature,
+        signature=None,
+        argument_trees=tuple(argument_trees),
+    )
     return JitCompiledFunction(
-        jit_module=cached.jit_module,
+        jit_module=replace(cached.jit_module, execution_args=execution_args),
         artifacts=cached.artifacts,
     )
 
@@ -889,6 +915,15 @@ def _pack_scalar_argument(
                 raise TlaUnsupportedAbiError(
                     f"scalar value for {mlir_type} does not fit in its declared type"
                 ) from exc
+        # Numeric subclasses use their base value. Keep primitive values allocation-free.
+        if value_type is not int and value_type is not bool and isinstance(value, int):
+            return _pack_scalar_argument(
+                int(value), descriptor, mlir_type, storage_size
+            )
+        if value_type is not float and isinstance(value, float):
+            return _pack_scalar_argument(
+                float(value), descriptor, mlir_type, storage_size
+            )
         raise TlaUnsupportedAbiError(
             f"plain Python {value_type.__name__} does not match kernel ABI type "
             f"{mlir_type}"

@@ -69,5 +69,13 @@ def require_bc() -> Path:
 
 
 @pytest.fixture
+def isolated_compile_cache(require_bc: Path, tmp_path: Path, monkeypatch) -> Path:
+    """Isolate kernel artifacts while reusing the session's compiled BC."""
+    (tmp_path / "bc").symlink_to(require_bc / "bc", target_is_directory=True)
+    monkeypatch.setenv("CATLASS_DSL_CACHE_DIR", str(tmp_path))
+    return tmp_path
+
+
+@pytest.fixture
 def compiler_tlair() -> Any:
     return _compiler_tlair

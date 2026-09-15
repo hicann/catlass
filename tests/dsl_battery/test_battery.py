@@ -517,6 +517,16 @@ def _cases(device: int) -> Iterator[tuple[str, list[list[str]]]]:
                 *dtype_args,
             ]],
         )
+    # --- structured arguments ---
+    for name in (
+        "mixed_memref_arguments",
+        "scalar_subclass_arguments",
+        "static_tensor_interfaces",
+    ):
+        yield (
+            f"structured-args-{name}",
+            [[f"structured_arguments/{name}.py", *dev]],
+        )
 
     # --- print_tensor, local AIC storage ---
     # Base cases sweep dtypes; repeated entries verify in-process cache reuse.

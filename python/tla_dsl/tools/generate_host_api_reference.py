@@ -108,6 +108,7 @@ HOST_SOURCE_PATHS = (
     PACKAGE_ROOT / "catlass" / "base_dsl" / "compiler.py",
     PACKAGE_ROOT / "catlass" / "base_dsl" / "jit_executor.py",
     PACKAGE_ROOT / "catlass" / "execution_lowering.py",
+    PACKAGE_ROOT / "catlass" / "base_dsl" / "runtime" / "jit_arg_adapters.py",
     PACKAGE_ROOT / "catlass" / "tla" / "ffi.py",
     PACKAGE_ROOT / "catlass" / "tla" / "runtime.py",
 )
