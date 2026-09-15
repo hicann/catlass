@@ -1718,6 +1718,26 @@ class Tla_VectorBinaryOp<string mnemonic, string opSummary, string opDescription
   let hasVerifier = 1;
 }
 
+class Tla_VectorShiftOp<string mnemonic, string opSummary, string opDescription>
+    : Tla_Op<mnemonic, [Pure]> {
+  let summary = opSummary;
+  let description = opDescription # [{
+
+    The signed rhs supplies a non-negative shift amount for each lane. The
+    required mask controls which lanes are computed; masked-out lanes are
+    zeroed.
+  }];
+  let arguments = (ins Tla_VectorSSAType:$lhs, Tla_VectorSSAType:$rhs,
+                       Tla_MaskSSAType:$mask);
+  let results = (outs Tla_VectorSSAType:$result);
+  let assemblyFormat = [{
+    $lhs `,` $rhs `mask` $mask attr-dict `:`
+    qualified(type($lhs)) `,` qualified(type($rhs)) `mask`
+    qualified(type($mask)) `->` qualified(type($result))
+  }];
+  let hasVerifier = 1;
+}
+
 def Tla_AddOp : Tla_VectorBinaryOp<"add",
     "Vector add on VectorSSA values",
     "Element-wise add on VectorSSA values.">;
@@ -1741,6 +1761,14 @@ def Tla_MaxOp : Tla_VectorBinaryOp<"max",
 def Tla_MinOp : Tla_VectorBinaryOp<"min",
     "Vector minimum on VectorSSA values",
     "Element-wise minimum on VectorSSA values.">;
+
+def Tla_ShiftLeftOp : Tla_VectorShiftOp<"shift_left",
+    "Vector-vector left shift on VectorSSA values",
+    "Element-wise left shift by the signed amounts in the rhs VectorSSA value.">;
+
+def Tla_ShiftRightOp : Tla_VectorShiftOp<"shift_right",
+    "Vector-vector right shift on VectorSSA values",
+    "Element-wise right shift by the signed amounts in the rhs VectorSSA value.">;
 
 def Tla_GatherOp : Tla_Op<"gather", [Pure]> {
   let summary = "Vector gather on VectorSSA values";
@@ -1825,6 +1853,25 @@ class Tla_VectorScalarBinaryOp<string mnemonic, string opSummary, string opDescr
   let hasVerifier = 1;
 }
 
+class Tla_VectorScalarShiftOp<string mnemonic, string opSummary, string opDescription>
+    : Tla_Op<mnemonic, [Pure]> {
+  let summary = opSummary;
+  let description = opDescription # [{
+
+    The rhs is a signed i16 scalar shift amount. The required mask controls
+    which lanes are computed; masked-out lanes are zeroed.
+  }];
+  let arguments = (ins Tla_VectorSSAType:$lhs, I16:$rhs,
+                       Tla_MaskSSAType:$mask);
+  let results = (outs Tla_VectorSSAType:$result);
+  let assemblyFormat = [{
+    $lhs `,` $rhs `mask` $mask attr-dict `:`
+    qualified(type($lhs)) `,` type($rhs) `mask`
+    qualified(type($mask)) `->` qualified(type($result))
+  }];
+  let hasVerifier = 1;
+}
+
 def Tla_AddsOp : Tla_VectorScalarBinaryOp<"adds",
     "Vector-scalar add on VectorSSA values",
     "Element-wise add of a scalar to VectorSSA values.">;
@@ -1848,6 +1895,14 @@ def Tla_MinsOp : Tla_VectorScalarBinaryOp<"mins",
 def Tla_DivsOp : Tla_VectorScalarBinaryOp<"divs",
     "Vector-scalar divide on VectorSSA values",
     "Element-wise divide of VectorSSA values by a scalar.">;
+
+def Tla_ShiftLeftsOp : Tla_VectorScalarShiftOp<"shift_lefts",
+    "Vector-scalar left shift on VectorSSA values",
+    "Element-wise left shift by a signed i16 scalar amount.">;
+
+def Tla_ShiftRightsOp : Tla_VectorScalarShiftOp<"shift_rights",
+    "Vector-scalar right shift on VectorSSA values",
+    "Element-wise right shift by a signed i16 scalar amount.">;
 
 def Tla_ReduceOp : Tla_Op<"reduce", [Pure]> {
   let summary = "Vector reduction on VectorSSA values";

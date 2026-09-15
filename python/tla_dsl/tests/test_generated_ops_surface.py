@@ -99,6 +99,10 @@ def test_generated_binding_symbols_exist_for_wrapped_ops() -> None:
         "maxs",
         "mins",
         "divs",
+        "shift_left",
+        "shift_right",
+        "shift_lefts",
+        "shift_rights",
         "bitwise_xor",
         "bitwise_or",
         "bitwise_and",
@@ -203,6 +207,8 @@ def test_public_api_exports_representative_helpers() -> None:
     assert callable(tla.bitwise_and)
     assert callable(tla.bitwise_or)
     assert callable(tla.bitwise_xor)
+    assert callable(tla.shift_left)
+    assert callable(tla.shift_right)
     assert tla.arch.FIX is tla.pipes.FIX
     assert tla.pipes.ALL is not None
 

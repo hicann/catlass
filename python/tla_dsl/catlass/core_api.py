@@ -26,7 +26,7 @@ _CAST_SUPPORTED_DTYPES = frozenset({"i8", "i16", "i32", "i64", "f16", "bf16", "f
 from catlass._mlir.dialects import tla as _tla_ops_gen  # type: ignore[import-not-found]
 from .base_dsl import ast_helpers as _ast_helpers
 from .base_dsl.op import _ExternUsage, dsl_user_op, _capture_user_loc
-from .base_dsl.typing import Bool, Float32, Int8, Int32, Numeric, as_numeric
+from .base_dsl.typing import Bool, Float32, Int8, Int16, Int32, Numeric, as_numeric
 from .base_dsl.typing import Pointer, TypedPointer
 from .tla.tensor import normalize_tile_view_coord
 from .tla.typing import Tensor
@@ -6702,6 +6702,114 @@ def _emit_vector_binary_or_scalar(
     _op_error(op_name, "expected vector-vector or vector-scalar operands")
 
 
+_SHIFT_SUPPORTED_DTYPES = frozenset({"i8", "i16", "i32"})
+_SIGNED_SHIFT_ELEMENT_TYPE = {
+    "i8": "i8",
+    "i16": "i16",
+    "i32": "i32",
+}
+
+
+def _materialize_full_shift_mask(
+    source_desc: TlaVectorSSATypeDescriptor,
+    *,
+    loc: mlir_ir.Location | None = None,
+) -> mlir_ir.Value:
+    """Build an all-lanes-active mask matching ``source_desc`` element type."""
+    ctx = loc.context if loc is not None else mlir_ir.Context.current
+    mask_ty = _mask_ssa_type_for_element_type(source_desc.element_type).to_mlir_type(
+        ctx
+    )
+    return _tla_ops_gen.create_mask(
+        mask_ty,
+        pattern="ALL",
+        dtype=mlir_ir.TypeAttr.get(source_desc.element_mlir_type(ctx)),
+        loc=loc,
+    )
+
+
+def _emit_vector_shift(
+    op_name: str,
+    source: VectorSSA,
+    shift: Any,
+    *,
+    mask: MaskSSA | None = None,
+    loc: mlir_ir.Location | None = None,
+) -> VectorSSA:
+    """Emit a masked register shift, dispatching vector and scalar amounts."""
+    _require_category(op_name, "source", source, "vector_ssa", 0)
+    _require_frontend_state(op_name)
+    _runtime._require_enclosing_region(op_name, "vec.func")
+
+    source_value = _as_value(source)
+    source_desc = _vector_ssa_type_for_mlir_value(source_value)
+    source_element = str(source_desc.element_type).lower()
+    if source_element not in _SHIFT_SUPPORTED_DTYPES:
+        _op_error(
+            op_name,
+            f"unsupported source element type {source_desc.element_type}; "
+            f"supported types are {', '.join(sorted(_SHIFT_SUPPORTED_DTYPES))}",
+        )
+
+    if mask is None:
+        mask_value = _materialize_full_shift_mask(source_desc, loc=loc)
+    else:
+        _require_category(op_name, "mask", mask, "mask_ssa", 2)
+        mask_value = _as_value(mask)
+        _require_mask_matches_vector(op_name, mask_value, source_value)
+
+    if _category(shift) == "vector_ssa":
+        shift_value = _as_value(shift)
+        shift_desc = _vector_ssa_type_for_mlir_value(shift_value)
+        expected = _SIGNED_SHIFT_ELEMENT_TYPE[source_element]
+        if str(shift_desc.element_type).lower() != expected:
+            _op_error(
+                op_name,
+                f"shift vector has element type {shift_desc.element_type}, "
+                f"expected {expected} for {source_element} source",
+            )
+        if shift_desc.valid_lanes != source_desc.valid_lanes:
+            _op_error(
+                op_name,
+                f"shift vector has {shift_desc.valid_lanes} valid lanes, expected "
+                f"{source_desc.valid_lanes}",
+            )
+        emitter = getattr(_tla_ops_gen, op_name)
+    else:
+        shift_num = _as_vector_scalar_numeric(shift)
+        if (
+            shift_num is None
+            or not type(shift_num).is_integer
+            or type(shift_num) is Bool
+        ):
+            _op_error(
+                op_name,
+                f"invalid argument 'shift' (position 1): expected integer scalar "
+                f"or signed VectorSSA, got {_type_name(shift)}",
+            )
+        resolved_shift = _resolve_bound_value(shift_num)
+        literal = (
+            resolved_shift.value
+            if isinstance(resolved_shift, Numeric)
+            else resolved_shift
+        )
+        if isinstance(literal, int) and literal < 0:
+            _op_error(op_name, "shift amount must be non-negative")
+        shift_value = _numeric_ir_value_for_element_type(
+            op_name, shift_num, Int16.mlir_type(), loc=loc
+        )
+        emitter = getattr(_tla_ops_gen, f"{op_name}s")
+
+    result = emitter(
+        source_value.type,
+        source_value,
+        shift_value,
+        mask=mask_value,
+        loc=loc,
+    )
+    return VectorSSA(result)
+
+
 _FLOAT_UNARY_ELEMENT_TYPES = frozenset({"f16", "f32"})
 _INTEGER_ABS_ELEMENT_TYPES = frozenset({"i8", "i16", "i32"})
 _ABS_ELEMENT_TYPES = _FLOAT_UNARY_ELEMENT_TYPES | _INTEGER_ABS_ELEMENT_TYPES
@@ -7116,6 +7224,80 @@ def deinterleave(
     )
 
     return VectorSSA(dst0_value), VectorSSA(dst1_value)
+
+
+@dsl_user_op
+def shift_left(
+    source: VectorSSA,
+    shift: Any,
+    *,
+    mask: MaskSSA | None = None,
+    loc: mlir_ir.Location | None = None,
+) -> VectorSSA:
+    """Directory: Vector Compute / Logical Compute
+    Description:
+        Element-wise left shift of a vector by per-lane or scalar shift amounts.
+
+        Parameters:
+        - `source` (`VectorSSA`): Source vector to shift. Required.
+        - `shift` (`VectorSSA | Numeric | int`): Shift amount per lane. A signed
+          `VectorSSA` with the same element width as `source`, or an integer
+          scalar convertible to i16. Required.
+        - `mask` (`MaskSSA | None`): Execution mask. Optional, default `None`
+          (all lanes enabled); masked-out lanes are zeroed.
+
+        Constraints:
+        - Must be called inside a `@tla.kernel`-decorated kernel function.
+        - Must be called inside `tla.vec.func()`.
+        - Source elements must be signed 8/16/32-bit integers (i8/i16/i32);
+          64-bit and unsigned shifts are not supported.
+        - Shift amounts must be non-negative.
+
+        Example:
+        ```python
+        with tla.vec.func(mode="simd"):
+            _tile = tla.shift_left(tile, bit_shift_reg, mask=mask)
+        ```
+    """
+    return _emit_vector_shift("shift_left", source, shift, mask=mask, loc=loc)
+
+
+@dsl_user_op
+def shift_right(
+    source: VectorSSA,
+    shift: Any,
+    *,
+    mask: MaskSSA | None = None,
+    loc: mlir_ir.Location | None = None,
+) -> VectorSSA:
+    """Directory: Vector Compute / Logical Compute
+    Description:
+        Element-wise right shift of a vector by per-lane or scalar shift amounts.
+
+        Signed source vectors use arithmetic right shift.
+
+        Parameters:
+        - `source` (`VectorSSA`): Source vector to shift. Required.
+        - `shift` (`VectorSSA | Numeric | int`): Shift amount per lane. A signed
+          `VectorSSA` with the same element width as `source`, or an integer
+          scalar convertible to i16. Required.
+        - `mask` (`MaskSSA | None`): Execution mask. Optional, default `None`
+          (all lanes enabled); masked-out lanes are zeroed.
+
+        Constraints:
+        - Must be called inside a `@tla.kernel`-decorated kernel function.
+        - Must be called inside `tla.vec.func()`.
+        - Source elements must be signed 8/16/32-bit integers (i8/i16/i32);
+          64-bit and unsigned shifts are not supported.
+        - Shift amounts must be non-negative.
+
+        Example:
+        ```python
+        with tla.vec.func(mode="simd"):
+            _tile = tla.shift_right(tile, bit_shift_reg, mask=mask)
+        ```
+    """
+    return _emit_vector_shift("shift_right", source, shift, mask=mask, loc=loc)
 
 
 @dsl_user_op
@@ -8410,6 +8592,10 @@ _require_generated("muls")
 _require_generated("maxs")
 _require_generated("mins")
 _require_generated("div")
+_require_generated("shift_left")
+_require_generated("shift_right")
+_require_generated("shift_lefts")
+_require_generated("shift_rights")
 _require_generated("where")
 _require_generated("squeeze")
 _require_generated("bitwise_not")
@@ -8879,6 +9065,8 @@ __all__ = [
     "max",
     "min",
     "div",
+    "shift_left",
+    "shift_right",
     "where",
     "squeeze",
     "bitwise_not",

@@ -585,7 +585,7 @@ tile.store(value: VectorSSA | MaskSSA, params: StoreParams | None = None, *, mas
 - 须在 `@tla.kernel` 装饰的 kernel 函数体内调用。
 - 须在 `tla.vec.func()` 内调用；目标 tile 须位于 UB。
 - first-element 模式要求被写值与目标 tile 的元素宽度匹配后缀
-  （b8 → 1 字节，b16 → 2 字节，b32 → 4 字节）；该模式忽略谓词 mask。
+  （b8 → 1 字节，b16 → 2 字节，b32 → 4 字节）；传入谓词 `mask` 会报错。
 
 调用示例：
 

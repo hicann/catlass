@@ -426,6 +426,8 @@ _CORE_API_EXPORTS = (
     "max",
     "min",
     "div",
+    "shift_left",
+    "shift_right",
     "where",
     "squeeze",
     "bitwise_not",

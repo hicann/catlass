@@ -169,7 +169,9 @@ enum class VectorBinaryKind
     Min,
     And,
     Or,
-    Xor
+    Xor,
+    ShiftLeft,
+    ShiftRight
 };
 enum class VectorRhsKind
 {
@@ -392,6 +394,22 @@ static TlaBinaryOperands getTlaBinaryOperands(Operation* op)
         r.lhs = o.getLhs();
         r.rhs = o.getRhs();
         r.mask = o.getMask();
+    } else if (auto o = dyn_cast<::tla::ShiftLeftOp>(op)) {
+        r.lhs = o.getLhs();
+        r.rhs = o.getRhs();
+        r.mask = o.getMask();
+    } else if (auto o = dyn_cast<::tla::ShiftRightOp>(op)) {
+        r.lhs = o.getLhs();
+        r.rhs = o.getRhs();
+        r.mask = o.getMask();
+    } else if (auto o = dyn_cast<::tla::ShiftLeftsOp>(op)) {
+        r.lhs = o.getLhs();
+        r.rhs = o.getRhs();
+        r.mask = o.getMask();
+    } else if (auto o = dyn_cast<::tla::ShiftRightsOp>(op)) {
+        r.lhs = o.getLhs();
+        r.rhs = o.getRhs();
+        r.mask = o.getMask();
     } else if (auto o = dyn_cast<::tla::BitwiseAndOp>(op)) {
         r.lhs = o.getLhs();
         r.rhs = o.getRhs();
@@ -442,6 +460,11 @@ static std::optional<VectorOpInfo> getVectorBinaryInfo(Operation* op)
         return VectorOpInfo{VectorBinaryKind::Or, VectorRhsKind::Vector, "bitwise_or", getTlaBinaryOperands(op)};
     if (isa<::tla::BitwiseXorOp>(op))
         return VectorOpInfo{VectorBinaryKind::Xor, VectorRhsKind::Vector, "bitwise_xor", getTlaBinaryOperands(op)};
+    if (isa<::tla::ShiftLeftOp>(op))
+        return VectorOpInfo{VectorBinaryKind::ShiftLeft, VectorRhsKind::Vector, "shift_left", getTlaBinaryOperands(op)};
+    if (isa<::tla::ShiftRightOp>(op))
+        return VectorOpInfo{
+            VectorBinaryKind::ShiftRight, VectorRhsKind::Vector, "shift_right", getTlaBinaryOperands(op)};
     return std::nullopt;
 }
 
@@ -461,6 +484,12 @@ static std::optional<VectorOpInfo> getVectorScalarBinaryInfo(Operation* op)
         return VectorOpInfo{VectorBinaryKind::Min, VectorRhsKind::Scalar, "mins", getTlaBinaryOperands(op)};
     if (isa<::tla::DivsOp>(op))
         return VectorOpInfo{VectorBinaryKind::Div, VectorRhsKind::Scalar, "divs", getTlaBinaryOperands(op)};
+    if (isa<::tla::ShiftLeftsOp>(op))
+        return VectorOpInfo{
+            VectorBinaryKind::ShiftLeft, VectorRhsKind::Scalar, "shift_lefts", getTlaBinaryOperands(op)};
+    if (isa<::tla::ShiftRightsOp>(op))
+        return VectorOpInfo{
+            VectorBinaryKind::ShiftRight, VectorRhsKind::Scalar, "shift_rights", getTlaBinaryOperands(op)};
     return std::nullopt;
 }
 
@@ -707,6 +736,17 @@ static Value createVectorBinaryResult(
                         mask)
                     .getRes();
             return nullptr;
+        case VectorBinaryKind::ShiftLeft:
+        case VectorBinaryKind::ShiftRight: {
+            // The verifier restricts shift sources to signed (signless)
+            // i8/i16/i32 and the shift vector to the same signless width.
+            // Hence the signed intrinsics are the only valid lowering.
+            if (!dyn_cast<IntegerType>(elementType))
+                return nullptr;
+            if (kind == VectorBinaryKind::ShiftLeft)
+                return b.create<hivm_regbaseintrins::VshlSXInstrOp>(loc, vecType, lhs, rhs, mask).getRes();
+            return b.create<hivm_regbaseintrins::VshrSXInstrOp>(loc, vecType, lhs, rhs, mask).getRes();
+        }
     }
     return nullptr;
 }
@@ -1000,11 +1040,16 @@ static FailureOr<Value> castScalarForVectorElement(Value scalar, Type elementTyp
 }
 
 static FailureOr<Value> materializeVectorScalarValue(
-    OpBuilder& b, TlaBinaryOperands operands, DenseMap<Value, Value>& valueMap, VecLowerCtx& ctx)
+    OpBuilder& b, VectorOpInfo info, DenseMap<Value, Value>& valueMap, VecLowerCtx& ctx)
 {
+    TlaBinaryOperands operands = info.operands;
     Value scalar = lookupOrCloneScalarValue(b, operands.rhs, valueMap);
     if (!scalar)
         return failure();
+    // Shift scalar ops deliberately carry i16, matching the vshls/vshrs
+    // intrinsic ABI rather than the source vector element type.
+    if (info.kind == VectorBinaryKind::ShiftLeft || info.kind == VectorBinaryKind::ShiftRight)
+        return scalar;
     auto castScalar = castScalarForVectorElement(scalar, ctx.elementType);
     if (failed(castScalar))
         return failure();
@@ -1014,6 +1059,14 @@ static FailureOr<Value> materializeVectorScalarValue(
 static FailureOr<Value> createVectorScalarBinaryResult(
     OpBuilder& b, Location loc, VectorOpInfo info, VecLowerCtx& ctx, Value lhs, Value scalar, Value mask)
 {
+    if (info.kind == VectorBinaryKind::ShiftLeft || info.kind == VectorBinaryKind::ShiftRight) {
+        if (!isa<IntegerType>(ctx.elementType) || !scalar.getType().isInteger(16))
+            return failure();
+        if (info.kind == VectorBinaryKind::ShiftLeft)
+            return b.create<hivm_regbaseintrins::VshlsSXInstrOp>(loc, ctx.vecType, lhs, scalar, mask).getRes();
+        return b.create<hivm_regbaseintrins::VshrsSXInstrOp>(loc, ctx.vecType, lhs, scalar, mask).getRes();
+    }
+
     if (info.kind == VectorBinaryKind::Add || info.kind == VectorBinaryKind::Mul ||
         info.kind == VectorBinaryKind::Max || info.kind == VectorBinaryKind::Min) {
         if (info.kind == VectorBinaryKind::Add)
@@ -1422,7 +1475,7 @@ static LogicalResult lowerNestedVectorOp(Operation& op, OpBuilder& b, ModuleOp m
         auto opCtx = deriveVecCtxForElement(lhsTy.getElementType());
         if (failed(opCtx))
             return failure();
-        auto scalarOr = materializeVectorScalarValue(b, operands, valueMap, *opCtx);
+        auto scalarOr = materializeVectorScalarValue(b, *info, valueMap, *opCtx);
         if (failed(scalarOr))
             return failure();
         Value mask;

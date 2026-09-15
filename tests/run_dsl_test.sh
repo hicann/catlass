@@ -20,7 +20,7 @@
 # bitwise_ops.py, reduction_ops.py, compare_mask.py, unary_ops.py, arange_op.py,
 # interleave_op.py, load_dintlv_op.py, load_store_mask.py, squeeze_op.py,
 # register_control_flow.py, load_and_store_scalar_after_reduction.py, load_us_b8_op.py,
-# cast_multi.py, gather_op.py).
+# cast_multi.py, gather_op.py, shift_op.py).
 # python/tla_dsl/examples/end_to_end/tensor_index (scalar_index_control_flow.py,
 # scalar_kernel_arg.py).
 # python/tla_dsl/examples/end_to_end/debug_print (debug_print.py, debug_print_mixed.py,
@@ -146,6 +146,7 @@ BASIC_MMAD_EPILOGUE_SILU_REL="examples/end_to_end/basic_mmad_epilogue/matmul_sil
 BASIC_MMAD_EPILOGUE_TANH_REL="examples/end_to_end/basic_mmad_epilogue/matmul_tanh.py"
 CAST_MULTI_REL="examples/end_to_end/vector_ops/cast_multi.py"
 GATHER_OP_REL="examples/end_to_end/vector_ops/gather_op.py"
+SHIFT_OP_REL="examples/end_to_end/vector_ops/shift_op.py"
 
 usage() {
     cat <<EOF
@@ -217,6 +218,7 @@ Run end-to-end validation for:
   - grouped_matmul_slice_m (grouped_matmul_slice_m.py)
   - cast_multi (cast_multi.py)
   - gather_op (gather_op.py)
+  - shift_op (shift_op.py <op> --all-dtypes for shift_left/shift_right/shift_lefts/shift_rights)
 Runs the basic_mmad flag-sync matrix with irregular CLI shapes (333×444×555
 and 1×2×3); representative mutex and atomic-add cases use 333×444×555.
 Example defaults remain regular (256×512×1024).
@@ -562,6 +564,10 @@ if [[ ! -f "${CATLASS_DSL_DIR}/${CAST_MULTI_REL}" ]]; then
 fi
 if [[ ! -f "${CATLASS_DSL_DIR}/${GATHER_OP_REL}" ]]; then
     echo "error: missing ${GATHER_OP_REL} under ${CATLASS_DSL_DIR}" >&2
+    exit 1
+fi
+if [[ ! -f "${CATLASS_DSL_DIR}/${SHIFT_OP_REL}" ]]; then
+    echo "error: missing ${SHIFT_OP_REL} under ${CATLASS_DSL_DIR}" >&2
     exit 1
 fi
 

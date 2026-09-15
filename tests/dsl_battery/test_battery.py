@@ -435,6 +435,13 @@ def _cases(device: int) -> Iterator[tuple[str, list[list[str]]]]:
         "vector-gather",
         [["vector_ops/gather_op.py", "--run", *dev]],
     )
+    yield (
+        "vector-shift-op",
+        [
+            ["vector_ops/shift_op.py", shift_op, "--all-dtypes", *dev]
+            for shift_op in ("shift_left", "shift_right", "shift_lefts", "shift_rights")
+        ],
+    )
 
     # --- tensor_index ---
     yield (

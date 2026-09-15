@@ -629,6 +629,72 @@ TLA_VERIFY_MASKED_VECTOR_LHS(MinsOp)
 
 #undef TLA_VERIFY_MASKED_VECTOR_LHS
 
+static mlir::LogicalResult verifyShiftSourceAndResult(
+    mlir::Operation* op, VectorSSAType sourceType, VectorSSAType resultType, mlir::Value mask)
+{
+    auto sourceElement = mlir::dyn_cast<mlir::IntegerType>(sourceType.getElementType());
+    if (!sourceElement || !sourceElement.isSignless() ||
+        (sourceElement.getWidth() != 8 && sourceElement.getWidth() != 16 && sourceElement.getWidth() != 32))
+        return op->emitOpError("requires a signed i8/i16/i32 source vector");
+    if (sourceType != resultType)
+        return op->emitOpError("requires source and result to have identical VectorSSA types");
+    return verifyMaskMatchesVector(op, mask, sourceType);
+}
+
+template <typename OpTy>
+static mlir::LogicalResult verifyVectorShiftOp(OpTy op)
+{
+    if (!hasEnclosingRegion<VecFuncOp>(op.getOperation()))
+        return op.emitOpError("must be nested inside a tla.vec.func region");
+    if (mlir::failed(verifyShiftSourceAndResult(
+            op.getOperation(), op.getLhs().getType(), op.getResult().getType(), op.getMask())))
+        return mlir::failure();
+
+    VectorSSAType sourceType = op.getLhs().getType();
+    VectorSSAType shiftType = op.getRhs().getType();
+    auto sourceElement = mlir::cast<mlir::IntegerType>(sourceType.getElementType());
+    auto shiftElement = mlir::dyn_cast<mlir::IntegerType>(shiftType.getElementType());
+    if (!shiftElement || !shiftElement.isSignless() || shiftElement.getWidth() != sourceElement.getWidth())
+        return op.emitOpError() << "requires a signed shift vector with the source element width ("
+                                << sourceElement.getWidth() << " bits)";
+    if (shiftType.getValidLanes() != sourceType.getValidLanes())
+        return op.emitOpError("requires source and shift vectors to have the same valid lane count");
+    return mlir::success();
+}
+
+template <typename OpTy>
+static mlir::LogicalResult verifyScalarShiftOp(OpTy op)
+{
+    if (!hasEnclosingRegion<VecFuncOp>(op.getOperation()))
+        return op.emitOpError("must be nested inside a tla.vec.func region");
+    if (mlir::failed(verifyShiftSourceAndResult(
+            op.getOperation(), op.getLhs().getType(), op.getResult().getType(), op.getMask())))
+        return mlir::failure();
+    if (!op.getRhs().getType().isSignlessInteger(16))
+        return op.emitOpError("requires an i16 scalar shift amount");
+    return mlir::success();
+}
+
+mlir::LogicalResult ShiftLeftOp::verify()
+{
+    return verifyVectorShiftOp(*this);
+}
+
+mlir::LogicalResult ShiftRightOp::verify()
+{
+    return verifyVectorShiftOp(*this);
+}
+
+mlir::LogicalResult ShiftLeftsOp::verify()
+{
+    return verifyScalarShiftOp(*this);
+}
+
+mlir::LogicalResult ShiftRightsOp::verify()
+{
+    return verifyScalarShiftOp(*this);
+}
+
 #define TLA_VERIFY_MASKED_VECTOR_OPERAND(OpTy)                                             \
     mlir::LogicalResult OpTy::verify()                                                     \
     {                                                                                      \

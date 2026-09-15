@@ -548,7 +548,12 @@ class DirectVectorOpHarness:
         )
         parser.add_argument("--device", type=int, default=2)
         parser.add_argument("--block-num", type=int, default=None)
-        parser.add_argument("--dtype", choices=self.config.all_dtypes, default="f32")
+        default_dtype = (
+            "f32" if "f32" in self.config.all_dtypes else self.config.all_dtypes[0]
+        )
+        parser.add_argument(
+            "--dtype", choices=self.config.all_dtypes, default=default_dtype
+        )
         parser.add_argument(
             "--shape",
             type=lambda value: parse_shape(value, script_name=self.script_name),
