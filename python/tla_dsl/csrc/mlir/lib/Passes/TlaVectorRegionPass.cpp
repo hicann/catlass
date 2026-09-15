@@ -74,6 +74,12 @@ static hivmave::StoreDist mapTlaStoreDistToAve(::StoreDist dist)
             return hivmave::StoreDist::PK_B32;
         case ::StoreDist::pack_b16:
             return hivmave::StoreDist::PK_B16;
+        case ::StoreDist::first_element_b8:
+            return hivmave::StoreDist::ONEPT_B8;
+        case ::StoreDist::first_element_b16:
+            return hivmave::StoreDist::ONEPT_B16;
+        case ::StoreDist::first_element_b32:
+            return hivmave::StoreDist::ONEPT_B32;
         // If other StoreDist added, complete here
         default:
             return hivmave::StoreDist::NORM_B8;

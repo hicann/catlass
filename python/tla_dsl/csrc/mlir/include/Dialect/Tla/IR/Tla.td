@@ -383,10 +383,16 @@ def Tla_LoadDistAttr : Tla_EnumAttr<"LoadDist", "load_dist"> {
 def Tla_StoreDist_Norm : I32EnumAttrCase<"norm", 0>;
 def Tla_StoreDist_PackB32: I32EnumAttrCase<"pack_b32", 1>;
 def Tla_StoreDist_PackB16: I32EnumAttrCase<"pack_b16", 2>;
+def Tla_StoreDist_FirstElementB8 : I32EnumAttrCase<"first_element_b8", 3>;
+def Tla_StoreDist_FirstElementB16 : I32EnumAttrCase<"first_element_b16", 4>;
+def Tla_StoreDist_FirstElementB32 : I32EnumAttrCase<"first_element_b32", 5>;
 def Tla_StoreDistEnum : Tla_I32Enum<"StoreDist", "Store distribution for tla.store.", [
   Tla_StoreDist_Norm,
   Tla_StoreDist_PackB32,
-  Tla_StoreDist_PackB16
+  Tla_StoreDist_PackB16,
+  Tla_StoreDist_FirstElementB8,
+  Tla_StoreDist_FirstElementB16,
+  Tla_StoreDist_FirstElementB32
 ]>;
 def Tla_StoreDistAttr : Tla_EnumAttr<"StoreDist", "store_dist"> {
   let parameters = (ins EnumParameter<Tla_StoreDistEnum>:$store_dist);
@@ -396,6 +402,12 @@ def Tla_StoreDistAttr : Tla_EnumAttr<"StoreDist", "store_dist"> {
      - DIST_NORM: Normal mode, support b8/b16/b32, with a fixed datacopy VL, should be aligned with 32B.
      - DIST_PACK_B16: Compact mode, store the low half data (b16) to dst, should be aligned with 32B, or VL/2.
      - DIST_PACK_B32: Compact mode, store the low half data (b32) to dst.
+     - DIST_FIRST_ELEMENT_B8/B16/B32 (AscendC ``DIST_FIRST_ELEMENT_*`` / HIVMAVE
+       ``ONEPT_B*``): element store that ignores the mask and writes only the
+       first element (lane 0) of the source register to the dst base address
+       (AscendC ``asc_storealign_1st``). The ``_b8``/``_b16``/``_b32`` suffix
+       fixes the stored element width in bytes and must match both the source
+       and the dst element type; the dst base must stay 32B-aligned.
   }];
 }
 

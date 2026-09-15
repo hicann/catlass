@@ -87,6 +87,9 @@ class StoreDist:
     DIST_NORM = "norm"
     DIST_PACK_B32 = "pack_b32"
     DIST_PACK_B16 = "pack_b16"
+    DIST_FIRST_ELEMENT_B8 = "first_element_b8"
+    DIST_FIRST_ELEMENT_B16 = "first_element_b16"
+    DIST_FIRST_ELEMENT_B32 = "first_element_b32"
 
 
 class MaskStoreDist:

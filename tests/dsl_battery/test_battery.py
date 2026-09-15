@@ -404,6 +404,10 @@ def _cases(device: int) -> Iterator[tuple[str, list[list[str]]]]:
         [["vector_ops/store_pack.py", "store_pack", "--all-dtypes", *dev]],
     )
     yield (
+        "vector-store-first-element",
+        [["vector_ops/store_first_element_op.py", "store_first_element", "--all-dtypes", *dev]],
+    )
+    yield (
         "vector-squeeze-op",
         [["vector_ops/squeeze_op.py", "squeeze", "--sweep", "--shapes", "64", *dev]],
     )

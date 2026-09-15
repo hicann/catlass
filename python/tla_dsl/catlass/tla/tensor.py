@@ -497,6 +497,7 @@ class _Tensor(TensorABC):
             _require_frontend_state,
             _require_mask_matches_vector,
             _tla_tensor_type_for_mlir_value,
+            _vector_ssa_type_for_mlir_value,
         )
         from ..execution_lowering import TlaLoweringError
         from ..params import (
@@ -578,6 +579,35 @@ class _Tensor(TensorABC):
         mask_val = _as_value(mask) if mask is not None else None
         if mask_val is not None:
             _require_mask_matches_vector("store", mask_val, value_val)
+        if isinstance(params, NormalStoreParams) and params.store_dist in (
+            StoreDist.DIST_FIRST_ELEMENT_B8,
+            StoreDist.DIST_FIRST_ELEMENT_B16,
+            StoreDist.DIST_FIRST_ELEMENT_B32,
+        ):
+            # AscendC DIST_FIRST_ELEMENT_* (HIVMAVE ONEPT_B*): mask-ignoring
+            # element store that writes only lane 0 of the source register to
+            # the dst base (asc_storealign_1st). The _b8/_b16/_b32 suffix fixes
+            # the stored element width in bytes; a mismatch would silently
+            # truncate/widen the stored bytes, so require it on both sides.
+            suffix = str(params.store_dist).rsplit("_", 1)[1]
+            suffix_bytes = int(suffix[1:]) // 8
+            mode = "DIST_FIRST_ELEMENT_" + suffix[1:].upper()
+            src_elem = (
+                str(_vector_ssa_type_for_mlir_value(value_val).element_type)
+                .strip()
+                .lower()
+            )
+            dst_elem = str(dest_desc.element_type).strip().lower()
+            if (
+                dtype_size_bytes(src_elem) != suffix_bytes
+                or dtype_size_bytes(dst_elem) != suffix_bytes
+            ):
+                raise TlaLoweringError(
+                    f"{mode} requires {suffix_bytes}-byte element types on both "
+                    f"the stored value (got {src_elem}, "
+                    f"{dtype_size_bytes(src_elem)} bytes) and the dest tile "
+                    f"(got {dst_elem}, {dtype_size_bytes(dst_elem)} bytes)"
+                )
         store_kwargs: dict[str, Any] = {"loc": loc}
         if (
             isinstance(params, NormalStoreParams)

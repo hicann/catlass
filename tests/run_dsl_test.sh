@@ -115,6 +115,7 @@ LOAD_US_B8_OP_REL="examples/end_to_end/vector_ops/load_us_b8_op.py"
 LOAD_DIST_OPS_REL="examples/end_to_end/vector_ops/load_dist_ops.py"
 LOAD_STORE_MASK_REL="examples/end_to_end/vector_ops/load_store_mask.py"
 STORE_PACK_REL="examples/end_to_end/vector_ops/store_pack.py"
+STORE_FIRST_ELEMENT_OP_REL="examples/end_to_end/vector_ops/store_first_element_op.py"
 SQUEEZE_OP_REL="examples/end_to_end/vector_ops/squeeze_op.py"
 REGISTER_CONTROL_FLOW_REL="examples/end_to_end/vector_ops/register_control_flow.py"
 SCALAR_INDEX_CONTROL_FLOW_REL="examples/end_to_end/tensor_index/scalar_index_control_flow.py"
@@ -184,6 +185,9 @@ Run end-to-end validation for:
     MaskSSA load/store round-trip via MaskLoadParams/MaskStoreParams for
     b8/b16/b32 UB carriers; companion vector fixed to f32)
   - store_pack (store_pack.py store_pack --all-dtypes; i32/i16 only)
+  - store_first_element (store_first_element_op.py store_first_element
+    --all-dtypes; i32/i16/i8/f32/f16 -> DIST_FIRST_ELEMENT_B32/B16/B8 lane-0
+    store, one element per VL tile written to the 32B-aligned tile base)
   - squeeze_op (squeeze_op.py squeeze --all-dtypes)
   - register_control_flow (register_control_flow.py register_carriers:
     mixed VectorSSA/MaskSSA scf.for carriers and masked store)
@@ -436,6 +440,10 @@ if [[ ! -f "${CATLASS_DSL_DIR}/${COMPARE_MASK_REL}" ]]; then
 fi
 if [[ ! -f "${CATLASS_DSL_DIR}/${LOAD_DIST_OPS_REL}" ]]; then
     echo "error: missing ${LOAD_DIST_OPS_REL} under ${CATLASS_DSL_DIR}" >&2
+    exit 1
+fi
+if [[ ! -f "${CATLASS_DSL_DIR}/${STORE_FIRST_ELEMENT_OP_REL}" ]]; then
+    echo "error: missing ${STORE_FIRST_ELEMENT_OP_REL} under ${CATLASS_DSL_DIR}" >&2
     exit 1
 fi
 if [[ ! -f "${CATLASS_DSL_DIR}/${UNARY_OPS_REL}" ]]; then
