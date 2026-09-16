@@ -2,6 +2,35 @@
 
 ## CATLASS 2.X
 
+### CATLASS 2.1.0
+
+#### CATLASS DSL
+
+- 关键特性
+  - 面向 Ascend950 扩展低精度计算与寄存器编程能力：
+    - 支持 MXFP8/MXFP4 矩阵乘、E8M0 缩放块及 MX 布局，新增 `copy(..., scale=...)` 和 `mmad_mx` 接口。
+    - 扩展寄存器数据搬运能力，支持连续/非连续对齐搬入、多种 LoadDist 模式，以及单元素和双寄存器交织搬出。
+    - 新增带 Mask 的寄存器向量/标量移位操作，支持有符号右移。
+  - 新增[`@tla.extern`](https://gitcode.com/cann/catlass/blob/v2.1.0/python/tla_dsl/docs/zh/api/host_api_reference.md)声明API：支持在 DSL Kernel 中声明和调用用户提供的 Ascend C 函数，复用已有底层实现。
+  - 新增[AutoSync](https://gitcode.com/cann/catlass/blob/v2.1.0/python/tla_dsl/docs/zh/dsl_development/feature_development/auto_sync_design.md)：通过 `@tla.kernel(auto_sync="v0")` 自动分析片上内存依赖并处理单个AIC或AIV内部各流水之间的核内同步：
+  - 增强编译期复用能力：[`@tla.kernel` 支持 Constexpr Callable 入参](https://gitcode.com/cann/catlass/blob/v2.1.0/python/tla_dsl/docs/zh/api/host_api_reference.md#constexpr-callable-%E5%85%A5%E5%8F%82)，可将后处理、Mask 和激活等逻辑作为编译期策略复用，并纳入特化与编译缓存。
+  - 完善 DSL 发布交付能力，支持从源码构建并安装 [`ascend-catlass-dsl` Wheel 包](https://gitcode.com/cann/catlass/blob/v2.1.0/python/tla_dsl/docs/zh/quick_start.md)。
+- 文档资料
+  - 新增 [Vector Op 执行指南](https://gitcode.com/cann/catlass/blob/v2.1.0/python/tla_dsl/examples/end_to_end/vector_ops/README.md)，覆盖二元、单目、比较、搬运、归约及寄存器控制流等典型操作的编译、运行与结果验证。
+  - 新增 [Host API 参考](https://gitcode.com/cann/catlass/blob/v2.1.0/python/tla_dsl/docs/zh/api/host_api_reference.md)，补充 [DSL 控制流](https://gitcode.com/cann/catlass/blob/v2.1.0/python/tla_dsl/docs/zh/kernel_development/core_concepts/control_flow.md)和 [AutoSync 设计与使用约束](https://gitcode.com/cann/catlass/blob/v2.1.0/python/tla_dsl/docs/zh/dsl_development/feature_development/auto_sync_design.md)文档。
+- Bugfix&优化
+  - 优化 DSL JIT 执行与动态 Tensor 参数封装，重复启动复用已加载的 Binary 和 Function Handle，动态 Tensor 稳态启动开销由 28 μs 降至 15 μs。
+
+#### CATLASS C++
+
+- 更多样例（新增 Ascend950 样例 1 个, AtlasA2/AtlasA3 样例1个）
+  - [Ascend950 Basic SYRK](https://gitcode.com/cann/catlass/blob/v2.1.0/examples/82_ascend950_basic_syrk/README.md)：支持 `Y = X·Xᵀ` 对称秩更新，仅计算下三角分块，并通过一次计算完成对称位置写回。
+  - [Atlas A2 X-Attention](https://gitcode.com/cann/catlass/blob/v2.1.0/examples/78_x_attention/README.md)：提供数据生成、Tiling、Kernel、Host 和 PyTorch 参考实现，融合 shared/unshared KV 注意力并支持两种缓存组合。
+- Bugfix&优化
+  - 修复 Basic Conv2D 大 padding 与输出通道非对齐场景的越界和精度问题。
+  - 修复 MLA Tiling 在部分核数和 Shape 下选择错误、尾段任务未写回的问题。
+  - 修复 BlockMmad Shuffle-K 边界除零和 Batched Matmul 大尺寸下的 stride 溢出风险。
+
 ### CATLASS 2.0.0
 
 #### CATLASS DSL
