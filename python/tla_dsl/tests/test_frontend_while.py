@@ -83,14 +83,12 @@ def test_while_rejects_compile_time_binding_write_at_assignment() -> None:
     ) as exc:
         while_compile_time_binding_write_inside_kernel.dump_mlir(type_args=(2,))
 
-    diagnostic = exc.value.__cause__.__cause__
-    assert isinstance(diagnostic, SyntaxError)
-    assert (
-        diagnostic.lineno
-        == inspect.getsourcelines(while_compile_time_binding_write_inside_kernel.fn)[1]
-        + 6
-    )
-    assert diagnostic.text.strip() == "scale = 3"
+    line = inspect.getsourcelines(while_compile_time_binding_write_inside_kernel.fn)[1] + 6
+    message = str(exc.value)
+    assert "reason: SyntaxError: compile-time binding 'scale'" in message
+    assert f" --> {__file__}:{line}:" in message
+    assert f">{line} |" in message
+    assert "scale = 3" in message
 
 
 @tla.kernel

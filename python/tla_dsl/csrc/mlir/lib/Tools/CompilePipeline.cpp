@@ -12,6 +12,7 @@
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/OperationSupport.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include "bishengir/Dialect/HACC/IR/HACC.h"
@@ -56,7 +57,8 @@ void buildTlaCompilePassManagers(MLIRContext& context, PassManager& tlaPm)
 }
 
 bool runTlaCompilePipelinesWithManagers(
-    ModuleOp module, llvm::StringRef emitMode, PassManager& tlaPm, std::string& output, std::string& error)
+    ModuleOp module, llvm::StringRef emitMode, PassManager& tlaPm, std::string& output, std::string& error,
+    bool includeDebugInfo)
 {
     if (failed(tlaPm.run(module))) {
         error = "Failed to run Tla pipeline.";
@@ -65,7 +67,13 @@ bool runTlaCompilePipelinesWithManagers(
 
     if (emitMode == "mlir") {
         llvm::raw_string_ostream os(output);
-        module.print(os);
+        // The Python bridge feeds this text to Hivmc and needs FileLineColLocs
+        // to map Hivmc coordinates back to user source. Keep ordinary
+        // tla-compile output stable for CLI users and FileCheck fixtures.
+        if (includeDebugInfo)
+            module.print(os, OpPrintingFlags().enableDebugInfo());
+        else
+            module.print(os);
         os.flush();
         return true;
     }

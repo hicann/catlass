@@ -14,6 +14,7 @@ void loadTlaCompileDialects(mlir::MLIRContext& context);
 void buildTlaCompilePassManagers(mlir::MLIRContext& context, mlir::PassManager& tlaPm);
 
 bool runTlaCompilePipelinesWithManagers(
-    mlir::ModuleOp module, llvm::StringRef emitMode, mlir::PassManager& tlaPm, std::string& output, std::string& error);
+    mlir::ModuleOp module, llvm::StringRef emitMode, mlir::PassManager& tlaPm, std::string& output, std::string& error,
+    bool includeDebugInfo = false);
 
 } // namespace tla::tools

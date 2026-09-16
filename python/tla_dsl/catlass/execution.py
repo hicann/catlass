@@ -37,6 +37,7 @@ from .base_dsl.typing import Numeric
 from .compiler_bridge import (
     BridgeDiagnostic,
     BridgeLoweringError,
+    BridgeSourceLocation,
     BridgeUnavailableError,
     KernelAbiArgumentKind,
     KernelAbiIntegerSignedness,
@@ -46,8 +47,10 @@ from .compiler_bridge import (
     kernel_abi_from_dict,
     kernel_abi_to_dict,
     lower_tlair_module_to_mlir,
+    render_bridge_diagnostic,
     resolve_bridge_extension_path,
 )
+from .frontend_diagnostics import verbose_errors_enabled
 from .types import dtype_size_bytes
 
 if TYPE_CHECKING:
@@ -136,10 +139,42 @@ class TlaKernelCompileError(TlaExecutionError):
         *,
         diagnostics: Sequence[BridgeDiagnostic] = (),
         pass_ir_dump: str = "",
+        compiler_output: Sequence[str] = (),
+        verbose_detail: str = "",
+        diagnostic_input_mlir: str = "",
     ) -> None:
         super().__init__(message)
         self.diagnostics = tuple(diagnostics)
         self.pass_ir_dump = pass_ir_dump
+        self.compiler_output = tuple(compiler_output)
+        self.verbose_detail = verbose_detail
+        self.diagnostic_input_mlir = diagnostic_input_mlir
+
+    def format(self, *, verbose: bool = False) -> str:
+        """Render compiler output, retaining bulky implementation detail on demand."""
+
+        rendered = "\n".join(
+            render_bridge_diagnostic(diagnostic, input_mlir=self.diagnostic_input_mlir)
+            for diagnostic in self.diagnostics
+        )
+        if not rendered:
+            rendered = "\n".join(
+                output.rstrip() for output in self.compiler_output if output.rstrip()
+            )
+        if not rendered:
+            rendered = str(self.args[0])
+        if verbose:
+            details = [
+                detail.rstrip()
+                for detail in (self.verbose_detail, self.pass_ir_dump)
+                if detail
+            ]
+            if details:
+                rendered += "\n\n" + "\n\n".join(details)
+        return rendered
+
+    def __str__(self) -> str:
+        return self.format(verbose=verbose_errors_enabled())
 
 
 class TlaRuntimeUnavailableError(TlaExecutionError):
@@ -471,10 +506,20 @@ def _compile_kernel(
         if exc.pass_ir_dump:
             _write_pass_ir_dump(pass_dump_path, exc.pass_ir_dump)
             raise TlaKernelCompileError(
-                f"{exc}\npass IR dump: {pass_dump_path}",
+                str(exc),
                 diagnostics=exc.diagnostics,
                 pass_ir_dump=exc.pass_ir_dump,
-            ) from exc
+                compiler_output=exc.compiler_output,
+                verbose_detail="\n".join(
+                    detail
+                    for detail in (
+                        exc.verbose_detail,
+                        f"pass IR dump: {pass_dump_path}",
+                    )
+                    if detail
+                ),
+                diagnostic_input_mlir=exc.diagnostic_input_mlir,
+            ) from None
         raise
     if lowering_result.pass_ir_dump:
         _write_pass_ir_dump(pass_dump_path, lowering_result.pass_ir_dump)
@@ -532,6 +577,7 @@ def _compile_kernel(
         template_bitcode = ",".join(
             (template_bitcode, *(str(path) for path in user_bitcodes))
         )
+    hivmc_input_mlir = hivmc_mlir_path.read_text()
     try:
         _run_checked(
             _build_hivmc_a5_command(
@@ -543,6 +589,7 @@ def _compile_kernel(
             ),
             label="hivmc-a5",
             cwd=artifact_dir,
+            diagnostic_input_mlir=hivmc_input_mlir,
         )
     finally:
         if hivmc_mlir_path != mlir_path:
@@ -2340,6 +2387,7 @@ def _build_hivmc_a5_command(
         str(compiler),
         str(mlir_path),
         "--target=Ascend950PR_9589",
+        "--mlir-print-op-on-diagnostic",
     ]
     reserve_flags = []
     if compile_option.cce_disable_asc_reserved_ubuf:
@@ -2504,8 +2552,187 @@ def _resolve_hivm_template_bitcode(compile_option: TlaCompileOption) -> str:
     return _get_bc_paths(compile_option.kernel_mode)
 
 
+_HIVMC_DIAGNOSTIC_RE = re.compile(
+    r"^(?P<prefix>.*?)(?P<severity>error|warning|remark|note):\s*(?P<message>.+)$",
+    re.MULTILINE,
+)
+_HIVMC_LOCATION_RE = re.compile(
+    r'(?:loc\()?(?:"(?P<quoted_filename>[^"\n]+)"|(?P<anonymous>-)):'
+    r"(?P<line>[1-9]\d*):(?P<column>\d+)"
+)
+
+
+_MLIR_DEBUG_FILE_LOCATION_RE = re.compile(
+    r'loc\("(?P<filename>[^"\n]+)":(?P<line>[1-9]\d*):(?P<column>\d+)\)'
+)
+_MLIR_DEBUG_LOCATION_ALIAS_RE = re.compile(
+    r'^(?P<alias>#loc\d+) = loc\("(?P<filename>[^"\n]+)":'
+    r"(?P<line>[1-9]\d*):(?P<column>\d+)\)$",
+    re.MULTILINE,
+)
+_MLIR_DEBUG_LOCATION_ALIAS_REFERENCE_RE = re.compile(
+    r'^\s*(?P<alias>#loc\d+) = loc\("[^"\n]+"\((?P<target>#loc\d+)\)\)$',
+    re.MULTILINE,
+)
+_MLIR_DEBUG_LOCATION_REFERENCE_RE = re.compile(r"loc\((?P<alias>#loc\d+)\)")
+
+
+def _hivmc_input_python_provenance(
+    input_mlir: str, *, line: int
+) -> BridgeSourceLocation | None:
+    """Resolve a Hivmc input-file coordinate to its inline Python location.
+
+    The bridge prints Hivmc input with MLIR debug information, which places
+    the operation's ``loc(\"...py\":line:column)`` on the same physical line as
+    the operation.  A parse error points at that physical line, so it can be
+    mapped without guessing from compiler text or a separate artifact.
+    """
+
+    lines = input_mlir.splitlines()
+    if line <= 0 or line > len(lines):
+        return None
+    locations = _MLIR_DEBUG_FILE_LOCATION_RE.finditer(lines[line - 1])
+    for match in locations:
+        filename = match.group("filename")
+        if not filename.endswith(".py"):
+            continue
+        return BridgeSourceLocation(
+            filename=filename,
+            line=int(match.group("line")),
+            column=int(match.group("column")),
+        )
+    alias_match = _MLIR_DEBUG_LOCATION_REFERENCE_RE.search(lines[line - 1])
+    if alias_match is None:
+        return None
+    aliases = {
+        match.group("alias"): BridgeSourceLocation(
+            filename=match.group("filename"),
+            line=int(match.group("line")),
+            column=int(match.group("column")),
+        )
+        for match in _MLIR_DEBUG_LOCATION_ALIAS_RE.finditer(input_mlir)
+    }
+    references = {
+        match.group("alias"): match.group("target")
+        for match in _MLIR_DEBUG_LOCATION_ALIAS_REFERENCE_RE.finditer(input_mlir)
+    }
+    alias = alias_match.group("alias")
+    seen: set[str] = set()
+    while alias not in seen:
+        seen.add(alias)
+        location = aliases.get(alias)
+        if location is not None and location.filename.endswith(".py"):
+            return location
+        alias = references.get(alias, "")
+        if not alias:
+            break
+    return None
+
+
+def _same_path(left: str, right: Path) -> bool:
+    """Compare diagnostic and input paths without requiring either to exist."""
+
+    try:
+        return Path(left).resolve(strict=False) == right.resolve(strict=False)
+    except (OSError, ValueError):
+        return left == str(right)
+
+
+def _hivmc_diagnostics(
+    compiler_output: Sequence[str],
+    *,
+    diagnostic_input_mlir: str = "",
+    diagnostic_input_path: Path | None = None,
+) -> tuple[BridgeDiagnostic, ...]:
+    """Decode Hivmc's MLIR diagnostics and their attached operation locations."""
+
+    output = "\n".join(compiler_output)
+    matches = tuple(_HIVMC_DIAGNOSTIC_RE.finditer(output))
+    records: list[dict[str, Any]] = []
+    for index, match in enumerate(matches):
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(output)
+        locations: list[Any] = []
+        for location_match in _HIVMC_LOCATION_RE.finditer(output[match.start() : end]):
+            filename = location_match.group("quoted_filename") or location_match.group(
+                "anonymous"
+            )
+            location = (
+                filename,
+                int(location_match.group("line")),
+                int(location_match.group("column")),
+            )
+            if location not in locations:
+                locations.append(location)
+        records.append(
+            {
+                "severity": match.group("severity"),
+                "message": match.group("message").strip(),
+                "locations": locations,
+                "rendered": match.group(0).strip(),
+            }
+        )
+
+    # Hivmc emits the failing operation as the following note when the primary
+    # diagnostic itself has no location.  Associate that exact operation
+    # provenance with the error so the default output points at user code.
+    for index, record in enumerate(records[:-1]):
+        next_record = records[index + 1]
+        if (
+            record["severity"] == "error"
+            and not record["locations"]
+            and next_record["severity"] == "note"
+            and "see current operation" in next_record["message"]
+        ):
+            record["locations"] = next_record["locations"]
+
+    # Hivmc parse diagnostics identify only the generated input file.  When
+    # that file is the exact debug-location-preserving MLIR emitted by the
+    # bridge, promote its inline Python location while retaining the generated
+    # coordinate as secondary context.
+    if diagnostic_input_mlir and diagnostic_input_path is not None:
+        for record in records:
+            provenance: list[tuple[str, int, int]] = []
+            for filename, line, _column in record["locations"]:
+                if not _same_path(filename, diagnostic_input_path):
+                    continue
+                source = _hivmc_input_python_provenance(
+                    diagnostic_input_mlir,
+                    line=line,
+                )
+                if source is not None:
+                    source_record = (source.filename, source.line, source.column)
+                    if source_record not in provenance:
+                        provenance.append(source_record)
+            if provenance:
+                record["locations"] = [
+                    *(location for location in provenance),
+                    *(
+                        location
+                        for location in record["locations"]
+                        if location not in provenance
+                    ),
+                ]
+
+    return tuple(
+        BridgeDiagnostic(
+            severity=record["severity"],
+            message=record["message"],
+            locations=tuple(
+                BridgeSourceLocation(*location) for location in record["locations"]
+            ),
+            rendered=record["rendered"],
+        )
+        for record in records
+    )
+
+
 def _run_checked(
-    command: list[str], *, label: str, cwd: Path, stdin_text: str | None = None
+    command: list[str],
+    *,
+    label: str,
+    cwd: Path,
+    stdin_text: str | None = None,
+    diagnostic_input_mlir: str = "",
 ) -> None:
     try:
         subprocess.run(
@@ -2517,12 +2744,30 @@ def _run_checked(
             input=stdin_text,
         )
     except subprocess.CalledProcessError as exc:
+        compiler_output = tuple(
+            output for output in (exc.stderr or "", exc.stdout or "") if output.strip()
+        )
+        diagnostics = (
+            _hivmc_diagnostics(
+                compiler_output,
+                diagnostic_input_mlir=diagnostic_input_mlir,
+                diagnostic_input_path=Path(command[1]),
+            )
+            if label == "hivmc-a5" and len(command) > 1
+            else ()
+        )
         raise TlaKernelCompileError(
-            f"{label} failed with exit code {exc.returncode}\n"
-            f"cmd: {' '.join(command)}\n"
-            f"stdout:\n{exc.stdout or ''}\n"
-            f"stderr:\n{exc.stderr or ''}"
-        ) from exc
+            f"{label} failed with exit code {exc.returncode}",
+            diagnostics=diagnostics,
+            compiler_output=compiler_output,
+            verbose_detail=(
+                f"{label} failed with exit code {exc.returncode}\n"
+                f"cmd: {' '.join(command)}\n"
+                f"stdout:\n{exc.stdout or ''}\n"
+                f"stderr:\n{exc.stderr or ''}"
+            ),
+            diagnostic_input_mlir=diagnostic_input_mlir,
+        ) from None
 
 
 def _run_tla_lowering_to_mlir(
@@ -2607,10 +2852,11 @@ def _run_typed_bridge_to_mlir(
         raise TlaCompilerBridgeUnavailableError(str(exc)) from exc
     except BridgeLoweringError as exc:
         raise TlaKernelCompileError(
-            f"In-process Tla compiler bridge failed.\nerror:\n{exc}",
+            "In-process Tla compiler bridge failed.",
             diagnostics=exc.diagnostics,
             pass_ir_dump=exc.pass_ir_dump,
-        ) from exc
+            diagnostic_input_mlir=exc.input_mlir,
+        ) from None
     except Exception as exc:
         raise TlaKernelCompileError(
             f"In-process Tla compiler bridge failed.\nerror:\n{exc}"
@@ -2665,14 +2911,25 @@ def _run_tla_compile_cli_to_mlir(
         )
     except subprocess.CalledProcessError as exc:
         stderr = exc.stderr or ""
-        stderr_message = "<captured in pass IR dump>" if print_requested else stderr
+        compiler_output = tuple(
+            output
+            for output in (
+                "<captured in pass IR dump>" if print_requested else stderr,
+                exc.stdout or "",
+            )
+            if output.strip()
+        )
         raise TlaKernelCompileError(
-            f"TlaCompile CLI fallback failed with exit code {exc.returncode}\n"
-            f"cmd: {' '.join(cmd)}\n"
-            f"stdout:\n{exc.stdout or ''}\n"
-            f"stderr:\n{stderr_message}",
+            f"TlaCompile CLI fallback failed with exit code {exc.returncode}",
             pass_ir_dump=stderr if print_requested else "",
-        ) from exc
+            compiler_output=compiler_output,
+            verbose_detail=(
+                f"TlaCompile CLI fallback failed with exit code {exc.returncode}\n"
+                f"cmd: {' '.join(cmd)}\n"
+                f"stdout:\n{exc.stdout or ''}\n"
+                f"stderr:\n{stderr}"
+            ),
+        ) from None
     if not mlir_path.exists():
         raise TlaKernelCompileError(
             "TlaCompile CLI fallback completed but did not produce lowered MLIR at "

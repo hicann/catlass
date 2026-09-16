@@ -9,6 +9,11 @@ from types import ModuleType
 from typing import Any, TYPE_CHECKING, Mapping, Sequence
 
 from . import _tla_type_bridge
+from .frontend_diagnostics import (
+    SourceLocation,
+    render_code_frame,
+    verbose_errors_enabled,
+)
 
 if TYPE_CHECKING:
     from catlass._mlir import ir as mlir_ir
@@ -68,10 +73,59 @@ class BridgeLoweringError(RuntimeError):
         *,
         diagnostics: Sequence[BridgeDiagnostic] = (),
         pass_ir_dump: str = "",
+        input_mlir: str = "",
     ) -> None:
         super().__init__(message)
         self.diagnostics = tuple(diagnostics)
         self.pass_ir_dump = pass_ir_dump
+        self.input_mlir = input_mlir
+
+    def format(self, *, verbose: bool = False) -> str:
+        """Render bridge diagnostics without hiding their structured payload."""
+
+        rendered = "\n".join(
+            render_bridge_diagnostic(diagnostic, input_mlir=self.input_mlir)
+            for diagnostic in self.diagnostics
+        )
+        if not rendered:
+            rendered = str(self.args[0])
+        if verbose and self.pass_ir_dump:
+            rendered += f"\n\nPass IR dump:\n{self.pass_ir_dump.rstrip()}"
+        return rendered
+
+    def __str__(self) -> str:
+        return self.format(verbose=verbose_errors_enabled())
+
+
+def render_bridge_diagnostic(
+    diagnostic: BridgeDiagnostic, *, input_mlir: str = ""
+) -> str:
+    """Format a compiler record with its preferred provenance source frame."""
+
+    if diagnostic.message:
+        rendered = f"{diagnostic.severity}: {diagnostic.message}"
+    else:
+        rendered = diagnostic.rendered
+    location = diagnostic.preferred_location
+    if location is None:
+        return rendered
+    filename = location.filename
+    source_text = None
+    if location.is_anonymous_mlir:
+        filename = "<in-memory TLA MLIR>"
+        source_text = input_mlir or None
+    source_location = SourceLocation(
+        filename=filename,
+        lineno=location.line,
+        # MLIR FileLineColLoc columns are 1-based; zero remains an unknown
+        # column and renders at the beginning of the source line.
+        col_offset=max(0, location.column - 1),
+    )
+    rendered += f"\n --> {filename}:{location.line}:{max(1, location.column)}"
+    frame = render_code_frame(source_location, source_text=source_text)
+    if frame:
+        rendered += f"\n{frame}"
+    return rendered
 
 
 class KernelAbiArgumentKind(str, Enum):
@@ -354,6 +408,16 @@ def _bridge_diagnostic(value: Any) -> BridgeDiagnostic:
     )
 
 
+def _module_asm(module: Any) -> str:
+    """Snapshot input assembly before a failing pass may mutate the module."""
+
+    operation = getattr(module, "operation", None)
+    get_asm = getattr(operation, "get_asm", None)
+    if not callable(get_asm):
+        return ""
+    return str(get_asm(assume_verified=False))
+
+
 def lower_tlair_module_to_mlir(
     module: mlir_ir.Module,
     *,
@@ -368,6 +432,7 @@ def lower_tlair_module_to_mlir(
     staying structured Python args instead of CLI strings.
     """
 
+    input_mlir = _module_asm(module)
     ext = _load_bridge_extension()
     result = ext.lower_to_mlir(
         module,
@@ -388,9 +453,10 @@ def lower_tlair_module_to_mlir(
             diagnostics=tuple(
                 _bridge_diagnostic(value)
                 for value in raw_diagnostics
-                if isinstance(value, Mapping)
+                if value is not None
             ),
             pass_ir_dump=pass_ir_dump,
+            input_mlir=input_mlir,
         )
     return TlaLoweringResult(
         lowered_mlir=str(result["lowered_mlir"]),
@@ -429,5 +495,6 @@ __all__ = [
     "kernel_abi_from_dict",
     "kernel_abi_to_dict",
     "lower_tlair_module_to_mlir",
+    "render_bridge_diagnostic",
     "resolve_bridge_extension_path",
 ]

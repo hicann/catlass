@@ -330,9 +330,6 @@ def _load_bridge_extension() -> ModuleType:
 
 def _resolve_bridge_extension_path() -> Path | None:
     packaged_root = Path(__file__).resolve().parent
-    packaged = sorted(packaged_root.glob("_tla_type_bridge_native*.so"))
-    if packaged:
-        return packaged[0]
     # Nested in Catlass: .../python/tla_dsl/catlass/this.py -> .../python/tla_dsl/csrc/mlir/build/...
     dsl_root = Path(__file__).resolve().parents[1]
     nested = sorted(
@@ -342,6 +339,12 @@ def _resolve_bridge_extension_path() -> Path | None:
     )
     if nested:
         return nested[0]
+    # A source worktree can retain an older editable-install artifact in the
+    # package directory. Prefer the nested build above whenever it exists;
+    # packaged artifacts remain the fallback for wheels and install-only use.
+    packaged = sorted(packaged_root.glob("_tla_type_bridge_native*.so"))
+    if packaged:
+        return packaged[0]
     # Legacy standalone ascend-catlass-DSL repo: .../python/<pkg>/this.py -> repo/mlir/build/...
     repo_root = Path(__file__).resolve().parents[2]
     candidates = sorted(

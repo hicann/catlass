@@ -864,7 +864,8 @@ py::dict lowerToMlir(
         // retain ownership of their presentation on successful lowerings.
         return diagnostic.getSeverity() == DiagnosticSeverity::Error ? success() : failure();
     });
-    bool success = ::tla::tools::runTlaCompilePipelinesWithManagers(module, StringRef("mlir"), tlaPm, output, error);
+    bool success =
+        ::tla::tools::runTlaCompilePipelinesWithManagers(module, StringRef("mlir"), tlaPm, output, error, true);
     passDumpStream.flush();
     py::dict result;
     result["success"] = success;

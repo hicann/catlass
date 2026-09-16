@@ -54,6 +54,10 @@ _WHILE_EXECUTOR = "while_executor"
 _UNKNOWN_LANGUAGE_VALUE = object()
 
 
+class _RecursiveJitHelperError(SyntaxError):
+    """Internal marker for recursion detected while staging a JIT helper."""
+
+
 def _is_exact_builtin_dict(value: object) -> bool:
     """Return whether *value* is a dict without subclass-defined behavior."""
 
@@ -3253,8 +3257,12 @@ def _validate_language_boundaries(
     aliases = {name: _UNKNOWN_LANGUAGE_VALUE for name in local_names}
     source_lines = source.splitlines()
 
-    def fail(node: ast.AST, message: str) -> NoReturn:
-        error = SyntaxError(message)
+    def fail(
+        node: ast.AST,
+        message: str,
+        error_type: type[SyntaxError] = SyntaxError,
+    ) -> NoReturn:
+        error = error_type(message)
         relative_lineno = int(getattr(node, "lineno", 0) or 0)
         error.filename = filename
         error.lineno = line_offset + relative_lineno
@@ -3314,7 +3322,11 @@ def _validate_language_boundaries(
 
     def validate_jit(node: ast.AST, helper: Callable[..., Any]) -> None:
         if id(helper) in validating:
-            fail(node, "recursive @tla.jit helper calls are not supported")
+            fail(
+                node,
+                "recursive @tla.jit helper calls are not supported",
+                _RecursiveJitHelperError,
+            )
         try:
             helper_lines, helper_lineno = inspect.getsourcelines(helper)
         except (OSError, IOError, TypeError):

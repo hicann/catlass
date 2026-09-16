@@ -680,8 +680,9 @@ def test_public_compile_dry_run_invokes_typed_bridge_and_hivmc_a5(
 
     recorded: list[tuple[str, list[str]]] = []
 
-    def fake_run_checked(cmd, *, label, cwd, stdin_text=None):
+    def fake_run_checked(cmd, *, label, cwd, stdin_text=None, diagnostic_input_mlir=""):
         assert stdin_text is None
+        assert diagnostic_input_mlir
         recorded.append((label, list(cmd)))
         if label == "hivmc-a5":
             assert "hivm.aic_bitcode" not in Path(cmd[1]).read_text()
@@ -712,6 +713,7 @@ def test_public_compile_dry_run_invokes_typed_bridge_and_hivmc_a5(
                 str(hivm_compile),
                 str(cache_dir / "lowered.mlir"),
                 "--target=Ascend950PR_9589",
+                "--mlir-print-op-on-diagnostic",
                 "--disable-ffts",
                 "--enable-hivm-compile=False",
                 f"--link-aicore-bitcode={template_bc.resolve()}",
@@ -776,9 +778,10 @@ def test_generated_kernel_bridge_lowers_live_module(monkeypatch, tmp_path) -> No
         execution, "lower_tlair_module_to_mlir", fake_lower_tlair_module_to_mlir
     )
 
-    def fake_run_checked(cmd, *, label, cwd, stdin_text=None):
+    def fake_run_checked(cmd, *, label, cwd, stdin_text=None, diagnostic_input_mlir=""):
         del cmd, stdin_text
         assert label == "hivmc-a5"
+        assert diagnostic_input_mlir
         Path(cwd, "kernel.o").write_bytes(b"obj")
 
     monkeypatch.setattr(execution, "_run_checked", fake_run_checked)
@@ -850,7 +853,8 @@ def test_compile_and_cache_preserves_diagnostics_when_writing_pass_ir_dump(
 
     assert exc_info.value.diagnostics == (diagnostic,)
     assert exc_info.value.pass_ir_dump == pass_ir_dump
-    assert "pass IR dump:" in str(exc_info.value)
+    assert "pass IR dump:" not in str(exc_info.value)
+    assert "pass IR dump:" in exc_info.value.format(verbose=True)
     assert len(list((tmp_path / "cache").rglob("pass-ir-dump.mlir"))) == 1
 
 
@@ -886,9 +890,10 @@ def test_force_recompile_refreshes_launched_artifact_in_memory_cache(
 
     compiled_binaries: list[bytes] = []
 
-    def fake_run_checked(cmd, *, label, cwd, stdin_text=None):
+    def fake_run_checked(cmd, *, label, cwd, stdin_text=None, diagnostic_input_mlir=""):
         del cmd, stdin_text
         assert label == "hivmc-a5"
+        assert diagnostic_input_mlir
         binary = f"obj-{len(compiled_binaries) + 1}".encode()
         compiled_binaries.append(binary)
         Path(cwd, "kernel.o").write_bytes(binary)
@@ -1243,6 +1248,210 @@ def test_lower_tlair_module_to_mlir_preserves_pass_dump_on_failure(
     assert "IR Dump After failing-pass" in exc_info.value.pass_ir_dump
 
 
+def test_lower_tlair_module_to_mlir_renders_anonymous_snapshot_frame(
+    monkeypatch,
+) -> None:
+    input_mlir = "module {\n  tla.func @kernel() {\n    tla.invalid\n  }\n}\n"
+
+    class _FakeOperation:
+        def get_asm(self, *, assume_verified: bool) -> str:
+            assert assume_verified is False
+            return input_mlir
+
+    class _FakeModule:
+        operation = _FakeOperation()
+
+    class _FakeExtension:
+        def lower_to_mlir(self, *_args) -> dict[str, object]:
+            return {
+                "success": False,
+                "error": "pipeline failed",
+                "diagnostics": [
+                    {
+                        "severity": "error",
+                        "message": "invalid operation",
+                        "locations": [{"filename": "-", "line": 3, "column": 4}],
+                    }
+                ],
+            }
+
+    monkeypatch.setattr(
+        compiler_bridge, "_load_bridge_extension", lambda: _FakeExtension()
+    )
+
+    with pytest.raises(compiler_bridge.BridgeLoweringError) as exc_info:
+        compiler_bridge.lower_tlair_module_to_mlir(_FakeModule())
+
+    rendered = str(exc_info.value)
+    assert " --> <in-memory TLA MLIR>:3:4" in rendered
+    assert ">3 |     tla.invalid" in rendered
+
+
+def test_bridge_lowering_error_renders_anonymous_mlir_source_frame() -> None:
+    diagnostic = compiler_bridge.BridgeDiagnostic(
+        severity="error",
+        message="invalid operation",
+        locations=(compiler_bridge.BridgeSourceLocation("-", 3, 3),),
+    )
+    error = compiler_bridge.BridgeLoweringError(
+        "pipeline failed",
+        diagnostics=(diagnostic,),
+        pass_ir_dump="after failing pass",
+        input_mlir="module {\n  tla.func @kernel() {\n    tla.invalid\n  }\n}\n",
+    )
+
+    rendered = str(error)
+    assert "invalid operation" in rendered
+    assert " --> <in-memory TLA MLIR>:3:3" in rendered
+    assert ">3 |     tla.invalid" in rendered
+    assert "Pass IR dump" not in rendered
+    assert "after failing pass" in error.format(verbose=True)
+
+
+def test_kernel_compile_error_renders_bridge_diagnostics_and_backend_detail() -> None:
+    diagnostic = compiler_bridge.BridgeDiagnostic(
+        severity="error",
+        message="invalid operation",
+        locations=(compiler_bridge.BridgeSourceLocation("-", 2, 1),),
+    )
+    bridge_error = execution.TlaKernelCompileError(
+        "bridge failed",
+        diagnostics=(diagnostic,),
+        diagnostic_input_mlir="module {\ninvalid\n}\n",
+    )
+    backend_error = execution.TlaKernelCompileError(
+        "hivmc-a5 failed",
+        compiler_output=("hivmc-a5: error: malformed input", "backend stdout"),
+        verbose_detail="cmd: hivmc-a5 broken.mlir",
+    )
+
+    assert " --> <in-memory TLA MLIR>:2:1" in str(bridge_error)
+    assert str(backend_error) == "hivmc-a5: error: malformed input\nbackend stdout"
+    assert "cmd: hivmc-a5 broken.mlir" in backend_error.format(verbose=True)
+
+
+def test_hivmc_failure_uses_attached_mlir_operation_python_provenance(
+    monkeypatch, tmp_path
+) -> None:
+    source = tmp_path / "kernel.py"
+    source.write_text("def kernel():\n    unsupported_op()\n")
+    stderr = (
+        (Path(__file__).parent / "fixtures" / "hivmc-attached-operation-diagnostic.txt")
+        .read_text()
+        .replace("__SOURCE_FILE__", str(source))
+    )
+
+    def fail_run(command, **_kwargs):
+        raise execution.subprocess.CalledProcessError(1, command, stderr=stderr)
+
+    monkeypatch.setattr(execution.subprocess, "run", fail_run)
+
+    with pytest.raises(execution.TlaKernelCompileError) as exc_info:
+        execution._run_checked(
+            ["hivmc-a5", "lowered.mlir"],
+            label="hivmc-a5",
+            cwd=tmp_path,
+            diagnostic_input_mlir="module {\n  tla.unsupported\n}\n",
+        )
+
+    error = exc_info.value
+    assert error.diagnostics[0].locations == (
+        compiler_bridge.BridgeSourceLocation(str(source), 2, 5),
+    )
+    rendered = error.format()
+    assert "error: lowering failed" in rendered
+    assert f" --> {source}:2:5" in rendered
+    assert ">2 |     unsupported_op()" in rendered
+    assert "cmd: hivmc-a5 lowered.mlir" not in rendered
+    assert "cmd: hivmc-a5 lowered.mlir" in error.format(verbose=True)
+
+
+def test_hivmc_parse_location_maps_generated_mlir_back_to_python(
+    monkeypatch, tmp_path
+) -> None:
+    source = tmp_path / "kernel.py"
+    source.write_text("def kernel():\n    unsupported_op()\n")
+    lowered = tmp_path / "lowered.mlir"
+    input_mlir = (
+        "module {\n"
+        '  "provenance.probe"() : () -> () loc(#loc0)\n'
+        "}\n"
+        '#loc0 = loc("__tladsl_vector_body_3"(#loc1))\n'
+        f'#loc1 = loc("{source}":2:5)\n'
+    )
+    stderr = (
+        f'loc("{lowered}":2:23): error: operation being parsed with an '
+        "unregistered dialect\n"
+    )
+
+    def fail_run(command, **_kwargs):
+        raise execution.subprocess.CalledProcessError(1, command, stderr=stderr)
+
+    monkeypatch.setattr(execution.subprocess, "run", fail_run)
+
+    with pytest.raises(execution.TlaKernelCompileError) as exc_info:
+        execution._run_checked(
+            ["hivmc-a5", str(lowered)],
+            label="hivmc-a5",
+            cwd=tmp_path,
+            diagnostic_input_mlir=input_mlir,
+        )
+
+    diagnostic = exc_info.value.diagnostics[0]
+    assert diagnostic.locations == (
+        compiler_bridge.BridgeSourceLocation(str(source), 2, 5),
+        compiler_bridge.BridgeSourceLocation(str(lowered), 2, 23),
+    )
+    rendered = exc_info.value.format()
+    assert f" --> {source}:2:5" in rendered
+    assert ">2 |     unsupported_op()" in rendered
+    assert str(lowered) not in rendered
+
+
+def test_hivmc_parse_location_without_inline_python_provenance_keeps_mlir_frame(
+    monkeypatch, tmp_path
+) -> None:
+    lowered = tmp_path / "lowered.mlir"
+    stderr = f'loc("{lowered}":2:3): error: malformed operation\n'
+
+    def fail_run(command, **_kwargs):
+        raise execution.subprocess.CalledProcessError(1, command, stderr=stderr)
+
+    monkeypatch.setattr(execution.subprocess, "run", fail_run)
+
+    with pytest.raises(execution.TlaKernelCompileError) as exc_info:
+        execution._run_checked(
+            ["hivmc-a5", str(lowered)],
+            label="hivmc-a5",
+            cwd=tmp_path,
+            diagnostic_input_mlir="module {\n  malformed\n}\n",
+        )
+
+    assert exc_info.value.diagnostics[0].locations == (
+        compiler_bridge.BridgeSourceLocation(str(lowered), 2, 3),
+    )
+    assert " --> " + str(lowered) + ":2:3" in exc_info.value.format()
+
+
+def test_hivmc_failure_without_mlir_diagnostic_falls_back_to_raw_output(
+    monkeypatch, tmp_path
+) -> None:
+    stderr = "hivmc-a5: fatal: compiler crashed\n"
+
+    def fail_run(command, **_kwargs):
+        raise execution.subprocess.CalledProcessError(1, command, stderr=stderr)
+
+    monkeypatch.setattr(execution.subprocess, "run", fail_run)
+
+    with pytest.raises(execution.TlaKernelCompileError) as exc_info:
+        execution._run_checked(
+            ["hivmc-a5", "lowered.mlir"], label="hivmc-a5", cwd=tmp_path
+        )
+
+    assert exc_info.value.diagnostics == ()
+    assert str(exc_info.value) == stderr.rstrip()
+
+
 def test_bridge_diagnostic_prefers_python_provenance_without_dropping_mlir(
     monkeypatch,
 ) -> None:
@@ -1400,7 +1609,12 @@ def test_lower_tlair_module_to_mlir_ignores_malformed_location_collections(
     with pytest.raises(compiler_bridge.BridgeLoweringError) as exc_info:
         compiler_bridge.lower_tlair_module_to_mlir(object())
 
-    assert str(exc_info.value) == "pipeline failed"
+    rendered = str(exc_info.value)
+    assert "error: valid diagnostic" in rendered
+    if expected_locations:
+        assert " --> kernel.py:8:2" in rendered
+    else:
+        assert " --> " not in rendered
     assert exc_info.value.diagnostics[0].locations == expected_locations
 
 
@@ -1455,8 +1669,16 @@ def test_lower_tlair_module_to_mlir_ignores_malformed_diagnostic_elements(
     with pytest.raises(compiler_bridge.BridgeLoweringError) as exc_info:
         compiler_bridge.lower_tlair_module_to_mlir(object())
 
-    assert str(exc_info.value) == "pipeline failed"
+    rendered = str(exc_info.value)
+    assert "error: not a diagnostic record" in rendered
+    assert "error: valid diagnostic" in rendered
+    assert " --> kernel.py:8:2" in rendered
     assert exc_info.value.diagnostics == (
+        compiler_bridge.BridgeDiagnostic(
+            severity="error",
+            message="not a diagnostic record",
+            rendered="not a diagnostic record",
+        ),
         compiler_bridge.BridgeDiagnostic(
             severity="error",
             message="valid diagnostic",
@@ -1590,10 +1812,35 @@ def test_tla_compile_cli_preserves_ir_dump_on_failure(monkeypatch, tmp_path) -> 
 
     assert exc_info.value.pass_ir_dump == pass_ir_dump
     assert "<captured in pass IR dump>" in str(exc_info.value)
+    assert "cmd:" not in str(exc_info.value)
+    assert exc_info.value.__cause__ is None
+    assert "cmd:" in exc_info.value.format(verbose=True)
+    assert "cli stdout" in exc_info.value.format(verbose=True)
     assert calls[0][0][-2:] == [
         "--mlir-print-ir-before-all",
         "--mlir-print-ir-after-all",
     ]
+
+
+def test_run_checked_hides_process_detail_unless_verbose(monkeypatch, tmp_path) -> None:
+    command = ["hivmc-a5", "broken.mlir"]
+
+    def fake_run(*_args, **_kwargs):
+        raise execution.subprocess.CalledProcessError(
+            2, command, output="backend stdout", stderr="backend stderr"
+        )
+
+    monkeypatch.setattr(execution.subprocess, "run", fake_run)
+
+    with pytest.raises(execution.TlaKernelCompileError) as exc_info:
+        execution._run_checked(command, label="hivmc-a5", cwd=tmp_path)
+
+    assert str(exc_info.value) == "backend stderr\nbackend stdout"
+    assert "cmd:" not in str(exc_info.value)
+    assert exc_info.value.__cause__ is None
+    verbose = exc_info.value.format(verbose=True)
+    assert "cmd: hivmc-a5 broken.mlir" in verbose
+    assert "exit code 2" in verbose
 
 
 def test_run_tla_lowering_to_mlir_raises_when_no_fallback_exists(
@@ -1687,6 +1934,7 @@ def test_build_hivmc_a5_command_links_template_bitcode_for_aic(
         str(compiler),
         str(mlir_path),
         "--target=Ascend950PR_9589",
+        "--mlir-print-op-on-diagnostic",
         "--disable-ffts",
         "--enable-hivm-compile=False",
         f"--link-aicore-bitcode={template_bc.resolve()}",
@@ -1718,6 +1966,7 @@ def test_build_hivmc_a5_command_links_template_bitcode_for_aiv(
         str(compiler),
         str(mlir_path),
         "--target=Ascend950PR_9589",
+        "--mlir-print-op-on-diagnostic",
         "--disable-ffts",
         "--enable-hivm-compile=False",
         f"--link-aicore-bitcode={template_bc.resolve()}",

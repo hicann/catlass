@@ -651,9 +651,12 @@ def test_compile_artifact_propagates_and_persists_kernel_abi(
         ),
     )
 
-    def fake_run_checked(_cmd, *, label, cwd, stdin_text=None):
+    def fake_run_checked(
+        _cmd, *, label, cwd, stdin_text=None, diagnostic_input_mlir=""
+    ):
         assert label == "hivmc-a5"
         assert stdin_text is None
+        assert diagnostic_input_mlir
         Path(cwd, "kernel.o").write_bytes(b"object")
 
     monkeypatch.setattr(execution, "_run_checked", fake_run_checked)

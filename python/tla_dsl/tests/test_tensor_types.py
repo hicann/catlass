@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 import catlass.tla as tla
@@ -11,6 +13,49 @@ import catlass.runtime as runtime_mod
 from catlass.execution_lowering import TlaLoweringError
 from catlass.tla.runtime import from_dlpack
 from catlass._mlir import ir as mlir_ir
+
+
+def test_type_bridge_prefers_nested_worktree_build_over_packaged_artifact(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    package_root = tmp_path / "python" / "tla_dsl" / "catlass"
+    package_root.mkdir(parents=True)
+    module_path = package_root / "_tla_type_bridge.py"
+    module_path.touch()
+    packaged = package_root / "_tla_type_bridge_native.packaged.so"
+    packaged.touch()
+    nested = (
+        tmp_path
+        / "python"
+        / "tla_dsl"
+        / "csrc"
+        / "mlir"
+        / "build"
+        / "python"
+        / "catlass"
+        / "_tla_type_bridge_native.nested.so"
+    )
+    nested.parent.mkdir(parents=True)
+    nested.touch()
+
+    monkeypatch.setattr(_tla_type_bridge, "__file__", str(module_path))
+
+    assert _tla_type_bridge._resolve_bridge_extension_path() == nested
+
+
+def test_type_bridge_uses_packaged_artifact_without_worktree_build(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    package_root = tmp_path / "python" / "tla_dsl" / "catlass"
+    package_root.mkdir(parents=True)
+    module_path = package_root / "_tla_type_bridge.py"
+    module_path.touch()
+    packaged = package_root / "_tla_type_bridge_native.packaged.so"
+    packaged.touch()
+
+    monkeypatch.setattr(_tla_type_bridge, "__file__", str(module_path))
+
+    assert _tla_type_bridge._resolve_bridge_extension_path() == packaged
 
 
 def test_tla_type_descriptors_construct_native_mlir_types() -> None:

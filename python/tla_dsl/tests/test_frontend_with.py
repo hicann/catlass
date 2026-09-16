@@ -508,7 +508,8 @@ def test_frontend_region_error_reports_original_source_location() -> None:
         cube_region_bad_list_index_kernel.dump_mlir()
     message = str(excinfo.value)
     assert "Execution-mode lowering failed in tla.cube region-body" in message
-    assert f"{__file__}:{line}" in message
-    assert "source: values[idx]" in message
+    assert f" --> {__file__}:{line}:" in message
+    assert f">{line} |" in message
+    assert "values[idx]" in message
     assert "cannot be used as a Python index" in message or "list indices" in message
     assert "Int32" in message

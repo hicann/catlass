@@ -5,15 +5,19 @@ from __future__ import annotations
 import builtins
 import contextlib
 import contextvars
-import linecache
 import operator
-import types
 from dataclasses import fields
 from typing import Any, Callable, Iterator
 
 from . import runtime as _runtime
 from .base_dsl.ast_helpers import FrontendRange
 from .base_dsl.utils import tree_utils
+from .frontend_diagnostics import (
+    FrontendDiagnosticError,
+    SourceLocation,
+    capture_cause_trace,
+    traceback_location_for_code,
+)
 
 TlaCoreAPIError = _runtime.TlaCoreAPIError
 _capture_caller_location = _runtime._capture_caller_location
@@ -196,7 +200,7 @@ def _internal_lazy_unary(op: str, value: Any) -> Any:
     return operation(value)
 
 
-class FrontendControlFlowLoweringError(RuntimeError):
+class FrontendControlFlowLoweringError(FrontendDiagnosticError):
     """Raised when an AST-generated control-flow helper fails during lowering."""
 
 
@@ -205,57 +209,64 @@ def _source_info_for(fn: Callable[..., Any]) -> dict[str, Any] | None:
     return info if isinstance(info, dict) else None
 
 
-def _traceback_lineno_for_code(exc: BaseException, code: types.CodeType) -> int | None:
-    tb = exc.__traceback__
-    best: int | None = None
-    while tb is not None:
-        if tb.tb_frame.f_code is code:
-            best = int(tb.tb_lineno)
-        tb = tb.tb_next
-    return best
-
-
-def _format_control_flow_error(fn: Callable[..., Any], exc: Exception) -> str | None:
+def _control_flow_error_parts(
+    fn: Callable[..., Any], exc: Exception
+) -> tuple[str, SourceLocation | None, str] | None:
     info = _source_info_for(fn)
     if info is None:
         return None
     filename = str(info.get("filename") or "<unknown>")
     fallback_lineno = int(info.get("lineno") or 0)
-    helper_lineno = _traceback_lineno_for_code(exc, fn.__code__)
-    lineno = helper_lineno if helper_lineno is not None else fallback_lineno
+    location = traceback_location_for_code(exc, fn.__code__)
+    lineno = location.lineno if location is not None else fallback_lineno
     if lineno <= 0:
         lineno = fallback_lineno
-    source = linecache.getline(filename, lineno).strip()
-    if not source:
-        source = str(info.get("source") or "")
     construct = str(info.get("construct") or "control flow")
     region = str(info.get("region") or "region")
-    message = (
-        f"Execution-mode lowering failed in {construct} {region} at {filename}:{lineno}"
+    return (
+        f"Execution-mode lowering failed in {construct} {region}",
+        SourceLocation(
+            filename=filename,
+            lineno=lineno,
+            col_offset=(
+                location.col_offset
+                if location is not None
+                else int(info.get("col_offset") or 0)
+            ),
+            end_col_offset=(location.end_col_offset if location is not None else None),
+        ),
+        f"{_exact_class(exc).__name__}: {exc}",
     )
-    if source:
-        message += f"\n  source: {source}"
-    message += f"\n  reason: {_exact_class(exc).__name__}: {exc}"
-    return message
 
 
 def _wrap_control_flow_exception(
     fn: Callable[..., Any], exc: Exception
 ) -> Exception | None:
-    if isinstance(exc, FrontendControlFlowLoweringError):
+    # An inner generated region may already have found and rendered the user
+    # source span.  Do not replace that more specific provenance with the
+    # outer region's synthetic helper location.
+    if isinstance(exc, FrontendDiagnosticError) and (
+        exc.location is not None or exc.cause_trace
+    ):
         return exc
-    message = _format_control_flow_error(fn, exc)
-    if message is None:
+    parts = _control_flow_error_parts(fn, exc)
+    if parts is None:
         return None
+    summary, location, reason = parts
+    error_kwargs = {
+        "location": location,
+        "reason": reason,
+        "cause_trace": capture_cause_trace(exc),
+    }
     try:
         from .execution_lowering import TlaLoweringError
     except ImportError:  # pragma: no cover - defensive for partial imports
         TlaLoweringError = ()  # type: ignore[assignment]
     if isinstance(exc, TlaCoreAPIError):
-        return TlaCoreAPIError(message)
+        return TlaCoreAPIError(summary, **error_kwargs)
     if TlaLoweringError and isinstance(exc, TlaLoweringError):
-        return TlaLoweringError(message)
-    return FrontendControlFlowLoweringError(message)
+        return TlaLoweringError(summary, **error_kwargs)
+    return FrontendControlFlowLoweringError(summary, **error_kwargs)
 
 
 def _call_with_control_flow_source(fn: Callable[..., Any], *args: Any) -> Any:
@@ -267,7 +278,7 @@ def _call_with_control_flow_source(fn: Callable[..., Any], *args: Any) -> Any:
         wrapped = _wrap_control_flow_exception(fn, exc)
         if wrapped is None:
             raise
-        raise wrapped from exc
+        raise wrapped from None
 
 
 class ScfGenerator:

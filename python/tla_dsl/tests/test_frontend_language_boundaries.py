@@ -1,3 +1,5 @@
+import inspect
+
 import pytest
 
 import catlass.tla as tla
@@ -58,6 +60,30 @@ def _make_recursive_jit_helper():
     @tla.jit
     def helper(value: int) -> None:
         helper(value)
+
+    return helper
+
+
+def _make_invalid_jit_helper():
+    @tla.jit
+    def helper(value: int) -> None:
+        _callee_kernel(value)
+
+    return helper
+
+
+def _make_value_error_jit_helper():
+    @tla.jit
+    def helper(value: int) -> None:
+        raise ValueError("dynamic helper staging failure")
+
+    return helper
+
+
+def _make_recursive_message_jit_helper():
+    @tla.jit
+    def helper(value: int) -> None:
+        raise SyntaxError("recursive @tla.jit helper calls are not supported")
 
     return helper
 
@@ -186,6 +212,21 @@ def _factory_recursive_helper_kernel(value: int) -> None:
 
 
 @tla.kernel
+def _factory_invalid_jit_helper_kernel(value: int) -> None:
+    _make_invalid_jit_helper()(value)
+
+
+@tla.kernel
+def _factory_value_error_jit_helper_kernel(value: int) -> None:
+    _make_value_error_jit_helper()(value)
+
+
+@tla.kernel
+def _factory_recursive_message_jit_helper_kernel(value: int) -> None:
+    _make_recursive_message_jit_helper()(value)
+
+
+@tla.kernel
 def _nested_forwarding_recursive_helper_kernel(value: int) -> None:
     _jit_nested_forwarding_recursive_helper(value)
 
@@ -311,6 +352,52 @@ def test_rejects_recursive_jit_helpers_before_execution(kernel) -> None:
 def test_rejects_indirect_recursive_jit_helpers(kernel) -> None:
     with pytest.raises(SyntaxError, match="recursive @tla.jit helper"):
         kernel.dump_mlir(type_args=(1,))
+
+
+def _source_line(fn, needle: str) -> int:
+    lines, first_lineno = inspect.getsourcelines(fn)
+    return first_lineno + next(
+        index for index, line in enumerate(lines) if needle in line
+    )
+
+
+def test_dynamic_jit_helper_validation_error_uses_helper_source_location() -> None:
+    line = _source_line(_make_invalid_jit_helper, "_callee_kernel(value)")
+
+    with pytest.raises(Exception, match="calling @tla.kernel") as exc_info:
+        _factory_invalid_jit_helper_kernel.dump_mlir(type_args=(1,))
+
+    diagnostic = exc_info.value
+    assert getattr(diagnostic, "location").filename == __file__
+    assert getattr(diagnostic, "location").lineno == line
+    assert f" --> {__file__}:{line}:" in str(diagnostic)
+    assert "_callee_kernel(value)" in str(diagnostic)
+
+
+def test_dynamic_jit_helper_staging_error_uses_helper_source_location() -> None:
+    line = _source_line(_make_value_error_jit_helper, "raise ValueError")
+
+    with pytest.raises(Exception, match="dynamic helper staging failure") as exc_info:
+        _factory_value_error_jit_helper_kernel.dump_mlir(type_args=(1,))
+
+    diagnostic = exc_info.value
+    assert getattr(diagnostic, "location").filename == __file__
+    assert getattr(diagnostic, "location").lineno == line
+    assert f" --> {__file__}:{line}:" in str(diagnostic)
+    assert "raise ValueError" in str(diagnostic)
+
+
+def test_user_recursive_message_error_uses_helper_source_location() -> None:
+    line = _source_line(_make_recursive_message_jit_helper, "raise SyntaxError")
+
+    with pytest.raises(Exception, match="recursive @tla.jit helper") as exc_info:
+        _factory_recursive_message_jit_helper_kernel.dump_mlir(type_args=(1,))
+
+    diagnostic = exc_info.value
+    assert getattr(diagnostic, "location").filename == __file__
+    assert getattr(diagnostic, "location").lineno == line
+    assert f" --> {__file__}:{line}:" in str(diagnostic)
+    assert "Execution-mode lowering failed while running" in str(diagnostic)
 
 
 def test_allows_straight_line_jit_helper_with_plain_staging_call() -> None:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import inspect
 import linecache
 from dataclasses import dataclass, field as dataclass_field
@@ -14,6 +15,7 @@ from . import _tla_type_bridge
 from . import runtime
 from . import tla_ast_decorators as ast_decorators
 from .base_dsl.ast_preprocessor import (
+    _RecursiveJitHelperError,
     maybe_transform_for_lowering,
     reject_user_class_value,
     validate_language_boundaries,
@@ -37,47 +39,69 @@ from .dsl import (
     unwrap_jit_callable,
 )
 from .base_dsl.runtime.jit_arg_adapters import _is_compile_time_callable
+from .frontend_diagnostics import (
+    FrontendDiagnosticError,
+    SourceLocation,
+    capture_cause_trace,
+    syntax_error_location,
+    traceback_location_for_code,
+    traceback_location_for_user_code,
+)
 from .tla.typing import Tensor
 
 
-class TlaLoweringError(RuntimeError):
+class TlaLoweringError(FrontendDiagnosticError):
     """Raised when Tla DSL lowering fails."""
 
 
-class UnsupportedExecutionLowering(RuntimeError):
+class UnsupportedExecutionLowering(FrontendDiagnosticError):
     """Raised when execution-mode lowering cannot safely handle a function."""
 
 
 _SOURCE_INFO_ATTR = "__tladsl_source_info__"
 
 
-def _traceback_lineno_for_code(exc: BaseException, code: Any) -> int | None:
-    tb = exc.__traceback__
-    best: int | None = None
-    while tb is not None:
-        if tb.tb_frame.f_code is code:
-            best = int(tb.tb_lineno)
-        tb = tb.tb_next
-    return best
-
-
-def _format_execution_source_error(fn: Any, exc: Exception) -> str | None:
+def _execution_source_error_parts(
+    fn: Any, exc: Exception
+) -> tuple[str, SourceLocation | None, str] | None:
     info = getattr(fn, _SOURCE_INFO_ATTR, None)
-    if not isinstance(info, dict):
+    location = syntax_error_location(exc) if isinstance(exc, SyntaxError) else None
+    location = location or traceback_location_for_user_code(exc)
+    location = location or traceback_location_for_code(exc, fn.__code__)
+    if location is None:
         return None
-    filename = str(info.get("filename") or "<unknown>")
-    lineno = _traceback_lineno_for_code(exc, fn.__code__)
-    if lineno is None:
-        return None
-    source = linecache.getline(filename, lineno).strip()
-    message = (
-        f"Execution-mode lowering failed while running `{fn.__name__}` "
-        f"at {filename}:{lineno}"
+    filename = location.filename
+    if location.filename == fn.__code__.co_filename and isinstance(info, dict):
+        filename = str(info.get("filename") or filename)
+    return (
+        f"Execution-mode lowering failed while running `{fn.__name__}`",
+        SourceLocation(
+            filename=filename,
+            lineno=location.lineno,
+            col_offset=location.col_offset,
+            end_col_offset=location.end_col_offset,
+        ),
+        f"{type(exc).__name__}: {exc}",
     )
-    if source:
-        message += f"\n  source: {source}"
-    message += f"\n  reason: {type(exc).__name__}: {exc}"
-    return message
+
+
+def _wrap_execution_exception(
+    error_type: type[FrontendDiagnosticError], fn: Any, exc: Exception
+) -> FrontendDiagnosticError:
+    parts = _execution_source_error_parts(fn, exc)
+    if parts is None:
+        return error_type(
+            f"Execution-mode lowering failed while running `{fn.__name__}`: {exc}",
+            reason=f"{type(exc).__name__}: {exc}",
+            cause_trace=capture_cause_trace(exc),
+        )
+    summary, location, reason = parts
+    return error_type(
+        summary,
+        location=location,
+        reason=reason,
+        cause_trace=capture_cause_trace(exc),
+    )
 
 
 @dataclass(frozen=True)
@@ -646,7 +670,7 @@ def _build_tla_func(
 
                 def guarded_helper(*args: Any, **kwargs: Any) -> Any:
                     if any(active is helper for active in active_jit_helpers):
-                        raise SyntaxError(
+                        raise _RecursiveJitHelperError(
                             "recursive @tla.jit helper calls are not supported"
                         )
                     active_jit_helpers.append(helper)
@@ -679,21 +703,41 @@ def _build_tla_func(
                         fn(*_pos, **_kw)
                     else:
                         fn(*call_args_for_fn)
-            except runtime.TlaCoreAPIError:
-                raise
-            except TlaLoweringError:
-                raise
-            except SyntaxError:
-                raise
-            except ValueError:
-                raise
+            except runtime.TlaCoreAPIError as exc:
+                if exc.location is not None or exc.cause_trace:
+                    raise
+                raise _wrap_execution_exception(
+                    runtime.TlaCoreAPIError, fn, exc
+                ) from None
+            except TlaLoweringError as exc:
+                if exc.location is not None or exc.cause_trace:
+                    raise
+                raise _wrap_execution_exception(TlaLoweringError, fn, exc) from None
+            # ValueError raised from the user body benefits from the same
+            # source-framed diagnostic as other execution-mode errors.
+            except ValueError as exc:
+                if traceback_location_for_code(exc, fn.__code__) is None:
+                    raise
+                raise _wrap_execution_exception(
+                    UnsupportedExecutionLowering, fn, exc
+                ) from None
+            except SyntaxError as exc:
+                if isinstance(exc, _RecursiveJitHelperError):
+                    raise
+                raise _wrap_execution_exception(
+                    UnsupportedExecutionLowering, fn, exc
+                ) from None
             except ast_decorators.FrontendControlFlowLoweringError as exc:
-                raise UnsupportedExecutionLowering(str(exc)) from exc
+                raise UnsupportedExecutionLowering(
+                    exc.args[0],
+                    location=exc.location,
+                    reason=exc.reason,
+                    cause_trace=exc.cause_trace,
+                ) from None
             except Exception as exc:
-                message = _format_execution_source_error(fn, exc)
-                if message is None:
-                    message = f"Execution-mode lowering failed while running `{fn.__name__}`: {exc}"
-                raise UnsupportedExecutionLowering(message) from exc
+                raise _wrap_execution_exception(
+                    UnsupportedExecutionLowering, fn, exc
+                ) from None
             # Group called externs by source in first-use order. Declarations that
             # share a source must also share one ordered include configuration;
             # merge their call-site core types into a single compile spec. The

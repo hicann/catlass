@@ -36,6 +36,7 @@ from .base_dsl.op import (
     _resolve_frontend_bound_value,
     _resolve_identity_binding,
 )
+from .frontend_diagnostics import FrontendDiagnosticError
 from .types import RuntimeTensorError
 
 
@@ -43,7 +44,7 @@ class TlaIRNotExecutableError(RuntimeError):
     """Raised when attempting to execute APIs that only exist on the lowered TLA MLIR path."""
 
 
-class TlaCoreAPIError(RuntimeError):
+class TlaCoreAPIError(FrontendDiagnosticError):
     """Raised when a user-facing Tla API call violates preconditions."""
 
 

@@ -40,14 +40,12 @@ def test_for_rejects_compile_time_binding_write_at_assignment() -> None:
     ) as exc:
         for_compile_time_binding_write_inside_kernel.dump_mlir(type_args=(2,))
 
-    diagnostic = exc.value.__cause__.__cause__
-    assert isinstance(diagnostic, SyntaxError)
-    assert (
-        diagnostic.lineno
-        == inspect.getsourcelines(for_compile_time_binding_write_inside_kernel.fn)[1]
-        + 5
-    )
-    assert diagnostic.text.strip() == "scale = 3"
+    line = inspect.getsourcelines(for_compile_time_binding_write_inside_kernel.fn)[1] + 5
+    message = str(exc.value)
+    assert "reason: SyntaxError: compile-time binding 'scale'" in message
+    assert f" --> {__file__}:{line}:" in message
+    assert f">{line} |" in message
+    assert "scale = 3" in message
 
 def _return_in_tuple_loop(limit: int) -> None:
     for i in tla.range(0, limit, 1):
@@ -989,8 +987,9 @@ def test_dynamic_for_body_error_reports_original_source_location() -> None:
         dynamic_for_bad_list_index_kernel.dump_mlir(type_args=(4,))
     message = str(excinfo.value)
     assert "Execution-mode lowering failed in dynamic for body" in message
-    assert f"{__file__}:{line}" in message
-    assert "source: values[i]" in message
+    assert f" --> {__file__}:{line}:" in message
+    assert f">{line} |" in message
+    assert "values[i]" in message
     assert "cannot be used as a Python index" in message or "list indices" in message
     assert "Int32" in message
 

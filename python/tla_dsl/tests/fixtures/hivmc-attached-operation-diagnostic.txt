@@ -1,0 +1,2 @@
+error: lowering failed
+note: see current operation: "tla.unsupported"() : () -> () loc("__SOURCE_FILE__":2:5)

@@ -2,6 +2,7 @@ from catlass.tla.runtime import make_fake_tensor
 
 from dataclasses import dataclass
 import inspect
+import re
 from typing import Any
 
 import pytest
@@ -11,6 +12,7 @@ import catlass.tla_ast_decorators as ast_decorators_mod
 import catlass.core_api as core_api_mod
 import catlass.runtime as runtime_mod
 from catlass import _tla_type_bridge
+from catlass.execution_lowering import UnsupportedExecutionLowering
 from catlass._mlir import ir as mlir_ir
 
 
@@ -1690,16 +1692,12 @@ def test_statement_if_rejects_compile_time_binding_write_at_assignment() -> None
     ) as exc:
         statement_if_compile_time_binding_write_inside_kernel.dump_mlir(type_args=(2,))
 
-    diagnostic = exc.value.__cause__.__cause__
-    assert isinstance(diagnostic, SyntaxError)
-    assert (
-        diagnostic.lineno
-        == inspect.getsourcelines(
-            statement_if_compile_time_binding_write_inside_kernel.fn
-        )[1]
-        + 5
-    )
-    assert diagnostic.text.strip() == "scale = 3"
+    line = inspect.getsourcelines(statement_if_compile_time_binding_write_inside_kernel.fn)[1] + 5
+    message = str(exc.value)
+    assert "reason: SyntaxError: compile-time binding 'scale'" in message
+    assert f" --> {__file__}:{line}:" in message
+    assert f">{line} |" in message
+    assert "scale = 3" in message
 
 def test_statement_if_rejects_definitely_assigned_python_seed() -> None:
     with pytest.raises(Exception, match="use tla.as_numeric"):
@@ -1716,14 +1714,12 @@ def test_region_rejects_compile_time_binding_write_at_assignment() -> None:
     ) as exc:
         region_compile_time_binding_write_inside_kernel.dump_mlir()
 
-    diagnostic = exc.value.__cause__.__cause__
-    assert isinstance(diagnostic, SyntaxError)
-    assert (
-        diagnostic.lineno
-        == inspect.getsourcelines(region_compile_time_binding_write_inside_kernel.fn)[1]
-        + 5
-    )
-    assert diagnostic.text.strip() == "scale = 3"
+    line = inspect.getsourcelines(region_compile_time_binding_write_inside_kernel.fn)[1] + 5
+    message = str(exc.value)
+    assert "reason: SyntaxError: compile-time binding 'scale'" in message
+    assert f" --> {__file__}:{line}:" in message
+    assert f">{line} |" in message
+    assert "scale = 3" in message
 
 def test_nested_scope_rejects_compile_time_binding_write_in_inner_scope() -> None:
     with pytest.raises(
@@ -1768,6 +1764,15 @@ def dynamic_if_bad_list_index_kernel() -> None:
     if idx == 0:
         values[idx]
 
+
+@tla.kernel
+def nested_dynamic_if_bad_constexpr_kernel() -> None:
+    idx = tla.arch.block_idx()
+    if idx == 0:
+        if idx == 0:
+            tla.const_expr(idx)
+
+
 def _source_line(fn: Any, needle: str) -> int:
     source_lines, first_lineno = inspect.getsourcelines(fn.fn)
     for offset, line in enumerate(source_lines):
@@ -1775,16 +1780,80 @@ def _source_line(fn: Any, needle: str) -> int:
             return first_lineno + offset
     raise AssertionError(f"Unable to find source line containing {needle!r}")
 
-def test_dynamic_if_then_error_reports_original_source_location() -> None:
+def test_dynamic_if_then_error_reports_original_source_location(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     line = _source_line(dynamic_if_bad_list_index_kernel, "values[idx]")
     with pytest.raises(Exception) as excinfo:
         dynamic_if_bad_list_index_kernel.dump_mlir()
     message = str(excinfo.value)
     assert "Execution-mode lowering failed in dynamic if then-region" in message
-    assert f"{__file__}:{line}" in message
-    assert "source: values[idx]" in message
+    assert f" --> {__file__}:{line}:" in message
+    assert f">{line} |         values[idx]" in message
+    assert "|         ^" in message
     assert "cannot be used as a Python index" in message or "list indices" in message
     assert "Int32" in message
+    assert "Captured cause traceback:" not in message
+    verbose = excinfo.value.format(verbose=True)
+    assert "Captured cause traceback:" in verbose
+    assert "TypeError: Int32 SSA cannot be used as a Python index" in verbose
+    monkeypatch.setenv("CATLASS_DSL_VERBOSE_ERRORS", "1")
+    assert "Captured cause traceback:" in str(excinfo.value)
+
+
+def test_nested_dynamic_if_preserves_inner_diagnostic_location() -> None:
+    line = _source_line(nested_dynamic_if_bad_constexpr_kernel, "tla.const_expr(idx)")
+
+    with pytest.raises(tla.TlaCoreAPIError, match="tla.const_expr") as exc_info:
+        nested_dynamic_if_bad_constexpr_kernel.dump_mlir()
+
+    diagnostic = exc_info.value
+    assert diagnostic.location is not None
+    assert diagnostic.location.filename == __file__
+    assert diagnostic.location.lineno == line
+    assert f" --> {__file__}:{line}:" in str(diagnostic)
+    assert "tla.const_expr(idx)" in str(diagnostic)
+
+
+@tla.kernel
+def kernel_body_bad_list_index_kernel() -> None:
+    idx = tla.arch.block_idx()
+    values = [0, 1]
+    values[idx]
+
+
+def test_kernel_body_error_renders_source_code_frame() -> None:
+    line = _source_line(kernel_body_bad_list_index_kernel, "values[idx]")
+    with pytest.raises(UnsupportedExecutionLowering) as excinfo:
+        kernel_body_bad_list_index_kernel.dump_mlir()
+    message = str(excinfo.value)
+    assert "Execution-mode lowering failed while running" in message
+    assert f" --> {__file__}:{line}:" in message
+    assert f">{line} |     values[idx]" in message
+    assert "|     ^" in message
+    assert "reason: TypeError: Int32 SSA cannot be used as a Python index" in message
+    assert "Captured cause traceback:" not in message
+    assert "Captured cause traceback:" in excinfo.value.format(verbose=True)
+
+
+@tla.kernel
+def kernel_body_value_error_kernel() -> None:
+    int("not an integer")
+
+
+def test_kernel_body_value_error_renders_source_code_frame() -> None:
+    line = _source_line(kernel_body_value_error_kernel, 'int("not an integer")')
+    with pytest.raises(UnsupportedExecutionLowering) as excinfo:
+        kernel_body_value_error_kernel.dump_mlir()
+
+    message = str(excinfo.value)
+    assert "Execution-mode lowering failed while running" in message
+    assert f" --> {__file__}:{line}:" in message
+    assert f">{line} |     int(\"not an integer\")" in message
+    assert "reason: ValueError:" in message
+    assert "Captured cause traceback:" not in message
+    assert "Captured cause traceback:" in excinfo.value.format(verbose=True)
+
 
 @tla.kernel
 def dynamic_if_constexpr_bool_bad_list_index_kernel(flag: tla.Constexpr[bool]) -> None:
@@ -1799,10 +1868,14 @@ def test_constexpr_if_body_error_reports_original_source_location() -> None:
         dynamic_if_constexpr_bool_bad_list_index_kernel.dump_mlir(type_args=(True,))
     message = str(excinfo.value)
     assert "Execution-mode lowering failed in dynamic if then-region" in message
-    assert f"{__file__}:{line}" in message
-    assert "source: values[idx]" in message
+    assert f" --> {__file__}:{line}:" in message
+    assert f">{line} |         values[idx]" in message
+    assert "|         ^" in message
+    assert "reason: TypeError:" in message
     assert "cannot be used as a Python index" in message or "list indices" in message
     assert "Int32" in message
+    assert "Captured cause traceback:" not in message
+    assert "Captured cause traceback:" in excinfo.value.format(verbose=True)
 
 @tla.kernel
 def dynamic_if_expr_bad_list_index_kernel() -> None:
@@ -1820,10 +1893,14 @@ def test_dynamic_if_expr_error_reports_original_source_location() -> None:
         "Execution-mode lowering failed in conditional expression then-region"
         in message
     )
-    assert f"{__file__}:{line}" in message
-    assert "source: result = values[idx] if idx == 0 else 0" in message
+    assert f" --> {__file__}:{line}:" in message
+    assert f">{line} |     result = values[idx] if idx == 0 else 0" in message
+    assert re.search(r"\n\s+\|\s+\^+", message)
+    assert "reason: TypeError:" in message
     assert "cannot be used as a Python index" in message or "list indices" in message
     assert "Int32" in message
+    assert "Captured cause traceback:" not in message
+    assert "Captured cause traceback:" in excinfo.value.format(verbose=True)
 
 @tla.kernel
 def cross_flag_statement_if_kernel() -> None:
