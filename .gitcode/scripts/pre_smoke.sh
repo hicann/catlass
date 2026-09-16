@@ -22,9 +22,13 @@ cd "${WORKSPACE}"
 # 1. 获取本次提交修改的文件
 # ============================================================================
 
-CURRENT_HASH=$(git rev-parse HEAD) || exit 1
-DIFFLIST_FILE="/tmp/difflist_${CURRENT_HASH:0:16}.txt"
-git diff --name-only HEAD~1 HEAD > "${DIFFLIST_FILE}" 2>/dev/null || true
+# 变更文件清单由 cann/.gitcode 的 get-pr action 在 pre_action 阶段生成，上传 OBS 后
+# 由各 job 的 obs-download 下载到 WORKSPACE 根目录，这里直接使用。
+DIFFLIST_FILE="${WORKSPACE}/pr_filelist.txt"
+if [ ! -s "${DIFFLIST_FILE}" ]; then
+    echo "ERROR: difflist not found or empty: ${DIFFLIST_FILE}" >&2
+    exit 1
+fi
 
 # 判断本次提交是否修改了匹配路径的文件。
 has_change() {
