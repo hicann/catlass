@@ -62,7 +62,7 @@ tla.make_shape(*components: IndexTree) -> TlaShape
 
 参数说明：
 
-- *`components`*（`IndexTree`）：shape 各维分量。`zN` / `nZ` / `zZ` /
+- *`components`*（`IndexTree`）：shape 各维分量。`zN` / `nZ` /
   `L0Clayout` / `zNUnAlign` 的物理布局用嵌套 tuple。必填。
 
 约束说明：
@@ -70,7 +70,7 @@ tla.make_shape(*components: IndexTree) -> TlaShape
 - 须在 `@tla.kernel` 装饰的 kernel 函数体内调用。
 - 至少提供 1 个 shape 分量。
 - RowMajor / ColumnMajor：用二维 shape `(M, N)`。
-- `zN` / `nZ` / `zZ` / `L0Clayout` / `zNUnAlign`：在 `make_layout` /
+- `zN` / `nZ` / `L0Clayout` / `zNUnAlign`：在 `make_layout` /
   `make_tensor` 中要用嵌套物理 shape `((m0, m1), (n0, n1))`。
   只写二维 `(M, N)` **不合法**；请改成嵌套，或优先用
   `make_tensor_like(..., layoutTag=zN)`（由逻辑二维 `origin_shape` 自动换算）。
@@ -143,9 +143,9 @@ tla.make_stride(*components: IndexTree) -> TlaStride
   | --- | --- | --- |
   | RowMajor 二维 `(M, N)` | `(N, 1)` | 行方向每次跨 `N` 个元素；列方向跨 1 |
   | ColumnMajor 二维 `(M, N)` | `(1, M)` | 行方向跨 1；列方向每次跨 `M` 个元素 |
-  | `zN` / `nZ` / `zZ` / … | 嵌套 `((s00, s01), (s10, s11))` | 与物理 `shape` 同结构；数值须匹配对应 layout |
+  | `zN` / `nZ` / … | 嵌套 `((s00, s01), (s10, s11))` | 与物理 `shape` 同结构；数值须匹配对应 layout |
 
-  对 `zN` / `nZ` / `zZ` / `L0Clayout` / `zNUnAlign`：一块 C0 是 32 字节，
+  对 `zN` / `nZ` / `L0Clayout` / `zNUnAlign`：一块 C0 是 32 字节，
   M 方向分块大小是 16。记
   `每块C0元素数 = 32 // sizeof(dtype)`（f16→16，f32→8），
   `每分块元素数 = 每块C0元素数 * 16`。
@@ -154,7 +154,7 @@ tla.make_stride(*components: IndexTree) -> TlaStride
 
 - 须在 `@tla.kernel` 装饰的 kernel 函数体内调用。
 - 至少提供 1 个 stride 分量。
-- 对 `zN` / `nZ` / `zZ` / `L0Clayout` / `zNUnAlign`，stride 数值须匹配
+- 对 `zN` / `nZ` / `L0Clayout` / `zNUnAlign`，stride 数值须匹配
   layout（见示例）；`make_tensor` 会按 `shape` + `layoutTag` 检查。
 
 调用示例：
@@ -198,7 +198,7 @@ tla.make_layout(shape: _Shape, stride: _Stride, *, origin_shape: _Shape | None =
 
 - `shape`（`_Shape`）：布局 shape，由 `tla.make_shape` 构造。必填。
   RowMajor / ColumnMajor：二维 `(M, N)`。
-  `zN` / `nZ` / `zZ` / `L0Clayout` / `zNUnAlign`：嵌套 `((m0, m1), (n0, n1))`。
+  `zN` / `nZ` / `L0Clayout` / `zNUnAlign`：嵌套 `((m0, m1), (n0, n1))`。
 - `stride`（`_Stride`）：布局 stride，由 `tla.make_stride` 构造。必填。
   嵌套形态须与 `shape` 一致。
 - `origin_shape`（`_Shape | None`）：逻辑工作尺寸（对齐前的真实数据大小）。
@@ -211,9 +211,9 @@ tla.make_layout(shape: _Shape, stride: _Stride, *, origin_shape: _Shape | None =
 - 须在 `@tla.kernel` 装饰的 kernel 函数体内调用。
 - `shape` / `stride` 须为 `make_shape` / `make_stride` 的返回值。
 - RowMajor / ColumnMajor 省略 `origin_shape` 时推断为 `shape`；
-  `zN` / `nZ` / `zZ` / `L0Clayout` / `zNUnAlign` 则从
+  `zN` / `nZ` / `L0Clayout` / `zNUnAlign` 则从
   `shape=((m0,m1),(n0,n1))` 推断为 `(m0*m1, n0*n1)`。
-- **不要**给 `zN` / `nZ` / `zZ` / `L0Clayout` / `zNUnAlign` 配普通二维
+- **不要**给 `zN` / `nZ` / `L0Clayout` / `zNUnAlign` 配普通二维
   `shape`，检查会失败。请写嵌套物理 shape，或用
   `make_tensor_like(ptr, like, layoutTag=...)` 由 `like.origin_shape` 自动换算。
 
@@ -300,8 +300,8 @@ tla.make_tensor(ptr: Pointer, layout: TlaLayout, coord: CoordLike | None = None)
 - 须在 `@tla.kernel` 装饰的 kernel 函数体内调用。
 - 指针、layout、coord 须匹配目标地址空间与 dtype。
 - `coord` 缺省为零坐标，秩与 layout 一致（秩 2 → `make_coord(0, 0)`，秩 1 → `make_coord(0)`）。元素类型与地址空间来自 `ptr` 的 `!tla.ptr`；layout tag、shape、stride、origin 来自 `!tla.layout` 操作数（未给 `origin_shape` 时 origin 默认为 `shape`）。
-- Lowering 支持 RowMajor、ColumnMajor、zN、nZ、zZ、L0Clayout、zNUnAlign。
-  对 `zN` / `nZ` / `zZ` / `L0Clayout` / `zNUnAlign`，物理 `shape` / `stride`
+- Lowering 支持 RowMajor、ColumnMajor、zN、nZ、L0Clayout、zNUnAlign。
+  对 `zN` / `nZ` / `L0Clayout` / `zNUnAlign`，物理 `shape` / `stride`
   为嵌套 2×2，逻辑 coord / `origin_shape` 仍是二维 `(M, N)`。若 `make_layout`
   省略 `origin_shape`，则从物理 shape 推断逻辑尺寸（例如 `(m0*m1, n0*n1)`）。
 - 完整编译要求 `ptr` 具备底层存储；可运行 kernel 中片上指针的推荐形式是 `allocate`（可选再经 `recast_ptr`）。
@@ -1971,8 +1971,8 @@ tla.arch
 参数说明：
 
 - 布局标签（`_LayoutTag`，供 `make_layout` / `make_tensor` /
-  `make_tensor_like` 使用）：`RowMajor`、`ColumnMajor`、`zN`、`nZ`、`zZ`、
-  `nN`、`L0Clayout`、`zNUnAlign`。
+  `make_tensor_like` 使用）：`RowMajor`、`ColumnMajor`、`zN`、`nZ`、
+  `L0Clayout`、`zNUnAlign`。
 - Pipe 标识（供 `flag` / `pipe_barrier` / `mutex_*` / 跨核同步使用）：
   `SCALAR`、`VECTOR`、`CUBE`、`MTE1`、`MTE2`、`MTE3`、`FIX`。
 - Memory-scope token（供 `local_mem_bar` 等相关接口使用）：`L1`、`L0A`、`L0B`、`L0C`、`UB`。

@@ -62,7 +62,7 @@ def from_dlpack(
 | 参数 | 说明 |
 |------|------|
 | `tensor_dlpack` | 实现 `__dlpack__` 的对象；须为 **Ascend/NPU 设备**上的缓冲区，CPU / NumPy 不可用 |
-| `layout_tag` | **必填**。`tla.arch` 布局标签：一维 `RowMajor`；二维线性 `RowMajor` / `ColumnMajor`；以及 `zN` / `nZ` / `zZ` / `L0Clayout` / `zNUnAlign`（逻辑二维，shape/stride 为嵌套四元组） |
+| `layout_tag` | **必填**。`tla.arch` 布局标签：一维 `RowMajor`；二维线性 `RowMajor` / `ColumnMajor`；以及 `zN` / `nZ` / `L0Clayout` / `zNUnAlign`（逻辑二维，shape/stride 为嵌套四元组） |
 | `origin_shape` | 可选。逻辑 origin，普通 `tuple`（如 `(M, K)`）。省略时由框架张量的 shape 与 `layout_tag` 推导 |
 | `assumed_align` | **预留参数**。当前传入值不影响实际行为 |
 | `stream` | 传给框架的 `__dlpack__(stream=...)`，只影响转换时框架侧是否做流同步；默认 `-1` 表示不做同步 |

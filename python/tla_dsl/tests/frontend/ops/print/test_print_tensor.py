@@ -48,7 +48,6 @@ def _host_packed_tensor(layout: object) -> tla.Tensor:
     packed = {
         "zN": (((16, 2), (8, 4)), ((8, 128), (1, 256))),
         "nZ": (((8, 4), (16, 2)), ((1, 256), (8, 128))),
-        "zZ": (((16, 2), (8, 4)), ((8, 512), (1, 128))),
         "L0Clayout": (((16, 2), (16, 2)), ((16, 256), (1, 512))),
         "zNUnAlign": (((32, 1), (8, 4)), ((8, 256), (1, 256))),
     }[str(layout)]
@@ -341,7 +340,6 @@ def test_print_tensor_defers_ub_offset_alignment_to_runtime() -> None:
     (
         tla.arch.zN,
         tla.arch.nZ,
-        tla.arch.zZ,
         tla.arch.L0Clayout,
         tla.arch.zNUnAlign,
     ),

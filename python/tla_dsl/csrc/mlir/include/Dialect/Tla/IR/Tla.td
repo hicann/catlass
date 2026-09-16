@@ -128,32 +128,30 @@ def Tla_LayoutTag_RowMajor : I32EnumAttrCase<"RowMajor", 1>;
 def Tla_LayoutTag_ColumnMajor : I32EnumAttrCase<"ColumnMajor", 2>;
 def Tla_LayoutTag_zN : I32EnumAttrCase<"zN", 3>;
 def Tla_LayoutTag_nZ : I32EnumAttrCase<"nZ", 4>;
-def Tla_LayoutTag_zZ : I32EnumAttrCase<"zZ", 5>;
-def Tla_LayoutTag_L0CLayout : I32EnumAttrCase<"L0Clayout", 6>;
-def Tla_LayoutTag_zNUnAlign : I32EnumAttrCase<"zNUnAlign", 7>;
-// MX shared-exponent scale block. Same nesting as zZ, but its C0 is fixed at 2
-// elements / 32 bytes per fractal by the e8m0 scale format rather than derived
-// from the element width, so it cannot reuse zZ.
-def Tla_LayoutTag_zZMxScale : I32EnumAttrCase<"zZMxScale", 8>;
+def Tla_LayoutTag_L0CLayout : I32EnumAttrCase<"L0Clayout", 5>;
+def Tla_LayoutTag_zNUnAlign : I32EnumAttrCase<"zNUnAlign", 6>;
+// MX shared-exponent scale block. Same fractal nesting as the "zZ"
+// tag, but its C0 is fixed at 2 elements / 32 bytes per fractal by the e8m0
+// scale format rather than derived from the element width.
+def Tla_LayoutTag_zZMxScale : I32EnumAttrCase<"zZMxScale", 7>;
 // The B-side MX scale block uses the transposed nN nesting.
-def Tla_LayoutTag_nNMxScale : I32EnumAttrCase<"nNMxScale", 9>;
+def Tla_LayoutTag_nNMxScale : I32EnumAttrCase<"nNMxScale", 8>;
 // GM-side MX scale blocks, named by side (A / B) and orientation. These say how
 // the scales sit in *global* memory, which the L1 tags above cannot: a
 // pre-swizzled buffer and a natural one are both u8 and otherwise
 // indistinguishable, and they select different copies. The four match Catlass's
 // isMxScaleFor{Row,Column}Major{A,B} predicates one-to-one; scaleA reaches L1 as
-// zZ and scaleB as nN either way.
-def Tla_LayoutTag_RowMajorMxScaleA : I32EnumAttrCase<"RowMajorMxScaleA", 10>;
-def Tla_LayoutTag_ColMajorMxScaleA : I32EnumAttrCase<"ColMajorMxScaleA", 11>;
-def Tla_LayoutTag_RowMajorMxScaleB : I32EnumAttrCase<"RowMajorMxScaleB", 12>;
-def Tla_LayoutTag_ColMajorMxScaleB : I32EnumAttrCase<"ColMajorMxScaleB", 13>;
+// zZMxScale and scaleB as nNMxScale either way.
+def Tla_LayoutTag_RowMajorMxScaleA : I32EnumAttrCase<"RowMajorMxScaleA", 9>;
+def Tla_LayoutTag_ColMajorMxScaleA : I32EnumAttrCase<"ColMajorMxScaleA", 10>;
+def Tla_LayoutTag_RowMajorMxScaleB : I32EnumAttrCase<"RowMajorMxScaleB", 11>;
+def Tla_LayoutTag_ColMajorMxScaleB : I32EnumAttrCase<"ColMajorMxScaleB", 12>;
 def Tla_LayoutTagEnum : Tla_I32Enum<"LayoutTag", "Tensor layout tag for tla.tensor types.", [
   Tla_LayoutTag_Unknown,
   Tla_LayoutTag_RowMajor,
   Tla_LayoutTag_ColumnMajor,
   Tla_LayoutTag_zN,
   Tla_LayoutTag_nZ,
-  Tla_LayoutTag_zZ,
   Tla_LayoutTag_L0CLayout,
   Tla_LayoutTag_zNUnAlign,
   Tla_LayoutTag_zZMxScale,
@@ -164,7 +162,7 @@ def Tla_LayoutTagEnum : Tla_I32Enum<"LayoutTag", "Tensor layout tag for tla.tens
   Tla_LayoutTag_ColMajorMxScaleB]>;
 def Tla_LayoutTagAttr : Tla_I32EnumAttr<"layout_tag", Tla_LayoutTagEnum> {
   let description = [{
-    tla layout_tag RowMajor,ColumnMajor,zN,nZ,zZ,L0Clayout,zNUnAlign for generic data types,
+    tla layout_tag RowMajor,ColumnMajor,zN,nZ,L0Clayout,zNUnAlign for generic data types,
     and zZMxScale,nNMxScale,RowMajorMxScaleA,ColMajorMxScaleA,RowMajorMxScaleB,ColMajorMxScaleB for mxfp4/mxfp8 scale.
   }];
 }

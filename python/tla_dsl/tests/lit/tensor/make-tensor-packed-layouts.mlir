@@ -25,14 +25,6 @@ module {
       (!tla.ptr<f16, l1, 512>, !tla.layout<!tla.shape<(16,2),(16,2)>, !tla.stride<(1,512),(16,256)>, !tla.shape<32,32>, nZ>, !tla.coord<0,0>) ->
       !tla.tensor<!tla.layout<!tla.shape<(16,2),(16,2)>, !tla.stride<(1,512),(16,256)>, !tla.shape<32,32>, nZ>, !tla.coord<0,0>, !tla.ptr<f16, l1, 512>>
 
-    %zz_stride = "tla.make_stride"() : () -> !tla.stride<(16,512),(1,256)>
-    %zz_layout = "tla.make_layout"(%shape, %zz_stride, %origin) {layoutTag = #tla.layout_tag<zZ>} :
-      (!tla.shape<(16,2),(16,2)>, !tla.stride<(16,512),(1,256)>, !tla.shape<32,32>) ->
-      !tla.layout<!tla.shape<(16,2),(16,2)>, !tla.stride<(16,512),(1,256)>, !tla.shape<32,32>, zZ>
-    %zz = "tla.make_tensor"(%ptr, %zz_layout, %coord) :
-      (!tla.ptr<f16, l1, 512>, !tla.layout<!tla.shape<(16,2),(16,2)>, !tla.stride<(16,512),(1,256)>, !tla.shape<32,32>, zZ>, !tla.coord<0,0>) ->
-      !tla.tensor<!tla.layout<!tla.shape<(16,2),(16,2)>, !tla.stride<(16,512),(1,256)>, !tla.shape<32,32>, zZ>, !tla.coord<0,0>, !tla.ptr<f16, l1, 512>>
-
     %l0c_layout = "tla.make_layout"(%shape, %zn_stride, %origin) {layoutTag = #tla.layout_tag<L0Clayout>} :
       (!tla.shape<(16,2),(16,2)>, !tla.stride<(16,256),(1,512)>, !tla.shape<32,32>) ->
       !tla.layout<!tla.shape<(16,2),(16,2)>, !tla.stride<(16,256),(1,512)>, !tla.shape<32,32>, L0Clayout>

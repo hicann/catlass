@@ -59,11 +59,6 @@ def make_tensor_all_layouts_kernel() -> None:
         tla.make_stride((1, 512), (16, 256)),
         layoutTag=tla.arch.nZ,
     )
-    zz = tla.make_layout(
-        tla.make_shape((16, 2), (16, 2)),
-        tla.make_stride((16, 512), (1, 256)),
-        layoutTag=tla.arch.zZ,
-    )
     l0c = tla.make_layout(
         tla.make_shape((16, 2), (16, 2)),
         tla.make_stride((16, 256), (1, 512)),
@@ -79,7 +74,6 @@ def make_tensor_all_layouts_kernel() -> None:
     _ = tla.make_tensor(ptr, column)
     _ = tla.make_tensor(ptr, zn)
     _ = tla.make_tensor(ptr, nz)
-    _ = tla.make_tensor(ptr, zz)
     _ = tla.make_tensor(ptr, l0c)
     _ = tla.make_tensor(ptr, zn_unalign)
 
@@ -128,8 +122,8 @@ def test_make_tensor_rank1_default_coord_is_single_zero() -> None:
 
 def test_make_tensor_accepts_every_registered_layout() -> None:
     mlir = make_tensor_all_layouts_kernel.dump_mlir()
-    assert mlir.count("tla.make_tensor ") == 7
-    assert mlir.count("!tla.coord<0,0>") >= 7
+    assert mlir.count("tla.make_tensor ") == 6
+    assert mlir.count("!tla.coord<0,0>") >= 6
     assert (
         "!tla.layout<!tla.shape<(16,2),(16,2)>, "
         "!tla.stride<(16,256),(1,512)>, !tla.shape<32,32>, zN>"
@@ -137,10 +131,6 @@ def test_make_tensor_accepts_every_registered_layout() -> None:
     assert (
         "!tla.layout<!tla.shape<(16,2),(16,2)>, "
         "!tla.stride<(1,512),(16,256)>, !tla.shape<32,32>, nZ>"
-    ) in mlir
-    assert (
-        "!tla.layout<!tla.shape<(16,2),(16,2)>, "
-        "!tla.stride<(16,512),(1,256)>, !tla.shape<32,32>, zZ>"
     ) in mlir
     assert "L0Clayout" in mlir
     assert "zNUnAlign" in mlir

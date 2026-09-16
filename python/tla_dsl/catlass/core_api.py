@@ -122,7 +122,7 @@ _MAKE_TENSOR_SUPPORTED_ELEMENT_TYPES = frozenset(
 )
 
 
-# An MX shared-exponent scale block nests exactly like zZ, but its C0 is fixed by
+# An MX shared-exponent scale block nests exactly like the zZ layout, but its C0 is fixed by
 # the e8m0 scale format (2 elements per C0, 32 bytes per fractal) instead of being
 # derived from the element width. Everything else about the layout is identical.
 _MX_SCALE_ELE_NUM_PER_C0 = 2
@@ -1655,7 +1655,6 @@ _NZ_FAMILY_LAYOUT_TOKENS = frozenset(
     {
         "zN",
         "nZ",
-        "zZ",
         "L0Clayout",
         "zNUnAlign",
         "zZMxScale",
@@ -1878,17 +1877,12 @@ def _validate_static_make_tensor_layout(
                 (stride01, _MX_SCALE_ELE_NUM_PER_C0),
                 (stride10, 0),
             )
-        elif layout_tag in ("zZ", "zZMxScale"):
-            c0 = ele_num_per_c0
-            fractal = ele_num_per_fractal
-            if layout_tag == "zZMxScale":
-                c0 = _MX_SCALE_ELE_NUM_PER_C0
-                fractal = _MX_SCALE_ELE_NUM_PER_FRACTAL
+        elif layout_tag == "zZMxScale":
             checks = (
                 (shape00, _CATLASS_C0_NUM_PER_FRACTAL),
-                (shape10, c0),
+                (shape10, _MX_SCALE_ELE_NUM_PER_C0),
                 (stride10, 1),
-                (stride11, fractal),
+                (stride11, _MX_SCALE_ELE_NUM_PER_FRACTAL),
             )
         elif layout_tag == "L0Clayout":
             checks = (
@@ -2108,10 +2102,9 @@ def _materialize_layout_trees_from_origin(
             coord,
             origin_shape,
         )
-    if layout in ("zZ", "zZMxScale"):
-        if layout == "zZMxScale":
-            ele_num_per_c0 = _MX_SCALE_ELE_NUM_PER_C0
-            ele_num_per_fractal = _MX_SCALE_ELE_NUM_PER_FRACTAL
+    if layout == "zZMxScale":
+        ele_num_per_c0 = _MX_SCALE_ELE_NUM_PER_C0
+        ele_num_per_fractal = _MX_SCALE_ELE_NUM_PER_FRACTAL
         cols_ru = _round_up_expr(cols, ele_num_per_c0)
         return (
             (
@@ -2315,10 +2308,9 @@ def _remap_tensor_like_prefix_fields_for_layout_trees(
             flat_shape,
             flat_stride,
         )
-    if layout_tag in ("zZ", "zZMxScale"):
-        if layout_tag == "zZMxScale":
-            ele_num_per_c0 = _MX_SCALE_ELE_NUM_PER_C0
-            ele_num_per_fractal = _MX_SCALE_ELE_NUM_PER_FRACTAL
+    if layout_tag == "zZMxScale":
+        ele_num_per_c0 = _MX_SCALE_ELE_NUM_PER_C0
+        ele_num_per_fractal = _MX_SCALE_ELE_NUM_PER_FRACTAL
         cols_round_up = None if cols is None else _round_up(cols, ele_num_per_c0)
         ceil_div_rows = None if rows is None else _ceil_div(rows, c0_num_per_fractal)
         ceil_div_cols = None if cols is None else _ceil_div(cols, ele_num_per_c0)
@@ -3563,7 +3555,6 @@ def _emit_tensor_print(
         in (
             "zN",
             "nZ",
-            "zZ",
             "L0Clayout",
             "zNUnAlign",
             "zZMxScale",
@@ -3885,14 +3876,14 @@ def make_shape(
 
         Parameters:
         - *`components`* (`IndexTree`): Shape components per dimension. Nested
-          tuples are used for `zN` / `nZ` / `zZ` / `L0Clayout` / `zNUnAlign`
+          tuples are used for `zN` / `nZ` / `L0Clayout` / `zNUnAlign`
           physical layouts. Required.
 
         Constraints:
         - Must be called inside a `@tla.kernel`-decorated kernel function.
         - Provide at least one shape component.
         - RowMajor / ColumnMajor: use a 2D shape `(M, N)`.
-        - `zN` / `nZ` / `zZ` / `L0Clayout` / `zNUnAlign`: for `make_layout` /
+        - `zN` / `nZ` / `L0Clayout` / `zNUnAlign`: for `make_layout` /
           `make_tensor`, use a nested physical shape `((m0, m1), (n0, n1))`.
           A plain 2D `(M, N)` is **not** valid for those tags; either nest it, or
           prefer `make_tensor_like(..., layoutTag=zN)` which remaps from the
@@ -3963,9 +3954,9 @@ def make_stride(
           |---|---|---|
           | RowMajor 2D `(M, N)` | `(N, 1)` | Row step is `N` elements; column step is 1 |
           | ColumnMajor 2D `(M, N)` | `(1, M)` | Row step is 1; column step is `M` |
-          | `zN` / `nZ` / `zZ` / … | nested `((s00, s01), (s10, s11))` | Same nesting as physical `shape`; values must match the layout tag |
+          | `zN` / `nZ` / … | nested `((s00, s01), (s10, s11))` | Same nesting as physical `shape`; values must match the layout tag |
 
-          For `zN` / `nZ` / `zZ` / `L0Clayout` / `zNUnAlign`, C0 is 32 bytes and
+          For `zN` / `nZ` / `L0Clayout` / `zNUnAlign`, C0 is 32 bytes and
           the M-side block size is 16. Let
           `elems_per_c0 = 32 // sizeof(dtype)` (f16→16, f32→8) and
           `elems_per_block = elems_per_c0 * 16`.
@@ -3973,7 +3964,7 @@ def make_stride(
         Constraints:
         - Must be called inside a `@tla.kernel`-decorated kernel function.
         - Provide at least one stride component.
-        - For `zN` / `nZ` / `zZ` / `L0Clayout` / `zNUnAlign`, stride values must
+        - For `zN` / `nZ` / `L0Clayout` / `zNUnAlign`, stride values must
           match the layout tag (see examples); `make_tensor` checks them against
           `shape` + `layoutTag`.
 
@@ -4021,7 +4012,7 @@ def make_layout(
         Parameters:
         - `shape` (`_Shape`): Layout shape from `tla.make_shape`. Required.
           RowMajor / ColumnMajor: 2D `(M, N)`.
-          `zN` / `nZ` / `zZ` / `L0Clayout` / `zNUnAlign`: nested
+          `zN` / `nZ` / `L0Clayout` / `zNUnAlign`: nested
           `((m0, m1), (n0, n1))`.
         - `stride` (`_Stride`): Layout stride from `tla.make_stride`. Required.
           Use the same nesting as `shape`.
@@ -4035,9 +4026,9 @@ def make_layout(
         - Must be called inside a `@tla.kernel`-decorated kernel function.
         - `shape` / `stride` must be values returned by `make_shape` / `make_stride`.
         - For RowMajor / ColumnMajor, an omitted `origin_shape` is inferred as
-          `shape`. For `zN` / `nZ` / `zZ` / `L0Clayout` / `zNUnAlign`, it is
+          `shape`. For `zN` / `nZ` / `L0Clayout` / `zNUnAlign`, it is
           inferred as `(m0*m1, n0*n1)` from `shape=((m0,m1),(n0,n1))`.
-        - Do **not** pass a plain 2D `shape` with a `zN` / `nZ` / `zZ` /
+        - Do **not** pass a plain 2D `shape` with a `zN` / `nZ` /
           `L0Clayout` / `zNUnAlign` tag; that fails checks. Either build the nested
           physical shape, or use `make_tensor_like(ptr, like, layoutTag=...)` so
           the front end remaps from `like.origin_shape`.
@@ -4126,7 +4117,6 @@ _MAKE_LAYOUT_WITH_TAG_TOKENS = frozenset(
         "ColumnMajor",
         "zN",
         "nZ",
-        "zZ",
         "zZMxScale",
         "nNMxScale",
         "L0Clayout",
@@ -4386,7 +4376,7 @@ def get_tile(
         - `coord` offsets must stay within the source's `origin_shape` -- the
           crop only trims the extent, it does not clamp the offsets.
         - Supported layout tags follow `tla.make_tensor` (RowMajor, ColumnMajor,
-          zN, nZ, zZ, L0Clayout, zNUnAlign).
+          zN, nZ, L0Clayout, zNUnAlign).
 
         Example:
         ```python
@@ -4527,8 +4517,8 @@ def make_tensor(
           `make_coord(0, 0)`, rank-1 -> `make_coord(0)`). Element type and address
           space come from `ptr`'s `!tla.ptr`; layout tag, shape, stride, and origin
           come from the `!tla.layout` operand (origin defaults to `shape`).
-        - Lowering supports RowMajor, ColumnMajor, zN, nZ, zZ, L0Clayout, and
-          zNUnAlign. For `zN` / `nZ` / `zZ` / `L0Clayout` / `zNUnAlign`, physical
+        - Lowering supports RowMajor, ColumnMajor, zN, nZ, L0Clayout, and
+          zNUnAlign. For `zN` / `nZ` / `L0Clayout` / `zNUnAlign`, physical
           `shape` / `stride` are nested 2x2, while logical coord / `origin_shape`
           stay 2D `(M, N)`. If `make_layout` omitted `origin_shape`, the logical
           size is inferred from the physical shape (for example `(m0*m1, n0*n1)`).
@@ -5224,7 +5214,7 @@ def copy(
 
     # A scale operand turns this into the MX L1 -> L0A/L0B load. Only that route
     # can carry one, and the scale's storage and tag must match the destination
-    # side: A-side scales are zZ, B-side nN.
+    # side: A-side scale is zZMxScale, B-side nNMxScale.
     if scale is not None:
         _require_category("copy", "scale", scale, "tensor", 2)
         scale_value = _as_value(scale)
@@ -8636,7 +8626,7 @@ on-chip memory-scope tokens, and block / SIMT helpers.
 
 Parameters:
 - Layout tags (`_LayoutTag`, used by `make_layout` / `make_tensor` /
-  `make_tensor_like`): `RowMajor`, `ColumnMajor`, `zN`, `nZ`, `zZ`, `nN`,
+  `make_tensor_like`): `RowMajor`, `ColumnMajor`, `zN`, `nZ`,
   `L0Clayout`, `zNUnAlign`.
 - Pipe identifiers (used by `flag` / `pipe_barrier` / `mutex_*` /
   cross-core sync): `SCALAR`, `VECTOR`, `CUBE`, `MTE1`, `MTE2`, `MTE3`, `FIX`.
@@ -8704,14 +8694,12 @@ arch._set("MTE3", _runtime.pipes.MTE3)
 arch._set("FIX", _runtime.pipes.FIX)
 arch._set("zN", _LayoutTag("zN"))
 arch._set("nZ", _LayoutTag("nZ"))
-arch._set("zZ", _LayoutTag("zZ"))
 arch._set("zZMxScale", _LayoutTag("zZMxScale"))
 arch._set("nNMxScale", _LayoutTag("nNMxScale"))
 arch._set("RowMajorMxScaleA", _LayoutTag("RowMajorMxScaleA"))
 arch._set("ColMajorMxScaleA", _LayoutTag("ColMajorMxScaleA"))
 arch._set("RowMajorMxScaleB", _LayoutTag("RowMajorMxScaleB"))
 arch._set("ColMajorMxScaleB", _LayoutTag("ColMajorMxScaleB"))
-arch._set("nN", _LayoutTag("nN"))
 arch._set("RowMajor", _LayoutTag("RowMajor"))
 arch._set("ColumnMajor", _LayoutTag("ColumnMajor"))
 arch._set("L0Clayout", _LayoutTag("L0Clayout"))

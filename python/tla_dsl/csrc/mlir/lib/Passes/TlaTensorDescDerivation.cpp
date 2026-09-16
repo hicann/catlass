@@ -573,7 +573,7 @@ mlir::LogicalResult TensorDescriptorDerivation::derive(mlir::func::FuncOp funcOp
             auto materializeNZFamilyShapeDynamicLeafFromOrigin = [&](ArrayRef<int64_t> leaves,
                                                                      size_t idx) -> FailureOr<Value> {
                 // NZFamily layout shape trees flatten as (m0,m1),(n0,n1).
-                // For zN/nZ/zZ/L0C dynamic logical extents live in m1 / n1:
+                // For zN/nZ/L0C dynamic logical extents live in m1 / n1:
                 //   m1 <- ceil_div(origin0, m0), n1 <- ceil_div(origin1, n0).
                 // m0 / n0 are layout constants (tile fractal factors), not runtime-varying.
                 if (!isNZFamilyLayout(childInfo->layoutTag)) {
@@ -646,11 +646,10 @@ mlir::LogicalResult TensorDescriptorDerivation::derive(mlir::func::FuncOp funcOp
                     idx == 3) {
                     return mulShapeLeaves(/*a=*/1, /*b=*/0, /*c=*/2);
                 }
-                // nZ/zZ: stride[1] = ceil_div_cols * c0 * ele_num_per_c0 = shape[3]*shape[2]*shape[0]
+                // nZ/zZMxScale: stride[1] = ceil_div_cols * c0 * ele_num_per_c0 = shape[3]*shape[2]*shape[0]
                 // zZMxScale nests exactly like zZ (only its constants differ: the MX scale C0 is
                 // fixed at 2 by the e8m0 format), so the same product derives its dynamic leaf.
-                if ((childInfo->layoutTag == LayoutTag::nZ || childInfo->layoutTag == LayoutTag::zZ ||
-                     childInfo->layoutTag == LayoutTag::zZMxScale) &&
+                if ((childInfo->layoutTag == LayoutTag::nZ || childInfo->layoutTag == LayoutTag::zZMxScale) &&
                     idx == 1) {
                     return mulShapeLeaves(/*a=*/3, /*b=*/2, /*c=*/0);
                 }

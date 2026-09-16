@@ -79,7 +79,6 @@ def test_make_layout_with_tag_all_tags() -> None:
             tla.arch.ColumnMajor,
             tla.arch.zN,
             tla.arch.nZ,
-            tla.arch.zZ,
             tla.arch.L0Clayout,
             tla.arch.zNUnAlign,
         ):
@@ -90,7 +89,6 @@ def test_make_layout_with_tag_all_tags() -> None:
     assert "ColumnMajor" in mlir
     assert ", zN>" in mlir
     assert ", nZ>" in mlir
-    assert ", zZ>" in mlir
     assert "L0Clayout" in mlir
     assert "zNUnAlign" in mlir
 

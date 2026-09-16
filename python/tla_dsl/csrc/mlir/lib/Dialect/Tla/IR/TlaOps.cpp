@@ -431,7 +431,7 @@ mlir::LogicalResult CopyMxOp::verify()
     auto scaleElem = scaleTy.getPtr().getPointee();
     if (!::llvm::isa<::tla::Float8E8M0Type>(scaleElem))
         return emitOpError("MX scale tile must be f8e8m0");
-    // A-side scales feed L0A and must be zZ; B-side feed L0B and must be nN.
+    // A-side scales feed L0A and must be zZMxScale; B-side feed L0B and must be nNMxScale.
     LayoutTag expected = dst == AddressSpace::l0a ? LayoutTag::zZMxScale : LayoutTag::nNMxScale;
     if (scaleTy.getLayout().getLayoutTag() != expected)
         return emitOpError("MX scale tile for an ")

@@ -266,7 +266,6 @@ def _kernel_make_tensor_like_supported_layout_tags(mem: tla.Tensor) -> None:
     _ = tla.make_tensor_like(l1_ptr, root, tla.arch.ColumnMajor)
     _ = tla.make_tensor_like(l1_ptr, root, tla.arch.zN)
     _ = tla.make_tensor_like(l1_ptr, root, tla.arch.nZ)
-    _ = tla.make_tensor_like(l1_ptr, root, tla.arch.zZ)
     _ = tla.make_tensor_like(l1_ptr, root, tla.arch.L0Clayout)
     # IR output:
     # module {
@@ -281,7 +280,6 @@ def _kernel_make_tensor_like_supported_layout_tags(mem: tla.Tensor) -> None:
     #     %6 = "tla.make_tensor_like"(%4, %3) {layoutTag = #tla.layout_tag<ColumnMajor>} : (!tla.ptr<f16, l1, 512>, !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<128,1>, !tla.shape<32,32>, RowMajor>, !tla.coord<32,64>, !tla.ptr<f16, gm, 2>>) -> !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<1,32>, !tla.shape<32,32>, ColumnMajor>, !tla.coord<0,0>, !tla.ptr<f16, l1, 512>>
     #     %7 = "tla.make_tensor_like"(%4, %3) {layoutTag = #tla.layout_tag<zN>} : (!tla.ptr<f16, l1, 512>, !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<128,1>, !tla.shape<32,32>, RowMajor>, !tla.coord<32,64>, !tla.ptr<f16, gm, 2>>) -> !tla.tensor<!tla.layout<!tla.shape<(16,2),(16,2)>, !tla.stride<(16,256),(1,512)>, !tla.shape<32,32>, zN>, !tla.coord<0,0>, !tla.ptr<f16, l1, 512>>
     #     %8 = "tla.make_tensor_like"(%4, %3) {layoutTag = #tla.layout_tag<nZ>} : (!tla.ptr<f16, l1, 512>, !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<128,1>, !tla.shape<32,32>, RowMajor>, !tla.coord<32,64>, !tla.ptr<f16, gm, 2>>) -> !tla.tensor<!tla.layout<!tla.shape<(16,2),(16,2)>, !tla.stride<(1,512),(16,256)>, !tla.shape<32,32>, nZ>, !tla.coord<0,0>, !tla.ptr<f16, l1, 512>>
-    #     %9 = "tla.make_tensor_like"(%4, %3) {layoutTag = #tla.layout_tag<zZ>} : (!tla.ptr<f16, l1, 512>, !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<128,1>, !tla.shape<32,32>, RowMajor>, !tla.coord<32,64>, !tla.ptr<f16, gm, 2>>) -> !tla.tensor<!tla.layout<!tla.shape<(16,2),(16,2)>, !tla.stride<(16,512),(1,256)>, !tla.shape<32,32>, zZ>, !tla.coord<0,0>, !tla.ptr<f16, l1, 512>>
     #     %10 = "tla.make_tensor_like"(%4, %3) {layoutTag = #tla.layout_tag<L0Clayout>} : (!tla.ptr<f16, l1, 512>, !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<128,1>, !tla.shape<32,32>, RowMajor>, !tla.coord<32,64>, !tla.ptr<f16, gm, 2>>) -> !tla.tensor<!tla.layout<!tla.shape<(16,2),(16,2)>, !tla.stride<(16,256),(1,512)>, !tla.shape<32,32>, L0Clayout>, !tla.coord<0,0>, !tla.ptr<f16, l1, 512>>
     #     "tla.return"() : () -> ()
     #   }) {function_type = (!tla.tensor<!tla.layout<!tla.shape<128,128>, !tla.stride<128,1>, !tla.shape<128,128>, RowMajor>, !tla.coord<0,0>, !tla.ptr<f16, gm, 2>>) -> (), sym_name = "_kernel_make_tensor_like_supported_layout_tags"} : () -> ()
@@ -300,12 +298,11 @@ def test_interface_make_tensor_like_supported_layout_tags(compiler_tlair) -> Non
     mlir = compiler_tlair(
         _kernel_make_tensor_like_supported_layout_tags, type_args=(root,)
     )
-    assert mlir.count('"tla.make_tensor_like"') == 6
+    assert mlir.count('"tla.make_tensor_like"') == 5
     assert 'layoutTag = #tla.layout_tag<RowMajor>' in mlir
     assert 'layoutTag = #tla.layout_tag<ColumnMajor>' in mlir
     assert 'layoutTag = #tla.layout_tag<zN>' in mlir
     assert 'layoutTag = #tla.layout_tag<nZ>' in mlir
-    assert 'layoutTag = #tla.layout_tag<zZ>' in mlir
     assert 'layoutTag = #tla.layout_tag<L0Clayout>' in mlir
     assert (
         "<!tla.layout<!tla.shape<32,32>, !tla.stride<128,1>, !tla.shape<32,32>, RowMajor>, !tla.coord<32,64>, !tla.ptr<f16, gm, 2>>"
@@ -325,10 +322,6 @@ def test_interface_make_tensor_like_supported_layout_tags(compiler_tlair) -> Non
     )
     assert (
         "<!tla.layout<!tla.shape<(16,2),(16,2)>, !tla.stride<(1,512),(16,256)>, !tla.shape<32,32>, nZ>, !tla.coord<0,0>, !tla.ptr<f16, l1, 512>>"
-        in mlir
-    )
-    assert (
-        "<!tla.layout<!tla.shape<(16,2),(16,2)>, !tla.stride<(16,512),(1,256)>, !tla.shape<32,32>, zZ>, !tla.coord<0,0>, !tla.ptr<f16, l1, 512>>"
         in mlir
     )
     assert (

@@ -732,8 +732,8 @@ std::string getCopyRouteCallee(
     auto isScaleElem = [](Type elem) { return ::llvm::isa<::tla::Float8E8M0Type>(elem) || elem.isSignlessInteger(8); };
 
     // MX scale GM -> L1, with the fractal reorder done by the copy. The source
-    // tag says how the block sits in GM; A-side scales land on L1 as zZ and
-    // B-side as nN whichever orientation they came in.
+    // tag says how the block sits in GM; A-side scales land on L1 as zZMxScale and
+    // B-side as nNMxScale whichever orientation they came in.
     if (*srcSpace == hivm::AddressSpace::GM && *dstSpace == hivm::AddressSpace::L1 && isScaleElem(srcElementType) &&
         isScaleElem(dstElem)) {
         StringRef src, dst;

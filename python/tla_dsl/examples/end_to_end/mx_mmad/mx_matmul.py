@@ -18,7 +18,7 @@ functions over one shared scale packing.
 
 Scale blocks go over as the plain (M, ceil(K/32)) and (ceil(K/32), N) matrices,
 padded to an even group count. The GM->L1
-DMA does the zZ / nN fractal reorder, steered by the GM-side layout tag, so the
+DMA does the zZMxScale / nNMxScale fractal reorder, steered by the GM-side layout tag, so the
 host never pre-swizzles them.
 """
 
@@ -528,7 +528,7 @@ def run(args: argparse.Namespace) -> int:
     # Quantise the whole operand at once. An MX scale group is 32 elements along
     # K and never straddles a K tile, so this is identical to quantising per tile
     # and concatenating -- which is what this used to do, back when the host also
-    # pre-swizzled each tile's scale block into zZ / nN. The DMA does that
+    # pre-swizzled each tile's scale block into zZMxScale / nNMxScale. The DMA does that
     # reorder now, so the blocks go over as the plain (M, K/32) and (K/32, N)
     # matrices and there is nothing left for the host to chunk.
     if is_fp4:

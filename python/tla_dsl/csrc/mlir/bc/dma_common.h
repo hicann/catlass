@@ -30,15 +30,14 @@ enum class LayoutTag : uint32_t
     ColumnMajor = 2,
     zN = 3,
     nZ = 4,
-    zZ = 5,
-    L0Clayout = 6,
-    zNUnAlign = 7,
-    zZMxScale = 8,
-    nNMxScale = 9,
-    RowMajorMxScaleA = 10,
-    ColMajorMxScaleA = 11,
-    RowMajorMxScaleB = 12,
-    ColMajorMxScaleB = 13,
+    L0Clayout = 5,
+    zNUnAlign = 6,
+    zZMxScale = 7,
+    nNMxScale = 8,
+    RowMajorMxScaleA = 9,
+    ColMajorMxScaleA = 10,
+    RowMajorMxScaleB = 11,
+    ColMajorMxScaleB = 12,
 };
 
 /// Unified 4D (12-field) tensor descriptor. Linear layouts (RowMajor/

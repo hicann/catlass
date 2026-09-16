@@ -246,14 +246,11 @@ def test_split_m_dynamic_RowMajor_stride_uses_child_n_extent(tmp_path) -> None:
     )
 
 
-# Keep this list aligned with the MLIR LayoutTag enum. tla.arch.nN is exported
-# by Python but is not currently supported by TLA tensor types or descriptors.
 _MAKE_TENSOR_LIKE_LAYOUT_CASES = (
     ("RowMajor", tla.arch.RowMajor),
     ("ColumnMajor", tla.arch.ColumnMajor),
     ("zN", tla.arch.zN),
     ("nZ", tla.arch.nZ),
-    ("zZ", tla.arch.zZ),
     ("L0Clayout", tla.arch.L0Clayout),
     ("zNUnAlign", tla.arch.zNUnAlign),
 )
@@ -450,7 +447,7 @@ def test_make_tensor_like_supports_every_layout_pair(
             result.stderr, extent=shape[0], stride=stride[1]
         )
     else:
-        assert child_name in {"zN", "nZ", "zZ", "L0Clayout", "zNUnAlign"}
+        assert child_name in {"zN", "nZ", "L0Clayout", "zNUnAlign"}
 
 
 @tla.kernel

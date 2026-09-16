@@ -85,8 +85,8 @@ CATLASS_DEVICE void copyL0CToUB(
 // switches to the mx_* variant, which is what makes the later mad take the
 // mad_mx path.
 // The e8m0 scale block reaches L1 as a flat byte copy: the host emits it already
-// in device (zZ / nN) order, so no reordering is needed on the way in. Only the
-// L1 -> L0 hop below needs the real MX layouts.
+// in device order (zZMxScale for A, nNMxScale for B), so no reordering is needed
+// on the way in. Only the L1 -> L0 hop below needs the real MX layouts.
 //
 // The copy must honour the tile coordinate and the tile's own extent. Reading
 // from the base of the buffer for originShape bytes is only correct for a

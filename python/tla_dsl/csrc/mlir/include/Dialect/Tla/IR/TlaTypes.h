@@ -29,9 +29,9 @@ inline bool isMxScaleGmLayout(::LayoutTag layoutTag)
 /// four physical leaves in tensor descriptors.
 inline bool isNZFamilyLayout(::LayoutTag layoutTag)
 {
-    return layoutTag == ::LayoutTag::zN || layoutTag == ::LayoutTag::nZ || layoutTag == ::LayoutTag::zZ ||
-           layoutTag == ::LayoutTag::L0Clayout || layoutTag == ::LayoutTag::zNUnAlign ||
-           layoutTag == ::LayoutTag::zZMxScale || layoutTag == ::LayoutTag::nNMxScale || isMxScaleGmLayout(layoutTag);
+    return layoutTag == ::LayoutTag::zN || layoutTag == ::LayoutTag::nZ || layoutTag == ::LayoutTag::L0Clayout ||
+           layoutTag == ::LayoutTag::zNUnAlign || layoutTag == ::LayoutTag::zZMxScale ||
+           layoutTag == ::LayoutTag::nNMxScale || isMxScaleGmLayout(layoutTag);
 }
 
 inline int64_t getByteSizeOfFixedWidthScalarType(::mlir::Type type)
