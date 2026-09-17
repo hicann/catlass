@@ -198,6 +198,22 @@ def docstring_sections(doc: str) -> dict[str, str]:
     return sections
 
 
+def docstring_tail(doc: str) -> str:
+    """Return the markdown an op appends after its last fenced code block.
+
+    `_modify_doc_mmad` / `_modify_doc_copy`, which the reference generator runs
+    through `__modify_doc__`, append tables at the end of the docstring -- after
+    the Example block. They are standalone markdown, so they are rendered
+    outside the example with their own indentation dropped.
+    """
+    text = dedent(doc)
+    end = text.rfind("```")
+    if end == -1:
+        return ""
+    lines = [line.strip() for line in text[end + 3 :].splitlines()]
+    return "\n".join(lines).strip()
+
+
 def require_docs(entries: dict[str, APIEntry]) -> None:
     problems: list[str] = []
     for name in sorted(entries):
@@ -417,10 +433,12 @@ def render_entry(
             sections["Example"],
             "```",
             "",
-            "---",
-            "",
         ]
     )
+    tail = docstring_tail(entry.docstring)
+    if tail:
+        parts.extend([tail, ""])
+    parts.extend(["---", ""])
     return "\n".join(parts)
 
 

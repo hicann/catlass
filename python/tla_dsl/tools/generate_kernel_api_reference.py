@@ -1,15 +1,21 @@
 #!/usr/bin/env python3
-"""Generate TLA DSL Kernel API reference docs from ``core_api.py`` (AST only).
+"""Generate TLA DSL Kernel API reference docs from ``core_api.py``.
 
-API docstrings carry ``Directory:`` plus Description / Parameters / Constraints /
-Example. Section order and blurbs live in ``DIRECTORY_SECTIONS`` below.
+Signatures, parameters and the `Directory:` path come from the source AST. The
+docstrings come from the imported module instead, because an op can append to
+its own docstring at import time (`mmad` / `mmad_mx` add the table of dtypes they
+accept), which the source text does not show. Importing needs the MLIR python
+bindings on the path.
+Section order and blurbs live in ``DIRECTORY_SECTIONS`` below.
 Writes English Markdown to ``docs/en/api/kernel_api_reference.md``.
 """
 
 from __future__ import annotations
 
 import ast
+import sys
 from pathlib import Path
+from types import ModuleType
 
 from common import (
     APIEntry,
@@ -25,6 +31,7 @@ from common import (
 
 
 CORE_API_PATH = PACKAGE_ROOT / "catlass" / "core_api.py"
+CORE_API_QUALNAME_PREFIX = "catlass.core_api."
 TENSOR_API_PATH = PACKAGE_ROOT / "catlass" / "tla" / "tensor.py"
 OUTPUT_PATH = PACKAGE_ROOT / "docs" / "en" / "api" / "kernel_api_reference.md"
 GENERATED_BY = "python/tla_dsl/tools/generate_kernel_api_reference.py"
@@ -236,6 +243,44 @@ def _collect_tensor_methods(path: Path) -> dict[str, APIEntry]:
     return entries
 
 
+def _import_core_api() -> ModuleType:
+    """Import the op module, which is where the ``__modify_doc__`` hooks live."""
+    if str(PACKAGE_ROOT) not in sys.path:
+        sys.path.insert(0, str(PACKAGE_ROOT))
+    try:
+        import catlass.core_api as core_api
+    except ImportError as exc:
+        raise RuntimeError(
+            "generating the reference needs `catlass.core_api` importable (the "
+            f"MLIR python bindings on PYTHONPATH): {exc}"
+        ) from exc
+    return core_api
+
+
+def _apply_doc_hooks(entries: dict[str, APIEntry]) -> None:
+    """Let ops that declare one extend their own docstring for the reference.
+
+    ``copy`` / ``mmad`` / ``mmad_mx`` carry a ``__modify_doc__`` hook that
+    appends the routes or dtypes they accept. Importing does not run it -- the
+    runtime docstring stays as written -- so the reference asks for it here. A
+    hook edits ``fn.__doc__`` in place, so the original is put back afterwards:
+    a second pass must not stack the same table twice.
+    """
+    module = _import_core_api()
+    for entry in entries.values():
+        if not entry.qualified_name.startswith(CORE_API_QUALNAME_PREFIX):
+            continue
+        attr = entry.qualified_name[len(CORE_API_QUALNAME_PREFIX) :]
+        op = getattr(module, attr, None)
+        hook = getattr(op, "__modify_doc__", None)
+        if hook is None:
+            continue
+        original = op.__doc__
+        hook(op)
+        entry.docstring = op.__doc__ or ""
+        op.__doc__ = original
+
+
 def parse_core_api(path: Path) -> dict[str, APIEntry]:
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     exported = parse_all_names(tree)
@@ -244,6 +289,7 @@ def parse_core_api(path: Path) -> dict[str, APIEntry]:
     entries.update(_collect_unary_aliases(tree, exported, _unary_op_template(tree)))
     entries.update(_collect_arch_namespace(tree, exported))
     entries.update(_collect_tensor_methods(TENSOR_API_PATH))
+    _apply_doc_hooks(entries)
     return entries
 
 

@@ -2398,94 +2398,6 @@ def _remap_tensor_like_trees_for_layout(
     )
 
 
-# Shared by every matmul the frontend emits. There is one contract because there
-# is one entry point: tla.mmad. Which cube instruction it becomes is settled in
-# tla-cube-region from operand provenance, not here.
-def _validate_mmad_contract(
-    acc: mlir_ir.Value,
-    lhs: mlir_ir.Value,
-    rhs: mlir_ir.Value,
-) -> None:
-    acc_desc = _tla_tensor_type_for_mlir_value(acc)
-    lhs_desc = _tla_tensor_type_for_mlir_value(lhs)
-    rhs_desc = _tla_tensor_type_for_mlir_value(rhs)
-
-    addrspaces = (
-        acc_desc.addrspace,
-        lhs_desc.addrspace,
-        rhs_desc.addrspace,
-    )
-    if addrspaces != ("l0c", "l0a", "l0b"):
-        raise TlaLoweringError(
-            "unsupported tla.mmad tile addrspaces; expected acc/lhs/rhs in l0c/l0a/l0b"
-        )
-
-    element_types = (
-        lhs_desc.element_type,
-        rhs_desc.element_type,
-        acc_desc.element_type,
-    )
-    # Packed fp4 is recognised by its element type, which states both the 4-bit
-    # width and the encoding. It uses the ordinary zN / nZ layouts like
-    # everything else, and the two operands need not share an encoding -- the
-    # cube has a mad_mx for every pairing.
-    is_fp4 = bool({element_types[0], element_types[1]} & _FP4_FORMATS)
-    if is_fp4:
-        if (
-            element_types[0] not in _FP4_FORMATS
-            or element_types[1] not in _FP4_FORMATS
-            or element_types[2] != "f32"
-        ):
-            raise TlaLoweringError(
-                "unsupported packed fp4 tla.mmad operands; expected any "
-                "f4e2m1/f4e1m2 pair -> f32"
-            )
-    elif element_types not in {
-        ("f16", "f16", "f32"),
-        ("bf16", "bf16", "f32"),
-        ("f32", "f32", "f32"),
-        # Integer route: the L0C accumulator is i32, not fp32.
-        ("i8", "i8", "i32"),
-        # fp8 accumulates into fp32. The two formats mix freely, so all four
-        # operand combinations are valid. This one table covers both the plain
-        # and the microscaling matmul: an MX fp8 L0 tile is indistinguishable
-        # from a plain one here, since MX-ness is a property of the load that
-        # wrote the tile. tla-cube-region reads that provenance and picks
-        # tla.mmad vs tla.mmad_mx.
-        ("f8e4m3fn", "f8e4m3fn", "f32"),
-        ("f8e5m2", "f8e5m2", "f32"),
-        ("f8e4m3fn", "f8e5m2", "f32"),
-        ("f8e5m2", "f8e4m3fn", "f32"),
-    }:
-        raise TlaLoweringError(
-            "unsupported tla.mmad element types; expected f16,f16 -> f32, bf16,bf16 -> f32, "
-            "f32,f32 -> f32, any f8e4m3fn/f8e5m2 pair -> f32 (fp32 L0C accumulator), "
-            "or i8,i8 -> i32 (i32 L0C accumulator)"
-        )
-
-    lhs_m, lhs_k = _flat_dim_pair_from_tree(lhs_desc.origin_shape)
-    rhs_k, rhs_n = _flat_dim_pair_from_tree(rhs_desc.origin_shape)
-    acc_m, acc_n = _flat_dim_pair_from_tree(acc_desc.origin_shape)
-    if None not in (lhs_m, lhs_k, rhs_k, rhs_n, acc_m, acc_n) and (
-        lhs_k != rhs_k or lhs_m != acc_m or rhs_n != acc_n
-    ):
-        raise TlaLoweringError(
-            "unsupported tla.mmad tile shape contract; expected lhs(MxK), rhs(KxN), acc(MxN)"
-        )
-
-    expected_layouts = (
-        (acc, "L0Clayout"),
-        (lhs, "zN"),
-        (rhs, "nZ"),
-    )
-    for operand, expected in expected_layouts:
-        layout = _tla_tensor_type_for_mlir_value(operand).layout_tag
-        if layout != expected:
-            raise TlaLoweringError(
-                "unsupported tla.mmad operand layout; expected acc L0Clayout, lhs zN, rhs nZ"
-            )
-
-
 def _flat_pair_sum_type_tree(a: Any, b: Any) -> tuple[int | None, int | None] | None:
     a_pair = _flat_dim_pair_from_tree(a)
     b_pair = _flat_dim_pair_from_tree(b)
@@ -4874,9 +4786,215 @@ _COPY_CUBE_ROUTES = {
     ("l0c", "gm"),
     ("l0c", "l1"),
     ("l0c", "ub"),
-    # L1 -> UB has no supported frontend copy route.
+    ("l1", "ub"),
 }
 _COPY_VECTOR_ROUTES = {("gm", "ub"), ("ub", "gm"), ("ub", "l1")}
+
+# fmt: off
+# Cube copy
+_SUPPORTED_CUBE_COPY_ROUTES = {
+    # (src_addr, src_layout, dst_addr, dst_layout) : dtypes
+    # GM->L1
+    ("gm", "RowMajor", "l1", "zN"): ("f32", "f16", "bf16", "i8", "f8e4m3fn", "f8e5m2", "f4e2m1", "f4e1m2"),
+    ("gm", "ColumnMajor", "l1", "nZ"): ("f32", "f16", "bf16", "i8", "f8e4m3fn", "f8e5m2", "f4e2m1", "f4e1m2"),
+    ("gm", "RowMajorMxScaleA", "l1", "zZMxScale"): ("f8e8m0",),
+    ("gm", "ColMajorMxScaleA", "l1", "zZMxScale"): ("f8e8m0",),
+    ("gm", "RowMajorMxScaleB", "l1", "nNMxScale"): ("f8e8m0",),
+    ("gm", "ColMajorMxScaleB", "l1", "nNMxScale"): ("f8e8m0",),
+    # L1->L0
+    ("l1", "zN", "l0a", "zN"): ("f32", "f16", "bf16", "i8", "f8e4m3fn", "f8e5m2"),
+    ("l1", "nZ", "l0a", "zN"): ("f32", "f16", "bf16", "i8", "f8e4m3fn", "f8e5m2"),
+    ("l1", "zN", "l0b", "nZ"): ("f32", "f16", "bf16", "i8", "f8e4m3fn", "f8e5m2"),
+    ("l1", "nZ", "l0b", "nZ"): ("f32", "f16", "bf16", "i8", "f8e4m3fn", "f8e5m2"),
+}
+
+# Cube copy that carries a scale
+_SUPPORTED_CUBE_MXFP_WITH_SCALE_COPY_ROUTES = {
+    # (src_addr, src_layout, dst_addr, dst_layout, scale_addr, scale_layout) : dtypes
+    ("l1", "zN", "l0a", "zN", "l1", "zZMxScale"): ("f8e4m3fn", "f8e5m2", "f4e2m1", "f4e1m2"),
+    ("l1", "nZ", "l0a", "zN", "l1", "zZMxScale"): ("f8e4m3fn", "f8e5m2", "f4e2m1", "f4e1m2"),
+    ("l1", "zN", "l0b", "nZ", "l1", "nNMxScale"): ("f8e4m3fn", "f8e5m2", "f4e2m1", "f4e1m2"),
+    ("l1", "nZ", "l0b", "nZ", "l1", "nNMxScale"): ("f8e4m3fn", "f8e5m2", "f4e2m1", "f4e1m2"),
+}
+
+# Vector copy
+_SUPPORTED_VECTOR_COPY_ROUTES = {
+    # (src_addr, src_layout, dst_addr, dst_layout) : dtypes
+    ("gm", "RowMajor", "ub", "RowMajor"): ("f32", "f16", "bf16", "i32", "i16", "i8"),
+    ("ub", "RowMajor", "gm", "RowMajor"): ("f32", "f16", "bf16", "i32", "i16", "i8"),
+    ("ub", "RowMajor", "l1", "zN"): ("f32", "f16", "bf16"),
+    ("ub", "zN", "l1", "zN"): ("f32", "f16", "bf16"),
+    ("ub", "zNUnAlign", "l1", "zN"): ("f32", "f16", "bf16"),
+}
+
+# Cube Copy Fixpipe
+_SUPPORTED_CUBE_FIXPIPE_ROUTES = {
+    # (dst_addr, dst_layout, split_mode, quant_mode, relu) : {src_dtype: dst_dtypes}
+    ("gm", "RowMajor", "-", "NO_QUANT", False): {"f32": ("f32", "f16", "bf16"), "i32": ("i32",)},
+    ("l1", "zN",  "-", "NO_QUANT", False): {"f32": ("f32", "f16", "bf16"), "i32": ("i32",)},
+
+    ("ub", "RowMajor", "nosplit", "NO_QUANT", False): {"f32": ("f32", "f16", "bf16"), "i32": ("i32",)},
+    ("ub", "RowMajor", "split", "NO_QUANT", False): {"f32": ("f32",), "i32": ("i32",)},
+    ("ub", "ColumnMajor", "nosplit", "NO_QUANT", False): {"f32": ("f32", "f16", "bf16"), "i32": ("i32",)},
+}
+# fmt: on
+
+
+def _validate_supported_copy(
+    src_addr,
+    src_layout,
+    dst_addr,
+    dst_layout,
+    dtype,
+    scale_addr=None,
+    scale_layout=None,
+) -> bool:
+    if scale_addr is not None or scale_layout is not None:
+        key = (src_addr, src_layout, dst_addr, dst_layout, scale_addr, scale_layout)
+        table = _SUPPORTED_CUBE_MXFP_WITH_SCALE_COPY_ROUTES
+        if key in table:
+            return dtype in table[key]
+    else:
+        key = (src_addr, src_layout, dst_addr, dst_layout)
+        if key in _SUPPORTED_CUBE_COPY_ROUTES:
+            return dtype in _SUPPORTED_CUBE_COPY_ROUTES[key]
+        elif key in _SUPPORTED_VECTOR_COPY_ROUTES:
+            return dtype in _SUPPORTED_VECTOR_COPY_ROUTES[key]
+    return False
+
+
+def _validate_supported_fixpipe(
+    src_addr,
+    src_layout,
+    dst_addr,
+    dst_layout,
+    src_dtype,
+    dst_dtype,
+    params: CopyL0C2DstParams,
+) -> bool:
+    if src_addr != "l0c" or src_layout != "L0Clayout":
+        _op_error("copy", f"L0C layout_tag must be L0Clayout, got {src_layout}")
+    if src_dtype not in ("f32", "i32"):
+        _op_error("copy", f"l0c dtype only support [f32, i32], got {src_dtype}")
+    if not isinstance(params, CopyL0C2DstParams):
+        _op_error(
+            "copy",
+            f"operand `params` expects to be a CopyL0C2DstParams when route is [{src_addr, dst_addr}]",
+        )
+    if dst_addr != "ub" and params.l0c2ub_mode != L0C2UBMode.NO_SPLIT_VEC_0:
+        _op_error("copy", "fixpipe to gm/l1 split_mode should be `NO_SPLIT_VEC_0`")
+
+    if dst_addr == "ub":
+        is_split = params.l0c2ub_mode in (L0C2UBMode.SPLIT_M, L0C2UBMode.SPLIT_N)
+        split_mode = "split" if is_split else "nosplit"
+    else:
+        split_mode = "-"
+
+    key = (
+        dst_addr,
+        dst_layout,
+        split_mode,
+        str(params.quant_mode),
+        params.relu_enable,
+    )
+    if key in _SUPPORTED_CUBE_FIXPIPE_ROUTES:
+        if src_dtype in _SUPPORTED_CUBE_FIXPIPE_ROUTES[key]:
+            return dst_dtype in _SUPPORTED_CUBE_FIXPIPE_ROUTES[key][src_dtype]
+    return False
+
+
+def _modify_doc_copy(fn: Callable[..., Any]) -> None:
+    """Append the supported copy route table to copy doc."""
+
+    def _stringify_types(types):
+        return ",".join([f"`{t}`" for t in types])
+
+    cube_list = [
+        "\n",
+        "Supported cube copy routes without scale, `tla.copy(dst, src, scale=None)`\n",
+        "|`src_addr`|`src_layout`|`dst_addr`|`dst_layout`|`dtypes`|",
+        "|----------|------------|----------|------------|--------|",
+    ]
+    for (
+        src_addr,
+        src_layout,
+        dst_addr,
+        dst_layout,
+    ), dtypes in _SUPPORTED_CUBE_COPY_ROUTES.items():
+        cube_list.append(
+            f"|`{src_addr}`|`{src_layout}`|`{dst_addr}`|`{dst_layout}`|{_stringify_types(dtypes)}|"
+        )
+
+    cube_scale_list = [
+        "\n",
+        "Supported cube copy routes carrying a scale (tla.mmad_mx),",
+        "i.e. `tla.copy(dst=l0a|l0b, src=l1, scale=scale)`, the scale only support `f8e8m0`.",
+        "and the scale `l1->l0` don't support transpose.\n",
+        "|`src_addr`|`src_layout`|`dst_addr`|`dst_layout`|`scale_addr`|`scale_layout`|`dtypes`|",
+        "|----------|------------|----------|------------|------------|--------------|--------|",
+    ]
+    for (
+        src_addr,
+        src_layout,
+        dst_addr,
+        dst_layout,
+        scale_addr,
+        scale_layout,
+    ), dtypes in _SUPPORTED_CUBE_MXFP_WITH_SCALE_COPY_ROUTES.items():
+        cube_scale_list.append(
+            f"|`{src_addr}`|`{src_layout}`|`{dst_addr}`|`{dst_layout}`|`{scale_addr}`|`{scale_layout}`|{_stringify_types(dtypes)}|"
+        )
+
+    def _stringify_type_map(type_map):
+        items = [
+            f"`{src_dtype}`: {_stringify_types(dst_dtypes)}"
+            for src_dtype, dst_dtypes in type_map.items()
+        ]
+        return "<br>".join(items)
+
+    cube_fixpipe_list = [
+        "\n",
+        "Supported cube fixpipe routes, copy from l0c->gm/l1/ub.",
+        "The fixpipe support on-the-fly quant and relu, quant mode support `NO_QUANT`, `PER_TENSOR`, `PER_CHANNEL`.",
+        "The fixpipe has these rules:",
+        "- the fixpipe chain is (l0c acc) -> quant(optional) -> relu(optional) -> copy out to dst.",
+        "- `NO_QUANT` mode includes pure data cast, `f32`->`f16`, `f32`->`bf16`",
+        "- If the dst is ub, there's an extra `split_mode`, support nosplit(`NO_SPLIT_VEC_0`, `NO_SPLIT_VEC_1`), and split(`SPLIT_M`, `SPLIT_N`)",
+        "- If dst is (ub, ColumnMajor), only support `nosplit` mode",
+        "- In to ub is `split` mode, any quant_mode/relu is disabled, neither pure cast, so only `f32`->`f32` and `i32`->`i32` is enabled\n",
+        "|`dst`|`dst_layout`|`split_mode`|`quant_mode`|`relu`|`src_dtype`:`dst_dtype`|",
+        "|-----|------------|------------|------------|------|-----------------------|",
+    ]
+    for (
+        dst_addr,
+        dst_layout,
+        split_mode,
+        quant_mode,
+        relu_enable,
+    ), dtype_map in _SUPPORTED_CUBE_FIXPIPE_ROUTES.items():
+        cube_fixpipe_list.append(
+            f"|`{dst_addr}`|`{dst_layout}`|`{split_mode}`|`{quant_mode}`|`{relu_enable}`"
+            f"|{_stringify_type_map(dtype_map)}|"
+        )
+
+    vec_list = [
+        "\n",
+        "Supported vector copy routes\n",
+        "|`src_addr`|`src_layout`|`dst_addr`|`dst_layout`|`dtypes`|",
+        "|----------|------------|----------|------------|--------|",
+    ]
+    for (
+        src_addr,
+        src_layout,
+        dst_addr,
+        dst_layout,
+    ), dtypes in _SUPPORTED_VECTOR_COPY_ROUTES.items():
+        vec_list.append(
+            f"|`{src_addr}`|`{src_layout}`|`{dst_addr}`|`{dst_layout}`|{_stringify_types(dtypes)}|"
+        )
+    fn.__doc__ += "\n".join(
+        [*cube_list, *cube_scale_list, *cube_fixpipe_list, *vec_list]
+    )
 
 
 # tla.fill (Tensor.fill) element rules: only the packed fp4/fp8 cube operand
@@ -5072,7 +5190,7 @@ def copy(
     elif _route in _COPY_VECTOR_ROUTES:
         _runtime._require_enclosing_region("copy", "vector")
     else:
-        raise TlaLoweringError(f"unsupported copy route {_route}")
+        _op_error("copy", f"Hardware unsupported copy route {_route}")
 
     # Read dtype/addrspace from MLIR descriptors; runtime argument proxies do
     # not expose Python .dtype / .addrspace attributes.
@@ -5086,100 +5204,67 @@ def copy(
     dst_layout = dst_desc.layout_tag
 
     if _route[0] == "l0c":
-        if src_layout != "L0Clayout":
-            raise TlaLoweringError(
-                f"L0C layout_tag only support L0Clayout, got {src_layout}"
-            )
-        if src_dtype not in ("f32", "i32"):
-            raise NotImplementedError(
-                f"currently l0c dtype only support [f32, i32], got {src_dtype}"
-            )
-        # Integer route: an i32 accumulator (the i8,i8 -> i32 mmad) has no
-        # narrowing path on fixpipe and must land as i32.
-        if src_dtype == "i32" and dst_dtype != "i32":
-            raise TlaLoweringError(
-                f"i32 fixpipe dst dtype only support [i32], got {dst_dtype}"
-            )
-        if src_dtype == "f32" and dst_dtype not in ("f32", "f16", "bf16"):
-            raise TlaLoweringError(
-                f"f32 fixpipe dst dtype only support [f32, f16, bf16], got {dst_dtype}"
-            )
-        if _route[1] == "gm" and dst_layout != "RowMajor":
-            raise NotImplementedError(
-                f"currently copy l0c to gm only support dst RowMajor, got {dst_layout}"
-            )
-        if _route[1] == "ub" and dst_layout not in ("RowMajor", "ColumnMajor"):
-            raise NotImplementedError(
-                "currently copy l0c to ub only support dst [RowMajor, ColumnMajor],"
-                f" got {dst_layout}"
-            )
-        if _route[1] == "l1" and dst_layout not in ("zN",):
-            raise TlaLoweringError(f"l0c2l1 dst layout shoud be zN, got {dst_layout}")
-
         if params is None:
             params = CopyL0C2DstParams()  # use default
-        if isinstance(params, CopyL0C2DstParams):
-            params._validate()
-            if params.quant_mode != QuantMode.NO_QUANT:
-                raise NotImplementedError(
-                    f"currently unsupported quant mode {params.quant_mode}"
-                )
-            if params.relu_enable:
-                raise NotImplementedError(
-                    f"currently unsupported relu_enable {params.relu_enable}"
-                )
-            if (
-                (_route[1] == "ub")
-                and (not same_dtype)
-                and (params.l0c2ub_mode in (L0C2UBMode.SPLIT_M, L0C2UBMode.SPLIT_N))
-            ):
-                raise TlaLoweringError(
-                    "When copy l0c to ub with split mode, src and dst dtype must be same , "
-                    f"got {src_dtype} {dst_dtype}"
-                )
-            if (
-                (_route[1] == "ub")
-                and (dst_layout == "ColumnMajor")
-                and (
-                    params.l0c2ub_mode
-                    not in (L0C2UBMode.NO_SPLIT_VEC_0, L0C2UBMode.NO_SPLIT_VEC_1)
-                )
-            ):
-                raise TlaLoweringError(
-                    f"When copy l0c to ub and dst layout_tag is ColumnMajor, only support `NO_SPLIT` mode,"
-                    f"got {params.l0c2ub_mode}"
-                )
+        params._validate()
+        fixpipe_route = (
+            _route[0],
+            src_layout,
+            _route[1],
+            dst_layout,
+            src_dtype,
+            dst_dtype,
+            params,
+        )
+        if not _validate_supported_fixpipe(*fixpipe_route):
+            _op_error(
+                "copy",
+                "unsupported fixpipe route "
+                f"{_route[0]},{src_layout} -> {_route[1]},{dst_layout} "
+                f"{src_dtype}, params={params}",
+            )
 
-            ctx = loc.context if loc is not None else mlir_ir.Context.current
-            quant_mode_attr = mlir_ir.Attribute.parse(
-                f"#tla.quant_mode<{params.quant_mode}>", context=ctx
-            )
-            l0c2ub_mode_attr = mlir_ir.Attribute.parse(
-                f"#tla.l0c2ub_mode<{params.l0c2ub_mode}>", context=ctx
-            )
-            quant_scale_or_tensor = None
-            if params.quant_mode == QuantMode.PER_TENSOR:
-                quant_scale_or_tensor = _const_f32(params.quant_scale)
-            elif params.quant_mode == QuantMode.PER_CHANNEL:
-                quant_scale_or_tensor = _as_value(params.quant_tensor)
-            params_value = _tla_ops_gen.CopyL0C2DstParams(
-                _tla_type_bridge.copy_l0c2dst_params_type_get(ctx),
-                params.unit_flag,
-                params.relu_enable,
-                quant_mode_attr,
-                l0c2ub_mode_attr,
-                quant_scale_or_tensor=quant_scale_or_tensor,
-            )
-        else:
-            raise TlaLoweringError(
-                f"tla.copy operand `params` expects to be a CopyL0C2DstParams when route is {_route}"
-            )
+        ctx = loc.context if loc is not None else mlir_ir.Context.current
+        quant_mode_attr = mlir_ir.Attribute.parse(
+            f"#tla.quant_mode<{params.quant_mode}>", context=ctx
+        )
+        l0c2ub_mode_attr = mlir_ir.Attribute.parse(
+            f"#tla.l0c2ub_mode<{params.l0c2ub_mode}>", context=ctx
+        )
+        quant_scale_or_tensor = None
+        if params.quant_mode == QuantMode.PER_TENSOR:
+            quant_scale_or_tensor = _const_f32(params.quant_scale)
+        elif params.quant_mode == QuantMode.PER_CHANNEL:
+            quant_scale_or_tensor = _as_value(params.quant_tensor)
+        params_value = _tla_ops_gen.CopyL0C2DstParams(
+            _tla_type_bridge.copy_l0c2dst_params_type_get(ctx),
+            params.unit_flag,
+            params.relu_enable,
+            quant_mode_attr,
+            l0c2ub_mode_attr,
+            quant_scale_or_tensor=quant_scale_or_tensor,
+        )
     else:
         if not same_dtype:
-            raise TlaLoweringError(
-                f"When copy {_route[0]} to {_route[1]}, dtype must be same, "
-                f"got {src_dtype} and {dst_dtype}"
+            _op_error(
+                "copy",
+                "Except the fixpipe pipe, other copy src and dst dtype "
+                f"must be same, got {src_dtype} and {dst_dtype}",
             )
+        if scale is None:
+            copy_route = (_route[0], src_layout, _route[1], dst_layout, src_dtype)
+            # fp4 l1->l0a/l0b will be checked in the `if scale is not None` bellow
+            if _route[1] in ("l0a", "l0b") and src_dtype in _FP4_FORMATS:
+                _op_error(
+                    "copy",
+                    "packed fp4 to l0a/l0b must carry scale, tla.copy(l0, l1, scale=...)",
+                )
+            elif not _validate_supported_copy(*copy_route):
+                _op_error(
+                    "copy",
+                    "unsupported copy route "
+                    f"{_route[0]},{src_layout} -> {_route[1]},{dst_layout} {src_dtype}",
+                )
         params_value = None
 
     # Check if atomic mode enabled and acquire lowered atomic_mode_attr
@@ -5219,43 +5304,36 @@ def copy(
         _require_category("copy", "scale", scale, "tensor", 2)
         scale_value = _as_value(scale)
         scale_desc = _tla_tensor_type_for_mlir_value(scale_value)
-        src_desc = _tla_tensor_type_for_mlir_value(src_value)
-        dst_desc = _tla_tensor_type_for_mlir_value(dst_value)
 
-        if src_desc.addrspace != "l1":
-            _op_error("copy", "an MX scale is only valid on an l1 source")
-        if dst_desc.addrspace not in ("l0a", "l0b"):
-            _op_error("copy", "an MX scale is only valid on an l0a or l0b destination")
-        if scale_desc.addrspace != "l1":
-            _op_error("copy", "scale must be an l1 tile")
-        # A packed fp4 tile names its own format, width and encoding together.
-        is_fp4 = src_desc.element_type in _FP4_FORMATS
-        if is_fp4:
-            expected_dst_tag = "zN" if dst_desc.addrspace == "l0a" else "nZ"
-            if dst_desc.layout.layout_tag != expected_dst_tag:
-                _op_error(
-                    "copy",
-                    f"an fp4 {dst_desc.addrspace} tile must be tagged {expected_dst_tag}",
-                )
-        elif src_desc.element_type not in ("f8e4m3fn", "f8e5m2"):
+        # The MX table pins the address spaces, the layouts and the data dtype
+        # (packed fp4 only appears there), and `same_dtype` above already holds
+        # both sides to one element type. What is left is the scale: an L1 tile
+        # whose tag matches the destination side -- A-side scales are zZ,
+        # B-side nN.
+        if not _validate_supported_copy(
+            src_desc.addrspace,
+            src_desc.layout_tag,
+            dst_desc.addrspace,
+            dst_desc.layout_tag,
+            src_desc.element_type,
+            scale_desc.addrspace,
+            scale_desc.layout_tag,
+        ):
             _op_error(
                 "copy",
-                f"unsupported MX element type {src_desc.element_type}; expected "
-                "f8e4m3fn, f8e5m2, f4e2m1, or f4e1m2",
+                "unsupported MX load "
+                f"{src_desc.addrspace}({src_desc.layout_tag}, "
+                f"{src_desc.element_type}) -> "
+                f"{dst_desc.addrspace}({dst_desc.layout_tag}) with scale "
+                f"{scale_desc.addrspace}({scale_desc.layout_tag}); expected an "
+                "l1 source of f8e4m3fn, f8e5m2, f4e2m1 or f4e1m2 laid out zN "
+                "or nZ, loaded into l0a(zN) or l0b(nZ), with the l1 scale "
+                "tile tagged zZMxScale for l0a or nNMxScale for l0b",
             )
         if src_desc.element_type != dst_desc.element_type:
             _op_error("copy", "src and dst element types must match")
         if scale_desc.element_type != "f8e8m0":
             _op_error("copy", "scale must be an f8e8m0 tile")
-        expected_scale_layout = (
-            "zZMxScale" if dst_desc.addrspace == "l0a" else "nNMxScale"
-        )
-        if scale_desc.layout.layout_tag != expected_scale_layout:
-            _op_error(
-                "copy",
-                f"scale for an {dst_desc.addrspace} destination must be tagged "
-                f"{expected_scale_layout}, got {scale_desc.layout.layout_tag}",
-            )
         # Remember that this L0 tile carries a scale block. Nothing in the tile's
         # type records it, so this is the only thing that can tell tla.mmad and
         # tla.mmad_mx apart later.
@@ -5271,6 +5349,9 @@ def copy(
         atomic_mode=atomic_mode_attr,
         **copy_attrs,
     )
+
+
+copy.__modify_doc__ = _modify_doc_copy
 
 
 @dsl_user_op
@@ -6044,6 +6125,116 @@ def _prepare_mmad_operands(
     )
 
 
+# A @ B -> C
+_SUPPORTED_MMAD = frozenset(
+    {
+        ("f32", "f32", "f32"),
+        ("f16", "f16", "f32"),
+        ("bf16", "bf16", "f32"),
+        ("f8e4m3fn", "f8e4m3fn", "f32"),
+        ("f8e5m2", "f8e5m2", "f32"),
+        ("f8e4m3fn", "f8e5m2", "f32"),
+        ("f8e5m2", "f8e4m3fn", "f32"),
+        ("i8", "i8", "i32"),
+    }
+)
+
+# (MxA, MxScaleA) @ (MxB, MxScaleB) -> C
+_SUPPORTED_MMAD_MX = frozenset(
+    {
+        ("f8e4m3fn", "f8e4m3fn", "f32"),
+        ("f8e5m2", "f8e5m2", "f32"),
+        ("f8e4m3fn", "f8e5m2", "f32"),
+        ("f8e5m2", "f8e4m3fn", "f32"),
+        ("f4e2m1", "f4e2m1", "f32"),
+        ("f4e1m2", "f4e1m2", "f32"),
+        ("f4e2m1", "f4e1m2", "f32"),
+        ("f4e1m2", "f4e2m1", "f32"),
+    }
+)
+
+
+def _validate_mmad_dtypes(lhs: str, rhs: str, acc: str, is_mx: bool) -> bool:
+    key = (lhs, rhs, acc)
+    if is_mx:
+        return key in _SUPPORTED_MMAD_MX
+    else:
+        return key in _SUPPORTED_MMAD
+
+
+def _modify_doc_mmad(fn: Callable[..., Any]) -> None:
+    table = _SUPPORTED_MMAD if fn.__name__ == "mmad" else _SUPPORTED_MMAD_MX
+    rows = "\n".join(
+        [f"| `{lhs}` | `{rhs}` | `{acc}` |" for lhs, rhs, acc in sorted(table)]
+    )
+    fn.__doc__ += (
+        f"Supported {fn.__name__} dtypes\n\n"
+        "| lhs | rhs | acc |\n"
+        "| --- | --- | --- |\n"
+        f"{rows}\n"
+    )
+
+
+_modify_doc_mmad_mx = _modify_doc_mmad
+
+
+# Shared by every matmul the frontend emits. There is one contract because there
+# is one entry point: tla.mmad. Which cube instruction it becomes is settled in
+# tla-cube-region from operand provenance, not here.
+def _validate_mmad_contract(
+    acc: mlir_ir.Value,
+    lhs: mlir_ir.Value,
+    rhs: mlir_ir.Value,
+    is_mx: bool,
+) -> None:
+    acc_desc = _tla_tensor_type_for_mlir_value(acc)
+    lhs_desc = _tla_tensor_type_for_mlir_value(lhs)
+    rhs_desc = _tla_tensor_type_for_mlir_value(rhs)
+
+    addrspaces = (
+        acc_desc.addrspace,
+        lhs_desc.addrspace,
+        rhs_desc.addrspace,
+    )
+    if addrspaces != ("l0c", "l0a", "l0b"):
+        raise TlaLoweringError(
+            "unsupported tla.mmad tile addrspaces; expected acc/lhs/rhs in l0c/l0a/l0b"
+        )
+
+    element_types = (
+        lhs_desc.element_type,
+        rhs_desc.element_type,
+        acc_desc.element_type,
+    )
+    if not _validate_mmad_dtypes(*element_types, is_mx=is_mx):
+        _op_name = is_mx and "mmad_mx" or "mmad"
+        raise TlaLoweringError(
+            f"unsupported tla.{_op_name} element types, got {element_types}"
+        )
+
+    lhs_m, lhs_k = _flat_dim_pair_from_tree(lhs_desc.origin_shape)
+    rhs_k, rhs_n = _flat_dim_pair_from_tree(rhs_desc.origin_shape)
+    acc_m, acc_n = _flat_dim_pair_from_tree(acc_desc.origin_shape)
+    if None not in (lhs_m, lhs_k, rhs_k, rhs_n, acc_m, acc_n) and (
+        lhs_k != rhs_k or lhs_m != acc_m or rhs_n != acc_n
+    ):
+        raise TlaLoweringError(
+            "unsupported tla.mmad tile shape contract; expected lhs(MxK), rhs(KxN), acc(MxN)"
+        )
+
+    expected_layouts = (
+        (acc, "L0Clayout"),
+        (lhs, "zN"),
+        (rhs, "nZ"),
+    )
+    for operand, expected in expected_layouts:
+        layout = _tla_tensor_type_for_mlir_value(operand).layout_tag
+        if layout != expected:
+            raise TlaLoweringError(
+                "unsupported tla.mmad operand layout; expected acc L0Clayout, lhs zN, rhs nZ"
+            )
+
+
 @dsl_user_op
 def mmad(
     acc: Tensor,
@@ -6075,8 +6266,10 @@ def mmad(
         Constraints:
         - Must be called inside a `@tla.kernel`-decorated kernel function.
         - Must be called inside `tla.cube()`; `acc`/`lhs`/`rhs` must be matching L0 tiles.
-        - Supported element-type routes include `f16`/`bf16`/`f32` pairs and any
-          `f8e4m3fn` / `f8e5m2` operand pairing, all accumulating into fp32 on L0C.
+        - Supported accumulating dtypes are fp32/i32, supported (`lhs`, `rhs`, `acc`) dtype
+          conbinations are as fllows.
+        - The `f8e4m3fn` and `f8e5m2` matmul both support non-MxScale matmul and MxScale matmul,
+          in the tla.mmad op scale is unsupported.
         - `init_c` accepts only a Python `bool` or an `i1` SSA value.
         - Unknown keyword arguments are not accepted; passing any raises an error.
 
@@ -6108,7 +6301,7 @@ def mmad(
     hf32_mode_attr = mlir_ir.Attribute.parse(
         f"#tla.hf32_mode<{str(hf32_mode)}>", context=ctx
     )
-    _validate_mmad_contract(acc_value, lhs_value, rhs_value)
+    _validate_mmad_contract(acc_value, lhs_value, rhs_value, is_mx=False)
     _tla_ops_gen.mmad(
         acc_value,
         lhs_value,
@@ -6194,6 +6387,8 @@ def mmad_mx(
         - Must be called inside `tla.cube()`; `acc`/`lhs`/`rhs` must be matching L0 tiles.
         - Operands must be an `f8e4m3fn`/`f8e5m2` pair or an `f4e2m1`/`f4e1m2`
           pair; either pair may mix its two formats, and the accumulator is fp32.
+        - The `f8e4m3fn` and `f8e5m2` matmul both support non-MxScale matmul and MxScale matmul,
+          in the tla.mmad_mx op scale is needed.
         - Both operands must have been loaded by `tla.copy(..., scale=...)`.
 
         Example:
@@ -6218,7 +6413,7 @@ def mmad_mx(
         "mmad_mx", acc, lhs, rhs, init_c, unit_flag, compute_order, loc, extra_kwargs
     )
     _check_mx_provenance("mmad_mx", lhs_value, rhs_value)
-    _validate_mmad_contract(acc_value, lhs_value, rhs_value)
+    _validate_mmad_contract(acc_value, lhs_value, rhs_value, is_mx=True)
     # hf32_mode is deliberately absent: it is an fp32 rounding mode, and MX
     # operands are fp8/fp4.
     # An fp4 operand states its encoding in its own element type, so there is
@@ -6233,6 +6428,10 @@ def mmad_mx(
         loc=loc,
         **mmad_kwargs,
     )
+
+
+mmad.__modify_doc__ = _modify_doc_mmad
+mmad_mx.__modify_doc__ = _modify_doc_mmad_mx
 
 
 @dsl_user_op

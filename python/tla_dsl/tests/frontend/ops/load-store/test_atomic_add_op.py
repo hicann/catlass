@@ -11,6 +11,7 @@ import catlass.tla as tla
 import catlass.runtime as runtime_mod
 
 from catlass.execution_lowering import TlaLoweringError
+from catlass.runtime import TlaCoreAPIError
 
 
 def _ub_tensor(
@@ -162,5 +163,5 @@ def test_atomic_add_gm2ub_rejected() -> None:
         gm2ub_atomic_false.dump_mlir(type_args=(_gm_tensor(), _ub_tensor()))
 
 def test_atomic_illega_f64_dtype() -> None:
-    with pytest.raises(TlaLoweringError):
+    with pytest.raises((TlaLoweringError, TlaCoreAPIError)):
         atomic_add_ub2gm.dump_mlir(type_args=(_ub_tensor(dtype=tla.Int64), _gm_tensor(dtype=tla.Int64)))

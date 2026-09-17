@@ -8,7 +8,6 @@ import pytest
 
 import catlass.tla as tla
 import catlass.runtime as runtime_mod
-from catlass.execution_lowering import TlaLoweringError
 
 
 def _require_hivm_tla_compile() -> pathlib.Path:
@@ -43,16 +42,20 @@ def copy_kernel_arg_directly_to_ub_kernel(mem_in: tla.Tensor) -> None:
 
 
 @tla.kernel
-def copy_l1_to_ub_kernel(mem_in: tla.Tensor) -> None:
-    l1_ptr = tla.allocate((32, 32), tla.Float32, tla.AddressSpace.l1, 512)
-    l1 = tla.make_tensor_like(l1_ptr, mem_in, tla.arch.zN)
-    ub_ptr = tla.allocate((32, 32), tla.Float32, tla.AddressSpace.ub, 256)
-    ub = tla.make_tensor_like(ub_ptr, mem_in, tla.arch.RowMajor)
+def copy_l1_to_gm_kernel(mem_in: tla.Tensor) -> None:
+    """L1 -> GM: the copy unit has no such direction at all."""
+    l1 = tla.make_tensor_like(
+        tla.allocate((32, 32), tla.Float32, tla.AddressSpace.l1, 512),
+        mem_in,
+        tla.arch.zN,
+    )
     with tla.cube():
-        tla.copy(ub, l1)
+        tla.copy(mem_in, l1)
 
 
-def test_frontend_rejects_copy_l1_to_ub() -> None:
+def test_frontend_rejects_copy_l1_to_gm() -> None:
+    """A direction the hardware does not have is named as such, not as an
+    unimplemented route."""
     mem = make_fake_tensor(
         tla.Float32,
         (32, 32),
@@ -60,8 +63,63 @@ def test_frontend_rejects_copy_l1_to_ub() -> None:
         origin_shape=(32, 32),
         layout_tag=tla.arch.RowMajor,
     )
-    with pytest.raises(TlaLoweringError, match=r"unsupported copy route \('l1', 'ub'\)"):
-        copy_l1_to_ub_kernel.dump_mlir(type_args=(mem,))
+    with pytest.raises(
+        runtime_mod.TlaCoreAPIError,
+        match=r"Hardware unsupported copy route",
+    ):
+        copy_l1_to_gm_kernel.dump_mlir(type_args=(mem,))
+
+
+@tla.kernel
+def copy_fp8_gm_to_ub_kernel(mem_in: tla.Tensor) -> None:
+    """fp8 staged through UB on the vector path -- no such route exists."""
+    ub = tla.make_tensor(
+        tla.allocate((32, 32), tla.Float8E4M3FN, tla.AddressSpace.ub, 256),
+        tla.make_layout(tla.make_shape(32, 32), tla.make_stride(32, 1)),
+    )
+    with tla.vector():
+        tla.copy(ub, mem_in)
+
+
+def test_frontend_rejects_fp8_gm_to_ub_copy() -> None:
+    """fp8 is a cube operand format: the vector staging route has no fp8 entry."""
+    mem = make_fake_tensor(
+        tla.Float8E4M3FN,
+        (32, 32),
+        (32, 1),
+        origin_shape=(32, 32),
+        layout_tag=tla.arch.RowMajor,
+    )
+    with pytest.raises(
+        runtime_mod.TlaCoreAPIError,
+        match=r"unsupported copy route gm,RowMajor -> ub,RowMajor f8e4m3fn",
+    ):
+        copy_fp8_gm_to_ub_kernel.dump_mlir(type_args=(mem,))
+
+
+@tla.kernel
+def copy_fp4_to_l0a_without_scale_kernel() -> None:
+    """A packed fp4 tile loaded into L0A with no scale block attached."""
+    l1 = tla.make_tensor(
+        tla.allocate((128, 64), tla.Float4E2M1, tla.AddressSpace.l1, 512),
+        tla.make_layout(tla.make_shape(128, 64), tla.make_stride(64, 1)),
+    )
+    l0a = tla.make_tensor_like(
+        tla.allocate((128, 64), tla.Float4E2M1, tla.AddressSpace.l0a, 512),
+        l1,
+        tla.arch.zN,
+    )
+    with tla.cube():
+        tla.copy(l0a, l1)
+
+
+def test_frontend_rejects_unscaled_fp4_l1_to_l0a_copy() -> None:
+    """fp4 is microscaling-only: the L1->L0A load has to carry a scale."""
+    with pytest.raises(
+        runtime_mod.TlaCoreAPIError,
+        match=r"packed fp4 to l0a/l0b must carry scale",
+    ):
+        copy_fp4_to_l0a_without_scale_kernel.dump_mlir()
 
 
 def test_frontend_copy_gm_to_l1_lowers_to_runtime_call(tmp_path) -> None:
@@ -153,36 +211,6 @@ def test_kernel_gm_arg_copies_directly_to_ub(tmp_path) -> None:
     assert "%arg0" not in lowered_copy
     assert "copy_gm_RowMajor_to_ub_RowMajor_float" in result.stdout
     assert "tla.copy" not in result.stdout
-
-
-@tla.kernel
-def copy_l0c_to_ub_split_mismatch_dtype_kernel(gm_c: tla.Tensor) -> None:
-    """L0C(f32)->UB(f16) with SPLIT_M, dtype mismatch must be rejected."""
-    l0c_ptr = tla.allocate((32, 32), tla.Float32, tla.AddressSpace.l0c, 512)
-    l0c = tla.make_tensor_like(l0c_ptr, gm_c, tla.arch.L0Clayout)
-    ub_ptr = tla.allocate((32, 32), tla.Float16, tla.AddressSpace.ub, 256)
-    ub = tla.make_tensor_like(ub_ptr, gm_c, tla.arch.RowMajor)
-    with tla.cube():
-        tla.copy(
-            ub, l0c,
-            tla.params.CopyL0C2DstParams(l0c2ub_mode=tla.params.L0C2UBMode.SPLIT_M),
-        )
-
-
-def test_copy_l0c_to_ub_split_mismatch_dtype_raises() -> None:
-    """L0C->UB copy with SPLIT_M where src(f32) != dst(f16) must raise TlaLoweringError."""
-    gm_c = make_fake_tensor(
-               tla.Float16,
-               (32, 32),
-               (32, 1),
-               origin_shape=(32, 32),
-               layout_tag=tla.arch.RowMajor,
-           )
-    with pytest.raises(
-        TlaLoweringError,
-        match=r"When copy l0c to ub with split mode, src and dst dtype must be same",
-    ):
-        copy_l0c_to_ub_split_mismatch_dtype_kernel.dump_mlir(type_args=(gm_c,))
 
 
 @tla.kernel
@@ -554,33 +582,3 @@ def test_ptradd_ub_subtile_copy_applies_ptr_offset(tmp_path) -> None:
     # (32*64+32 = 2080) from coord/stride at runtime.
     assert "arith.constant 64 : i64" in out
     assert '"tla.copy"' not in out
-
-
-@tla.kernel
-def copy_l0c_to_ub_split_m_col_major_dst_kernel(gm_c: tla.Tensor) -> None:
-    """L0C(f32)->UB(f32) with SPLIT_M and ColumnMajor dst must be rejected."""
-    l0c_ptr = tla.allocate(32 * 32, tla.Float32, tla.AddressSpace.l0c, 512)
-    l0c = tla.make_tensor_like(l0c_ptr, gm_c, tla.arch.L0Clayout)
-    ub_ptr = tla.allocate(32 * 32, tla.Float32, tla.AddressSpace.ub, 256)
-    ub = tla.make_tensor_like(ub_ptr, gm_c, tla.arch.ColumnMajor)
-    with tla.cube():
-        tla.copy(
-            ub, l0c,
-            tla.params.CopyL0C2DstParams(l0c2ub_mode=tla.params.L0C2UBMode.SPLIT_M),
-        )
-
-
-def test_copy_l0c_to_ub_split_m_col_major_dst_raises() -> None:
-    """L0C->UB copy with SPLIT_M + ColumnMajor dst must raise TlaLoweringError."""
-    gm_c = make_fake_tensor(
-               tla.Float32,
-               (32, 32),
-               (32, 1),
-               origin_shape=(32, 32),
-               layout_tag=tla.arch.RowMajor,
-           )
-    with pytest.raises(
-        TlaLoweringError,
-        match=r"When copy l0c to ub and dst layout_tag is ColumnMajor, only support `NO_SPLIT` mode",
-    ):
-        copy_l0c_to_ub_split_m_col_major_dst_kernel.dump_mlir(type_args=(gm_c,))

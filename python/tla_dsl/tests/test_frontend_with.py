@@ -74,18 +74,34 @@ def _mmad_tensor_args() -> tuple[tla.Tensor, tla.Tensor, tla.Tensor, tla.Tensor]
         ),
     )
 
+# A zN tile carries fractal shape/stride, and the cube copy routes only accept
+# zN (or nZ) on the L1/L0A side -- a RowMajor tile there has no route at all.
+# These tests exercise mutex placement rather than route availability, so L1/L0A
+# operands default to the zN geometry the cube tests already use.
+_ZN_FRACTAL_SHAPE = ((16, 8), (16, 4))
+_ZN_FRACTAL_STRIDE = ((16, 256), (1, 2048))
+_ZN_ORIGIN_SHAPE = (128, 64)
+
+
 def _tensor_arg(
     addrspace: tla.AddressSpace,
     *,
     dtype: type[tla.Numeric] = tla.Float16,
     layout_tag: Any | None = None,
 ) -> tla.Tensor:
+    if layout_tag is None and addrspace in (tla.AddressSpace.l1, tla.AddressSpace.l0a):
+        layout_tag = tla.arch.zN
+        shape: Any = _ZN_FRACTAL_SHAPE
+        stride: Any = _ZN_FRACTAL_STRIDE
+        origin_shape: Any = _ZN_ORIGIN_SHAPE
+    else:
+        shape, stride, origin_shape = (16, 16), (16, 1), (16, 16)
     return make_fake_tensor(
         dtype,
-        (16, 16),
-        (16, 1),
+        shape,
+        stride,
         addrspace=addrspace,
-        origin_shape=(16, 16),
+        origin_shape=origin_shape,
         layout_tag=layout_tag or tla.arch.RowMajor,
     )
 

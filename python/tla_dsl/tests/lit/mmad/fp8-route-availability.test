@@ -7,16 +7,32 @@
 // names have no REGISTER_* behind them, so an unguarded route resolves to a
 // well-formed callee that fails at link time rather than as a diagnostic here.
 //
-// Both cases below are emitted by legal Python @tla.kernel programs: the
-// frontend has no reason to reject either, which is precisely why the compiler
-// must.
+// The IR below is what a legal Python @tla.kernel program compiles to: an fp8
+// tile is fine to build, it is the vector staging route (GM <-> UB) that does
+// not exist. The rejection is therefore checked here, in the compiler, on IR the
+// frontend did not produce a diagnostic for -- the frontend's own refusal of
+// this route is covered by the Python tests.
 
-// The vector staging path (GM <-> UB, UB -> L1) has no fp8 wrappers.
-//
+// RUN: not %tla_compile %s -o - 2>&1 | %filecheck %s --check-prefix=VECCOPY
+
 // The vector pass reports an unsupported route through notifyMatchFailure, which
 // is a pattern-dispatch signal rather than a user diagnostic, so what surfaces is
 // the generic legalization failure below rather than a message naming fp8. The
 // route is correctly rejected either way; only the wording is unhelpful.
-// RUN: %python %S/Inputs/generate_mmad_ir.py fp8-vector-copy | not %tla_compile - -o - 2>&1 | %filecheck %s --check-prefix=VECCOPY
-
 // VECCOPY: failed to legalize operation 'tla.copy' that was explicitly marked illegal
+
+module {
+  tla.func @fp8_vector_copy(%arg0: !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<32,1>, !tla.shape<32,32>, RowMajor>, !tla.coord<0,0>, !tla.ptr<f8E4M3FN, gm, 1>>) {
+    %0 = tla.alloc_ptr{size_bytes = 1024} -> !tla.ptr<f8E4M3FN, ub, 256>
+    %1 = tla.make_shape -> !tla.shape<32,32>
+    %2 = tla.make_stride -> !tla.stride<32,1>
+    %3 = tla.make_layout %1, %2 : !tla.shape<32,32>, !tla.stride<32,1> -> !tla.layout<!tla.shape<32,32>, !tla.stride<32,1>, !tla.shape<32,32>, RowMajor>
+    %4 = tla.make_coord -> !tla.coord<0,0>
+    %5 = tla.make_tensor %0, %3, %4 : !tla.ptr<f8E4M3FN, ub, 256>, !tla.layout<!tla.shape<32,32>, !tla.stride<32,1>, !tla.shape<32,32>, RowMajor>, !tla.coord<0,0> -> !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<32,1>, !tla.shape<32,32>, RowMajor>, !tla.coord<0,0>, !tla.ptr<f8E4M3FN, ub, 256>>
+    "tla.vector"() ({
+      tla.copy %5, %arg0 : !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<32,1>, !tla.shape<32,32>, RowMajor>, !tla.coord<0,0>, !tla.ptr<f8E4M3FN, ub, 256>>, !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<32,1>, !tla.shape<32,32>, RowMajor>, !tla.coord<0,0>, !tla.ptr<f8E4M3FN, gm, 1>>
+    }) : () -> ()
+    tla.return
+  }
+}
+

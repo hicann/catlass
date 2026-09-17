@@ -3,8 +3,8 @@
 //
 // tla.mmad and tla.mmad_mx are both written by the user and neither is inferred
 // from the other, so each has to reject the operands belonging to the other.
-// That check lives in the frontend, which is why these two cases fail while the
-// IR is still being generated rather than while it is being compiled.
+// That check lives in the frontend, which is why these cases fail while the IR
+// is still being generated rather than while it is being compiled.
 
 // RUN: not %python %S/Inputs/generate_mmad_ir.py mx-half-scaled 2>&1 | %filecheck %s --check-prefix=HALFSCALED
 
@@ -24,11 +24,8 @@
 
 // FMTMIXED: mmad_float4_e1m2x2_t_float4_e2m1x2_t_float
 
-// Packed fp4 is microscaling-only: there is no plain fp4 route on the cube. An
-// unscaled fp4 load leaves tiles that are i8 as far as MLIR is concerned, so
-// without this the matmul would fall through to the generic "unsupported element
-// types" complaint and name i8 rather than the actual problem.
-
-// RUN: %python %S/Inputs/generate_mmad_ir.py mxfp4-unscaled | not %tla_compile - -o - 2>&1 | %filecheck %s --check-prefix=FP4UNSCALED
-
-// FP4UNSCALED: packed fp4 tla.mmad operands must be loaded by tla.copy(..., scale=...); the cube has no non-microscaling fp4 route
+// Packed fp4 is microscaling-only: an unscaled fp4 tile has no L1->L0A/L0B
+// route at all, so the frontend stops it earlier, at the tla.copy that would
+// load it. That check is a Python-side one and lives with the other copy
+// checks (tests/test_copy_lowering.py). For IR the frontend did not produce,
+// tla-cube-region still names the missing scale block on the matmul itself.
