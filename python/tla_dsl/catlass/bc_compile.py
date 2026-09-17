@@ -1,7 +1,8 @@
 """BC (LLVM bitcode) compiler for TLA DSL.
 
 Compiles BC stub sources using the user's own ``ccec`` / ``llvm-link``
-and caches the result.  Cache key = catlass version ID + ccec binary hash.
+and caches the result.  Cache key = catlass version ID + ccec identity
+(ELF build-id).
 """
 
 from __future__ import annotations
@@ -9,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import struct
 import subprocess
 import time
 from dataclasses import dataclass
@@ -146,19 +148,46 @@ def _catlass_version_id() -> str:
     return "unknown"
 
 
-def _ccec_hash(ccec: Path) -> str:
-    """SHA256 of ccec binary, truncated to 16 hex chars."""
+def _ccec_id(ccec: Path) -> str:
+    """ccec identity = ELF build-id (a few small reads, ~5 us).
+
+    The linker computes it while building ccec, so any rebuilt ccec carries a
+    new one -- no need to hash the 150 MB binary (~119 ms).  Falls back to
+    size+mtime for binaries without a build-id (``--build-id=none``).
+    """
     try:
-        return hashlib.sha256(ccec.read_bytes()).hexdigest()[:16]
-    except OSError:
+        with ccec.open("rb") as f:
+            header = f.read(64)
+            if header[:4] == b"\x7fELF" and header[4:6] == b"\x02\x01":  # ELF64 LE
+                e_phoff = struct.unpack_from("<Q", header, 32)[0]
+                e_phentsize, e_phnum = struct.unpack_from("<HH", header, 54)
+                f.seek(e_phoff)
+                table = f.read(e_phentsize * e_phnum)
+                for i in range(e_phnum):
+                    base = i * e_phentsize
+                    if struct.unpack_from("<I", table, base)[0] != 4:  # PT_NOTE
+                        continue
+                    f.seek(struct.unpack_from("<Q", table, base + 8)[0])
+                    notes = f.read(struct.unpack_from("<Q", table, base + 32)[0])
+                    pos = 0
+                    while pos + 12 <= len(notes):  # Elf_Nhdr: namesz, descsz, type
+                        namesz, descsz, ntype = struct.unpack_from("<III", notes, pos)
+                        name = notes[pos + 12 : pos + 12 + namesz].rstrip(b"\0")
+                        desc = notes[pos + 12 + ((namesz + 3) & ~3) :][:descsz]
+                        if ntype == 3 and name == b"GNU":  # NT_GNU_BUILD_ID
+                            return desc.hex()
+                        pos += 12 + ((namesz + 3) & ~3) + ((descsz + 3) & ~3)
+    except (OSError, struct.error):
         return "missing"
+    stat = ccec.stat()
+    return f"stat:{stat.st_size}:{stat.st_mtime_ns}"
 
 
 def compute_cache_key(ccec: Path) -> str:
-    """Cache key = catlass version ID + ccec binary hash."""
-    ver = _catlass_version_id()
-    ccec_h = _ccec_hash(ccec)
-    return hashlib.sha256(f"{ver}:{ccec_h}".encode()).hexdigest()[:16]
+    """Cache key = catlass version ID + ccec identity."""
+    return hashlib.sha256(
+        f"{_catlass_version_id()}:{_ccec_id(ccec)}".encode()
+    ).hexdigest()[:16]
 
 
 # ---------------------------------------------------------------------------
@@ -260,7 +289,7 @@ def _write_manifest(cache: Path, cfg: BCConfig, key: str) -> None:
         "catlass_arch": cfg.catlass_arch,
         "ascend_home": str(cfg.toolchain.ascend_home),
         "ccec": str(cfg.toolchain.ccec),
-        "ccec_hash": _ccec_hash(cfg.toolchain.ccec),
+        "ccec_id": _ccec_id(cfg.toolchain.ccec),
         "llvm_link": str(cfg.toolchain.llvm_link),
         "bc_stubs": str(cfg.paths.bc_stubs),
         "compiled_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
@@ -343,7 +372,7 @@ def _ensure_cache(cfg: BCConfig) -> Path:
             manifest = json.loads(manifest_path.read_text())
             if manifest.get(
                 "catlass_version"
-            ) == _catlass_version_id() and manifest.get("ccec_hash") == _ccec_hash(
+            ) == _catlass_version_id() and manifest.get("ccec_id") == _ccec_id(
                 cfg.toolchain.ccec
             ):
                 return cache
@@ -360,11 +389,14 @@ def get_bc_paths(
     *,
     bc_type: str = "meta_op",
     core_type: Optional[str] = None,
+    bc_dir: Optional[Path] = None,
 ) -> str:
     """Get comma-joined BC paths from cache. Raises if not compiled.
 
     ``bc_type``: ``"meta_op"`` (default) or ``"print_tensor"``.
     ``core_type``: required when ``bc_type="print_tensor"`` (``"aic"`` or ``"aiv"``).
+    ``bc_dir``: already-validated dir holding the ``.bc`` files; defaults to the
+    cache dir resolved from the environment.
     """
     cfg = BCConfig(
         paths=_resolve_paths(),
@@ -373,7 +405,7 @@ def get_bc_paths(
         catlass_arch=3510,
         cache_dir=_resolve_cache_dir(),
     )
-    cache = _ensure_cache(cfg)
+    cache = bc_dir or _ensure_cache(cfg)
 
     if bc_type == "print_tensor":
         if core_type is None:
@@ -396,6 +428,16 @@ def get_bc_paths(
             )
         paths.append(str(bc_path.resolve()))
     return ",".join(paths)
+
+
+def check_bc(bc_dir: Optional[Path] = None) -> None:
+    """Check all runtime BC artifacts: meta_op aic/aiv/mix + print_tensor aic/aiv."""
+    for kernel_mode in _MODE_CORE_TYPES:
+        get_bc_paths(kernel_mode, bc_dir=bc_dir)
+    for core_type in ("aic", "aiv"):
+        get_bc_paths(
+            core_type, bc_type="print_tensor", core_type=core_type, bc_dir=bc_dir
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -447,11 +489,12 @@ def main() -> None:
     key = compute_cache_key(cfg.toolchain.ccec)
     cache = cfg.cache_dir / key
 
-    # A cache is valid only when its manifest matches the current catlass
-    # version and ccec hash -- the same rule used at runtime by get_bc_paths().
+    # A cache hit needs a matching manifest (catlass version + ccec identity)
+    # and every artifact still on disk -- check_bc enforces both.
     cache_hit = False
     try:
         _ensure_cache(cfg)
+        check_bc(bc_dir=cache)
         cache_hit = True
     except RuntimeError:
         pass
