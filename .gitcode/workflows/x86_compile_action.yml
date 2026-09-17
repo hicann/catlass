@@ -6,6 +6,9 @@ on:
       task_name:
         required: true
         type: string
+      ut_type:
+        required: true
+        type: string
       image_version:
         required: true
         type: string
@@ -45,6 +48,7 @@ jobs:
             export WORKSPACE=${{ steps.process_checkout.outputs.path }}
             cd ${{ steps.process_checkout.outputs.path }}
             export task_name=${{ inputs.task_name }}
+            export ut_type=${{ inputs.ut_type }}
             export target_branch=${{ env.TARGET_BRANCH }}
             bash pre_smoke.sh ${WORKSPACE}
           AC_SERVER_IP: ${{ vars.AC_SERVER_IP }}
