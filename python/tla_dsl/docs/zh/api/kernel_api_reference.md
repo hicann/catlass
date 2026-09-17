@@ -34,6 +34,7 @@ kernel 函数体内调用。
   - [离散与聚合](#离散与聚合)
   - [数据重排](#数据重排)
   - [数据压缩](#数据压缩)
+  - [类型转换](#类型转换)
 - [同步控制](#同步控制)
 - [系统变量访问](#系统变量访问)
 - [资源管理](#资源管理)
@@ -1545,6 +1546,50 @@ tla.squeeze(src: VectorSSA, mask: MaskSSA) -> VectorSSA
 ```python
 with tla.vec.func(mode="simd"):
     packed = tla.squeeze(src, m)
+```
+
+### 类型转换
+
+#### `VectorSSA.to`
+
+**源码：** [`catlass.core_api.VectorSSA.to`](../../../catlass/core_api.py#L535)
+
+功能说明：
+
+将寄存器内的 vector 转换为另一种元素类型。
+
+lowering 支持有符号整数 `tla.Int8` ~ `tla.Int64`、浮点 `tla.Float16` / `tla.BFloat16` / `tla.Float32`，以及两种 OCP fp8 格式 `tla.Float8E4M3FN` / `tla.Float8E5M2`。无符号整数、`tla.Bool`（i1）、`tla.Float64` 与 `tla.Float8E8M0` 会被拒绝。
+
+fp8 操作数可与 `tla.Float32`、`tla.Float16`、`tla.BFloat16` 互相转换。其中只有 f32 这一对是单条指令：f16 与 bf16 两对由 lowering 展开为经过 f32 的两次 cast，扩宽一侧精确、收窄一侧只舍入一次；`f8e5m2 -> f16` 则展开为一次整数扩宽加一次移位，因为这两种格式共享同一指数字段。fp8 之间没有重编码路径——两者指数范围不同，属于重量化而非 cast——也没有 fp8 与整数之间的路径。
+
+函数原型：
+
+```python
+VectorSSA.to(dst_type: Any, params: CastParams, mask: Any | None = None) -> Any
+```
+
+参数说明：
+
+- `dst_type`（`type[Numeric]`）：目标元素类型。必填。
+- `params`（`CastParams`）：舍入模式、饱和模式与寄存器 slot。必填。
+- `mask`（`MaskSSA | None`）：可选执行掩码；`None` 表示所有 lane 使能。选填，默认 `None`。
+
+约束说明：
+
+- 须在 `@tla.kernel` 装饰的 kernel 函数体内调用。
+- 须在 `tla.vec.func()` 内调用。
+- `reg_slot` 的 `TWO` 与 `THREE` 指向 pack 的四分之一，仅在位宽变化为 4 倍的整数 cast 上可达。
+
+调用示例：
+
+```python
+trait = tla.params.CastParams(
+    reg_slot=tla.params.RegSlot.ZERO,
+    sat_mode=tla.params.SatMode.NOSAT,
+    round_mode=tla.params.RoundMode.CAST_ROUND,
+)
+with tla.vec.func(mode="simd"):
+    wide = narrow.to(tla.Float32, trait)
 ```
 
 ---

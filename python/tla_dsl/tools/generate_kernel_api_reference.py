@@ -78,6 +78,10 @@ DIRECTORY_SECTIONS: list[tuple[str, str]] = [
     ),
     ("Vector Compute / Data Compress", "Compress valid lanes under a mask."),
     (
+        "Vector Compute / Type Conversion",
+        "Element-type conversion on the register-vector path.",
+    ),
+    (
         "Sync Control",
         "In-core / cross-core flags, pipe barriers, mutexes, and local-memory "
         "barriers.",
@@ -208,24 +212,26 @@ def _collect_arch_namespace(
     }
 
 
-def _collect_tensor_methods(path: Path) -> dict[str, APIEntry]:
-    """Document Tensor methods that are ``@dsl_user_op`` and have ``Directory:``."""
+def _collect_class_methods(
+    path: Path, class_names: set[str], *, label: str, module: str
+) -> dict[str, APIEntry]:
+    """Document methods of ``class_names`` that are ``@dsl_user_op`` and have ``Directory:``."""
     if not path.is_file():
         return {}
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-    tensor_cls = next(
+    cls = next(
         (
             node
             for node in tree.body
-            if isinstance(node, ast.ClassDef) and node.name in {"Tensor", "_Tensor"}
+            if isinstance(node, ast.ClassDef) and node.name in class_names
         ),
         None,
     )
-    if tensor_cls is None:
+    if cls is None:
         return {}
 
     entries: dict[str, APIEntry] = {}
-    for node in tensor_cls.body:
+    for node in cls.body:
         if not isinstance(node, ast.FunctionDef):
             continue
         if not has_dsl_user_op(node.decorator_list):
@@ -233,10 +239,10 @@ def _collect_tensor_methods(path: Path) -> dict[str, APIEntry]:
         doc = ast.get_docstring(node) or ""
         if directory_path(doc) is None:
             continue
-        entries[f"Tensor.{node.name}"] = function_entry(
-            f"Tensor.{node.name}",
+        entries[f"{label}.{node.name}"] = function_entry(
+            f"{label}.{node.name}",
             node,
-            qualified_name=f"catlass.tla.tensor.{tensor_cls.name}.{node.name}",
+            qualified_name=f"{module}.{cls.name}.{node.name}",
             source_path=path.resolve(),
             drop_self=True,
         )
@@ -288,7 +294,19 @@ def parse_core_api(path: Path) -> dict[str, APIEntry]:
     entries.update(_collect_core_functions(tree, exported))
     entries.update(_collect_unary_aliases(tree, exported, _unary_op_template(tree)))
     entries.update(_collect_arch_namespace(tree, exported))
-    entries.update(_collect_tensor_methods(TENSOR_API_PATH))
+    entries.update(
+        _collect_class_methods(
+            TENSOR_API_PATH,
+            {"Tensor", "_Tensor"},
+            label="Tensor",
+            module="catlass.tla.tensor",
+        )
+    )
+    entries.update(
+        _collect_class_methods(
+            path, {"VectorSSA"}, label="VectorSSA", module="catlass.core_api"
+        )
+    )
     _apply_doc_hooks(entries)
     return entries
 

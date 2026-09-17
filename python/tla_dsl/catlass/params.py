@@ -285,9 +285,18 @@ class RegSlot(enum.Enum):
 
 
 class SatMode(enum.Enum):
-    """Overflow behaviour of the cast (AVE ``sat`` BoolAttr)."""
+    """Overflow behaviour of the cast (AVE ``sat`` BoolAttr).
 
-    UNKNOWN = "unknown"
+    ``SAT`` clamps an out-of-range value to the destination's largest finite
+    magnitude. ``NOSAT`` lets it overflow the way IEEE does: to an infinity, or
+    to NaN for a format that has none, such as ``Float8E4M3FN``.
+
+    ``SAT`` also turns a NaN input into ``+0`` instead of propagating it. That
+    is AVE's saturating-narrow behaviour rather than anything specific to fp8 --
+    ``f32 -> f16`` does the same -- so use ``NOSAT`` where NaNs must survive.
+    """
+
+    UNKNOWN = "unknown"  # unspecified; the lowering treats this exactly as NOSAT
     SAT = "sat"
     NOSAT = "nosat"
 

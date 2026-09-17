@@ -882,14 +882,76 @@ static hivmave::VCVT_PPTypeAttr mapCastPP(OpBuilder& b, ::RegSlot layout)
     return hivmave::VCVT_PPTypeAttr::get(b.getContext(), pp);
 }
 
+// The two 8-bit floats AVE vtruncf / vextf actually accept -- not every 8-bit
+// float MLIR knows. e8m0 has no AVE conversion path and must not slip in on
+// width alone.
+static bool isAveFloat8Type(Type t)
+{
+    return isa<Float8E4M3FNType, Float8E5M2Type>(t);
+}
+
+// HIVMAVE's float conversion ops model only the 2x even/odd selector. FP8
+// <-> f32 is the one 4x float conversion: its hardware intrinsics take the
+// pp0..pp3 immediate directly. Materialize those intrinsics here rather than
+// silently folding reg_slot TWO/THREE into PART_EVEN in the generic AVE op.
+static Value createFp8ToF32Result(
+    OpBuilder& b, Location loc, VectorType dstVecType, Value src, Value mask, hivmave::VCVT_PPTypeAttr pp)
+{
+    Value preg = castMaskToPregType(b, loc, mask, fullPregVecType(b.getContext()));
+    Value part = b.create<arith::ConstantIntOp>(loc, static_cast<int64_t>(pp.getValue()), 32);
+    Type elemType = cast<VectorType>(src.getType()).getElementType();
+    if (isa<Float8E4M3FNType>(elemType))
+        return b.create<hivm_regbaseintrins::VcvtffF8E4M32F32InstrOp>(loc, dstVecType, src, preg, part).getResult();
+    return b.create<hivm_regbaseintrins::VcvtffF8E5M22F32InstrOp>(loc, dstVecType, src, preg, part).getResult();
+}
+
+static Value createF32ToFp8Result(
+    OpBuilder& b, Location loc, VectorType dstVecType, Value src, Value mask, hivm::RoundModeAttr rnd, BoolAttr sat,
+    hivmave::VCVT_PPTypeAttr pp)
+{
+    Value preg = castMaskToPregType(b, loc, mask, fullPregVecType(b.getContext()));
+    Value round = b.create<arith::ConstantIntOp>(loc, static_cast<int64_t>(rnd.getValue()), 32);
+    Value saturation = b.create<arith::ConstantIntOp>(loc, sat.getValue() ? 1 : 0, 32);
+    Value part = b.create<arith::ConstantIntOp>(loc, static_cast<int64_t>(pp.getValue()), 32);
+    Type elemType = dstVecType.getElementType();
+    if (isa<Float8E4M3FNType>(elemType))
+        return b
+            .create<hivm_regbaseintrins::VcvtffF322F8E4M3InstrOp>(loc, dstVecType, src, preg, round, saturation, part)
+            .getResult();
+    return b.create<hivm_regbaseintrins::VcvtffF322F8E5M2InstrOp>(loc, dstVecType, src, preg, round, saturation, part)
+        .getResult();
+}
+
+// E5M2 and f16 have the same sign and exponent layout (one sign bit and a
+// five-bit, bias-15 exponent). Their two E5M2 mantissa bits become f16 bits
+// 9:8, so widening the raw byte and shifting it left by eight is an exact
+// conversion. Unlike the generic fp8 -> f32 -> f16 composition, this emits one
+// 2x integer widen and one shift. The caller's even/odd slot selects which
+// source elements become the result, identically to the composed route.
+static Value createE5M2ToF16Result(
+    OpBuilder& b, Location loc, VectorType srcVecType, VectorType dstVecType, Value src, Value mask,
+    hivmave::VCVT_PartTypeAttr part)
+{
+    auto srcBitsType = VectorType::get(srcVecType.getShape(), b.getIntegerType(8));
+    auto dstBitsType = VectorType::get(dstVecType.getShape(), b.getIntegerType(16));
+    Value srcBits = b.create<mlir::vector::BitCastOp>(loc, srcBitsType, src).getResult();
+    Value widened =
+        b.create<hivmave::VFExtSIOp>(loc, dstBitsType, srcBits, mask, part, hivmave::VCVT_PPTypeAttr()).getResult();
+    Value shift = b.create<arith::ConstantIntOp>(loc, 8, 16);
+    Value sign = b.create<arith::ConstantOp>(loc, b.getI1Type(), b.getBoolAttr(false));
+    Value shifted = b.create<hivmave::VFShlsOp>(loc, dstBitsType, widened, shift, mask, sign, Value()).getResult();
+    return b.create<mlir::vector::BitCastOp>(loc, dstVecType, shifted).getResult();
+}
+
 // Element types the tla.cast lowering can emit AVE ops for: signed/signless
-// integers i8/i16/i32/i64 and floats f16/bf16/f32. Unsigned integers, i1 (bool)
-// and f64 have no AVE cast path and are rejected (the front-end rejects them too;
-// this guards hand-written / non-front-end IR).
+// integers i8/i16/i32/i64, floats f16/bf16/f32, and the fp8 formats
+// f8E4M3FN/f8E5M2. Unsigned integers, i1 (bool) and f64 have no AVE cast path
+// and are rejected (the front-end rejects them too; this guards hand-written /
+// non-front-end IR).
 static bool isSupportedCastElementType(Type t)
 {
     if (auto f = dyn_cast<FloatType>(t))
-        return f.getWidth() == 16 || f.getWidth() == 32; // f16/bf16/f32, not f64
+        return f.getWidth() == 16 || f.getWidth() == 32 || isAveFloat8Type(t);
     if (auto i = dyn_cast<IntegerType>(t)) {
         if (i.isUnsigned() || i.getWidth() == 1) // unsigned / bool
             return false;
@@ -903,8 +965,8 @@ static bool isSupportedCastElementType(Type t)
 // The trait supplies rounding, saturation and register layout; the mask (source
 // width) predicates active lanes.
 static FailureOr<Value> createVectorCastResult(
-    OpBuilder& b, Location loc, VectorType srcVecType, VectorType dstVecType, ArrayRef<int32_t> trait, Value src,
-    Value mask)
+    OpBuilder& b, AutoFullPredicateCache& fullMasks, Location loc, VectorType srcVecType, VectorType dstVecType,
+    ArrayRef<int32_t> trait, Value src, Value mask, bool hasUserMask)
 {
     // trait codes: [0] reg_slot, [1] sat_mode, [2] round_mode.
     Type s = srcVecType.getElementType();
@@ -912,11 +974,135 @@ static FailureOr<Value> createVectorCastResult(
     auto rnd = mapCastRoundMode(b, static_cast<::RoundMode>(trait[2]));
     BoolAttr sat = b.getBoolAttr(static_cast<::SatMode>(trait[1]) == ::SatMode::sat);
     auto part = mapCastPart(b, static_cast<::RegSlot>(trait[0]));
+    auto pp = mapCastPP(b, static_cast<::RegSlot>(trait[0]));
 
     bool sFloat = isa<FloatType>(s);
     bool dFloat = isa<FloatType>(d);
     unsigned sb = s.getIntOrFloatBitWidth();
     unsigned db = d.getIntOrFloatBitWidth();
+
+    // fp8 pairs with f32 and nothing else. The AVE op definitions advertise a
+    // wider set -- vtruncf lists bf16/f16/f32 sources, vextf lists bf16/f16/f32
+    // results -- but HIVMAVEToAVEIntrin only ever builds VcvtffF322F8E4M3 /
+    // VcvtffF322F8E5M2 and VcvtffF8E4M32F32 / VcvtffF8E5M22F32. An f8 -> f16
+    // widen hits llvm_unreachable there, and, more dangerously, an f16 -> f8
+    // narrow does NOT: that path dispatches on the destination type alone, so
+    // it silently emits the F32-source instruction against f16 lanes. Refuse
+    // every non-f32 partner here rather than let that through. bf16/f16 reach
+    // fp8 by widening to f32 first, which is exact.
+    if (isAveFloat8Type(s) || isAveFloat8Type(d)) {
+        Type partner = isAveFloat8Type(s) ? d : s;
+        if (isAveFloat8Type(s) && isAveFloat8Type(d))
+            return failure(); // no fp8 <-> fp8 re-encode instruction
+
+        // Every fp8 route that is not a single instruction has the same mask
+        // problem: its instructions run in different lane domains -- f32 or
+        // f16 for the composed route, i8 then i16 for the e5m2 shortcut --
+        // while the mask is written in the source element domain. An all-true
+        // or contiguous mask is insensitive to the mismatch; a strided one is
+        // not, and lanes are silently dropped.
+        //
+        // Fold the predicate into the data once, here, where the mask means
+        // what it says, and let the instructions run all-true. A masked-off
+        // element becomes zero and converts to zero, which is what the
+        // hardware already yields for inactive lanes.
+        //
+        // Only the multi-instruction routes need this. The direct fp8 <-> f32
+        // conversions are a single instruction that consumes the mask in the
+        // source domain already, so gating them would emit an and, two
+        // bitcasts and a pge that nothing reads.
+        const bool needsGatedMask = (isa<Float8E5M2Type>(s) && d.isF16()) || !partner.isF32();
+        Value gatedSrc = src;
+        Value legMask = mask;
+        if (hasUserMask && needsGatedMask) {
+            auto srcBitsType = VectorType::get(srcVecType.getShape(), b.getIntegerType(sb));
+            Value srcBits = b.create<mlir::vector::BitCastOp>(loc, srcBitsType, src).getResult();
+            // and-with-self under the predicate: keeps active lanes, zeros the rest.
+            Value gated = b.create<hivmave::VFAndOp>(loc, srcBitsType, srcBits, srcBits, mask, Value()).getResult();
+            gatedSrc = b.create<mlir::vector::BitCastOp>(loc, srcVecType, gated).getResult();
+            legMask = allTrueMaskFor(fullMasks, loc, srcVecType, srcVecType);
+        }
+        // E5M2 -> f16 has an exact two-instruction form (see below). It places
+        // its result exactly where the composed route does -- both select the
+        // source elements `part` names -- so it is simply the cheaper way to
+        // spell the same cast, and is always preferred.
+        if (isa<Float8E5M2Type>(s) && d.isF16())
+            return createE5M2ToF16Result(b, loc, srcVecType, dstVecType, gatedSrc, legMask, part);
+        if (!partner.isF32()) {
+            // f16 and bf16 have no fp8 instruction, so expand the cast into the
+            // two the ISA does have, through f32. The user writes one .to();
+            // this is where it becomes two. Exact in the widening direction
+            // (fp8 -> f32 loses nothing) and single-rounded in the other, since
+            // only the f32 -> fp8 leg rounds.
+            if (!partner.isF16() && !partner.isBF16())
+                return failure();
+            // Every vector register is 256 bytes, so the f32 intermediate holds
+            // 2048 / 32 lanes whatever the endpoints are.
+            auto f32Ty = b.getF32Type();
+            auto midType = VectorType::get({static_cast<int64_t>(2048 / 32)}, f32Ty);
+            // vextf and vtruncf each address one half of a packed register.
+            // A single composed route therefore drops the other half. Convert
+            // both halves and OR their disjoint output lanes together. vor is
+            // an integer operation, so merge the raw destination bits before
+            // restoring the requested float type. The truncation is the only
+            // rounded step.
+            auto even = hivmave::VCVT_PartTypeAttr::get(b.getContext(), hivmave::VCVT_PartType::PART_EVEN);
+            auto odd = hivmave::VCVT_PartTypeAttr::get(b.getContext(), hivmave::VCVT_PartType::PART_ODD);
+            // The f8 <-> f32 leg is a 4x conversion, so its selector is the
+            // pack pattern pp0..pp3 (which byte of each 32-bit slot), NOT the
+            // 2x even/odd part. The generic AVE ops carry only `part`, and
+            // HIVMAVEToAVEIntrin forwards that attribute verbatim as the pp
+            // immediate -- PART_EVEN/PART_ODD are numerically PP0/PP1 -- so
+            // driving this leg with even/odd silently reads or writes only
+            // byte positions 0 and 1 of every 4-byte group and never touches
+            // 2 and 3. Half the register is dropped and the rest lands on the
+            // wrong lanes. Build the leg from the pp intrinsics instead.
+            //
+            // Pick the pattern so the composed cast matches every other 2x
+            // widen/narrow in this function, where reg_slot selects the even
+            // or the odd elements: the f32 half contributes the high pp bit
+            // and reg_slot the low one, i.e. pp = 2 * half + (reg_slot == one).
+            // Widening then gives dst[j] = src[2j + slot], and narrowing gives
+            // dst[2j + slot] = src[j], which is also what the e5m2 -> f16
+            // integer-widen path above produces.
+            unsigned slotBit = (static_cast<::RegSlot>(trait[0]) == ::RegSlot::one) ? 1 : 0;
+            auto ppForHalf = [&](unsigned half) {
+                return hivmave::VCVT_PPTypeAttr::get(
+                    b.getContext(), static_cast<hivmave::VCVT_PPType>(2 * half + slotBit));
+            };
+            Value dstEven;
+            Value dstOdd;
+            if (isAveFloat8Type(s)) {
+                // fp8 -> f16/bf16. Widen the two source groups the destination
+                // can hold, then narrow each onto the dst even / odd lanes.
+                Value midEven = createFp8ToF32Result(b, loc, midType, gatedSrc, legMask, ppForHalf(0));
+                Value midOdd = createFp8ToF32Result(b, loc, midType, gatedSrc, legMask, ppForHalf(1));
+                dstEven = b.create<hivmave::VFTruncFOp>(loc, dstVecType, midEven, legMask, rnd, sat, even).getResult();
+                dstOdd = b.create<hivmave::VFTruncFOp>(loc, dstVecType, midOdd, legMask, rnd, sat, odd).getResult();
+            } else {
+                // f16/bf16 -> fp8. Widen the source even / odd lanes, then
+                // narrow each into its own byte position of the destination.
+                Value midEven = b.create<hivmave::VFExtFOp>(loc, midType, gatedSrc, legMask, even).getResult();
+                Value midOdd = b.create<hivmave::VFExtFOp>(loc, midType, gatedSrc, legMask, odd).getResult();
+                dstEven = createF32ToFp8Result(b, loc, dstVecType, midEven, legMask, rnd, sat, ppForHalf(0));
+                dstOdd = createF32ToFp8Result(b, loc, dstVecType, midOdd, legMask, rnd, sat, ppForHalf(1));
+            }
+            auto dstBitsType = VectorType::get(dstVecType.getShape(), b.getIntegerType(d.getIntOrFloatBitWidth()));
+            Value dstEvenBits = b.create<mlir::vector::BitCastOp>(loc, dstBitsType, dstEven).getResult();
+            Value dstOddBits = b.create<mlir::vector::BitCastOp>(loc, dstBitsType, dstOdd).getResult();
+            Value dstMask = allTrueMaskFor(fullMasks, loc, dstBitsType, dstBitsType);
+            Value dstBits =
+                b.create<hivmave::VFOrOp>(loc, dstBitsType, dstEvenBits, dstOddBits, dstMask, Value()).getResult();
+            return b.create<mlir::vector::BitCastOp>(loc, dstVecType, dstBits).getResult();
+        }
+    }
+
+    // The native fp8<->f32 instructions select one of four byte positions in
+    // each 32-bit slot. Keep every RegSlot value intact as pp0..pp3.
+    if (isAveFloat8Type(s) && d.isF32())
+        return createFp8ToF32Result(b, loc, dstVecType, src, mask, pp);
+    if (s.isF32() && isAveFloat8Type(d))
+        return createF32ToFp8Result(b, loc, dstVecType, src, mask, rnd, sat, pp);
     // For same-width float<->int conversions the packed even/odd part does not
     // apply (src and dst occupy the full register); pass a null part attribute,
     // matching the arith->AVE lowering.
@@ -946,7 +1132,6 @@ static FailureOr<Value> createVectorCastResult(
     // even/odd `part`; a 4x step (i32<->i8) uses the pack-pattern `pp` (PP0)
     // instead, matching the arith->AVE lowering. Integer casts do not round.
     auto uni = hivm::UnsignedModeAttr::get(b.getContext(), hivm::UnsignedMode::SI2SI);
-    auto pp = mapCastPP(b, static_cast<::RegSlot>(trait[0]));
     if (db < sb) {
         if (sb / db >= 4)
             return b
@@ -1560,6 +1745,7 @@ static LogicalResult lowerNestedVectorOp(
     // width; the destination width is one full 256-byte register's worth of the
     // target element type. The cast op picks the AVE cast (vtruncf / vfptosi /
     // vsitofp / vtrunci / ...) from the (src,dst) element kinds.
+
     if (auto castOp = dyn_cast<::tla::CastOp>(op)) {
         Value src = valueMap.lookup(castOp.getSource());
         if (!src)
@@ -1596,7 +1782,8 @@ static LogicalResult lowerNestedVectorOp(
         } else {
             mask = allTrueMaskFor(fullMasks, loc, srcVecType, castOp.getSource().getType());
         }
-        auto result = createVectorCastResult(b, loc, srcVecType, dstVecType, trait, src, mask);
+        auto result =
+            createVectorCastResult(b, fullMasks, loc, srcVecType, dstVecType, trait, src, mask, (bool)castOp.getMask());
         if (failed(result))
             return castOp.emitError("unsupported tla.cast element type conversion"), failure();
         valueMap[castOp.getResult()] = *result;

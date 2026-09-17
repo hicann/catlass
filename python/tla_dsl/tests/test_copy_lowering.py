@@ -72,7 +72,7 @@ def test_frontend_rejects_copy_l1_to_gm() -> None:
 
 @tla.kernel
 def copy_fp8_gm_to_ub_kernel(mem_in: tla.Tensor) -> None:
-    """fp8 staged through UB on the vector path -- no such route exists."""
+    """fp8 staged through UB on the vector path."""
     ub = tla.make_tensor(
         tla.allocate((32, 32), tla.Float8E4M3FN, tla.AddressSpace.ub, 256),
         tla.make_layout(tla.make_shape(32, 32), tla.make_stride(32, 1)),
@@ -81,8 +81,15 @@ def copy_fp8_gm_to_ub_kernel(mem_in: tla.Tensor) -> None:
         tla.copy(ub, mem_in)
 
 
-def test_frontend_rejects_fp8_gm_to_ub_copy() -> None:
-    """fp8 is a cube operand format: the vector staging route has no fp8 entry."""
+def test_frontend_accepts_fp8_gm_to_ub_copy() -> None:
+    """fp8 has a vector staging route now.
+
+    It used to be refused on the grounds that fp8 was a cube *operand* format.
+    That was a statement about the registrations rather than about the
+    hardware: Vector/dma.cpp registers GM <-> UB for both fp8 encodings, so the
+    front-end route table has to admit them or the copy dies before it reaches
+    the lowering.
+    """
     mem = make_fake_tensor(
         tla.Float8E4M3FN,
         (32, 32),
@@ -90,11 +97,7 @@ def test_frontend_rejects_fp8_gm_to_ub_copy() -> None:
         origin_shape=(32, 32),
         layout_tag=tla.arch.RowMajor,
     )
-    with pytest.raises(
-        runtime_mod.TlaCoreAPIError,
-        match=r"unsupported copy route gm,RowMajor -> ub,RowMajor f8e4m3fn",
-    ):
-        copy_fp8_gm_to_ub_kernel.dump_mlir(type_args=(mem,))
+    copy_fp8_gm_to_ub_kernel.dump_mlir(type_args=(mem,))
 
 
 @tla.kernel

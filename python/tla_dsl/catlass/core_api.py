@@ -22,7 +22,26 @@ from .params import CastParams
 
 # Element-type tokens the tla.cast lowering supports: signed ints and the AVE
 # float set. Unsigned ints, Bool (i1) and Float64 (f64) are rejected by VectorSSA.to.
-_CAST_SUPPORTED_DTYPES = frozenset({"i8", "i16", "i32", "i64", "f16", "bf16", "f32"})
+#
+# f8e8m0 is absent on purpose: it is a block-scale exponent, an opaque byte
+# converted by shifting rather than by a cast.
+_CAST_FP8_DTYPES = frozenset({"f8e4m3fn", "f8e5m2"})
+
+# Element width per cast token, used to tell a 4x width step from a 2x one.
+_CAST_TOKEN_BITS = {
+    "i8": 8,
+    "i16": 16,
+    "i32": 32,
+    "i64": 64,
+    "f8e4m3fn": 8,
+    "f8e5m2": 8,
+    "f16": 16,
+    "bf16": 16,
+    "f32": 32,
+}
+_CAST_SUPPORTED_DTYPES = (
+    frozenset({"i8", "i16", "i32", "i64", "f16", "bf16", "f32"}) | _CAST_FP8_DTYPES
+)
 from catlass._mlir.dialects import tla as _tla_ops_gen  # type: ignore[import-not-found]
 from .base_dsl import ast_helpers as _ast_helpers
 from .base_dsl.op import _ExternUsage, dsl_user_op, _capture_user_loc
@@ -63,6 +82,7 @@ from .types import (
 )
 from .params import (
     AtomicMode,
+    RegSlot,
     HF32Mode,
     ComputeOrder,
     CopyL0C2DstParams,
@@ -97,11 +117,12 @@ _MASK_CMP_MODES = ("lt", "le", "gt", "ge", "eq", "ne")
 _FP4_FORMATS = frozenset({"f4e2m1", "f4e1m2"})
 
 _MAKE_TENSOR_SUPPORTED_ELEMENT_TYPES = frozenset(
-    # fp8 is a cube operand format only: it can be held in a tile and moved
-    # through the copy machinery, but no vector op consumes it. The packed fp4
-    # formats are narrower still -- their tiles are buffered as i8 storage with
-    # half the elements; nothing addresses them element-wise. f8e8m0 is the
-    # microscaling scale element, likewise only ever moved, never computed on.
+    # fp8 tiles are staged and computed on like any other element type: the
+    # vector routes carry them (Vector/dma.cpp registers the copies) and
+    # tla.cast converts them. The packed fp4 formats are narrower still --
+    # their tiles are buffered as i8 storage with half the elements; nothing
+    # addresses them element-wise. f8e8m0 is the microscaling scale element,
+    # only ever moved, never computed on.
     {
         "f4e2m1",
         "f4e1m2",
@@ -518,16 +539,53 @@ class VectorSSA(_RegisterSSA):
         *,
         loc: mlir_ir.Location | None = None,
     ) -> Any:
-        """Convert this register-resident vector to ``dst_type`` (element-type cast).
+        """Directory: Vector Compute / Type Conversion
 
-        ``dst_type`` is a concrete Numeric element type; only the types the AVE
-        cast lowering supports are allowed: signed integers (``tla.Int8`` ..
-        ``tla.Int64``) and floats ``tla.Float16`` / ``tla.BFloat16`` /
-        ``tla.Float32``. Unsigned integers, ``tla.Bool`` (i1) and ``tla.Float64``
-        are rejected. ``params`` is a required
-        :class:`~catlass.params.CastParams` selecting rounding / saturation /
-        register slot; ``mask`` optionally predicates which lanes convert. Lowers
-        to ``tla.cast`` and must be used inside a ``tla.vec.func`` region.
+        Description:
+            Convert a register-resident vector to another element type.
+
+            The lowering supports the signed integers `tla.Int8` .. `tla.Int64`,
+            the floats `tla.Float16` / `tla.BFloat16` / `tla.Float32`, and the
+            two OCP fp8 formats `tla.Float8E4M3FN` / `tla.Float8E5M2`. Unsigned
+            integers, `tla.Bool` (i1), `tla.Float64` and `tla.Float8E8M0` are
+            rejected.
+
+            An fp8 operand converts to and from `tla.Float32`, `tla.Float16` and
+            `tla.BFloat16`. Only the f32 pair is a single instruction: the f16
+            and bf16 pairs are expanded by the lowering into two casts through
+            f32, exact on the widening leg and rounding once on the narrowing
+            one. `f8e5m2 -> f16` instead uses an exact integer widen and a
+            shift, because the two formats share a sign and exponent layout; it
+            selects the same elements as the composed path, in two instructions
+            rather than five. There is no
+            fp8-to-fp8 re-encode -- the exponent ranges differ, which
+            makes it a requantisation rather than a cast -- and no fp8-to-integer
+            path.
+
+            Parameters:
+            - `dst_type` (`type[Numeric]`): Element type to convert to. Required.
+            - `params` (`CastParams`): Rounding, saturation and register slot. Required.
+            - `mask` (`MaskSSA | None`): Optional execution mask; `None` means all lanes enabled. Optional, default `None`. The
+              mask is indexed in the **source** element domain: lane `i` predicates
+              source element `i`, whatever the width change. A masked-off element
+              contributes zero to the result.
+
+            Constraints:
+            - Must be called inside a `@tla.kernel`-decorated kernel function.
+            - Must be called inside `tla.vec.func()`.
+            - `reg_slot` `TWO` and `THREE` name a pack quarter. They are valid
+              on a 4x integer cast and the direct fp8<->f32 instruction.
+
+            Example:
+            ```python
+            trait = tla.params.CastParams(
+                reg_slot=tla.params.RegSlot.ZERO,
+                sat_mode=tla.params.SatMode.NOSAT,
+                round_mode=tla.params.RoundMode.CAST_ROUND,
+            )
+            with tla.vec.func(mode="simd"):
+                wide = narrow.to(tla.Float32, trait)
+            ```
         """
         _require_category("cast", "operand", self, "vector_ssa", 0)
         if not (
@@ -548,7 +606,8 @@ class VectorSSA(_RegisterSSA):
                 "cast",
                 f"unsupported cast target dtype '{dst_type.dtype}': tla.cast "
                 f"supports signed integers (i8/i16/i32/i64) and floats "
-                f"(f16/bf16/f32); unsigned, bool and f64 are not supported",
+                f"(f16/bf16/f32/f8e4m3fn/f8e5m2); unsigned, bool, f64 and "
+                f"f8e8m0 are not supported",
             )
         if not isinstance(params, CastParams):
             _op_error(
@@ -563,7 +622,10 @@ class VectorSSA(_RegisterSSA):
         operand_value = _as_value(self)
         context = operand_value.type.context
         src_desc = _vector_ssa_type_for_mlir_value(operand_value)
-        result_desc = _cast_result_descriptor(src_desc, _dtype_to_str(dst_type), params)
+        dst_token = _dtype_to_str(dst_type)
+        src_token = src_desc.element_type
+        _require_reg_slot_reachable(src_token, dst_token, params.reg_slot)
+        result_desc = _cast_result_descriptor(src_desc, dst_token, params)
         with context:
             trait_attr = mlir_ir.DenseI32ArrayAttr.get(params.codes())
         mask_value = _as_value(mask) if mask is not None else None
@@ -4820,9 +4882,9 @@ _SUPPORTED_CUBE_MXFP_WITH_SCALE_COPY_ROUTES = {
 # Vector copy
 _SUPPORTED_VECTOR_COPY_ROUTES = {
     # (src_addr, src_layout, dst_addr, dst_layout) : dtypes
-    ("gm", "RowMajor", "ub", "RowMajor"): ("f32", "f16", "bf16", "i32", "i16", "i8"),
-    ("ub", "RowMajor", "gm", "RowMajor"): ("f32", "f16", "bf16", "i32", "i16", "i8"),
-    ("ub", "RowMajor", "l1", "zN"): ("f32", "f16", "bf16"),
+    ("gm", "RowMajor", "ub", "RowMajor"): ("f32", "f16", "bf16", "i32", "i16", "i8", "f8e4m3fn", "f8e5m2"),
+    ("ub", "RowMajor", "gm", "RowMajor"): ("f32", "f16", "bf16", "i32", "i16", "i8", "f8e4m3fn", "f8e5m2"),
+    ("ub", "RowMajor", "l1", "zN"): ("f32", "f16", "bf16", "f8e4m3fn", "f8e5m2"),
     ("ub", "zN", "l1", "zN"): ("f32", "f16", "bf16"),
     ("ub", "zNUnAlign", "l1", "zN"): ("f32", "f16", "bf16"),
 }
@@ -8276,6 +8338,42 @@ def bitwise_xor(
         src1_reg,
         mask=mask,
         loc=loc,
+    )
+
+
+def _require_reg_slot_reachable(src_token: str, dst_token: str, slot: RegSlot) -> None:
+    """Refuse a reg_slot the lowering would quietly ignore.
+
+    Slots TWO and THREE name a pack quarter, and only an integer cast of 4x
+    width or more, or a direct fp8<->f32 cast, reads one (pp0..pp3). Every
+    other cast carries an even/odd part, where mapCastPart folds TWO and THREE
+    onto PART_EVEN -- so accepting them would hand back slot ZERO's lanes with
+    no diagnostic.
+
+    The fp8<->f32 instruction is the one float exception: it is a 4x-width
+    conversion and uses the same pp0..pp3 selector family as i8<->i32.
+    """
+    if slot not in (RegSlot.TWO, RegSlot.THREE):
+        return
+    src_bits = _CAST_TOKEN_BITS.get(src_token, 0)
+    dst_bits = _CAST_TOKEN_BITS.get(dst_token, 0)
+    int_pair = src_token.startswith("i") and dst_token.startswith("i")
+    ratio = (
+        _builtins.max(src_bits, dst_bits) // _builtins.min(src_bits, dst_bits)
+        if src_bits and dst_bits
+        else 0
+    )
+    fp8_f32_pair = (src_token in _CAST_FP8_DTYPES and dst_token == "f32") or (
+        src_token == "f32" and dst_token in _CAST_FP8_DTYPES
+    )
+    if (int_pair and ratio >= 4) or fp8_f32_pair:
+        return
+    _op_error(
+        "cast",
+        f"invalid reg_slot {slot} for cast '{src_token}'->'{dst_token}': slots "
+        f"TWO and THREE select a pack quarter, which requires a 4x integer cast "
+        f"or a direct fp8<->f32 cast; this conversion carries an even/odd part, "
+        f"where they would silently behave as ZERO",
     )
 
 

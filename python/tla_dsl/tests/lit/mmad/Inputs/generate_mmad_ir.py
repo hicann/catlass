@@ -487,12 +487,11 @@ def _fp8_mmad_kernel(elem_a, elem_b):
 
 @tla.kernel
 def _fp8_vector_copy_kernel(mem_a: tla.Tensor) -> None:
-    """fp8 staged through UB on the vector path -- no such route exists.
+    """fp8 staged through UB on the vector path.
 
-    fp8 is a cube operand format: the bc layer implements it for GM->L1 and
-    L1->L0A/L0B only. Nothing about the tile itself says so, which is why the
-    route resolution has to reject it rather than name a symbol that was never
-    registered.
+    Once rejected as a cube-operand-only format; Vector/dma.cpp now registers
+    GM<->UB and UB->L1 for both fp8 encodings, so the route resolves and the
+    copy lowers like any other element type.
     """
     ub = tla.make_tensor(
         tla.allocate((32, 32), tla.Float8E4M3FN, tla.AddressSpace.ub, 256),

@@ -1,38 +1,26 @@
-// fp8 is a cube *operand* format: the bc layer registers it for GM->L1 and
-// L1->L0A/L0B only. Every other route must reject it during route resolution.
+// fp8 on the vector staging path.
 //
-// This is not a theoretical guard. Element types are shared across all copy
-// routes, so giving fp8 a runtime-symbol suffix -- which the cube routes need --
-// simultaneously makes every other route able to spell a name for it. Those
-// names have no REGISTER_* behind them, so an unguarded route resolves to a
-// well-formed callee that fails at link time rather than as a diagnostic here.
+// This route used to be rejected, on the grounds that fp8 was a cube *operand*
+// format the bc layer implemented for GM->L1 and L1->L0A/L0B only. That was a
+// statement about the registrations rather than about the hardware, and it no
+// longer holds: Vector/dma.cpp registers GM<->UB and UB->L1 for both fp8
+// encodings, so an fp8 tile is staged and loaded like any other element type.
 //
-// The IR below is what a legal Python @tla.kernel program compiles to: an fp8
-// tile is fine to build, it is the vector staging route (GM <-> UB) that does
-// not exist. The rejection is therefore checked here, in the compiler, on IR the
-// frontend did not produce a diagnostic for -- the frontend's own refusal of
-// this route is covered by the Python tests.
+// The registration is not quite direct. The AIV backend rejects fp8 outright --
+// "type only supports pointer operations, scalar float type semantics are not
+// supported" -- and the UB copy templates trip that where the cube's DMA-only
+// ones do not. Each wrapper therefore keeps the fp8 name and signature that
+// route resolution needs and instantiates the copy on int8_t behind a
+// reinterpret_cast, which emits the same move because a copy does not read the
+// element type beyond stride and layout arithmetic.
+//
+// What this test guards is that the route resolves at all: element types are
+// shared across every copy route, so a route that can spell a name but has no
+// REGISTER_* behind it fails at link time rather than as a diagnostic here.
 
-// RUN: not %tla_compile %s -o - 2>&1 | %filecheck %s --check-prefix=VECCOPY
+// RUN: %python %S/Inputs/generate_mmad_ir.py fp8-vector-copy | %tla_compile - -o - 2>&1 | %filecheck %s --check-prefix=VECCOPY
 
-// The vector pass reports an unsupported route through notifyMatchFailure, which
-// is a pattern-dispatch signal rather than a user diagnostic, so what surfaces is
-// the generic legalization failure below rather than a message naming fp8. The
-// route is correctly rejected either way; only the wording is unhelpful.
-// VECCOPY: failed to legalize operation 'tla.copy' that was explicitly marked illegal
-
-module {
-  tla.func @fp8_vector_copy(%arg0: !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<32,1>, !tla.shape<32,32>, RowMajor>, !tla.coord<0,0>, !tla.ptr<f8E4M3FN, gm, 1>>) {
-    %0 = tla.alloc_ptr{size_bytes = 1024} -> !tla.ptr<f8E4M3FN, ub, 256>
-    %1 = tla.make_shape -> !tla.shape<32,32>
-    %2 = tla.make_stride -> !tla.stride<32,1>
-    %3 = tla.make_layout %1, %2 : !tla.shape<32,32>, !tla.stride<32,1> -> !tla.layout<!tla.shape<32,32>, !tla.stride<32,1>, !tla.shape<32,32>, RowMajor>
-    %4 = tla.make_coord -> !tla.coord<0,0>
-    %5 = tla.make_tensor %0, %3, %4 : !tla.ptr<f8E4M3FN, ub, 256>, !tla.layout<!tla.shape<32,32>, !tla.stride<32,1>, !tla.shape<32,32>, RowMajor>, !tla.coord<0,0> -> !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<32,1>, !tla.shape<32,32>, RowMajor>, !tla.coord<0,0>, !tla.ptr<f8E4M3FN, ub, 256>>
-    "tla.vector"() ({
-      tla.copy %5, %arg0 : !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<32,1>, !tla.shape<32,32>, RowMajor>, !tla.coord<0,0>, !tla.ptr<f8E4M3FN, ub, 256>>, !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<32,1>, !tla.shape<32,32>, RowMajor>, !tla.coord<0,0>, !tla.ptr<f8E4M3FN, gm, 1>>
-    }) : () -> ()
-    tla.return
-  }
-}
-
+// Naming the callee pins two things at once: the copy lowered rather than being
+// marked illegal, and it resolved to the registered fp8 symbol rather than to
+// some other element type's.
+// VECCOPY: copy_gm_RowMajor_to_ub_RowMajor_fp8_e4m3fn_t

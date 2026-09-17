@@ -47,6 +47,12 @@ from vector_op_harness import (
 #                     i32->i8->i32 (4x direct), and i16->f16 (int->float)
 #   i16 mul   : p16 = trunc(a) * trunc(c), computed at i16 width -> f32
 #   i8  add   : s8  = trunc(a) + trunc(b), computed at i8 width  -> f32
+#   fp8       : every leg the vector unit accepts. e4m3 and e5m2 against f32
+#               (one instruction each), and against f16 and bf16, which have no
+#               fp8 instruction and are expanded by the lowering into two ops
+#               through f32. The composed routes that describe the same value as
+#               their f32 round trip are subtracted, so they contribute zero
+#               unless a composition is wrong.
 #
 # The integer chain exercises: i32<->i16 and i16<->i8 (2x, even/odd part),
 # i32<->i8 (4x, pack pattern), and i16->f16 (int->float). int<->int casts do not
@@ -60,6 +66,25 @@ ALL_DTYPES = ("f32",)
 _KERNEL_DTYPE = tla.Float32
 _KERNEL_ELEMENT_BYTES = 4
 _KERNEL_SHAPE = (VECTOR_ELE,)
+
+
+# --- fp8 path traits ---------------------------------------------------------
+# fp8 pairs with f32 in hardware and uses all four pp0..pp3 byte positions.
+# The f16/bf16 routes compose through f32 with the compact pp0/pp1 layout.
+def _fp8_pp_trait(layout: tla.params.RegSlot) -> tla.params.CastParams:
+    return tla.params.CastParams(
+        reg_slot=layout,
+        sat_mode=tla.params.SatMode.NOSAT,
+        round_mode=tla.params.RoundMode.CAST_ROUND,
+    )
+
+
+_TRAIT_FP8_PP0 = _fp8_pp_trait(tla.params.RegSlot.ZERO)
+_TRAIT_FP8_PP1 = _fp8_pp_trait(tla.params.RegSlot.ONE)
+_TRAIT_FP8_PP2 = _fp8_pp_trait(tla.params.RegSlot.TWO)
+_TRAIT_FP8_PP3 = _fp8_pp_trait(tla.params.RegSlot.THREE)
+# Composed fp8<->f16/bf16 uses the compact pp0/pp1 layout.
+_TRAIT_FP8 = _TRAIT_FP8_PP0
 
 # --- f16 path traits ---------------------------------------------------------
 # a -> f16: even lane, no saturation, zeroing, round-to-nearest.
@@ -301,6 +326,90 @@ def cast_multi(
                 sum8_i32 = sum8.to(tla.Int32, _TRAIT_INT)  # i8 -> i32 (4x)
                 sum8_f32 = sum8_i32.to(tla.Float32, _TRAIT_TO_F32_INT)
 
+                # fp8. Every native f32<->fp8 pp0..pp3 round trip must describe
+                # the same values. The second route reaches f16 from fp8, which has no
+                # instruction and is expanded by the lowering into fp8 -> f32
+                # -> f16. Both describe e4m3(a), so their difference is zero
+                # and becomes nonzero if the composition is wrong.
+                a_f8 = a_v.to(tla.Float8E4M3FN, _TRAIT_FP8_PP0, full_mask)
+                f8_rt_f32 = a_f8.to(tla.Float32, _TRAIT_FP8_PP0)
+                f8_pp1_f32 = a_v.to(tla.Float8E4M3FN, _TRAIT_FP8_PP1, full_mask).to(
+                    tla.Float32, _TRAIT_FP8_PP1
+                )
+                f8_pp2_f32 = a_v.to(tla.Float8E4M3FN, _TRAIT_FP8_PP2, full_mask).to(
+                    tla.Float32, _TRAIT_FP8_PP2
+                )
+                f8_pp3_f32 = a_v.to(tla.Float8E4M3FN, _TRAIT_FP8_PP3, full_mask).to(
+                    tla.Float32, _TRAIT_FP8_PP3
+                )
+                f8_via16_f32 = a_f8.to(tla.Float16, _TRAIT_FP8).to(
+                    tla.Float32, _TRAIT_TO_F32_EVEN
+                )
+                # The other composed direction: f16 -> e4m3 becomes
+                # f16 -> f32 -> e4m3. e4m3 is used rather than e5m2 so that the
+                # inputs here (1.0 .. 6.0 in steps of 0.5) are all exactly
+                # representable: e5m2 carries two mantissa bits, so its spacing
+                # over [4, 8) is 1.0 and 4.5 lands exactly on a tie, where the
+                # AVE round mode and torch's round-half-to-even disagree. This
+                # test is about the composition, not about tie-breaking.
+                f16_to_f8_f32 = a_h.to(tla.Float8E4M3FN, _TRAIT_FP8).to(
+                    tla.Float32, _TRAIT_FP8
+                )
+
+                # e5m2, on c rather than a: c is 1.0, 1.5, 2.0, 2.5, 3.0, and
+                # e5m2's spacing is 0.25 over [1, 2) and 0.5 over [2, 4), so all
+                # of them are exact. a would not be -- 4.5 sits exactly on a tie
+                # there, where the AVE round mode and torch's round-half-to-even
+                # disagree.
+                c_e5 = c_v.to(tla.Float8E5M2, _TRAIT_FP8_PP0, full_mask)
+                e5_rt_f32 = c_e5.to(tla.Float32, _TRAIT_FP8_PP0)
+                e5_pp1_f32 = c_v.to(tla.Float8E5M2, _TRAIT_FP8_PP1, full_mask).to(
+                    tla.Float32, _TRAIT_FP8_PP1
+                )
+                e5_pp2_f32 = c_v.to(tla.Float8E5M2, _TRAIT_FP8_PP2, full_mask).to(
+                    tla.Float32, _TRAIT_FP8_PP2
+                )
+                e5_pp3_f32 = c_v.to(tla.Float8E5M2, _TRAIT_FP8_PP3, full_mask).to(
+                    tla.Float32, _TRAIT_FP8_PP3
+                )
+                e5_via16_f32 = c_e5.to(tla.Float16, _TRAIT_FP8).to(
+                    tla.Float32, _TRAIT_TO_F32_EVEN
+                )
+
+                # bf16, both directions and both encodings. bf16 carries eight
+                # mantissa bits, so it holds every value here exactly and the
+                # round trips stay identities.
+                f8_viabf_f32 = a_f8.to(tla.BFloat16, _TRAIT_FP8).to(
+                    tla.Float32, _TRAIT_TO_F32_EVEN
+                )
+                c_bf = c_v.to(tla.BFloat16, _TRAIT_FP8)
+                bf_to_e4m3_f32 = c_bf.to(tla.Float8E4M3FN, _TRAIT_FP8).to(
+                    tla.Float32, _TRAIT_FP8
+                )
+                bf_to_e5m2_f32 = c_bf.to(tla.Float8E5M2, _TRAIT_FP8).to(
+                    tla.Float32, _TRAIT_FP8
+                )
+
+                # The two "via" routes describe the same values as their round
+                # trips, so they enter as zero-differences that become nonzero
+                # the moment a composition is wrong.
+                fp8_contrib = (
+                    f8_rt_f32
+                    + (f8_pp1_f32 - f8_rt_f32)
+                    + (f8_pp2_f32 - f8_rt_f32)
+                    + (f8_pp3_f32 - f8_rt_f32)
+                    + (f8_via16_f32 - f8_rt_f32)
+                    + (f8_viabf_f32 - f8_rt_f32)
+                    + f16_to_f8_f32
+                    + e5_rt_f32
+                    + (e5_pp1_f32 - e5_rt_f32)
+                    + (e5_pp2_f32 - e5_rt_f32)
+                    + (e5_pp3_f32 - e5_rt_f32)
+                    + (e5_via16_f32 - e5_rt_f32)
+                    + bf_to_e4m3_f32
+                    + bf_to_e5m2_f32
+                )
+
                 out_chunk.store(
                     sum_f32
                     + (max_f32 - min_f32)
@@ -308,6 +417,7 @@ def cast_multi(
                     + int_contrib
                     + prod16_f32
                     + sum8_f32
+                    + fp8_contrib
                 )
 
         tla.set_flag(vec_done)
@@ -403,10 +513,30 @@ def _expected(op_name: str, inputs: tuple[Any, ...]) -> Any:
     # kernel combines them as (chain + direct) - i2f == one float(trunc(a)).
     int_contrib = a.to(torch.int32).to(f32)
     # compute at i16 / i8 width (small values, so int32 mirrors them exactly).
+    # fp8: the e4m3 round trip, plus e4m3 applied to the f16 value. The
+    # fp8 -> f16 route is the same value as the round trip, so it contributes
+    # nothing here -- which is the point: any error in the composition shows up
+    # as a nonzero difference.
+    f8_rt = a.to(torch.float8_e4m3fn).to(f32)
+    f16_to_f8 = a.to(torch.float16).to(torch.float8_e4m3fn).to(f32)
+    # e5m2 rides on c, whose values are all exact there; bf16 holds everything
+    # exactly. The fp8 -> f16 and fp8 -> bf16 routes equal their round trips and
+    # so contribute nothing -- which is the point of subtracting them.
+    e5_rt = c.to(torch.float8_e5m2).to(f32)
+    c_bf = c.to(torch.bfloat16)
+    bf_to_e4m3 = c_bf.to(torch.float8_e4m3fn).to(f32)
+    bf_to_e5m2 = c_bf.to(torch.float8_e5m2).to(f32)
+    fp8_contrib = f8_rt + f16_to_f8 + e5_rt + bf_to_e4m3 + bf_to_e5m2
     prod16_f32 = (a.to(torch.int32) * c.to(torch.int32)).to(f32)
     sum8_f32 = (a.to(torch.int32) + b.to(torch.int32)).to(f32)
     return (
-        sum_f32 + (max_f32 - min_f32) + prod_f32 + int_contrib + prod16_f32 + sum8_f32,
+        sum_f32
+        + (max_f32 - min_f32)
+        + prod_f32
+        + int_contrib
+        + prod16_f32
+        + sum8_f32
+        + fp8_contrib,
     )
 
 

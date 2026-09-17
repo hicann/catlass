@@ -612,25 +612,9 @@ static StringRef copyRuntimeElemSuffix(Type elementType)
     return {};
 }
 
-// fp8 is a cube *operand* format. The bc layer registers it only for the routes
-// that feed the cube (GM->L1 and L1->L0A/L0B); there is no vector-path wrapper
-// for it, and fixpipe cannot produce it. Element types are therefore not
-// route-agnostic, and a route must ask for a suffix it can actually implement.
-static bool isCubeOperandOnlyElementType(Type elementType)
-{
-    return elementType.isFloat8E4M3FN() || elementType.isFloat8E5M2();
-}
-
-// Suffix for the vector staging routes (GM<->UB, UB->L1). Spelling a cube-operand
-// type here would name a symbol the bc layer never defines, which surfaces as a
-// link failure instead of a diagnostic; an empty suffix rejects the route where
-// it is chosen.
-static StringRef vectorPathElemSuffix(Type elementType)
-{
-    if (isCubeOperandOnlyElementType(elementType))
-        return {};
-    return copyRuntimeElemSuffix(elementType);
-}
+// Vector staging shares copyRuntimeElemSuffix with the other copy routes.
+// fp8 is registered on GM<->UB and UB->L1 like int8_t; fixpipe remains
+// independently restricted by isLegalFixpipeElementType below.
 
 // Whether fixpipe can carry this L0C element type out to the given destination
 // type. An fp32 accumulator (the float MMAD routes) may be narrowed to f16/bf16
@@ -668,7 +652,7 @@ std::string getCopyRouteCallee(
         srcLayout == LayoutTag::RowMajor && dstLayout == LayoutTag::zN) {
         if (srcElementType != dstElem)
             return {};
-        StringRef suffix = vectorPathElemSuffix(srcElementType);
+        StringRef suffix = copyRuntimeElemSuffix(srcElementType);
         if (suffix.empty())
             return {};
         return Twine("copy_ub_RowMajor_to_l1_zN_").concat(suffix).str();
@@ -677,7 +661,7 @@ std::string getCopyRouteCallee(
         (srcLayout == LayoutTag::zN || srcLayout == LayoutTag::zNUnAlign) && dstLayout == LayoutTag::zN) {
         if (srcElementType != dstElem)
             return {};
-        StringRef suffix = vectorPathElemSuffix(srcElementType);
+        StringRef suffix = copyRuntimeElemSuffix(srcElementType);
         if (suffix.empty())
             return {};
         return Twine("copy_ub_zN_to_l1_zN_").concat(suffix).str();
@@ -687,7 +671,7 @@ std::string getCopyRouteCallee(
         srcLayout == LayoutTag::RowMajor && dstLayout == LayoutTag::RowMajor) {
         if (srcElementType != dstElem)
             return {};
-        StringRef suffix = vectorPathElemSuffix(srcElementType);
+        StringRef suffix = copyRuntimeElemSuffix(srcElementType);
         if (suffix.empty())
             return {};
         return Twine("copy_gm_RowMajor_to_ub_RowMajor_").concat(suffix).str();
@@ -697,7 +681,7 @@ std::string getCopyRouteCallee(
         srcLayout == LayoutTag::RowMajor && dstLayout == LayoutTag::RowMajor) {
         if (srcElementType != dstElem)
             return {};
-        StringRef suffix = vectorPathElemSuffix(srcElementType);
+        StringRef suffix = copyRuntimeElemSuffix(srcElementType);
         if (suffix.empty())
             return {};
         return Twine("copy_ub_RowMajor_to_gm_RowMajor_").concat(suffix).str();
