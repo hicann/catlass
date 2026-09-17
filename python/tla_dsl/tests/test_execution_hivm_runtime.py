@@ -1056,9 +1056,12 @@ def test_cache_hit_preserves_recursive_tree_and_launches_same_payload(
 
     compiled_binaries: list[bytes] = []
 
-    def fake_run_checked(_cmd, *, label, cwd, stdin_text=None):
+    def fake_run_checked(
+        _cmd, *, label, cwd, stdin_text=None, diagnostic_input_mlir=""
+    ):
         del stdin_text
         assert label == "hivmc-a5"
+        assert diagnostic_input_mlir
         binary = f"obj-{len(compiled_binaries) + 1}".encode()
         compiled_binaries.append(binary)
         Path(cwd, "kernel.o").write_bytes(binary)
