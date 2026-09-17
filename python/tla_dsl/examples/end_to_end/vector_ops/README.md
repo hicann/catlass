@@ -152,7 +152,7 @@ def vector_op(mem_in: tla.Tensor, mem_out: tla.Tensor) -> None:
 | `--dtypes` | 全部支持类型 | 供 `--sweep` 使用的数据类型列表。 |
 | `--all-dtypes` | `None` | 对全部支持的数据类型逐一执行，默认不启用。 |
 | `--batch-size` | `4` | 批量模式下每个 kernel 打包的算子数（1~4）。 |
-| `--sentinel` | 各算子默认哨兵值 | 初始化输出的值。 |
+| `--sentinel` | 各算子输出的初始默认值 | 初始化输出的值。 |
 | `--atol` | 各算子默认绝对误差 | 浮点精度校验的绝对误差阈值。 |
 | `--fail-fast` | `None` | 扫描/批量模式遇到失败即停止，默认不启用。 |
 
@@ -467,22 +467,45 @@ first mismatch=None
   python examples/end_to_end/vector_ops/arange_op.py decrease --dtype i16 --device 0
   ```
 
-### 数据搬运
+### 数据重排
 
 - 文件位置：
   - `interleave_op.py`：交织/解交织。
+
+- 功能说明：**`interleave_op.py`**（i8, i16, i32, f16, f32, bf16）：
+
+  | op | 语义 |
+  |------|------|
+  | `interleave` | 两路输入交错为两路输出：`dst0` 的偶、奇位分别取自 `src0`、`src1` 的前半段，`dst1` 的偶、奇位分别取自两者的后半段 |
+  | `deinterleave` | 两路输入解交错为两路输出：`dst0` 收集两路输入的偶数位（前半段取自 `src0`、后半段取自 `src1`），`dst1` 收集奇数位 |
+
+- 约束说明：
+  - 支持的数据类型：
+
+    | 文件 | 支持的数据类型 |
+    |------|---------------|
+    | `interleave_op.py` | i8, i16, i32, f16, f32, bf16 |
+
+- 执行示例：
+  ```bash
+  # 在本仓 python/tla_dsl 目录下执行
+  cd python/tla_dsl
+
+  # interleave 模式（两路输入 两路输出）
+  python examples/end_to_end/vector_ops/interleave_op.py interleave --dtype f32 --device 0
+
+  # deinterleave 模式 （interleave 的逆操作）
+  python examples/end_to_end/vector_ops/interleave_op.py deinterleave --dtype f32 --device 0
+  ```
+
+### 数据搬运
+
+- 文件位置：
   - `load_dintlv_op.py`：双目标交织加载。
   - `load_us_b8_op.py`：b8 上采样加载。
   - `store_pack.py`：紧凑 PACK 存储。
 
 - 功能说明：
-  - **`interleave_op.py`**（i8, i16, i32, f16, f32, bf16）：
-
-    | op | 语义 |
-    |------|------|
-    | `interleave` | 两路输入交错为两路输出 |
-    | `deinterleave` | 两路输入解交错为两路输出 |
-
   - **`load_dintlv_op.py`**（f32）：op `dintlv_b32`，按 `2*i*VL` 偏移读 `2*VL`，拆出偶数/奇数两路寄存器。
   - **`load_us_b8_op.py`**（i8）：op `us_b8`，每 loop 读 `VL/2` 个 b8 并上采样为 VL 寄存器。
   - **`store_pack.py`**（输入 i32/i16）：op `store_pack`，i32→i16（`DIST_PACK_B32`）、i16→i8（`DIST_PACK_B16`），抽取低半有效数位做紧凑存储。
@@ -492,12 +515,10 @@ first mismatch=None
 
     | 文件 | 支持的数据类型 |
     |------|---------------|
-    | `interleave_op.py` | i8, i16, i32, f16, f32, bf16 |
     | `load_dintlv_op.py` | f32 |
     | `load_us_b8_op.py` | i8 |
     | `store_pack.py` | i32, i16 |
 
-  - `interleave_op.py`：全部列出 dtype；输入 2、输出 2；支持 batch。
   - `load_dintlv_op.py`：仅 f32（i32/u32 不支持）；`VECTOR_ELE` 须为 `2*VL` 的倍数；仅写 `LOOPS*VL` lane，其余保留 sentinel。
   - `load_us_b8_op.py`：仅 i8；仅写 `LOOPS*VL` lane，其余保留 sentinel。
   - `store_pack.py`：输入 i32/i16，输出对应 i16/i8；固定 256 元素。
@@ -506,9 +527,6 @@ first mismatch=None
   ```bash
   # 在本仓 python/tla_dsl 目录下执行
   cd python/tla_dsl
-
-  # 交织 / 解交织（两路输入、两路输出）
-  python examples/end_to_end/vector_ops/interleave_op.py interleave --dtype f32 --device 0
 
   # 双目标交织加载（仅 f32）
   python examples/end_to_end/vector_ops/load_dintlv_op.py dintlv_b32 --dtype f32 --device 0
@@ -570,15 +588,12 @@ first mismatch=None
   python examples/end_to_end/vector_ops/register_control_flow.py register_carriers --dtype f32 --device 0
   ```
 
-### 标量访问与收集（独立脚本）
+### 标量访问
 
 - 文件位置：
   - `load_and_store_scalar_after_reduction.py`：UB 标量访问。
-  - `gather_op.py`：按索引收集。
 
-- 功能说明：
-  - **`load_and_store_scalar_after_reduction.py`**（f32）：对 f32 UB 向量归约后，分别在 `tla.vec.func` 内与 `tla.vector` 内直接做 UB 标量 `load`/`store`。
-  - **`gather_op.py`**（f32）：`tla.gather` 依据 int32 索引从源向量收集元素。
+- 功能说明：**`load_and_store_scalar_after_reduction.py`**（f32）：对 f32 UB 向量归约后，分别在 `tla.vec.func` 内与 `tla.vector` 内直接做 UB 标量 `load`/`store`。
 
 - 约束说明：
   - 支持的数据类型：
@@ -586,10 +601,8 @@ first mismatch=None
     | 文件 | 支持的数据类型 |
     |------|---------------|
     | `load_and_store_scalar_after_reduction.py` | f32 |
-    | `gather_op.py` | f32 |
 
   - `load_and_store_scalar_after_reduction.py`：dtype 固定 f32，无位置 op、无 `--run`，唯一参数 `--device`；固定写入索引 7（`vec.func` 内）与 8（`vector` 内）。
-  - `gather_op.py`：仅 f32；必须显式传 `--run`，否则退出。
 
 - 执行示例：
   ```bash
@@ -598,7 +611,64 @@ first mismatch=None
 
   # UB 标量 load/store（无位置 op、无 --run，直接执行）
   python examples/end_to_end/vector_ops/load_and_store_scalar_after_reduction.py --device 0
+  ```
+
+### 离散与聚合
+
+- 文件位置：
+  - `gather_op.py`：按索引收集。
+
+- 功能说明：**`gather_op.py`**（f32，独立脚本）——`tla.gather` 依据 int32 索引向量从源向量收集元素并写回目标向量；源向量、索引向量与目标向量均为 64 lane。
+
+- 约束说明：
+  - 支持的数据类型：
+
+    | 文件 | 支持的数据类型 |
+    |------|---------------|
+    | `gather_op.py` | f32 |
+
+  - `gather_op.py`：仅 f32；必须显式传 `--run`，否则退出；索引为 i32；`VECTOR_ELE = 64`；默认 `--device 0`；精度校验 `atol=1e-4`。
+
+- 执行示例：
+  ```bash
+  # 在本仓 python/tla_dsl 目录下执行
+  cd python/tla_dsl
 
   # 按索引收集（独立脚本，必须显式 --run）
   python examples/end_to_end/vector_ops/gather_op.py --run --dtype f32 --device 0
+  ```
+
+### 广播（独立脚本）
+
+- 文件位置：
+  - `full_op.py`：`tla.full` 的标量填充或单通道广播。
+
+- 功能说明：**`full_op.py`** ——演示 `tla.full` 的两种取值形式以及可选 lane 掩码，一次 kernel 产出 4 路广播结果：
+
+  | 输出 | 计算 | 语义 |
+  |------|------|------|
+  | `out_vec_nomask` | `full(reduced, data_type)` | 单 lane `fragment`（`tla.reduce` 后的结果）广播到所有 lane |
+  | `out_scl_nomask` | `full(SCALAR_FILL, data_type)` | Python 标量填充到所有 lane |
+  | `out_vec_mask` | `full(reduced, data_type, mask=mask)` | 仅 lane < `MASK_LANES` 写归约值 |
+  | `out_scl_mask` | `full(SCALAR_FILL, data_type, mask=mask)` | 仅 lane < `MASK_LANES` 写标量 |
+
+  其中 `fragment` 形式是：`tla.reduce` 的结果位于向量寄存器的一个 lane，SIMD 后端没有把 lane 读回标量寄存器的指令；直接广播 fragment 无需经过标量寄存器即可完成数据相关的填充。
+
+- 约束说明：
+  - 支持的数据类型：
+
+    | 文件 | 支持的数据类型 |
+    |------|---------------|
+    | `full_op.py` | f32 |
+
+  - `full_op.py`：固定 `VECTOR_ELE = 64`（恰好一个物理向量寄存器）、`MASK_LANES = 40`、`SCALAR_FILL = 3.0`；输入 1 个（`x`），输出 4 个（`vn` / `sn` / `vm` / `sm`）。
+  - 掩码未命中的 lane（`vm[40:]` / `sm[40:]`）不写入，保持初始设定值 `-999.0`，故 golden 校验只比较前 `MASK_LANES` 个元素。
+
+- 执行示例：
+  ```bash
+  # 在本仓 python/tla_dsl 目录下执行
+  cd python/tla_dsl
+
+  # 标量填充 / 单 lane fragment 广播，含带掩码变体
+  python examples/end_to_end/vector_ops/full_op.py --device 0
   ```
