@@ -4,13 +4,14 @@
 
 module {
   func.func @store_first_element_b16(
+      %extent: index,
       %src_memref: memref<128xf16, #hivm.address_space<ub>>,
       %dst_memref: memref<128xf16, #hivm.address_space<ub>>) {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c128 = arith.constant 128 : index
     %src = tla.tensor_desc %src_memref shape [%c1, %c128, %c1, %c1] stride [%c128, %c1, %c1, %c1] origin_shape [%c1, %c128] coord [%c0, %c0] : memref<128xf16, #hivm.address_space<ub>> -> !ub_f16
-    %dst = tla.tensor_desc %dst_memref shape [%c1, %c128, %c1, %c1] stride [%c128, %c1, %c1, %c1] origin_shape [%c1, %c128] coord [%c0, %c0] : memref<128xf16, #hivm.address_space<ub>> -> !ub_f16
+    %dst = tla.tensor_desc %dst_memref shape [%c1, %c128, %c1, %c1] stride [%c128, %c1, %c1, %c1] origin_shape [%c1, %extent] coord [%c0, %c0] : memref<128xf16, #hivm.address_space<ub>> -> !ub_f16
     "tla.vec.func"() ({
       %shape = "tla.make_shape"() : () -> !tla.shape<64>
       %coord = "tla.make_coord"() : () -> !tla.coord<0>
@@ -24,7 +25,9 @@ module {
 }
 
 // CHECK-LABEL: func.func private @vector_region_
+// CHECK: ave.hir.pge <ALL>
 // CHECK: ave.hir.vload
+// CHECK-NOT: ave.hir.plt
 // CHECK: ave.hir.masked_store <ONEPT_B16>
 // CHECK-SAME: vector<128xf16>
 // CHECK-NOT: tla.store

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <optional>
+
 #include "Dialect/Tla/IR/TlaAttrs.h"
 #include "Dialect/Tla/IR/TlaDialect.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -70,6 +72,44 @@ inline int64_t getBitSizeOfFixedWidthScalarType(::mlir::Type type)
     if (::llvm::isa<::tla::Float4E2M1Type, ::tla::Float4E1M2Type>(type))
         return 4;
     return getByteSizeOfFixedWidthScalarType(type) * 8;
+}
+
+/// Predicate geometry for a packed vector store.  The factor converts logical
+/// destination elements into predicate lanes for the source register.
+struct PackedStorePredicateGeometry {
+    int64_t sourcePredicateLanesPerDestElement;
+};
+
+/// Return the supported non-NORM store predicate geometry for ``storeDist``.
+///
+/// PACK_B32 always writes one 16-bit payload per B32 slot.  A 16-bit source
+/// register contains two source predicate lanes per B32 slot, while a 32-bit
+/// source register contains one.  PACK_B16 writes one 8-bit payload per B16
+/// slot.  ONEPT distributions preserve one source predicate lane per
+/// same-width destination element. The DSL deliberately rejects other
+/// combinations rather than inventing a source-to-destination predicate
+/// mapping the hardware does not define.
+inline std::optional<PackedStorePredicateGeometry> getPackedStorePredicateGeometry(
+    ::StoreDist storeDist, ::mlir::Type sourceElementType, ::mlir::Type destElementType)
+{
+    if (storeDist == ::StoreDist::norm)
+        return PackedStorePredicateGeometry{1};
+
+    int64_t sourceBits = getBitSizeOfFixedWidthScalarType(sourceElementType);
+    int64_t destBits = getBitSizeOfFixedWidthScalarType(destElementType);
+    if (storeDist == ::StoreDist::pack_b32 && destBits == 16) {
+        if (sourceBits == 32)
+            return PackedStorePredicateGeometry{1};
+        if (sourceBits == 16)
+            return PackedStorePredicateGeometry{2};
+    }
+    if (storeDist == ::StoreDist::pack_b16 && sourceBits == 16 && destBits == 8)
+        return PackedStorePredicateGeometry{1};
+    if ((storeDist == ::StoreDist::first_element_b8 && sourceBits == 8 && destBits == 8) ||
+        (storeDist == ::StoreDist::first_element_b16 && sourceBits == 16 && destBits == 16) ||
+        (storeDist == ::StoreDist::first_element_b32 && sourceBits == 32 && destBits == 32))
+        return PackedStorePredicateGeometry{1};
+    return std::nullopt;
 }
 
 /// True for a packed 4-bit cube float, either encoding.

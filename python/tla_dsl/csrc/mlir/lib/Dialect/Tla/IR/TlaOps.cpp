@@ -739,6 +739,39 @@ mlir::LogicalResult StoreOp::verify()
     auto vectorSource = mlir::dyn_cast<VectorSSAType>(getSource().getType());
     if (!vectorSource)
         return emitOpError("source must be !tla.vector or !tla.mask");
+
+    bool isUnaligned = getUnalignedUbAccess().value_or(false);
+    if (isUnaligned && getBlockStride())
+        return emitOpError("unaligned_ub_access and block_stride are mutually exclusive");
+
+    if (auto storeDist = getStoreDist()) {
+        ::StoreDist dist = storeDist->getStoreDist();
+        bool isNormal = dist == ::StoreDist::norm;
+        bool isFirstElement = dist == ::StoreDist::first_element_b8 || dist == ::StoreDist::first_element_b16 ||
+                              dist == ::StoreDist::first_element_b32;
+        if (!isNormal && isUnaligned)
+            return emitOpError("non-normal store_dist is incompatible with unaligned_ub_access");
+        if (!isNormal && getBlockStride())
+            return emitOpError("non-normal store_dist is incompatible with block_stride");
+        if (isFirstElement && getMask())
+            return emitOpError("predicate mask is not supported with first_element store_dist");
+
+        auto destElementType = destType.getPtr().getPointee();
+        // Explicit masks retain their historical behavior: their predicate
+        // geometry is defined by the user and verified below against the
+        // source vector. Omitted masks and mask-ignoring first-element stores
+        // need compiler-derived geometry and therefore require a supported
+        // source/destination width pairing.
+        if ((!getMask() || isFirstElement) &&
+            !getPackedStorePredicateGeometry(dist, vectorSource.getElementType(), destElementType)) {
+            return emitOpError() << "unsupported " << stringifyStoreDist(dist)
+                                 << " source/destination element widths: source "
+                                 << getBitSizeOfFixedWidthScalarType(vectorSource.getElementType())
+                                 << " bits, destination " << getBitSizeOfFixedWidthScalarType(destElementType)
+                                 << " bits; supported layouts are pack_b32 32->16, pack_b32 16->16, pack_b16 16->8, "
+                                    "first_element_b8 8->8, first_element_b16 16->16, and first_element_b32 32->32";
+        }
+    }
     return verifyMaskMatchesVector(getOperation(), getMask(), vectorSource);
 }
 

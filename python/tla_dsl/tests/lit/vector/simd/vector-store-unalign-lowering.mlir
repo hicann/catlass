@@ -13,7 +13,8 @@ module {
     %dst_c0 = arith.constant 0 : index
     %dst_c1 = arith.constant 1 : index
     %dst_c64 = arith.constant 64 : index
-    %dst = tla.tensor_desc %dst_memref shape [%dst_c1, %dst_c64, %dst_c1, %dst_c1] stride [%dst_c64, %dst_c1, %dst_c1, %dst_c1] origin_shape [%dst_c1, %dst_c64] coord [%dst_c0, %dst_c0] : memref<64xf32, #hivm.address_space<ub>> -> !fvec
+    %dst_c37 = arith.constant 37 : index
+    %dst = tla.tensor_desc %dst_memref shape [%dst_c1, %dst_c64, %dst_c1, %dst_c1] stride [%dst_c64, %dst_c1, %dst_c1, %dst_c1] origin_shape [%dst_c1, %dst_c37] coord [%dst_c0, %dst_c0] : memref<64xf32, #hivm.address_space<ub>> -> !fvec
     "tla.vec.func"() ({
       %shape = "tla.make_shape"() : () -> !tla.shape<64>
       %coord = "tla.make_coord"() : () -> !tla.coord<0>
@@ -24,10 +25,40 @@ module {
     }) : () -> ()
     return
   }
+
+  // The source has 10 valid lanes and the destination has 20. An omitted
+  // unaligned-store mask is destination-defined, so it must use 20 lanes.
+  func.func @vector_store_unalign_source_dest_tail(
+      %src_memref: memref<64xf32, #hivm.address_space<ub>>,
+      %dst_memref: memref<64xf32, #hivm.address_space<ub>>) {
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    %c10 = arith.constant 10 : index
+    %c20 = arith.constant 20 : index
+    %c64 = arith.constant 64 : index
+    %src = tla.tensor_desc %src_memref shape [%c1, %c64, %c1, %c1] stride [%c64, %c1, %c1, %c1] origin_shape [%c1, %c10] coord [%c0, %c0] : memref<64xf32, #hivm.address_space<ub>> -> !fvec
+    %dst = tla.tensor_desc %dst_memref shape [%c1, %c64, %c1, %c1] stride [%c64, %c1, %c1, %c1] origin_shape [%c1, %c20] coord [%c0, %c0] : memref<64xf32, #hivm.address_space<ub>> -> !fvec
+    "tla.vec.func"() ({
+      %shape = "tla.make_shape"() : () -> !tla.shape<64>
+      %coord = "tla.make_coord"() : () -> !tla.coord<0>
+      %src_tile = "tla.tile_view"(%src, %shape, %coord) : (!fvec, !tla.shape<64>, !tla.coord<0>) -> !fvec
+      %dst_tile = "tla.tile_view"(%dst, %shape, %coord) : (!fvec, !tla.shape<64>, !tla.coord<0>) -> !fvec
+      %loaded = tla.load %src_tile : !fvec -> !tla.vector<10xf32>
+      tla.store %dst_tile, %loaded {unaligned_ub_access} : !fvec, !tla.vector<10xf32>
+    }) : () -> ()
+    return
+  }
 }
 
 // CHECK-LABEL: func.func private @vector_region_
 // CHECK: ave.hir.vload
+// CHECK: ave.hir.plt
 // CHECK: ave.hir.masked_store
 // CHECK: ave.unaligned_ub_access
 // CHECK-NOT: tla.store
+
+// CHECK-LABEL: func.func private @vector_region_
+// CHECK: arith.constant 20 : index
+// CHECK: %[[DEST_TAIL:.*]], %{{.*}} = ave.hir.plt {{.*}} : vector<256xi1>
+// CHECK: ave.hir.masked_store {{.*}}, %[[DEST_TAIL]],
+// CHECK: ave.unaligned_ub_access

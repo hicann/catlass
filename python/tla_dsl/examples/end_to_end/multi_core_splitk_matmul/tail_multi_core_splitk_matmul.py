@@ -589,7 +589,6 @@ def tail_multi_core_splitk_mmad_kernel(
 
                 # Sum split-K UB rows; optionally cast narrow types and densify stores.
                 with tla.vec.func(mode="simd"):
-                    add_mask = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Float32)
                     acc_chunk_shape = tla.make_shape(ELE_PER_VECTOR_BLOCK)
                     src_chunk_shape = tla.make_shape(1, ELE_PER_VECTOR_BLOCK)
                     for sk_idx in tla.range(1, _tail_splitk.splitk_factor):
@@ -606,19 +605,13 @@ def tail_multi_core_splitk_mmad_kernel(
                             )
                             reduce_acc_chunk.store(
                                 reduce_acc_chunk.load() + reduce_src_chunk.load(),
-                                mask=add_mask,
                             )
 
                     if tla.const_expr(dtype_gm_c != tla.Float32):
                         # f32→f16/bf16 cast leaves values in low-16 of each B32 slot;
                         # DIST_PACK_B32 packs those halves densely (replaces deinterleave).
-                        # Mask must be ALL on the narrow dtype — VL64 only enables half the
-                        # f16 lanes and would write only half a strip.
                         cast_mask = tla.create_mask(
                             pattern=tla.mask.ALL, dtype=tla.Float32
-                        )
-                        store_mask = tla.create_mask(
-                            pattern=tla.mask.ALL, dtype=dtype_gm_c
                         )
                         pack_store = NormalStoreParams(
                             store_dist=StoreDist.DIST_PACK_B32
@@ -643,7 +636,7 @@ def tail_multi_core_splitk_mmad_kernel(
                             )
                             acc_v = cast_acc_chunk.load()
                             out_v = acc_v.to(dtype_gm_c, cast_to_gm_params, cast_mask)
-                            cast_out_chunk.store(out_v, pack_store, mask=store_mask)
+                            cast_out_chunk.store(out_v, pack_store)
 
                 tla.set_flag(reduce_v_mte3)
                 tla.wait_flag(reduce_v_mte3)

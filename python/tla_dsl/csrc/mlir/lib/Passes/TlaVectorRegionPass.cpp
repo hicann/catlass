@@ -14,6 +14,9 @@
 #include "mlir/IR/IRMapping.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
+#include <algorithm>
+#include <limits>
+
 namespace tla {
 namespace {
 // ParsedTensorInfo + parseTensorInfo live in the shared header
@@ -787,15 +790,45 @@ static hivmave::VFPltOp createPredicatePlt(
     return plt;
 }
 
+// Reuse auto-generated full predicates at the vector-helper entry. A generated
+// predicate has no data dependency, so placing it here makes it dominate every
+// loop and branch in the helper. Explicit tla.create_mask stays at its source
+// location; this cache applies only to omitted masks.
+class AutoFullPredicateCache {
+public:
+    explicit AutoFullPredicateCache(Block* entry) : entry(entry)
+    {}
+
+    Value get(Location loc, int64_t semanticLanes)
+    {
+        if (Value mask = masks.lookup(semanticLanes))
+            return mask;
+        OpBuilder entryBuilder = OpBuilder::atBlockBegin(entry);
+        // Keep the cached predicate in the hardware register-container type.
+        // A semantic-width cache value would be materialized as a conversion
+        // to vector<Nxi1> at the entry and then converted back to the physical
+        // predicate for every vector op. Explicit tla.create_mask lowers as the
+        // physical predicate directly, so the hidden default must do the same.
+        VectorType maskType = fullPregVecType(entry->getParent()->getContext());
+        Value mask = createPredicatePge(entryBuilder, loc, maskType, semanticLanes, hivmave::PgePattern::ALL);
+        masks[semanticLanes] = mask;
+        return mask;
+    }
+
+private:
+    Block* entry;
+    DenseMap<uint64_t, Value> masks;
+};
+
 // An all-lanes-active predicate for a data or MaskSSA vector. MaskSSA keeps its
 // semantic lane count in tlaOperandType even when its mapped value is the full
 // predicate-register container.
-static Value allTrueMaskFor(OpBuilder& b, Location loc, VectorType vecType, Type tlaOperandType)
+static Value allTrueMaskFor(AutoFullPredicateCache& cache, Location loc, VectorType vecType, Type tlaOperandType)
 {
     int64_t semanticLanes = vecType.getNumElements();
     if (auto maskType = dyn_cast<::tla::MaskSSAType>(tlaOperandType))
         semanticLanes = maskType.getPhysicalLanes();
-    return createPredicatePge(b, loc, fullPregVecType(b.getContext()), semanticLanes, hivmave::PgePattern::ALL);
+    return cache.get(loc, semanticLanes);
 }
 
 // Map the tla.cast round mode onto the HIVM round_mode attribute.
@@ -1008,17 +1041,19 @@ static Value lookupOrCloneScalarValue(OpBuilder& b, Value value, DenseMap<Value,
     if (Value mapped = valueMap.lookup(value))
         return mapped;
     Operation* def = value.getDefiningOp();
-    if (!def || def->getNumResults() != 1 || !isa<arith::ConstantOp>(def))
+    if (!def || def->getNumResults() != 1)
         return nullptr;
-    Operation* cloned = b.clone(*def);
-    valueMap[value] = cloned->getResult(0);
-    return cloned->getResult(0);
+    if (isa<arith::ConstantOp>(def)) {
+        Operation* cloned = b.clone(*def);
+        valueMap[value] = cloned->getResult(0);
+        return cloned->getResult(0);
+    }
+    return nullptr;
 }
 
-// Materialize the valid-lane count of a tla.tensor as an index SSA value for the
-// active mask. Falls back to the producing tla.tensor_desc's origin_shape0*origin_shape1,
-// mapped into the helper via lookupOrCloneScalarValue (vec.func-external scalars are
-// helper args; in-region index arithmetic is cloned ahead of the descriptor).
+// Materialize the descriptor-defined valid-lane count for an omitted store.
+// `origin_shape` describes the logical tile extent even when the addressable UB
+// subview is a full physical register wide.
 static FailureOr<Value> getTlaTensorValidLaneCount(
     OpBuilder& b, Location loc, Value tensorValue, DenseMap<Value, Value>& valueMap)
 {
@@ -1030,6 +1065,224 @@ static FailureOr<Value> getTlaTensorValidLaneCount(
         return b.create<arith::MulIOp>(loc, origin0, origin1).getResult();
     }
     return failure();
+}
+
+static std::optional<int64_t> getStaticTlaTensorValidLaneCount(Value tensorValue)
+{
+    auto descOp = findTensorDescProducer(tensorValue);
+    if (!descOp)
+        return std::nullopt;
+    auto origin0 = getConstantIntValue(descOp.getOriginShape0());
+    auto origin1 = getConstantIntValue(descOp.getOriginShape1());
+    if (!origin0 || !origin1 || *origin0 < 0 || *origin1 < 0 ||
+        (*origin1 != 0 && *origin0 > std::numeric_limits<int64_t>::max() / *origin1))
+        return std::nullopt;
+    return *origin0 * *origin1;
+}
+
+struct IndexInterval {
+    int64_t lower;
+    int64_t upper;
+};
+
+// arith integer operations wrap at their SSA result width. An interval that
+// exceeds that signed range cannot be propagated as ordinary int64 arithmetic:
+// the wrapped value observed by a later index_cast may be completely different.
+static bool intervalFitsValueType(Value value, const IndexInterval& interval)
+{
+    auto integerType = dyn_cast<IntegerType>(value.getType());
+    if (!integerType)
+        return true;
+    unsigned width = integerType.getWidth();
+    if (width == 0 || width > 64)
+        return false;
+    if (width == 64)
+        return true;
+    int64_t min = -(int64_t{1} << (width - 1));
+    int64_t max = (int64_t{1} << (width - 1)) - 1;
+    return interval.lower >= min && interval.upper <= max;
+}
+
+// Evaluate the small affine subset produced by tiled vector loops. This is
+// deliberately conservative: unknown values retain the PLT tail path.
+static std::optional<IndexInterval> getIndexInterval(Value value)
+{
+    if (std::optional<int64_t> constant = getConstantIntValue(value))
+        return IndexInterval{*constant, *constant};
+
+    if (auto arg = dyn_cast<BlockArgument>(value)) {
+        auto forOp = dyn_cast_or_null<scf::ForOp>(arg.getOwner()->getParentOp());
+        if (!forOp || arg.getArgNumber() != 0)
+            return std::nullopt;
+        auto lowerInterval = getIndexInterval(forOp.getLowerBound());
+        auto upperInterval = getIndexInterval(forOp.getUpperBound());
+        auto stepInterval = getIndexInterval(forOp.getStep());
+        if (!lowerInterval || lowerInterval->lower != lowerInterval->upper || !upperInterval ||
+            upperInterval->lower != upperInterval->upper || !stepInterval || stepInterval->lower != stepInterval->upper)
+            return std::nullopt;
+        int64_t lower = lowerInterval->lower;
+        int64_t upper = upperInterval->lower;
+        int64_t step = stepInterval->lower;
+        if (step <= 0 || upper <= lower)
+            return std::nullopt;
+        int64_t span;
+        int64_t lastOffset;
+        int64_t last;
+        if (__builtin_sub_overflow(upper, lower, &span) || __builtin_sub_overflow(span, int64_t{1}, &span) ||
+            __builtin_mul_overflow(span / step, step, &lastOffset) || __builtin_add_overflow(lower, lastOffset, &last))
+            return std::nullopt;
+        IndexInterval result{lower, last};
+        if (intervalFitsValueType(value, result))
+            return result;
+        return std::nullopt;
+    }
+    if (auto cast = value.getDefiningOp<arith::IndexCastOp>()) {
+        auto interval = getIndexInterval(cast.getIn());
+        if (!interval)
+            return std::nullopt;
+        if (auto destType = dyn_cast<IntegerType>(cast.getType())) {
+            unsigned width = destType.getWidth();
+            if (width == 0 || width > 64)
+                return std::nullopt;
+            int64_t min = width == 64 ? std::numeric_limits<int64_t>::min() : -(int64_t{1} << (width - 1));
+            int64_t max = width == 64 ? std::numeric_limits<int64_t>::max() : (int64_t{1} << (width - 1)) - 1;
+            if (interval->lower < min || interval->upper > max)
+                return std::nullopt;
+        }
+        return interval;
+    }
+    if (auto add = value.getDefiningOp<arith::AddIOp>()) {
+        auto lhs = getIndexInterval(add.getLhs());
+        auto rhs = getIndexInterval(add.getRhs());
+        int64_t lower;
+        int64_t upper;
+        if (lhs && rhs && !__builtin_add_overflow(lhs->lower, rhs->lower, &lower) &&
+            !__builtin_add_overflow(lhs->upper, rhs->upper, &upper)) {
+            IndexInterval result{lower, upper};
+            if (intervalFitsValueType(value, result))
+                return result;
+        }
+    }
+    if (auto sub = value.getDefiningOp<arith::SubIOp>()) {
+        auto lhs = getIndexInterval(sub.getLhs());
+        auto rhs = getIndexInterval(sub.getRhs());
+        int64_t lower;
+        int64_t upper;
+        if (lhs && rhs && !__builtin_sub_overflow(lhs->lower, rhs->upper, &lower) &&
+            !__builtin_sub_overflow(lhs->upper, rhs->lower, &upper)) {
+            IndexInterval result{lower, upper};
+            if (intervalFitsValueType(value, result))
+                return result;
+        }
+    }
+    if (auto mul = value.getDefiningOp<arith::MulIOp>()) {
+        auto lhs = getIndexInterval(mul.getLhs());
+        auto rhs = getIndexInterval(mul.getRhs());
+        int64_t lower;
+        int64_t upper;
+        if (lhs && rhs && lhs->lower >= 0 && rhs->lower >= 0 &&
+            !__builtin_mul_overflow(lhs->lower, rhs->lower, &lower) &&
+            !__builtin_mul_overflow(lhs->upper, rhs->upper, &upper)) {
+            IndexInterval result{lower, upper};
+            if (intervalFitsValueType(value, result))
+                return result;
+        }
+    }
+    if (auto min = value.getDefiningOp<arith::MinSIOp>()) {
+        auto lhs = getIndexInterval(min.getLhs());
+        auto rhs = getIndexInterval(min.getRhs());
+        if (lhs && rhs) {
+            IndexInterval result{std::min(lhs->lower, rhs->lower), std::min(lhs->upper, rhs->upper)};
+            if (intervalFitsValueType(value, result))
+                return result;
+        }
+    }
+    return std::nullopt;
+}
+
+static bool isProvablyFullVectorStore(::tla::StoreOp storeOp, int64_t lanes)
+{
+    auto descOp = findTensorDescProducer(storeOp.getDest());
+    if (!descOp)
+        return false;
+    auto origin0 = getIndexInterval(descOp.getOriginShape0());
+    auto origin1 = getIndexInterval(descOp.getOriginShape1());
+    if (!origin0 || !origin1 || origin0->lower <= 0 || origin1->lower <= 0)
+        return false;
+    int64_t requiredRows = lanes / origin1->lower;
+    if (lanes % origin1->lower != 0)
+        ++requiredRows;
+    return origin0->lower >= requiredRows;
+}
+
+// Packed stores use the source-predicate-to-destination-element geometry
+// validated by tla.store. Keep this defensive lookup in the lowering too: a
+// malformed program may reach the pass through a nonstandard pipeline.
+static FailureOr<int64_t> getStorePredicateDestLaneMultiplier(::tla::StoreOp storeOp, Type sourceElementType)
+{
+    auto storeDist = storeOp.getStoreDist();
+    ::StoreDist dist = storeDist ? storeDist->getStoreDist() : ::StoreDist::norm;
+    auto destType = dyn_cast<::tla::TlaTensorType>(storeOp.getDest().getType());
+    if (!destType)
+        return failure();
+    auto geometry = getPackedStorePredicateGeometry(dist, sourceElementType, destType.getPtr().getPointee());
+    if (!geometry)
+        return failure();
+    return geometry->sourcePredicateLanesPerDestElement;
+}
+
+// An omitted vector-store mask is defined by the destination tile alone. Use
+// the shared ALL predicate for a destination proven to cover the physical
+// store width; retain a PLT tail predicate otherwise. Source-producing ops do
+// not affect this default: callers use an explicit store mask for sparse or
+// otherwise non-default writes.
+static FailureOr<Value> createImplicitVectorStoreMask(
+    OpBuilder& b, Location loc, ::tla::StoreOp storeOp, VecLowerCtx& opCtx, DenseMap<Value, Value>& valueMap,
+    AutoFullPredicateCache& fullMasks)
+{
+    auto storeDist = storeOp.getStoreDist();
+    ::StoreDist dist = storeDist ? storeDist->getStoreDist() : ::StoreDist::norm;
+    auto destLaneMultiplierOr = getStorePredicateDestLaneMultiplier(storeOp, opCtx.elementType);
+    if (failed(destLaneMultiplierOr))
+        return storeOp.emitError("unsupported packed-store predicate geometry"), failure();
+    int64_t destLaneMultiplier = *destLaneMultiplierOr;
+
+    // The supported vector frontend has no 64-bit on-chip element type. Raw
+    // i64 IR historically used a B32 PLT predicate for omitted masks; keep that
+    // behavior instead of introducing an unproven B32 PGE encoding for B64
+    // stores. Proper B64 predicate support is separate work.
+    bool supportsImplicitAll = opCtx.elementType.getIntOrFloatBitWidth() <= 32;
+
+    // FIRST_ELEMENT modes ignore predicate bits in the backend. Supplying a
+    // destination-tail PLT would only add work and suggest semantics that the
+    // instruction does not implement, so omitted masks use the shared ALL
+    // singleton directly.
+    if (supportsImplicitAll && (dist == ::StoreDist::first_element_b8 || dist == ::StoreDist::first_element_b16 ||
+                                dist == ::StoreDist::first_element_b32))
+        return fullMasks.get(loc, opCtx.lanes);
+
+    int64_t requiredDestLanes = (opCtx.lanes + destLaneMultiplier - 1) / destLaneMultiplier;
+    auto destStaticLanes = getStaticTlaTensorValidLaneCount(storeOp.getDest());
+
+    if (supportsImplicitAll && isProvablyFullVectorStore(storeOp, requiredDestLanes))
+        return fullMasks.get(loc, opCtx.lanes);
+
+    if (destStaticLanes) {
+        int64_t maxDestLanes = opCtx.lanes / destLaneMultiplier;
+        int64_t activeLanes = *destStaticLanes >= maxDestLanes ? opCtx.lanes : *destStaticLanes * destLaneMultiplier;
+        Value active = b.create<arith::ConstantIndexOp>(loc, activeLanes);
+        return createPredicatePlt(b, loc, opCtx.maskVecType, opCtx.lanes, active).getRes();
+    }
+
+    auto destLanes = getTlaTensorValidLaneCount(b, loc, storeOp.getDest(), valueMap);
+    if (failed(destLanes))
+        return failure();
+    Value destLimit = *destLanes;
+    if (destLaneMultiplier != 1) {
+        Value multiplier = b.create<arith::ConstantIndexOp>(loc, destLaneMultiplier);
+        destLimit = b.create<arith::MulIOp>(loc, destLimit, multiplier);
+    }
+    return createPredicatePlt(b, loc, opCtx.maskVecType, opCtx.lanes, destLimit).getRes();
 }
 
 static FailureOr<Value> castScalarForVectorElement(Value scalar, Type elementType)
@@ -1097,7 +1350,8 @@ static FailureOr<Type> lowerSCFCarrierType(Type type)
 }
 
 static LogicalResult lowerNestedVectorBlock(
-    Block* sourceBlock, OpBuilder& b, ModuleOp module, DenseMap<Value, Value>& valueMap);
+    Block* sourceBlock, OpBuilder& b, ModuleOp module, DenseMap<Value, Value>& valueMap,
+    AutoFullPredicateCache& fullMasks);
 
 // Materialize one tla.tensor_desc as an addressable subview inside the helper.
 //
@@ -1199,7 +1453,8 @@ static LogicalResult materializeTensorDescSubview(
 // ops; scf control flow and index arithmetic are carried verbatim. Each op
 // derives its own vector/mask width from its operands or result element type,
 // so a single region may mix element widths (e.g. across tla.cast).
-static LogicalResult lowerNestedVectorOp(Operation& op, OpBuilder& b, ModuleOp module, DenseMap<Value, Value>& valueMap)
+static LogicalResult lowerNestedVectorOp(
+    Operation& op, OpBuilder& b, ModuleOp module, DenseMap<Value, Value>& valueMap, AutoFullPredicateCache& fullMasks)
 {
     Location loc = op.getLoc();
 
@@ -1277,7 +1532,7 @@ static LogicalResult lowerNestedVectorOp(Operation& op, OpBuilder& b, ModuleOp m
             // The gather reads all 8 DataBlocks, so the predicate is all-true;
             // build it via PgePattern::ALL like the other no-mask lowerings
             // (a dense<true> arith constant is not selectable in bisheng).
-            Value allTrue = allTrueMaskFor(b, loc, opCtx->vecType, loadOp.getResult().getType());
+            Value allTrue = allTrueMaskFor(fullMasks, loc, opCtx->vecType, loadOp.getResult().getType());
             auto call =
                 b.create<func::CallOp>(loc, callee, ValueRange{source, blockStrideVal, repeatStrideVal, allTrue});
             valueMap[loadOp.getResult()] = call.getResult(0);
@@ -1339,7 +1594,7 @@ static LogicalResult lowerNestedVectorOp(Operation& op, OpBuilder& b, ModuleOp m
             if (!mask)
                 return failure();
         } else {
-            mask = allTrueMaskFor(b, loc, srcVecType, castOp.getSource().getType());
+            mask = allTrueMaskFor(fullMasks, loc, srcVecType, castOp.getSource().getType());
         }
         auto result = createVectorCastResult(b, loc, srcVecType, dstVecType, trait, src, mask);
         if (failed(result))
@@ -1364,7 +1619,7 @@ static LogicalResult lowerNestedVectorOp(Operation& op, OpBuilder& b, ModuleOp m
             if (!mask)
                 return failure();
         } else {
-            mask = allTrueMaskFor(b, loc, opCtx->vecType, fullOp.getResult().getType());
+            mask = allTrueMaskFor(fullMasks, loc, opCtx->vecType, fullOp.getResult().getType());
         }
 
         // A one-lane vector fragment source (e.g. a tla.reduce result) is already
@@ -1451,7 +1706,7 @@ static LogicalResult lowerNestedVectorOp(Operation& op, OpBuilder& b, ModuleOp m
             if (!mask)
                 return failure();
         } else {
-            mask = allTrueMaskFor(b, loc, opVecType, operands.lhs.getType());
+            mask = allTrueMaskFor(fullMasks, loc, opVecType, operands.lhs.getType());
         }
         Value result =
             createVectorBinaryResult(b, loc, info->kind, operands.lhs.getType(), opElemType, opVecType, lhs, rhs, mask);
@@ -1484,7 +1739,7 @@ static LogicalResult lowerNestedVectorOp(Operation& op, OpBuilder& b, ModuleOp m
             if (!mask)
                 return failure();
         } else {
-            mask = createPredicatePge(b, loc, opCtx->maskVecType, opCtx->lanes, hivmave::PgePattern::ALL);
+            mask = fullMasks.get(loc, opCtx->lanes);
         }
         auto result = createVectorScalarBinaryResult(b, loc, *info, *opCtx, lhs, *scalarOr, mask);
         if (failed(result))
@@ -1630,7 +1885,7 @@ static LogicalResult lowerNestedVectorOp(Operation& op, OpBuilder& b, ModuleOp m
                 return failure();
         } else {
             // Predicate follows the gathered vector semantic lane count.
-            mask = createPredicatePge(b, loc, fullPregVecType(b.getContext()), numElems, hivmave::PgePattern::ALL);
+            mask = fullMasks.get(loc, numElems);
         }
         Value zero = b.create<arith::ConstantIndexOp>(loc, 0);
         valueMap[gatherOp.getResult()] =
@@ -1663,7 +1918,7 @@ static LogicalResult lowerNestedVectorOp(Operation& op, OpBuilder& b, ModuleOp m
             if (!mask)
                 return failure();
         } else {
-            mask = allTrueMaskFor(b, loc, operandVecType, tlaOperandType);
+            mask = allTrueMaskFor(fullMasks, loc, operandVecType, tlaOperandType);
         }
         Value result = createVectorUnaryResult(b, loc, info->kind, tlaOperandType, operandVecType, operand, mask);
         if (!result)
@@ -1734,7 +1989,7 @@ static LogicalResult lowerNestedVectorOp(Operation& op, OpBuilder& b, ModuleOp m
             if (!mask)
                 return failure();
         } else {
-            mask = createPredicatePge(b, loc, opCtx->maskVecType, opCtx->lanes, hivmave::PgePattern::ALL);
+            mask = fullMasks.get(loc, opCtx->lanes);
         }
         if (isa<::tla::VectorSSAType>(cmpOp.getRhs().getType())) {
             Value rhs = valueMap.lookup(cmpOp.getRhs());
@@ -1768,9 +2023,8 @@ static LogicalResult lowerNestedVectorOp(Operation& op, OpBuilder& b, ModuleOp m
             if (failed(i1MemrefOr))
                 return storeOp.emitError("failed to materialize i1 memref view for tla.store MaskSSA"), failure();
             VectorType semanticMaskType = VectorType::get({lanes}, b.getI1Type());
-            VectorType pregOrSemantic = fullPregVecType(b.getContext());
             Value zero = b.create<arith::ConstantIndexOp>(loc, 0);
-            Value allTrue = createPredicatePge(b, loc, pregOrSemantic, lanes, hivmave::PgePattern::ALL);
+            Value allTrue = fullMasks.get(loc, lanes);
             Value storeVal = source;
             if (storeVal.getType() != semanticMaskType)
                 storeVal = b.create<UnrealizedConversionCastOp>(loc, semanticMaskType, storeVal).getResult(0);
@@ -1795,10 +2049,10 @@ static LogicalResult lowerNestedVectorOp(Operation& op, OpBuilder& b, ModuleOp m
             if (!mask)
                 return failure();
         } else {
-            auto validLanes = getTlaTensorValidLaneCount(b, loc, storeOp.getDest(), valueMap);
-            if (failed(validLanes))
-                return storeOp.emitError("failed to determine tla.store dest valid lanes"), failure();
-            mask = createPredicatePlt(b, loc, opCtx->maskVecType, opCtx->lanes, *validLanes).getRes();
+            auto implicitMask = createImplicitVectorStoreMask(b, loc, storeOp, *opCtx, valueMap, fullMasks);
+            if (failed(implicitMask))
+                return storeOp.emitError("failed to determine omitted tla.store active lanes"), failure();
+            mask = *implicitMask;
         }
         // store_unalign (this PR): mark AVE masked-store as unaligned UB access.
         if (storeOp.getUnalignedUbAccess().value_or(false)) {
@@ -1880,7 +2134,7 @@ static LogicalResult lowerNestedVectorOp(Operation& op, OpBuilder& b, ModuleOp m
                         newArg = nb.create<arith::IndexCastOp>(nloc, nb.getIndexType(), newArg);
                     nestedMap[regionIterArgs[i]] = newArg;
                 }
-                if (failed(lowerNestedVectorBlock(forOp.getBody(), nb, module, nestedMap))) {
+                if (failed(lowerNestedVectorBlock(forOp.getBody(), nb, module, nestedMap, fullMasks))) {
                     bodyStatus = failure();
                     nb.create<scf::YieldOp>(nloc, iterArgs);
                     return;
@@ -1937,7 +2191,7 @@ static LogicalResult lowerNestedVectorOp(Operation& op, OpBuilder& b, ModuleOp m
             if (!newBlock->empty() && newBlock->back().hasTrait<OpTrait::IsTerminator>())
                 newBlock->back().erase();
             OpBuilder branchBuilder = OpBuilder::atBlockEnd(newBlock);
-            if (failed(lowerNestedVectorBlock(oldBlock, branchBuilder, module, branchMap)))
+            if (failed(lowerNestedVectorBlock(oldBlock, branchBuilder, module, branchMap, fullMasks)))
                 return failure();
 
             auto oldYield = dyn_cast<scf::YieldOp>(oldBlock->getTerminator());
@@ -2054,14 +2308,15 @@ static LogicalResult lowerNestedVectorOp(Operation& op, OpBuilder& b, ModuleOp m
 }
 
 static LogicalResult lowerNestedVectorBlock(
-    Block* sourceBlock, OpBuilder& b, ModuleOp module, DenseMap<Value, Value>& valueMap)
+    Block* sourceBlock, OpBuilder& b, ModuleOp module, DenseMap<Value, Value>& valueMap,
+    AutoFullPredicateCache& fullMasks)
 {
     for (Operation& op : sourceBlock->getOperations()) {
         // Terminators are reproduced by the enclosing op (scf.for/scf.if) or by
         // buildHelperFunc's func.return.
         if (op.hasTrait<OpTrait::IsTerminator>())
             continue;
-        if (failed(lowerNestedVectorOp(op, b, module, valueMap)))
+        if (failed(lowerNestedVectorOp(op, b, module, valueMap, fullMasks)))
             return failure();
     }
     return success();
@@ -2345,7 +2600,8 @@ static FailureOr<func::FuncOp> buildHelperFunc(
         }
     }
 
-    if (failed(lowerNestedVectorBlock(body, b, module, valueMap))) {
+    AutoFullPredicateCache fullMasks(&helper.getBody().front());
+    if (failed(lowerNestedVectorBlock(body, b, module, valueMap, fullMasks))) {
         // Discard the partially-built helper so an unsupported construct fails
         // cleanly (the vec.func is left intact) instead of leaking malformed IR.
         helper.erase();

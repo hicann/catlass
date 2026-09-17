@@ -109,7 +109,6 @@ module {
 // CHECK-LABEL: func.func @load_store_mask_b8
 // CHECK-LABEL: func.func private @vector_region_
 // CHECK: ave.hir.pge <H> {element_alignment_bit_width = 32 : i32} : vector<256xi1>
-// CHECK: ave.hir.pge <ALL> {element_alignment_bit_width = 32 : i32} : vector<256xi1>
 // CHECK: ave.hir.masked_store <NORM_B8>
 // CHECK-SAME: memref<64xi1
 // CHECK: ave.hir.vload <NORM>

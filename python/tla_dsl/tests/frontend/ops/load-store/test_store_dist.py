@@ -1,23 +1,14 @@
 from __future__ import annotations
 
-from catlass.tla.runtime import make_fake_tensor
-
-
 from typing import Any
 
 import pytest
 
 import catlass.tla as tla
-import catlass.runtime as runtime_mod
-from catlass.params import (
-    NormalStoreParams, 
-    StoreDist,
-    )
+import catlass.runtime as runtime_mod  # noqa: F401
+from catlass.params import NormalStoreParams, StoreDist
+from catlass.tla.runtime import make_fake_tensor
 
-# DIST mode now supports:
-# - StoreDist.DIST_NORM: Normal mode, move out a VL-width from reg tensor to ub tensor with datatype b8/b16/b32
-# - StoreDist.DIST_PACK_B32: Pack mode (b32), the lower half bits of valid elements in src are stored in dst according to the mask.
-# - StoreDist.DIST_PACK_B16: Pack mode (b16).
 
 def _ub_tensor(
     dtype: type[tla.Numeric],
@@ -32,6 +23,7 @@ def _ub_tensor(
         layout_tag=tla.arch.RowMajor,
     )
 
+
 @tla.kernel
 def store_dist(src: tla.Tensor, dst: tla.Tensor, dist: tla.Constexpr[str]) -> None:
     src_tile = tla.tile_view(src, tla.make_shape(64), tla.make_coord(0))
@@ -43,22 +35,29 @@ def store_dist(src: tla.Tensor, dst: tla.Tensor, dist: tla.Constexpr[str]) -> No
 
 
 @pytest.mark.parametrize(
-    ("dist", "dtype"),
+    ("dist", "source_dtype", "dest_dtype"),
     (
-        (StoreDist.DIST_NORM, tla.Float32),
-        (StoreDist.DIST_PACK_B32, tla.Float32),
-        (StoreDist.DIST_PACK_B32, tla.Int32),
-        (StoreDist.DIST_PACK_B16, tla.Float16),
-        (StoreDist.DIST_PACK_B16, tla.Int16),
-    )
+        (StoreDist.DIST_NORM, tla.Float32, tla.Float32),
+        (StoreDist.DIST_PACK_B32, tla.Float32, tla.Float16),
+        (StoreDist.DIST_PACK_B32, tla.Int32, tla.Int16),
+        # A packed 16-bit vector has two source predicate lanes per compacted
+        # 16-bit destination element.
+        (StoreDist.DIST_PACK_B32, tla.Float16, tla.Float16),
+        (StoreDist.DIST_PACK_B16, tla.Int16, tla.Int8),
+    ),
 )
-def test_store_dist_emits_tlair(compiler_tlair: Any, dist: StoreDist, dtype: type[tla.Numeric]):
+def test_store_dist_emits_tlair(
+    compiler_tlair: Any,
+    dist: StoreDist,
+    source_dtype: type[tla.Numeric],
+    dest_dtype: type[tla.Numeric],
+) -> None:
     mlir = compiler_tlair(
         store_dist,
         type_args=(
-            _ub_tensor(dtype),
-            _ub_tensor(dtype),
-            dist
+            _ub_tensor(source_dtype),
+            _ub_tensor(dest_dtype),
+            dist,
         ),
     )
 
