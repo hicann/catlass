@@ -75,21 +75,23 @@ def _mmad_cases(
 ) -> Iterator[tuple[str, list[list[str]]]]:
     """Matmul-like cases generator
     
-    Iterate over all shapes, layouts and dtype triples
+    Iterate over all shapes, layouts, dtype triples and relu_enable
     """
     for m, n, k in kwargs.get("shapes", MMAD_SHAPES):
         for la, lb in kwargs.get("layouts", MMAD_LAYOUTS):
             for dab, dc in kwargs.get("triples", MMAD_TRIPLES):
-                yield (
-                    f"{op_name}-{m}x{n}x{k}-{la}{lb}-{dab}-{dc}",
-                    [[
-                        op_script,
-                        "--m", m, "--n", n, "--k", k,
-                        "--layout-a", la, "--layout-b", lb,
-                        "--dtype-a", dab, "--dtype-b", dab, "--dtype-c", dc,
-                        "--device", str(device)
-                    ]]
-                )
+                for relu_enable in kwargs.get("relu_enable", (0, 1)):
+                    yield (
+                        f"{op_name}-{m}x{n}x{k}-{la}{lb}-{dab}-{dc}-relu{relu_enable}",
+                        [[
+                            op_script,
+                            "--m", m, "--n", n, "--k", k,
+                            "--layout-a", la, "--layout-b", lb,
+                            "--dtype-a", dab, "--dtype-b", dab, "--dtype-c", dc,
+                            "--relu-enable", str(relu_enable),
+                            "--device", str(device),
+                        ]]
+                    )
 
 def _cases(device: int) -> Iterator[tuple[str, list[list[str]]]]:
     """Yield (test id, [argv, ...]) for every case in the battery.

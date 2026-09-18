@@ -801,7 +801,7 @@ std::string getCopyRouteCallee(
         StringRef suffix = copyRuntimeElemSuffix(dstElem);
         if (suffix.empty())
             return {};
-        return Twine("copy_l0c_to_gm_RowMajor_").concat(suffix).str();
+        return Twine("copy_l0c_to_gm_RowMajor_").concat(extraDesc).concat(suffix).str();
     }
     // L0C (fp32 MMAD acc) -> UB row-major: dst may be f32 / f16 / bf16 (narrowing on fixpipe).
     if (*srcSpace == hivm::AddressSpace::L0C && *dstSpace == hivm::AddressSpace::UB &&
@@ -811,7 +811,7 @@ std::string getCopyRouteCallee(
         StringRef suffix = copyRuntimeElemSuffix(dstElem);
         if (suffix.empty())
             return {};
-        return Twine("copy_l0c_to_ub_RowMajor_").concat(extraDesc).concat("_").concat(suffix).str();
+        return Twine("copy_l0c_to_ub_RowMajor_").concat(extraDesc).concat(suffix).str();
     }
     // L0C (fp32 MMAD acc) -> UB col-major: dst may be f32 / f16 / bf16 (narrowing on fixpipe).
     if (*srcSpace == hivm::AddressSpace::L0C && *dstSpace == hivm::AddressSpace::UB &&
@@ -821,7 +821,7 @@ std::string getCopyRouteCallee(
         StringRef suffix = copyRuntimeElemSuffix(dstElem);
         if (suffix.empty())
             return {};
-        return Twine("copy_l0c_to_ub_ColumnMajor_").concat(extraDesc).concat("_").concat(suffix).str();
+        return Twine("copy_l0c_to_ub_ColumnMajor_").concat(extraDesc).concat(suffix).str();
     }
     // L0C -> L1 zN: an fp32 acc may narrow to f32 / f16 / bf16 on fixpipe; an i32
     // acc (int8 MMAD) stays i32.
@@ -832,7 +832,7 @@ std::string getCopyRouteCallee(
         StringRef suffix = copyRuntimeElemSuffix(dstElem);
         if (suffix.empty())
             return {};
-        return Twine("copy_l0c_to_l1_zN_").concat(suffix).str();
+        return Twine("copy_l0c_to_l1_zN_").concat(extraDesc).concat(suffix).str();
     }
     return {};
 }

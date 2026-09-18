@@ -4898,6 +4898,14 @@ _SUPPORTED_CUBE_FIXPIPE_ROUTES = {
     ("ub", "RowMajor", "nosplit", "NO_QUANT", False): {"f32": ("f32", "f16", "bf16"), "i32": ("i32",)},
     ("ub", "RowMajor", "split", "NO_QUANT", False): {"f32": ("f32",), "i32": ("i32",)},
     ("ub", "ColumnMajor", "nosplit", "NO_QUANT", False): {"f32": ("f32", "f16", "bf16"), "i32": ("i32",)},
+
+    # ReLU rides on the fixpipe transfer itself, so it exists only where a
+    # no-split variant is registered: split_M / split_N have no ReLU symbol.
+    ("gm", "RowMajor", "-", "NO_QUANT", True): {"f32": ("f32", "f16", "bf16"), "i32": ("i32",)},
+    ("l1", "zN",  "-", "NO_QUANT", True): {"f32": ("f32", "f16", "bf16"), "i32": ("i32",)},
+
+    ("ub", "RowMajor", "nosplit", "NO_QUANT", True): {"f32": ("f32", "f16", "bf16"), "i32": ("i32",)},
+    ("ub", "ColumnMajor", "nosplit", "NO_QUANT", True): {"f32": ("f32", "f16", "bf16"), "i32": ("i32",)},
 }
 # fmt: on
 

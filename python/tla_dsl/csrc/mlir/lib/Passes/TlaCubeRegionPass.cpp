@@ -494,7 +494,7 @@ struct LowerTlaCopyPattern : public OpRewritePattern<::tla::CopyOp> {
             return ::tla::castMemrefToType(rewriter, op.getLoc(), *baseMemref, runtimeType);
         };
 
-        std::string extraDesc;
+        std::string extraDesc = "";
         struct L0C2DstInfo {
             uint8_t unitFlag = 0;
             bool relu_enable = false;
@@ -512,21 +512,23 @@ struct LowerTlaCopyPattern : public OpRewritePattern<::tla::CopyOp> {
             l0c2DstInfo.unitFlag = static_cast<uint8_t>(l0c2DstParamsOp.getUnitFlag());
             l0c2DstInfo.relu_enable = l0c2DstParamsOp.getReluEnable();
             l0c2DstInfo.quantMode = l0c2DstParamsOp.getQuantMode().getQuantMode();
+            // l0c to ub: {splitMode}_{quantMode}_{relu}_dstDtype
+            // l0c to gm/l1 {quantMode}_{relu}_dstDtype
             if (dstAddrspace == "ub") {
                 l0c2DstInfo.l0c2UbMode = l0c2DstParamsOp.getL0c2ubMode().getL0c2ubMode();
-                StringRef splitMode = "nosplit";
                 switch (l0c2DstInfo.l0c2UbMode) {
                     case L0C2UBMode::NO_SPLIT_VEC_0:
+                        extraDesc += "nosplit_";
                         break;
                     case L0C2UBMode::NO_SPLIT_VEC_1:
                         l0c2DstInfo.subBlockId = 1;
-                        splitMode = "nosplit";
+                        extraDesc += "nosplit_";
                         break;
                     case L0C2UBMode::SPLIT_M:
-                        splitMode = "splitm";
+                        extraDesc += "splitm_";
                         break;
                     case L0C2UBMode::SPLIT_N:
-                        splitMode = "splitn";
+                        extraDesc += "splitn_";
                         break;
                 }
                 if ((l0c2DstInfo.l0c2UbMode == L0C2UBMode::SPLIT_M || l0c2DstInfo.l0c2UbMode == L0C2UBMode::SPLIT_N) &&
@@ -534,7 +536,19 @@ struct LowerTlaCopyPattern : public OpRewritePattern<::tla::CopyOp> {
                     op->emitError("When copy l0c to ub with split mode, src and dst type must be same");
                     return failure();
                 }
-                extraDesc = splitMode;
+            }
+            switch (l0c2DstInfo.quantMode) {
+                case QuantMode::NO_QUANT:
+                    break;
+                case QuantMode::PER_TENSOR:
+                    extraDesc += "pertensor_";
+                    break;
+                case QuantMode::PER_CHANNEL:
+                    extraDesc += "perchannel_";
+                    break;
+            }
+            if (l0c2DstInfo.relu_enable) {
+                extraDesc += "relu_";
             }
         }
 

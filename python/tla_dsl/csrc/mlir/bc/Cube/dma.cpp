@@ -36,32 +36,34 @@ CATLASS_DEVICE void copyL1ToL0B(
 }
 
 // L0C holds fp32 MMAD accumulator; ElementDst may be f32/f16/bf16 (Ascend950 fixpipe).
-template <class ArchTag, LayoutTag DstLayout, typename ElementSrc, typename ElementDst>
+template <class ArchTag, LayoutTag DstLayout, typename ElementSrc, typename ElementDst, bool ReluEnable = false>
 CATLASS_DEVICE void copyL0CToGM(
     memref_t<__cc__ ElementSrc, 1>* src, memref_t<__gm__ ElementDst, 2>* dst, const TensorDesc& srcDesc,
     const TensorDesc& dstDesc, uint8_t unitFlag)
 {
     auto srcTensor = makeL0CTensor<LayoutTag::L0Clayout, ElementSrc>(src, srcDesc);
     auto dstTensor = makeGMTensor<DstLayout, ElementDst>(dst, dstDesc);
-    Catlass::Gemm::Tile::CopyL0CToGmTla<ArchTag, decltype(srcTensor), decltype(dstTensor)>{}(
-        dstTensor, srcTensor, unitFlag);
+    Catlass::Gemm::Tile::CopyL0CToGmTla<
+        ArchTag, decltype(srcTensor), decltype(dstTensor), Catlass::Gemm::Tile::ScaleGranularity::NO_QUANT,
+        ReluEnable>{}(dstTensor, srcTensor, unitFlag);
 }
 
 // L0C holds fp32 MMAD accumulator; ElementDst may be f32/f16/bf16 (Ascend950 fixpipe).
-template <class ArchTag, LayoutTag DstLayout, typename ElementSrc, typename ElementDst>
+template <class ArchTag, LayoutTag DstLayout, typename ElementSrc, typename ElementDst, bool ReluEnable = false>
 CATLASS_DEVICE void copyL0CToL1(
     memref_t<__cc__ ElementSrc, 1>* src, memref_t<__cbuf__ ElementDst, 1>* dst, const TensorDesc& srcDesc,
     const TensorDesc& dstDesc, uint8_t unitFlag)
 {
     auto srcTensor = makeL0CTensor<LayoutTag::L0Clayout, ElementSrc>(src, srcDesc);
     auto dstTensor = makeL1Tensor<DstLayout, ElementDst>(dst, dstDesc);
-    Catlass::Gemm::Tile::CopyL0CToL1Tla<ArchTag, decltype(srcTensor), decltype(dstTensor)>{}(
-        dstTensor, srcTensor, unitFlag);
+    Catlass::Gemm::Tile::CopyL0CToL1Tla<
+        ArchTag, decltype(srcTensor), decltype(dstTensor), Catlass::Gemm::Tile::ScaleGranularity::NO_QUANT,
+        ReluEnable>{}(dstTensor, srcTensor, unitFlag);
 }
 
 template <
     class ArchTag, LayoutTag DstLayout, Catlass::Gemm::Tile::CopyL0CToUBMode Mode, typename ElementSrc,
-    typename ElementDst>
+    typename ElementDst, bool ReluEnable = false>
 CATLASS_DEVICE void copyL0CToUB(
     memref_t<__cc__ ElementSrc, 1>* src, memref_t<__ubuf__ ElementDst, 1>* dst, const TensorDesc& srcDesc,
     const TensorDesc& dstDesc, uint8_t unitFlag, uint8_t subBlockId)
@@ -69,13 +71,15 @@ CATLASS_DEVICE void copyL0CToUB(
     auto srcTensor = makeL0CTensor<LayoutTag::L0Clayout, ElementSrc>(src, srcDesc);
     auto dstTensor = makeUBTensor<DstLayout, ElementDst>(dst, dstDesc);
     if constexpr (Mode == Catlass::Gemm::Tile::CopyL0CToUBMode::NO_SPLIT) {
-        Catlass::Gemm::Tile::CopyL0CToUBTla<ArchTag, decltype(srcTensor), decltype(dstTensor), Mode>{}(
-            dstTensor, srcTensor, (bool)subBlockId, unitFlag);
+        Catlass::Gemm::Tile::CopyL0CToUBTla<
+            ArchTag, decltype(srcTensor), decltype(dstTensor), Mode, Catlass::Gemm::Tile::ScaleGranularity::NO_QUANT,
+            ReluEnable>{}(dstTensor, srcTensor, (bool)subBlockId, unitFlag);
     } else if constexpr (
         Mode == Catlass::Gemm::Tile::CopyL0CToUBMode::SPLIT_M ||
         Mode == Catlass::Gemm::Tile::CopyL0CToUBMode::SPLIT_N) {
-        Catlass::Gemm::Tile::CopyL0CToUBTla<ArchTag, decltype(srcTensor), decltype(dstTensor), Mode>{}(
-            dstTensor, srcTensor, unitFlag);
+        Catlass::Gemm::Tile::CopyL0CToUBTla<
+            ArchTag, decltype(srcTensor), decltype(dstTensor), Mode, Catlass::Gemm::Tile::ScaleGranularity::NO_QUANT,
+            ReluEnable>{}(dstTensor, srcTensor, unitFlag);
     }
 }
 
@@ -350,25 +354,51 @@ REGISTER_L1_TO_L0B_MX_FP4(zN, float4_e1m2x2_t)
 REGISTER_L1_TO_L0B_MX_FP4(nZ, float4_e2m1x2_t)
 REGISTER_L1_TO_L0B_MX_FP4(nZ, float4_e1m2x2_t)
 
-#define REGISTER_L0C_TO_GM(LayoutDst, DTypeSrc, DTypeDst)                                              \
+#define REGISTER_L0C_TO_GM_NORELU(LayoutDst, DTypeSrc, DTypeDst)                                       \
     [aicore] __attribute__((always_inline)) void _mlir_ciface_copy_l0c_to_gm_##LayoutDst##_##DTypeDst( \
         memref_t<__cc__ DTypeSrc, 1>* src, memref_t<__gm__ DTypeDst, 2>* dst, DESC_ABI_PARAMS(src),    \
         DESC_ABI_PARAMS(dst), uint8_t unitFlag)                                                        \
     {                                                                                                  \
-        copyL0CToGM<Catlass::Arch::Ascend950, LayoutTag::LayoutDst, DTypeSrc, DTypeDst>(               \
+        copyL0CToGM<Catlass::Arch::Ascend950, LayoutTag::LayoutDst, DTypeSrc, DTypeDst, false>(        \
             src, dst, TENSOR_DESC_12(src), TENSOR_DESC_12(dst), unitFlag);                             \
     }
 
-#define REGISTER_L0C_TO_L1(LayoutDst, DTypeSrc, DTypeDst)                                              \
+#define REGISTER_L0C_TO_GM_RELU(LayoutDst, DTypeSrc, DTypeDst)                                              \
+    [aicore] __attribute__((always_inline)) void _mlir_ciface_copy_l0c_to_gm_##LayoutDst##_relu_##DTypeDst( \
+        memref_t<__cc__ DTypeSrc, 1>* src, memref_t<__gm__ DTypeDst, 2>* dst, DESC_ABI_PARAMS(src),         \
+        DESC_ABI_PARAMS(dst), uint8_t unitFlag)                                                             \
+    {                                                                                                       \
+        copyL0CToGM<Catlass::Arch::Ascend950, LayoutTag::LayoutDst, DTypeSrc, DTypeDst, true>(              \
+            src, dst, TENSOR_DESC_12(src), TENSOR_DESC_12(dst), unitFlag);                                  \
+    }
+
+#define REGISTER_L0C_TO_GM(LayoutDst, DTypeSrc, DTypeDst)    \
+    REGISTER_L0C_TO_GM_NORELU(LayoutDst, DTypeSrc, DTypeDst) \
+    REGISTER_L0C_TO_GM_RELU(LayoutDst, DTypeSrc, DTypeDst)
+
+#define REGISTER_L0C_TO_L1_NORELU(LayoutDst, DTypeSrc, DTypeDst)                                       \
     [aicore] __attribute__((always_inline)) void _mlir_ciface_copy_l0c_to_l1_##LayoutDst##_##DTypeDst( \
         memref_t<__cc__ DTypeSrc, 1>* src, memref_t<__cbuf__ DTypeDst, 1>* dst, DESC_ABI_PARAMS(src),  \
         DESC_ABI_PARAMS(dst), uint8_t unitFlag)                                                        \
     {                                                                                                  \
-        copyL0CToL1<Catlass::Arch::Ascend950, LayoutTag::LayoutDst, DTypeSrc, DTypeDst>(               \
+        copyL0CToL1<Catlass::Arch::Ascend950, LayoutTag::LayoutDst, DTypeSrc, DTypeDst, false>(        \
             src, dst, TENSOR_DESC_12(src), TENSOR_DESC_12(dst), unitFlag);                             \
     }
 
-#define REGISTER_L0C_TO_UB(LayoutDst, mode, MODE, DTypeSrc, DTypeDst)                                             \
+#define REGISTER_L0C_TO_L1_RELU(LayoutDst, DTypeSrc, DTypeDst)                                              \
+    [aicore] __attribute__((always_inline)) void _mlir_ciface_copy_l0c_to_l1_##LayoutDst##_relu_##DTypeDst( \
+        memref_t<__cc__ DTypeSrc, 1>* src, memref_t<__cbuf__ DTypeDst, 1>* dst, DESC_ABI_PARAMS(src),       \
+        DESC_ABI_PARAMS(dst), uint8_t unitFlag)                                                             \
+    {                                                                                                       \
+        copyL0CToL1<Catlass::Arch::Ascend950, LayoutTag::LayoutDst, DTypeSrc, DTypeDst, true>(              \
+            src, dst, TENSOR_DESC_12(src), TENSOR_DESC_12(dst), unitFlag);                                  \
+    }
+
+#define REGISTER_L0C_TO_L1(LayoutDst, DTypeSrc, DTypeDst)    \
+    REGISTER_L0C_TO_L1_NORELU(LayoutDst, DTypeSrc, DTypeDst) \
+    REGISTER_L0C_TO_L1_RELU(LayoutDst, DTypeSrc, DTypeDst)
+
+#define REGISTER_L0C_TO_UB_NORELU(LayoutDst, mode, MODE, DTypeSrc, DTypeDst)                                      \
     [aicore] __attribute__((always_inline)) void _mlir_ciface_copy_l0c_to_ub_##LayoutDst##_##mode##_##DTypeDst(   \
         memref_t<__cc__ DTypeSrc, 1>* src, memref_t<__ubuf__ DTypeDst, 1>* dst, DESC_ABI_PARAMS(src),             \
         DESC_ABI_PARAMS(dst), uint8_t unitFlag, uint8_t subBlockId)                                               \
@@ -378,7 +408,25 @@ REGISTER_L1_TO_L0B_MX_FP4(nZ, float4_e1m2x2_t)
             DTypeDst>(src, dst, TENSOR_DESC_12(src), TENSOR_DESC_12(dst), unitFlag, subBlockId);                  \
     }
 
-// Fixpipe copy
+#define REGISTER_L0C_TO_UB_RELU(LayoutDst, mode, MODE, DTypeSrc, DTypeDst)                                           \
+    [aicore] __attribute__((always_inline)) void _mlir_ciface_copy_l0c_to_ub_##LayoutDst##_##mode##_relu_##DTypeDst( \
+        memref_t<__cc__ DTypeSrc, 1>* src, memref_t<__ubuf__ DTypeDst, 1>* dst, DESC_ABI_PARAMS(src),                \
+        DESC_ABI_PARAMS(dst), uint8_t unitFlag, uint8_t subBlockId)                                                  \
+    {                                                                                                                \
+        copyL0CToUB<                                                                                                 \
+            Catlass::Arch::Ascend950, LayoutTag::LayoutDst, Catlass::Gemm::Tile::CopyL0CToUBMode::MODE, DTypeSrc,    \
+            DTypeDst, true>(src, dst, TENSOR_DESC_12(src), TENSOR_DESC_12(dst), unitFlag, subBlockId);               \
+    }
+
+// ReLU rides only on the no-split fixpipe variants, so the split registrations
+// below go through the no-relu macro.
+#define REGISTER_L0C_TO_UB(LayoutDst, mode, MODE, DTypeSrc, DTypeDst)    \
+    REGISTER_L0C_TO_UB_NORELU(LayoutDst, mode, MODE, DTypeSrc, DTypeDst) \
+    REGISTER_L0C_TO_UB_RELU(LayoutDst, mode, MODE, DTypeSrc, DTypeDst)
+
+// Fixpipe copy: NO_QUANT is the only quant mode implemented, so it stays out of
+// the symbol name; the registered variants differ by layout, split mode, element
+// type, and whether the transfer carries the ReLU epilogue.
 REGISTER_L0C_TO_GM(RowMajor, float, float)
 REGISTER_L0C_TO_GM(RowMajor, float, half)
 REGISTER_L0C_TO_GM(RowMajor, float, bf16)
@@ -389,16 +437,16 @@ REGISTER_L0C_TO_L1(zN, float, half)
 REGISTER_L0C_TO_L1(zN, float, bf16)
 REGISTER_L0C_TO_L1(zN, int32_t, int32_t)
 
-// RowMajor nosplit
+// RowMajor nosplit (the only split mode ReLU is registered for)
 REGISTER_L0C_TO_UB(RowMajor, nosplit, NO_SPLIT, float, float)
 REGISTER_L0C_TO_UB(RowMajor, nosplit, NO_SPLIT, float, half)
 REGISTER_L0C_TO_UB(RowMajor, nosplit, NO_SPLIT, float, bf16)
 REGISTER_L0C_TO_UB(RowMajor, nosplit, NO_SPLIT, int32_t, int32_t)
-// split mode src=dst
-REGISTER_L0C_TO_UB(RowMajor, splitm, SPLIT_M, float, float)
-REGISTER_L0C_TO_UB(RowMajor, splitm, SPLIT_M, int32_t, int32_t)
-REGISTER_L0C_TO_UB(RowMajor, splitn, SPLIT_N, float, float)
-REGISTER_L0C_TO_UB(RowMajor, splitn, SPLIT_N, int32_t, int32_t)
+// split mode src=dst (no ReLU variant)
+REGISTER_L0C_TO_UB_NORELU(RowMajor, splitm, SPLIT_M, float, float)
+REGISTER_L0C_TO_UB_NORELU(RowMajor, splitm, SPLIT_M, int32_t, int32_t)
+REGISTER_L0C_TO_UB_NORELU(RowMajor, splitn, SPLIT_N, float, float)
+REGISTER_L0C_TO_UB_NORELU(RowMajor, splitn, SPLIT_N, int32_t, int32_t)
 // ColumnMajor must be nosplit
 REGISTER_L0C_TO_UB(ColumnMajor, nosplit, NO_SPLIT, float, float)
 REGISTER_L0C_TO_UB(ColumnMajor, nosplit, NO_SPLIT, float, half)

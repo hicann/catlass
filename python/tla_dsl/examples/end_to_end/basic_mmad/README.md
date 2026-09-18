@@ -61,6 +61,7 @@ basic_matmul.py [-h] [--device DEVICE] [--m M] [--n N] [--k K]
                 [--dtype-a {f16,bf16,f32}]
                 [--dtype-b {f16,bf16,f32}]
                 [--dtype-c {f16,bf16,f32}]
+                [--relu-enable {0,1}]
                 [--block-num BLOCK_NUM]
 ```
 
@@ -74,6 +75,7 @@ basic_matmul.py [-h] [--device DEVICE] [--m M] [--n N] [--k K]
 | `--k`                                       | `1024`                                                | 矩阵乘累加轴的大小                                                                         |
 | `--layout-a` / `--layout-b`               | `"row"` / `"row"`                                   | 左、右矩阵 A、B 的数据排布格式，可选`"row"` 或 `"col"`，表示行优先或列优先布局。       |
 | `--dtype-a` / `--dtype-b` / `--dtype-c` | `"f16"` / `"f16"` / `"f32"`                       | 左、右矩阵 A、B 和结果矩阵 C 的数据类型，可选范围包括`"f16"`, `"bf16"` 和 `"f32"` 。 |
+| `--relu-enable`                             | `0`                                         | fixpipe是否开启随路relu                                                                       |
 | `--block-num`                               | `-1`                                        | 启用的核数，`-1` 表示自动探测可用核数（满核）。                                               |
 
 ### 执行示例

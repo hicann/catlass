@@ -40,6 +40,7 @@ def basic_mmad_kernel(
     _tiling: tla.Constexpr[TilingParams],
     hf32_mode: tla.Constexpr[tla.params.HF32Mode],
     acc_is_int: tla.Constexpr[bool],
+    relu_enable: tla.Constexpr[bool],
 ) -> None:
     c0 = 0
     c1 = 1
@@ -269,7 +270,7 @@ def basic_mmad_kernel(
             tla.copy(
                 gm_c_by_core,
                 l0_c,
-                tla.params.CopyL0C2DstParams(unit_flag=0b11),
+                tla.params.CopyL0C2DstParams(unit_flag=0b11, relu_enable=relu_enable),
             )
 
         tla.wait_flag(l1a0_available)
@@ -385,6 +386,7 @@ def run(args: argparse.Namespace) -> int:
         TilingParams(),  # default tiling: L1: (256, 256, 128); L0: (256, 256, 32)
         hf32_mode,
         is_int_route,
+        bool(args.relu_enable),
         options="--npu-arch 3510",
     )
     block_num = get_block_num(args.block_num, args.device, kind="cube")
@@ -392,6 +394,8 @@ def run(args: argparse.Namespace) -> int:
     torch.npu.synchronize()
 
     result = c.detach().cpu()
+    if args.relu_enable:
+        torch.nn.functional.relu_(ref)
     if is_int_route:
         # Integer MMAD is exact, so no tolerance: compare() falls back to
         # element-wise equality for integer dtypes.
@@ -419,6 +423,7 @@ def main() -> int:
     parser.add_argument(
         "--dtype-c", choices=("f16", "bf16", "f32", "i32"), default="f32"
     )
+    parser.add_argument("--relu-enable", type=int, choices=(0, 1), default=0)
     parser.add_argument("--block-num", type=int, default=-1)
     return run(parser.parse_args())
 
