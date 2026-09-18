@@ -116,6 +116,17 @@ struct GemmParams : public MatmulParams {
 };
 
 /**
+ * @brief Runtime parameters for Ascend950 SYRK: D = alpha * X @ X^T + beta * Y.
+ *
+ * ``inputAddr[0]`` = X, ``inputAddr[1]`` = Y, ``outputAddr[0]`` = D; ``m`` must equal ``n``.
+ * For batched inputs use ``batch > 1`` with contiguous ``(B, M, K)`` / ``(B, M, M)`` tensors.
+ */
+struct SyrkParams : public MatmulParams {
+    float alpha = 1.0f; ///< Alpha scale in D = alpha * X @ X^T + beta * Y.
+    float beta = 0.0f;  ///< Beta scale in D = alpha * X @ X^T + beta * Y.
+};
+
+/**
  * @brief Runtime parameters for example 76_trmm.
  */
 struct TrmmParams : public MatmulParams {
@@ -524,6 +535,14 @@ void Symm(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, c
  */
 void Ascend950BasicSyrk(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
+
+/**
+ * @brief JIT interface for 84_ascend950_syrk (MIX L0C→workspace + AIV AXPBY).
+ *
+ * D = alpha * X @ X^T + beta * Y. ``params.m`` must equal ``params.n``.
+ */
+void Ascend950Syrk(
+    const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const SyrkParams& params);
 
 /**
  * @brief Reserved JIT interface for example 74_ascend950_weight_quant_a8w4_grouped_mx_matmul.

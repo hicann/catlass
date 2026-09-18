@@ -52,6 +52,7 @@
 #include "template/svd_quant_matmul.h"
 #include "template/ascend950_quant_matmul.h"
 #include "template/basic_syrk.h"
+#include "template/syrk.h"
 #include "template/trmm.h"
 #include "template/conv_bias.h"
 #include "template/symm.h"
@@ -452,5 +453,10 @@ REGISTER_TORCH_FUNC(x_attention);
 using Ascend950BasicSyrkOp = BasicSyrkLike<CatlassKernel::Ascend950BasicSyrk>;
 static auto& ascend950_basic_syrk = Ascend950BasicSyrkOp::Run;
 REGISTER_TORCH_FUNC(ascend950_basic_syrk);
+
+// ── 84_ascend950_syrk ──
+using Ascend950SyrkOp = SyrkLike<CatlassKernel::Ascend950Syrk>;
+static auto& ascend950_syrk = Ascend950SyrkOp::Run;
+REGISTER_TORCH_FUNC(ascend950_syrk);
 
 } // namespace CatlassKernelWrapper

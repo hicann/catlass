@@ -205,12 +205,16 @@ struct TrmmOptions {
 /**
  * @struct SyrkOptions
  * @brief Options structuture for syrk examples.
- * @brief Arguments: `example_name m k [device_id]`
+ * @brief Arguments: `example_name m k [device_id]` or
+ *        `example_name m k batch alpha beta [device_id]`
  */
 struct SyrkOptions {
-    const std::string HELPER = "m k [device_id]";
+    const std::string HELPER = "m k [device_id] | m k batch alpha beta [device_id]";
 
     Catlass::GemmCoord problemShape{128, 128, 128};
+    uint32_t batchCount{1};
+    float alpha{1.0f};
+    float beta{1.0f};
     int32_t deviceId{0};
 
     SyrkOptions() = default;
@@ -221,12 +225,20 @@ struct SyrkOptions {
         {
             M_INDEX = 1,
             K_INDEX,
+            BATCH_INDEX,
+            ALPHA_INDEX,
+            BETA_INDEX,
             DEVICE_ID_INDEX,
             ARGS_MAX
         };
 
-        if (argc > static_cast<uint32_t>(ArgsIndex::ARGS_MAX) ||
-            argc < static_cast<uint32_t>(ArgsIndex::DEVICE_ID_INDEX)) {
+        // Two accepted shapes, distinguished by positional arg count (no overlap):
+        //   m k [device_id]                     -> batch/alpha/beta keep defaults
+        //   m k batch alpha beta [device_id]
+        const uint32_t posArgs = static_cast<uint32_t>(argc) - 1;
+        const bool isBasicForm = (posArgs == 2 || posArgs == 3);
+        const bool isFullForm = (posArgs == 5 || posArgs == 6);
+        if (!isBasicForm && !isFullForm) {
             std::cerr << TOSTRING(CATLASS_EXAMPLE_NAME) << " " << HELPER << std::endl;
             return -1;
         }
@@ -234,8 +246,13 @@ struct SyrkOptions {
         problemShape.m() = std::atoi(argv[static_cast<uint32_t>(ArgsIndex::M_INDEX)]);
         problemShape.n() = std::atoi(argv[static_cast<uint32_t>(ArgsIndex::M_INDEX)]);
         problemShape.k() = std::atoi(argv[static_cast<uint32_t>(ArgsIndex::K_INDEX)]);
-        if (argc == static_cast<uint32_t>(ArgsIndex::ARGS_MAX)) {
-            deviceId = std::atoi(argv[static_cast<uint32_t>(ArgsIndex::DEVICE_ID_INDEX)]);
+        if (isFullForm) {
+            batchCount = std::atoi(argv[static_cast<uint32_t>(ArgsIndex::BATCH_INDEX)]);
+            alpha = std::atof(argv[static_cast<uint32_t>(ArgsIndex::ALPHA_INDEX)]);
+            beta = std::atof(argv[static_cast<uint32_t>(ArgsIndex::BETA_INDEX)]);
+        }
+        if (posArgs == 3 || posArgs == 6) {
+            deviceId = std::atoi(argv[argc - 1]);
         }
         return 0;
     }
