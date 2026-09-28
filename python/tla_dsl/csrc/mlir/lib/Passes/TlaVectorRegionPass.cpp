@@ -66,6 +66,12 @@ static hivmave::LoadDist mapTlaLoadDistToAve(::LoadDist dist)
             return hivmave::LoadDist::E2B_B32;
         case ::LoadDist::blk:
             return hivmave::LoadDist::BLK;
+        // MaskDist US/DS: IR may carry these enums, but lowering uses AIV bc
+        // (NPU-IR i1→plds hardcodes NORM). Keep map entries for completeness.
+        case ::LoadDist::us:
+            return hivmave::LoadDist::US;
+        case ::LoadDist::ds:
+            return hivmave::LoadDist::DS;
     }
     llvm_unreachable("unsupported tla.load load_dist");
 }
@@ -542,6 +548,60 @@ static bool isVectorComputeOp(Operation* op)
            isa_and_nonnull<::tla::DeInterleaveOp>(op);
 }
 
+static void annotateAivLibraryCall(func::FuncOp callee)
+{
+    MLIRContext* ctx = callee.getContext();
+    callee.setPrivate();
+    callee->setAttr("llvm.emit_c_interface", UnitAttr::get(ctx));
+    callee->setAttr(hivm::TFuncCoreTypeAttr::name, hivm::TFuncCoreTypeAttr::get(ctx, hivm::TFuncCoreType::AIV));
+}
+
+// MaskLoadDist US/DS: one bc symbol per UB element byte width. Element type
+// is address typing only; plds always takes __ubuf__ uint32_t*. Typed stubs
+// keep the memref ABI exact (PointerCast-to-i8 views have tripped BiShengLIR).
+static StringRef maskLoadUsDsCalleeName(int64_t elemBytes, hivmave::LoadDist pattern)
+{
+    const bool isUs = pattern == hivmave::LoadDist::US;
+    switch (elemBytes) {
+        case 1:
+            return isUs ? "mask_load_us_b8" : "mask_load_ds_b8";
+        case 2:
+            return isUs ? "mask_load_us_b16" : "mask_load_ds_b16";
+        case 4:
+            return isUs ? "mask_load_us_b32" : "mask_load_ds_b32";
+        case 8:
+            return isUs ? "mask_load_us_b64" : "mask_load_ds_b64";
+        default:
+            return {};
+    }
+}
+
+static func::FuncOp getOrCreateMaskLoadUsDsLibraryCall(
+    ModuleOp module, Location loc, Type memRefType, hivmave::LoadDist pattern)
+{
+    auto memrefTy = dyn_cast<MemRefType>(memRefType);
+    if (!memrefTy)
+        return {};
+    int64_t elemBytes = getByteSizeOfFixedWidthScalarType(memrefTy.getElementType());
+    if (elemBytes != 1 && elemBytes != 2 && elemBytes != 4 && elemBytes != 8)
+        return {};
+    if (pattern != hivmave::LoadDist::US && pattern != hivmave::LoadDist::DS)
+        return {};
+    StringRef calleeName = maskLoadUsDsCalleeName(elemBytes, pattern);
+    if (calleeName.empty())
+        return {};
+    if (auto existing = module.lookupSymbol<func::FuncOp>(calleeName)) {
+        annotateAivLibraryCall(existing);
+        return existing;
+    }
+    OpBuilder moduleBuilder(module.getBodyRegion());
+    auto pregTy = VectorType::get({256}, IntegerType::get(module.getContext(), 1));
+    auto fnType = FunctionType::get(module.getContext(), {memRefType}, {pregTy});
+    auto callee = moduleBuilder.create<func::FuncOp>(loc, calleeName, fnType);
+    annotateAivLibraryCall(callee);
+    return callee;
+}
+
 static std::string getSqueezeLibraryCallName(Type elementType)
 {
     if (elementType.isF32())
@@ -792,11 +852,16 @@ static int64_t maskElementBitWidthForLanes(int64_t lanes)
 // vector<256xi1>. When those types differ, annotate the AVE producer with the
 // semantic element width so HIVMAVE lowering still selects pge/plt.b8/b16/b32
 // from N instead of the full container width.
+//
+// Prefer string attrs over mlir::utils::elementAlignmentBitWidth (removed /
+// unavailable on current AscendNPU-IR).
+static constexpr llvm::StringLiteral kElementAlignmentBitWidth = "element_alignment_bit_width";
 static void annotateFullPregWidth(OpBuilder& b, Operation* op, VectorType resultType, int64_t semanticLanes)
 {
     if (resultType.getNumElements() == semanticLanes)
         return;
-    op->setAttr(mlir::utils::elementAlignmentBitWidth, b.getI32IntegerAttr(maskElementBitWidthForLanes(semanticLanes)));
+    const int64_t bitWidth = maskElementBitWidthForLanes(semanticLanes);
+    op->setAttr(kElementAlignmentBitWidth, b.getI32IntegerAttr(bitWidth));
 }
 
 static Value createPredicatePge(
@@ -1689,16 +1754,39 @@ static LogicalResult lowerNestedVectorOp(
         if (!source)
             return failure();
 
-        // MaskSSA result: 1/2/4-byte UB → i1 memref view → vload <NORM> (plds.b8).
+        // MaskSSA result: 1/2/4-byte UB → predicate.
+        // DIST_US / DIST_DS: AscendC MaskDist via linked bc (plds dist=1/2).
+        // IR i1→plds hardcodes dist=0, so US/DS must not go through VFLoad.
         if (auto maskType = dyn_cast<::tla::MaskSSAType>(loadOp.getResult().getType())) {
             int64_t lanes = maskType.getPhysicalLanes();
+            hivmave::LoadDist pattern = hivmave::LoadDist::NORM;
+            if (auto loadDistAttr = loadOp.getLoadDist())
+                pattern = mapTlaLoadDistToAve(loadDistAttr->getLoadDist());
+            if (pattern != hivmave::LoadDist::NORM && pattern != hivmave::LoadDist::US &&
+                pattern != hivmave::LoadDist::DS)
+                return loadOp.emitError("mask load_dist must be norm|us|ds"), failure();
+
+            if (pattern == hivmave::LoadDist::US || pattern == hivmave::LoadDist::DS) {
+                ModuleOp module = loadOp->getParentOfType<ModuleOp>();
+                auto callee = getOrCreateMaskLoadUsDsLibraryCall(module, loc, source.getType(), pattern);
+                if (!callee)
+                    return loadOp.emitError(
+                               "MaskLoadDist US/DS requires a b8/b16/b32/b64 "
+                               "scalar UB (AscendC LoadAlign<T, MaskDist>)"),
+                           failure();
+                auto call = b.create<func::CallOp>(loc, callee, ValueRange{source});
+                Value loaded = castMaskToPregType(b, loc, call.getResult(0), fullPregVecType(b.getContext()));
+                (void)lanes;
+                valueMap[loadOp.getResult()] = loaded;
+                return success();
+            }
+
             auto i1MemrefOr = materializeI1MaskMemrefFromUb(b, loc, source, lanes);
             if (failed(i1MemrefOr))
                 return loadOp.emitError("failed to materialize i1 memref view for tla.load MaskSSA"), failure();
             VectorType semanticMaskType = VectorType::get({lanes}, b.getI1Type());
             Value zero = b.create<arith::ConstantIndexOp>(loc, 0);
-            auto vfLoad =
-                createVFLoad(b, loc, semanticMaskType, *i1MemrefOr, zero, hivmave::LoadDist::NORM, /*unaligned=*/false);
+            auto vfLoad = createVFLoad(b, loc, semanticMaskType, *i1MemrefOr, zero, pattern, /*unaligned=*/false);
             Value loaded = castMaskToPregType(b, loc, vfLoad.getRes(), fullPregVecType(b.getContext()));
             valueMap[loadOp.getResult()] = loaded;
             return success();
@@ -2051,7 +2139,7 @@ static LogicalResult lowerNestedVectorOp(
             src0 = castMaskToPregType(b, loc, src0, pregType);
             src1 = castMaskToPregType(b, loc, src1, pregType);
             auto pairType = LLVM::LLVMStructType::getLiteral(b.getContext(), {pregType, pregType});
-            Operation *intrinsic = nullptr;
+            Operation* intrinsic = nullptr;
             switch (maskType.getPhysicalLanes()) {
                 case 256:
                     intrinsic = b.create<hivm_regbaseintrins::PintlvB8InstrOp>(loc, pairType, src0, src1);
@@ -2122,8 +2210,8 @@ static LogicalResult lowerNestedVectorOp(
             auto src1Type = dyn_cast<VectorType>(src1.getType());
             if (!src0Type || !src1Type || src0Type != src1Type)
                 return failure();
-            auto aveOp = b.create<hivmave::VFDeInterleaveOp>(
-                loc, TypeRange{src0Type, src1Type}, ValueRange{src0, src1});
+            auto aveOp =
+                b.create<hivmave::VFDeInterleaveOp>(loc, TypeRange{src0Type, src1Type}, ValueRange{src0, src1});
             valueMap[deInterleaveOp.getDst0()] = aveOp->getResult(0);
             valueMap[deInterleaveOp.getDst1()] = aveOp->getResult(1);
         }

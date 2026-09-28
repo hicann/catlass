@@ -83,6 +83,7 @@ def vector_op(mem_in: tla.Tensor, mem_out: tla.Tensor) -> None:
 ├── interleave_op.py
 ├── load_and_store_scalar_after_reduction.py
 ├── load_dintlv_op.py
+├── load_mask_dist.py
 ├── load_store_mask.py
 ├── load_us_b8_op.py
 ├── masked_binary.py
@@ -111,6 +112,7 @@ def vector_op(mem_in: tla.Tensor, mem_out: tla.Tensor) -> None:
 | [**`interleave_op.py`**](interleave_op.py) | 交错运算示例，基于两路输入分别产出交错后的两路输出。 |
 | [**`load_dintlv_op.py`**](load_dintlv_op.py) |双目的交织加载示例，单次加载拆出偶数/奇数两路寄存器。 |
 | [**`load_us_b8_op.py`**](load_us_b8_op.py) | 上采样加载示例，将 i8 元素上采样至 VL 寄存器（仅 i8）。 |
+| [**`load_mask_dist.py`**](load_mask_dist.py) | `MaskLoadParams`：`ds`/`us` × `--mask-dtype i8|i16|i32` → `tla.where`。 |
 | [**`load_store_mask.py`**](load_store_mask.py) | 掩码搬运往返示例，掩码 UB 与伴随向量同 dtype。 |
 | [**`store_pack.py`**](store_pack.py) | 压缩存储示例，取得低半有效数位做紧凑存储。 |
 | [**`reduction_ops.py`**](reduction_ops.py) | `tla.reduce` 归约示例，支持 `add`/`max`/`min` 三种模式，覆盖对齐与非对齐场景。 |
@@ -156,7 +158,7 @@ def vector_op(mem_in: tla.Tensor, mem_out: tla.Tensor) -> None:
 | `--atol` | 各算子默认绝对误差 | 浮点精度校验的绝对误差阈值。 |
 | `--fail-fast` | `None` | 扫描/批量模式遇到失败即停止，默认不启用。 |
 
-> `gather_op.py`、`reduction_ops.py`、`load_and_store_scalar_after_reduction.py` 为独立脚本，使用各自的命令行参数（如 `--run`、位置参数 `add/max/min`、`--device` 等）。
+> `gather_op.py`、`load_mask_dist.py`、`reduction_ops.py`、`load_and_store_scalar_after_reduction.py` 为独立脚本，使用各自的命令行参数（如 `--run`、位置参数 `add/max/min`/`ds`、`--device` 等）。
 
 ### 执行示例
 
@@ -179,6 +181,9 @@ python examples/end_to_end/vector_ops/binary_op.py --batch-run add sub mul max
 
 # `gather_op.py` 执行（需显式 `--run` ）
 python examples/end_to_end/vector_ops/gather_op.py --run --device 0
+# MaskLoadDist 独立脚本（需显式 `--run` ）
+python examples/end_to_end/vector_ops/load_mask_dist.py ds --run --device 0
+python examples/end_to_end/vector_ops/load_mask_dist.py us --run --device 0
 ```
 
 执行测试后，预期输出（以统一框架样例为例）：
@@ -353,6 +358,7 @@ first mismatch=None
 - 文件位置：
   - `compare_mask.py`：比较掩码与 `tla.where` 选择。
   - `load_store_mask.py`：MaskSSA 的 UB 往返搬运。
+  - `load_mask_dist.py`（独立脚本）：`MaskLoadParams` 的 `ds` / `us` 两种模式。
 
 - 功能说明：
   - **`compare_mask.py`**（f32）：
@@ -366,6 +372,11 @@ first mismatch=None
     | `static_dynamic_lt` | 静态首 chunk 参考与动态 chunk 混用 |
 
   - **`load_store_mask.py`**（f32, f16, i8）：op `load_store_mask`，`create_mask(H)` → `store(MaskStoreParams)` → `load(MaskLoadParams)` → 以该掩码做 masked store 的往返。
+  - **`load_mask_dist.py`**（独立脚本，位置参数 `ds` / `us`，可选 `--mask-dtype`）：
+    - `ds`：`DIST_DS` / `mask_load_ds_b*` → `tla.where`
+    - `us`：`DIST_US`/`PACK` / `mask_load_us_b*`；f32 下 byte `i` → lane `4*i`
+    - `--mask-dtype i8|i16|i32`：mask UB 寻址类型（b8/b16/b32；IR 亦接受 b64）；首 64 mask 字节布局跨 dtype 相同
+      （`make_tensor_like`/GM↔UB 暂无 i64，故 e2e 未覆盖 b64）
 
 - 约束说明：
   - 支持的数据类型：
@@ -374,9 +385,21 @@ first mismatch=None
     |------|---------------|
     | `compare_mask.py` | f32 |
     | `load_store_mask.py` | f32, f16, i8 |
+    | `load_mask_dist.py ds/us` | f32 伴随 + mask `i8/i16/i32`（IR 另支持 b64） |
 
   - `compare_mask.py`：仅 f32；输入 2、输出 1；支持 batch。
   - `load_store_mask.py`：shape 随 dtype 变化（f32→64、f16→128、i8→256），输出仅前 `ELE/2` lane 有效；掩码与伴随向量 dtype 一致。
+  - `load_mask_dist.py`：必须显式传 `op` 与 `--run`；默认 `--mask-dtype i8`。
+  - **字节偏移对齐**（作用于 UB 字节地址 `base + offset×sizeof(T)`；DSL **不**做静态校验，
+    不对齐可编译但运行可能 fault）：
+
+    | `MaskLoadDist` | 对齐约束（Byte） | VL=256 时 |
+    |----------------|------------------|-----------|
+    | `DIST_NORM` | `VL/8` | 32B |
+    | `DIST_US` | `VL/16` | 16B |
+    | `DIST_DS` | `min(32, VL/4)` | 32B |
+
+    硬件路径为 `plds(uint32_t*)`，故绝对下限亦为 4B；正式契约以表中模式约束为准。
 
 - 执行示例：
   ```bash
@@ -391,8 +414,14 @@ first mismatch=None
 
   # MaskSSA 的 UB 存储 / 加载往返
   python examples/end_to_end/vector_ops/load_store_mask.py load_store_mask --dtype f32 --device 0
-  ```
 
+  # MaskLoadDist：统一脚本 load_mask_dist.py <ds|us> --run
+  python examples/end_to_end/vector_ops/load_mask_dist.py ds --run --device 0
+  python examples/end_to_end/vector_ops/load_mask_dist.py us --run --device 0
+  # b16/b32 mask 寻址类型（首 64 mask 字节与 i8 相同）
+  python examples/end_to_end/vector_ops/load_mask_dist.py ds --run --mask-dtype i32 --device 0
+  python examples/end_to_end/vector_ops/load_mask_dist.py us --run --mask-dtype i16 --device 0
+    ```
 ### 类型转换
 
 - 文件位置：

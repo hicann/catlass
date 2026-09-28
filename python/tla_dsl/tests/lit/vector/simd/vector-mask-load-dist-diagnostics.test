@@ -1,0 +1,46 @@
+// RUN: sed -n '/^\/\/ BEGIN_US_BAD$/,/^\/\/ END_US_BAD$/p' %s | sed '1d;$d;s|^// ||' > %t.us_bad.mlir && not %tla_compile %t.us_bad.mlir -o %t 2>&1 | %filecheck %s --check-prefix=US-BAD
+// RUN: sed -n '/^\/\/ BEGIN_DS_BAD$/,/^\/\/ END_DS_BAD$/p' %s | sed '1d;$d;s|^// ||' > %t.ds_bad.mlir && not %tla_compile %t.ds_bad.mlir -o %t 2>&1 | %filecheck %s --check-prefix=DS-BAD
+
+// DIST_US / DIST_DS align AscendC LoadAlign<T, MaskDist>: T must be
+// b8/b16/b32/b64. Reject load_dist values outside norm|us|ds on MaskSSA.
+
+// US-BAD: mask load only supports
+// DS-BAD: mask load only supports
+
+// BEGIN_US_BAD
+// !mask_i8_64 = !tla.tensor<!tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, RowMajor>, !tla.coord<0>, !tla.ptr<i8, ub, 1>>
+// module {
+//   func.func @mask_load_us_bad_dist(%mask_memref: memref<64xi8, #hivm.address_space<ub>>) {
+//     %m_c0 = arith.constant 0 : index
+//     %m_c1 = arith.constant 1 : index
+//     %m_c64 = arith.constant 64 : index
+//     %mask = tla.tensor_desc %mask_memref shape [%m_c1, %m_c64, %m_c1, %m_c1] stride [%m_c64, %m_c1, %m_c1, %m_c1] origin_shape [%m_c1, %m_c64] coord [%m_c0, %m_c0] : memref<64xi8, #hivm.address_space<ub>> -> !mask_i8_64
+//     "tla.vec.func"() ({
+//       %shape = "tla.make_shape"() : () -> !tla.shape<64>
+//       %coord = "tla.make_coord"() : () -> !tla.coord<0>
+//       %mask_tile = "tla.tile_view"(%mask, %shape, %coord) : (!mask_i8_64, !tla.shape<64>, !tla.coord<0>) -> !mask_i8_64
+//       %preg = tla.load %mask_tile {load_dist = #tla.load_dist<brc_b32>} : !mask_i8_64 -> !tla.mask<64>
+//     }) : () -> ()
+//     return
+//   }
+// }
+// END_US_BAD
+
+// BEGIN_DS_BAD
+// !mask_i8_64 = !tla.tensor<!tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, RowMajor>, !tla.coord<0>, !tla.ptr<i8, ub, 1>>
+// module {
+//   func.func @mask_load_ds_bad_dist(%mask_memref: memref<64xi8, #hivm.address_space<ub>>) {
+//     %m_c0 = arith.constant 0 : index
+//     %m_c1 = arith.constant 1 : index
+//     %m_c64 = arith.constant 64 : index
+//     %mask = tla.tensor_desc %mask_memref shape [%m_c1, %m_c64, %m_c1, %m_c1] stride [%m_c64, %m_c1, %m_c1, %m_c1] origin_shape [%m_c1, %m_c64] coord [%m_c0, %m_c0] : memref<64xi8, #hivm.address_space<ub>> -> !mask_i8_64
+//     "tla.vec.func"() ({
+//       %shape = "tla.make_shape"() : () -> !tla.shape<64>
+//       %coord = "tla.make_coord"() : () -> !tla.coord<0>
+//       %mask_tile = "tla.tile_view"(%mask, %shape, %coord) : (!mask_i8_64, !tla.shape<64>, !tla.coord<0>) -> !mask_i8_64
+//       %preg = tla.load %mask_tile {load_dist = #tla.load_dist<brc_b32>} : !mask_i8_64 -> !tla.mask<64>
+//     }) : () -> ()
+//     return
+//   }
+// }
+// END_DS_BAD

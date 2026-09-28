@@ -325,10 +325,13 @@ def Tla_LoadDist_DintlvB32 : I32EnumAttrCase<"dintlv_b32", 2>;
 def Tla_LoadDist_UsB8 : I32EnumAttrCase<"us_b8", 3>;
 def Tla_LoadDist_BrcB16 : I32EnumAttrCase<"brc_b16", 4>;
 def Tla_LoadDist_UsB16 : I32EnumAttrCase<"us_b16", 5>;
+// MaskDist US/DS (free slots; upstream skipped 6 between us_b16 and unpack_b16).
+def Tla_LoadDist_Us : I32EnumAttrCase<"us", 6>;
 def Tla_LoadDist_UnpackB16 : I32EnumAttrCase<"unpack_b16", 7>;
 def Tla_LoadDist_E2bB16 : I32EnumAttrCase<"e2b_b16", 8>;
 def Tla_LoadDist_E2bB32 : I32EnumAttrCase<"e2b_b32", 9>;
 def Tla_LoadDist_Blk : I32EnumAttrCase<"blk", 10>;
+def Tla_LoadDist_Ds : I32EnumAttrCase<"ds", 11>;
 def Tla_LoadDistEnum : Tla_I32Enum<"LoadDist", "Load distribution for tla.load.", [
   Tla_LoadDist_Norm,
   Tla_LoadDist_BrcB32,
@@ -336,10 +339,12 @@ def Tla_LoadDistEnum : Tla_I32Enum<"LoadDist", "Load distribution for tla.load."
   Tla_LoadDist_UsB8,
   Tla_LoadDist_BrcB16,
   Tla_LoadDist_UsB16,
+  Tla_LoadDist_Us,
   Tla_LoadDist_UnpackB16,
   Tla_LoadDist_E2bB16,
   Tla_LoadDist_E2bB32,
-  Tla_LoadDist_Blk
+  Tla_LoadDist_Blk,
+  Tla_LoadDist_Ds
 ]>;
 def Tla_LoadDistAttr : Tla_EnumAttr<"LoadDist", "load_dist"> {
   let parameters = (ins EnumParameter<Tla_LoadDistEnum>:$load_dist);
@@ -357,6 +362,8 @@ def Tla_LoadDistAttr : Tla_EnumAttr<"LoadDist", "load_dist"> {
     ``us_b16`` is single-destination 2x up-sample load (AscendC
     ``LoadDist::DIST_US_B16``): loads ``VL/2`` b16 elements and repeats
     each twice to fill a VL-wide ``b16`` register; b16 element type only.
+    ``us`` / ``ds`` are AscendC ``MaskDist::DIST_US`` / ``DIST_DS`` for
+    ``!tla.mask`` loads (``hivm.plds.b8`` dist 1 / 2).
     ``unpack_b16`` is single-destination unpack load (AscendC
     ``LoadDist::DIST_UNPACK_B16``, HIVMAVE ``UNPK_B16``): loads ``VL/2``
     b16 elements and inserts one zero b16 element after each to fill a
@@ -1128,12 +1135,14 @@ def Tla_LoadOp : Tla_Op<"load", []> {
       (POST_MODE_NORMAL) is a compile-time address pre-offset in 32B
       DataBlocks. Strided load is mutually exclusive with ``load_dist`` and
       the dual result.
-    * ``!tla.mask`` — continuous-aligned MaskReg load (AscendC
-      ``LoadAlign(MaskReg&)`` / ``DIST_NORM`` / ``plds``). Source UB element
-      type must be a 1/2/4-byte scalar (int or float). ``N`` on
-      ``!tla.mask<N>`` is ``256 / sizeof(elem)`` from the UB element type;
-      the tile supplies the address. Lowers via ``ave.hir.vload <NORM>`` on
-      an ``i1`` memref view to ``hivm.plds.b8``.
+    * ``!tla.mask`` — MaskReg load (AscendC ``LoadAlign(MaskReg&)`` /
+      ``MaskDist`` / ``plds``). Source UB element type must be a 1/2/4-byte
+      scalar (int or float). ``N`` on ``!tla.mask<N>`` is
+      ``256 / sizeof(elem)`` from the UB element type; the tile supplies the
+      address. Optional ``load_dist`` ``norm``/``us``/``ds`` maps to
+      ``hivm.plds.b8`` dist 0/1/2 (``DIST_NORM``/``US``/``DS``). ``DIST_NORM``
+      lowers via ``ave.hir.vload <NORM>`` on an ``i1`` memref view;
+      ``us``/``ds`` lower via AIV bc (NPU-IR i1→``plds`` hardcodes NORM).
 
     Must be nested inside a ``tla.vec.func`` region.
   }];

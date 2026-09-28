@@ -88,6 +88,7 @@ void buildTlaPipeline(OpPassManager& pm)
     // duplicated TLA pass. Frontend ``tla.range`` emits i32 IVs; ccec VLOOPv2
     // recognition benefits from i16 when bounds fit. Default TableGen option is
     // false, so turn it on here when constructing the pass.
+    // Sync: cann/catlass#1295
     {
         std::unique_ptr<mlir::Pass> hivmaveToIntrin = mlir::createConvertHIVMAVEToAVEIntrinPass();
         if (failed(hivmaveToIntrin->initializeOptions("enable-i16-indvar=true", [](const llvm::Twine& msg) {

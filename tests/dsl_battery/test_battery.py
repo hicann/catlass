@@ -453,6 +453,34 @@ def _cases(device: int) -> Iterator[tuple[str, list[list[str]]]]:
             for shift_op in ("shift_left", "shift_right", "shift_lefts", "shift_rights")
         ],
     )
+    # AscendC LoadAlign<T, MaskDist> address typing (copy-capable: i8/i16/i32).
+    for mask_dt in ("i8", "i16", "i32"):
+        yield (
+            f"vector-load-mask-dist-ds-{mask_dt}",
+            [
+                [
+                    "vector_ops/load_mask_dist.py",
+                    "ds",
+                    "--run",
+                    "--mask-dtype",
+                    mask_dt,
+                    *dev,
+                ]
+            ],
+        )
+        yield (
+            f"vector-load-mask-dist-us-{mask_dt}",
+            [
+                [
+                    "vector_ops/load_mask_dist.py",
+                    "us",
+                    "--run",
+                    "--mask-dtype",
+                    mask_dt,
+                    *dev,
+                ]
+            ],
+        )
 
     # --- tensor_index ---
     yield (

@@ -899,17 +899,41 @@ mlir::LogicalResult LoadOp::verify()
     if (auto maskResult = mlir::dyn_cast<MaskSSAType>(getResult().getType())) {
         if (getResult2())
             return emitOpError("second result is not valid when loading !tla.mask");
-        if (getLoadDist())
-            return emitOpError("load_dist is not supported when loading !tla.mask");
+        if (getLoadDist()) {
+            auto dist = getLoadDist()->getLoadDist();
+            if (dist != LoadDist::norm && dist != LoadDist::us && dist != LoadDist::ds)
+                return emitOpError(
+                    "mask load only supports load_dist norm|us|ds "
+                    "(AscendC MaskDist NORM/US/DS)");
+            if (dist == LoadDist::us || dist == LoadDist::ds) {
+                // AscendC LoadAlign<T, MaskDist>: SupportBytes<T, 1, 2, 4, 8>.
+                int64_t sourceElemBytes = getByteSizeOfFixedWidthScalarType(sourceType.getPtr().getPointee());
+                if (sourceElemBytes != 1 && sourceElemBytes != 2 && sourceElemBytes != 4 && sourceElemBytes != 8)
+                    return emitOpError(
+                        "MaskLoadDist US/DS requires a b8/b16/b32/b64 scalar UB "
+                        "(AscendC LoadAlign<T, MaskDist>)");
+            }
+        }
         if (getBlockStride() || getRepeatStride())
             return emitOpError("block_stride/repeat_stride is not supported when loading !tla.mask");
         if (getUnalignedUbAccess())
             return emitOpError("unaligned_ub_access is not supported when loading !tla.mask");
         int64_t sourceElemBytes = getByteSizeOfFixedWidthScalarType(sourceType.getPtr().getPointee());
-        if (sourceElemBytes != 1 && sourceElemBytes != 2 && sourceElemBytes != 4)
+        bool usOrDs = false;
+        if (getLoadDist()) {
+            auto dist = getLoadDist()->getLoadDist();
+            usOrDs = dist == LoadDist::us || dist == LoadDist::ds;
+        }
+        if (usOrDs) {
+            if (sourceElemBytes != 1 && sourceElemBytes != 2 && sourceElemBytes != 4 && sourceElemBytes != 8)
+                return emitOpError(
+                    "source !tla.tensor element type must be a b8/b16/b32/b64 "
+                    "scalar for MaskLoadDist US/DS");
+        } else if (sourceElemBytes != 1 && sourceElemBytes != 2 && sourceElemBytes != 4) {
             return emitOpError(
                 "source !tla.tensor element type must be a 1/2/4-byte scalar "
                 "for MaskSSA load");
+        }
         int64_t lanes = maskResult.getPhysicalLanes();
         if (lanes != 32 && lanes != 64 && lanes != 128 && lanes != 256)
             return emitOpError() << "unsupported !tla.mask lane count " << lanes;

@@ -31,6 +31,11 @@ def _dynamic_metadata_values(type_tree: Any, metadata_tree: Any) -> list[Any]:
 # MaskSSA load/store UB: any 1/2/4-byte scalar (int or float).
 # ``N = 256 / sizeof(UB elem)``; hardware path is still plds/psts.b8.
 _MASK_UB_ELEM_BYTES = frozenset((1, 2, 4))
+# AscendC ``LoadAlign<T, MaskDist>``: ``SupportBytes<T, 1, 2, 4, 8>`` (b8/b16/b32/b64).
+# ``T`` is address typing only; ``plds`` always takes ``uint32_t*``.
+_MASK_DIST_US_DS_ELEM_BYTES = frozenset((1, 2, 4, 8))
+# AscendC MaskReg width after plds (VL bits). Used when tile shape cannot hint N.
+_MASK_DIST_US_DS_DEFAULT_LANES = 256
 
 
 class _Tensor(TensorABC):
@@ -226,23 +231,26 @@ class _Tensor(TensorABC):
             - `params` (`LoadParams | None`): Load mode. `None` / `NormalLoadParams` /
               `UnalignLoadParams` / `BlockLoadParams` → `VectorSSA` (or a pair for
               `DIST_DINTLV_B32`); `MaskLoadParams` → `MaskSSA`.
-              `NormalLoadParams.load_dist` selects an AscendC distribution mode:
+              `NormalLoadParams.load_dist` selects a distribution mode:
               `norm` (default), `brc_b32` (broadcast one b32 element to all lanes),
               `dintlv_b32` (f32 deinterleave, dual results), `us_b8` / `us_b16`
               (2x up-sample), `brc_b16` (broadcast one b16 element),
               `unpack_b16` (zero-extend b16 to double width),
               `e2b_b16` / `e2b_b32` (element-to-DataBlock broadcast),
               `blk` (one 32-byte DataBlock broadcast to all 8).
-              `BlockLoadParams` is the `vsldb` strided gather: one instruction
-              gathers 8 DataBlocks whose heads are `block_stride` DataBlocks
-              (32B units) apart; `block_stride == 0` repeats the first DataBlock
-              into all 8 slots; `post_update_stride` is the compile-time address
-              pre-offset in 32B DataBlocks. Optional, default `None`.
+              `BlockLoadParams` is a strided DataBlock gather: loads 8
+              DataBlocks whose heads are `block_stride` DataBlocks (32B units)
+              apart; `block_stride == 0` repeats the first DataBlock into all
+              8 slots; `post_update_stride` is the compile-time address
+              pre-offset in 32B DataBlocks.
+              `MaskLoadParams.load_dist` may be `DIST_NORM` (default bit-packed
+              mask load), `DIST_US` (bit upsample), or `DIST_DS` (bit
+              downsample). Optional, default `None`.
 
             Constraints:
             - Must be called inside a `@tla.kernel`-decorated kernel function.
             - Must be called inside `tla.vec.func()`; source tile must be UB.
-            - Mask load requires a 1/2/4-byte scalar UB element type.
+            - Mask load ``DIST_NORM`` requires a 1/2/4-byte scalar UB element type.
             - Distribution modes fix the element width: `us_b8` needs i8/u8;
               `brc_b16` / `us_b16` / `unpack_b16` / `e2b_b16` need 2-byte
               (f16/bf16/i16/u16); `e2b_b32` needs 4-byte (f32/i32/u32);
@@ -250,6 +258,15 @@ class _Tensor(TensorABC):
             - `BlockLoadParams` requires a 2/4-byte element type
               (f32/f16/bf16/i32/u32/i16/u16); `block_stride` and
               `post_update_stride` must fit in [0, 65535].
+            - ``DIST_US`` / ``DIST_DS``: UB element type may be any
+              b8/b16/b32/b64 scalar. The element type only types the UB
+              address; the mask bit layout does not depend on element width.
+              When the static tile-shape product is in ``{32,64,128,256}``,
+              it is used as ``N`` on ``!tla.mask<N>``; otherwise ``N=256``.
+            - Mask load byte-offset alignment (UB byte address =
+              base + offset×sizeof(T)): ``DIST_NORM`` → ``VL/8``;
+              ``DIST_US`` → ``VL/16``; ``DIST_DS`` → ``min(32, VL/4)``.
+              On VL=256 this is 32B / 16B / 32B.
 
             Example:
             ```python
@@ -259,6 +276,10 @@ class _Tensor(TensorABC):
                 x_blk = x_ub.load(tla.params.NormalLoadParams(
                     load_dist=tla.params.LoadDist.DIST_BLK))
                 x_gather = x_ub.load(tla.params.BlockLoadParams(block_stride=4))
+                preg = mask_ub.load(
+                    tla.params.MaskLoadParams(load_dist=tla.params.MaskLoadDist.DIST_DS)
+                )
+                y = tla.where(preg, x_reg, min_reg)
             ```
         """
         from ..core_api import (
@@ -300,25 +321,76 @@ class _Tensor(TensorABC):
 
         # MaskSSA path: selected by MaskLoadParams.
         if isinstance(params, MaskLoadParams):
-            if params.load_dist != MaskLoadDist.DIST_NORM:
+            allowed = (
+                MaskLoadDist.DIST_NORM,
+                MaskLoadDist.DIST_US,
+                MaskLoadDist.DIST_DS,
+            )
+            if params.load_dist not in allowed:
                 raise NotImplementedError(
-                    f"currently unsupported load_dist {params.load_dist!r}"
+                    f"unsupported MaskLoadDist {params.load_dist!r}; "
+                    f"expected one of {allowed}"
                 )
             elem = str(source_desc.element_type).strip().lower()
-            if dtype_size_bytes(elem) not in _MASK_UB_ELEM_BYTES:
+            elem_bytes = dtype_size_bytes(elem)
+            is_us_ds = params.load_dist in (
+                MaskLoadDist.DIST_US,
+                MaskLoadDist.DIST_DS,
+            )
+            # AscendC MaskDist: T ∈ b8/b16/b32/b64. DIST_NORM keeps the
+            # existing 1/2/4-byte MaskSSA carrier rule.
+            allowed_bytes = (
+                _MASK_DIST_US_DS_ELEM_BYTES if is_us_ds else _MASK_UB_ELEM_BYTES
+            )
+            if elem_bytes not in allowed_bytes:
+                if is_us_ds:
+                    raise NotImplementedError(
+                        f"MaskLoadDist {params.load_dist!r} requires a "
+                        f"b8/b16/b32/b64 scalar UB (AscendC "
+                        f"LoadAlign<T, MaskDist>), got "
+                        f"{source_desc.element_type}"
+                    )
                 _op_error(
                     "load",
                     f"invalid argument 'source': expected 1/2/4-byte scalar "
                     f"element type for MaskSSA load, got "
                     f"{source_desc.element_type}",
                 )
-            mask_desc = TlaMaskSSATypeDescriptor(
-                physical_lanes=_mask_ssa_type_for_element_type(elem).physical_lanes
-            )
+            # DIST_US / DIST_DS: ``T`` does not set predicate width (AscendC
+            # plds bit window is independent of sizeof(T)). Prefer a static
+            # tile-shape product in {32,64,128,256} as the companion VL hint
+            # (Softmax: i8/u32 tile of 64 → mask<64> with f32). Otherwise use
+            # the full AscendC MaskReg width (256).
+            from ..core_api import _flatten_tla_tuple
+
+            lanes = None
+            if is_us_ds:
+                shape_leaves = list(_flatten_tla_tuple(source_desc.shape))
+                prod = 1
+                static_ok = True
+                for dim in shape_leaves:
+                    if isinstance(dim, bool) or not isinstance(dim, int) or dim <= 0:
+                        static_ok = False
+                        break
+                    prod *= int(dim)
+                if static_ok and prod in (32, 64, 128, 256):
+                    lanes = prod
+                else:
+                    lanes = _MASK_DIST_US_DS_DEFAULT_LANES
+            if lanes is None:
+                lanes = _mask_ssa_type_for_element_type(elem).physical_lanes
+            mask_desc = TlaMaskSSATypeDescriptor(physical_lanes=lanes)
             mask_ty = mask_desc.to_mlir_type(
                 loc.context if loc is not None else mlir_ir.Context.current
             )
-            return MaskSSA(_tla_ops_gen.load(mask_ty, None, source, loc=loc))
+            load_kwargs: dict[str, Any] = {"loc": loc}
+            if params.load_dist != MaskLoadDist.DIST_NORM:
+                ctx = loc.context if loc is not None else mlir_ir.Context.current
+                load_kwargs["load_dist"] = mlir_ir.Attribute.parse(
+                    f"#tla.load_dist<{params.load_dist}>",
+                    context=ctx,
+                )
+            return MaskSSA(_tla_ops_gen.load(mask_ty, None, source, **load_kwargs))
 
         if params is None:
             params = NormalLoadParams()

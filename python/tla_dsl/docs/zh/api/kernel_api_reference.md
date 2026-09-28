@@ -721,27 +721,38 @@ tile.load(params: LoadParams | None = None) -> MaskSSA | VectorSSA | tuple[Vecto
 - `params`（`LoadParams | None`）：载入模式。`None` / `NormalLoadParams` /
   `UnalignLoadParams` / `BlockLoadParams` → `VectorSSA`（`DIST_DINTLV_B32`
   时可为二元组）；`MaskLoadParams` → `MaskSSA`。
-  `NormalLoadParams.load_dist` 选择 AscendC 分发模式：`norm`（默认）、
+  `NormalLoadParams.load_dist` 选择分发模式：`norm`（默认）、
   `brc_b32`（单个 b32 元素广播到全部 lane）、`dintlv_b32`（f32 解交织，
   双返回值）、`us_b8` / `us_b16`（2 倍上采样）、`brc_b16`（单个 b16 元素
   广播）、`unpack_b16`（b16 零扩展到双倍宽度）、`e2b_b16` / `e2b_b32`
   （元素到 DataBlock 广播）、`blk`（一个 32 字节 DataBlock 广播到全部 8 个）。
-  `BlockLoadParams` 为 `vsldb` 跨步收集：一条指令收集 8 个 DataBlock，
+  `BlockLoadParams` 为跨步 DataBlock 收集：一条指令收集 8 个 DataBlock，
   块头间隔 `block_stride` 个 DataBlock（32B 单位）；`block_stride == 0`
   时将首个 DataBlock 复制到全部 8 槽；`post_update_stride` 为编译期地址
   预偏移，单位 32B DataBlock。可选，默认 `None`。
+`UnalignLoadParams` → `VectorSSA`（`DIST_DINTLV_B32` 时可为二元组）；
+  `MaskLoadParams` → `MaskSSA`。可选，默认 `None`。
+  `MaskLoadParams.load_dist` 可为 `DIST_NORM`（默认，bit-packed 掩码载入）、
+  `DIST_US`（bit 上采样）或 `DIST_DS`（bit 下采样）。
 
 约束说明：
 
 - 须在 `@tla.kernel` 装饰的 kernel 函数体内调用。
 - 须在 `tla.vec.func()` 内调用；源 tile 须位于 UB。
-- Mask 载入要求 UB 元素类型为 1/2/4 字节标量。
+- Mask 载入 `DIST_NORM` 要求 UB 元素类型为 1/2/4 字节标量。
 - 分发模式限定元素宽度：`us_b8` 要求 i8/u8；`brc_b16` / `us_b16` /
   `unpack_b16` / `e2b_b16` 要求 2 字节（f16/bf16/i16/u16）；`e2b_b32`
   要求 4 字节（f32/i32/u32）；`dintlv_b32` 要求 f32；`blk` 适用于任意
   元素宽度。
 - `BlockLoadParams` 要求 2/4 字节元素类型（f32/f16/bf16/i32/u32/i16/u16）；
   `block_stride` 与 `post_update_stride` 须在 [0, 65535] 范围内。
+- `DIST_US` / `DIST_DS`：UB 元素类型可为任意 b8/b16/b32/b64 标量。
+  元素类型仅用于 UB 寻址；掩码位布局与元素宽度无关。
+  静态 tile shape 乘积属于 `{32,64,128,256}` 时作为 `!tla.mask<N>` 的 `N`；
+  否则 `N=256`。
+- 掩码载入字节偏移对齐（UB 字节地址 `base + offset×sizeof(T)`）：
+  `DIST_NORM` → `VL/8`；`DIST_US` → `VL/16`；`DIST_DS` → `min(32, VL/4)`。
+  VL=256 时为 32B / 16B / 32B。
 
 调用示例：
 
@@ -752,6 +763,10 @@ with tla.vec.func(mode="simd"):
     x_blk = x_ub.load(tla.params.NormalLoadParams(
         load_dist=tla.params.LoadDist.DIST_BLK))
     x_gather = x_ub.load(tla.params.BlockLoadParams(block_stride=4))
+    preg = mask_ub.load(
+        tla.params.MaskLoadParams(load_dist=tla.params.MaskLoadDist.DIST_DS)
+    )
+    y = tla.where(preg, x_reg, min_reg)
 ```
 
 ---

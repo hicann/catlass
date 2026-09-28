@@ -708,7 +708,7 @@ Supported vector copy routes
 
 ### `Tensor.load`
 
-**Source:** [`catlass.tla.tensor._Tensor.load`](../../../catlass/tla/tensor.py#L215)
+**Source:** [`catlass.tla.tensor._Tensor.load`](../../../catlass/tla/tensor.py#L220)
 
 Description:
 
@@ -725,24 +725,27 @@ Parameters:
 - `params` (`LoadParams | None`): Load mode. `None` / `NormalLoadParams` /
   `UnalignLoadParams` / `BlockLoadParams` → `VectorSSA` (or a pair for
   `DIST_DINTLV_B32`); `MaskLoadParams` → `MaskSSA`.
-  `NormalLoadParams.load_dist` selects an AscendC distribution mode:
+  `NormalLoadParams.load_dist` selects a distribution mode:
   `norm` (default), `brc_b32` (broadcast one b32 element to all lanes),
   `dintlv_b32` (f32 deinterleave, dual results), `us_b8` / `us_b16`
   (2x up-sample), `brc_b16` (broadcast one b16 element),
   `unpack_b16` (zero-extend b16 to double width),
   `e2b_b16` / `e2b_b32` (element-to-DataBlock broadcast),
   `blk` (one 32-byte DataBlock broadcast to all 8).
-  `BlockLoadParams` is the `vsldb` strided gather: one instruction
-  gathers 8 DataBlocks whose heads are `block_stride` DataBlocks
-  (32B units) apart; `block_stride == 0` repeats the first DataBlock
-  into all 8 slots; `post_update_stride` is the compile-time address
-  pre-offset in 32B DataBlocks. Optional, default `None`.
+  `BlockLoadParams` is a strided DataBlock gather: loads 8
+  DataBlocks whose heads are `block_stride` DataBlocks (32B units)
+  apart; `block_stride == 0` repeats the first DataBlock into all
+  8 slots; `post_update_stride` is the compile-time address
+  pre-offset in 32B DataBlocks.
+  `MaskLoadParams.load_dist` may be `DIST_NORM` (default bit-packed
+  mask load), `DIST_US` (bit upsample), or `DIST_DS` (bit
+  downsample). Optional, default `None`.
 
 Constraints:
 
 - Must be called inside a `@tla.kernel`-decorated kernel function.
 - Must be called inside `tla.vec.func()`; source tile must be UB.
-- Mask load requires a 1/2/4-byte scalar UB element type.
+- Mask load ``DIST_NORM`` requires a 1/2/4-byte scalar UB element type.
 - Distribution modes fix the element width: `us_b8` needs i8/u8;
   `brc_b16` / `us_b16` / `unpack_b16` / `e2b_b16` need 2-byte
   (f16/bf16/i16/u16); `e2b_b32` needs 4-byte (f32/i32/u32);
@@ -750,6 +753,15 @@ Constraints:
 - `BlockLoadParams` requires a 2/4-byte element type
   (f32/f16/bf16/i32/u32/i16/u16); `block_stride` and
   `post_update_stride` must fit in [0, 65535].
+- ``DIST_US`` / ``DIST_DS``: UB element type may be any
+  b8/b16/b32/b64 scalar. The element type only types the UB
+  address; the mask bit layout does not depend on element width.
+  When the static tile-shape product is in ``{32,64,128,256}``,
+  it is used as ``N`` on ``!tla.mask<N>``; otherwise ``N=256``.
+- Mask load byte-offset alignment (UB byte address =
+  base + offset×sizeof(T)): ``DIST_NORM`` → ``VL/8``;
+  ``DIST_US`` → ``VL/16``; ``DIST_DS`` → ``min(32, VL/4)``.
+  On VL=256 this is 32B / 16B / 32B.
 
 Example:
 
@@ -760,13 +772,17 @@ with tla.vec.func(mode="simd"):
     x_blk = x_ub.load(tla.params.NormalLoadParams(
         load_dist=tla.params.LoadDist.DIST_BLK))
     x_gather = x_ub.load(tla.params.BlockLoadParams(block_stride=4))
+    preg = mask_ub.load(
+        tla.params.MaskLoadParams(load_dist=tla.params.MaskLoadDist.DIST_DS)
+    )
+    y = tla.where(preg, x_reg, min_reg)
 ```
 
 ---
 
 ### `Tensor.store`
 
-**Source:** [`catlass.tla.tensor._Tensor.store`](../../../catlass/tla/tensor.py#L529)
+**Source:** [`catlass.tla.tensor._Tensor.store`](../../../catlass/tla/tensor.py#L601)
 
 Description:
 
@@ -2832,7 +2848,7 @@ with tla.vector():
 
 ### `Tensor.fill`
 
-**Source:** [`catlass.tla.tensor._Tensor.fill`](../../../catlass/tla/tensor.py#L720)
+**Source:** [`catlass.tla.tensor._Tensor.fill`](../../../catlass/tla/tensor.py#L792)
 
 Description:
 

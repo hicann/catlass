@@ -78,9 +78,19 @@ class LoadDist:
 
 
 class MaskLoadDist:
-    """Mask load distribution modes (AscendC ``MaskDist`` / ``plds``)."""
+    """Mask load distribution modes for ``MaskLoadParams``.
+
+    - ``DIST_NORM``: bit-packed mask load (default)
+    - ``DIST_US``: bit upsample
+    - ``DIST_DS``: bit downsample
+
+    For ``DIST_US`` / ``DIST_DS``, the UB element type may be b8/b16/b32/b64
+    (address typing only; mask bit layout is independent of element width).
+    """
 
     DIST_NORM = "norm"
+    DIST_US = "us"
+    DIST_DS = "ds"
 
 
 class StoreDist:
@@ -185,13 +195,26 @@ class BlockLoadParams(LoadParams):
 
 @dataclass
 class MaskLoadParams(LoadParams):
-    """Continuous-aligned MaskSSA load (1/2/4-byte UB / ``plds``).
+    """Continuous-aligned MaskSSA load via ``tile.load``.
 
-    AscendC ``LoadAlign(MaskReg&, __ubuf__ T*)``: predicate width
-    ``!tla.mask<N>`` is ``N = 256 / sizeof(T)`` from the UB element type
-    (same rule as ``create_mask``). ``T`` may be int or float; match the
-    companion vector element width (e.g. ``f32`` UB with ``f32`` →
-    ``mask<64>``). The source tile only supplies the UB address.
+    - ``DIST_NORM``: UB element is a 1/2/4-byte scalar; predicate width
+      ``!tla.mask<N>`` is ``N = 256 / sizeof(T)`` (same rule as
+      ``create_mask``).
+    - ``DIST_US`` / ``DIST_DS``: UB element type may be any b8/b16/b32/b64
+      scalar. The element type only types the UB address; the mask bit
+      layout does not depend on element width. ``N`` is a static
+      tile-shape product in ``{32, 64, 128, 256}`` when available;
+      otherwise ``N = 256``.
+
+    Byte-offset alignment (UB byte address = base + offset×sizeof(T)):
+    - ``DIST_NORM`` → ``VL/8`` bytes (VL=256 → 32B)
+    - ``DIST_US`` → ``VL/16`` bytes (VL=256 → 16B)
+    - ``DIST_DS`` → ``min(32, VL/4)`` bytes (VL=256 → 32B)
+
+    ``load_dist``:
+    - ``DIST_NORM``: bit-packed mask load (default)
+    - ``DIST_US``: bit upsample (VL/16 → VL/8)
+    - ``DIST_DS``: bit downsample (VL/4 → VL/8)
     """
 
     load_dist: str = MaskLoadDist.DIST_NORM
