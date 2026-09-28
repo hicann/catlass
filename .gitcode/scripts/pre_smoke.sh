@@ -229,6 +229,7 @@ if [ "${#EXAMPLE_CASES[@]}" -gt 0 ]; then
         python3 -m pytest -q "${WORKSPACE}/tests/test_example.py" -k "${EXAMPLE_FILTER}" || true
 
     if [ "${#OPTEST_KEYWORDS[@]}" -gt 0 ]; then
+        npu-smi info
         run_test "optest" \
             bash "${WORKSPACE}/tests/run_optest.sh" || true
     fi
