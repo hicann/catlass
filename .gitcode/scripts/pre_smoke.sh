@@ -15,6 +15,7 @@ set -uo pipefail
 DRY_RUN=${CI_DRY_RUN:-0}
 FAILED=0
 
+WORKSPACE=$1
 cd "${WORKSPACE}"
 
 # ============================================================================

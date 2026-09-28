@@ -51,7 +51,7 @@ jobs:
           export WORKSPACE=${{ steps.process_checkout.outputs.path }}
           whoami
           pwd
-          sudo bash ${{ steps.process_checkout.outputs.path }}/pre_smoke.sh
+          sudo bash ${{ steps.process_checkout.outputs.path }}/pre_smoke.sh ${{ steps.process_checkout.outputs.path }}
 
     if: "${{ default() }}"
     runs-on: ['self-hosted','npu=2','smoke=204']
