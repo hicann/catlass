@@ -156,9 +156,8 @@ def _set_kernel_types(dtype_key: str) -> str:
 
 
 def _compile_and_launch(args, kernel, host_tensors, from_dlpack, torch):
-    tensors = [
-        from_dlpack(t.contiguous(), layout_tag=tla.arch.RowMajor) for t in host_tensors
-    ]
+    tag = tla.arch.RowMajor
+    tensors = [from_dlpack(t.contiguous(), layout_tag=tag) for t in host_tensors]
     artifact = tla.compile(
         kernel,
         *tensors,

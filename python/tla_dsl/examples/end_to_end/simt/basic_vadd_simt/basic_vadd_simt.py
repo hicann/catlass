@@ -13,17 +13,14 @@
 The SIMD counterpart lives in ``examples/end_to_end/basic_vadd``. The difference
 is the whole point of the SIMT mode: no UB staging, no tiles, no vector ops --
 each thread loads its own two elements and stores one.
+
+The launch is a single block: the kernel splits the data across the threads of
+one thread block and never reads ``tla.arch.block_idx()``, so extra blocks would
+each recompute the same elements. ``simt/multiple_blocks_simt`` is the example
+that scales a SIMT kernel across blocks.
 """
 
 from __future__ import annotations
-
-import sys
-from pathlib import Path
-
-_DSL_EXAMPLE_PATH = str((Path(__file__).resolve().parent / "..").resolve())
-
-if _DSL_EXAMPLE_PATH not in sys.path:
-    sys.path.insert(0, _DSL_EXAMPLE_PATH)
 
 import argparse
 
@@ -59,8 +56,6 @@ def run(args: argparse.Namespace) -> int:
     import torch
     import torch_npu
 
-    from common import get_block_num
-
     n_ele = VECTOR_ELE
 
     def create_tla_tensor(dev_buf):
@@ -70,7 +65,6 @@ def run(args: argparse.Namespace) -> int:
         return from_dlpack(dev_buf.contiguous(), layout_tag=tla.arch.RowMajor)
 
     torch.npu.set_device(args.device)
-    block_num = get_block_num(args.block_num, args.device, kind="vector")
     print(f"--- basic_vadd_simt n={n_ele} thread_block_dim={VECTOR_ELE} ---")
 
     a = torch.rand(n_ele, dtype=torch.float32, device="npu") * 10.0 - 5.0
@@ -90,7 +84,7 @@ def run(args: argparse.Namespace) -> int:
         tla_c,
         options="--npu-arch 3510",
     )
-    artifact(tla_a, tla_b, tla_c, block_num=block_num)
+    artifact(tla_a, tla_b, tla_c, block_num=1)
     torch.npu.synchronize()
 
     passed = bool(torch.isclose(c, expected, rtol=0.0, atol=float(args.atol)).all())
@@ -102,12 +96,6 @@ def run(args: argparse.Namespace) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Compile and run the SIMT vector add.")
     parser.add_argument("--device", type=int, default=0)
-    parser.add_argument(
-        "--block-num",
-        type=int,
-        default=-1,
-        help="Launch block count; -1 = full vector_core_num (AIV) for this pure-v kernel",
-    )
     parser.add_argument("--atol", type=float, default=1e-4)
     return run(parser.parse_args())
 

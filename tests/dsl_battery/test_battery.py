@@ -249,7 +249,7 @@ def _cases(device: int) -> Iterator[tuple[str, list[list[str]]]]:
     )
     yield (
         "simt-basic-vadd",
-        [["simt/basic_vadd_simt.py", "--block-num", "1", *dev]],
+        [["simt/basic_vadd_simt/basic_vadd_simt.py", *dev]],
     )
     # The only battery case that puts a SIMT region inside a mixed AIC+AIV
     # kernel, and the only one that gives SIMT any UB at all: basic_vadd_simt
@@ -257,14 +257,14 @@ def _cases(device: int) -> Iterator[tuple[str, list[list[str]]]]:
     # launch-sized UB region, whose buffer the SIMD and SIMT stages share.
     yield (
         "simt-mixed",
-        [["simt/simt_mixed.py", *dev]],
+        [["simt/simt_mixed/simt_mixed.py", *dev]],
     )
     # The op coverage for SIMT: arithmetic, abs/exp/log/sqrt, max/min/where,
     # over six dtypes -- including the bf16 round-trip through f32 and the
     # integer divide. simt-basic-vadd exercises a single addition.
     yield (
         "simt-multi-ops",
-        [["simt/multi_ops_simt.py", *dev]],
+        [["simt/multi_ops_simt/multi_ops_simt.py", *dev]],
     )
 
     # --- multi_core_splitk_matmul and tail_multi_core_splitk_matmul ---

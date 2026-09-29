@@ -39,7 +39,7 @@
 # python/tla_dsl/examples/end_to_end/lazy_conditions (lazy_conditions.py).
 # python/tla_dsl/examples/end_to_end/constexpr_callable (constexpr_callable_epilogue.py).
 # python/tla_dsl/examples/end_to_end/jit_callable (jit_callable_epilogue.py).
-# python/tla_dsl/examples/end_to_end/simt (basic_vadd_simt.py).
+# python/tla_dsl/examples/end_to_end/simt/basic_vadd_simt (basic_vadd_simt.py).
 # python/tla_dsl/examples/end_to_end/multi_core_splitk_matmul (multi_core_splitk_matmul.py,
 # tail_multi_core_splitk_matmul.py).
 # python/tla_dsl/examples/end_to_end/basic_mmad_streamk (basic_mmad_streamk.py).
@@ -137,7 +137,7 @@ FLASH_ATTENTION_INFER_REL="examples/end_to_end/flash_attention_infer/flash_atten
 LAZY_CONDITIONS_REL="examples/end_to_end/lazy_conditions/lazy_conditions.py"
 CONSTEXPR_CALLABLE_REL="examples/end_to_end/constexpr_callable/constexpr_callable_epilogue.py"
 JIT_CALLABLE_REL="examples/end_to_end/jit_callable/jit_callable_epilogue.py"
-SIMT_VADD_REL="examples/end_to_end/simt/basic_vadd_simt.py"
+SIMT_VADD_REL="examples/end_to_end/simt/basic_vadd_simt/basic_vadd_simt.py"
 MULTI_CORE_SPLITK_REL="examples/end_to_end/multi_core_splitk_matmul/multi_core_splitk_matmul.py"
 TAIL_MULTI_CORE_SPLITK_REL="examples/end_to_end/multi_core_splitk_matmul/tail_multi_core_splitk_matmul.py"
 BASIC_MMAD_EPILOGUE_ADD_REL="examples/end_to_end/basic_mmad_epilogue/matmul_add.py"
@@ -219,7 +219,7 @@ Run end-to-end validation for:
   - lazy_conditions (lazy_conditions.py)
   - constexpr_callable (constexpr_callable_epilogue.py: Constexpr Callable epilogue)
   - jit_callable (jit_callable_epilogue.py: @tla.jit helper as Constexpr epilogue)
-  - simt (basic_vadd_simt.py: SIMT thread-block add)
+  - simt/basic_vadd_simt (basic_vadd_simt.py: SIMT thread-block add)
   - multi_core_splitk_matmul (multi_core_splitk_matmul.py: using split-k strategy for workload balancing)
   - basic_mmad_streamk (basic_mmad_streamk.py: streamK workload balancing)
   - batched_matmul (batched_matmul.py)
