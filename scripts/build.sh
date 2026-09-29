@@ -64,9 +64,15 @@ function show_help() {
     echo "  test_self_contained_includes  Test for self contained includes"
 }
 
-if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+if [[ $# -gt 0 && ( "$1" = "-h" || "$1" = "--help" ) ]]; then
     show_help
     exit 0
+fi
+
+if [[ $# -eq 0 ]]; then
+    echo -e "${ERROR}No target specified${NC}" >&2
+    show_help
+    exit 1
 fi
 
 if [[ ! -v ASCEND_HOME_PATH ]]; then
