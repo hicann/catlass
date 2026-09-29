@@ -35,6 +35,16 @@ has_change() {
     grep -qE "$1" "${DIFFLIST_FILE}"
 }
 
+# 打印环境变量：变量未设置时打印 <unset>，避免 set -u 下直接展开报错。
+echo_var() {
+    local name=$1
+    if [ -z "${!name+x}" ]; then
+        echo "${name}: <unset>"
+    else
+        echo "${name}: ${!name}"
+    fi
+}
+
 # 统一执行一个测试，并记录结果。
 # 执行前打印完整命令（含参数，dry-run 与真实执行都可见），失败时保留命令上下文。
 run_test() {
@@ -197,10 +207,10 @@ if [ "${DRY_RUN}" -ne 1 ]; then
     export DEVICE_ID_LIST=$(for d in /dev/davinci[0-9]*; do [ -e "$d" ] && echo "${d#/dev/davinci}"; done | sort -n)
 fi
 
-echo "LD_LIBRARY_PATH: ${LD_LIBRARY_PATH}"
-echo "ASCEND_RT_VISIBLE_DEVICES: ${ASCEND_RT_VISIBLE_DEVICES}"
-echo "CMAKE_BUILD_PARALLEL_LEVEL: ${CMAKE_BUILD_PARALLEL_LEVEL}"
-echo "DEVICE_ID_LIST: ${DEVICE_ID_LIST}"
+echo_var LD_LIBRARY_PATH
+echo_var ASCEND_RT_VISIBLE_DEVICES
+echo_var CMAKE_BUILD_PARALLEL_LEVEL
+echo_var DEVICE_ID_LIST
 
 cd "${WORKSPACE}" || exit 1
 
