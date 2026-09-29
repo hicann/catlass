@@ -1,55 +1,82 @@
-# Ascend950 Matmul EVG 示例
+# Ascend950MatmulEvg Example Readme
 
-本目录集中展示 EVG（Epilogue Visitor Graph）在 Ascend950 GEMM 尾处理中的典型用法，包含 7 个可执行文件：
+## 功能说明
 
-| 可执行文件                           | 源文件                      | 场景               | EVG 组织                   | 数据通路         |
-| ------------------------------------ | --------------------------- | ------------------ | -------------------------- | ---------------- |
-| `64_ascend950_matmul_evg_add`        | `matmul_evg_add.cpp`        | D = A×B + X        | TreeVisitor                | GM workspace     |
-| `64_ascend950_matmul_evg_leaky_relu` | `matmul_evg_leaky_relu.cpp` | D = LeakyRelu(A×B) | TreeVisitor                | GM workspace     |
-| `64_ascend950_matmul_evg_sigmoid`    | `matmul_evg_sigmoid.cpp`    | D = Sigmoid(A×B)   | TreeVisitor                | GM workspace     |
-| `64_ascend950_matmul_evg_silu`       | `matmul_evg_silu.cpp`       | D = Silu(A×B)      | TreeVisitor                | GM workspace     |
-| `64_ascend950_matmul_evg_tanh`       | `matmul_evg_tanh.cpp`       | D = Tanh(A×B)      | TopologicalVisitor         | GM workspace     |
-| `64_ascend950_matmul_evg_bias`       | `matmul_evg_bias.cpp`       | D = A×B + bias     | TreeVisitor + RowBroadcast | GM workspace     |
-| `64_ascend950_matmul_evg_add_ub`     | `matmul_evg_add_ub.cpp`     | D = A×B + X        | TreeVisitor                | L0C→UB workspace |
+- 算子功能：使用 EVG（Epilogue Visitor Graph）完成矩阵乘及后处理（如加法、偏置等）的融合计算。
+- 计算公式：
 
-## 编译
+  $$
+    \begin{aligned}
+    C &= A \times B \\
+    D &= f(C)
+    \end{aligned}
+  $$
 
-`build.sh` 每次只编译并 **install 一个** CMake target 到 `output/bin/`。
+  其中 $A$ 和 $B$ 分别是形如 `(m,k)`、`(k,n)` 的输入矩阵，$C$ 是矩阵乘中间结果，$D$ 是形如 `(m,n)` 的最终输出。$f$ 对应后处理操作。更多说明见 [EVG 设计文档](../../docs/zh/2_Design/03_evg/01_evg_design.md)。
+- 支持产品型号：Ascend 950 系列产品
+
+| 可执行文件 | 计算公式 |
+| --- | --- |
+| `64_ascend950_matmul_evg_add` | D = A×B + X |
+| `64_ascend950_matmul_evg_leaky_relu` | D = LeakyRelu(A×B) |
+| `64_ascend950_matmul_evg_sigmoid` | D = Sigmoid(A×B) |
+| `64_ascend950_matmul_evg_silu` | D = Silu(A×B) |
+| `64_ascend950_matmul_evg_tanh` | D = Tanh(A×B) |
+| `64_ascend950_matmul_evg_bias` | D = A×B + bias |
+| `64_ascend950_matmul_evg_add_ub` | D = A×B + X |
+
+## 样例参数说明
+
+| 参数 | 属性 | shape | dtype | 说明 |
+| --- | --- | --- | --- | --- |
+| `A` | Input | `(m,k)` | `float32` | 左矩阵，当前 layout 为 `RowMajor` |
+| `B` | Input | `(k,n)` | `float32` | 右矩阵，当前 layout 为 `RowMajor` |
+| `X` | Input | `(m,n)` | `float32` | `add`、`add_ub` 的加法输入，当前 layout 为 `RowMajor` |
+| `bias` | Input | `(1,n)` | `float32` | `bias` 的偏置向量，沿 m 轴广播 |
+| `leakyReluAlpha` | Input | 标量 | `float32` | `leaky_relu` 的负半轴斜率，默认 `0.1` |
+| `D` | Output | `(m,n)` | `float32` | 融合计算结果，当前 layout 为 `RowMajor` |
+
+## 使用范围说明
+
+推荐场景：
+
+- 矩阵的 M/N/K 轴不超过 122880。
+
+
+### 命令行参数
 
 ```bash
-source ${ASCEND_HOME}/ascend-toolkit/set_env.sh
-
-# 仅编译单个示例
-bash scripts/build.sh -DCATLASS_ARCH=3510 64_ascend950_matmul_evg_add
-
-# 编译本目录全部 7 个可执行文件并安装到 output/bin/
-for t in 64_ascend950_matmul_evg_add \
-         64_ascend950_matmul_evg_leaky_relu \
-         64_ascend950_matmul_evg_sigmoid \
-         64_ascend950_matmul_evg_silu \
-         64_ascend950_matmul_evg_tanh \
-         64_ascend950_matmul_evg_bias \
-         64_ascend950_matmul_evg_add_ub; do
-  bash scripts/build.sh -DCATLASS_ARCH=3510 "$t"
-done
-
-# 仅编译、不逐个 install 时，可先构建聚合 target，再按组件安装：
-# cmake --build build --target 64_ascend950_matmul_evg_all -j
-# cmake --install build --component 64_ascend950_matmul_evg_add --component 64_ascend950_matmul_evg_leaky_relu ...
+64_ascend950_matmul_evg_add [m] [n] [k] [deviceId]
 ```
 
-编译全部 Catlass 示例（含本目录及其他 example）：
+上述命令行参数具体说明如下：
 
-```bash
-bash scripts/build.sh -DCATLASS_ARCH=3510 catlass_examples
-```
+| 参数 | 默认值 | 参数说明 |
+| --- | --- | --- |
+| `m` | 无 | A 矩阵的 m 轴大小 |
+| `n` | 无 | B 矩阵的 n 轴大小 |
+| `k` | 无 | A/B 矩阵的 k 轴大小 |
+| `deviceId` | `0` | 指定运行设备 ID |
 
-## 运行
+7 个可执行文件的参数相同，替换文件名即可编译和运行其他样例。
 
-```bash
-cd output/bin
-./64_ascend950_matmul_evg_add 256 512 1024 0
-./64_ascend950_matmul_evg_tanh 512 256 1024 0
-```
+### 执行示例
 
-更多设计说明见 `docs/zh/2_Design/03_evg/`.
+1. 进入项目根目录，编译样例代码生成相应的算子可执行文件。
+
+    ```bash
+    bash scripts/build.sh 64_ascend950_matmul_evg_add -DCATLASS_ARCH=3510
+    ```
+
+2. 切换到可执行文件的编译目录 `output/bin`，执行算子样例程序。
+
+    ```bash
+    cd output/bin
+    ./64_ascend950_matmul_evg_add 256 512 1024 0
+    ```
+
+3. 执行结果如下，说明样例执行成功，精度通过：
+
+    ```text
+    Compare success.
+    ```

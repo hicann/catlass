@@ -1,39 +1,68 @@
 # OptimizedMatmulTla Example Readme
 
-## 代码组织
+## 功能说明
 
-```text
-├── 14_optimized_matmul_tla
-│   ├── CMakeLists.txt     # CMake编译文件
-│   ├── README.md
-│   └── optimized_matmul_tla.cpp # 主文件
-```
+- 算子功能：基于 TLA，使用 Preload 预取、ShuffleK 和前置 Padding 优化的矩阵乘计算。
+- 计算公式：
 
-## 示例说明
+  $$
+    \begin{aligned}
+    C &= A \times B \\
+    C_{i,j} &= \Sigma_{k} A_{i,k}B_{k,j}
+    \end{aligned}
+  $$
 
-该用例总体设计与06_optimized_matmul相同，区别为使用了TLA相关抽象，故作相关示例说明
+  其中 $A$ 和 $B$ 分别是形如 `(m,k)`、`(k,n)` 的输入矩阵，$C$ 是形如 `(m,n)` 的输出矩阵。
+- 支持产品型号：Atlas A2/A3 系列产品
 
-## 使用示例
+## 样例参数说明
 
-- 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/zh/1_Practice/01_quick_start.md#编译执行)
-- 执行算子
+| 参数 | 属性 | shape | dtype | 说明 |
+| --- | --- | --- | --- | --- |
+| `A` | Input | `(m,k)` | `float16` | 左矩阵，layout 支持 `RowMajor`（默认）和 `ColumnMajor` |
+| `B` | Input | `(k,n)` | `float16` | 右矩阵，layout 支持 `RowMajor` 和 `ColumnMajor`（默认） |
+| `C` | Output | `(m,n)` | `float16` | 矩阵乘结果，当前 layout 为 `RowMajor` |
+
+表中列出当前样例源码的数据类型和布局，调整配置后需重新编译。
+
+## 使用范围说明
+
+推荐范围：
+
+- K/N 对齐与否均可，非对齐时自动启用 Padding 前处理。
+
+### 命令行参数
 
 ```bash
-# 编译指定用例
-bash scripts/build.sh 14_optimized_matmul_tla
-cd output/bin
-# 可执行文件名 |矩阵m轴|n轴|k轴|Device ID
-# Device ID可选，默认为0
-./14_optimized_matmul_tla 256 512 1024 0
+14_optimized_matmul_tla [m] [n] [k] [deviceId]
 ```
 
-执行结果如下，说明精度比对成功。
+上述命令行参数具体说明如下：
 
-```text
-Compare success.
-```
+| 参数 | 默认值 | 参数说明 |
+| --- | --- | --- |
+| `m` | 无 | A 矩阵的 m 轴大小 |
+| `n` | 无 | B 矩阵的 n 轴大小 |
+| `k` | 无 | A/B 矩阵的 k 轴大小 |
+| `deviceId` | `0` | 指定运行设备 ID |
 
-## 模板推荐场景
+### 执行示例
 
-本样例与 `06_optimized_matmul` 为同一模板的 TLA 抽象实现，推荐场景相同。
-推荐 MNK 范围：`M ≥ 256、N ≥ 256、256 < K ≤ 3072`，K/N 对齐与否均可，具体以 `102_dynamic_optimized_matmul` 泛化工程的路由结论为准。
+1. 进入项目根目录，编译样例代码生成相应的算子可执行文件。
+
+    ```bash
+    bash scripts/build.sh 14_optimized_matmul_tla
+    ```
+
+2. 切换到可执行文件的编译目录 `output/bin`，执行算子样例程序。
+
+    ```bash
+    cd output/bin
+    ./14_optimized_matmul_tla 256 512 1024 0
+    ```
+
+3. 执行结果如下，说明样例执行成功，精度通过：
+
+    ```text
+    Compare success.
+    ```

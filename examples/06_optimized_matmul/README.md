@@ -1,85 +1,69 @@
 # OptimizedMatmul Example Readme
 
-## 代码组织
+## 功能说明
 
-```text
-├── 06_optimized_matmul
-│   ├── CMakeLists.txt     # CMake编译文件
-│   ├── README.md
-│   └── optimized_matmul.cpp # 主文件
-```
+- 算子功能：使用 Preload 预取、ShuffleK 和前置 Padding 优化的矩阵乘计算。
+- 计算公式：
 
-## 功能介绍
+  $$
+    \begin{aligned}
+    C &= A \times B \\
+    C_{i,j} &= \Sigma_{k} A_{i,k}B_{k,j}
+    \end{aligned}
+  $$
 
-matmul矩阵乘，相比00_basic_matmul样例替换dispatchPolicy为`MmadAtlasA2Preload`，并增加输入矩阵的padding前处理，提升数据搬入性能。
+  其中 $A$ 和 $B$ 分别是形如 `(m,k)`、`(k,n)` 的输入矩阵，$C$ 是形如 `(m,n)` 的输出矩阵。
+- 支持产品型号：Atlas A2/A3 系列产品
 
-## 使用示例
+## 样例参数说明
 
-- 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/zh/1_Practice/01_quick_start.md#编译执行)
-- 执行算子
+| 参数 | 属性 | shape | dtype | 说明 |
+| --- | --- | --- | --- | --- |
+| `A` | Input | `(m,k)` | `float16` | 左矩阵，layout支持`RowMajor`（默认）和`ColumnMajor` |
+| `B` | Input | `(k,n)` | `float16` | 右矩阵，layout支持`RowMajor`和`ColumnMajor`（默认） |
+| `C` | Output | `(m,n)` | `float16` | 矩阵乘结果，当前 layout 为 `RowMajor` |
+
+表中列出当前样例源码的数据类型和布局，调整配置后需重新编译。
+
+## 使用范围说明
+
+推荐范围：
+
+- K/N 对齐与否均可，非对齐时自动启用 Padding 前处理。
+
+
+### 命令行参数
 
 ```bash
-# 编译指定用例
-bash scripts/build.sh 06_optimized_matmul
-cd output/bin
-# 可执行文件名 |矩阵m轴|n轴|k轴|Device ID
-# Device ID可选，默认为0
-./06_optimized_matmul 256 512 1024 0
+06_optimized_matmul [m] [n] [k] [deviceId]
 ```
 
-执行结果如下，说明精度比对成功。
+上述命令行参数具体说明如下：
 
-```text
-Compare success.
-```
+| 参数 | 默认值 | 参数说明 |
+| --- | --- | --- |
+| `m` | 无 | A 矩阵的 m 轴大小 |
+| `n` | 无 | B 矩阵的 n 轴大小 |
+| `k` | 无 | A/B 矩阵的 k 轴大小 |
+| `deviceId` | `0` | 指定运行设备 ID |
 
-## 说明
+### 执行示例
 
-样例里当前padding动作使用的是`PADDING_NZ`，也可以替换为`PADDING_BLOCK_ND`来测试性能表现
+1. 进入项目根目录，编译样例代码生成相应的算子可执行文件。
 
-- **PADDING_NZ**
-  代码位置如下
+    ```bash
+    bash scripts/build.sh 06_optimized_matmul
+    ```
 
-```cpp
-    constexpr PaddingTag paddingTagA = (std::is_same_v<LayoutA, layout::zN> || std::is_same_v<LayoutA, layout::nZ>)
-                                           ? PaddingTag::NO_PADDING
-                                           : PaddingTag::PADDING_NZ;
-    constexpr PaddingTag paddingTagB = (std::is_same_v<LayoutB, layout::zN> || std::is_same_v<LayoutB, layout::nZ>)
-                                           ? PaddingTag::NO_PADDING
-                                           : PaddingTag::PADDING_NZ;
-```
+2. 切换到可执行文件的编译目录 `output/bin`，执行算子样例程序。
 
-基于`PADDING_NZ`策略的UB上的COMPUTE_LENGTH为48KB
+    ```bash
+    cd output/bin
+    ./06_optimized_matmul 256 512 1024 0
+    ```
 
-```cpp
-static const uint32_t COMPUTE_LENGTH_A = 48 * 1024 / sizeof(ElementA);
-static const uint32_t COMPUTE_LENGTH_B = 48 * 1024 / sizeof(ElementB);
-```
+3. 执行结果如下，说明样例执行成功，精度通过：
 
-- **PADDING_BLOCK_ND**
-  替换`PADDING_BLOCK_ND`的代码修改如下，当输入矩阵非NZ格式时使能，会将矩阵按照`L1TileShape`对齐来做padding
-
-```diff
-    constexpr PaddingTag paddingTagA = (std::is_same_v<LayoutA, layout::zN> || std::is_same_v<LayoutA, layout::nZ>)
-                                           ? PaddingTag::NO_PADDING
--                                          : PaddingTag::PADDING_NZ;
-+                                          : PaddingTag::PADDING_BLOCK_ND;
-    constexpr PaddingTag paddingTagB = (std::is_same_v<LayoutB, layout::zN> || std::is_same_v<LayoutB, layout::nZ>)
-                                           ? PaddingTag::NO_PADDING
--                                          : PaddingTag::PADDING_NZ;
-+                                          : PaddingTag::PADDING_BLOCK_ND;
-```
-
-基于`PADDING_BLOCK_ND`策略的UB上的COMPUTE_LENGTH为96KB
-
-```diff
--static const uint32_t COMPUTE_LENGTH_A = 48 * 1024 / sizeof(ElementA);
--static const uint32_t COMPUTE_LENGTH_B = 48 * 1024 / sizeof(ElementB);
-+static const uint32_t COMPUTE_LENGTH_A = 96 * 1024 / sizeof(ElementA);
-+static const uint32_t COMPUTE_LENGTH_B = 96 * 1024 / sizeof(ElementB);
-```
-
-## 模板推荐场景
-
-本样例为 Preload 优化模板（Preload 预取 + ShuffleK + A/B padding 前处理）的经典接口实现。
-推荐 MNK 范围：`M ≥ 256、N ≥ 256、256 < K ≤ 3072`，K/N 对齐与否均可（对齐走 Preload 主力路径，非对齐自动启用 padding 前处理），具体以 `102_dynamic_optimized_matmul` 泛化工程的路由结论为准。
+    ```text
+    Compare success.
+    ```
