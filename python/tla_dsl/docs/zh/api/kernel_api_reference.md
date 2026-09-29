@@ -23,6 +23,7 @@ kernel 函数体内调用。
 ## 目录
 
 - [基本数据类型与操作](#基本数据类型与操作)
+- [标量 Numeric](#标量-numeric)
 - [数据搬运](#数据搬运)
 - [矩阵运算](#矩阵运算)
 - [Vector 运算](#vector-运算)
@@ -517,6 +518,193 @@ tla.recast_ptr(ptr: Pointer, *, dtype: type[Numeric]) -> Pointer
 
 ```python
 ptr_f32 = tla.recast_ptr(ptr_f16, dtype=tla.Float32)
+```
+
+---
+
+## 标量 Numeric
+
+`Numeric` 是 TLA DSL 在 `@tla.kernel` 内使用的**标量**类型与值的基类。
+具体类型包括整数（`tla.Int8` / `Int16` / `Int32` / `Int64` 及无符号变体）、
+浮点（`tla.Float16` / `BFloat16` / `Float32`，以及更窄格式）和 `tla.Bool`。
+用类型构造值，例如 `tla.Int32(0)`、`tla.Float32(1.5)`。
+
+循环下标、坐标，以及会在运行时 `if` / `tla.range` / `while` 中更新的单元素状态，
+请使用 `Numeric` 值。Python 字面量用 `as_numeric` 提升；改类型用 `Numeric.to`；
+按位宽重解释用 `Numeric.bitcast`。
+
+约束说明：
+
+- 优先使用具体类型（`Int32`、`Float32` 等）。抽象基类 `Numeric` / `Integer` /
+  `Float` 不可直接构造。
+- 参与设备侧控制流或计算时，须在 `@tla.kernel` 函数体内使用。
+- 在运行时 `if` / `tla.range` / `while` 中对名字重新赋值时，该值须是 `Numeric`
+  （由 `as_numeric` 或具体类型如 `tla.Int32(...)` 得到）。普通 Python
+  `int` / `float` / `bool` 无法作为运行时状态跨过上述控制流。
+
+### `Numeric.to`
+
+**源码：** [`catlass.base_dsl.typing.Numeric.to`](../../../catlass/base_dsl/typing.py#L891)
+
+功能说明：
+
+将标量 `Numeric` 转换为另一种具体类型。
+
+`round_mode` 选择浮点转整数（以及部分浮点转浮点）的舍入方式：
+`ScalarRoundMode.NEAREST_EVEN` / `NEAREST_AWAY` / `FLOOR` /
+`CEIL` / `ODD`。省略（或 `TRUNC`）时，浮点转整数向零截断。
+
+函数原型：
+
+```python
+Numeric.to(dtype: Any, *, round_mode: Any = None) -> Any
+```
+
+参数说明：
+
+- `dtype`（`type[Numeric] | type[int] | type[float] | type[bool]`）：
+  目标类型。具体 `Numeric` 子类（如 `Int32`、`Float32`）得到另一个 `Numeric`；
+  传入 Python `int` / `float` / `bool` 时，若值仍是 Host 常量，则提取 Host 侧
+  Python 标量。必填。
+- `round_mode`（`ScalarRoundMode | None`）：可选标量舍入模式。可选，默认 `None`。
+
+约束说明：
+
+- 优先在 `@tla.kernel` 函数体内调用。
+- 产出 DSL 标量时，`dtype` 须为具体类型（如 `Int32` / `Float32`），不能是抽象的
+  `Integer` / `Float` / `Numeric`。
+- 此处使用 `tla.params.ScalarRoundMode`；不要传入 `tla.params.RoundMode`。
+- 不支持的源/目标组合会抛出 `TypeError`。
+
+调用示例：
+
+```python
+@tla.kernel
+def kernel(n: int) -> None:
+    x = tla.as_numeric(n).to(tla.Int32)
+    y = tla.Float32(1.5).to(
+        tla.Int32, round_mode=tla.params.ScalarRoundMode.FLOOR
+    )
+    tla.make_coord(x, y)
+```
+
+---
+
+### `Numeric.bitcast`
+
+**源码：** [`catlass.base_dsl.typing.Numeric.bitcast`](../../../catlass/base_dsl/typing.py#L1066)
+
+功能说明：
+
+将标量 `Numeric` 的位型重新解释为**相同位宽**的另一种具体类型（不做数值转换）。
+
+函数原型：
+
+```python
+Numeric.bitcast(dtype: type['Numeric']) -> 'Numeric'
+```
+
+参数说明：
+
+- `dtype`（`type[Numeric]`）：相同位宽的具体目标类型。必填。
+
+约束说明：
+
+- 优先在 `@tla.kernel` 函数体内调用。
+- `dtype` 须为具体 `Numeric`，且与源值位宽相同；否则抛出 `TypeError` /
+  `ValueError`。
+- 同类型 bitcast 为 no-op，返回 `self`。
+
+调用示例：
+
+```python
+bits = tla.Float32(1.0).bitcast(tla.Int32)
+```
+
+---
+
+### `as_numeric`
+
+**源码：** [`catlass.base_dsl.typing.as_numeric`](../../../catlass/base_dsl/typing.py#L1240)
+
+功能说明：
+
+将 Python 标量转换为 DSL `Numeric`。
+
+在运行时控制流（`if` / `tla.range` / `while` / 展开的 DSL `with` 区域）中更新之前，
+或从字面量组装少量固定运行时标量 list/tuple 时，请调用本接口。
+
+映射规则：
+
+- 已是 `Numeric` 的值原样返回；
+- `bool` → `Bool`；
+- 落在有符号 32 位范围内的 `int` → `Int32`，否则 → `Int64`；
+- `float` → `Float32`。
+
+函数原型：
+
+```python
+tla.as_numeric(obj: Any) -> Numeric
+```
+
+参数说明：
+
+- `obj`（`bool | int | float | Numeric`）：Python 标量或已有 `Numeric`。必填。
+
+约束说明：
+
+- 结果用作运行时状态（控制流重绑定、循环边界等）时，优先在 `@tla.kernel`
+  函数体内调用。
+- 也可在 Host 侧从 Python 标量构造，用于 staging。
+- 不接受用户自定义对象与非标量容器；无法转换时抛出 `ValueError`。
+
+调用示例：
+
+```python
+@tla.kernel
+def kernel(limit: int) -> None:
+    index = tla.as_numeric(0)
+    if limit > 0:
+        index = index + 1
+    tla.make_coord(index, 0)
+```
+
+---
+
+### `Float.sqrt`
+
+**源码：** [`catlass.base_dsl.typing.Float.sqrt`](../../../catlass/base_dsl/typing.py#L1319)
+
+功能说明：
+
+标量浮点平方根。
+
+对应 `tla.sqrt` 的标量形态。在 `tla.vec.func(mode="simt")` 内按线程执行；
+在 kernel 其他位置（含 cube / SIMD vector 区域与 kernel 函数体）走核内标量数学路径。
+
+函数原型：
+
+```python
+Float.sqrt() -> 'Float'
+```
+
+参数说明：
+
+- （除 `self` 外无额外参数）
+
+约束说明：
+
+- 设备侧值须在 `@tla.kernel` 函数体内调用。
+- 在非 `mode="simt"` 时仅支持 `Float32`（`Float16` / `BFloat16` 抛 `TypeError`）；
+  请先 `.to(tla.Float32)`，或在 `tla.vec.func(mode="simt")` 内调用。
+
+调用示例：
+
+```python
+@tla.kernel
+def kernel() -> None:
+    r = tla.Float32(4.0).sqrt()
+    tla.make_coord(r.to(tla.Int32), 0)
 ```
 
 ---

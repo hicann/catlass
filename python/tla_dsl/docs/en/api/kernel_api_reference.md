@@ -17,24 +17,25 @@ All APIs must be called inside a `@tla.kernel`-decorated kernel function body.
 ## Table of Contents
 
 - [1. Basic Data Types and Operations](#1-basic-data-types-and-operations)
-- [2. Data Movement](#2-data-movement)
-- [3. Matrix Compute](#3-matrix-compute)
-- [4. Vector Compute](#4-vector-compute)
-  - [4.1 Mask Compute](#41-mask-compute)
-  - [4.2 Basic Arithmetic](#42-basic-arithmetic)
-  - [4.3 Logical Compute](#43-logical-compute)
-  - [4.4 Compare and Select](#44-compare-and-select)
-  - [4.5 Data Fill](#45-data-fill)
-  - [4.6 Discrete and Aggregate](#46-discrete-and-aggregate)
-  - [4.7 Data Rearrange](#47-data-rearrange)
-  - [4.8 Data Compress](#48-data-compress)
-  - [4.9 Type Conversion](#49-type-conversion)
-- [5. Sync Control](#5-sync-control)
-- [6. System Variable Access](#6-system-variable-access)
-- [7. Resource Management](#7-resource-management)
-- [8. Debug APIs](#8-debug-apis)
-- [9. Scopes and Control Flow](#9-scopes-and-control-flow)
-- [10. Data fill](#10-data-fill)
+- [2. Numeric Scalars](#2-numeric-scalars)
+- [3. Data Movement](#3-data-movement)
+- [4. Matrix Compute](#4-matrix-compute)
+- [5. Vector Compute](#5-vector-compute)
+  - [5.1 Mask Compute](#51-mask-compute)
+  - [5.2 Basic Arithmetic](#52-basic-arithmetic)
+  - [5.3 Logical Compute](#53-logical-compute)
+  - [5.4 Compare and Select](#54-compare-and-select)
+  - [5.5 Data Fill](#55-data-fill)
+  - [5.6 Discrete and Aggregate](#56-discrete-and-aggregate)
+  - [5.7 Data Rearrange](#57-data-rearrange)
+  - [5.8 Data Compress](#58-data-compress)
+  - [5.9 Type Conversion](#59-type-conversion)
+- [6. Sync Control](#6-sync-control)
+- [7. System Variable Access](#7-system-variable-access)
+- [8. Resource Management](#8-resource-management)
+- [9. Debug APIs](#9-debug-apis)
+- [10. Scopes and Control Flow](#10-scopes-and-control-flow)
+- [11. Data fill](#11-data-fill)
 
 ---
 
@@ -536,7 +537,199 @@ ptr_f32 = tla.recast_ptr(ptr_f16, dtype=tla.Float32)
 
 ---
 
-## 2. Data Movement
+## 2. Numeric Scalars
+
+`Numeric` is the base of TLA DSL **scalar** types and values used inside `@tla.kernel`. Concrete types include integers (`tla.Int8` / `Int16` / `Int32` / `Int64` and unsigned variants), floats (`tla.Float16` / `BFloat16` / `Float32`, plus narrower formats), and `tla.Bool`. Construct values with the type, for example `tla.Int32(0)` or `tla.Float32(1.5)`.
+
+Use `Numeric` values for loop indices, coordinates, and other single-element state updated under runtime `if` / `tla.range` / `while`. Promote Python literals with `as_numeric`; change type with `Numeric.to`; reinterpret bits with `Numeric.bitcast`.
+
+Constraints:
+
+- Prefer concrete types (`Int32`, `Float32`, …). The abstract bases `Numeric` / `Integer` / `Float` are not constructible.
+- Must be used inside a `@tla.kernel` body when the value participates in device-side control flow or computation.
+- A name reassigned under runtime `if` / `tla.range` / `while` must hold a `Numeric` (from `as_numeric` or a concrete type such as `tla.Int32(...)`). Plain Python `int` / `float` / `bool` cannot be carried as runtime state across that control flow.
+
+### `Numeric.to`
+
+**Source:** [`catlass.base_dsl.typing.Numeric.to`](../../../catlass/base_dsl/typing.py#L891)
+
+Description:
+
+Convert a scalar `Numeric` to another concrete type.
+
+`round_mode` selects how float-to-int (and some float-to-float)
+conversions round:
+`ScalarRoundMode.NEAREST_EVEN` / `NEAREST_AWAY` / `FLOOR` /
+`CEIL` / `ODD`. When omitted (or `TRUNC`), float-to-int truncates
+toward zero.
+
+Prototype:
+
+```python
+Numeric.to(dtype: Any, *, round_mode: Any = None) -> Any
+```
+
+Parameters:
+
+- `dtype` (`type[Numeric] | type[int] | type[float] | type[bool]`):
+  Target type. Concrete `Numeric` subclasses (e.g. `Int32`,
+  `Float32`) produce another `Numeric`. Passing Python `int` /
+  `float` / `bool` extracts a host-side Python scalar when the
+  value is still a host constant. Required.
+- `round_mode` (`ScalarRoundMode | None`): Optional scalar rounding
+  mode. Optional, default `None`.
+
+Constraints:
+
+- Prefer calling inside a `@tla.kernel` body.
+- When producing a DSL scalar, `dtype` must be a concrete type
+  such as `Int32` / `Float32` (not the abstract `Integer` /
+  `Float` / `Numeric` bases).
+- Use `tla.params.ScalarRoundMode` here; do not pass
+  `tla.params.RoundMode`.
+- Unsupported source/target pairs raise `TypeError`.
+
+Example:
+
+```python
+@tla.kernel
+def kernel(n: int) -> None:
+    x = tla.as_numeric(n).to(tla.Int32)
+    y = tla.Float32(1.5).to(
+        tla.Int32, round_mode=tla.params.ScalarRoundMode.FLOOR
+    )
+    tla.make_coord(x, y)
+```
+
+---
+
+### `Numeric.bitcast`
+
+**Source:** [`catlass.base_dsl.typing.Numeric.bitcast`](../../../catlass/base_dsl/typing.py#L1027)
+
+Description:
+
+Reinterpret the bit pattern of a scalar `Numeric` as another
+concrete type of the **same bit width** (no numeric conversion).
+
+Prototype:
+
+```python
+Numeric.bitcast(dtype: type['Numeric']) -> 'Numeric'
+```
+
+Parameters:
+
+- `dtype` (`type[Numeric]`): Concrete same-width target type.
+  Required.
+
+Constraints:
+
+- Prefer calling inside a `@tla.kernel` body.
+- `dtype` must be a concrete `Numeric` with the same bit width as
+  the source; otherwise raises `TypeError` / `ValueError`.
+- Same-type bitcast is a no-op and returns `self`.
+
+Example:
+
+```python
+bits = tla.Float32(1.0).bitcast(tla.Int32)
+```
+
+---
+
+### `as_numeric`
+
+**Source:** [`catlass.base_dsl.typing.as_numeric`](../../../catlass/base_dsl/typing.py#L1201)
+
+Description:
+
+Convert a Python scalar into a DSL `Numeric`.
+
+Call this before a value is updated under runtime control flow
+(`if` / `tla.range` / `while` / expanded DSL `with` regions), or when
+building a small fixed list/tuple of runtime scalars from literals.
+
+Mapping rules:
+- already-`Numeric` values are returned unchanged;
+- `bool` → `Bool`;
+- `int` in the signed 32-bit range → `Int32`, otherwise `Int64`;
+- `float` → `Float32`.
+
+Prototype:
+
+```python
+tla.as_numeric(obj: Any) -> Numeric
+```
+
+Parameters:
+
+- `obj` (`bool | int | float | Numeric`): Python scalar or an existing
+  `Numeric`. Required.
+
+Constraints:
+
+- Prefer calling inside a `@tla.kernel` body when the result is used
+  as runtime state (rebound under control flow, loop bounds, etc.).
+- Host-side construction from Python scalars is also fine for staging.
+- User-defined objects and non-scalar containers are not accepted;
+  conversion failure raises `ValueError`.
+
+Example:
+
+```python
+@tla.kernel
+def kernel(limit: int) -> None:
+    index = tla.as_numeric(0)
+    if limit > 0:
+        index = index + 1
+    tla.make_coord(index, 0)
+```
+
+---
+
+### `Float.sqrt`
+
+**Source:** [`catlass.base_dsl.typing.Float.sqrt`](../../../catlass/base_dsl/typing.py#L1280)
+
+Description:
+
+Square root of a scalar float.
+
+Scalar counterpart of `tla.sqrt`. Inside
+`tla.vec.func(mode="simt")` it runs per-thread; elsewhere in the
+kernel (including cube / SIMD vector regions and the kernel body)
+it uses the core scalar math path.
+
+Prototype:
+
+```python
+Float.sqrt() -> 'Float'
+```
+
+Parameters:
+
+- (none besides `self`)
+
+Constraints:
+
+- Must be called inside a `@tla.kernel` body for device values.
+- Outside `mode="simt"`, only `Float32` is supported (`Float16` /
+  `BFloat16` raise `TypeError`); convert with `.to(tla.Float32)`
+  first, or call from `tla.vec.func(mode="simt")`.
+
+Example:
+
+```python
+@tla.kernel
+def kernel() -> None:
+    r = tla.Float32(4.0).sqrt()
+    tla.make_coord(r.to(tla.Int32), 0)
+```
+
+---
+
+## 3. Data Movement
 
 Tensor copies between on-chip and global memory, and UB register load/store.
 
@@ -827,7 +1020,7 @@ with tla.vec.func(mode="simd"):
 
 ---
 
-## 3. Matrix Compute
+## 4. Matrix Compute
 
 Cube-side matrix multiply-accumulate (`tla.mmad`).
 
@@ -965,11 +1158,11 @@ Supported mmad_mx dtypes
 
 ---
 
-## 4. Vector Compute
+## 5. Vector Compute
 
 Compute and mask ops on the register-vector path; usually must be called inside `tla.vec.func()`.
 
-### 4.1 Mask Compute
+### 5.1 Mask Compute
 
 Mask creation and tail-mask updates.
 
@@ -1062,7 +1255,7 @@ with tla.vec.func(mode="simd"):
 
 ---
 
-### 4.2 Basic Arithmetic
+### 5.2 Basic Arithmetic
 
 Element-wise arithmetic and unary math ops. `VectorSSA` overloads `+` / `-` / `*` / `/` for `add` / `sub` / `mul` / `div` when no `mask=` is needed.
 
@@ -1466,7 +1659,7 @@ with tla.vec.func(mode="simd"):
 
 ---
 
-### 4.3 Logical Compute
+### 5.3 Logical Compute
 
 Bitwise and logical ops on Mask / Vector.
 
@@ -1687,7 +1880,7 @@ with tla.vec.func(mode="simd"):
 
 ---
 
-### 4.4 Compare and Select
+### 5.4 Compare and Select
 
 Vector compares that produce masks, and masked select.
 
@@ -1762,7 +1955,7 @@ with tla.vec.func(mode="simd"):
 
 ---
 
-### 4.5 Data Fill
+### 5.5 Data Fill
 
 Constant fill and lane-index sequence construction.
 
@@ -1844,7 +2037,7 @@ with tla.vec.func(mode="simd"):
 
 ---
 
-### 4.6 Discrete and Aggregate
+### 5.6 Discrete and Aggregate
 
 Gather elements from a UB tensor by index, and masked reductions (`VectorSSA.reduce`).
 
@@ -1923,7 +2116,7 @@ with tla.vec.func(mode="simd"):
 
 ---
 
-### 4.7 Data Rearrange
+### 5.7 Data Rearrange
 
 Interleave / deinterleave and related lane reshuffles.
 
@@ -1997,7 +2190,7 @@ with tla.vec.func(mode="simd"):
 
 ---
 
-### 4.8 Data Compress
+### 5.8 Data Compress
 
 Compress valid lanes under a mask.
 
@@ -2034,7 +2227,7 @@ with tla.vec.func(mode="simd"):
 
 ---
 
-### 4.9 Type Conversion
+### 5.9 Type Conversion
 
 Element-type conversion on the register-vector path.
 
@@ -2100,7 +2293,7 @@ with tla.vec.func(mode="simd"):
 
 ---
 
-## 5. Sync Control
+## 6. Sync Control
 
 In-core / cross-core flags, pipe barriers, mutexes, and local-memory barriers.
 
@@ -2500,7 +2693,7 @@ with tla.vec.func(mode="simd"):
 
 ---
 
-## 6. System Variable Access
+## 7. System Variable Access
 
 Architecture attributes on `tla.arch` (layout tags, pipe identifiers, block helpers, etc.).
 
@@ -2577,7 +2770,7 @@ ub_bytes = tla.arch.get_capacity_in_bytes(tla.AddressSpace.ub)
 
 ---
 
-## 7. Resource Management
+## 8. Resource Management
 
 On-chip scratch allocation via `allocate`.
 
@@ -2620,7 +2813,7 @@ ptr = tla.allocate(
 
 ---
 
-## 8. Debug APIs
+## 9. Debug APIs
 
 In-kernel scalar / tensor debug printing.
 
@@ -2665,7 +2858,7 @@ with tla.cube():
 
 ---
 
-## 9. Scopes and Control Flow
+## 10. Scopes and Control Flow
 
 Cube / Vector / `vec.func` regions and kernel-side loop ranges.
 
@@ -2844,7 +3037,7 @@ with tla.vector():
 
 ---
 
-## 10. Data fill
+## 11. Data fill
 
 ### `Tensor.fill`
 

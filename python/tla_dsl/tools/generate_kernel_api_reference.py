@@ -33,6 +33,7 @@ from common import (
 CORE_API_PATH = PACKAGE_ROOT / "catlass" / "core_api.py"
 CORE_API_QUALNAME_PREFIX = "catlass.core_api."
 TENSOR_API_PATH = PACKAGE_ROOT / "catlass" / "tla" / "tensor.py"
+TYPING_API_PATH = PACKAGE_ROOT / "catlass" / "base_dsl" / "typing.py"
 OUTPUT_PATH = PACKAGE_ROOT / "docs" / "en" / "api" / "kernel_api_reference.md"
 GENERATED_BY = "python/tla_dsl/tools/generate_kernel_api_reference.py"
 
@@ -41,6 +42,31 @@ DIRECTORY_SECTIONS: list[tuple[str, str]] = [
         "Basic Data Types and Operations",
         "Construction and views for front-end structured values such as "
         "Shape / Coord / Stride / Layout / Tensor, plus pointer helpers.",
+    ),
+    (
+        "Numeric Scalars",
+        "`Numeric` is the base of TLA DSL **scalar** types and values used "
+        "inside `@tla.kernel`. Concrete types include integers "
+        "(`tla.Int8` / `Int16` / `Int32` / `Int64` and unsigned variants), "
+        "floats (`tla.Float16` / `BFloat16` / `Float32`, plus narrower "
+        "formats), and `tla.Bool`. Construct values with the type, for "
+        "example `tla.Int32(0)` or `tla.Float32(1.5)`.\n"
+        "\n"
+        "Use `Numeric` values for loop indices, coordinates, and other "
+        "single-element state updated under runtime `if` / `tla.range` / "
+        "`while`. Promote Python literals with `as_numeric`; change type "
+        "with `Numeric.to`; reinterpret bits with `Numeric.bitcast`.\n"
+        "\n"
+        "Constraints:\n"
+        "\n"
+        "- Prefer concrete types (`Int32`, `Float32`, …). The abstract bases "
+        "`Numeric` / `Integer` / `Float` are not constructible.\n"
+        "- Must be used inside a `@tla.kernel` body when the value "
+        "participates in device-side control flow or computation.\n"
+        "- A name reassigned under runtime `if` / `tla.range` / `while` must "
+        "hold a `Numeric` (from `as_numeric` or a concrete type such as "
+        "`tla.Int32(...)`). Plain Python `int` / `float` / `bool` cannot be "
+        "carried as runtime state across that control flow.",
     ),
     (
         "Data Movement",
@@ -134,6 +160,46 @@ def _doc_from_make_unary_call(call: ast.Call) -> str:
 
 def _function_defs_by_name(tree: ast.Module) -> dict[str, ast.FunctionDef]:
     return {node.name: node for node in tree.body if isinstance(node, ast.FunctionDef)}
+
+
+def _collect_typing_helpers() -> dict[str, APIEntry]:
+    """Collect typing.py free helpers and types that carry ``Directory:``.
+
+    Opt-in via docstring (same rule as documented class methods); no name allowlist.
+    Private ``_``-prefixed names are skipped. Class entries are marked ``is_class``.
+    """
+    if not TYPING_API_PATH.is_file():
+        raise FileNotFoundError(f"typing module not found: {TYPING_API_PATH}")
+    tree = ast.parse(
+        TYPING_API_PATH.read_text(encoding="utf-8"), filename=str(TYPING_API_PATH)
+    )
+    entries: dict[str, APIEntry] = {}
+    for node in tree.body:
+        if isinstance(node, ast.ClassDef) and not node.name.startswith("_"):
+            doc = ast.get_docstring(node) or ""
+            if directory_path(doc) is None:
+                continue
+            entries[node.name] = APIEntry(
+                name=node.name,
+                qualified_name=f"catlass.base_dsl.typing.{node.name}",
+                source_line=node.lineno,
+                docstring=doc,
+                is_class=True,
+                source_path=TYPING_API_PATH,
+            )
+            continue
+        if not isinstance(node, ast.FunctionDef) or node.name.startswith("_"):
+            continue
+        doc = ast.get_docstring(node) or ""
+        if directory_path(doc) is None:
+            continue
+        entries[node.name] = function_entry(
+            node.name,
+            node,
+            qualified_name=f"catlass.base_dsl.typing.{node.name}",
+            source_path=TYPING_API_PATH,
+        )
+    return entries
 
 
 def _collect_core_functions(
@@ -259,39 +325,48 @@ def _collect_arch_namespace(
 
 
 def _collect_class_methods(
-    path: Path, class_names: set[str], *, label: str, module: str
+    path: Path,
+    class_names: set[str],
+    *,
+    module: str,
+    label: str | None = None,
 ) -> dict[str, APIEntry]:
-    """Document methods of ``class_names`` that are ``@dsl_user_op`` and have ``Directory:``."""
+    """Document methods of ``class_names`` that are ``@dsl_user_op`` and have ``Directory:``.
+
+    Every matching class is scanned. Entry keys use ``label.method`` when
+    ``label`` is set (e.g. document ``_Tensor`` as ``Tensor``); otherwise
+    ``ClassName.method``.
+    """
     if not path.is_file():
         return {}
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-    cls = next(
-        (
-            node
-            for node in tree.body
-            if isinstance(node, ast.ClassDef) and node.name in class_names
-        ),
-        None,
-    )
-    if cls is None:
+    classes = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name in class_names
+    ]
+    if not classes:
         return {}
 
     entries: dict[str, APIEntry] = {}
-    for node in cls.body:
-        if not isinstance(node, ast.FunctionDef):
-            continue
-        if not has_dsl_user_op(node.decorator_list):
-            continue
-        doc = ast.get_docstring(node) or ""
-        if directory_path(doc) is None:
-            continue
-        entries[f"{label}.{node.name}"] = function_entry(
-            f"{label}.{node.name}",
-            node,
-            qualified_name=f"{module}.{cls.name}.{node.name}",
-            source_path=path.resolve(),
-            drop_self=True,
-        )
+    for cls in classes:
+        entry_label = label if label is not None else cls.name
+        for node in cls.body:
+            if not isinstance(node, ast.FunctionDef):
+                continue
+            if not has_dsl_user_op(node.decorator_list):
+                continue
+            doc = ast.get_docstring(node) or ""
+            if directory_path(doc) is None:
+                continue
+            key = f"{entry_label}.{node.name}"
+            entries[key] = function_entry(
+                key,
+                node,
+                qualified_name=f"{module}.{cls.name}.{node.name}",
+                source_path=path.resolve(),
+                drop_self=True,
+            )
     return entries
 
 
@@ -341,6 +416,15 @@ def parse_core_api(path: Path) -> dict[str, APIEntry]:
     entries.update(_collect_unary_aliases(tree, exported, _unary_op_template(tree)))
     entries.update(_collect_scalar_aware_binary_aliases(tree, exported))
     entries.update(_collect_arch_namespace(tree, exported))
+    entries.update(_collect_typing_helpers())
+    # Per-class labels (Numeric.to / Float.sqrt / ...); no shared alias.
+    entries.update(
+        _collect_class_methods(
+            TYPING_API_PATH,
+            {"Numeric", "Integer", "Float"},
+            module="catlass.base_dsl.typing",
+        )
+    )
     entries.update(
         _collect_class_methods(
             TENSOR_API_PATH,

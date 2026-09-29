@@ -741,6 +741,10 @@ def _mlir_f8e8m0() -> mlir_ir.Type:
 class Numeric(metaclass=NumericMeta, is_abstract=True):
     """Numeric type and value (``DslType`` / ``NumericMeta`` first-class).
 
+    Kernel API overview for external developers lives in the Numeric Scalars
+    section intro of ``docs/*/api/kernel_api_reference.md`` (generated from
+    ``DIRECTORY_SECTIONS``), not as a standalone ``### Numeric`` entry.
+
     - Type tag: ``dtype=tla.Float16``; class attr ``dtype`` is the TLA token string.
     - Value: ``tla.Int32(5)`` / ``tensor[i]`` → concrete Numeric; arithmetic via operators.
     """
@@ -891,14 +895,45 @@ class Numeric(metaclass=NumericMeta, is_abstract=True):
         round_mode: Any = None,
         loc: mlir_ir.Location | None = None,
     ) -> Any:
-        """Convert to another type.
+        """Directory: Numeric Scalars
 
-        ``round_mode`` applies only to a float32 -> int32 conversion and names
-        one of the scalar unit's four rounding instructions
-        (``ScalarRoundMode.NEAREST_EVEN`` / ``NEAREST_AWAY`` / ``FLOOR`` /
-        ``CEIL``). Omitted -- or ``TRUNC`` -- keeps ``arith.fptosi``, which
-        truncates toward zero. This is not :class:`RoundMode`, which configures
-        the AVE vector cast.
+        Description:
+            Convert a scalar `Numeric` to another concrete type.
+
+            `round_mode` selects how float-to-int (and some float-to-float)
+            conversions round:
+            `ScalarRoundMode.NEAREST_EVEN` / `NEAREST_AWAY` / `FLOOR` /
+            `CEIL` / `ODD`. When omitted (or `TRUNC`), float-to-int truncates
+            toward zero.
+
+            Parameters:
+            - `dtype` (`type[Numeric] | type[int] | type[float] | type[bool]`):
+              Target type. Concrete `Numeric` subclasses (e.g. `Int32`,
+              `Float32`) produce another `Numeric`. Passing Python `int` /
+              `float` / `bool` extracts a host-side Python scalar when the
+              value is still a host constant. Required.
+            - `round_mode` (`ScalarRoundMode | None`): Optional scalar rounding
+              mode. Optional, default `None`.
+
+            Constraints:
+            - Prefer calling inside a `@tla.kernel` body.
+            - When producing a DSL scalar, `dtype` must be a concrete type
+              such as `Int32` / `Float32` (not the abstract `Integer` /
+              `Float` / `Numeric` bases).
+            - Use `tla.params.ScalarRoundMode` here; do not pass
+              `tla.params.RoundMode`.
+            - Unsupported source/target pairs raise `TypeError`.
+
+            Example:
+            ```python
+            @tla.kernel
+            def kernel(n: int) -> None:
+                x = tla.as_numeric(n).to(tla.Int32)
+                y = tla.Float32(1.5).to(
+                    tla.Int32, round_mode=tla.params.ScalarRoundMode.FLOOR
+                )
+                tla.make_coord(x, y)
+            ```
         """
         if round_mode is not None:
             _validate_scalar_round_mode(self, dtype, round_mode)
@@ -995,6 +1030,27 @@ class Numeric(metaclass=NumericMeta, is_abstract=True):
         *,
         loc: mlir_ir.Location | None = None,
     ) -> "Numeric":
+        """Directory: Numeric Scalars
+
+        Description:
+            Reinterpret the bit pattern of a scalar `Numeric` as another
+            concrete type of the **same bit width** (no numeric conversion).
+
+            Parameters:
+            - `dtype` (`type[Numeric]`): Concrete same-width target type.
+              Required.
+
+            Constraints:
+            - Prefer calling inside a `@tla.kernel` body.
+            - `dtype` must be a concrete `Numeric` with the same bit width as
+              the source; otherwise raises `TypeError` / `ValueError`.
+            - Same-type bitcast is a no-op and returns `self`.
+
+            Example:
+            ```python
+            bits = tla.Float32(1.0).bitcast(tla.Int32)
+            ```
+        """
         if not isinstance(dtype, NumericMeta) or dtype.is_abstract:
             raise TypeError(
                 f"bitcast dtype must be a concrete Numeric type, got {dtype!r}"
@@ -1143,7 +1199,42 @@ class Numeric(metaclass=NumericMeta, is_abstract=True):
 
 
 def as_numeric(obj: Any) -> Numeric:
-    """Convert a Python primitive or MLIR value to a Numeric."""
+    """Directory: Numeric Scalars
+
+    Description:
+        Convert a Python scalar into a DSL `Numeric`.
+
+        Call this before a value is updated under runtime control flow
+        (`if` / `tla.range` / `while` / expanded DSL `with` regions), or when
+        building a small fixed list/tuple of runtime scalars from literals.
+
+        Mapping rules:
+        - already-`Numeric` values are returned unchanged;
+        - `bool` → `Bool`;
+        - `int` in the signed 32-bit range → `Int32`, otherwise `Int64`;
+        - `float` → `Float32`.
+
+        Parameters:
+        - `obj` (`bool | int | float | Numeric`): Python scalar or an existing
+          `Numeric`. Required.
+
+        Constraints:
+        - Prefer calling inside a `@tla.kernel` body when the result is used
+          as runtime state (rebound under control flow, loop bounds, etc.).
+        - Host-side construction from Python scalars is also fine for staging.
+        - User-defined objects and non-scalar containers are not accepted;
+          conversion failure raises `ValueError`.
+
+        Example:
+        ```python
+        @tla.kernel
+        def kernel(limit: int) -> None:
+            index = tla.as_numeric(0)
+            if limit > 0:
+                index = index + 1
+            tla.make_coord(index, 0)
+        ```
+    """
     return Numeric._from_python_value(obj)
 
 
@@ -1187,13 +1278,32 @@ class Float(
 
     @dsl_user_op
     def sqrt(self, *, loc: mlir_ir.Location | None = None) -> "Float":
-        """Square root of a scalar float.
+        """Directory: Numeric Scalars
 
-        The scalar counterpart of ``tla.sqrt``, dispatched the same way
-        ``__abs__`` is: inside a ``tla.vec.func(mode="simt")`` this is the
-        per-thread ``tla.simt_sqrt``, and everywhere else -- a cube region, a
-        SIMD vector region, the kernel body -- it is ``math.sqrt`` on the
-        core's own scalar unit.
+        Description:
+            Square root of a scalar float.
+
+            Scalar counterpart of `tla.sqrt`. Inside
+            `tla.vec.func(mode="simt")` it runs per-thread; elsewhere in the
+            kernel (including cube / SIMD vector regions and the kernel body)
+            it uses the core scalar math path.
+
+            Parameters:
+            - (none besides `self`)
+
+            Constraints:
+            - Must be called inside a `@tla.kernel` body for device values.
+            - Outside `mode="simt"`, only `Float32` is supported (`Float16` /
+              `BFloat16` raise `TypeError`); convert with `.to(tla.Float32)`
+              first, or call from `tla.vec.func(mode="simt")`.
+
+            Example:
+            ```python
+            @tla.kernel
+            def kernel() -> None:
+                r = tla.Float32(4.0).sqrt()
+                tla.make_coord(r.to(tla.Int32), 0)
+            ```
         """
         if isinstance(self.value, (int, float, bool)):
             return type(self)(math.sqrt(float(self.value)))
