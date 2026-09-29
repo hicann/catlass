@@ -193,10 +193,14 @@ if [ "${DRY_RUN}" -ne 1 ]; then
     source /usr/local/Ascend/ascend-toolkit/set_env.sh || exit 1
 
     export LD_LIBRARY_PATH="/usr/local/Ascend/driver/lib64:/usr/local/Ascend/driver/lib64/common:/usr/local/Ascend/driver/lib64/driver:${LD_LIBRARY_PATH:-}"
-    unset ASCEND_RT_VISIBLE_DEVICES
     export CMAKE_BUILD_PARALLEL_LEVEL="${CMAKE_BUILD_PARALLEL_LEVEL:-$(nproc)}"
-    export DEVICE_ID=$(for d in /dev/davinci[0-9]*; do [ -e "$d" ] && echo "${d#/dev/davinci}"; done | sort -n | head -1)
+    export DEVICE_ID_LIST=$(for d in /dev/davinci[0-9]*; do [ -e "$d" ] && echo "${d#/dev/davinci}"; done | sort -n)
 fi
+
+echo "LD_LIBRARY_PATH: ${LD_LIBRARY_PATH}"
+echo "ASCEND_RT_VISIBLE_DEVICES: ${ASCEND_RT_VISIBLE_DEVICES}"
+echo "CMAKE_BUILD_PARALLEL_LEVEL: ${CMAKE_BUILD_PARALLEL_LEVEL}"
+echo "DEVICE_ID_LIST: ${DEVICE_ID_LIST}"
 
 cd "${WORKSPACE}" || exit 1
 
@@ -216,24 +220,21 @@ fi
 # 受影响 example：跑 test_example.py（C++ bin）+ 对应 optest（torch_catlass 算子测试）
 if [ "${#EXAMPLE_CASES[@]}" -gt 0 ]; then
     EXAMPLE_FILTER=""
-    OPTEST_KEYWORDS=()
     for case_name in "${EXAMPLE_CASES[@]}"; do
         if [ -n "${EXAMPLE_FILTER}" ]; then
             EXAMPLE_FILTER="${EXAMPLE_FILTER} or "
         fi
         EXAMPLE_FILTER="${EXAMPLE_FILTER}${case_name}"
-        # optest 关键词：去掉数字前缀（00_basic_matmul -> basic_matmul）
-        OPTEST_KEYWORDS+=("${case_name#*_}")
     done
 
     run_test "example" \
         python3 -m pytest -q "${WORKSPACE}/tests/test_example.py" -k "${EXAMPLE_FILTER}" || true
 
-    if [ "${#OPTEST_KEYWORDS[@]}" -gt 0 ]; then
-        npu-smi info
-        run_test "optest" \
-            bash "${WORKSPACE}/tests/run_optest.sh" || true
-    fi
+    # optest：把受影响用例名透传给 run_optest.sh，由后者按数字前缀匹配 tests/test_NN_*.py；
+    # 不传参数时 run_optest.sh 执行 tests/ 全量（tests/run_all_test.sh 走该默认路径）。
+    npu-smi info
+    run_test "optest" \
+        bash "${WORKSPACE}/tests/run_optest.sh" "${EXAMPLE_CASES[@]}" || true
 fi
 
 # python extension / torch lib 
