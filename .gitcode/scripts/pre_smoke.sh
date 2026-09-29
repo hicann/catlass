@@ -195,6 +195,7 @@ if [ "${DRY_RUN}" -ne 1 ]; then
     export LD_LIBRARY_PATH="/usr/local/Ascend/driver/lib64:/usr/local/Ascend/driver/lib64/common:/usr/local/Ascend/driver/lib64/driver:${LD_LIBRARY_PATH:-}"
     unset ASCEND_RT_VISIBLE_DEVICES
     export CMAKE_BUILD_PARALLEL_LEVEL="${CMAKE_BUILD_PARALLEL_LEVEL:-$(nproc)}"
+    export DEVICE_ID=$(for d in /dev/davinci[0-9]*; do [ -e "$d" ] && echo "${d#/dev/davinci}"; done | sort -n | head -1)
 fi
 
 cd "${WORKSPACE}" || exit 1
