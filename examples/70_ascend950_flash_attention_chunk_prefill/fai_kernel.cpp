@@ -271,7 +271,7 @@ public:
             }
             uint32_t kShapeRow = 0;
             if constexpr (kvcacheType == CacheMode::pagedCache) {
-                kShapeRow = numBlocks_ * blockSize_;
+                kShapeRow = numBlocks_ * blockSize_ * kvHeads_;
             } else {
                 kShapeRow = kvSeqlen;
             }

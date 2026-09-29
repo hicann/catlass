@@ -100,7 +100,7 @@ struct Ascend950FlashAttentionChunkPrefillHost {
     static OutputType AllocOutput(CatlassKernel::FlashAttentionChunkPrefillParams& params)
     {
         OutputType output = GetOutputTensor(
-            {params.qNtokens, params.numHeads, params.qkembeddingSize},
+            {params.qNtokens, params.numHeads, params.vembeddingSize},
             AclDtypeToTorchDtype(params.dataType));
         params.outputAddr.resize(1);
         params.outputAddr[0] = static_cast<uint8_t*>(const_cast<void*>(output.storage().data()));

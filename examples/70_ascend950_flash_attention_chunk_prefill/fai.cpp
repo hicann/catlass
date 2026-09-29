@@ -109,6 +109,55 @@ static void FreeMem(uint8_t* host, uint8_t* device)
     ACL_CHECK(aclrtFree(device));
 }
 
+static bool CanImplement(
+    int32_t batch, int32_t qSeqlen, int32_t kvSeqlen, int32_t numHeads, int32_t kvHeads, int32_t qkHeadSize,
+    int32_t vHeadSize, int32_t blockSize, int32_t numBlocks, const string& dataType, const string& cacheLayout)
+{
+    if (batch < 1 || qSeqlen < 1 || kvSeqlen < 1 || numHeads < 1 || kvHeads < 1) {
+        cerr << "[ERROR] batch/qSeqlen/kvSeqlen/numHeads/kvHeads must all be positive, got batch=" << batch
+             << ", qSeqlen=" << qSeqlen << ", kvSeqlen=" << kvSeqlen << ", numHeads=" << numHeads
+             << ", kvHeads=" << kvHeads << endl;
+        return false;
+    }
+    if (numHeads % kvHeads != 0) {
+        cerr << "[ERROR] numHeads (" << numHeads << ") must be a positive multiple of kvHeads (" << kvHeads
+             << ") for GQA." << endl;
+        return false;
+    }
+    if (qSeqlen > kvSeqlen) {
+        cerr << "[ERROR] qSeqlen (" << qSeqlen << ") must not exceed kvSeqlen (" << kvSeqlen << ")." << endl;
+        return false;
+    }
+    if ((dataType != "half") && (dataType != "bf16")) {
+        cerr << "[ERROR] dtype must be 'half' or 'bf16'." << endl;
+        return false;
+    }
+    if ((cacheLayout != "nz") && (cacheLayout != "nd")) {
+        cerr << "[ERROR] cacheLayout must be 'nz' or 'nd'." << endl;
+        return false;
+    }
+    if (qkHeadSize != 64 && qkHeadSize != 128 && qkHeadSize != 192) {
+        cerr << "[ERROR] qkHeadSize must be 64, 128 or 192, got " << qkHeadSize << endl;
+        return false;
+    }
+    if (vHeadSize != 64 && vHeadSize != 128) {
+        cerr << "[ERROR] vHeadSize must be 64 or 128, got " << vHeadSize << endl;
+        return false;
+    }
+    if (blockSize != 128 && blockSize != 256 && blockSize != 512 && blockSize != 1024) {
+        cerr << "[ERROR] blockSize must be 128, 256, 512 or 1024, got " << blockSize << endl;
+        return false;
+    }
+    int64_t requiredMinBlocks = static_cast<int64_t>(batch) * ((kvSeqlen + blockSize - 1) / blockSize);
+    if (numBlocks < requiredMinBlocks) {
+        cerr << "[ERROR] numBlocks (" << numBlocks << ") is less than required "
+             << "batch * ceil(kvSeqlen / blockSize) = " << batch << " * ceil(" << kvSeqlen << " / " << blockSize
+             << ") = " << requiredMinBlocks << endl;
+        return false;
+    }
+    return true;
+}
+
 // Allocate several matrices in NPU device memory and call a
 // CATLASS FAI kernel.
 static void Run(const Options& options)
@@ -144,35 +193,12 @@ static void Run(const Options& options)
     string dataPath = options.dataPath;
     int32_t maxKvSeqlen = kvSeqlen;
 
-    int64_t requiredMinBlocks = static_cast<int64_t>(batch) * ((maxKvSeqlen + blockSize - 1) / blockSize);
-    if (numBlocks < requiredMinBlocks) {
-        cerr << "[ERROR] numBlocks (" << numBlocks << ") is less than required "
-             << "batch * ceil(maxKvSeqlen / blockSize) = " << batch << " * ceil(" << maxKvSeqlen << " / " << blockSize
-             << ") = " << requiredMinBlocks << endl;
-        return;
-    }
-
-    if ((dataType != "half") && (dataType != "bf16")) {
-        cerr << "[ERROR] dtype must be 'half' or 'bf16'." << endl;
-        return;
-    }
-    if ((cacheLayout != "nz") && (cacheLayout != "nd")) {
-        cerr << "[ERROR] cacheLayout must be 'nz' or 'nd'." << endl;
-        return;
-    }
-
-    if (qkHeadSize != 64 && qkHeadSize != 128 && qkHeadSize != 192) {
-        cerr << "[ERROR] qkHeadSize must be 64, 128 or 192, got " << qkHeadSize << endl;
-        return;
-    }
-
-    if (vHeadSize != 64 && vHeadSize != 128) {
-        cerr << "[ERROR] vHeadSize must be 64 or 128, got " << vHeadSize << endl;
-        return;
-    }
-
-    if (blockSize != 128 && blockSize != 256 && blockSize != 512 && blockSize != 1024) {
-        cerr << "[ERROR] blockSize must be 128, 256, 512 or 1024, got " << blockSize << endl;
+    if (!CanImplement(
+            batch, qSeqlen, kvSeqlen, numHeads, kvHeads, qkHeadSize, vHeadSize, blockSize, numBlocks, dataType,
+            cacheLayout)) {
+        ACL_CHECK(aclrtDestroyStream(stream));
+        ACL_CHECK(aclrtResetDevice(options.deviceId));
+        ACL_CHECK(aclFinalize());
         return;
     }
 
@@ -289,10 +315,6 @@ static void Run(const Options& options)
     faiContext.kvSeqlenList = reinterpret_cast<int64_t*>(kvSeqHost);
     faiContext.preToken = preToken;
     faiContext.nextToken = nextToken;
-    cout << "preToken " << preToken << endl;
-    cout << "nextToken " << nextToken << endl;
-    cout << "cacheLayout " << cacheLayout << endl;
-    cout << "maskType " << maskType << endl;
 
     // flashDecodeFlag determination
     int64_t maxQSeqlenCalc = 0;
@@ -322,26 +344,20 @@ static void Run(const Options& options)
     bool isLongSeq = (numTasks <= 0.8 * aicCoreNum) && (minKVSeqlenCalc >= aicCoreNum * 512);
     bool isShortSeq = (numTasks <= 0.4 * aicCoreNum) && (minKVSeqlenCalc >= 1024);
     faiContext.flashDecodeFlag = false;
-    cout << "faiContext.flashDecodeFlag " << faiContext.flashDecodeFlag << endl;
 
     FAInferTiling fai_tiling(faiContext);
     fai_tiling.SetCoreNum(aicCoreNum);
     fai_tiling.DoTiling(faiTilingData);
-    uint64_t tilingKey = fai_tiling.GetTilingKey();
 
     uint8_t* workspaceDevice{nullptr};
     faiTilingData.workSpaceSize = 1024 * 1024 * 32 * 4;
-    cout << "faiTilingData.workSpaceSize " << faiTilingData.workSpaceSize << endl;
     ACL_CHECK(aclrtMalloc((void**)(&workspaceDevice), faiTilingData.workSpaceSize, ACL_MEM_MALLOC_HUGE_FIRST));
 
     uint8_t* oDevice{nullptr};
-    cout << "oSize " << oSize << endl;
     ACL_CHECK(aclrtMalloc((void**)(&oDevice), oSize * 2, ACL_MEM_MALLOC_HUGE_FIRST));
     uint8_t* lseDevice{nullptr};
-    cout << "lseSize " << lseSize << endl;
     ACL_CHECK(aclrtMalloc((void**)(&lseDevice), lseSize * 2, ACL_MEM_MALLOC_HUGE_FIRST));
     uint8_t* tilingDevice;
-    cout << "tilingSize " << tilingSize << endl;
     ACL_CHECK(aclrtMalloc((void**)(&tilingDevice), tilingSize, ACL_MEM_MALLOC_HUGE_FIRST));
 
     // get tiling
@@ -356,29 +372,8 @@ static void Run(const Options& options)
     }
 
     // tiling output
-    cout << "faiTilingData.numHeads" << faiTilingData.numHeads << endl;
-    cout << "faiTilingData.embeddingSize" << faiTilingData.embeddingSize << endl;
-    cout << "faiTilingData.embeddingSizeV" << faiTilingData.embeddingSizeV << endl;
-    cout << "faiTilingData.numBlocks" << faiTilingData.numBlocks << endl;
-    cout << "faiTilingData.blockSize" << faiTilingData.blockSize << endl;
-    cout << "faiTilingData.maxQSeqlen" << faiTilingData.maxQSeqlen << endl;
-    cout << "faiTilingData.maxKvSeqlen" << faiTilingData.maxKvSeqlen << endl;
-    cout << "faiTilingData.kvHeads" << faiTilingData.kvHeads << endl;
-    cout << "faiTilingData.batch" << faiTilingData.batch << endl;
-    cout << "faiTilingData.maxNumBlocksPerBatch" << faiTilingData.maxNumBlocksPerBatch << endl;
-    cout << "faiTilingData.totalTaskNum" << faiTilingData.totalTaskNum << endl;
-    cout << "faiTilingData.maskType" << faiTilingData.maskType << endl;
-    cout << "faiTilingData.qkOutSize" << faiTilingData.qkOutSize << endl;
-    cout << "faiTilingData.smOnlineOutSize" << faiTilingData.smOnlineOutSize << endl;
-    cout << "faiTilingData.pvOutSize" << faiTilingData.pvOutSize << endl;
-    cout << "faiTilingData.UpdateSize" << faiTilingData.UpdateSize << endl;
-    cout << "faiTilingData.workSpaceSize" << faiTilingData.workSpaceSize << endl;
-    cout << "faiTilingData.scaleValue" << faiTilingData.scaleValue << endl;
-    cout << "faiTilingData.firstBatchTaskNum" << faiTilingData.firstBatchTaskNum << endl;
     tilingHost = reinterpret_cast<void*>(&faiTilingData);
     ACL_CHECK(aclrtMemcpy(tilingDevice, tilingSize, tilingHost, tilingSize, ACL_MEMCPY_HOST_TO_DEVICE));
-
-    cout << "tilingkey: " << tilingKey << endl;
 
     for (int i = 0; i < 1; i++) {
         if (cacheLayout == "nd") {
