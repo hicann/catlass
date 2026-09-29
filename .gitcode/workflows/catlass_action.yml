@@ -1,7 +1,7 @@
 name: catlass_action
 
 concurrency:
-  max: 5
+  max: 15
   exceed-action: QUEUE
   enable: true
   preemption:
