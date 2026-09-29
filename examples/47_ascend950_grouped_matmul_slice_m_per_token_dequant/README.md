@@ -1,52 +1,71 @@
-# 950_grouped_matmul_slice_m_per_token_dequant Example Readme
+# 47_ascend950_grouped_matmul_slice_m_per_token_dequant Example Readme
 
-## 代码组织
+## 功能说明
 
-```text
-├── 47_ascend950_grouped_matmul_slice_m_per_token_dequant
-│   ├── CMakeLists.txt     # CMake编译文件
-│   ├── README.md
-│   └── grouped_matmul_slice_m_per_token_dequant_tla.cpp # 主文件
-```
+- 算子功能：完成在 Ascend 950 上的分组矩阵乘（Grouped Matmul）与反量化（dequant）融合计算。左矩阵沿 m 轴切分为 `g` 组，每组完成矩阵乘后，使用 per-channel 量化系数 `scale` 与 per-token 量化系数 `perToken` 进行反量化。
+- 计算公式：
 
-## 功能介绍
+  $$
+    \begin{aligned}
+    C &= \mathrm{GroupedGEMM}(A,B) \\
+    C_{i,j} &= \left(\Sigma_{k} A_{i,k}B_{g,k,j}\right) \cdot scale_{g,j} \cdot perToken_i
+    \end{aligned}
+  $$
 
-该CV融合算子实现了在ascend950上的分组矩阵乘法（Grouped Matmul）与反量化（dequant）操作。主要解决了高效执行分组、切片（M轴）矩阵乘法，并融合per-token和per-channel反量化操作的需求。
+  其中 `A` 是形如 `(m,k)` 的左矩阵，`B` 是形如 `(g,k,n)` 的右矩阵，`g` 为分组数量，m 轴具体切分的值由 `groupList` 确定；`scale` 为 per-channel 量化系数（形如 `(g,n)`），`perToken` 为 per-token 量化系数（形如 `(m,)`），`C` 为形如 `(m,n)` 的输出矩阵。
+- 支持产品型号：Ascend 950PR&950DT 系列产品
 
-## 方案概述
+## 样例参数说明
 
-1. 新增[GroupedMatmulSliceMPerTokenTla模板类（Kernel）](../../include/catlass/gemm/kernel/grouped_matmul_slice_m_per_token_dequant_tla.hpp)，通过[BlockMmad](../../include/catlass/gemm/block/block_mmad_pingpong_tla.hpp)、[Epilogue](../../include/catlass/epilogue/block/block_epilogue_per_token_dequant.hpp)和[Scheduler](../../include/catlass/gemm/block/block_scheduler_aswt.hpp)，支持对一组groupCount的矩阵进行反量化计算。
-2. 为Ascend950新增了Epilogue模板[EpilogueAscend950PerTokenDequantTla](../../include/catlass/epilogue/block/block_epilogue_per_token_dequant.hpp)，实现了从GM加载量化系数、在同一UB执行反量化计算。
-3. 为Ascend950新增了高性能反量化计算的Tile模板[TilePerTokenDequant](../../include/catlass/epilogue/tile/tile_pertoken_dequant.hpp)。
+| 参数       | 属性   | shape    | dtype  | 说明                                                             |
+| ---------- | ------ | -------- | ------ | ---------------------------------------------------------------- |
+| `A`        | Input  | `(m,k)`  | `int8` | 左矩阵，layout 固定 `RowMajor`          |
+| `B`        | Input  | `(g,k,n)`| `int8` | 右矩阵，layout 固定 `RowMajor`          |
+| `groupList`| Input  | `(g,)`   | `int64`| m 轴切分的前缀和列表，终止偏移为 `m`，允许空分组 |
+| `scale`    | Input  | `(g,n)`  | `fp32` | per-channel 量化系数，layout为`VectorLayout` |
+| `perToken` | Input  | `(m,)`   | `fp32` | per-token 量化系数，layout为`VectorLayout` |
+| `C`        | Output | `(m,n)`  | `fp16` | 矩阵乘反量化结果，layout 固定 `RowMajor`   |
 
-## 参数说明
+## 使用范围说明
 
-| 名称/Name | 类型/Class | 数据类型/Dtype | 维度/Dims          | 格式/Format | 描述/Description            |
-| --------- | ---------- | -------------- | ------------------ | ----------- | --------------------------- |
-| matA      | inTensor   | int8           | [m, k]             | ND          | 左矩阵                      |
-| matB      | inTensor   | int8           | [groupCount, n, k] | ND          | 右矩阵，支持转置            |
-| groupList | inTensor   | int32          | [groupCount]       | ND          | m轴方向分组大小，累加和列表 |
-| scale     | inTensor   | bf16/fp16/fp32 | [groupCount, n]    | ND          | perChannel量化系数          |
-| perToken  | inTensor   | bf16/fp16/fp32 | [m]                | ND          | perToken量化系数            |
-| matD      | outTensor  | bf16/fp16/fp32 | [m, n]             | ND          | 输出矩阵                    |
+推荐范围：
+- 分组数量 `g` 满足 `1 ≤ g ≤ 128` 且 `g ≤ m`。
 
 ## 使用示例
 
-- 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/zh/1_Practice/01_quick_start.md#编译执行)，本用例为Ascend950算子，编译时需加-DCATLASS_ARCH=3510
-- 执行算子
+### 命令行参数
 
 ```bash
-# 编译指定用例
-bash scripts/build.sh 47_ascend950_grouped_matmul_slice_m_per_token_dequant -DCATLASS_ARCH=3510
-cd output/bin
-# 可执行文件名|group数量|矩阵m轴|n轴|k轴|Device ID
-# group数量及矩阵m轴、n轴、k轴维度必须大于0
-# Device ID可选，默认为0
-./47_ascend950_grouped_matmul_slice_m_per_token_dequant 128 512 1024 2048 0
+47_ascend950_grouped_matmul_slice_m_per_token_dequant [g] [m] [n] [k] [deviceId]
 ```
 
-执行结果如下，说明精度比对成功。
+上述命令行参数具体说明如下：
 
-```text
-Compare success.
-```
+| 参数       | 默认值 | 参数说明                    |
+| ---------- | ------ | --------------------------- |
+| `g`        | 无     | 分组数量                  |
+| `m`        | 无     | A 矩阵的 m 轴大小           |
+| `n`        | 无     | B 矩阵的 n 轴大小           |
+| `k`        | 无     | A/B 矩阵的 k 轴大小         |
+| `deviceId` | `0`    | 指定运行设备ID              |
+
+### 执行示例
+
+1. 进入项目根目录，编译样例代码生成相应的算子可执行文件。本用例为 Ascend 950 算子，编译时需添加 `-DCATLASS_ARCH=3510`。
+
+    ```bash
+    bash scripts/build.sh 47_ascend950_grouped_matmul_slice_m_per_token_dequant -DCATLASS_ARCH=3510
+    ```
+
+2. 切换到可执行文件的编译目录 `output/bin`，执行算子样例程序。
+
+    ```bash
+    cd output/bin
+    ./47_ascend950_grouped_matmul_slice_m_per_token_dequant 128 512 1024 2048 0
+    ```
+
+3. 执行结果如下，说明样例执行成功，精度通过：
+
+    ```text
+    Compare success.
+    ```
