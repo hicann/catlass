@@ -13,7 +13,7 @@
   $$
 
   where $A$ and $B$ are input matrices in the shape of `(m, k)` and `(k, n)`, respectively. $C$ is the output matrix in the shape of `(m, n)`.
-- Supported products: Atlas A2/A3 training/inference series products
+- Supported products: Atlas A2/A3 series products
 
 ## Parameters
 
@@ -31,6 +31,8 @@ Recommended range:
 
 - `m ≥ 256, n ≥ 256, 256 < k ≤ 3072`
 - The K axis and N axis are aligned to 512B.
+
+## Usage Example
 
 ### Command Line Parameters
 
