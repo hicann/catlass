@@ -137,14 +137,24 @@ def _cases(device: int) -> Iterator[tuple[str, list[list[str]]]]:
             if case.startswith("f4")
             else (("row", "row"), ("row", "col"), ("col", "row"), ("col", "col"))
         )
-        for la, lb in layouts:
-            yield (
-                f"mx-mmad-{case.replace(',', '-')}-{la}{lb}",
-                [[
-                    "mx_mmad/mx_matmul.py", "--case", case,
-                    "--layout-a", la, "--layout-b", lb, *dev,
-                ]],
-            )
+        # A third axis: the shape. The regular one divides evenly and never
+        # reaches a boundary tile, so every pairing runs again unaligned --
+        # 333x444x535, where 535 is not a multiple of 32 and the last scale
+        # group along k is short. Spelled out rather than left to the script's
+        # defaults, which an edit there could change without touching this.
+        for shape_label, shape_args in (
+            ("regular", []),
+            ("unaligned", ["--m", "333", "--n", "444", "--k", "535"]),
+        ):
+            for la, lb in layouts:
+                yield (
+                    f"mx-mmad-{case.replace(',', '-')}-{la}{lb}-{shape_label}",
+                    [[
+                        "mx_mmad/mx_matmul.py", "--case", case,
+                        "--layout-a", la, "--layout-b", lb,
+                        *shape_args, *dev,
+                    ]],
+                )
 
     for script, label in (
         ("basic_matmul_mutex.py", "mutex"),

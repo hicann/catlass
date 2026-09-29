@@ -686,9 +686,9 @@ def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--device", type=int, default=0)
     p.add_argument("--block-num", type=int, default=-1)
-    p.add_argument("--m", type=int, default=333)
-    p.add_argument("--n", type=int, default=444)
-    p.add_argument("--k", type=int, default=535)
+    p.add_argument("--m", type=int, default=256)
+    p.add_argument("--n", type=int, default=512)
+    p.add_argument("--k", type=int, default=1024)
     # One per side: the operand and its scale block share an orientation.
     p.add_argument("--layout-a", choices=("row", "col"), default="row")
     p.add_argument("--layout-b", choices=("row", "col"), default="col")
