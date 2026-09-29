@@ -32,6 +32,14 @@ set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" APPEND PROPERTY
 declare_mlir_dialect_python_bindings(
   ADD_TO_PARENT CatlassMLIRPythonSources
   ROOT_DIR "${_npuir_mlir_src}/python/mlir"
+  TD_FILE dialects/BuiltinOps.td
+  SOURCES
+    dialects/builtin.py
+  DIALECT_NAME builtin)
+
+declare_mlir_dialect_python_bindings(
+  ADD_TO_PARENT CatlassMLIRPythonSources
+  ROOT_DIR "${_npuir_mlir_src}/python/mlir"
   TD_FILE dialects/ArithOps.td
   SOURCES
     dialects/arith.py

@@ -58,6 +58,36 @@ class _RecursiveJitHelperError(SyntaxError):
     """Internal marker for recursion detected while staging a JIT helper."""
 
 
+@dataclass(frozen=True)
+class _SourceSnapshot:
+    """Keep diagnostic source alive without extracting snippets while compiling."""
+
+    source_text: str
+
+    def snippet(self, span: tuple[int | None, ...]) -> str:
+        lineno, col_offset, end_lineno, end_col_offset = span
+        location = ast.Constant(
+            value=None,
+            lineno=lineno,
+            col_offset=col_offset,
+            end_lineno=end_lineno,
+            end_col_offset=end_col_offset,
+        )
+        # Use CPython's byte-offset and newline rules, including form feeds.
+        # This runs only when reporting an error, never during normal tracing.
+        segment = ast.get_source_segment(self.source_text, location) or ""
+        return next((line.strip() for line in segment.splitlines() if line.strip()), "")
+
+
+def _source_text_for_info(info: dict[str, Any]) -> str:
+    if "source" not in info:
+        reference = info.get("_source_ref")
+        if reference is not None:
+            snapshot, span = reference
+            info["source"] = snapshot.snippet(span)
+    return str(info.get("source") or "")
+
+
 def _is_exact_builtin_dict(value: object) -> bool:
     """Return whether *value* is a dict without subclass-defined behavior."""
 
@@ -295,6 +325,7 @@ class _FunctionScopeFacts:
 
     local_names: frozenset[str]
     free_names: frozenset[str]
+    local_bindings: tuple[Binding, ...]
 
 
 def _function_scope_id(
@@ -372,6 +403,7 @@ def _root_function_scope_facts(
         free_names=frozenset(
             name for name, symbol in symbols.items() if symbol.is_free()
         ),
+        local_bindings=tuple(collector.bindings),
     )
 
 
@@ -379,10 +411,14 @@ def _scope_facts_for_transform(
     source: str,
     filename: str,
     target: ast.FunctionDef | ast.AsyncFunctionDef,
+    *,
+    has_scope_declaration: bool | None = None,
 ) -> _FunctionScopeFacts | None:
     """Build root compiler facts unless a source diagnostic must run first."""
 
-    if _has_scope_declaration(target):
+    if has_scope_declaration is None:
+        has_scope_declaration = _has_scope_declaration(target)
+    if has_scope_declaration:
         return None
     return _root_function_scope_facts(source, filename, target)
 
@@ -489,11 +525,13 @@ class _FunctionAnalyzer:
         root_freevars: set[str] | None = None,
         trusted_identities: _TrustedDslIdentities | None = None,
         trusted_symbols: _TrustedDslSymbols | None = None,
+        statement_facts: _StatementFactsCache | None = None,
     ) -> None:
         self.global_names = set(global_names or ())
         self.global_symbols = dict(global_symbols or {})
         self.scope_facts = scope_facts
         self.root_freevars = set(root_freevars or ())
+        self.statement_facts = statement_facts or _StatementFactsCache()
         self.trusted_identities = trusted_identities or _trusted_dsl_identities()
         self.trusted_symbols = trusted_symbols or _trusted_dsl_symbols(
             self.global_symbols, self.trusted_identities
@@ -511,14 +549,18 @@ class _FunctionAnalyzer:
             )
             for argument in _ordered_function_args(node.args)
         )
-        collector = _FunctionLocalCollector(scope_id)
-        for statement in node.body:
-            collector.visit(statement)
         scope_facts = self.scope_facts
+        if scope_facts is None:
+            collector = _FunctionLocalCollector(scope_id)
+            for statement in node.body:
+                collector.visit(statement)
+            collected_bindings = collector.bindings
+        else:
+            collected_bindings = scope_facts.local_bindings
         local_names = scope_facts.local_names if scope_facts is not None else None
         local_bindings = tuple(
             binding
-            for binding in collector.bindings
+            for binding in collected_bindings
             if binding.name not in {argument.name for argument in arguments}
             and (local_names is None or binding.name in local_names)
         )
@@ -542,6 +584,7 @@ class _FunctionAnalyzer:
                     lexical_shadow_names=lexical_shadows,
                     trusted_symbols=self.trusted_symbols,
                     global_symbols=self.global_symbols,
+                    statement_facts=self.statement_facts,
                 )
             ),
         )
@@ -552,6 +595,8 @@ class _FunctionAnalyzer:
         owned: dict[str, Binding],
         free_names: set[str] | None,
     ) -> tuple[Binding, ...]:
+        if free_names is not None and not free_names:
+            return ()
         loaded = _ordered_function_loads(node)
         captures: list[Binding] = []
         seen: set[str] = set()
@@ -789,6 +834,9 @@ class ControlFlowPlan:
 class _ControlFlowAnalyzer:
     """Analyze and validate a runtime construct without rewriting its AST."""
 
+    def __init__(self, statement_facts: _StatementFactsCache | None = None) -> None:
+        self._statement_facts = statement_facts
+
     def analyze(
         self,
         *,
@@ -816,12 +864,22 @@ class _ControlFlowAnalyzer:
         for region in assigned_regions:
             for statement in region:
                 policy.visit(statement)
+        statement_facts = self._statement_facts or _StatementFactsCache()
         assigned_names_by_region = tuple(
-            _assigned_names_from_statements(region) for region in assigned_regions
+            set().union(
+                *(statement_facts.get(statement).assigned_names for statement in region)
+            )
+            for region in assigned_regions
         )
         assigned_names = set().union(*assigned_names_by_region)
-        invoked_names = _invoked_active_names_from_statements(
-            active_call_nodes, active_symbols
+        invoked_names = (
+            set().union(
+                *(
+                    statement_facts.get(statement).invoked_names
+                    for statement in active_call_nodes
+                )
+            )
+            & active_symbols
         )
         # Local bare helpers are Python closures captured by the outlined
         # region, not runtime SSA state that must be threaded through it.
@@ -907,7 +965,7 @@ class ScopeManager:
             self.scopes.append(set())
         self.scopes[-1].add(name)
 
-    def add_names_to_scope(self, names: set[str] | list[str] | tuple[str, ...]) -> None:
+    def add_names_to_scope(self, names: Iterable[str]) -> None:
         for name in names:
             self.add_to_scope(name)
 
@@ -1023,6 +1081,128 @@ class _DynamicConditionValidator(ast.NodeVisitor):
         raise error
 
 
+@dataclass(frozen=True)
+class _StatementFacts:
+    """Scope-independent facts; populated once, before rewriting source nodes."""
+
+    read_names: frozenset[str]
+    assigned_names: frozenset[str]
+    invoked_names: frozenset[str]
+
+
+_EMPTY_STATEMENT_FACTS = _StatementFacts(frozenset(), frozenset(), frozenset())
+
+
+class _StatementFactsCache:
+    """Facts about source nodes, retained unchanged during destructive rewriting.
+
+    Populate before visiting a source statement. Generated statements must be
+    analyzed separately: a source node can keep its identity after mutation.
+    """
+
+    def __init__(self) -> None:
+        self._facts: dict[ast.AST, _StatementFacts] = {}
+
+    def get(self, node: ast.AST) -> _StatementFacts:
+        facts = self._facts.get(node)
+        if facts is None:
+            facts = self._collect(node)
+            self._facts[node] = facts
+        return facts
+
+    def _collect(self, node: ast.AST) -> _StatementFacts:
+        if isinstance(node, ast.Name):
+            if isinstance(node.ctx, ast.Load):
+                return _StatementFacts(frozenset({node.id}), frozenset(), frozenset())
+            if isinstance(node.ctx, ast.Store):
+                return _StatementFacts(frozenset(), frozenset({node.id}), frozenset())
+            return _EMPTY_STATEMENT_FACTS
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            return _StatementFacts(frozenset(), frozenset({node.name}), frozenset())
+        if isinstance(node, ast.Lambda):
+            return _EMPTY_STATEMENT_FACTS
+
+        read_names: set[str] = set()
+        assigned_names: set[str] = set()
+        invoked_names: set[str] = set()
+
+        def include(
+            facts: _StatementFacts, hidden: set[str] | frozenset[str] = frozenset()
+        ) -> None:
+            read_names.update(facts.read_names - hidden)
+            assigned_names.update(facts.assigned_names)
+            invoked_names.update(facts.invoked_names)
+
+        if isinstance(
+            node, (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
+        ):
+            bound: set[str] = set()
+            for generator in node.generators:
+                include(self.get(generator.iter), bound)
+                target = self.get(generator.target)
+                bound.update(target.assigned_names)
+                # Assignment/load collectors exclude comprehension targets;
+                # invocation analysis historically visits them without filtering.
+                invoked_names.update(target.invoked_names)
+                for condition in generator.ifs:
+                    include(self.get(condition), bound)
+            values = (
+                (node.key, node.value)
+                if isinstance(node, ast.DictComp)
+                else (node.elt,)
+            )
+            for value in values:
+                include(self.get(value), bound)
+        else:
+            for child in ast.iter_child_nodes(node):
+                include(self.get(child))
+            if isinstance(node, ast.Call):
+                base = _call_base_name(node.func)
+                if base is not None:
+                    invoked_names.add(base)
+            elif isinstance(node, ast.Import):
+                assigned_names.update(
+                    alias.asname or alias.name.split(".", 1)[0] for alias in node.names
+                )
+            elif isinstance(node, ast.ImportFrom):
+                assigned_names.update(
+                    alias.asname or alias.name
+                    for alias in node.names
+                    if alias.name != "*"
+                )
+        if not read_names and not assigned_names and not invoked_names:
+            return _EMPTY_STATEMENT_FACTS
+        return _StatementFacts(
+            frozenset(read_names), frozenset(assigned_names), frozenset(invoked_names)
+        )
+
+
+@dataclass(frozen=True)
+class _BlockLastReadIndex:
+    """Index each variable's last read within a statement list."""
+
+    last_read: dict[str, int]
+
+    @classmethod
+    def build(
+        cls,
+        body: list[ast.stmt],
+        *,
+        statement_facts: _StatementFactsCache | None = None,
+    ) -> "_BlockLastReadIndex":
+        statement_facts = statement_facts or _StatementFactsCache()
+        return cls(
+            {
+                name: index
+                for index, statement in enumerate(body)
+                for name in statement_facts.get(statement).read_names
+            }
+        )
+
+    def used_after(self, index: int, candidates: Iterable[str]) -> set[str]:
+        return {name for name in candidates if self.last_read.get(name, -1) > index}
+
+
 class _FrontendControlFlowTransformer(ast.NodeTransformer):
     def __init__(
         self,
@@ -1033,23 +1213,30 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
         source_text: str = "",
         trusted_identities: _TrustedDslIdentities | None = None,
         root_plan: FunctionPlan | None = None,
+        statement_facts: _StatementFactsCache | None = None,
     ) -> None:
         self._counter = 0
         self._reserved_names: set[str] = set(global_symbols or ())
         self._range_alias_stack: list[set[str]] = []
         self._scope_manager = ScopeManager.create()
-        self._following_loads_stack: list[set[str]] = []
+        self._following_loads_stack: list[tuple[_BlockLastReadIndex, int]] = []
         self._binding_origin_markers: dict[Binding, str] = {}
         self._runtime_origin_initializers: dict[int, list[ast.stmt]] = {}
         self._runtime_transform_depth = 0
         self._runtime_local_bindings: set[Binding] = set()
         self._tensor_store_assignments: set[ast.Assign] = set()
-        self._control_flow_analyzer = _ControlFlowAnalyzer()
+        self._statement_facts = statement_facts or _StatementFactsCache()
+        # Names captured before rewriting, keyed by the emitted statement.
+        self._rewritten_assigned_names: dict[ast.stmt, frozenset[str]] = {}
+        self._control_flow_analyzer = _ControlFlowAnalyzer(self._statement_facts)
         self._function_plan_stack: list[FunctionPlan] = []
         self._global_symbols = global_symbols or {}
         self._filename = filename
         self._line_offset = line_offset
         self._source_text = source_text
+        self._source_snapshot = _SourceSnapshot(source_text)
+        self._source_snapshot_name: str | None = None
+        self._source_lines = source_text.splitlines()
         self._tensor_store_helper_name: str | None = None
         self._lazy_operand_context: str | None = None
         self._call_shadow_stack: list[set[str]] = []
@@ -1070,6 +1257,7 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
     def visit_Module(self, node: ast.Module) -> Any:
         self._reserved_names.update(_identifier_names(node))
         self._tensor_store_helper_name = self._fresh("tensor_store")
+        self._source_snapshot_name = self._fresh("source_snapshot")
         return self.generic_visit(node)
 
     @property
@@ -1280,7 +1468,7 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
             value
         )
         function_plan = self._function_plan_stack[-1]
-        source_lines = self._source_text.splitlines()
+        source_lines = self._source_lines
         guards: list[ast.stmt] = []
         target_names = set().union(*(_assigned_names(target) for target in targets))
         for name in sorted(target_names):
@@ -1356,9 +1544,9 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
         construct: str,
         region: str,
     ) -> ast.Dict:
-        source = ast.get_source_segment(self._source_text, node) or ""
-        source = next(
-            (line.strip() for line in source.splitlines() if line.strip()), ""
+        span = tuple(
+            getattr(node, field, None)
+            for field in ("lineno", "col_offset", "end_lineno", "end_col_offset")
         )
         return ast.Dict(
             keys=[
@@ -1368,7 +1556,7 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
                 ast.Constant(value="construct"),
                 ast.Constant(value="region"),
                 ast.Constant(value="generated_name"),
-                ast.Constant(value="source"),
+                ast.Constant(value="_source_ref"),
             ],
             values=[
                 ast.Constant(value=self._filename),
@@ -1379,7 +1567,13 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
                 ast.Constant(value=construct),
                 ast.Constant(value=region),
                 ast.Constant(value=generated_name),
-                ast.Constant(value=source),
+                ast.Tuple(
+                    elts=[
+                        ast.Name(id=self._source_snapshot_name, ctx=ast.Load()),
+                        ast.Constant(value=span),
+                    ],
+                    ctx=ast.Load(),
+                ),
             ],
         )
 
@@ -1423,10 +1617,11 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
     def _active_callables(self) -> set[str]:
         return self._scope_manager.get_active_callables()
 
-    def _following_loads(self) -> set[str]:
+    def _following_loads(self, candidates: Iterable[str]) -> set[str]:
         if not self._following_loads_stack:
             return set()
-        return self._following_loads_stack[-1]
+        last_read_index, index = self._following_loads_stack[-1]
+        return last_read_index.used_after(index, candidates)
 
     def _is_static_control_flow_test(self, node: ast.AST) -> bool:
         return _is_static_python_if_test(
@@ -1503,6 +1698,7 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
             visitor.visit(statement)
 
     def visit_Assign(self, node: ast.Assign) -> Any:
+        assigned_names = self._statement_facts.get(node).assigned_names
         self._record_runtime_local_bindings(node)
         guards = self._runtime_assignment_guards(node, node.targets, node.value)
         if self._runtime_transform_depth != 0:
@@ -1510,6 +1706,7 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
         refreshes = self._refresh_compiletime_origin_markers(node, node.targets)
         if node not in self._tensor_store_assignments:
             rewritten = self.generic_visit(node)
+            self._rewritten_assigned_names[rewritten] = assigned_names
             statements = [*guards, rewritten, *refreshes]
             return statements if len(statements) > 1 else rewritten
         if len(node.targets) != 1 or not isinstance(node.targets[0], ast.Subscript):
@@ -1530,22 +1727,27 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
             )
         )
         rewritten = ast.copy_location(rewritten, node)
+        self._rewritten_assigned_names[rewritten] = assigned_names
         statements = [*guards, rewritten, *refreshes]
         return statements if len(statements) > 1 else rewritten
 
     def visit_AnnAssign(self, node: ast.AnnAssign) -> Any:
+        assigned_names = self._statement_facts.get(node).assigned_names
         self._record_runtime_local_bindings(node)
         guards = self._runtime_assignment_guards(node, [node.target], node.value)
         if self._runtime_transform_depth != 0:
             self._rewrite_builtin_tuple_promotion(node.value)
         refreshes = self._refresh_compiletime_origin_markers(node, [node.target])
         rewritten = self.generic_visit(node)
+        self._rewritten_assigned_names[rewritten] = assigned_names
         statements = [*guards, rewritten, *refreshes]
         return statements if len(statements) > 1 else rewritten
 
     def visit_AugAssign(self, node: ast.AugAssign) -> Any:
+        assigned_names = self._statement_facts.get(node).assigned_names
         guards = self._runtime_assignment_guards(node, [node.target], None)
         rewritten = self.generic_visit(node)
+        self._rewritten_assigned_names[rewritten] = assigned_names
         return [*guards, rewritten] if guards else rewritten
 
     def _record_runtime_local_bindings(self, node: ast.Assign | ast.AnnAssign) -> None:
@@ -1553,7 +1755,7 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
             return
         active = self._local_scope()
         function_plan = self._function_plan_stack[-1]
-        for name in _assigned_names(node) - active:
+        for name in self._statement_facts.get(node).assigned_names - active:
             binding = function_plan.resolve(name)
             if binding is not None:
                 self._runtime_local_bindings.add(binding)
@@ -1578,9 +1780,11 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
     def _visit_statement_list(self, body: list[ast.stmt]) -> list[ast.stmt]:
         rewritten_body: list[ast.stmt] = []
         aliases = self._range_aliases()
+        last_read_index = _BlockLastReadIndex.build(
+            body, statement_facts=self._statement_facts
+        )
         for index, stmt in enumerate(body):
-            following_loads = _loaded_names_from_statements(body[index + 1 :])
-            self._following_loads_stack.append(following_loads)
+            self._following_loads_stack.append((last_read_index, index))
             try:
                 rewritten = self.visit(stmt)
                 stmts = rewritten if isinstance(rewritten, list) else [rewritten]
@@ -1595,7 +1799,10 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
                         self._tla_module_aliases,
                         self._recognition_scope(),
                     )
-                    self._scope_manager.add_names_to_scope(_assigned_names(out_stmt))
+                    assigned_names = self._rewritten_assigned_names.get(out_stmt)
+                    if assigned_names is None:
+                        assigned_names = _assigned_names(out_stmt)
+                    self._scope_manager.add_names_to_scope(assigned_names)
                     for callable_name in _callable_names(
                         out_stmt, self._scope_manager.get_active_callables()
                     ):
@@ -1633,7 +1840,7 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
         self._function_plan_stack.append(function_plan)
         self._range_alias_stack.append(set())
         local_names = _function_arg_names(node.args) | _assigned_names_from_statements(
-            node.body
+            node.body, statement_facts=self._statement_facts
         )
         self._call_shadow_stack.append(local_names)
         lexical_shadows = {binding.name for binding in function_plan.bindings}
@@ -1853,7 +2060,7 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
             analysis.active_symbols,
             analysis.assigned_names,
             node.target.id,
-            self._following_loads(),
+            self._following_loads(analysis.assigned_names | {node.target.id}),
         )
         carried_names = list(analysis.carried_names)
         self._scope_manager.add_names_to_scope(carried_names)
@@ -2099,7 +2306,7 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
             analysis.active_symbols,
             then_assigned,
             else_assigned,
-            self._following_loads(),
+            self._following_loads(then_assigned | else_assigned),
         )
         carried_names = list(analysis.carried_names)
         result = self._runtime_write_guards(analysis)
@@ -2246,7 +2453,9 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
             active_call_nodes=[node.test, *node.body],
         )
         _reject_unsupported_dynamic_while_new_defs(
-            analysis.active_symbols, analysis.assigned_names, self._following_loads()
+            analysis.active_symbols,
+            analysis.assigned_names,
+            self._following_loads(analysis.assigned_names),
         )
         carried_names = list(analysis.carried_names)
         self._scope_manager.add_names_to_scope(carried_names)
@@ -2675,12 +2884,11 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
     def visit_Call(self, node: ast.Call) -> Any:
         module_path = self._module_qualified_dsl_path(node.func)
         direct_path = self._direct_dsl_path(node.func)
-        is_dsl_call = (
+        if self._lazy_operand_context is not None and not (
             module_path is not None
             or direct_path is not None
             or self._is_dsl_call(node)
-        )
-        if self._lazy_operand_context is not None and not is_dsl_call:
+        ):
             original = self.generic_visit(node)
             thunk = ast.Lambda(
                 args=ast.arguments(
@@ -3032,6 +3240,43 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
         ]
 
 
+@dataclass(frozen=True)
+class _PreparedFunctionSource:
+    """Source shared by validation and its subsequent, destructive rewrite."""
+
+    source_text: str
+    filename: str
+    line_offset: int
+    module_ast: ast.Module
+    target: ast.FunctionDef | None
+    statement_facts: _StatementFactsCache = dataclasses.field(
+        default_factory=_StatementFactsCache, compare=False, repr=False
+    )
+
+
+def _prepare_function_source(fn: Callable[..., Any]) -> _PreparedFunctionSource | None:
+    try:
+        source_lines, first_lineno = inspect.getsourcelines(fn)
+    except (OSError, IOError, TypeError):
+        return None
+    source_text = textwrap.dedent("".join(source_lines))
+    filename = inspect.getsourcefile(fn) or "<unknown>"
+    module_ast = ast.parse(source_text, filename=filename)
+    return _PreparedFunctionSource(
+        source_text,
+        filename,
+        int(first_lineno) - 1,
+        module_ast,
+        _find_function_def(module_ast, fn.__name__),
+    )
+
+
+def _preprocess_for_lowering(fn: FunctionType, **hooks: Any) -> FunctionType:
+    prepared = _prepare_function_source(fn)
+    validate_language_boundaries(fn, _prepared_source=prepared)
+    return maybe_transform_for_lowering(fn, _prepared_source=prepared, **hooks)
+
+
 def maybe_transform_for_lowering(
     fn: FunctionType,
     *,
@@ -3048,23 +3293,24 @@ def maybe_transform_for_lowering(
     internal_bool: Any,
     internal_min: Any,
     internal_max: Any,
+    _prepared_source: _PreparedFunctionSource | None = None,
 ) -> FunctionType:
     """Return a transformed callable when source-driven control-flow lowering is needed."""
 
-    try:
-        source_lines, first_lineno = inspect.getsourcelines(fn)
-    except (OSError, IOError, TypeError):
+    prepared = _prepared_source or _prepare_function_source(fn)
+    if prepared is None:
         return fn
-    source = "".join(source_lines)
-    filename = inspect.getsourcefile(fn) or "<unknown>"
-    line_offset = int(first_lineno) - 1
-
-    source = textwrap.dedent(source)
-    module_ast = ast.parse(source, filename=filename)
-    target = _find_function_def(module_ast, fn.__name__)
+    source = prepared.source_text
+    filename = prepared.filename
+    line_offset = prepared.line_offset
+    module_ast = prepared.module_ast
+    target = prepared.target
     if target is None:
         return fn
-    scope_facts = _scope_facts_for_transform(source, filename, target)
+    has_scope_declaration = _has_scope_declaration(target)
+    scope_facts = _scope_facts_for_transform(
+        source, filename, target, has_scope_declaration=has_scope_declaration
+    )
     root_freevars = set(fn.__code__.co_freevars)
     trusted_identities = _trusted_dsl_identities()
     shadow_plan = _FunctionAnalyzer(
@@ -3073,14 +3319,16 @@ def maybe_transform_for_lowering(
         scope_facts=scope_facts,
         root_freevars=root_freevars,
         trusted_identities=trusted_identities,
+        statement_facts=prepared.statement_facts,
     ).analyze(target)
     root_shadows = {binding.name for binding in shadow_plan.bindings}
-    if not _has_scope_declaration(target) and not _function_needs_frontend_transform(
+    if not has_scope_declaration and not _function_needs_frontend_transform(
         target,
         fn.__globals__,
         root_shadows,
         trusted_identities,
         is_root=True,
+        child_plans=shadow_plan.child_plans,
     ):
         return fn
 
@@ -3093,6 +3341,7 @@ def maybe_transform_for_lowering(
         source_text=source,
         trusted_identities=trusted_identities,
         root_plan=shadow_plan,
+        statement_facts=prepared.statement_facts,
     )
     transformed = transformer.visit(module_ast)
     if root_freevars:
@@ -3124,6 +3373,7 @@ def maybe_transform_for_lowering(
     exec_globals[_INTERNAL_INDEX_ADD] = _index_add
     exec_globals[_INTERNAL_INDEX_SUB] = _index_sub
     exec_globals[transformer.tensor_store_helper_name] = _tensor_store
+    exec_globals[transformer._source_snapshot_name] = transformer._source_snapshot
     exec_globals[_INTERNAL_ATTACH_SOURCE_INFO] = _attach_source_info
     from ..tla_ast_decorators import (
         _internal_lazy_attribute,
@@ -3199,24 +3449,25 @@ def maybe_transform_for_lowering(
     return rewritten
 
 
-def validate_language_boundaries(fn: Callable[..., Any]) -> None:
+def validate_language_boundaries(
+    fn: Callable[..., Any],
+    *,
+    _prepared_source: _PreparedFunctionSource | None = None,
+) -> None:
     """Validate calls and class use reachable from one decorated function."""
 
-    try:
-        source_lines, first_lineno = inspect.getsourcelines(fn)
-    except (OSError, IOError, TypeError):
+    prepared = _prepared_source or _prepare_function_source(fn)
+    if prepared is None:
         raise SyntaxError("Tla DSL function source must be available for validation")
-    source = textwrap.dedent("".join(source_lines))
-    filename = inspect.getsourcefile(fn) or "<unknown>"
-    target = _find_function_def(ast.parse(source, filename=filename), fn.__name__)
-    if target is None:
+    if prepared.target is None:
         raise SyntaxError("Tla DSL function source could not be analyzed")
     _validate_language_boundaries(
         fn,
-        target=target,
-        source=source,
-        filename=filename,
-        line_offset=int(first_lineno) - 1,
+        target=prepared.target,
+        source=prepared.source_text,
+        filename=prepared.filename,
+        line_offset=prepared.line_offset,
+        statement_facts=prepared.statement_facts,
     )
 
 
@@ -3229,6 +3480,7 @@ def _validate_language_boundaries(
     line_offset: int,
     validated: set[int] | None = None,
     validating: set[int] | None = None,
+    statement_facts: _StatementFactsCache | None = None,
 ) -> None:
     """Validate the boundary between Python staging and DSL lowering.
 
@@ -3252,7 +3504,7 @@ def _validate_language_boundaries(
         symbols.update(closure.nonlocals)
         symbols.update(closure.builtins)
     local_names = _function_arg_names(target.args) | _assigned_names_from_statements(
-        target.body
+        target.body, statement_facts=statement_facts
     )
     aliases = {name: _UNKNOWN_LANGUAGE_VALUE for name in local_names}
     source_lines = source.splitlines()
@@ -3327,6 +3579,8 @@ def _validate_language_boundaries(
                 "recursive @tla.jit helper calls are not supported",
                 _RecursiveJitHelperError,
             )
+        if id(helper) in validated:
+            return
         try:
             helper_lines, helper_lineno = inspect.getsourcelines(helper)
         except (OSError, IOError, TypeError):
@@ -3643,9 +3897,14 @@ def _function_needs_frontend_transform(
     trusted_identities: _TrustedDslIdentities | None = None,
     *,
     is_root: bool = False,
+    child_plans: tuple[FunctionBlockPlan, ...] | None = None,
 ) -> bool:
     """Return whether *target* contains syntax handled by the frontend rewrite."""
 
+    # An authoritative nonempty plan already establishes the need to rewrite.
+    # An empty plan still needs expression, static-loop and diagnostic discovery.
+    if child_plans:
+        return True
     identities = trusted_identities or _trusted_dsl_identities()
     range_names = _tla_function_names_from_globals(global_symbols, "range", identities)
     range_constexpr_names = _tla_function_names_from_globals(
@@ -3657,12 +3916,14 @@ def _function_needs_frontend_transform(
     # Keep helper discovery aligned with the root frontend plan: an ``if`` or
     # ``while`` only needs PR-5 composition when it is dynamic control flow.
     # Static Python branches remain ordinary staging-time Python.
-    if _function_child_plans(
-        target,
-        lexical_shadow_names=lexical_shadows,
-        trusted_symbols=_trusted_dsl_symbols(global_symbols, identities),
-        global_symbols=global_symbols,
-    ):
+    if child_plans is None:
+        child_plans = _function_child_plans(
+            target,
+            lexical_shadow_names=lexical_shadows,
+            trusted_symbols=_trusted_dsl_symbols(global_symbols, identities),
+            global_symbols=global_symbols,
+        )
+    if child_plans:
         return True
 
     class Discovery(ast.NodeVisitor):
@@ -4371,7 +4632,9 @@ def _function_child_plans(
     lexical_shadow_names: set[str] | None = None,
     trusted_symbols: _TrustedDslSymbols,
     global_symbols: dict[str, Any] | None = None,
+    statement_facts: _StatementFactsCache | None = None,
 ) -> tuple[FunctionBlockPlan, ...]:
+    statement_facts = statement_facts or _StatementFactsCache()
     plans: list[FunctionBlockPlan] = []
     lexical_shadows = set(lexical_shadow_names or ())
     tla_range_names = set(trusted_symbols.range_names)
@@ -4405,7 +4668,7 @@ def _function_child_plans(
                     tla_module_aliases,
                     active_names | lexical_shadows,
                 )
-                active_names.update(_assigned_names(statement))
+                active_names.update(statement_facts.get(statement).assigned_names)
 
         def visit_statement(
             self,
@@ -4436,7 +4699,7 @@ def _function_child_plans(
                 )
                 if is_runtime_for:
                     self._record("for", statement)
-                target_names = _assigned_names(statement.target)
+                target_names = statement_facts.get(statement.target).assigned_names
                 loop_names = active_names | target_names
                 self._visit_regions(
                     (statement.body, statement.orelse),
@@ -4471,7 +4734,9 @@ def _function_child_plans(
                 with_names = set(active_names)
                 for item in statement.items:
                     if item.optional_vars is not None:
-                        with_names.update(_assigned_names(item.optional_vars))
+                        with_names.update(
+                            statement_facts.get(item.optional_vars).assigned_names
+                        )
                 self._visit_regions(
                     (statement.body,),
                     with_names,
@@ -4581,10 +4846,16 @@ def _align_function_child_plans(
     return membership
 
 
-def _assigned_names_from_statements(body: list[ast.stmt]) -> set[str]:
+def _assigned_names_from_statements(
+    body: list[ast.stmt], *, statement_facts: _StatementFactsCache | None = None
+) -> set[str]:
     assigned: set[str] = set()
     for stmt in body:
-        assigned.update(_assigned_names(stmt))
+        assigned.update(
+            _assigned_names(stmt)
+            if statement_facts is None
+            else statement_facts.get(stmt).assigned_names
+        )
     return assigned
 
 
@@ -4682,100 +4953,6 @@ def _has_nonlocal_or_global_declaration(node: ast.FunctionDef) -> bool:
     visitor = Visitor()
     visitor.visit(node)
     return visitor.found
-
-
-def _loaded_name_nodes_from_statements(body: list[ast.stmt]) -> dict[str, ast.Name]:
-    loaded: dict[str, ast.Name] = {}
-
-    class Visitor(ast.NodeVisitor):
-        def __init__(self) -> None:
-            self._comprehension_bindings: list[set[str]] = []
-
-        def visit_Name(self, name_node: ast.Name) -> None:
-            if isinstance(name_node.ctx, ast.Load) and not any(
-                name_node.id in bindings for bindings in self._comprehension_bindings
-            ):
-                loaded.setdefault(name_node.id, name_node)
-
-        def visit_FunctionDef(self, function_node: ast.FunctionDef) -> None:
-            del function_node
-
-        def visit_AsyncFunctionDef(self, function_node: ast.AsyncFunctionDef) -> None:
-            del function_node
-
-        def visit_ClassDef(self, class_node: ast.ClassDef) -> None:
-            del class_node
-
-        def visit_Lambda(self, lambda_node: ast.Lambda) -> None:
-            del lambda_node
-
-        def visit_ListComp(self, comp_node: ast.ListComp) -> None:
-            self._visit_comprehension(comp_node, comp_node.elt)
-
-        def visit_SetComp(self, comp_node: ast.SetComp) -> None:
-            self._visit_comprehension(comp_node, comp_node.elt)
-
-        def visit_DictComp(self, comp_node: ast.DictComp) -> None:
-            self._visit_comprehension(comp_node, comp_node.key, comp_node.value)
-
-        def visit_GeneratorExp(self, comp_node: ast.GeneratorExp) -> None:
-            self._visit_comprehension(comp_node, comp_node.elt)
-
-        def _visit_comprehension(
-            self,
-            comp_node: ast.ListComp | ast.SetComp | ast.DictComp | ast.GeneratorExp,
-            *values: ast.expr,
-        ) -> None:
-            self._comprehension_bindings.append(set())
-            try:
-                for generator in comp_node.generators:
-                    self.visit(generator.iter)
-                    self._comprehension_bindings[-1].update(
-                        _assigned_names(generator.target)
-                    )
-                    for condition in generator.ifs:
-                        self.visit(condition)
-                for value in values:
-                    self.visit(value)
-            finally:
-                self._comprehension_bindings.pop()
-
-    for stmt in body:
-        Visitor().visit(stmt)
-    return loaded
-
-
-def _loaded_names_from_statements(body: list[ast.stmt]) -> set[str]:
-    return set(_loaded_name_nodes_from_statements(body))
-
-
-def _invoked_active_names_from_statements(
-    body: list[ast.stmt], active_names: set[str]
-) -> set[str]:
-    invoked: set[str] = set()
-
-    class Visitor(ast.NodeVisitor):
-        def visit_Call(self, call_node: ast.Call) -> None:
-            base_name = _call_base_name(call_node.func)
-            if base_name in active_names:
-                invoked.add(base_name)
-            self.generic_visit(call_node)
-
-        def visit_FunctionDef(self, function_node: ast.FunctionDef) -> None:
-            del function_node
-
-        def visit_AsyncFunctionDef(self, function_node: ast.AsyncFunctionDef) -> None:
-            del function_node
-
-        def visit_ClassDef(self, class_node: ast.ClassDef) -> None:
-            del class_node
-
-        def visit_Lambda(self, lambda_node: ast.Lambda) -> None:
-            del lambda_node
-
-    for stmt in body:
-        Visitor().visit(stmt)
-    return invoked
 
 
 class _DynamicControlFlowPolicy(ast.NodeVisitor):

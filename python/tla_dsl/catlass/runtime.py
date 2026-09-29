@@ -29,6 +29,7 @@ from .base_dsl.op import (
     _bind_frontend_category,
     _bind_frontend_value,
     _current_frontend_state,
+    _frame_source_info,
     _frontend_emission,
     _has_enclosing_region,
     _in_simt_vec_func,
@@ -242,18 +243,11 @@ def _capture_caller_location() -> Any:
         while frame is not None:
             filename = frame.f_code.co_filename
             if filename != __file__:
-                frame_info = inspect.getframeinfo(frame)
-                lineno = int(getattr(frame_info, "lineno", 0) or 0)
-                col_offset = 0
-                positions = getattr(frame_info, "positions", None)
-                if positions is not None:
-                    col_offset = int(getattr(positions, "col_offset", 0) or 0)
+                filename, function, lineno, col_offset = _frame_source_info(frame)
                 if lineno <= 0:
                     return mlir_ir.Location.unknown()
-                file_loc = mlir_ir.Location.file(
-                    frame_info.filename, lineno, col_offset
-                )
-                return mlir_ir.Location.name(frame_info.function, childLoc=file_loc)
+                file_loc = mlir_ir.Location.file(filename, lineno, col_offset)
+                return mlir_ir.Location.name(function, childLoc=file_loc)
             frame = frame.f_back
     finally:
         del frame

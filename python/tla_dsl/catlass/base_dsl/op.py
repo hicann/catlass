@@ -12,6 +12,7 @@ import inspect
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from functools import wraps
+from types import FrameType
 from typing import TYPE_CHECKING, Any, Callable, Iterator, get_type_hints
 
 from catlass._mlir import ir as mlir_ir  # type: ignore[assignment]
@@ -173,16 +174,16 @@ def _capture_user_loc() -> mlir_ir.Location | None:
         and frame.f_back.f_back is not None
         else None
     )
-    if caller is None:
-        return None
-    frame_info = inspect.getframeinfo(caller)
-    positions = getattr(frame_info, "positions", None)
-    col_offset = int(getattr(positions, "col_offset", 0) or 0)
-    lineno = int(getattr(positions, "lineno", frame_info.lineno) or frame_info.lineno)
-    if lineno <= 0:
-        return mlir_ir.Location.unknown()
-    file_loc = mlir_ir.Location.file(frame_info.filename, lineno, col_offset)
-    return mlir_ir.Location.name(frame_info.function, childLoc=file_loc)
+    try:
+        if caller is None:
+            return None
+        filename, function, lineno, col_offset = _frame_source_info(caller)
+        if lineno <= 0:
+            return mlir_ir.Location.unknown()
+        file_loc = mlir_ir.Location.file(filename, lineno, col_offset)
+        return mlir_ir.Location.name(function, childLoc=file_loc)
+    finally:
+        del caller, frame
 
 
 def _record_category(value: Any, category: str) -> None:
@@ -219,3 +220,15 @@ def dsl_user_op(op_func: Callable[..., Any]) -> Callable[..., Any]:
         return result
 
     return wrapper
+
+
+def _frame_source_info(frame: FrameType) -> tuple[str, str, int, int]:
+    """Read source positions without fetching unused source lines."""
+    info = inspect.getframeinfo(frame, context=0)
+    positions = getattr(info, "positions", None)
+    return (
+        info.filename,
+        info.function,
+        int(getattr(positions, "lineno", info.lineno) or info.lineno),
+        int(getattr(positions, "col_offset", 0) or 0),
+    )

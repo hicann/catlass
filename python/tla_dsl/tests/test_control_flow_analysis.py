@@ -7,6 +7,7 @@ import sys
 import textwrap
 from dataclasses import FrozenInstanceError
 from types import ModuleType
+from unittest.mock import patch
 
 import pytest
 
@@ -14,6 +15,7 @@ import catlass.tla as catlass_module
 import catlass.core_api as core_api
 import catlass.tla_ast_decorators as ast_decorators
 from catlass.base_dsl.ast_preprocessor import (
+    _BlockLastReadIndex,
     _cf_symbol_check,
     _ControlFlowAnalyzer,
     _DynamicConditionValidator,
@@ -22,9 +24,11 @@ from catlass.base_dsl.ast_preprocessor import (
     FunctionPlan,
     _function_needs_frontend_transform,
     _FunctionAnalyzer,
-    _loaded_names_from_statements,
     _root_function_scope_facts,
     _scope_facts_for_transform,
+    _SourceSnapshot,
+    _source_text_for_info,
+    _StatementFactsCache,
     _trusted_dsl_identities,
     maybe_transform_for_lowering,
 )
@@ -44,6 +48,85 @@ from catlass.tla_ast_decorators import (
 
 def _parse_first_statement(source: str) -> ast.stmt:
     return ast.parse(source).body[0]
+
+
+def test_statement_facts_preserve_source_reads_after_rewrite() -> None:
+    statement = _parse_first_statement(
+        "result = [transform(item, other) for item in items "
+        "for other in expand(item) if predicate(other)]"
+    )
+    cache = _StatementFactsCache()
+    original = cache.get(statement)
+    assert original.read_names == {"transform", "items", "expand", "predicate"}
+    assert original.assigned_names == {"result"}
+    assert original.invoked_names == {"transform", "expand", "predicate"}
+
+    # Rewriting retains the source node's identity and its original facts.
+    statement.value = ast.parse("replacement(seed)", mode="eval").body
+    assert cache.get(statement) is original
+
+    generated = ast.Assign(targets=statement.targets, value=statement.value)
+    rewritten = cache.get(generated)
+    assert rewritten.read_names == {"replacement", "seed"}
+    assert rewritten.assigned_names == {"result"}
+    assert rewritten.invoked_names == {"replacement"}
+    assert cache.get(statement).read_names == {
+        "transform", "items", "expand", "predicate"
+    }
+
+
+def test_block_last_read_index_respects_statement_boundaries_and_scopes() -> None:
+    body = ast.parse(
+        "seed = initial\n"
+        "if flag:\n"
+        "    consume(seed)\n"
+        "result = [item for item in items]\n"
+        "sink(result)\n"
+        "seed = replacement\n"
+        "def helper():\n"
+        "    return seed\n"
+    ).body
+    index = _BlockLastReadIndex.build(body, statement_facts=_StatementFactsCache())
+    candidates = {"seed", "flag", "consume", "item", "items", "result", "missing"}
+
+    assert index.used_after(0, candidates) == {
+        "seed", "flag", "consume", "items", "result"
+    }
+    assert index.used_after(1, candidates) == {"items", "result"}
+    assert index.used_after(2, candidates) == {"result"}
+    # A later store or nested function body does not extend a variable's last read.
+    assert index.used_after(3, candidates) == set()
+    assert index.used_after(len(body) - 1, candidates) == set()
+    assert _BlockLastReadIndex.build([]).used_after(-1, candidates) == set()
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ("前缀 = '值'; 结果 = 调用(变量)\n", "调用(变量)"),
+        ("前缀 = '值'; 结果 = (\n    变量\n    + 1\n)\n", "变量"),
+        ("前缀 = '值'\n\f结果 = 调用(\n    变量,\n)\n", "调用("),
+    ],
+    ids=["utf8-columns", "multiline", "form-feed"],
+)
+def test_source_snapshot_extracts_and_caches_text_without_source_file(
+    source: str, expected: str, tmp_path
+) -> None:
+    path = tmp_path / "kernel.py"
+    path.write_text(source, encoding="utf-8")
+    node = ast.parse(source).body[-1].value
+    span = (node.lineno, node.col_offset, node.end_lineno, node.end_col_offset)
+
+    with patch.object(ast, "get_source_segment", wraps=ast.get_source_segment) as extract:
+        snapshot = _SourceSnapshot(path.read_text(encoding="utf-8"))
+        info = {"filename": str(path), "_source_ref": (snapshot, span)}
+        path.unlink()
+        assert "source" not in info
+        extract.assert_not_called()
+        assert _source_text_for_info(info) == expected
+        assert info["source"] == expected
+        assert _source_text_for_info(info) == expected
+        extract.assert_called_once()
 
 
 def _validate_condition(source: str, *, construct: str = "if") -> None:
@@ -2374,19 +2457,6 @@ def test_control_flow_analyzer_does_not_carry_comprehension_target() -> None:
 
     assert plan.assigned_names == frozenset({"values"})
     assert plan.carried_names == ("values",)
-
-
-def test_following_loads_ignore_sequential_comprehension_bindings() -> None:
-    statements = ast.parse(
-        "values = [(row, column) for row in rows for column in row]\n"
-        "consume(outer)\n"
-    ).body
-
-    assert _loaded_names_from_statements(statements) == {
-        "rows",
-        "consume",
-        "outer",
-    }
 
 
 def test_compile_time_for_destructuring_activates_every_target() -> None:

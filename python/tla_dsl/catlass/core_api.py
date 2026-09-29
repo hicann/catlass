@@ -2828,7 +2828,7 @@ def _pack_tree(
 ) -> tuple[TlaIndexTreeType, list[mlir_ir.Value]]:
     type_tree: list[Any] = []
 
-    def pack_one(c: Any) -> tuple[str, list[mlir_ir.Value], Any]:
+    def pack_one(c: Any) -> tuple[list[mlir_ir.Value], Any]:
         if isinstance(c, list):
             _op_error(
                 op_name,
@@ -2839,24 +2839,21 @@ def _pack_tree(
                 _op_error(op_name, "expected non-empty nested tuple in tree")
             child_packs = [pack_one(x) for x in c]
             dyns: list[mlir_ir.Value] = []
-            for _, d, _ in child_packs:
+            for d, _ in child_packs:
                 dyns.extend(d)
             return (
-                f"({','.join(ty for ty, _, _ in child_packs)})",
                 dyns,
-                tuple(tree for _, _, tree in child_packs),
+                tuple(tree for _, tree in child_packs),
             )
         _require_index(op_name, "leaf", c, 0)
         const = _const_int_value(c)
         if const is not None:
-            return (str(const), [], int(const))
-        return ("?", [_as_index_value(c)], None)
+            return ([], int(const))
+        return ([_as_index_value(c)], None)
 
-    parts: list[str] = []
     dyn: list[mlir_ir.Value] = []
     for c in components:
-        frag, d, tree = pack_one(c)
-        parts.append(frag)
+        d, tree = pack_one(c)
         dyn.extend(d)
         type_tree.append(tree)
     return TlaIndexTreeType(kind, tuple(type_tree)), dyn

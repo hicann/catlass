@@ -829,6 +829,10 @@ class Numeric(metaclass=NumericMeta, is_abstract=True):
         # User-facing Numerics do not include MLIR ``index``; map to Int32.
         if isinstance(ty, mlir_ir.IndexType):
             token = "i32"
+        elif isinstance(ty, mlir_ir.IntegerType):
+            int_type = mlir_ir.IntegerType(ty)
+            prefix = "u" if int_type.is_unsigned else "i"
+            token = f"{prefix}{int_type.width}"
         elif isinstance(ty, mlir_ir.F16Type):
             token = "f16"
         elif isinstance(ty, mlir_ir.BF16Type):
@@ -839,18 +843,14 @@ class Numeric(metaclass=NumericMeta, is_abstract=True):
             token = "f8e4m3fn"
         elif isinstance(ty, mlir_ir.Float8E5M2Type):
             token = "f8e5m2"
-        elif str(ty) in ("!tla.f4e2m1", "!tla.f4e1m2", "!tla.f8e8m0"):
-            # Dialect types, so there is no mlir_ir class to isinstance against;
-            # the printed mnemonic is the token.
-            token = str(ty).removeprefix("!tla.")
         elif isinstance(ty, mlir_ir.F64Type):
             raise TypeError(f"unsupported element type for Numeric: {ty!r}")
-        elif isinstance(ty, mlir_ir.IntegerType):
-            int_type = mlir_ir.IntegerType(ty)
-            prefix = "u" if int_type.is_unsigned else "i"
-            token = f"{prefix}{int_type.width}"
         else:
-            raise TypeError(f"unsupported element type for Numeric: {ty!r}")
+            # Dialect floats have no mlir_ir class for isinstance dispatch.
+            printed = str(ty)
+            if printed not in ("!tla.f4e2m1", "!tla.f4e1m2", "!tla.f8e8m0"):
+                raise TypeError(f"unsupported element type for Numeric: {ty!r}")
+            token = printed.removeprefix("!tla.")
         try:
             return _TOKEN_TO_NUMERIC[token]
         except KeyError as exc:

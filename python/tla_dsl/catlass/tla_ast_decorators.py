@@ -11,6 +11,7 @@ from typing import Any, Callable, Iterator
 
 from . import runtime as _runtime
 from .base_dsl.ast_helpers import FrontendRange
+from .base_dsl.ast_preprocessor import _source_text_for_info
 from .base_dsl.utils import tree_utils
 from .frontend_diagnostics import (
     FrontendDiagnosticError,
@@ -47,7 +48,7 @@ def _internal_unknown_effect_call(thunk: Callable[[], Any]) -> Any:
     error.filename = str(info.get("filename") or "<unknown>")
     error.lineno = int(info.get("lineno") or 0)
     error.offset = int(info.get("col_offset") or 0) + 1
-    error.text = str(info.get("source") or "")
+    error.text = _source_text_for_info(info)
     raise error
 
 

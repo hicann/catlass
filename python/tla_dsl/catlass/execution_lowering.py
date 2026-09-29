@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import dataclasses
 import inspect
-import linecache
 from dataclasses import dataclass, field as dataclass_field
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -16,9 +14,8 @@ from . import runtime
 from . import tla_ast_decorators as ast_decorators
 from .base_dsl.ast_preprocessor import (
     _RecursiveJitHelperError,
-    maybe_transform_for_lowering,
+    _preprocess_for_lowering,
     reject_user_class_value,
-    validate_language_boundaries,
 )
 from .base_dsl import BaseDSL, DSLLocation
 from .base_dsl.runtime.argument_tree import (
@@ -174,8 +171,7 @@ def lower_jit_to_tlair_module_by_execution(
         )
     if kind != "kernel" and auto_sync is not None:
         raise TlaLoweringError("auto_sync is supported only for tla.kernel")
-    validate_language_boundaries(fn)
-    fn = maybe_transform_for_lowering(
+    fn = _preprocess_for_lowering(
         fn,
         internal_for=ast_decorators._internal_frontend_for,
         internal_region=runtime._internal_frontend_region,
@@ -265,7 +261,7 @@ def lower_jit_to_tlair_module_by_execution(
 def _transform_jit_helper(helper: Any) -> Any:
     """Transform one genuine helper with the same frontend hooks as its root."""
 
-    return maybe_transform_for_lowering(
+    return _preprocess_for_lowering(
         unwrap_jit_callable(helper),
         internal_for=ast_decorators._internal_frontend_for,
         internal_region=runtime._internal_frontend_region,
@@ -665,7 +661,6 @@ def _build_tla_func(
                 # Helpers discovered only while staging a factory or Python
                 # forwarding call have not passed the root-function boundary
                 # walk. Validate them before their first transformation.
-                validate_language_boundaries(unwrap_jit_callable(helper))
                 transformed = _transform_jit_helper(helper)
 
                 def guarded_helper(*args: Any, **kwargs: Any) -> Any:
