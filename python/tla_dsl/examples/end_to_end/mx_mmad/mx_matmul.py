@@ -476,6 +476,50 @@ def _random_operands(m: int, n: int, k: int, spread: float):
     )
 
 
+def _canImplement(args: argparse.Namespace) -> None:
+    """Reject inputs that violate the README constraints before any real work.
+
+    The README states what a legal mx_mmad call is; mirror those rules here so a
+    bad shape, layout or case fails fast up front instead of surfacing later as
+    an obscure device-side error.
+    """
+    is_fp4 = args.fp4_case is not None
+
+    # Element-width consistency: fp8 never multiplies fp4. Within one family any
+    # encoding may pair (fp8 x fp8, fp4 x fp4), but the family is fixed by case.
+    if is_fp4:
+        if args.fp4_case not in _FP4_FORMATS:
+            raise SystemExit(f"unknown fp4 encoding: {args.fp4_case!r}")
+        if args.dtype_a is not None or args.dtype_b is not None:
+            raise SystemExit(
+                "fp4 case cannot be combined with fp8 operand dtypes: "
+                f"fp4_case={args.fp4_case!r} dtype_a={args.dtype_a!r} "
+                f"dtype_b={args.dtype_b!r}"
+            )
+    else:
+        if args.dtype_a not in _FP8 or args.dtype_b not in _FP8:
+            raise SystemExit(
+                "fp8 dtype pair must each be one of "
+                f"{', '.join(sorted(_FP8))}, got "
+                f"dtype_a={args.dtype_a!r} dtype_b={args.dtype_b!r}"
+            )
+
+    # fp4 layout is fixed: A row, B col. Packed fp4 pairs two elements per byte
+    # along K, and the fractal layout requires that pairing to be the contiguous
+    # axis, so an fp4 operand can only be handed over with K contiguous: a
+    # row-major A (M, K/2) or a column-major B (N, K/2). fp8 has no such
+    # constraint -- every element is a whole byte -- so it takes all four
+    # combinations.
+    if is_fp4 and (
+        getattr(args, "layout_a", "row") != "row"
+        or getattr(args, "layout_b", "col") != "col"
+    ):
+        raise SystemExit(
+            "packed fp4 requires --layout-a row --layout-b col: the two-per-byte "
+            "packing runs along K and must be the contiguous axis"
+        )
+
+
 def run(args: argparse.Namespace) -> int:
     from common import compare, create_tla_tensor, get_block_num
 
@@ -486,25 +530,12 @@ def run(args: argparse.Namespace) -> int:
     layout_a = getattr(args, "layout_a", "row")
     layout_b = getattr(args, "layout_b", "col")
 
+    _canImplement(args)
+
     torch.npu.set_device(args.device)
     m, n, k = args.m, args.n, args.k
     tm, tn, tk = MX_L1_TM, MX_L1_TN, MX_L1_TK
     is_fp4 = args.fp4_case is not None
-
-    # Packed fp4 pairs two elements per byte along K, and the fractal layout
-    # requires that pairing to be the contiguous one, so an fp4 operand can only
-    # be handed over with K contiguous: a row-major A (M, K/2) or a column-major
-    # B (N, K/2). The other two orientations would put M or N contiguous and
-    # split a nibble pair across the stride. fp8 has no such constraint -- every
-    # element is a whole byte -- so it takes all four combinations.
-    if is_fp4 and (
-        getattr(args, "layout_a", "row") != "row"
-        or getattr(args, "layout_b", "col") != "col"
-    ):
-        raise SystemExit(
-            "packed fp4 requires --layout-a row --layout-b col: the two-per-byte "
-            "packing runs along K and must be the contiguous axis"
-        )
 
     if is_fp4:
         fmt = args.fp4_case

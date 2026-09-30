@@ -34,6 +34,8 @@ Recommended range:
 - `m ≥ 256, n ≥ 256, k ≥ 256`
 - The k axis is a multiple of 32, so that no scale group is partially filled.
 
+## Usage Example
+
 ### Command Line Parameters
 
 ```bash
