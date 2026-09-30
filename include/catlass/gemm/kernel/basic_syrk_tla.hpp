@@ -98,7 +98,16 @@ public:
 
     static bool CanImplement(const Arguments& args)
     {
-        return args.problemShape.m() == args.problemShape.n();
+        // Delivery limits for host reference computation and comparison.
+        // Check shape before allocation; device pointers are populated afterwards.
+        constexpr uint32_t MAX_M = 8192;
+        constexpr uint32_t MAX_K = 65536;
+        constexpr uint64_t MAX_INPUT_ELEMENTS = uint64_t{MAX_M} * MAX_M;
+        const uint32_t m = args.problemShape.m();
+        const uint32_t k = args.problemShape.k();
+        // Mirrored stores require a square output tile grid.
+        return L1_TILE_M == L1_TILE_N && m == args.problemShape.n() && m > 0 && m <= MAX_M && k > 0 && k <= MAX_K &&
+               uint64_t{m} * k <= MAX_INPUT_ELEMENTS;
     }
 
     static size_t GetWorkspaceSize(const Arguments& /*args*/)
