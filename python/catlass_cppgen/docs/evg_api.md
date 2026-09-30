@@ -89,6 +89,8 @@ print(evg_str)        # using Result = Catlass::Epilogue::Fusion::VisitorAuStore
 - 在创建kernel时直接通过 `Gemm(evg_config=...)` 传入，参考示例：
 
 ```python
+from catlass_cppgen.op.gemm import Gemm
+
 evg_config = {
     "fn_src": "def epilogue(accum, bias):\n    return relu(accum + bias)",
     "example_inputs": {"accum": ..., "bias": ..., "result": ...},
