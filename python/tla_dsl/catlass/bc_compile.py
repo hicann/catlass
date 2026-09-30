@@ -13,6 +13,7 @@ import os
 import struct
 import subprocess
 import time
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -234,7 +235,7 @@ def compile_stub(cpp: Path, out_bc: Path, core_type: str, cfg: BCConfig) -> None
             args.extend(["-DASCENDC_DUMP", "-DONE_CORE_DUMP_SIZE=1048576"])
 
     args.extend([str(cpp), "-emit-llvm", "-c", "-o", str(out_bc)])
-    subprocess.run(args, check=True)
+    subprocess.run(args, check=True, capture_output=True, text=True)
 
 
 # ---------------------------------------------------------------------------
@@ -255,43 +256,62 @@ def link_bc(inputs: list[Path], output: Path, cfg: BCConfig) -> None:
 # ---------------------------------------------------------------------------
 
 
-def build_meta_op(core_type: str, cache: Path, cfg: BCConfig) -> Path:
-    """Compile all stubs for *core_type*, link into ``meta_op.*.bc``."""
-    output_name = f"meta_op.{core_type}.{cfg.cce_arch}.bc"
-    linked_path = cache / output_name
-    if linked_path.exists():
-        return linked_path.resolve()
+def build_meta_op(core_types: list[str], cache: Path, cfg: BCConfig) -> None:
+    """Compile all stubs for all *core_type*, link into ``meta_op.*.bc``."""
+    workers = max(1, min(8, os.cpu_count() or 1))
+    reslts: list[tuple[Path, "Future[None]"]] = []
+    link_individuals: dict[Path, list[Path]] = {}
+    link_path: dict[Path, Path] = {}
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        for core_type in core_types:
+            link_individuals[core_type] = []
+            output_name = f"meta_op.{core_type}.{cfg.cce_arch}.bc"
+            linked_path = cache / output_name
+            if linked_path.exists():
+                continue
 
-    src_dir = cfg.paths.bc_stubs / _SOURCE_SUBDIR[core_type]
-    if not src_dir.is_dir():
-        raise RuntimeError(f"Stub source directory not found: {src_dir}")
-    src_dirs = [src_dir]
-    for shared in _SHARED_SUBDIRS:
-        shared_dir = cfg.paths.bc_stubs / shared
-        if shared_dir.is_dir():
-            src_dirs.append(shared_dir)
+            src_dir = cfg.paths.bc_stubs / _SOURCE_SUBDIR[core_type]
+            if not src_dir.is_dir():
+                raise RuntimeError(f"Stub source directory not found: {src_dir}")
+            src_dirs = [src_dir]
+            for shared in _SHARED_SUBDIRS:
+                shared_dir = cfg.paths.bc_stubs / shared
+                if shared_dir.is_dir():
+                    src_dirs.append(shared_dir)
 
-    individual: list[Path] = []
-    seen: dict[str, Path] = {}
-    for cpp in sorted(p for d in src_dirs for p in d.glob("*.cpp")):
-        # The per-file bitcode is named from the stem alone, so two stubs of the
-        # same name in different directories would silently overwrite each
-        # other's .bc. Fail loudly instead.
-        if cpp.stem in seen:
-            raise RuntimeError(
-                f"duplicate bc stub name '{cpp.stem}.cpp': {seen[cpp.stem]} and {cpp}"
-            )
-        seen[cpp.stem] = cpp
-        bc_name = cpp.stem + f".{core_type}.{cfg.cce_arch}.bc"
-        bc_path = cache / bc_name
-        if not bc_path.exists():
-            compile_stub(cpp, bc_path, core_type, cfg)
-        individual.append(bc_path)
+            seen: dict[str, Path] = {}
+            for cpp in sorted(p for d in src_dirs for p in d.glob("*.cpp")):
+                # The per-file bitcode is named from the stem alone, so two stubs of the
+                # same name in different directories would silently overwrite each
+                # other's .bc. Fail loudly instead.
+                if cpp.stem in seen:
+                    raise RuntimeError(
+                        f"duplicate bc stub name '{cpp.stem}.cpp': {seen[cpp.stem]} and {cpp}"
+                    )
+                seen[cpp.stem] = cpp
+                bc_name = cpp.stem + f".{core_type}.{cfg.cce_arch}.bc"
+                bc_path = cache / bc_name
+                if not bc_path.exists():
+                    reslts.append(
+                        (
+                            bc_path,
+                            pool.submit(compile_stub, cpp, bc_path, core_type, cfg),
+                        )
+                    )
+                link_individuals[core_type].append(bc_path)
+                link_path[core_type] = linked_path
 
-    if individual:
-        link_bc(individual, linked_path, cfg)
+        for bc_path, fut in reslts:
+            try:
+                fut.result()
+            except Exception:
+                print(f"build {bc_path} failed")
+                bc_path.unlink(missing_ok=True)  # remove failed .bc
+                raise
 
-    return linked_path.resolve()
+    for core_type, individual in link_individuals.items():
+        if individual:
+            link_bc(individual, link_path[core_type], cfg)
 
 
 # ---------------------------------------------------------------------------
@@ -339,8 +359,7 @@ def _compile_all(cfg: BCConfig, cache: Path) -> None:
     up-to-date cache is not recompiled."""
     cache.mkdir(parents=True, exist_ok=True)
 
-    for core_type in ("aic", "aiv"):
-        build_meta_op(core_type, cache, cfg)
+    build_meta_op(("aic", "aiv"), cache, cfg)
 
     for core_type in ("aic", "aiv"):
         subdir = _SOURCE_SUBDIR.get(core_type, "Cube")
