@@ -114,7 +114,9 @@ static void Allocate(HostDeviceBuffer& buffer, uint64_t size)
 static void Load(HostDeviceBuffer& buffer, const string& path, uint64_t size)
 {
     Allocate(buffer, size);
-    ReadFile(path, buffer.host, size);
+    if (!ReadFile(path, buffer.host, size)) {
+        throw runtime_error("failed to read input file: " + path);
+    }
     ACL_CHECK(aclrtMemcpy(buffer.device, size, buffer.host, size, ACL_MEMCPY_HOST_TO_DEVICE));
 }
 
@@ -138,6 +140,22 @@ static bool Run(const Options& options)
 
     uint32_t coreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
     bool sharedPaged = options.cacheMode == 0;
+    XAttentionTiling::Context context;
+    context.batch = options.batch;
+    context.beamSize = options.beamSize;
+    context.numHeads = options.numHeads;
+    context.kvHeads = options.kvHeads;
+    context.embeddingSize = options.embeddingSize;
+    context.sharedKvSeqLen = options.sharedKvSeqLen;
+    context.maxDecodeStep = options.maxDecodeStep;
+    context.coreNum = coreNum;
+    context.sharedPaged = sharedPaged;
+
+    XAttentionTilingData tilingData;
+    uint64_t workspaceSize = 0;
+    uint64_t tilingKey = XAttentionTiling::GetTiling(context, tilingData, workspaceSize);
+    tilingKey += options.dataType == "bf16" ? 2 : 0;
+
     uint32_t blockSize = XAttentionTiling::PAGED_BLOCK_SIZE;
     uint32_t maxBlocksPerBatch =
         XAttentionTiling::CeilDivHost(options.sharedKvSeqLen, XAttentionTiling::PAGED_BLOCK_SIZE);
@@ -178,21 +196,6 @@ static bool Run(const Options& options)
         sharedKvLens, options.dataPath + "/shared_kv_lens.bin", static_cast<uint64_t>(options.batch) * sizeof(int32_t));
     Load(decodeStep, options.dataPath + "/decode_step.bin", sizeof(int32_t));
 
-    XAttentionTiling::Context context;
-    context.batch = options.batch;
-    context.beamSize = options.beamSize;
-    context.numHeads = options.numHeads;
-    context.kvHeads = options.kvHeads;
-    context.embeddingSize = options.embeddingSize;
-    context.sharedKvSeqLen = options.sharedKvSeqLen;
-    context.maxDecodeStep = options.maxDecodeStep;
-    context.coreNum = coreNum;
-    context.sharedPaged = sharedPaged;
-
-    XAttentionTilingData tilingData;
-    uint64_t workspaceSize = 0;
-    uint64_t tilingKey = XAttentionTiling::GetTiling(context, tilingData, workspaceSize);
-    tilingKey += options.dataType == "bf16" ? 2 : 0;
     cout << "tilingKey: " << tilingKey << ", workspace: " << workspaceSize << " bytes\n";
 
     uint8_t* outputDevice{nullptr};
@@ -235,7 +238,9 @@ static bool Run(const Options& options)
     ACL_CHECK(aclrtSynchronizeStream(stream));
 
     vector<float> golden(outputElements);
-    ReadFile(options.dataPath + "/golden.bin", golden.data(), outputElements * sizeof(float));
+    if (!ReadFile(options.dataPath + "/golden.bin", golden.data(), outputElements * sizeof(float))) {
+        throw runtime_error("failed to read golden.bin");
+    }
     vector<uint64_t> errorIndices;
     if (options.dataType == "half") {
         vector<fp16_t> output(outputElements);

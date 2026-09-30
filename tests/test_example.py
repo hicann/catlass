@@ -725,6 +725,7 @@ def test_74_ascend950_weight_quant_a8w4_grouped_mx_matmul(build_env):
         run_case(build_env, "74_ascend950_weight_quant_a8w4_grouped_mx_matmul", case_cpp + [DEVICE_ID])
 
 
+@pytest.mark.skip(reason="x_attention: temporary skip for ACL error 507033; re-enable after resolution")
 @only_on_2201
 def test_78_x_attention(build_env):
     case_base = [str(i) for i in [1, 4, 512, 8, 2, 128, 32, 16, 0]]

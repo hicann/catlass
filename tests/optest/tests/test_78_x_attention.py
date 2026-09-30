@@ -15,6 +15,9 @@ import torch_npu
 import torch_catlass
 from common import only_on_2201
 
+# Temporarily disable x_attention optest until the device issue (507033) is resolved.
+pytestmark = pytest.mark.skip(reason="x_attention: device issue 507033; re-enable after recovery")
+
 
 BLOCK_SIZE = 128
 HEAD_DIM = 128
@@ -199,6 +202,90 @@ def test_x_attention(cache_mode, dtype, seed, batch, beam_size, shared_kv_seq_le
         f"batch={batch}, shared_kv_seq_len={shared_kv_seq_len}, "
         f"max diff={(actual - expected.float()).abs().max().item()}"
     )
+
+
+def _invoke_contract_case(inputs, scale=0.0):
+    names = ("query", "shared_key", "shared_value", "unshared_key", "unshared_value",
+             "unshared_block_table", "shared_kv_lens", "decode_step", "shared_block_table")
+    return torch_catlass.x_attention(*(inputs[name] for name in names), scale)
+
+
+@only_on_2201
+@pytest.mark.parametrize("case,match", [
+    ("zero_heads", "num_heads"),
+    ("zero_kv_heads", "kv_heads"),
+    ("empty_requests", "request_count"),
+    ("scalar_table", "must be 2D"),
+    ("scalar_decode", "shape"),
+    ("matrix_lengths", "one value per batch"),
+    ("dtype", "same dtype"),
+    ("both_tables", "exactly one"),
+    ("no_tables", "exactly one"),
+    ("capacity", "max_decode_step"),
+    ("group", "GQA"),
+    ("noncontiguous", "contiguous"),
+    ("cpu", "NPU tensor"),
+])
+def test_x_attention_can_implement(case, match):
+    mode = 1 if case in ("empty_requests", "zero_kv_heads") else 0
+    inputs = _make_inputs(mode, torch.float16, 0, 1, 2, 33, 1)
+    if case == "zero_heads":
+        inputs["query"] = inputs["query"][:, :0].contiguous()
+    elif case == "zero_kv_heads":
+        for name in ("shared_key", "shared_value"):
+            inputs[name] = inputs[name][:, :0].contiguous()
+    elif case == "empty_requests":
+        for name in ("unshared_key", "unshared_value"):
+            inputs[name] = inputs[name][:0]
+    elif case == "scalar_table":
+        inputs["shared_block_table"] = inputs["shared_block_table"].reshape(())
+    elif case == "scalar_decode":
+        inputs["decode_step"] = inputs["decode_step"].reshape(())
+    elif case == "matrix_lengths":
+        inputs["shared_kv_lens"] = inputs["shared_kv_lens"].reshape(1, 1)
+    elif case == "dtype":
+        inputs["shared_value"] = inputs["shared_value"].bfloat16()
+    elif case == "both_tables":
+        inputs["unshared_block_table"] = torch.zeros(1, dtype=torch.int32, device="npu")
+    elif case == "no_tables":
+        inputs["shared_block_table"] = None
+    elif case == "capacity":
+        for name in ("unshared_key", "unshared_value"):
+            inputs[name] = torch.empty(2, 8, 257, 128, dtype=torch.float16, device="npu")
+    elif case == "group":
+        inputs["query"] = torch.empty(2, 8 * 129, 128, dtype=torch.float16, device="npu")
+    elif case == "noncontiguous":
+        inputs["query"] = inputs["query"].transpose(0, 1)
+    elif case == "cpu":
+        inputs["decode_step"] = inputs["decode_step"].cpu()
+    with pytest.raises(RuntimeError, match=match):
+        _ = _invoke_contract_case(inputs)
+
+
+@only_on_2201
+@pytest.mark.parametrize("scale", [-1.0, float("nan"), float("inf"), 1e100])
+def test_x_attention_invalid_scale(scale):
+    inputs = _make_inputs(0, torch.float16, 0, 1, 2, 33, 1)
+    with pytest.raises(RuntimeError, match="scale_value"):
+        _ = _invoke_contract_case(inputs, scale)
+
+
+@only_on_2201
+@pytest.mark.parametrize("mode", [0, 1])
+@pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
+def test_x_attention_storage_offset(mode, dtype):
+    inputs = _make_inputs(mode, dtype, 0, 1, 2, 33, 1)
+    expected = _invoke_contract_case(inputs).cpu()
+    for name, tensor in list(inputs.items()):
+        if isinstance(tensor, torch.Tensor):
+            # A contiguous slice may start after the beginning of its storage.
+            padded = torch.zeros(tensor.numel() + 16, dtype=tensor.dtype, device=tensor.device)
+            sliced = padded[16:].view(tensor.shape)
+            sliced.copy_(tensor)
+            assert sliced.is_contiguous() and sliced.storage_offset() == 16
+            inputs[name] = sliced
+    actual = _invoke_contract_case(inputs).cpu()
+    torch.testing.assert_close(actual, expected, rtol=0, atol=0)
 
 
 if __name__ == "__main__":

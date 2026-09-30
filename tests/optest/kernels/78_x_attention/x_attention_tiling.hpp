@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 #include <stdexcept>
 
 #include "x_attention_common.hpp"
@@ -41,10 +42,10 @@ struct Context {
 
 inline uint32_t CeilDivHost(uint32_t value, uint32_t divisor)
 {
-    return (value + divisor - 1) / divisor;
+    return value / divisor + (value % divisor != 0);
 }
 
-inline void Validate(const Context& context)
+inline void CanImplement(const Context& context)
 {
     if (context.batch == 0 || context.beamSize == 0 || context.numHeads == 0 || context.kvHeads == 0) {
         throw std::invalid_argument("batch, beamSize, numHeads and kvHeads must be positive");
@@ -64,12 +65,24 @@ inline void Validate(const Context& context)
     if (context.numHeads / context.kvHeads > UNSHARED_Q_TILE) {
         throw std::invalid_argument("GQA group size must not exceed 128");
     }
+    // Device output/statistic offsets and task counts use uint32_t.
+    constexpr uint64_t maxIndex = std::numeric_limits<uint32_t>::max();
+    uint64_t tokens = static_cast<uint64_t>(context.batch) * context.beamSize;
+    if (tokens > maxIndex / (context.embeddingSize + 1) / context.numHeads) {
+        throw std::invalid_argument("batch * beamSize * numHeads * 129 must fit uint32_t");
+    }
+    if (context.sharedKvSeqLen > static_cast<uint32_t>(std::numeric_limits<int32_t>::max()) ||
+        static_cast<uint64_t>(context.batch) * CeilDivHost(context.sharedKvSeqLen, PAGED_BLOCK_SIZE) >
+            static_cast<uint64_t>(std::numeric_limits<int32_t>::max())) {
+        throw std::invalid_argument("shared KV length and block count must fit int32_t");
+    }
+
 }
 
 inline uint64_t GetTiling(
     const Context& context, XAttentionTilingData& tilingData, uint64_t& workspaceSize)
 {
-    Validate(context);
+    CanImplement(context);
 
     tilingData.numHeads = context.numHeads;
     tilingData.kvHeads = context.kvHeads;

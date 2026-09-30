@@ -13,6 +13,8 @@
 #define OPTEST_X_ATTENTION_H
 
 #include <array>
+#include <cmath>
+#include <limits>
 #include <string>
 #include <utility>
 
@@ -36,10 +38,10 @@ struct XAttentionOp {
 
     static uint8_t* TensorAddress(const at::Tensor& tensor)
     {
-        return static_cast<uint8_t*>(const_cast<void*>(tensor.storage().data()));
+        return static_cast<uint8_t*>(tensor.data_ptr());
     }
 
-    static OutputType Run(
+    static CatlassKernel::XAttentionParams CanImplement(
         const at::Tensor& query,
         const at::Tensor& shared_key_block,
         const at::Tensor& shared_value_block,
@@ -64,11 +66,18 @@ struct XAttentionOp {
         }};
         for (const auto& item : tensors) {
             CheckTensor(*item.first, item.second);
+            TORCH_CHECK(item.first->device() == query.device(), "all input tensors must be on the same NPU");
+            for (int64_t size : item.first->sizes()) {
+                TORCH_CHECK(size <= std::numeric_limits<uint32_t>::max(), "tensor dimensions must fit uint32_t");
+            }
         }
 
         TORCH_CHECK(query.dim() == 3, "query must have shape (batch * beam_size, num_heads, 128)");
         TORCH_CHECK(query.size(2) == 128, "x_attention currently requires embedding_size == 128");
-        TORCH_CHECK(scale_value >= 0.0, "scale_value must be non-negative");
+        TORCH_CHECK(
+            std::isfinite(scale_value) && scale_value >= 0.0 &&
+                scale_value <= std::numeric_limits<float>::max(),
+            "scale_value must be finite, non-negative and representable as float32");
 
         aclDataType dataType = TorchDtypeToAclDtype(query.scalar_type());
         TORCH_CHECK(
@@ -83,7 +92,7 @@ struct XAttentionOp {
         TORCH_CHECK(
             shared_block_table.scalar_type() == at::kInt && unshared_block_table.scalar_type() == at::kInt,
             "block tables must use int32");
-        TORCH_CHECK(decode_step.numel() == 1, "decode_step must contain one int32 value");
+        TORCH_CHECK(decode_step.dim() == 1 && decode_step.numel() == 1, "decode_step must have shape (1,)");
 
         bool sharedPaged = shared_block_table.numel() != 0;
         bool unsharedPaged = unshared_block_table.numel() != 0;
@@ -91,13 +100,15 @@ struct XAttentionOp {
             sharedPaged != unsharedPaged,
             "exactly one of shared_block_table and unshared_block_table must be non-empty");
 
+        TORCH_CHECK(!sharedPaged || shared_block_table.dim() == 2, "shared_block_table must be 2D");
+        TORCH_CHECK(!unsharedPaged || unshared_block_table.dim() == 1, "unshared_block_table must be 1D");
         int64_t batch = sharedPaged ? shared_block_table.size(0) : unshared_block_table.numel();
         TORCH_CHECK(batch > 0 && query.size(0) % batch == 0, "query token count must be divisible by batch");
         int64_t beamSize = query.size(0) / batch;
         TORCH_CHECK(beamSize > 0, "beam_size must be positive");
         int64_t numHeads = query.size(1);
         int64_t embeddingSize = query.size(2);
-        TORCH_CHECK(shared_kv_lens.numel() == batch, "shared_kv_lens must contain one value per batch");
+        TORCH_CHECK(shared_kv_lens.dim() == 1 && shared_kv_lens.numel() == batch, "shared_kv_lens must contain one value per batch");
 
         int64_t kvHeads = 0;
         int64_t sharedKvSeqLen = 0;
@@ -130,6 +141,7 @@ struct XAttentionOp {
                 "continuous shared key/value must have identical 3D shapes");
             TORCH_CHECK(shared_key_block.size(0) % batch == 0, "shared cache token count must be divisible by batch");
             kvHeads = shared_key_block.size(1);
+            TORCH_CHECK(kvHeads > 0, "kv_heads must be positive");
             TORCH_CHECK(shared_key_block.size(2) == embeddingSize, "shared cache embedding size mismatch");
             sharedKvSeqLen = shared_key_block.size(0) / batch;
 
@@ -140,13 +152,25 @@ struct XAttentionOp {
                 unshared_key_block.size(1) == beamSize && unshared_key_block.size(2) == kvHeads &&
                     unshared_key_block.size(4) == embeddingSize,
                 "paged unshared cache shape must be (requests, beam_size, kv_heads, max_decode_step, 128)");
+            TORCH_CHECK(unshared_key_block.size(0) > 0, "request_count must be positive");
+            TORCH_CHECK(
+                unshared_key_block.size(0) <= std::numeric_limits<uint32_t>::max() / beamSize / kvHeads,
+                "request_count * beam_size * kv_heads must fit uint32_t");
             maxDecodeStep = unshared_key_block.size(3);
         }
 
-        TORCH_CHECK(kvHeads > 0 && numHeads % kvHeads == 0, "num_heads must be divisible by kv_heads");
+        TORCH_CHECK(numHeads > 0 && kvHeads > 0 && numHeads % kvHeads == 0, "num_heads must be divisible by kv_heads");
         TORCH_CHECK(numHeads / kvHeads <= 128, "GQA group size must not exceed 128");
         TORCH_CHECK(maxDecodeStep > 0 && maxDecodeStep <= 256, "max_decode_step must be in [1, 256]");
         TORCH_CHECK(sharedKvSeqLen > 0, "shared KV sequence length must be positive");
+
+        TORCH_CHECK(
+            query.size(0) <= std::numeric_limits<uint32_t>::max() / 129 / numHeads,
+            "batch * beam_size * num_heads * 129 must fit uint32_t");
+        TORCH_CHECK(
+            sharedKvSeqLen <= std::numeric_limits<int32_t>::max() &&
+                batch * ((sharedKvSeqLen + 127) / 128) <= std::numeric_limits<int32_t>::max(),
+            "shared KV length and block count must fit int32_t");
 
         CatlassKernel::XAttentionParams params;
         params.inputAddr = {
@@ -172,12 +196,32 @@ struct XAttentionOp {
         params.scaleValue = static_cast<float>(scale_value);
         params.dataType = dataType;
 
+        return params;
+    }
+
+    static OutputType Run(
+        const at::Tensor& query,
+        const at::Tensor& shared_key_block,
+        const at::Tensor& shared_value_block,
+        const at::Tensor& unshared_key_block,
+        const at::Tensor& unshared_value_block,
+        const at::Tensor& unshared_block_table,
+        const at::Tensor& shared_kv_lens,
+        const at::Tensor& decode_step,
+        const at::Tensor& shared_block_table,
+        double scale_value)
+    {
+        auto params = CanImplement(query, shared_key_block, shared_value_block, unshared_key_block,
+            unshared_value_block, unshared_block_table, shared_kv_lens, decode_step, shared_block_table, scale_value);
+        TORCH_CHECK(query.device().index() == c10_npu::current_device(), "query must be on the current NPU device");
+        uint32_t aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
+        TORCH_CHECK(aicCoreNum >= 2, "x_attention requires at least two cube cores");
+
         OutputType output = GetOutputTensor(
             {query.size(0), query.size(1), query.size(2)}, query.scalar_type());
         params.outputAddr = {TensorAddress(output)};
 
         aclrtStream stream = c10_npu::getCurrentNPUStream().stream(false);
-        uint32_t aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
         // params contains raw addresses. Keep their tensors alive until the queued
         // launcher has submitted the kernel to the NPU stream.
         const std::array<at::Tensor, 9> inputs{
