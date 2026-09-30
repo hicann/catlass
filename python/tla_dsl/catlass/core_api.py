@@ -101,13 +101,7 @@ _PIPE_VALUES = {
     "mte2",
     "mte3",
     "all",
-    "mte4",
-    "mte5",
-    "v2",
     "fix",
-    "virtual_mte2_l1a",
-    "virtual_mte2_l1b",
-    "num",
 }
 _MISSING = object()
 _SUPPORTED_COMPARE_ELEMENT_TYPES = frozenset({"f16", "f32", "i32", "u32"})

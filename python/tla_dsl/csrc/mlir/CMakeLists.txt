@@ -120,7 +120,27 @@ endif()
 if(NOT pybind11_FOUND)
   message(FATAL_ERROR "pybind11 must be installed in the active Python environment")
 endif()
-set(TLA_TD_FILE ${CMAKE_CURRENT_SOURCE_DIR}/include/Dialect/Tla/IR/Tla.td)
+set(TLA_TD_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include/Dialect/Tla/IR)
+# Tla.td is the entry point mlir-tblgen is run on; it only includes the files
+# below. Keep this list in sync with the include lines in Tla.td, or an edit to
+# a fragment will not trigger a regeneration.
+set(TLA_TD_FILE ${TLA_TD_DIR}/Tla.td)
+set(TLA_TD_SOURCES
+  ${TLA_TD_FILE}
+  ${TLA_TD_DIR}/TlaBase.td
+  ${TLA_TD_DIR}/TlaEnums.td
+  ${TLA_TD_DIR}/TlaTypes.td
+  ${TLA_TD_DIR}/TlaRegionOps.td
+  ${TLA_TD_DIR}/TlaArchOps.td
+  ${TLA_TD_DIR}/TlaScalarOps.td
+  ${TLA_TD_DIR}/TlaStructureOps.td
+  ${TLA_TD_DIR}/TlaTensorOps.td
+  ${TLA_TD_DIR}/TlaMemoryOps.td
+  ${TLA_TD_DIR}/TlaSyncOps.td
+  ${TLA_TD_DIR}/TlaCubeOps.td
+  ${TLA_TD_DIR}/TlaSimdOps.td
+  ${TLA_TD_DIR}/TlaSimtOps.td
+)
 # Dialect TableGen targets (Tla dialect).
 find_package(MLIR REQUIRED CONFIG)
 if(DEFINED LLVM_CMAKE_DIR)
@@ -202,7 +222,7 @@ add_custom_command(
   COMMAND ${METAPASSES_TBLGEN_EXE} --gen-op-defs ${TLA_TD_FILE} ${METAPASSES_TBLGEN_INCLUDE_FLAGS} -o ${CMAKE_CURRENT_BINARY_DIR}/tblgen/tla/Ops.cpp.inc
   COMMAND ${METAPASSES_TBLGEN_EXE} --gen-op-decls ${TLA_TD_FILE} ${METAPASSES_TBLGEN_INCLUDE_FLAGS} -o ${CMAKE_CURRENT_BINARY_DIR}/tblgen/tla/Ops.h.inc
   COMMAND_EXPAND_LISTS
-  DEPENDS ${TLA_TD_FILE}
+  DEPENDS ${TLA_TD_SOURCES}
   COMMENT "Generate TableGen files for tla"
 )
 add_custom_target(TlaTblgen DEPENDS

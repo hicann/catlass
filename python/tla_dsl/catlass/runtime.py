@@ -212,9 +212,6 @@ class _Pipes:
     MTE2 = _Sentinel("MTE2")
     MTE3 = _Sentinel("MTE3")
     ALL = _Sentinel("ALL")
-    MTE4 = _Sentinel("MTE4")
-    MTE5 = _Sentinel("MTE5")
-    V2 = _Sentinel("V2")
     FIX = _Sentinel("FIX")
 
 

@@ -2,7 +2,6 @@
 
 #include "Dialect/Tla/IR/TlaAttrs.h"
 #include "Dialect/Tla/IR/TlaDialect.h"
-#include "Dialect/Tla/IR/TlaOpTraits.h"
 #include "Dialect/Tla/IR/TlaTypes.h"
 #include "mlir/Bytecode/BytecodeImplementation.h"
 #include "mlir/Bytecode/BytecodeOpInterface.h"
