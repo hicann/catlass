@@ -69,6 +69,7 @@ def compute_tiling(
     kv_base_tile: int = KV_BASE_TILE,
 ) -> FATilingData:
     td = FATilingData()
+
     td.batch = batch
     td.num_heads = num_heads
     td.kv_heads = kv_heads
@@ -78,7 +79,6 @@ def compute_tiling(
     td.group_size = num_heads // kv_heads
     td.max_q_seqlen = max(q_seqlen_list)
     td.max_kv_seqlen = max(kv_seqlen_list)
-
     td.qk_l1_tile_m = QK_L1_TILE_M
     td.qk_l1_tile_n = QK_L1_TILE_N
     td.qk_l1_tile_k_left = QK_L1_TILE_K_LEFT
@@ -91,7 +91,6 @@ def compute_tiling(
     td.k_l1_buf_num = K_L1_BUF_NUM
     td.v_l1_buf_num = V_L1_BUF_NUM
     td.p_l1_buf_num = P_L1_BUF_NUM
-
     total_task_num = 0
     first_batch_task_num = 0
     for b_idx in range(batch):
@@ -101,7 +100,6 @@ def compute_tiling(
         if b_idx == 0:
             first_batch_task_num = cur_task_num
         total_task_num += cur_task_num
-
     td.first_batch_task_num = first_batch_task_num
     td.total_task_num = total_task_num
     return td

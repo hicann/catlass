@@ -240,9 +240,27 @@ def _cases(device: int) -> Iterator[tuple[str, list[list[str]]]]:
     yield ("mixed-fixpipe-nz2dn", [["basic_mixed/basic_mixed_fixpipe_nz2dn.py", *dev]])
 
     # --- mixed-core handshake and standalone control-flow probes ---
+    # flash_attention_infer routes --mask to two independently compiled
+    # kernels: causal -> flash_attention_mask_kernel (TileMask + fine mask),
+    # none -> flash_attention_nomask_kernel. Both binaries must run.
+    for mask_mode in ("causal", "none"):
+        yield (
+            f"flash-attention-infer-{mask_mode}",
+            [["flash_attention_infer/flash_attention_infer.py", "--mask", mask_mode, *dev]],
+        )
     yield (
-        "flash-attention-infer",
-        [["flash_attention_infer/flash_attention_infer.py", *dev]],
+        "flash-attention-infer-causal-no-paged",
+        [[
+            "flash_attention_infer/flash_attention_infer.py",
+            "--mask", "causal", "--no-paged", "--kvseqlen", "160", *dev,
+        ]],
+    )
+    yield (
+        "flash-attention-infer-nomask-no-paged",
+        [[
+            "flash_attention_infer/flash_attention_infer.py",
+            "--mask", "none", "--no-paged", "--kvseqlen", "224", *dev,
+        ]],
     )
     yield (
         "lazy-conditions",

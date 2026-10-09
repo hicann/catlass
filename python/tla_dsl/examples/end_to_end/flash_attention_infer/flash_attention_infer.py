@@ -9,18 +9,16 @@
 # -----------------------------------------------------------------------------------------------------------
 
 from __future__ import annotations
-
+import argparse
+import enum
 import math
 from dataclasses import dataclass
 from typing import Any
-
 import torch
 import catlass.tla as tla
 from catlass.tla.runtime import from_dlpack
-
-from kernel import flash_attention_infer_kernel
-
-import argparse
+from kernel_mask import flash_attention_mask_kernel
+from kernel_nomask import flash_attention_nomask_kernel
 
 
 @dataclass
@@ -33,45 +31,62 @@ class TileMaskParams:
     maskr: torch.Tensor  # (B, Sq) int32 — 行右边界(k >= maskr 被 mask)
 
 
-def generate_fa_mask(mask_mode, batch, seq_q, seq_k, tile_m=128, tile_n=128):
+def generate_fa_mask(
+    mask_mode,
+    batch,
+    seq_q,
+    seq_k,
+    tile_m=128,
+    tile_n=128,
+    q_lens=None,
+    kv_lens=None,
+):
+    """逐 batch 生成的 tile mask：seq_q/seq_k 取最大值，变长时按 q_lens/kv_lens
+    以各 batch 自己的 prefix = kv_lens[b] - q_lens[b] 计算，等长输入与旧实现一致。"""
     Tq = (seq_q + tile_m - 1) // tile_m
     Tk = (seq_k + tile_n - 1) // tile_n
     Wk = (Tk + 31) // 32
-
-    if mask_mode == "none":
-        maskr_1d = torch.full((seq_q,), seq_k, dtype=torch.int32)
-        tile_range = torch.full((batch, Tq), Tk, dtype=torch.int32)
-        tile_compute_bp = torch.zeros((batch, Tq, Wk), dtype=torch.int32)
-        fine_mask_bp = torch.zeros((batch, Tq, Wk), dtype=torch.int32)
-        for kt in range(Tk):
-            tile_compute_bp[:, :, kt // 32] |= 1 << (kt % 32)
-        dense = torch.ones((batch, seq_q, seq_k), dtype=torch.bool)
-    else:  # causal
-        prefix = seq_k - seq_q
-        # 行右边界(不含): 列 >= maskr 的被遮蔽
-        maskr_1d = (torch.arange(seq_q) + prefix + 1).clamp(max=seq_k).to(torch.int32)
-        dense_2d = torch.arange(seq_k).unsqueeze(0) < maskr_1d.unsqueeze(1)  # (Sq, Sk)
-        dense = dense_2d.unsqueeze(0).expand(batch, -1, -1).contiguous()
-
-        tile_range = torch.zeros((batch, Tq), dtype=torch.int32)
-        tile_compute_bp = torch.zeros((batch, Tq, Wk), dtype=torch.int32)
-        fine_mask_bp = torch.zeros((batch, Tq, Wk), dtype=torch.int32)
+    if q_lens is None:
+        q_lens = [seq_q] * batch
+    if kv_lens is None:
+        kv_lens = [seq_k] * batch
+    maskr = torch.zeros((batch, seq_q), dtype=torch.int32)
+    tile_range = torch.zeros((batch, Tq), dtype=torch.int32)
+    tile_compute_bp = torch.zeros((batch, Tq, Wk), dtype=torch.int32)
+    fine_mask_bp = torch.zeros((batch, Tq, Wk), dtype=torch.int32)
+    dense = torch.zeros((batch, seq_q, seq_k), dtype=torch.bool)
+    for b in range(batch):
+        kv_b = kv_lens[b]
+        if mask_mode == "none":
+            maskr_1d = torch.full((seq_q,), kv_b, dtype=torch.int32)
+            dense[b] = True
+            tr_max = (kv_b + tile_n - 1) // tile_n
+        else:  # causal：chunk-prefill 底对齐，prefix 用本 batch 长度差
+            prefix_b = kv_b - q_lens[b]
+            # 行右边界(不含): 列 >= maskr 的被遮蔽
+            maskr_1d = (
+                (torch.arange(seq_q) + prefix_b + 1).clamp(max=kv_b).to(torch.int32)
+            )
+            dense[b] = torch.arange(seq_k).unsqueeze(0) < maskr_1d.unsqueeze(1)
+            tr_max = None
+        maskr[b] = maskr_1d
         for qt in range(Tq):
             q_start = qt * tile_m
             q_end = min(q_start + tile_m, seq_q)
-            # 该 Q tile 的最大可见列(最宽行的右边界)
-            max_vis = min(int(maskr_1d[q_end - 1]), seq_k)
-            tr = (max_vis + tile_n - 1) // tile_n  # 最后一个有可见元素的 tile
-            tile_range[:, qt] = tr
+            if mask_mode == "none":
+                tr = tr_max
+            else:
+                # 该 Q tile 的最大可见列(最宽行的右边界)
+                max_vis = min(int(maskr_1d[q_end - 1]), kv_b)
+                tr = (max_vis + tile_n - 1) // tile_n  # 最后一个有可见元素的 tile
+            tile_range[b, qt] = tr
             for kt in range(tr):
-                tile_compute_bp[:, qt, kt // 32] |= 1 << (kt % 32)
+                tile_compute_bp[b, qt, kt // 32] |= 1 << (kt % 32)
                 # 精细 mask: tile 跨越因果边界(最窄行看不全此 tile)
                 k_end = (kt + 1) * tile_n
                 min_vis = int(maskr_1d[q_start])  # 最窄行右边界
                 if k_end > min_vis:
-                    fine_mask_bp[:, qt, kt // 32] |= 1 << (kt % 32)
-
-    maskr = maskr_1d.unsqueeze(0).expand(batch, seq_q).contiguous()
+                    fine_mask_bp[b, qt, kt // 32] |= 1 << (kt % 32)
     tm = TileMaskParams(
         tile_range=tile_range,
         tile_compute_bp=tile_compute_bp,
@@ -121,7 +136,7 @@ class RunResult:
 
 @dataclass
 class _KernelOutput:
-    """_run_kernel_core 的返回值"""
+    """_compile_launch 的返回值"""
 
     out_buf: torch.Tensor  # (total_q*D,) fp16 NPU buffer
     total_q: int
@@ -139,7 +154,48 @@ class _KernelOutput:
     cu_seqlens_k: torch.Tensor | None = None  # TND: (B+1,) kv 累加序列长度
 
 
-def _run_kernel_core(
+@dataclass
+class _FaInputs:
+    """输入侧 bundle：_build_inputs 的产物、_compile_launch 的入参。
+    CPU 原始 Q/K/V 留给 golden 校验；NPU 侧为展平 2D
+    （paged 时 K/V 已按块表散入分页 cache 再展平）。
+    """
+
+    display_name: str
+    input_format: str
+    op_dtype: torch.dtype
+    is_uniform: bool
+    B: int
+    H: int
+    Hkv: int
+    D: int
+    tile_m: int
+    tile_n: int
+    max_sq: int
+    max_kv: int
+    total_q: int
+    q_lens_list: list[int]
+    kv_lens_list: list[int]
+    actual_q_vals: list[int]
+    actual_kv_vals: list[int]
+    cu_seqlens_q: torch.Tensor | None
+    cu_seqlens_k: torch.Tensor | None
+    # CPU 原始输入（golden 用）
+    query: torch.Tensor
+    key: torch.Tensor
+    value: torch.Tensor
+    # NPU kernel 入参
+    query_2d: torch.Tensor
+    key_2d: torch.Tensor
+    value_2d: torch.Tensor
+    out_buf: torch.Tensor
+    block_table: torch.Tensor  # paged: 物理页表；非 paged: 占位 [0]
+    paged: bool
+    mnb: int  # paged: 每 batch 块表长度
+    tilemask: TileMaskParams
+
+
+def _build_inputs(
     args: argparse.Namespace,
     mask_mode: str,
     mask_key: str,
@@ -156,42 +212,36 @@ def _run_kernel_core(
     input_format: str = "BSND",
     q_lens_list: list[int] | None = None,
     kv_lens_list_override: list[int] | None = None,
-) -> _KernelOutput:
-    """TileMask 生成 → DSL kernel 编译执行"""
+) -> _FaInputs:
+    """长度规整 → TileMask → TND/BSND 输入构造 → PA cache/块表 → NPU 迁移。"""
+    if tile_m != 128 or tile_n != 128:
+        # host 按 tile_m/tile_n 生成任务数与掩码，kernel 侧 qBaseTile/kvBaseTile 固定 128
+        raise ValueError(
+            f"tile_m/tile_n 当前仅支持 128（kernel 侧固定），传入 {tile_m}/{tile_n}"
+        )
     is_tnd = input_format == "TND"
-
     B, H, Hkv, D = batch_size, num_heads, kv_heads, head_dim
-
     if q_lens_list is None:
         q_lens_list = [seq_q] * B
     if kv_lens_list_override is None:
         kv_lens_list_override = [seq_k] * B
-
-    max_sq = max(q_lens_list)
+    q_lens_real = list(q_lens_list)
+    max_sq = max(q_lens_real)
     max_kv = max(kv_lens_list_override)
     is_uniform = all(v == q_lens_list[0] for v in q_lens_list) and all(
         v == kv_lens_list_override[0] for v in kv_lens_list_override
     )
     var_tag = "" if is_uniform else "_var"
-
-    torch_mod = _require_torch_npu(args.device)
+    _require_torch_npu(args.device).manual_seed(144)
     device = "npu"
-    torch_mod.manual_seed(144)
-
     display_name = (
         f"{mask_key}_{input_format}{var_tag}_B{B}_H{H}_D{D}_Sq{max_sq}_Sk{max_kv}"
     )
-
     if not is_uniform:
         print(f"  q_lens: {q_lens_list}")
         print(f"  kv_lens: {kv_lens_list_override}")
-
-    kv_lens_list = list(kv_lens_list_override)
-    if mask_key == "causal" or mask_key == "none":
-        _mask_tensors = {"seq_lens": torch.tensor(kv_lens_list, dtype=torch.int32)}
-    else:
+    if mask_key not in ("causal", "none"):
         raise ValueError(f"Unknown mask_key: {mask_key}")
-
     tilemask, _ = generate_fa_mask(
         "none" if mask_mode == "none" else "causal",
         batch=B,
@@ -199,10 +249,11 @@ def _run_kernel_core(
         seq_k=max_kv,
         tile_m=tile_m,
         tile_n=tile_n,
+        q_lens=q_lens_real,
+        kv_lens=list(kv_lens_list_override),
     )
-
     if is_tnd:
-        # TND 格式：(Σlens, H, D) 3D 变长 — QKV 放在 CPU，kernel 前再迁 NPU
+        # TND 格式：(Σlens, H, D) 3D 变长
         Tq_total = sum(q_lens_list)
         Tk_total = sum(kv_lens_list_override)
         query_raw = torch.randn((Tq_total, H, D), dtype=torch.float32)
@@ -227,9 +278,8 @@ def _run_kernel_core(
         cu_seqlens_k = torch.tensor(_cum_k_vals, dtype=torch.int32)
         actual_q_vals = list(_cum_q_vals)
         actual_kv_vals = list(_cum_k_vals)
-        query_4d = query_raw
     else:
-        # BSND 格式：(B, max_sq, H, D) 4D 定长 — QKV 放在 CPU，kernel 前再迁 NPU
+        # BSND 格式：(B, max_sq, H, D) 4D 定长
         query_raw = torch.randn((B, max_sq, H, D), dtype=torch.float32)
         key_raw = torch.randn((B, max_kv, Hkv, D), dtype=torch.float32)
         value_raw = torch.randn((B, max_kv, Hkv, D), dtype=torch.float32)
@@ -242,28 +292,13 @@ def _run_kernel_core(
         cu_seqlens_k = None
         actual_q_vals = [max_sq] * B
         actual_kv_vals = [max_kv] * B
-        query_4d = query_raw
-
-    kv_lens_npu = torch.tensor(kv_lens_list_override, dtype=torch.int32)
-    _scale_value = 1.0 / (head_dim**0.5)
-
-    # Q/K/V 迁到 NPU（仅 kernel 需要，golden 用 CPU 版本）
     query_2d = query.reshape(total_q, D).contiguous().to(device)
-    key_2d = key.reshape(total_k, D).contiguous().to(device)
-    value_2d = value.reshape(total_k, D).contiguous().to(device)
-
-    _tla_dtype = tla.BFloat16 if op_dtype == torch.bfloat16 else tla.Float16
     out_buf = torch.full(
         (total_q, D), getattr(args, "sentinel", -7.0), dtype=op_dtype, device=device
     )
-
-    tla_query = create_tla_tensor(query_2d, tla.arch.RowMajor)
-    tla_key = create_tla_tensor(key_2d, tla.arch.RowMajor)
-    tla_value = create_tla_tensor(value_2d, tla.arch.RowMajor)
-
-    _paged = bool(getattr(args, "paged", False))
-    _mnb = 0
-    if _paged:
+    paged = bool(getattr(args, "paged", False))
+    mnb = 0
+    if paged:
         # ===== PagedAttention: cache [numBlocks, Hkv, bs, D] + 打乱块表; kernel 物理页寻址 =====
         _bs = tile_n
         assert int(getattr(args, "blocksize", _bs)) == _bs, (
@@ -275,17 +310,17 @@ def _run_kernel_core(
             cu_seqlens_k.tolist() if (_is_tnd and cu_seqlens_k is not None) else None
         )
         B_tot = len(kv_lens_list_override)
-        _mnb = (max_kv + _bs - 1) // _bs
-        num_blocks = B_tot * _mnb
+        mnb = (max_kv + _bs - 1) // _bs
+        num_blocks = B_tot * mnb
         if getattr(args, "pa_table", "shuffle") == "identity":
             block_table = (
-                torch.arange(num_blocks, dtype=torch.int32).reshape(B_tot, _mnb).clone()
+                torch.arange(num_blocks, dtype=torch.int32).reshape(B_tot, mnb).clone()
             )
         else:
             _gtab = torch.Generator().manual_seed(7)
             block_table = (
                 torch.randperm(num_blocks, generator=_gtab)
-                .reshape(B_tot, _mnb)
+                .reshape(B_tot, mnb)
                 .to(torch.int32)
             )
         k_cache = torch.zeros(num_blocks, _hkv, _bs, D, dtype=op_dtype)
@@ -295,7 +330,9 @@ def _run_kernel_core(
             _koff = (
                 int(_cu_k[_b]) if _cu_k else 0
             )  # TND: 该 batch 在扁平张量中的起始偏移
-            for _i in range(_mnb):
+            # 变长时只填本 batch 有效页：短序列遍历全局 mnb 会得到 hi<lo 的负切片
+            _pages = (_sk + _bs - 1) // _bs
+            for _i in range(_pages):
                 _lo, _hi = _i * _bs, min((_i + 1) * _bs, _sk)
                 if _is_tnd:
                     # TND: key 是 3D (total_k, Hkv, D), 用偏移切片
@@ -313,55 +350,87 @@ def _run_kernel_core(
                     v_cache[block_table[_b, _i], :, : _hi - _lo, :] = value[
                         _b, _lo:_hi, :, :
                     ].permute(1, 0, 2)
-        tla_key = create_tla_tensor(
-            k_cache.reshape(-1, D).contiguous().to(device), tla.arch.RowMajor
-        )
-        tla_value = create_tla_tensor(
-            v_cache.reshape(-1, D).contiguous().to(device), tla.arch.RowMajor
-        )
-        tla_block_table = create_tla_tensor(
-            block_table.reshape(-1).contiguous().to(device), tla.arch.RowMajor
-        )
+        key_2d = k_cache.reshape(-1, D).contiguous().to(device)
+        value_2d = v_cache.reshape(-1, D).contiguous().to(device)
     else:
-        tla_block_table = create_tla_tensor(
-            torch.zeros(1, dtype=torch.int32, device=device), tla.arch.RowMajor
-        )
-    tla_output = create_tla_tensor(out_buf, tla.arch.RowMajor)
-
-    uniform_q_seqlen = q_lens_list[0] if is_uniform else 0
-    uniform_kv_seqlen = kv_lens_list_override[0] if is_uniform else 0
-    uniform_tasks_per_batch = (
-        H * ((uniform_q_seqlen + tile_m - 1) // tile_m) if is_uniform else 0
+        key_2d = key.reshape(total_k, D).contiguous().to(device)
+        value_2d = value.reshape(total_k, D).contiguous().to(device)
+        block_table = torch.zeros(1, dtype=torch.int32)
+    return _FaInputs(
+        display_name=display_name,
+        input_format=input_format,
+        op_dtype=op_dtype,
+        is_uniform=is_uniform,
+        B=B,
+        H=H,
+        Hkv=Hkv,
+        D=D,
+        tile_m=tile_m,
+        tile_n=tile_n,
+        max_sq=max_sq,
+        max_kv=max_kv,
+        total_q=total_q,
+        q_lens_list=list(q_lens_real),
+        kv_lens_list=list(kv_lens_list_override),
+        actual_q_vals=actual_q_vals,
+        actual_kv_vals=actual_kv_vals,
+        cu_seqlens_q=cu_seqlens_q,
+        cu_seqlens_k=cu_seqlens_k,
+        query=query,
+        key=key,
+        value=value,
+        query_2d=query_2d,
+        key_2d=key_2d,
+        value_2d=value_2d,
+        out_buf=out_buf,
+        block_table=block_table,
+        paged=paged,
+        mnb=mnb,
+        tilemask=tilemask,
     )
 
+
+def _compile_launch(
+    args: argparse.Namespace, mask_mode: str, inputs: _FaInputs
+) -> _KernelOutput:
+    """tiling/DSL 张量组装 → 双 kernel 路由 → 编译执行 + 计时。"""
+    device = "npu"
+    H, Hkv, D = inputs.H, inputs.Hkv, inputs.D
+    tile_m, tile_n = inputs.tile_m, inputs.tile_n
+    uniform_q_seqlen = inputs.q_lens_list[0] if inputs.is_uniform else 0
+    uniform_kv_seqlen = inputs.kv_lens_list[0] if inputs.is_uniform else 0
+    uniform_tasks_per_batch = (
+        H * ((uniform_q_seqlen + tile_m - 1) // tile_m) if inputs.is_uniform else 0
+    )
     # tiling: FA 21字段(fa_tiling) + qFormat/kvFormat
     import fa_tiling as _fa_tiling
 
     _fa_td = _fa_tiling.compute_tiling(
-        batch=len(kv_lens_list_override),
-        num_heads=num_heads,
-        kv_heads=kv_heads,
+        batch=len(inputs.kv_lens_list),
+        num_heads=H,
+        kv_heads=Hkv,
         q_seqlen_list=list(
-            q_lens_list if q_lens_list else [max_sq] * len(kv_lens_list_override)
+            inputs.q_lens_list
+            if inputs.q_lens_list
+            else [inputs.max_sq] * len(inputs.kv_lens_list)
         ),
-        kv_seqlen_list=list(kv_lens_list_override),
-        head_dim=head_dim,
+        kv_seqlen_list=list(inputs.kv_lens_list),
+        head_dim=D,
         q_base_tile=tile_m,
         kv_base_tile=tile_n,
     )
-    tiling_int_list = (
-        _fa_tiling.pack_tiling_int(_fa_td)
-        + [
-            1 if input_format == "BSND" else 0,  # qFormat
-            1 if input_format == "BSND" else 0,
-        ]  # kvFormat
+    tiling_int_list = _fa_tiling.pack_tiling_int(_fa_td) + [
+        1 if inputs.input_format == "BSND" else 0,  # qFormat
+        1 if inputs.input_format == "BSND" else 0,
+    ]  # kvFormat
+    tiling_scale_list = [1.0 / (D**0.5)]
+    tla_query = create_tla_tensor(inputs.query_2d, tla.arch.RowMajor)
+    tla_key = create_tla_tensor(inputs.key_2d, tla.arch.RowMajor)
+    tla_value = create_tla_tensor(inputs.value_2d, tla.arch.RowMajor)
+    tla_block_table = create_tla_tensor(
+        inputs.block_table.reshape(-1).contiguous().to(device), tla.arch.RowMajor
     )
-    tiling_scale_list = [_scale_value]
-
-    Tq = (max_sq + tile_m - 1) // tile_m
-    Tk = (max_kv + tile_n - 1) // tile_n
-    Wk = (Tk + 31) // 32
-
+    tla_output = create_tla_tensor(inputs.out_buf, tla.arch.RowMajor)
     tla_tiling_int = create_tla_tensor(
         torch.tensor(tiling_int_list, dtype=torch.int32, device=device),
         tla.arch.RowMajor,
@@ -371,60 +440,48 @@ def _run_kernel_core(
         tla.arch.RowMajor,
     )
     tla_actual_q = create_tla_tensor(
-        torch.tensor(actual_q_vals, dtype=torch.int32, device=device), tla.arch.RowMajor
+        torch.tensor(inputs.actual_q_vals, dtype=torch.int32, device=device),
+        tla.arch.RowMajor,
     )
     tla_actual_kv = create_tla_tensor(
-        torch.tensor(actual_kv_vals, dtype=torch.int32, device=device),
+        torch.tensor(inputs.actual_kv_vals, dtype=torch.int32, device=device),
         tla.arch.RowMajor,
     )
     tla_tile_range = create_tla_tensor(
-        tilemask.tile_range.contiguous().to(device).reshape(-1), tla.arch.RowMajor
+        inputs.tilemask.tile_range.contiguous().to(device).reshape(-1),
+        tla.arch.RowMajor,
     )
     tla_tile_compute = create_tla_tensor(
-        tilemask.tile_compute_bp.contiguous().to(device).to(torch.int32).reshape(-1),
+        inputs.tilemask.tile_compute_bp.contiguous()
+        .to(device)
+        .to(torch.int32)
+        .reshape(-1),
         tla.arch.RowMajor,
     )
     tla_fine_mask = create_tla_tensor(
-        tilemask.fine_mask_bp.contiguous().to(device).to(torch.int32).reshape(-1),
+        inputs.tilemask.fine_mask_bp.contiguous()
+        .to(device)
+        .to(torch.int32)
+        .reshape(-1),
         tla.arch.RowMajor,
     )
     tla_maskr = create_tla_tensor(
-        tilemask.maskr.contiguous().to(device).reshape(-1), tla.arch.RowMajor
+        inputs.tilemask.maskr.contiguous().to(device).reshape(-1), tla.arch.RowMajor
     )
 
-    _is_fp16 = op_dtype == torch.float16
-
-    artifact = tla.compile(
-        flash_attention_infer_kernel,
-        tla_query,
-        tla_key,
-        tla_value,
-        tla_output,
-        tla_tiling_int,
-        tla_tiling_scale,
-        tla_actual_q,
-        tla_actual_kv,
-        tla_tile_range,
-        tla_tile_compute,
-        tla_fine_mask,
-        tla_maskr,
-        tla_block_table,
-        _is_fp16,
+    # 双 kernel 路由：causal → mask kernel（含 TileMask）；none → nomask kernel（无 TileMask 入参）
+    _constexpr_tail = (
+        inputs.op_dtype == torch.float16,
         uniform_q_seqlen,
         uniform_kv_seqlen,
         uniform_tasks_per_batch,
-        _paged,
-        _mnb,
-        head_dim,
-        options="--npu-arch 3510",
+        inputs.paged,
+        inputs.mnb,
+        D,
     )
-
-    import time as _time
-
-    _t0 = _time.perf_counter()
-    _rep = max(1, int(getattr(args, "launch_repeat", 1)))
-    for _ in range(_rep):
-        artifact(
+    if mask_mode == "causal":
+        kernel_fn = flash_attention_mask_kernel
+        tensor_args = (
             tla_query,
             tla_key,
             tla_value,
@@ -438,26 +495,51 @@ def _run_kernel_core(
             tla_fine_mask,
             tla_maskr,
             tla_block_table,
-            block_num=get_block_num(args.block_num, args.device),
         )
+    else:
+        kernel_fn = flash_attention_nomask_kernel
+        tensor_args = (
+            tla_query,
+            tla_key,
+            tla_value,
+            tla_output,
+            tla_tiling_int,
+            tla_tiling_scale,
+            tla_actual_q,
+            tla_actual_kv,
+            tla_block_table,
+        )
+    artifact = tla.compile(
+        kernel_fn,
+        *(tensor_args + _constexpr_tail),
+        options="--npu-arch 3510",
+    )
+
+    import time as _time
+
+    _t0 = _time.perf_counter()
+    artifact(*tensor_args, block_num=get_block_num(args.block_num, args.device))
     torch.npu.synchronize()
     _dt = _time.perf_counter() - _t0
+
+    out_buf = inputs.out_buf
+    total_q = inputs.total_q
 
     return _KernelOutput(
         out_buf=out_buf,
         total_q=total_q,
         D=D,
         kernel_time_s=_dt,
-        display_name=display_name,
-        tilemask=tilemask,
-        query=query,
-        key=key,
-        value=value,
-        kv_lens_list=list(kv_lens_list_override),
-        q_lens_list=list(q_lens_list),
-        input_format=input_format,
-        cu_seqlens_q=cu_seqlens_q,
-        cu_seqlens_k=cu_seqlens_k,
+        display_name=inputs.display_name,
+        tilemask=inputs.tilemask,
+        query=inputs.query,
+        key=inputs.key,
+        value=inputs.value,
+        kv_lens_list=list(inputs.kv_lens_list),
+        q_lens_list=list(inputs.q_lens_list),
+        input_format=inputs.input_format,
+        cu_seqlens_q=inputs.cu_seqlens_q,
+        cu_seqlens_k=inputs.cu_seqlens_k,
     )
 
 
@@ -563,28 +645,22 @@ def compute_golden_torch_bsnd(
     B, Sq, H_q, D = query.shape
     H_kv = key.shape[2]
     out = torch.empty_like(query)
-
     for b in range(B):
         kv_b = int(kv_lens_per_batch[b])
         q_b = query[b]  # (Sq, H_q, D)
         k_b = key[b][:kv_b]  # (kv_b, H_kv, D)
         v_b = value[b][:kv_b]  # (kv_b, H_kv, D)
-
         if H_kv != H_q:
             g = H_q // H_kv
             k_b = k_b.repeat_interleave(g, dim=1)
             v_b = v_b.repeat_interleave(g, dim=1)
-
         q_hnd = q_b.permute(1, 0, 2).float()  # (H_q, Sq, D)
         k_hnd = k_b.permute(1, 0, 2).float()  # (H_q, kv_b, D)
         v_hnd = v_b.permute(1, 0, 2).float()
-
         scores = torch.matmul(q_hnd, k_hnd.transpose(-2, -1)) * scale
-
         if custom_mask is not None:
             m = custom_mask[b, :Sq, :kv_b].to(dtype=torch.bool, device=query.device)
             scores = scores.masked_fill(m.unsqueeze(0), float("-inf"))
-
         row_max = scores.max(dim=-1, keepdim=True).values
         row_max = torch.where(
             torch.isfinite(row_max), row_max, torch.zeros_like(row_max)
@@ -595,7 +671,6 @@ def compute_golden_torch_bsnd(
         attn = torch.where(
             denom > 0, probs / denom.clamp_min(1e-30), torch.zeros_like(probs)
         )
-
         o_hnd = torch.matmul(attn, v_hnd)
         out[b] = o_hnd.permute(1, 0, 2).to(query.dtype)
     return out
@@ -609,17 +684,85 @@ class GoldenInput:
     kv_lens: torch.Tensor
 
 
+class Status(enum.Enum):
+    """对齐 Catlass::Status 的返回语义，供 can_implement 使用"""
+
+    kSuccess = 0
+    kInvalid = 1
+
+
+def can_implement(args: argparse.Namespace) -> tuple[Status, list[str]]:
+    """CanImplement：进入运行前统一校验参数合法性。
+    只读 args，返回 (Status, 不可实现原因清单)。
+    """
+    reasons: list[str] = []
+
+    def _check(cond: bool, msg: str) -> None:
+        if not cond:
+            reasons.append(msg)
+
+    _check(
+        args.dtype in ("fp16", "bf16"), f"dtype 仅支持 fp16/bf16，当前 {args.dtype!r}"
+    )
+    _check(
+        args.mask in ("none", "causal"), f"mask 仅支持 none/causal，当前 {args.mask!r}"
+    )
+    _check(
+        args.format in ("BSND", "TND"), f"format 仅支持 BSND/TND，当前 {args.format!r}"
+    )
+    for name in ("batch", "headnum", "kvheadnum", "qseqlen", "kvseqlen"):
+        val = int(getattr(args, name))
+        _check(val >= 1, f"--{name} 须为正整数，当前 {val}")
+    _check(
+        args.kvheadnum > 0 and args.headnum % args.kvheadnum == 0,
+        f"GQA 约束：headnum({args.headnum}) 须被 kvheadnum({args.kvheadnum}) 整除"
+        "（kvheadnum<=0 已由正整数检查记录）",
+    )
+    _check(args.head_dim == 128, f"head_dim 固定为 128，当前 {args.head_dim}")
+    if args.mask == "causal":
+        _check(
+            args.qseqlen <= args.kvseqlen,
+            f"causal 约束：qseqlen({args.qseqlen}) 须不大于 kvseqlen({args.kvseqlen})",
+        )
+    if bool(getattr(args, "paged", False)):
+        blocksize = int(getattr(args, "blocksize", 128))
+        _check(
+            blocksize == 128,
+            f"paged 约束：blocksize 须等于 kvBaseTile(128)，当前 {blocksize}",
+        )
+    _check(
+        args.block_num == -1 or args.block_num >= 1,
+        f"--block-num 仅支持 -1(自动满核) 或正整数，当前 {args.block_num}",
+    )
+    _check(int(args.device) >= 0, f"--device 须为非负整数，当前 {args.device}")
+    if bool(getattr(args, "varlen", False)):
+        _check(
+            args.format == "TND",
+            "varlen 约束：变长仅支持 TND 布局（BSND 为定长语义），当前 format="
+            f"{args.format!r}",
+        )
+        _check(
+            args.qseqlen >= 1 and args.kvseqlen >= 1,
+            f"varlen 约束：qseqlen/kvseqlen 须 >= 1，当前 {args.qseqlen}/{args.kvseqlen}",
+        )
+    return (Status.kSuccess if not reasons else Status.kInvalid), reasons
+
+
 def main() -> int:
     args = parse_args()
+    status, reasons = can_implement(args)
+    if status != Status.kSuccess:
+        print(f"CanImplement: {status.name}")
+        for reason in reasons:
+            print(f"  - {reason}")
+        return 2
     rst = run(args)
     print_result(rst, args)
     return 0 if rst.passed else 1
 
 
 def run(args: argparse.Namespace) -> RunResult:
-    """执行kernel，根据perf_only决定是否进入校验阶段"""
-    torch_mod = _require_torch_npu(args.device)
-
+    """一次完整执行：构造输入 → 编译执行 kernel → 校验（perf_only 跳过校验）。"""
     op_dtype = {"fp16": torch.float16, "bf16": torch.bfloat16}[args.dtype]
     print(
         f"--- BATCH=({args.batch},{args.qseqlen},{args.kvseqlen}) "
@@ -627,8 +770,28 @@ def run(args: argparse.Namespace) -> RunResult:
         f"HEAD_DIM={args.head_dim} "
         f"dtype={args.dtype} mask={args.mask} sentinel={args.sentinel} ---"
     )
-    ko = _run_kernel_core(
-        args, args.mask, args.mask,
+    q_lens_list = None
+    kv_lens_list = None
+    if bool(getattr(args, "varlen", False)):
+        # 以传入 seqlen 为区间上限逐 batch 随机采样；causal 逐 batch 保 q<=kv
+        _gen = torch.Generator().manual_seed(144)
+        kv_lens_list = torch.randint(
+            1, args.kvseqlen + 1, (args.batch,), generator=_gen
+        ).tolist()
+        q_hi = (
+            [min(args.qseqlen, kv) for kv in kv_lens_list]
+            if args.mask == "causal"
+            else [args.qseqlen] * args.batch
+        )
+
+        def rand_q_len(hi: int) -> int:
+            return int(torch.randint(1, hi + 1, (1,), generator=_gen))
+
+        q_lens_list = [rand_q_len(hi) for hi in q_hi]
+    inputs = _build_inputs(
+        args,
+        args.mask,
+        args.mask,
         seq_q=args.qseqlen,
         seq_k=args.kvseqlen,
         batch_size=args.batch,
@@ -637,24 +800,31 @@ def run(args: argparse.Namespace) -> RunResult:
         head_dim=args.head_dim,
         input_format=args.format,
         op_dtype=op_dtype,
+        q_lens_list=q_lens_list,
+        kv_lens_list_override=kv_lens_list,
     )
+    ko = _compile_launch(args, args.mask, inputs)
     return _validate_kernel_output(args, ko)
 
 
 def run_debug(
     args: argparse.Namespace, mask_mode: str, mask_key: str, **kwargs
 ) -> RunResult:
-    """保留原调试入口及自定义tile、变长序列等参数的转发能力"""
+    """调试入口：自定义 tile、变长序列等参数，走同一条 build→launch→validate 编排。"""
     input_format = kwargs.pop("input_format", "BSND")
-    ko = _run_kernel_core(
+    inputs = _build_inputs(
         args, mask_mode, mask_key, input_format=input_format, **kwargs
     )
-    return _validate_kernel_output(args, ko)
+    ko = _compile_launch(args, mask_mode, inputs)
+    return _validate_kernel_output(args, ko, mask_mode=mask_mode)
 
 
-def _validate_kernel_output(args: argparse.Namespace, ko: _KernelOutput) -> RunResult:
+def _validate_kernel_output(
+    args: argparse.Namespace,
+    ko: _KernelOutput,
+    mask_mode: str | None = None,
+) -> RunResult:
     """共用原调试入口的长度统计、perf_only判断和校验流程"""
-    # 保持原顺序：先统计长度，再判断是否跳过校验
     max_sq = max(ko.q_lens_list)
     max_kv = max(ko.kv_lens_list)
     batch = len(ko.kv_lens_list)
@@ -662,14 +832,17 @@ def _validate_kernel_output(args: argparse.Namespace, ko: _KernelOutput) -> RunR
         return RunResult(name="perf_only", passed=True, info="verify skipped")
     return run_validation(
         ko,
-        mask_mode=args.mask,
+        mask_mode=args.mask if mask_mode is None else mask_mode,
         args=args,
         sequence_shape=(max_sq, max_kv, batch),
     )
 
 
 def run_validation(
-    ko: _KernelOutput, *, mask_mode: str, args: argparse.Namespace,
+    ko: _KernelOutput,
+    *,
+    mask_mode: str,
+    args: argparse.Namespace,
     sequence_shape: tuple[int, int, int] | None = None,
 ) -> RunResult:
     """只组织校验阶段，具体计算交给各阶段函数"""
@@ -683,7 +856,9 @@ def run_validation(
         golden = compute_golden_bsnd(ko, inputs)
         reference = compute_reference_bsnd(ko, inputs)
     return compare(
-        ko.out_buf, golden, reference,
+        ko.out_buf,
+        golden,
+        reference,
         op_dtype=inputs.op_dtype,
         name=ko.display_name,
         kernel_time_s=ko.kernel_time_s,
@@ -694,22 +869,30 @@ def run_validation(
 
 
 def prepare_cpu_golden_input(
-    ko: _KernelOutput, mask_mode: str, *,
+    ko: _KernelOutput,
+    mask_mode: str,
+    *,
     sequence_shape: tuple[int, int, int] | None = None,
 ) -> GoldenInput:
     """准备两种格式共用的Mask、scale和KV长度，沿用原来的Mask规则"""
-    # 复用run的长度统计，独立调用时就地统计
     if sequence_shape is None:
-        sequence_shape = (max(ko.q_lens_list), max(ko.kv_lens_list), len(ko.kv_lens_list))
+        sequence_shape = (
+            max(ko.q_lens_list),
+            max(ko.kv_lens_list),
+            len(ko.kv_lens_list),
+        )
     max_sq, max_kv, batch = sequence_shape
-    prefix = max_kv - max_sq if mask_mode == "causal" else max_kv
     cols = torch.arange(max_kv)
     rows = torch.arange(max_sq)
-    visible = (
-        (cols.unsqueeze(0) <= rows.unsqueeze(1) + prefix)
-        .unsqueeze(0)
-        .expand(batch, -1, -1)
-    )
+    visible = torch.zeros((batch, max_sq, max_kv), dtype=torch.bool)
+    for b in range(batch):
+        # 变长时 prefix 用本 batch 长度差（与 generate_fa_mask 一致）
+        prefix_b = (
+            ko.kv_lens_list[b] - ko.q_lens_list[b]
+            if mask_mode == "causal"
+            else ko.kv_lens_list[b]
+        )
+        visible[b] = cols.unsqueeze(0) <= rows.unsqueeze(1) + prefix_b
     return GoldenInput(
         mask=~visible,  # True表示屏蔽
         scale=1.0 / math.sqrt(float(ko.D)),
@@ -721,7 +904,10 @@ def prepare_cpu_golden_input(
 def compute_golden_tnd(ko: _KernelOutput, inputs: GoldenInput) -> torch.Tensor:
     """沿用TND原golden的计算与dtype舍入，再转为CPU FP32比较"""
     golden = compute_golden_torch_tnd(
-        ko.query, ko.key, ko.value, inputs.scale,
+        ko.query,
+        ko.key,
+        ko.value,
+        inputs.scale,
         cu_seqlens_q=ko.cu_seqlens_q,
         cu_seqlens_k=ko.cu_seqlens_k,
         custom_mask=inputs.mask,
@@ -732,7 +918,10 @@ def compute_golden_tnd(ko: _KernelOutput, inputs: GoldenInput) -> torch.Tensor:
 def compute_golden_bsnd(ko: _KernelOutput, inputs: GoldenInput) -> torch.Tensor:
     """沿用BSND原golden的计算与dtype舍入，再转为CPU FP32比较"""
     golden = compute_golden_torch_bsnd(
-        ko.query, ko.key, ko.value, inputs.scale,
+        ko.query,
+        ko.key,
+        ko.value,
+        inputs.scale,
         kv_lens_per_batch=inputs.kv_lens,
         custom_mask=inputs.mask,
     )
@@ -742,9 +931,7 @@ def compute_golden_bsnd(ko: _KernelOutput, inputs: GoldenInput) -> torch.Tensor:
 def compute_reference_tnd(ko: _KernelOutput, inputs: GoldenInput) -> torch.Tensor:
     """逐batch将TND适配为BSND，计算分块参考并按原顺序拼接"""
     ref_parts = []
-    cu_q = (
-        ko.cu_seqlens_q.tolist() if ko.cu_seqlens_q is not None else [0, ko.total_q]
-    )
+    cu_q = ko.cu_seqlens_q.tolist() if ko.cu_seqlens_q is not None else [0, ko.total_q]
     cu_k = (
         ko.cu_seqlens_k.tolist()
         if ko.cu_seqlens_k is not None
@@ -773,7 +960,10 @@ def compute_reference_tnd(ko: _KernelOutput, inputs: GoldenInput) -> torch.Tenso
 def compute_reference_bsnd(ko: _KernelOutput, inputs: GoldenInput) -> torch.Tensor:
     """计算BSND的分块参考，并统一结果形状"""
     reference = _fa_style_bm(
-        ko.query, ko.key, ko.value, inputs.scale,
+        ko.query,
+        ko.key,
+        ko.value,
+        inputs.scale,
         kv_lens_per_batch=inputs.kv_lens,
         custom_mask=inputs.mask,
     )
@@ -781,12 +971,19 @@ def compute_reference_bsnd(ko: _KernelOutput, inputs: GoldenInput) -> torch.Tens
 
 
 def compute_error_metrics(
-    actual: torch.Tensor, golden: torch.Tensor
+    actual: torch.Tensor, golden: torch.Tensor, floor: float = 2**-7
 ) -> tuple[float, float, float]:
-    """返回最大相对误差、平均相对误差和均方根误差"""
+    """返回最大相对误差、平均相对误差和均方根误差。
+    相对误差分母以 floor 截底：fp16/bf16 输出在近零元素上的舍入会让
+    纯相对误差放大若干个量级（|g|<<floor 的元素按 diff/floor 计）。
+    """
     diff = (actual - golden).abs()
-    relative = diff / (golden.abs() + 1e-7)
-    return relative.max().item(), relative.mean().item(), torch.sqrt((diff**2).mean()).item()
+    relative = diff / golden.abs().clamp_min(floor)
+    return (
+        relative.max().item(),
+        relative.mean().item(),
+        torch.sqrt((diff**2).mean()).item(),
+    )
 
 
 def check_sentinel(output: torch.Tensor, sentinel: float) -> str:
@@ -813,9 +1010,9 @@ def compare(
 ) -> RunResult:
     """相对原golden衡量kernel和分块参考的误差，沿用原来的通过阈值"""
     kernel_flat = output.reshape(total_q, head_dim).cpu().float()
-    num_mare, num_mere, num_rmse = compute_error_metrics(kernel_flat, golden)
-    den_mare, den_mere, den_rmse = compute_error_metrics(reference, golden)
     floor = 2 ** (-7) if op_dtype == torch.float16 else 2 ** (-6)
+    num_mare, num_mere, num_rmse = compute_error_metrics(kernel_flat, golden, floor)
+    den_mare, den_mere, den_rmse = compute_error_metrics(reference, golden, floor)
     ratio_rmse = num_rmse / max(den_rmse, floor)
     ratio_mare = num_mare / max(den_mare, floor)
     ratio_mere = num_mere / max(den_mere, floor)
@@ -858,14 +1055,29 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--block-num", type=int, default=-1, help="-1=自动取满核")
     parser.add_argument(
         "--paged",
+        dest="paged",
         action="store_true",
-        help="PagedAttention: cache+块表, kernel 侧物理页寻址",
+        default=True,
+        help="PagedAttention: cache+块表, kernel 侧物理页寻址（默认开启）",
+    )
+    parser.add_argument(
+        "--no-paged",
+        dest="paged",
+        action="store_false",
+        help="切换回连续 KV 存储",
     )
     parser.add_argument(
         "--sentinel",
         type=float,
         default=-7.0,
         help="O 的初始值，用于检测 kernel 是否真正写入",
+    )
+    parser.add_argument(
+        "--varlen",
+        dest="varlen",
+        action="store_true",
+        default=False,
+        help="变长模式：以 qseqlen/kvseqlen 为区间上限逐 batch 随机采样长度（仅 TND，causal 保 q<=kv）",
     )
     parser.add_argument(
         "--perf-only",
@@ -876,12 +1088,8 @@ def parse_args() -> argparse.Namespace:
     )
     args = parser.parse_args()
     args.head_dim = 128
-
     return args
-
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
-
