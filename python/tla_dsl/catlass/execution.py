@@ -113,6 +113,8 @@ _INTEGER_LITERAL_RE = re.compile(r"^[+-]?\d+$")
 _HIVM_TEMPLATE_BITCODE_ATTRS = {
     "meta_op.aic.c310.bc": ("hivm.aic_bitcode", "hivm.aic_bitcode"),
     "meta_op.aiv.c310.bc": ("hivm.aiv_bitcode", "hivm.aiv_bitcode"),
+    "meta_op.aic.print.c310.bc": ("hivm.aic_bitcode", "hivm.aic_bitcode"),
+    "meta_op.aiv.print.c310.bc": ("hivm.aiv_bitcode", "hivm.aiv_bitcode"),
 }
 _MAX_KERNEL_ABI_PAYLOAD_SIZE = 1 << 20
 _ONLINE_CACHE_ABI_VERSION = 8
@@ -301,6 +303,7 @@ class _LogicalMixedHandoff:
 class _ArtifactStaticMetadata:
     uses_scalar_print: bool
     uses_tensor_print: bool
+    uses_debug_tunnel: bool
     logical_mixed_handoff: _LogicalMixedHandoff | None
 
 
@@ -524,6 +527,8 @@ def _compile_kernel(
     if lowering_result.pass_ir_dump:
         _write_pass_ir_dump(pass_dump_path, lowering_result.pass_ir_dump)
     lowered_llvm = mlir_path.read_text()
+    if not lowered_llvm.strip():
+        raise TlaKernelCompileError("Compiler produced empty lowered MLIR.")
     static_metadata = _analyze_compiled_artifact_static_metadata(
         tlair_mlir, lowered_llvm
     )
@@ -544,8 +549,11 @@ def _compile_kernel(
     abi_packer = _prepare_compiled_abi_packer(
         kernel_abi, expected_entrypoint=expected_entrypoint
     )
-    hivmc_mlir_path, template_bitcode = _create_stamped_hivmc_input(
-        mlir_path, resolved_option
+    variant = _select_bc_aggregate_variant(static_metadata)
+    bitcodes = _resolve_hivm_template_bitcode(resolved_option, variant=variant)
+    helper_bitcode_files = bitcodes.split(",")
+    hivmc_mlir_path, _ = _create_stamped_hivmc_input(
+        mlir_path, resolved_option, bitcodes=bitcodes
     )
     user_bitcodes: list[Path] = []
     # Group dependencies by source content and compile target, because even if
@@ -557,7 +565,7 @@ def _compile_kernel(
     # }
     extern_dependency_groups: dict[tuple[str, str], frozenset[Path]] = {}
     for source_index, spec in enumerate(extern_compile_specs):
-        bitcodes, dependencies_by_target = _compile_ascendc_extern_source(
+        _bitcodes, dependencies_by_target = _compile_ascendc_extern_source(
             spec.source,
             source_index=source_index,
             artifact_dir=artifact_dir,
@@ -567,16 +575,12 @@ def _compile_kernel(
             ),
             user_include_dirs=spec.include_dirs,
         )
-        user_bitcodes.extend(bitcodes)
+        user_bitcodes.extend(_bitcodes)
         source_sha256 = _extern_source_sha256(spec.source)
         for target_name, dependencies in dependencies_by_target.items():
             extern_dependency_groups[(source_sha256, target_name)] = dependencies
     if user_bitcodes:
-        if template_bitcode is None:
-            template_bitcode = _resolve_hivm_template_bitcode(resolved_option)
-        template_bitcode = ",".join(
-            (template_bitcode, *(str(path) for path in user_bitcodes))
-        )
+        bitcodes = ",".join((bitcodes, *(str(path) for path in user_bitcodes)))
     hivmc_input_mlir = hivmc_mlir_path.read_text()
     try:
         _run_checked(
@@ -585,7 +589,7 @@ def _compile_kernel(
                 mlir_path=hivmc_mlir_path,
                 kernel_binary_path=kernel_binary_path,
                 compile_option=resolved_option,
-                template_bitcode=template_bitcode,
+                bitcodes=bitcodes,
             ),
             label="hivmc-a5",
             cwd=artifact_dir,
@@ -613,6 +617,9 @@ def _compile_kernel(
             str(compiler_bridge_path) if compiler_bridge_path else None
         ),
         "hivmc": str(hivmc),
+        # Historical compile inputs for inspection, not cache validity checks.
+        "bc_aggregate_variant": variant,
+        "helper_bitcode_files": helper_bitcode_files,
         "arch_scope": resolved_option.arch_scope,
         "kernel_abi": kernel_abi_to_dict(kernel_abi),
         # Read back on a cache hit, where lowering never runs to produce them.
@@ -1385,6 +1392,7 @@ def _analyze_artifact_static_metadata(
     return _ArtifactStaticMetadata(
         uses_scalar_print="tla.debug_print.workspace" in mlir_text,
         uses_tensor_print="tla.print_tensor.workspace" in mlir_text,
+        uses_debug_tunnel="tla.debug_tunnel.state" in mlir_text,
         logical_mixed_handoff=_extract_logical_mixed_handoff(mlir_text),
     )
 
@@ -2391,10 +2399,8 @@ def _build_hivmc_a5_command(
     mlir_path: Path,
     kernel_binary_path: Path,
     compile_option: TlaCompileOption,
-    template_bitcode: str | None = None,
+    bitcodes: str,
 ) -> list[str]:
-    if template_bitcode is None:
-        template_bitcode = _resolve_hivm_template_bitcode(compile_option)
     command = [
         str(compiler),
         str(mlir_path),
@@ -2414,7 +2420,7 @@ def _build_hivmc_a5_command(
         command.extend(
             [
                 "--disable-ffts",
-                f"--link-aicore-bitcode={template_bitcode}",
+                f"--link-aicore-bitcode={bitcodes}",
                 "-o",
                 str(kernel_binary_path),
             ]
@@ -2424,7 +2430,7 @@ def _build_hivmc_a5_command(
             [
                 "--disable-ffts",
                 "--enable-hivm-compile=False",
-                f"--link-aicore-bitcode={template_bitcode}",
+                f"--link-aicore-bitcode={bitcodes}",
                 "-o",
                 str(kernel_binary_path),
             ]
@@ -2433,7 +2439,10 @@ def _build_hivmc_a5_command(
 
 
 def _create_stamped_hivmc_input(
-    mlir_path: Path, compile_option: TlaCompileOption
+    mlir_path: Path,
+    compile_option: TlaCompileOption,
+    *,
+    bitcodes: str,
 ) -> tuple[Path, str | None]:
     """Stamp a private HIVMC input only when debug-print helpers are present.
 
@@ -2446,11 +2455,11 @@ def _create_stamped_hivmc_input(
     if (
         "tla.debug_print.workspace" not in compiler_text
         and "tla.print_tensor.workspace" not in compiler_text
+        and "tla.debug_tunnel.state" not in compiler_text
     ):
         return mlir_path, None
     compiler_input = mlir_path.with_name(f"{mlir_path.stem}.hivmc-input.mlir")
     compiler_input.write_text(compiler_text)
-    template_bitcode = _resolve_hivm_template_bitcode(compile_option)
     if "tla.print_tensor.workspace" in compiler_text:
         helper_core_type = (
             _mixed_print_tensor_helper_core(compiler_text)
@@ -2463,8 +2472,8 @@ def _create_stamped_hivmc_input(
             )
         aggregate_candidates = [
             Path(path)
-            for path in template_bitcode.split(",")
-            if Path(path).name == f"meta_op.{helper_core_type}.c310.bc"
+            for path in bitcodes.split(",")
+            if Path(path).name == f"meta_op.{helper_core_type}.print.c310.bc"
         ]
         if len(aggregate_candidates) != 1:
             raise TlaRuntimeUnavailableError(
@@ -2474,8 +2483,8 @@ def _create_stamped_hivmc_input(
             raise TlaRuntimeUnavailableError(
                 "C310 aggregate print tensor bitcode does not provide the required ABI marker"
             )
-    _stamp_hivm_template_bitcode_attrs(compiler_input, template_bitcode)
-    return compiler_input, template_bitcode
+    _stamp_hivm_template_bitcode_attrs(compiler_input, bitcodes)
+    return compiler_input, bitcodes
 
 
 def _mixed_print_tensor_helper_core(compiler_text: str) -> str:
@@ -2505,11 +2514,11 @@ def _mixed_print_tensor_helper_core(compiler_text: str) -> str:
     return split.group(1)
 
 
-def _stamp_hivm_template_bitcode_attrs(mlir_path: Path, template_bitcode: str) -> None:
+def _stamp_hivm_template_bitcode_attrs(mlir_path: Path, bitcodes: str) -> None:
     text = mlir_path.read_text()
     additions: list[str] = []
     added_attr_names: set[str] = set()
-    for raw_path in template_bitcode.split(","):
+    for raw_path in bitcodes.split(","):
         path = Path(raw_path)
         attr = _HIVM_TEMPLATE_BITCODE_ATTRS.get(path.name)
         if attr is None or attr[0] in text or attr[0] in added_attr_names:
@@ -2560,8 +2569,23 @@ def _mlir_build_dirs() -> list[Path]:
     return [nested, legacy, packaged]
 
 
-def _resolve_hivm_template_bitcode(compile_option: TlaCompileOption) -> str:
-    return _get_bc_paths(compile_option.kernel_mode)
+def _select_bc_aggregate_variant(
+    static_metadata: _ArtifactStaticMetadata,
+) -> str:
+    """Select one BC aggregate variant for all cores after lowering on a cache miss."""
+    if (
+        static_metadata.uses_scalar_print
+        or static_metadata.uses_tensor_print
+        or static_metadata.uses_debug_tunnel
+    ):
+        return "print"
+    return "normal"
+
+
+def _resolve_hivm_template_bitcode(
+    compile_option: TlaCompileOption, *, variant: str = "print"
+) -> str:
+    return _get_bc_paths(compile_option.kernel_mode, variant=variant)
 
 
 _HIVMC_DIAGNOSTIC_RE = re.compile(

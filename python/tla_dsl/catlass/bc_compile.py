@@ -81,6 +81,18 @@ _MODE_CORE_TYPES: dict[str, list[str]] = {
     "mix": ["aic", "aiv"],
 }
 
+_BC_AGGREGATE_VARIANTS = ("normal", "print")
+_PRINT_COMPONENTS = frozenset({"printf", "print_tensor", "debug_tunnel"})
+
+
+def _meta_op_filename(core_type: str, cce_arch: str, variant: str) -> str:
+    if variant not in _BC_AGGREGATE_VARIANTS:
+        raise ValueError(
+            f"Unknown BC aggregate variant {variant!r}; expected 'normal' or 'print'"
+        )
+    suffix = ".print" if variant == "print" else ""
+    return f"meta_op.{core_type}{suffix}.{cce_arch}.bc"
+
 
 # ---------------------------------------------------------------------------
 # Path resolution
@@ -256,8 +268,14 @@ def link_bc(inputs: list[Path], output: Path, cfg: BCConfig) -> None:
 # ---------------------------------------------------------------------------
 
 
-def build_meta_op(core_types: list[str], cache: Path, cfg: BCConfig) -> None:
-    """Compile all stubs for all *core_type*, link into ``meta_op.*.bc``."""
+def build_meta_op(
+    core_types: list[str], cache: Path, cfg: BCConfig, *, variant: str = "print"
+) -> None:
+    """Compile every stub for all *core_types* into one aggregate per core.
+
+    Component BC is shared by both variants: the ``normal`` pass compiles the
+    non-print stubs, and the ``print`` pass reuses them and adds the rest.
+    """
     workers = max(1, min(8, os.cpu_count() or 1))
     reslts: list[tuple[Path, "Future[None]"]] = []
     link_individuals: dict[Path, list[Path]] = {}
@@ -265,7 +283,7 @@ def build_meta_op(core_types: list[str], cache: Path, cfg: BCConfig) -> None:
     with ThreadPoolExecutor(max_workers=workers) as pool:
         for core_type in core_types:
             link_individuals[core_type] = []
-            output_name = f"meta_op.{core_type}.{cfg.cce_arch}.bc"
+            output_name = _meta_op_filename(core_type, cfg.cce_arch, variant)
             linked_path = cache / output_name
             if linked_path.exists():
                 continue
@@ -283,12 +301,15 @@ def build_meta_op(core_types: list[str], cache: Path, cfg: BCConfig) -> None:
             for cpp in sorted(p for d in src_dirs for p in d.glob("*.cpp")):
                 # The per-file bitcode is named from the stem alone, so two stubs of the
                 # same name in different directories would silently overwrite each
-                # other's .bc. Fail loudly instead.
+                # other's .bc. Fail loudly instead.  The check runs for every variant so
+                # a duplicate is reported the same way whether or not it is filtered out.
                 if cpp.stem in seen:
                     raise RuntimeError(
                         f"duplicate bc stub name '{cpp.stem}.cpp': {seen[cpp.stem]} and {cpp}"
                     )
                 seen[cpp.stem] = cpp
+                if variant == "normal" and cpp.stem in _PRINT_COMPONENTS:
+                    continue
                 bc_name = cpp.stem + f".{core_type}.{cfg.cce_arch}.bc"
                 bc_path = cache / bc_name
                 if not bc_path.exists():
@@ -354,19 +375,13 @@ _cache: Optional[Path] = None
 
 
 def _compile_all(cfg: BCConfig, cache: Path) -> None:
-    """Compile the full artifact set (meta_op + print_tensor for aic/aiv)
+    """Compile both meta_op variants for aic/aiv
     into *cache* and write the manifest. Existing files are skipped, so an
     up-to-date cache is not recompiled."""
     cache.mkdir(parents=True, exist_ok=True)
 
-    build_meta_op(("aic", "aiv"), cache, cfg)
-
-    for core_type in ("aic", "aiv"):
-        subdir = _SOURCE_SUBDIR.get(core_type, "Cube")
-        cpp = cfg.paths.bc_stubs / subdir / "print_tensor.cpp"
-        bc_path = cache / f"print_tensor.{core_type}.{cfg.cce_arch}.bc"
-        if not bc_path.exists():
-            compile_stub(cpp, bc_path, core_type, cfg)
+    for variant in _BC_AGGREGATE_VARIANTS:
+        build_meta_op(("aic", "aiv"), cache, cfg, variant=variant)
 
     _write_manifest(cache, cfg, compute_cache_key(cfg.toolchain.ccec))
 
@@ -426,16 +441,15 @@ def _ensure_cache(cfg: BCConfig) -> Path:
 def get_bc_paths(
     kernel_mode: str,
     *,
-    bc_type: str = "meta_op",
-    core_type: Optional[str] = None,
     bc_dir: Optional[Path] = None,
+    variant: str = "print",
 ) -> str:
     """Get comma-joined BC paths from cache. Raises if not compiled.
 
-    ``bc_type``: ``"meta_op"`` (default) or ``"print_tensor"``.
-    ``core_type``: required when ``bc_type="print_tensor"`` (``"aic"`` or ``"aiv"``).
     ``bc_dir``: already-validated dir holding the ``.bc`` files; defaults to the
     cache dir resolved from the environment.
+    ``variant``: for meta_op aggregates, ``"print"`` includes every helper;
+    ``"normal"`` excludes print/debug helpers.
     """
     cfg = BCConfig(
         paths=_resolve_paths(),
@@ -446,21 +460,10 @@ def get_bc_paths(
     )
     cache = bc_dir or _ensure_cache(cfg)
 
-    if bc_type == "print_tensor":
-        if core_type is None:
-            raise ValueError("core_type is required when bc_type='print_tensor'")
-        bc_name = f"print_tensor.{core_type}.{cfg.cce_arch}.bc"
-        bc_path = cache / bc_name
-        if not bc_path.exists():
-            raise RuntimeError(
-                f"{bc_name} not found. Run: python -m catlass.bc_compile"
-            )
-        return str(bc_path.resolve())
-
     core_types = _MODE_CORE_TYPES[kernel_mode]
     paths = []
     for ct in core_types:
-        bc_path = cache / f"meta_op.{ct}.{cfg.cce_arch}.bc"
+        bc_path = cache / _meta_op_filename(ct, cfg.cce_arch, variant)
         if not bc_path.exists():
             raise RuntimeError(
                 f"{bc_path.name} not found. Run: python -m catlass.bc_compile"
@@ -470,13 +473,21 @@ def get_bc_paths(
 
 
 def check_bc(bc_dir: Optional[Path] = None) -> None:
-    """Check all runtime BC artifacts: meta_op aic/aiv/mix + print_tensor aic/aiv."""
-    for kernel_mode in _MODE_CORE_TYPES:
-        get_bc_paths(kernel_mode, bc_dir=bc_dir)
-    for core_type in ("aic", "aiv"):
-        get_bc_paths(
-            core_type, bc_type="print_tensor", core_type=core_type, bc_dir=bc_dir
-        )
+    """Check every meta_op aggregate for both variants.
+
+    ``get_bc_paths`` is called for its validation side effect only: it raises
+    when an artifact is missing, and the resolved paths are not needed here,
+    so the return value is discarded on purpose.  The error is deliberately
+    propagated rather than caught -- ``main`` treats it as a cache miss and
+    recompiles, and the pytest session relies on it to fail loudly.
+
+    Raises:
+        RuntimeError: an aggregate is missing, or the cached manifest does not
+            match the current catlass version / ``ccec`` identity.
+    """
+    for variant in _BC_AGGREGATE_VARIANTS:
+        for kernel_mode in _MODE_CORE_TYPES:
+            _ = get_bc_paths(kernel_mode, bc_dir=bc_dir, variant=variant)
 
 
 # ---------------------------------------------------------------------------
@@ -490,7 +501,7 @@ def main() -> None:
     import shutil
 
     parser = argparse.ArgumentParser(
-        description="Pre-compile CATLASS BC stubs (meta_op + print_tensor)."
+        description="Pre-compile CATLASS BC stubs (normal and print meta_op)."
     )
     parser.add_argument("--cache-dir", type=str, default=None)
     parser.add_argument("--cce-arch", type=str, default="c310")

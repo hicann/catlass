@@ -5,6 +5,7 @@ from enum import IntEnum
 from typing import NamedTuple
 from pathlib import Path
 import importlib.util
+import json
 import math
 import os
 import re
@@ -195,37 +196,35 @@ def test_prepare_hivmc_input_uses_aic_aggregate_print_tensor_helper(
     compiler_input, selected = execution._create_stamped_hivmc_input(
         mlir_path,
         execution.TlaCompileOption(kernel_mode="aic", arch_scope="aic.c310"),
+        bitcodes=template_bc,
     )
 
     assert compiler_input != mlir_path
     assert selected == template_bc
+    assert Path(selected).name == "meta_op.aic.print.c310.bc"
     assert "hivm.aic_bitcode" in compiler_input.read_text()
 
 
 def test_prepare_hivmc_input_rejects_outdated_print_tensor_aggregate(
-    require_bc, monkeypatch, tmp_path
+    require_bc, tmp_path
 ) -> None:
     mlir_path = tmp_path / "lowered.mlir"
     mlir_path.write_text(
         "module { func.func @kernel(%workspace: i64 {tla.print_tensor.workspace}) }"
     )
     template_bc = Path(execution._get_bc_paths("aiv"))
-    stale_aggregate = tmp_path / "meta_op.aiv.c310.bc"
+    stale_aggregate = tmp_path / "meta_op.aiv.print.c310.bc"
     stale_aggregate.write_bytes(
         template_bc.read_bytes().replace(
             execution._PRINT_TENSOR_HELPER_ABI_MARKER, b""
         )
     )
 
-    def override_bc_paths(kernel_mode, **_kwargs):
-        return str(stale_aggregate.resolve())
-
-    monkeypatch.setattr(execution, "_get_bc_paths", override_bc_paths)
-
     with pytest.raises(execution.TlaRuntimeUnavailableError, match="ABI marker"):
         execution._create_stamped_hivmc_input(
             mlir_path,
             execution.TlaCompileOption(kernel_mode="aiv", arch_scope="aiv.c310"),
+            bitcodes=str(stale_aggregate),
         )
 
 
@@ -257,9 +256,14 @@ def test_prepare_hivmc_input_uses_mixed_split_aggregate_print_tensor_helper(
     _, selected = execution._create_stamped_hivmc_input(
         mlir_path,
         execution.TlaCompileOption(kernel_mode="mix"),
+        bitcodes=template_bc,
     )
 
     assert selected == template_bc
+    assert [Path(path).name for path in selected.split(",")] == [
+        "meta_op.aic.print.c310.bc",
+        "meta_op.aiv.print.c310.bc",
+    ]
 
 
 def test_debug_print_output_accepts_unordered_f32_records_from_distinct_blocks() -> (
@@ -676,7 +680,13 @@ def test_public_compile_dry_run_invokes_typed_bridge_and_hivmc_a5(
             kernel_abi=_zero_arg_kernel_abi(),
         ),
     )
-    monkeypatch.setattr(execution, "_get_bc_paths", lambda scope: str(template_bc.resolve()))
+    helper_lookups = []
+
+    def get_helper_paths(scope, *, variant):
+        helper_lookups.append((scope, variant))
+        return str(template_bc.resolve())
+
+    monkeypatch.setattr(execution, "_get_bc_paths", get_helper_paths)
 
     recorded: list[tuple[str, list[str]]] = []
 
@@ -706,6 +716,10 @@ def test_public_compile_dry_run_invokes_typed_bridge_and_hivmc_a5(
     cache_dir = compiled.artifacts.cache_dir
     assert cache_dir is not None
     assert not (cache_dir / "lowered.hivmc-input.mlir").exists()
+    assert helper_lookups == [("aiv", "normal")]
+    manifest = json.loads((cache_dir / "manifest.json").read_text())
+    assert manifest["bc_aggregate_variant"] == "normal"
+    assert manifest["helper_bitcode_files"] == [str(template_bc.resolve())]
     assert recorded == [
         (
             "hivmc-a5",
@@ -724,27 +738,96 @@ def test_public_compile_dry_run_invokes_typed_bridge_and_hivmc_a5(
     ]
 
 
-def test_prepare_hivmc_input_stamps_only_debug_print_mlir(
-    monkeypatch, tmp_path
-) -> None:
+def test_prepare_hivmc_input_stamps_only_debug_print_mlir(tmp_path) -> None:
     mlir_path = tmp_path / "lowered.mlir"
     mlir_path.write_text(
         "module { func.func @kernel(%workspace: memref<?xi8> "
         "{tla.debug_print.workspace}) }"
     )
-    template_bc = tmp_path / "meta_op.aic.c310.bc"
+    template_bc = tmp_path / "meta_op.aic.print.c310.bc"
     template_bc.write_bytes(b"bc")
-    monkeypatch.setattr(execution, "_get_bc_paths", lambda scope: str(template_bc.resolve()))
 
-    compiler_input, template_bitcode = execution._create_stamped_hivmc_input(
+    compiler_input, bitcodes = execution._create_stamped_hivmc_input(
         mlir_path,
         execution.TlaCompileOption(kernel_mode="aic", arch_scope="aic.c310"),
+        bitcodes=str(template_bc.resolve()),
     )
 
     assert compiler_input != mlir_path
-    assert template_bitcode == str(template_bc.resolve())
+    assert bitcodes == str(template_bc.resolve())
     assert "hivm.aic_bitcode" in compiler_input.read_text()
     assert "hivm.aic_bitcode" not in mlir_path.read_text()
+
+
+@pytest.mark.parametrize(
+    ("workspace_attr", "expected"),
+    (
+        ("", "normal"),
+        ("tla.debug_print.workspace", "print"),
+        ("tla.print_tensor.workspace", "print"),
+        ("tla.debug_tunnel.state", "print"),
+    ),
+    ids=("ordinary", "scalar-print", "tensor-print", "local-memory"),
+)
+def test_select_bc_aggregate_variant(workspace_attr, expected) -> None:
+    lowered = (
+        f"module {{ func.func @kernel(%workspace: i64 {{{workspace_attr}}}) }}"
+        if workspace_attr
+        else "module { func.func @kernel() }"
+    )
+    metadata = execution._analyze_artifact_static_metadata("module {}", lowered)
+
+    assert execution._select_bc_aggregate_variant(metadata) == expected
+
+
+def test_prepare_hivmc_input_rejects_normal_aggregate_for_tensor_print(tmp_path) -> None:
+    mlir_path = tmp_path / "lowered.mlir"
+    mlir_path.write_text(
+        "module { func.func @kernel(%workspace: i64 {tla.print_tensor.workspace}) }"
+    )
+    normal_bc = tmp_path / "meta_op.aiv.c310.bc"
+    normal_bc.write_bytes(execution._PRINT_TENSOR_HELPER_ABI_MARKER)
+
+    with pytest.raises(
+        execution.TlaRuntimeUnavailableError,
+        match="aggregate print tensor bitcode was not selected",
+    ):
+        execution._create_stamped_hivmc_input(
+            mlir_path,
+            execution.TlaCompileOption(kernel_mode="aiv", arch_scope="aiv.c310"),
+            bitcodes=str(normal_bc),
+        )
+
+
+def test_prepare_hivmc_input_keeps_selected_helpers_for_debug_tunnel(
+    monkeypatch, tmp_path
+) -> None:
+    mlir_path = tmp_path / "lowered.mlir"
+    mlir_path.write_text(
+        "module { func.func @kernel(%state: i64 {tla.debug_tunnel.state}) }"
+    )
+    selected = str(tmp_path / "meta_op.aic.print.c310.bc")
+    stamped = []
+    monkeypatch.setattr(
+        execution,
+        "_stamp_hivm_template_bitcode_attrs",
+        lambda path, paths: stamped.append((path, paths)),
+    )
+    monkeypatch.setattr(
+        execution,
+        "_get_bc_paths",
+        lambda *_args, **_kwargs: pytest.fail("selected helpers must not be resolved again"),
+    )
+
+    compiler_input, bitcodes = execution._create_stamped_hivmc_input(
+        mlir_path,
+        execution.TlaCompileOption(kernel_mode="aic", arch_scope="aic.c310"),
+        bitcodes=selected,
+    )
+
+    assert compiler_input != mlir_path
+    assert bitcodes == selected
+    assert stamped == [(compiler_input, selected)]
 
 
 def test_generated_kernel_bridge_lowers_live_module(monkeypatch, tmp_path) -> None:
@@ -763,7 +846,9 @@ def test_generated_kernel_bridge_lowers_live_module(monkeypatch, tmp_path) -> No
     monkeypatch.setattr(execution, "resolve_bridge_extension_path", lambda: None)
     monkeypatch.setattr(execution, "_resolve_hivmc_a5", lambda: hivm_compile)
     monkeypatch.setattr(execution, "_tool_version", lambda _x: "test-version")
-    monkeypatch.setattr(execution, "_get_bc_paths", lambda scope: str(template_bc.resolve()))
+    monkeypatch.setattr(
+        execution, "_get_bc_paths", lambda scope, **_kwargs: str(template_bc.resolve())
+    )
 
     bridge_calls: list[tuple[object, dict[str, object]]] = []
 
@@ -878,7 +963,9 @@ def test_force_recompile_refreshes_launched_artifact_in_memory_cache(
     monkeypatch.setattr(execution, "resolve_bridge_extension_path", lambda: None)
     monkeypatch.setattr(execution, "_resolve_hivmc_a5", lambda: hivm_compile)
     monkeypatch.setattr(execution, "_tool_version", lambda _path: "test-version")
-    monkeypatch.setattr(execution, "_get_bc_paths", lambda scope: str((tmp_path / "meta_op.aic.c310.bc").resolve()))
+    monkeypatch.setattr(
+        execution, "_get_bc_paths", lambda scope, **_kwargs: str(template_bc.resolve())
+    )
     monkeypatch.setattr(
         execution,
         "lower_tlair_module_to_mlir",
@@ -1046,6 +1133,9 @@ def test_cache_hit_preserves_recursive_tree_and_launches_same_payload(
     monkeypatch.setattr(execution, "_tool_version", lambda _path: "test-version")
     monkeypatch.setattr(execution, "_mlir_build_dirs", lambda: [tmp_path])
     monkeypatch.setattr(
+        execution, "_get_bc_paths", lambda scope, **_kwargs: str(template_bc.resolve())
+    )
+    monkeypatch.setattr(
         execution,
         "lower_tlair_module_to_mlir",
         lambda *_args, **_kwargs: compiler_bridge.TlaLoweringResult(
@@ -1114,11 +1204,102 @@ def test_artifact_manifest_does_not_require_a_python_tree() -> None:
     assert execution._cache_manifest_has_current_workspace_abis(manifest)
 
 
-def test_compile_rejects_invalid_kernel_abi_before_hivmc(monkeypatch, tmp_path) -> None:
+@pytest.mark.parametrize("storage", ("memory", "disk"))
+@pytest.mark.parametrize("helper_record", ("absent", "stale"))
+def test_cache_hits_ignore_helper_manifest_records(
+    storage, helper_record, monkeypatch, tmp_path
+) -> None:
+    """BC aggregate variants are provenance, not an additional cache validity check."""
+    hivmc = tmp_path / "hivmc-a5"
+    hivmc.write_text("")
+    helper = tmp_path / "meta_op.aiv.c310.bc"
+    helper.write_bytes(b"bc")
+    monkeypatch.setattr(execution, "_MEMORY_COMPILE_CACHE", {})
+    monkeypatch.setattr(
+        base_dsl_mod.BaseDSL,
+        "_lower",
+        lambda *_args, **_kwargs: _FakeLowered(
+            "module { tla.func @zero_arg_kernel() { tla.return } }", module=object()
+        ),
+    )
+    monkeypatch.setattr(execution, "resolve_bridge_extension_path", lambda: None)
+    monkeypatch.setattr(execution, "_resolve_hivmc_a5", lambda: hivmc)
+    monkeypatch.setattr(execution, "_tool_version", lambda _path: "test-version")
+    monkeypatch.setattr(
+        execution, "_get_bc_paths", lambda *_args, **_kwargs: str(helper)
+    )
+    monkeypatch.setattr(
+        execution,
+        "lower_tlair_module_to_mlir",
+        lambda *_args, **_kwargs: compiler_bridge.TlaLoweringResult(
+            "module { func.func @zero_arg_kernel() }",
+            kernel_abi=_zero_arg_kernel_abi(),
+        ),
+    )
+    monkeypatch.setattr(
+        execution,
+        "_run_checked",
+        lambda _command, *, cwd, **_kwargs: Path(cwd, "kernel.o").write_bytes(b"obj"),
+    )
+    kwargs = dict(
+        kind="kernel",
+        options={},
+        compile_option=execution.TlaCompileOption(
+            cache_enabled=True, cache_dir=tmp_path / "cache"
+        ),
+    )
+    first = execution.compile_and_cache(_zero_arg_kernel, **kwargs)
+    manifest_path = first.artifacts.cache_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    if helper_record == "absent":
+        manifest.pop("bc_aggregate_variant")
+        manifest.pop("helper_bitcode_files")
+    else:
+        manifest["bc_aggregate_variant"] = "print"
+        manifest["helper_bitcode_files"] = [str(tmp_path / "missing.print.bc")]
+    manifest_path.write_text(json.dumps(manifest))
+    helper.unlink()
+    if storage == "disk":
+        execution._MEMORY_COMPILE_CACHE.clear()
+
+    def unexpected_compile(*_args, **_kwargs):
+        pytest.fail("cache hit must not select helpers, lower or compile again")
+
+    for operation in (
+        "_select_bc_aggregate_variant",
+        "_get_bc_paths",
+        "_run_tla_lowering_to_mlir",
+        "_run_checked",
+    ):
+        monkeypatch.setattr(execution, operation, unexpected_compile)
+    cached = execution.compile_and_cache(_zero_arg_kernel, **kwargs)
+
+    assert cached.cache_key == first.cache_key
+    assert cached.kernel_binary_path == first.kernel_binary_path
+    assert cached.kernel_binary_path.read_bytes() == b"obj"
+    assert json.loads(manifest_path.read_text()) == manifest
+
+
+@pytest.mark.parametrize(
+    ("lowered_mlir", "abi_entrypoint", "error"),
+    (
+        (
+            "module { func.func @zero_arg_kernel() }\n",
+            "wrong_kernel",
+            "does not match",
+        ),
+        ("", "zero_arg_kernel", "Compiler produced empty lowered MLIR"),
+        (" \n", "zero_arg_kernel", "Compiler produced empty lowered MLIR"),
+    ),
+    ids=("kernel-abi", "empty-mlir", "whitespace-mlir"),
+)
+def test_compile_rejects_invalid_lowering_before_hivmc(
+    monkeypatch, tmp_path, lowered_mlir, abi_entrypoint, error
+) -> None:
     tlair_mlir = "module { tla.func @zero_arg_kernel() { tla.return } }"
     hivmc = tmp_path / "hivmc-a5"
     hivmc.write_text("")
-    invalid_abi = replace(_zero_arg_kernel_abi(), entrypoint="wrong_kernel")
+    kernel_abi = replace(_zero_arg_kernel_abi(), entrypoint=abi_entrypoint)
 
     monkeypatch.setattr(
         base_dsl_mod.BaseDSL,
@@ -1132,8 +1313,8 @@ def test_compile_rejects_invalid_kernel_abi_before_hivmc(monkeypatch, tmp_path) 
         execution,
         "lower_tlair_module_to_mlir",
         lambda *_args, **_kwargs: compiler_bridge.TlaLoweringResult(
-            "module { func.func @zero_arg_kernel() }\n",
-            kernel_abi=invalid_abi,
+            lowered_mlir,
+            kernel_abi=kernel_abi,
         ),
     )
     monkeypatch.setattr(
@@ -1142,7 +1323,7 @@ def test_compile_rejects_invalid_kernel_abi_before_hivmc(monkeypatch, tmp_path) 
         lambda *_args, **_kwargs: pytest.fail("hivmc must not run"),
     )
 
-    with pytest.raises(execution.TlaKernelCompileError, match="does not match"):
+    with pytest.raises(execution.TlaKernelCompileError, match=error):
         execution.compile_and_cache(
             _zero_arg_kernel,
             kind="kernel",
@@ -1914,15 +2095,12 @@ def test_resolve_compile_option_from_lowered_mlir_updates_kernel_mode() -> None:
     assert updated.arch_scope == "aiv.c310"
 
 
-def test_build_hivmc_a5_command_links_template_bitcode_for_aic(
-    monkeypatch, tmp_path
-) -> None:
+def test_build_hivmc_a5_command_links_template_bitcode_for_aic(tmp_path) -> None:
     compiler = tmp_path / "hivmc-a5"
     mlir_path = tmp_path / "kernel.mlir"
     kernel_binary_path = tmp_path / "kernel.o"
     template_bc = tmp_path / "meta_op.aic.c310.bc"
     template_bc.write_bytes(b"bc")
-    monkeypatch.setattr(execution, "_get_bc_paths", lambda scope: str(template_bc.resolve()))
 
     command = execution._build_hivmc_a5_command(
         compiler=compiler,
@@ -1931,6 +2109,7 @@ def test_build_hivmc_a5_command_links_template_bitcode_for_aic(
         compile_option=execution.TlaCompileOption(
             kernel_mode="aic", arch_scope="aic.c310"
         ),
+        bitcodes=str(template_bc.resolve()),
     )
 
     assert command == [
@@ -1946,15 +2125,12 @@ def test_build_hivmc_a5_command_links_template_bitcode_for_aic(
     ]
 
 
-def test_build_hivmc_a5_command_links_template_bitcode_for_aiv(
-    monkeypatch, tmp_path
-) -> None:
+def test_build_hivmc_a5_command_links_template_bitcode_for_aiv(tmp_path) -> None:
     compiler = tmp_path / "hivmc-a5"
     mlir_path = tmp_path / "kernel.mlir"
     kernel_binary_path = tmp_path / "kernel.o"
     template_bc = tmp_path / "meta_op.aiv.c310.bc"
     template_bc.write_bytes(b"bc")
-    monkeypatch.setattr(execution, "_get_bc_paths", lambda scope: str(template_bc.resolve()))
 
     command = execution._build_hivmc_a5_command(
         compiler=compiler,
@@ -1963,6 +2139,7 @@ def test_build_hivmc_a5_command_links_template_bitcode_for_aiv(
         compile_option=execution.TlaCompileOption(
             kernel_mode="aiv", arch_scope="aiv.c310"
         ),
+        bitcodes=str(template_bc.resolve()),
     )
 
     assert command == [
