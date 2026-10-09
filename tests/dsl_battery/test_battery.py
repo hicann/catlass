@@ -104,6 +104,18 @@ def _cases(device: int) -> Iterator[tuple[str, list[list[str]]]]:
 
     dev = ["--device", str(device)]
 
+    # --- SYRK: aligned tiles, M/K tails, long K, single/multi-core stores ---
+    for dtype in ("f16", "bf16"):
+        for m, k in (("1", "1"), ("1024", "1024"), ("769", "129"), ("257", "16385")):
+            for blocks in ("1", "-1"):
+                yield (
+                    f"syrk-{m}x{k}-{dtype}-b{blocks}",
+                    [[
+                        "basic_syrk/basic_syrk.py", "--m", m, "--k", k,
+                        "--dtype", dtype, "--block-num", blocks, *dev,
+                    ]],
+                )
+
     # --- basic_mmad: the flag-sync layout x dtype matrix ---
     yield from _mmad_cases(
         "mmad",

@@ -11,6 +11,7 @@
 #
 # End-to-end validation for python/tla_dsl/examples/end_to_end/basic_mmad (basic_matmul*.py, basic_mmad_ptr.py,
 # basic_matmul_l0c2l1.py),
+# python/tla_dsl/examples/end_to_end/basic_syrk (basic_syrk.py).
 # python/tla_dsl/examples/end_to_end/basic_vadd (basic_vadd.py),
 # python/tla_dsl/examples/end_to_end/extern_op (extern_vecadd.py, extern_dual_core.py),
 # python/tla_dsl/examples/end_to_end/basic_mixed (basic_mixed.py), python/tla_dsl/examples/end_to_end/basic_mixed_mutex (basic_mixed_mutex.py) and
@@ -90,6 +91,7 @@ BASIC_MMAD_REL="examples/end_to_end/basic_mmad/basic_matmul.py"
 BASIC_MMAD_AUTO_SYNC_REL="examples/end_to_end/basic_mmad/basic_matmul_auto_sync.py"
 BASIC_MMAD_PTR_REL="examples/end_to_end/basic_mmad/basic_mmad_ptr.py"
 BASIC_MMAD_L0C2L1_REL="examples/end_to_end/basic_mmad/basic_matmul_l0c2l1.py"
+BASIC_SYRK_REL="examples/end_to_end/basic_syrk/basic_syrk.py"
 BASIC_VADD_REL="examples/end_to_end/basic_vadd/basic_vadd.py"
 EXTERN_VECADD_REL="examples/end_to_end/extern_op/extern_vecadd.py"
 EXTERN_DUAL_CORE_REL="examples/end_to_end/extern_op/extern_dual_core.py"
@@ -160,6 +162,7 @@ Run end-to-end validation for:
     atomic-add coverage for each supported input dtype)
   - basic_mmad_ptr (basic_mmad_ptr.py)
   - basic_mmad_l0c2l1 (basic_matmul_l0c2l1.py: cube-only E=(A@B)@D with L0C->L1 staging)
+  - basic_syrk (fp16/bf16, aligned/tail/long-K shapes, single/automatic core count)
   - basic_vadd (basic_vadd.py with per-dtype CLI invocations, plus mutex variants)
   - extern_op (extern_vecadd.py and extern_dual_core.py)
   - basic_mixed (basic_mixed.py with dynamic GM mnk list, including --use-mutex; basic_mixed_ub2l1.py,
@@ -389,6 +392,10 @@ if [[ ! -f "${CATLASS_DSL_DIR}/${BASIC_MMAD_PTR_REL}" ]]; then
 fi
 if [[ ! -f "${CATLASS_DSL_DIR}/${BASIC_MMAD_L0C2L1_REL}" ]]; then
     echo "error: missing ${BASIC_MMAD_L0C2L1_REL} under ${CATLASS_DSL_DIR}" >&2
+    exit 1
+fi
+if [[ ! -f "${CATLASS_DSL_DIR}/${BASIC_SYRK_REL}" ]]; then
+    echo "error: missing ${BASIC_SYRK_REL} under ${CATLASS_DSL_DIR}" >&2
     exit 1
 fi
 if [[ ! -f "${CATLASS_DSL_DIR}/${BASIC_VADD_REL}" ]]; then
