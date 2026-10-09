@@ -582,9 +582,11 @@ static LogicalResult collectInstructionPlans(
                     plan.resources.push_back(resolver.resolve(load.getSource()));
                 else if (auto store = dyn_cast<::tla::StoreOp>(nested))
                     plan.resources.push_back(resolver.resolve(store.getDest()));
-                else if (auto gather = dyn_cast<::tla::GatherOp>(nested))
-                    plan.resources.push_back(resolver.resolve(gather.getX()));
-                else if (auto scalarLoad = dyn_cast<::tla::ScalarLoadOp>(nested))
+                else if (auto gather = dyn_cast<::tla::GatherOp>(nested)) {
+                    // Reg→Reg gather has no UB storage operand.
+                    if (isa<::tla::TlaTensorType>(gather.getX().getType()))
+                        plan.resources.push_back(resolver.resolve(gather.getX()));
+                } else if (auto scalarLoad = dyn_cast<::tla::ScalarLoadOp>(nested))
                     plan.resources.push_back(resolver.resolve(scalarLoad.getSource()));
                 else if (auto scalarStore = dyn_cast<::tla::ScalarStoreOp>(nested))
                     plan.resources.push_back(resolver.resolve(scalarStore.getDest()));

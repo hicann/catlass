@@ -8498,7 +8498,7 @@ def _require_reg_slot_reachable(src_token: str, dst_token: str, slot: RegSlot) -
 
 @dsl_user_op
 def gather(
-    x: Tensor,
+    x: Tensor | VectorSSA,
     y: VectorSSA,
     *,
     mask: MaskSSA | None = None,
@@ -8506,31 +8506,112 @@ def gather(
 ) -> VectorSSA:
     """Directory: Vector Compute / Discrete and Aggregate
     Description:
-        Gather vector values from a tile/table by indices.
+        Gather vector values by indices from a UB tile or a register.
+
+        Two forms:
+
+        - **UB→Reg**: ``x`` is a UB ``Tensor``; ``y`` is ``i32`` indices.
+          Optional ``mask``.
+        - **Reg→Reg**: ``x`` is ``VectorSSA``; ``y`` is an integer index
+          vector with the same element bit-width as ``x`` (``i8``/``u8``,
+          ``i16``/``u16``, or ``i32``/``u32``); ``result[i] = x[y[i] % VL]``.
+          No ``mask``.
 
         Parameters:
-        - `x` (`Tensor`): Source tile / table to gather from. Required.
+        - `x` (`Tensor | VectorSSA`): Source tile (UB) or source register. Required.
         - `y` (`VectorSSA`): Index vector register. Required.
-        - `mask` (`MaskSSA | None`): Optional execution mask; `None` means all lanes enabled. Optional, default `None`.
+        - `mask` (`MaskSSA | None`): Optional execution mask for UB→Reg only;
+          `None` means all lanes enabled. Optional, default `None`.
 
         Constraints:
         - Must be called inside a `@tla.kernel`-decorated kernel function.
-        - Must be called inside `tla.vec.func()`; the source tensor must reside in UB.
+        - Must be called inside `tla.vec.func()`.
+        - Tensor source must reside in UB.
 
         Example:
         ```python
         with tla.vec.func(mode="simd"):
-            vals = tla.gather(ub_tile, idx_reg)
+            vals = tla.gather(ub_tile, idx_i32)
+            w_brc = tla.gather(w, idx_u16)  # Reg→Reg
         ```
     """
-    _require_category("gather", "x", x, "tensor", 0)
+    _require_categories("gather", "x", x, ("tensor", "vector_ssa"), 0)
     _require_category("gather", "y", y, "vector_ssa", 1)
     _require_frontend_state("gather")
     _runtime._require_enclosing_region("gather", "vec.func")
     x_value = _as_value(x)
     y_value = _as_value(y)
-    x_desc = _tla_tensor_descriptor_from_type_or_value(x_value)
     y_desc = _vector_ssa_type_for_mlir_value(y_value)
+    if y_desc is None:
+        _op_error("gather", "invalid argument 'y' (position 1)")
+
+    # Reg→Reg: x is VectorSSA → bc vselr.
+    if _category(x) == "vector_ssa":
+        if mask is not None:
+            _op_error("gather", "Reg→Reg gather does not support mask")
+        x_desc = _vector_ssa_type_for_mlir_value(x_value)
+        if x_desc is None:
+            _op_error("gather", "invalid argument 'x' (position 0)")
+        _GATHER_REG_SRC = frozenset(
+            {
+                "i8",
+                "u8",
+                "i16",
+                "u16",
+                "i32",
+                "u32",
+                "f16",
+                "bf16",
+                "f32",
+            }
+        )
+        src_tok = x_desc.element_type.lower()
+        if src_tok not in _GATHER_REG_SRC:
+            _op_error(
+                "gather",
+                f"unsupported Reg→Reg src element type {x_desc.element_type}; "
+                f"expected one of {sorted(_GATHER_REG_SRC)}",
+            )
+
+        src_bytes = dtype_size_bytes(src_tok)
+        index_tok = y_desc.element_type.lower()
+        _INDEX_OK = {
+            1: frozenset({"u8", "i8"}),
+            2: frozenset({"u16", "i16"}),
+            4: frozenset({"u32", "i32"}),
+        }
+        if index_tok not in _INDEX_OK[src_bytes]:
+            _op_error(
+                "gather",
+                f"Reg→Reg gather index element type must match src bit-width "
+                f"({sorted(_INDEX_OK[src_bytes])} for {src_bytes}-byte src), "
+                f"got {y_desc.element_type}",
+            )
+
+        if (
+            x_desc.valid_lanes is not None
+            and y_desc.valid_lanes is not None
+            and x_desc.valid_lanes != y_desc.valid_lanes
+        ):
+            _op_error(
+                "gather",
+                f"src and index lane counts must match, got "
+                f"{x_desc.valid_lanes} vs {y_desc.valid_lanes}",
+            )
+
+        result = _tla_ops_gen.gather(
+            x_value.type,
+            x_value,
+            y_value,
+            mask=None,
+            loc=loc,
+        )
+        return VectorSSA(result)
+
+    # UB→Reg: x is a UB tensor → HIVMAVE vgather.
+    x_desc = _tla_tensor_descriptor_from_type_or_value(x_value)
+    if x_desc is None:
+        _op_error("gather", "invalid argument 'x' (position 0)")
 
     # validate x addrspace is ub
     if x_desc.addrspace.lower() != "ub":

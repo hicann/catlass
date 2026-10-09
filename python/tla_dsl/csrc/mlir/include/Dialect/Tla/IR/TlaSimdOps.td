@@ -246,12 +246,24 @@ def Tla_ShiftRightOp : Tla_VectorShiftOp<"shift_right",
     "Element-wise right shift by the signed amounts in the rhs VectorSSA value.">;
 
 def Tla_GatherOp : Tla_Op<"gather", [Pure]> {
-  let summary = "Vector gather on VectorSSA values";
+  let summary = "Vector gather from UB tile or register";
   let description = [{
-    Gathers elements from ``x`` to ``result``according to the indices in ``y``.
+    Gathers elements from ``x`` into ``result`` according to the indices in ``y``.
+
+    Two source forms are supported:
+
+    * **UB→Reg** (``x`` is a UB ``!tla.tensor``): per-lane indexed load.
+      ``y`` must be ``i32``. Optional ``mask`` predicates lanes.
+    * **Reg→Reg** (``x`` is ``!tla.vector``): register permute
+      ``result[i] = x[y[i] % VL]``. ``y`` must be an integer with the same
+      element bit-width as ``x`` (``i8``/``u8``, ``i16``/``u16``, or
+      ``i32``/``u32``). No ``mask`` in this form.
   }];
-  let arguments = (ins Tla_TensorType:$x, Tla_VectorSSAType:$y,
-                       Optional<Tla_MaskSSAType>:$mask);
+  let arguments = (ins
+    AnyTypeOf<[Tla_TensorType, Tla_VectorSSAType]>:$x,
+    Tla_VectorSSAType:$y,
+    Optional<Tla_MaskSSAType>:$mask
+  );
   let results = (outs Tla_VectorSSAType:$result);
   let assemblyFormat = [{
     $x `,` $y (`mask` $mask^)? attr-dict `:`

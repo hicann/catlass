@@ -472,7 +472,7 @@ dst = tla.make_tensor_like(ptr, like=src_tile, layoutTag=tla.arch.RowMajor)
 
 ### `make_ptr`
 
-**Source:** [`catlass.core_api.make_ptr`](../../../catlass/core_api.py#L8856)
+**Source:** [`catlass.core_api.make_ptr`](../../../catlass/core_api.py#L8937)
 
 Description:
 
@@ -507,7 +507,7 @@ ptr = tla.make_ptr(tla.Float16, addr, mem_space=tla.AddressSpace.gm)
 
 ### `recast_ptr`
 
-**Source:** [`catlass.core_api.recast_ptr`](../../../catlass/core_api.py#L8910)
+**Source:** [`catlass.core_api.recast_ptr`](../../../catlass/core_api.py#L8991)
 
 Description:
 
@@ -1168,7 +1168,7 @@ Mask creation and tail-mask updates.
 
 #### `create_mask`
 
-**Source:** [`catlass.core_api.create_mask`](../../../catlass/core_api.py#L9184)
+**Source:** [`catlass.core_api.create_mask`](../../../catlass/core_api.py#L9265)
 
 Description:
 
@@ -1224,7 +1224,7 @@ with tla.vec.func(mode="simd"):
 
 #### `update_mask`
 
-**Source:** [`catlass.core_api.update_mask`](../../../catlass/core_api.py#L9248)
+**Source:** [`catlass.core_api.update_mask`](../../../catlass/core_api.py#L9329)
 
 Description:
 
@@ -2088,30 +2088,42 @@ with tla.vec.func(mode="simd"):
 
 Description:
 
-Gather vector values from a tile/table by indices.
+Gather vector values by indices from a UB tile or a register.
+
+Two forms:
+
+- **UB→Reg**: ``x`` is a UB ``Tensor``; ``y`` is ``i32`` indices.
+  Optional ``mask``.
+- **Reg→Reg**: ``x`` is ``VectorSSA``; ``y`` is an integer index
+  vector with the same element bit-width as ``x`` (``i8``/``u8``,
+  ``i16``/``u16``, or ``i32``/``u32``); ``result[i] = x[y[i] % VL]``.
+  No ``mask``.
 
 Prototype:
 
 ```python
-tla.gather(x: Tensor, y: VectorSSA, *, mask: MaskSSA | None = None) -> VectorSSA
+tla.gather(x: Tensor | VectorSSA, y: VectorSSA, *, mask: MaskSSA | None = None) -> VectorSSA
 ```
 
 Parameters:
 
-- `x` (`Tensor`): Source tile / table to gather from. Required.
+- `x` (`Tensor | VectorSSA`): Source tile (UB) or source register. Required.
 - `y` (`VectorSSA`): Index vector register. Required.
-- `mask` (`MaskSSA | None`): Optional execution mask; `None` means all lanes enabled. Optional, default `None`.
+- `mask` (`MaskSSA | None`): Optional execution mask for UB→Reg only;
+  `None` means all lanes enabled. Optional, default `None`.
 
 Constraints:
 
 - Must be called inside a `@tla.kernel`-decorated kernel function.
-- Must be called inside `tla.vec.func()`; the source tensor must reside in UB.
+- Must be called inside `tla.vec.func()`.
+- Tensor source must reside in UB.
 
 Example:
 
 ```python
 with tla.vec.func(mode="simd"):
-    vals = tla.gather(ub_tile, idx_reg)
+    vals = tla.gather(ub_tile, idx_i32)
+    w_brc = tla.gather(w, idx_u16)  # Reg→Reg
 ```
 
 ---
@@ -2699,7 +2711,7 @@ Architecture attributes on `tla.arch` (layout tags, pipe identifiers, block help
 
 ### `arch`
 
-**Source:** [`catlass.core_api.arch`](../../../catlass/core_api.py#L9038)
+**Source:** [`catlass.core_api.arch`](../../../catlass/core_api.py#L9119)
 
 Description:
 
@@ -2776,7 +2788,7 @@ On-chip scratch allocation via `allocate`.
 
 ### `allocate`
 
-**Source:** [`catlass.core_api.allocate`](../../../catlass/core_api.py#L8730)
+**Source:** [`catlass.core_api.allocate`](../../../catlass/core_api.py#L8811)
 
 Description:
 

@@ -856,7 +856,53 @@ mlir::LogicalResult GatherOp::verify()
 {
     if (!hasEnclosingRegion<VecFuncOp>(getOperation()))
         return emitOpError("must be nested inside a tla.vec.func region");
+
     auto indexType = mlir::dyn_cast<VectorSSAType>(getY().getType());
+    if (!indexType)
+        return emitOpError("gather indices must be !tla.vector");
+    auto resultTy = mlir::dyn_cast<VectorSSAType>(getResult().getType());
+    if (!resultTy)
+        return emitOpError("gather result must be !tla.vector");
+
+    // Reg→Reg: x is VectorSSA; lowers via bc vselr. No mask.
+    if (auto srcTy = mlir::dyn_cast<VectorSSAType>(getX().getType())) {
+        if (getMask())
+            return emitOpError("Reg→Reg gather does not support mask");
+        if (resultTy != srcTy)
+            return emitOpError("result type must match src vector type");
+
+        mlir::Type srcElem = srcTy.getElementType();
+        unsigned srcBytes = 0;
+        if (auto intTy = mlir::dyn_cast<mlir::IntegerType>(srcElem)) {
+            if (intTy.getWidth() != 8 && intTy.getWidth() != 16 && intTy.getWidth() != 32)
+                return emitOpError("src element width must be 8/16/32 bits");
+            srcBytes = intTy.getWidth() / 8;
+        } else if (srcElem.isF16() || srcElem.isBF16()) {
+            srcBytes = 2;
+        } else if (srcElem.isF32()) {
+            srcBytes = 4;
+        } else {
+            return emitOpError("unsupported src element type for Reg→Reg gather");
+        }
+
+        auto indexElem = mlir::dyn_cast<mlir::IntegerType>(indexType.getElementType());
+        if (!indexElem || indexElem.getWidth() != srcBytes * 8)
+            return emitOpError(
+                "Reg→Reg gather index must be an integer with the same bit-width as "
+                "src element (i8/u8, i16/u16, or i32/u32)");
+
+        if (srcTy.getValidLanes() != mlir::ShapedType::kDynamic &&
+            indexType.getValidLanes() != mlir::ShapedType::kDynamic &&
+            srcTy.getValidLanes() != indexType.getValidLanes())
+            return emitOpError("src and index must have the same lane count");
+
+        return mlir::success();
+    }
+
+    // UB→Reg: x is a tensor; indices must be i32; optional mask.
+    if (!mlir::isa<TlaTensorType>(getX().getType()))
+        return emitOpError("gather source must be a UB tensor or !tla.vector");
+
     auto indexElementType = indexType.getElementType();
     auto integerType = mlir::dyn_cast<mlir::IntegerType>(indexElementType);
     if (!integerType || !integerType.isSignless() || integerType.getWidth() != 32)

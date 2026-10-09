@@ -614,6 +614,27 @@ static std::string getSqueezeLibraryCallName(Type elementType)
     return {};
 }
 
+static std::string getGatherRegLibraryCallName(Type elementType)
+{
+    if (elementType.isF32())
+        return "gather_reg_float";
+    if (elementType.isF16())
+        return "gather_reg_half";
+    if (elementType.isBF16())
+        return "gather_reg_bfloat16_t";
+    if (auto intType = dyn_cast<IntegerType>(elementType)) {
+        const unsigned w = intType.getWidth();
+        const bool uns = intType.isUnsigned();
+        if (w == 8)
+            return uns ? "gather_reg_uint8_t" : "gather_reg_int8_t";
+        if (w == 16)
+            return uns ? "gather_reg_uint16_t" : "gather_reg_int16_t";
+        if (w == 32)
+            return uns ? "gather_reg_uint32_t" : "gather_reg_int32_t";
+    }
+    return {};
+}
+
 static func::FuncOp getOrCreateSqueezeLibraryCall(
     ModuleOp module, Location loc, VectorType vecType, VectorType pregType, StringRef calleeName)
 {
@@ -621,6 +642,19 @@ static func::FuncOp getOrCreateSqueezeLibraryCall(
         return existing;
     OpBuilder moduleBuilder(module.getBodyRegion());
     auto fnType = FunctionType::get(module.getContext(), {vecType, pregType}, {vecType});
+    auto callee = moduleBuilder.create<func::FuncOp>(loc, calleeName, fnType);
+    callee.setPrivate();
+    callee->setAttr("llvm.emit_c_interface", UnitAttr::get(module.getContext()));
+    return callee;
+}
+
+static func::FuncOp getOrCreateGatherRegLibraryCall(
+    ModuleOp module, Location loc, VectorType srcVecType, VectorType indexVecType, StringRef calleeName)
+{
+    if (auto existing = module.lookupSymbol<func::FuncOp>(calleeName))
+        return existing;
+    OpBuilder moduleBuilder(module.getBodyRegion());
+    auto fnType = FunctionType::get(module.getContext(), {srcVecType, indexVecType}, {srcVecType});
     auto callee = moduleBuilder.create<func::FuncOp>(loc, calleeName, fnType);
     callee.setPrivate();
     callee->setAttr("llvm.emit_c_interface", UnitAttr::get(module.getContext()));
@@ -2218,16 +2252,42 @@ static LogicalResult lowerNestedVectorOp(
         return success();
     }
 
-    // tla.gather: per-lane indexed load from a UB tile.
-    //   x (tile_view → rank-1 memref) → VFGatherOp base
-    //   y (loaded index vector)        → index_vec
-    //   mask (optional)                → mask (all-true if absent)
+    // tla.gather:
+    //   Reg→Reg: x is a vector → bc @gather_reg_* (vselr)
+    //   UB→Reg:  x is a rank-1 memref → VFGatherOp (vgather)
     if (auto gatherOp = dyn_cast<::tla::GatherOp>(op)) {
-        Value base = valueMap.lookup(gatherOp.getX());
+        Value src = valueMap.lookup(gatherOp.getX());
         Value indexVec = valueMap.lookup(gatherOp.getY());
-        if (!base || !indexVec)
+        if (!src || !indexVec)
             return failure();
-        auto baseType = dyn_cast<MemRefType>(base.getType());
+
+        // Reg→Reg permute via linked bitcode (vselr). Not HIVMAVE vgather / vsel.
+        if (isa<::tla::VectorSSAType>(gatherOp.getX().getType())) {
+            auto srcTy = dyn_cast<VectorType>(src.getType());
+            if (!srcTy)
+                return failure();
+            auto opCtx = deriveVecCtxForElement(srcTy.getElementType());
+            if (failed(opCtx))
+                return failure();
+            std::string calleeName = getGatherRegLibraryCallName(srcTy.getElementType());
+            if (calleeName.empty())
+                return gatherOp.emitError("unsupported element type for Reg→Reg gather: ") << srcTy.getElementType(),
+                       failure();
+
+            unsigned indexBits = srcTy.getElementType().getIntOrFloatBitWidth();
+            VectorType indexUType = VectorType::get(
+                opCtx->vecType.getShape(), IntegerType::get(b.getContext(), indexBits, IntegerType::Unsigned));
+            if (indexVec.getType() != indexUType)
+                indexVec = b.create<UnrealizedConversionCastOp>(loc, indexUType, indexVec).getResult(0);
+
+            auto callee = getOrCreateGatherRegLibraryCall(module, loc, opCtx->vecType, indexUType, calleeName);
+            valueMap[gatherOp.getResult()] =
+                b.create<func::CallOp>(loc, callee, ValueRange{src, indexVec}).getResult(0);
+            return success();
+        }
+
+        // UB→Reg: per-lane indexed load from a UB tile.
+        auto baseType = dyn_cast<MemRefType>(src.getType());
         if (!baseType || baseType.getRank() != 1)
             return failure();
         auto elemByteWidth = getElementByteWidth(baseType.getElementType());
@@ -2246,7 +2306,7 @@ static LogicalResult lowerNestedVectorOp(
         }
         Value zero = b.create<arith::ConstantIndexOp>(loc, 0);
         valueMap[gatherOp.getResult()] =
-            b.create<hivmave::VFGatherOp>(loc, resultVecType, base, ValueRange(zero), indexVec, mask);
+            b.create<hivmave::VFGatherOp>(loc, resultVecType, src, ValueRange(zero), indexVec, mask);
         return success();
     }
 
@@ -2775,7 +2835,9 @@ static LogicalResult collectVectorHelperOperands(
             continue;
         }
         if (auto gatherOp = dyn_cast<::tla::GatherOp>(op)) {
-            addVectorHelperOperand(gatherOp.getX(), operands, aliases);
+            // Only UB-tensor gather needs a helper memref argument.
+            if (isa<::tla::TlaTensorType>(gatherOp.getX().getType()))
+                addVectorHelperOperand(gatherOp.getX(), operands, aliases);
             continue;
         }
         // Bridged scalar accesses (after tla-lower-scalar-access) appear as
@@ -4005,6 +4067,11 @@ public:
                     return rewriter.notifyMatchFailure(
                         vecFuncOp, "expected tla.deinterleave operands from tla.load or prior compute op");
             } else if (auto gatherOp = dyn_cast<::tla::GatherOp>(computeOp)) {
+                if (isa<::tla::VectorSSAType>(gatherOp.getX().getType())) {
+                    if (!producedValues.contains(gatherOp.getX()))
+                        return rewriter.notifyMatchFailure(
+                            vecFuncOp, "expected tla.gather src from tla.load or prior compute op");
+                }
                 if (gatherOp.getMask() && !producedValues.contains(gatherOp.getMask()))
                     return rewriter.notifyMatchFailure(
                         vecFuncOp, "expected tla.gather mask from a legal mask producer");

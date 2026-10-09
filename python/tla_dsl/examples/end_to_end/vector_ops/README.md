@@ -79,6 +79,7 @@ def vector_op(mem_in: tla.Tensor, mem_out: tla.Tensor) -> None:
 ├── bitwise_ops.py
 ├── cast_multi.py
 ├── compare_mask.py
+├── gather_reg_op.py
 ├── gather_op.py
 ├── interleave_op.py
 ├── load_and_store_scalar_after_reduction.py
@@ -108,7 +109,8 @@ def vector_op(mem_in: tla.Tensor, mem_out: tla.Tensor) -> None:
 | [**`compare_mask.py`**](compare_mask.py) | 比较掩码示例，覆盖 `tla.cmp` 的六种比较模式（lt/le/gt/ge/eq/ne）、以及向量-标量比较。 |
 | [**`cast_multi.py`**](cast_multi.py) | `tla.cast` 类型转换示例，覆盖 `f32` / `f16` / `bf16` / `i32` / `i16` / `i8` 之间的多级类型转换。 |
 | [**`arange_op.py`**](arange_op.py) | `tla.arange` 序列生成示例，在 UB 上生成递增/递减（`increase`/`decrease`）序列。 |
-| [**`gather_op.py`**](gather_op.py) | `tla.gather` 按索引收集示例（独立脚本），依据索引向量从源向量中收集元素。 |
+| [**`gather_reg_op.py`**](gather_reg_op.py) | `tla.gather` Reg→Reg 独立上板样例：`vselr`（源为寄存器）。 |
+| [**`gather_op.py`**](gather_op.py) | `tla.gather` UB→Reg 按索引收集示例（独立脚本），依据索引向量从 UB tile 收集元素。 |
 | [**`interleave_op.py`**](interleave_op.py) | 交错运算示例，基于两路输入分别产出交错后的两路输出。 |
 | [**`load_dintlv_op.py`**](load_dintlv_op.py) |双目的交织加载示例，单次加载拆出偶数/奇数两路寄存器。 |
 | [**`load_us_b8_op.py`**](load_us_b8_op.py) | 上采样加载示例，将 i8 元素上采样至 VL 寄存器（仅 i8）。 |
@@ -178,6 +180,9 @@ python examples/end_to_end/vector_ops/unary_ops.py exp --sweep --dtypes f16 f32 
 
 # 批量模式（多个算子打包、多核并发）
 python examples/end_to_end/vector_ops/binary_op.py --batch-run add sub mul max
+
+  # `gather_reg_op.py` 执行（需显式 `--run` ）
+python examples/end_to_end/vector_ops/gather_reg_op.py --run --device 0
 
 # `gather_op.py` 执行（需显式 `--run` ）
 python examples/end_to_end/vector_ops/gather_op.py --run --device 0
@@ -645,9 +650,12 @@ first mismatch=None
 ### 离散与聚合
 
 - 文件位置：
-  - `gather_op.py`：按索引收集。
+  - `gather_op.py`：`tla.gather` 按索引收集（UB→Reg）。
+  - `gather_reg_op.py`：`tla.gather` Reg→Reg（`vselr`）。
 
-- 功能说明：**`gather_op.py`**（f32，独立脚本）——`tla.gather` 依据 int32 索引向量从源向量收集元素并写回目标向量；源向量、索引向量与目标向量均为 64 lane。
+- 功能说明：
+  - **`gather_op.py`**（f32，独立脚本）——`tla.gather` 依据 int32 索引向量从源向量收集元素并写回目标向量；源向量、索引向量与目标向量均为 64 lane。
+  - **`gather_reg_op.py`**（f16，独立脚本）——`tla.gather` Reg→Reg 置换，128-lane f16 + i16 索引位型。
 
 - 约束说明：
   - 支持的数据类型：
@@ -655,8 +663,10 @@ first mismatch=None
     | 文件 | 支持的数据类型 |
     |------|---------------|
     | `gather_op.py` | f32 |
+    | `gather_reg_op.py` | f16 + i16 索引 |
 
   - `gather_op.py`：仅 f32；必须显式传 `--run`，否则退出；索引为 i32；`VECTOR_ELE = 64`；默认 `--device 0`；精度校验 `atol=1e-4`。
+  - `gather_reg_op.py`：必须 `--run`；固定 `VL_ELE=128`；默认 `--device 0`。
 
 - 执行示例：
   ```bash
@@ -665,6 +675,9 @@ first mismatch=None
 
   # 按索引收集（独立脚本，必须显式 --run）
   python examples/end_to_end/vector_ops/gather_op.py --run --dtype f32 --device 0
+
+  # Reg→Reg Gather 上板
+  python examples/end_to_end/vector_ops/gather_reg_op.py --run --device 0
   ```
 
 ### 广播（独立脚本）
