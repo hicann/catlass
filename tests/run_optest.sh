@@ -64,9 +64,6 @@ pip install scikit-build-core
 cd "$SCRIPT_DIR/optest"
 bash build.sh
 
-# current environment pool may not compact with the framework, compile only
-exit 0
-
 # 3. 安装 optest（从 dist）
 echo ""
 echo "============================================"

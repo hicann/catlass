@@ -5,9 +5,9 @@ cython
 decorator
 expecttest
 ml_dtypes
-numpy>=1.19.2,<=1.24.0
+numpy
 pathlib2
-protobuf==3.20.0
+protobuf
 psutil
 pybind11
 pytest
