@@ -20,7 +20,9 @@ add_library(TlaPasses
   TlaLowerFlagBarrierToHivmPass.cpp
   TlaPrologueEpiloguePass.cpp
   TlaLowerAVEToRegbaseIntrinsPass.cpp
-  TlaVectorRegionPass.cpp
+  TlaVectorRegionCommon.cpp
+  TlaVectorRegionSimdPass.cpp
+  TlaVectorRegionSimtPass.cpp
   ../Dialect/Tla/IR/TlaDialect.cpp
   ../Dialect/Tla/IR/TlaAttrs.cpp
   ../Dialect/Tla/IR/TlaOps.cpp

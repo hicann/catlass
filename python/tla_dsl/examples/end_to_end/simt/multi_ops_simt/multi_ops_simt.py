@@ -25,7 +25,7 @@ gets a tolerance, since transcendentals are not bit-identical to the host.
 Two lowering notes. ``//`` maps to arith.divsi, which truncates toward zero
 rather than flooring like Python, so the reference uses
 ``rounding_mode="trunc"``. And bf16 has no transcendental unit, so
-tla-vector-region evaluates those five ops in f32 and rounds back -- see
+tla-vector-region-simt evaluates those five ops in f32 and rounds back -- see
 Tla.td. Of the math ops, only the ones that survive this pipeline are used:
 sin/cos, floor/ceil/round and log2/exp2 have no instruction on this target,
 and log goes through llvm.intr.log because convert-hivm-to-std would turn

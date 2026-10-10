@@ -1,4 +1,4 @@
-// RUN: %tla_compile %s --mlir-print-ir-after=tla-vector-region -o %t 2>&1 | %filecheck %s
+// RUN: %tla_compile %s --mlir-print-ir-after=tla-vector-region-simd -o %t 2>&1 | %filecheck %s
 
 // E2B_B16 (i16, VL=128): element-to-DataBlock broadcast. Reads VL/DB=8 b16
 // elements (DB = 32-byte DataBlock = 16 b16 lanes) from the tile-view base

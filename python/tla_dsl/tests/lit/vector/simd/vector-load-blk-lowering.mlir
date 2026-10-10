@@ -1,4 +1,4 @@
-// RUN: %tla_compile %s --mlir-print-ir-after=tla-vector-region -o %t 2>&1 | %filecheck %s
+// RUN: %tla_compile %s --mlir-print-ir-after=tla-vector-region-simd -o %t 2>&1 | %filecheck %s
 
 // BLK (i16, VL=128): DataBlock broadcast. Reads the 32-byte DataBlock worth
 // of VL/DB=16 b16 elements from the tile-view base and replicates it across

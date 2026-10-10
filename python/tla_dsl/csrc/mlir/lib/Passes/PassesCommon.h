@@ -67,7 +67,8 @@ inline hivm::TModuleCoreType toModuleCoreType(hivm::TFuncCoreType coreType)
 
 // The function's effective core type, resolved from the hivm.func_core_type
 // attribute stamped by TlaLowerFuncPass (and carried onto outlined fragments
-// by tla-vector-region / tla-cube-region / tla-split-mixed-func). This is the
+// by the tla.vector lowering passes / tla-cube-region / tla-split-mixed-func).
+// This is the
 // single carrier of the per-function AIC/AIV/MIX classification through the
 // lowering pipeline;
 inline std::optional<hivm::TFuncCoreType> getFunctionCoreType(Operation* op)

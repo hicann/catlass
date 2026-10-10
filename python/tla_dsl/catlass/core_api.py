@@ -908,7 +908,7 @@ _ARANGE_SUPPORTED_DTYPES = frozenset(("i8", "i16", "i32", "i64"))
 _ARANGE_ORDERS = frozenset(("increase", "decrease"))
 
 # Width of one Ascend vector register tile in bytes. Must stay in sync with
-# TlaVectorRegionPass::kVectorBytes in csrc/mlir/lib/Passes/TlaVectorRegionPass.cpp.
+# kVectorBytes in csrc/mlir/lib/Passes/TlaTensorToMemref.cpp.
 _VECTOR_REGISTER_BYTES = 256
 
 
@@ -7179,7 +7179,7 @@ _SCALAR_UNARY_OPS = {
 # scalar f16 or bf16 reaches the backend as "Cannot select: f16 = fsqrt", an
 # error from deep inside the compiler that says nothing about the kernel, so the
 # frontend rejects those here instead. The SIMT form is unaffected: tla.simt_sqrt
-# selects for f16, and tla-vector-region promotes bf16 through f32.
+# selects for f16, and tla-vector-region-simt promotes bf16 through f32.
 _SCALAR_UNARY_ELEMENT_TYPE = Float32
 
 

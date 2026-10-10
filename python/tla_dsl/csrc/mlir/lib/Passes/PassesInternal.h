@@ -21,7 +21,8 @@ void registerTlaLowerScalarAccessPass();
 void registerTlaSplitMixedFuncPass();
 void registerTlaLowerTensorDescPass();
 void registerTlaLowerBlockIdxPass();
-void registerTlaVectorRegionPass();
+void registerTlaVectorRegionSimdPass();
+void registerTlaVectorRegionSimtPass();
 void registerTlaLowerFlagBarrierToHivmPass();
 void registerTlaLowerPtrPass();
 void registerTlaLowerExternCallPass();
@@ -31,6 +32,8 @@ void registerTlaFinalizeMemrefPass();
 void registerTlaPrologueEpiloguePass();
 void registerTlaLowerAVEToRegbaseIntrinsPass();
 
+std::unique_ptr<mlir::Pass> createTlaVectorRegionSimdPass();
+std::unique_ptr<mlir::Pass> createTlaVectorRegionSimtPass();
 std::unique_ptr<mlir::Pass> createTlaLowerMutexToStdPass();
 std::unique_ptr<mlir::Pass> createTlaLowerAVEToRegbaseIntrinsPass();
 mlir::FailureOr<llvm::StringRef> getPrintTensorHelperSuffix(mlir::Type elementType, std::string& diagnostic);

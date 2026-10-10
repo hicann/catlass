@@ -1,7 +1,7 @@
 // RUN: %tla_compile %s -o %t
 // RUN: %filecheck %s --check-prefix=BLOCK_STORE < %t
 // RUN: %filecheck %s --check-prefix=BLOCK_STORE_HALF < %t
-// RUN: %tla_compile %s --mlir-print-ir-after=tla-vector-region -o %t 2>&1 | %filecheck %s --check-prefix=BLOCK_STORE_TAIL
+// RUN: %tla_compile %s --mlir-print-ir-after=tla-vector-region-simd -o %t 2>&1 | %filecheck %s --check-prefix=BLOCK_STORE_TAIL
 
 !fvec = !tla.tensor<!tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, RowMajor>, !tla.coord<0>, !tla.ptr<f32, ub, 4>>
 !hvec = !tla.tensor<!tla.layout<!tla.shape<128>, !tla.stride<1>, !tla.shape<128>, RowMajor>, !tla.coord<0>, !tla.ptr<f16, ub, 2>>

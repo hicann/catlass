@@ -1,4 +1,4 @@
-// RUN: %tla_compile %s -o - --mlir-print-ir-after=tla-vector-region 2>&1 | %filecheck %s
+// RUN: %tla_compile %s -o - --mlir-print-ir-after=tla-vector-region-simd 2>&1 | %filecheck %s
 
 // A plain (non-i1) scalar tla.full lowers to the mask-capable AVE broadcast
 // (all-true mask when none is given), which lowers to vdups.z.

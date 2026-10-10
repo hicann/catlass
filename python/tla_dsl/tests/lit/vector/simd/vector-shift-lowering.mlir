@@ -1,4 +1,4 @@
-// RUN: %tla_compile %s --mlir-print-ir-after=tla-vector-region -o %t 2>&1 | %filecheck %s --implicit-check-not=tla.shift --implicit-check-not=hivm.vshl.u --implicit-check-not=hivm.vshr.u --implicit-check-not=hivm.vshls.u --implicit-check-not=hivm.vshrs.u
+// RUN: %tla_compile %s --mlir-print-ir-after=tla-vector-region-simd -o %t 2>&1 | %filecheck %s --implicit-check-not=tla.shift --implicit-check-not=hivm.vshl.u --implicit-check-not=hivm.vshr.u --implicit-check-not=hivm.vshls.u --implicit-check-not=hivm.vshrs.u
 
 !ivec = !tla.tensor<!tla.layout<!tla.shape<128>, !tla.stride<1>, !tla.shape<128>, RowMajor>, !tla.coord<0>, !tla.ptr<i16, ub, 2>>
 

@@ -165,7 +165,7 @@ op 定义在 [Tla.td](../../../../csrc/mlir/include/Dialect/Tla/IR/Tla.td)（`Tl
 这是 bc 接入的关键一步。`tla.copy` 在两个 pass 里被消除（cube 路由 / vector 路由各一个，逻辑对称）：
 
 - **cube 端**：[TlaCubeRegionPass.cpp](../../../../csrc/mlir/lib/Passes/TlaCubeRegionPass.cpp) 的 `LowerTlaCopyPattern`（197–400 行）
-- **vector 端**：[TlaVectorRegionPass.cpp](../../../../csrc/mlir/lib/Passes/TlaVectorRegionPass.cpp) 的 `LowerCopyPattern`（2531–2622 行）
+- **vector 端**：[TlaVectorRegionCommon.cpp](../../../../csrc/mlir/lib/Passes/TlaVectorRegionCommon.cpp) 的 `LowerCopyPattern`（110–199 行）
 
 它们做的事：
 
@@ -293,7 +293,7 @@ llvm-link dma.aic.c310.bc mmad.aic.c310.bc mutex.aic.c310.bc ... \
 | C++ verifier | [TlaOps.cpp](../../../../csrc/mlir/lib/Dialect/Tla/IR/TlaOps.cpp) | `CopyOp::verify` 594–638 |
 | pass pipeline | [PassRegistry.cpp](../../../../csrc/mlir/lib/Passes/PassRegistry.cpp) | `buildTlaPipeline` 42–82 |
 | cube copy lowering | [TlaCubeRegionPass.cpp](../../../../csrc/mlir/lib/Passes/TlaCubeRegionPass.cpp) | `LowerTlaCopyPattern` 197–400 |
-| vector copy lowering | [TlaVectorRegionPass.cpp](../../../../csrc/mlir/lib/Passes/TlaVectorRegionPass.cpp) | `LowerCopyPattern` 2531–2622 |
+| vector copy lowering | [TlaVectorRegionCommon.cpp](../../../../csrc/mlir/lib/Passes/TlaVectorRegionCommon.cpp) | `LowerCopyPattern` 110–199 |
 | 路由选择/payload | [TlaTensorToMemref.cpp](../../../../csrc/mlir/lib/Passes/TlaTensorToMemref.cpp) | `getCopyRouteCallee` 606–733 |
 | C++ 搬运模板 | [include/catlass/gemm/tile/ascend950/](../../../../../../include/catlass/gemm/tile/ascend950/) | `copy_gm_to_l1.hpp`、`copy_l0c_to_gm.hpp` 等 |
 | stub 实现（cube） | [csrc/mlir/bc/Cube/dma.cpp](../../../../csrc/mlir/bc/Cube/dma.cpp) | GM->L1 stub 131 行起 |

@@ -148,10 +148,13 @@ def test_vector_ssa_bitwise_bindings_and_public_ops_emit_mlir(
 
 
 def test_bitwise_ops_are_in_vector_lowering_info() -> None:
-    pass_source = Path(
-        __file__
-    ).parents[5] / "csrc/mlir/lib/Passes/TlaVectorRegionPass.cpp"
-    source = pass_source.read_text(encoding="utf-8")
+    # The vector lowering is split across TlaVectorRegion*.cpp (driver, common,
+    # SIMD, SIMT), so search all of them rather than naming one file: which file
+    # a given op is handled in is not what this test is about.
+    pass_dir = Path(__file__).parents[5] / "csrc/mlir/lib/Passes"
+    sources = sorted(pass_dir.glob("TlaVectorRegion*.cpp"))
+    assert sources, f"no vector-region pass sources found under {pass_dir}"
+    source = "\n".join(path.read_text(encoding="utf-8") for path in sources)
 
     for op_name in ("BitwiseNotOp", "BitwiseAndOp", "BitwiseOrOp", "BitwiseXorOp"):
         assert f"::tla::{op_name}" in source

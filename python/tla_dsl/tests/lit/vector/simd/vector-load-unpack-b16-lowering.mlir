@@ -1,4 +1,4 @@
-// RUN: %tla_compile %s --mlir-print-ir-after=tla-vector-region -o %t 2>&1 | %filecheck %s
+// RUN: %tla_compile %s --mlir-print-ir-after=tla-vector-region-simd -o %t 2>&1 | %filecheck %s
 
 // UNPK_B16 (i16, VL=128): reads VL/2=64 b16 elements from the tile-view base
 // and inserts one zero b16 element after each to fill a VL-wide register.

@@ -1,6 +1,6 @@
-// RUN: %tla_compile %s --mlir-print-ir-after=tla-vector-region -o %t 2>&1 | %filecheck %s
+// RUN: %tla_compile %s --mlir-print-ir-after=tla-vector-region-simt -o %t 2>&1 | %filecheck %s
 
-// Every per-thread scalar arithmetic op in one SIMT region. tla-vector-region
+// Every per-thread scalar arithmetic op in one SIMT region. tla-vector-region-simt
 // outlines the region into a vector function and rewrites each tla.simt_* op to
 // the arith op for its element type, so none of them may survive the pass.
 

@@ -18,7 +18,6 @@ std::unique_ptr<mlir::Pass> createTlaLowerScalarOpsPass();
 std::unique_ptr<mlir::Pass> createTlaSplitMixedFuncPass();
 std::unique_ptr<mlir::Pass> createTlaLowerTensorDescPass();
 std::unique_ptr<mlir::Pass> createTlaLowerBlockIdxPass();
-std::unique_ptr<mlir::Pass> createTlaVectorRegionPass();
 std::unique_ptr<mlir::Pass> createTlaPrologueEpiloguePass();
 std::unique_ptr<mlir::Pass> createTlaLowerAVEToRegbaseIntrinsPass();
 

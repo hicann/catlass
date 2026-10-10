@@ -1,4 +1,4 @@
-// RUN: %tla_compile %s -o - --mlir-print-ir-after=tla-vector-region 2>&1 | %filecheck %s
+// RUN: %tla_compile %s -o - --mlir-print-ir-after=tla-vector-region-simd 2>&1 | %filecheck %s
 
 // CHECK-LABEL: func.func @ub_scalar_access_in_vec_func
 // CHECK: call @vector_region_

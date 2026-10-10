@@ -7,7 +7,8 @@
 
 // tla-cube-region: lowers the cube (AIC) compute ops (tla.copy / tla.mmad) via
 // the shared !tla.tensor->memref lowering (TlaTensorMemrefLowering), then flattens
-// the tla.cube region. Runs after tla-vector-region, before tla-finalize-memref.
+// the tla.cube region. Runs after the two tla.vector lowering passes, before
+// tla-finalize-memref.
 //
 // Flow: collect materialized descriptors, then lower tla.copy (descriptor +
 // payload driven) and tla.mmad, both reconstructing tile memrefs directly from
@@ -612,7 +613,8 @@ struct LowerTlaCopyPattern : public OpRewritePattern<::tla::CopyOp> {
             return success();
         }
 
-        // GM<->UB row-major copies are owned by tla-vector-region's LowerCopyPattern
+        // GM<->UB row-major copies are owned by LowerCopyPattern in
+        // TlaVectorRegionCommon.cpp
         // (UB is vector-core memory); the cube pass only lowers the cube-side routes
         // above (L1 / L0A / L0B / L0C).
 
@@ -818,7 +820,7 @@ public:
 
         // Drive one function at a time so the cube lowering only touches the cube
         // (AIC) function's ops, not a sibling vector (AIV) function in a mixed kernel.
-        // Mirrors tla-vector-region, which iterates the module's functions and filters
+        // Mirrors the tla.vector lowering passes, which iterate the module's functions and filter
         // by core type. Snapshot the functions up front: lowering appends runtime-call
         // declarations to the module, which must not be fed back through the loop.
         SmallVector<func::FuncOp, 4> funcOps(module.getOps<func::FuncOp>());
@@ -843,7 +845,7 @@ public:
 
     // Lower all cube compute ops within a single cube (AIC/MIX) function. The
     // lowering state (descriptors, memref cache, staged erases) is fresh per
-    // function, matching tla-vector-region's per-function handoff. Only `root` (the
+    // function, matching the tla.vector passes' per-function handoff. Only `root` (the
     // function) is threaded; the ModuleOp needed for runtime-symbol insertion is
     // derived on demand from the op being rewritten (getParentOfType<ModuleOp>()).
     LogicalResult runOnCubeFunction(func::FuncOp funcOp)

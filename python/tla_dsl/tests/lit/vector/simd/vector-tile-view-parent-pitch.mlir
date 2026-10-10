@@ -1,4 +1,4 @@
-// RUN: %tla_compile %s --mlir-print-ir-after=tla-vector-region -o %t 2>&1 | %filecheck %s
+// RUN: %tla_compile %s --mlir-print-ir-after=tla-vector-region-simd -o %t 2>&1 | %filecheck %s
 //
 // A tile_view keeps its parent's row pitch. Flattening coord<1,0> for a
 // shape<1,64> tile over stride<128,1> must therefore use offset 128, not 64.

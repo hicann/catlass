@@ -114,7 +114,7 @@ def _binary_op(
 
         if op in _COMPARE_OPS:
             # Inside a SIMT region a comparison is a TLA op like the arithmetic
-            # ones; tla-vector-region lowers it back to the arith op below.
+            # ones; tla-vector-region-simt lowers it back to the arith op below.
             _SIMT_CMP_MODES = {
                 operator.eq: "eq",
                 operator.ne: "ne",
@@ -168,7 +168,7 @@ def _binary_op(
         unsigned = not res_type.signed
         # Inside a SIMT region the scalar arithmetic operators are TLA ops in
         # their own right, so the per-thread body stays recognisable as TLA IR;
-        # tla-vector-region lowers them back to the arith ops below. This
+        # tla-vector-region-simt lowers them back to the arith ops below. This
         # generalises the base's add-only routing to the whole set.
         _SIMT_OPS = {
             operator.add: "tla.simt_add",

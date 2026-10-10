@@ -1,4 +1,4 @@
-// RUN: %tla_compile %s --mlir-print-ir-after=tla-vector-region -o %t 2>&1 | %filecheck %s
+// RUN: %tla_compile %s --mlir-print-ir-after=tla-vector-region-simd -o %t 2>&1 | %filecheck %s
 
 // MaskLoadDist US/DS must lower via AIV bc (func.call), not ave.hir.vload:
 // NPU-IR i1→plds hardcodes DIST_NORM.

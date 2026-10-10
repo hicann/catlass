@@ -1,4 +1,4 @@
-// RUN: %tla_compile %s -o - --mlir-print-ir-after=tla-vector-region 2>&1 | %filecheck %s
+// RUN: %tla_compile %s -o - --mlir-print-ir-after=tla-vector-region-simd 2>&1 | %filecheck %s
 
 // Every fp8 cast leg the vector unit accepts, and how each one lowers.
 //

@@ -72,7 +72,7 @@ Precision conventions:
 Two lowering behaviours are worth noting:
 
 - `//` lowers to `arith.divsi`, which truncates toward zero, whereas Python's `//` floors, so the reference implementation uses `rounding_mode="trunc"`.
-- bf16 has no transcendental unit, so `tla-vector-region` evaluates those operations in f32 and rounds the result back to bf16.
+- bf16 has no transcendental unit, so `tla-vector-region-simt` evaluates those operations in f32 and rounds the result back to bf16.
 
 The example only uses the math operations that survive the current pipeline: `sin`/`cos`, `floor`/`ceil`/`round`, and `log2`/`exp2` have no instruction on this target and are therefore not covered.
 

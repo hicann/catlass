@@ -29,7 +29,8 @@ mlir::FailureOr<mlir::Value> castMemrefToType(
     mlir::OpBuilder& builder, mlir::Location loc, mlir::Value value, mlir::MemRefType memrefType);
 
 // ---------------------------------------------------------------------------
-// Copy-route runtime lowering (shared by tla-cube-region and tla-vector-region).
+// Copy-route runtime lowering (shared by tla-cube-region and the tla.vector
+// lowering passes).
 // A tla.copy between two on-/off-chip layouts lowers to an inlinable C-interface
 // runtime template (bc/Cube or bc/Vector). These helpers pick the template name,
 // build its shape/stride/coord payload from the operand descriptors, and declare
@@ -126,7 +127,7 @@ mlir::FailureOr<mlir::Value> materializeTileMemrefFromDescriptor(
     llvm::DenseMap<mlir::Value, mlir::Value>& baseMemrefCache);
 
 // ---------------------------------------------------------------------------
-// Vector tile memref materialization (TlaVectorRegionPass). Vector-specific
+// Vector tile memref materialization (the tla.vector lowering passes). Vector-specific
 // policy — 256-byte lane memrefs, rank-1<->2 reshape, the per-copy handoff cache
 // — layered on the shared decode/bridge above.
 // ---------------------------------------------------------------------------

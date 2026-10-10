@@ -31,7 +31,8 @@ void registerTlaPasses()
     registerTlaSplitMixedFuncPass();
     registerTlaLowerTensorDescPass();
     registerTlaLowerBlockIdxPass();
-    registerTlaVectorRegionPass();
+    registerTlaVectorRegionSimtPass();
+    registerTlaVectorRegionSimdPass();
     registerTlaLowerFlagBarrierToHivmPass();
     registerTlaLowerPtrPass();
     registerTlaLowerExternCallPass();
@@ -62,7 +63,8 @@ void buildTlaPipeline(OpPassManager& pm)
     pm.addPass(createTlaLowerTensorDescPass());
     // Lower all GM scalar accesses from the materialized descriptor form.
     pm.addPass(createTlaLowerScalarAccessPass());
-    pm.addPass(createTlaVectorRegionPass());
+    pm.addPass(createTlaVectorRegionSimtPass());
+    pm.addPass(createTlaVectorRegionSimdPass());
     pm.addPass(createTlaCubeRegionPass());
     pm.addPass(createTlaFinalizeMemrefPass());
     pm.addPass(createTlaLowerDebugPrintPass());

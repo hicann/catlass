@@ -130,7 +130,7 @@ def scalar_index_constexpr_if_kernel(
 def scalar_index_vec_func_kernel(meta: tla.Tensor, out: tla.Tensor) -> None:
     """GM scalar load/store nested in ``tla.vector`` / ``tla.vec.func`` (VF).
 
-    Scalar-only VF bodies are inlined by ``tla-vector-region`` (no ``tla.store``
+    Scalar-only VF bodies are inlined by the tla.vector lowering passes (no ``tla.store``
     to outline a helper); the frontend form still exercises the VF nesting.
     """
     with tla.vector():

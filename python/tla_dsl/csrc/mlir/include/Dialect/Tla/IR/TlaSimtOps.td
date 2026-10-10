@@ -123,7 +123,7 @@ def Tla_SimtCmpOp : Tla_Op<"simt_cmp", [Pure, AllTypesMatch<["lhs", "rhs"]>]> {
 // Tla_SimtLogOp below.
 //
 // bf16 has no transcendental unit -- exp, log, sqrt and pow all fail to
-// select -- so for a bf16 operand tla-vector-region evaluates these in f32 and
+// select -- so for a bf16 operand tla-vector-region-simt evaluates these in f32 and
 // rounds the result back. The f32 intermediate makes them slightly more
 // accurate than a native bf16 evaluation would be. simt_abs needs no such
 // promotion; it has a bf16 instruction.
@@ -162,7 +162,7 @@ def Tla_SimtLoadOp : Tla_Op<"simt_load", [MemoryEffects<[MemRead]>]> {
     Read one element of a ``!tla.tensor`` from inside a ``tla.vec.func`` with
     ``mode = "simt"``: one thread, one element. The SIMT counterpart of
     ``tla.scalar_load``, which stays the general descriptor-based access.
-    ``tla-vector-region`` lowers this to ``memref.load`` on the outlined vector
+    ``tla-vector-region-simt`` lowers this to ``memref.load`` on the outlined vector
     function's parameter, so no descriptor view is materialized.
   }];
   let arguments = (ins Tla_TensorType:$source, Variadic<Index>:$indices);
@@ -177,7 +177,7 @@ def Tla_SimtStoreOp : Tla_Op<"simt_store", [MemoryEffects<[MemWrite]>]> {
   let description = [{
     Write one element of a ``!tla.tensor`` from inside a ``tla.vec.func`` with
     ``mode = "simt"``. The SIMT counterpart of ``tla.scalar_store``; lowered by
-    ``tla-vector-region`` to ``memref.store`` on the outlined vector function's
+    ``tla-vector-region-simt`` to ``memref.store`` on the outlined vector function's
     parameter.
   }];
   let arguments = (ins Tla_TensorType:$dest, Variadic<Index>:$indices,

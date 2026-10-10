@@ -1,4 +1,4 @@
-// RUN: %tla_compile %s -o - --mlir-print-ir-after=tla-vector-region > %t 2>&1
+// RUN: %tla_compile %s -o - --mlir-print-ir-after=tla-vector-region-simd > %t 2>&1
 // RUN: %filecheck %s --check-prefix=MAIN < %t
 // RUN: %filecheck %s --check-prefix=HELPER < %t
 

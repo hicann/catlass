@@ -26,7 +26,8 @@
 // address sees an i64 rather than a !tla.ptr -- the atomics and the D-cache
 // bypass store will need that -- and downstream of the region passes, so that
 // anything which might SYNTHESIZE a scalar op still has a lowering behind it.
-// tla-vector-region already synthesizes instruction sequences of its own, so
+// The tla.vector lowering passes already synthesize instruction sequences of
+// their own, so
 // that is the constraint worth designing to; it is not a correctness
 // requirement for the ops here today, since a func.call survives
 // vector-function outlining, as tla-lower-extern-call demonstrates from much

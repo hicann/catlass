@@ -1,7 +1,7 @@
-// RUN: %tla_compile %s --mlir-print-ir-after=tla-vector-region -o %t 2>&1 | %filecheck %s
+// RUN: %tla_compile %s --mlir-print-ir-after=tla-vector-region-simd -o %t 2>&1 | %filecheck %s
 
 // Index uses signless i16/i32: HIVMAVE vload rejects ui16/ui32 vector results.
-// VectorRegion casts index to unsigned before calling gather_reg_* stubs.
+// tla-vector-region-simd casts index to unsigned before calling gather_reg_* stubs.
 // Reg→Reg gather is expressed as tla.gather with vector src (not a separate op).
 
 !hvec = !tla.tensor<!tla.layout<!tla.shape<128>, !tla.stride<1>, !tla.shape<128>, RowMajor>, !tla.coord<0>, !tla.ptr<f16, ub, 2>>

@@ -1007,7 +1007,7 @@ def test_vector_tile_view_uses_static_parent_pitch_in_flat_offset() -> None:
     assert "!tla.stride<128,1>" in mlir_text
 
     output = _run_tla_compile_ir_after_pass(
-        mlir_text, "tla-vector-region", require_success=True
+        mlir_text, "tla-vector-region-simd", require_success=True
     )
     assert "arith.constant 128 : index" in output
     assert "memref<256xf32, #hivm.address_space<ub>>" in output
@@ -1027,7 +1027,7 @@ def test_vector_tile_view_captures_dynamic_parent_pitch() -> None:
     assert "tla.make_tensor_like" not in desc_output
 
     output = _run_tla_compile_ir_after_pass(
-        mlir_text, "tla-vector-region", require_success=True
+        mlir_text, "tla-vector-region-simd", require_success=True
     )
     assert "arith.muli" in output
 
@@ -1045,7 +1045,7 @@ def test_vector_tile_view_built_outside_region_keeps_its_offset() -> None:
     assert "!tla.shape<1,64>" in mlir_text
 
     output = _run_tla_compile_ir_after_pass(
-        mlir_text, "tla-vector-region", require_success=True
+        mlir_text, "tla-vector-region-simd", require_success=True
     )
     helper = output[output.index("func.func private @vector_region_"):]
     # coord (1, 0) over a 128-element pitch: the tile starts at element 128.
@@ -1074,7 +1074,7 @@ def test_vector_dynamic_view_built_outside_region_keeps_its_offset() -> None:
     assert "tla.make_coord %" in mlir_text, mlir_text
 
     output = _run_tla_compile_ir_after_pass(
-        mlir_text, "tla-vector-region", require_success=True
+        mlir_text, "tla-vector-region-simd", require_success=True
     )
     helper = _helper_body(output)
     offsets = _reinterpret_offsets(helper)
@@ -1095,7 +1095,7 @@ def test_two_dynamic_views_on_one_allocation_keep_distinct_offsets() -> None:
         type_args=(1, 3)
     )
     output = _run_tla_compile_ir_after_pass(
-        mlir_text, "tla-vector-region", require_success=True
+        mlir_text, "tla-vector-region-simd", require_success=True
     )
     helper = _helper_body(output)
     offsets = _reinterpret_offsets(helper)
@@ -1110,7 +1110,7 @@ def test_vector_zn_unalign_address_arithmetic_uses_i32() -> None:
     assert "!tla.shape<?,128>" in mlir_text
 
     output = _run_tla_compile_ir_after_pass(
-        mlir_text, "tla-vector-region", require_success=True
+        mlir_text, "tla-vector-region-simd", require_success=True
     )
     div_rem_lines = [
         line
@@ -1153,7 +1153,7 @@ def test_vector_static_tile_does_not_narrow_unknown_base_capacity() -> None:
     assert "scf.for" in mlir_text
 
     output = _run_tla_compile_ir_after_pass(
-        mlir_text, "tla-vector-region", require_success=True
+        mlir_text, "tla-vector-region-simd", require_success=True
     )
 
     dynamic_ub_casts = re.findall(
@@ -1193,7 +1193,7 @@ def test_vector_dynamic_on_chip_pointer_uses_unknown_flat_extent() -> None:
     assert "!tla.shape<?,128>" in mlir_text
 
     output = _run_tla_compile_ir_after_pass(
-        mlir_text, "tla-vector-region", require_success=True
+        mlir_text, "tla-vector-region-simd", require_success=True
     )
 
     pointer_cast = re.search(
@@ -1217,7 +1217,7 @@ def test_vector_static_rank_one_pointer_keeps_inferred_flat_extent() -> None:
     assert "!tla.shape<128>" in mlir_text
 
     output = _run_tla_compile_ir_after_pass(
-        mlir_text, "tla-vector-region", require_success=True
+        mlir_text, "tla-vector-region-simd", require_success=True
     )
 
     expected_type = "memref<128xf16, #hivm.address_space<ub>>"
@@ -1236,7 +1236,7 @@ def test_vector_static_view_with_unproven_capacity_uses_unknown_extent() -> None
     assert "!tla.shape<64,128>" in mlir_text
 
     output = _run_tla_compile_ir_after_pass(
-        mlir_text, "tla-vector-region", require_success=True
+        mlir_text, "tla-vector-region-simd", require_success=True
     )
 
     assert re.search(
@@ -1268,7 +1268,7 @@ def test_vector_dynamic_gm_memref_keeps_real_descriptor() -> None:
     assert "tla.tensor_desc" in mlir_text
 
     output = _run_tla_compile_ir_after_pass(
-        mlir_text, "tla-vector-region", require_success=True
+        mlir_text, "tla-vector-region-simd", require_success=True
     )
 
     assert re.search(
@@ -1328,7 +1328,7 @@ def test_store_through_a_loop_carried_tile_lowers() -> None:
     assert "scf.for" in mlir_text, mlir_text
 
     output = _run_tla_compile_ir_after_pass(
-        mlir_text, "tla-vector-region", require_success=True
+        mlir_text, "tla-vector-region-simd", require_success=True
     )
     assert '"tla.vec.func"' not in output, output
 
@@ -1368,6 +1368,6 @@ def test_copy_into_a_loop_carried_tile_lowers() -> None:
     assert "scf.for" in mlir_text, mlir_text
 
     output = _run_tla_compile_ir_after_pass(
-        mlir_text, "tla-vector-region", require_success=True
+        mlir_text, "tla-vector-region-simd", require_success=True
     )
     assert "tla.copy" not in output, output

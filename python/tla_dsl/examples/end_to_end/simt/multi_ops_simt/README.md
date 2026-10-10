@@ -72,7 +72,7 @@
 两处下降行为需要注意：
 
 - `//` 下降为 `arith.divsi`，向零截断，而 Python 的 `//` 向下取整，因此参考实现使用 `rounding_mode="trunc"`。
-- bf16 没有超越函数单元，`tla-vector-region` 会在 f32 上求值再舍入回 bf16。
+- bf16 没有超越函数单元，`tla-vector-region-simt` 会在 f32 上求值再舍入回 bf16。
 
 样例只使用能走通当前流水的数学算子：`sin`/`cos`、`floor`/`ceil`/`round`、`log2`/`exp2` 在该目标上没有对应指令，因此未纳入。
 

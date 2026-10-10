@@ -295,7 +295,7 @@ mlir::FailureOr<mlir::Value> getOrMaterializeDescriptorBaseMemref(
 }
 
 // ---------------------------------------------------------------------------
-// Vector tile memref materialization (TlaVectorRegionPass).
+// Vector tile memref materialization (the tla.vector lowering passes).
 // Vector-specific policy: 256-byte lane memrefs, rank-1<->2 reshape, and the
 // per-copy handoff cache. Layered on the shared decode/bridge above.
 // ---------------------------------------------------------------------------
@@ -574,7 +574,8 @@ mlir::LogicalResult collectMaterializedTensorDescriptors(
 }
 
 // ---------------------------------------------------------------------------
-// Copy-route runtime lowering (shared by tla-cube-region / tla-vector-region).
+// Copy-route runtime lowering (shared by tla-cube-region and the tla.vector
+// lowering passes).
 // ---------------------------------------------------------------------------
 
 static mlir::FailureOr<hivm::AddressSpace> resolveHivmAddressSpace(MLIRContext* ctx, StringRef addressSpace)

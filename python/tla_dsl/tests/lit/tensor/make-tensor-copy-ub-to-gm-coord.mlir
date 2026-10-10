@@ -34,8 +34,10 @@ module {
 // CHECK-LABEL: func.func private @copy_ub_RowMajor_to_gm_RowMajor_float
 // CHECK-SAME: hivm.func_core_type = #hivm.func_core_type<AIV>
 // CHECK-LABEL: func.func @make_tensor_copy_ub_to_gm_coord
-// CHECK: llvm.mlir.constant(16 : i64) : i64
-// CHECK: llvm.mlir.constant(32 : i64) : i64
+// The two constants are the coord row offset (16) and the row stride (32); the
+// order they are materialized in is the greedy driver's business, not the test's.
+// CHECK-DAG: llvm.mlir.constant(16 : i64) : i64
+// CHECK-DAG: llvm.mlir.constant(32 : i64) : i64
 // CHECK: call @copy_ub_RowMajor_to_gm_RowMajor_float
 // CHECK-NOT: tla.make_tensor
 // CHECK-NOT: memref.reinterpret_cast
