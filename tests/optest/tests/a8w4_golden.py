@@ -209,22 +209,23 @@ def _quantize_fp4_axis_last(matrix: torch.Tensor, format_name: str, block_size: 
     exp = torch.where(max_abs < _EPSILON, torch.zeros_like(exp), exp).clamp(_MIN_SCALE_EXP, _MAX_SCALE_EXP)
     scale = torch.pow(torch.tensor(2.0, dtype=torch.float32, device=matrix.device), exp)
     scaled = blocks / scale.unsqueeze(-1)
-    quantized_blocks, _ = _quantize_to_fp4_lut(scaled, format_name)
+    quantized_blocks, indices_blocks = _quantize_to_fp4_lut(scaled, format_name)
     dequant_blocks = quantized_blocks * scale.unsqueeze(-1)
     quantized = quantized_blocks.reshape(m, padded_n)[:, :n].contiguous()
     dequantized = dequant_blocks.reshape(m, padded_n)[:, :n].contiguous()
+    indices = indices_blocks.reshape(m, padded_n)[:, :n].contiguous()
     padded_blocks = ((num_blocks + 1) // 2) * 2
     if padded_blocks != num_blocks:
         scale_padded = torch.ones((m, padded_blocks), dtype=torch.float32, device=matrix.device)
         scale_padded[:, :num_blocks] = scale
         scale = scale_padded
-    return quantized, scale, dequantized
+    return quantized, scale, dequantized, indices
 
 
 def _quantize_fp4(matrix: torch.Tensor, format_name: str, axis: int):
     if axis == 0:
-        qt, st, dt = _quantize_fp4_axis_last(matrix.t().contiguous(), format_name)
-        return qt.t().contiguous(), st.t().contiguous(), dt.t().contiguous()
+        qt, st, dt, it = _quantize_fp4_axis_last(matrix.t().contiguous(), format_name)
+        return qt.t().contiguous(), st.t().contiguous(), dt.t().contiguous(), it.t().contiguous()
     return _quantize_fp4_axis_last(matrix, format_name)
 
 
@@ -240,10 +241,9 @@ def _gen_data_fp8_e4m3(row: int, col: int, axis: int):
 
 def _gen_data_fp4_e2m1(row: int, col: int, axis: int, trans: int):
     matrix = torch.randn((row, col), dtype=torch.float32)
-    quantized_matrix, scale_matrix, dequantized_matrix = _quantize_fp4(matrix, "E2M1", axis)
+    _, scale_matrix, dequantized_matrix, fp4_indices = _quantize_fp4(matrix, "E2M1", axis)
     if trans == 1:
-        quantized_matrix = quantized_matrix.t().contiguous()
-    _, fp4_indices = _quantize_to_fp4_lut(quantized_matrix, "E2M1")
+        fp4_indices = fp4_indices.t().contiguous()
     packed = _pack_fp4_nibbles(fp4_indices)
     return packed, scale_matrix.to(torch.float8_e8m0fnu), dequantized_matrix
 
@@ -337,10 +337,9 @@ def prepare_a8w4_grouped_mx_inputs(
     b_deq_list = []
     for _ in range(g):
         matrix = torch.randn((k, n), dtype=torch.float32)
-        quantized_vals, scale, dequantized = _quantize_fp4(matrix, "E2M1", axis=0)
+        _, scale, dequantized, fp4_indices = _quantize_fp4(matrix, "E2M1", axis=0)
         if trans_b == 1:
-            quantized_vals = quantized_vals.t().contiguous()
-        _, fp4_indices = _quantize_to_fp4_lut(quantized_vals, "E2M1")
+            fp4_indices = fp4_indices.t().contiguous()
         b_indices_list.append(fp4_indices)        # (N, K) or (K, N), uint8
         b_scale_list.append(scale.to(torch.float8_e8m0fnu))
         b_deq_list.append(dequantized)            # (K, N)

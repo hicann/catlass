@@ -420,7 +420,7 @@ def _quantize_fp8(matrix: torch.Tensor, format_name: str, axis: int,
 
 def _quantize_fp4_axis_last(matrix: torch.Tensor, format_name: str,
                              block_size: int = _BLOCK_SIZE
-                             ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+                             ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     m, n = matrix.shape
     padded_n = ((n + block_size - 1) // block_size) * block_size
     num_blocks = padded_n // block_size
@@ -440,14 +440,16 @@ def _quantize_fp4_axis_last(matrix: torch.Tensor, format_name: str,
     scale = torch.pow(torch.tensor(2.0, dtype=torch.float32, device=matrix.device), exp)
 
     scaled = blocks / scale.unsqueeze(-1)
-    quantized_blocks, _ = _quantize_to_fp4_lut(scaled, format_name)
+    quantized_blocks, indices_blocks = _quantize_to_fp4_lut(scaled, format_name)
     dequant_blocks = quantized_blocks * scale.unsqueeze(-1)
 
     quantized = quantized_blocks.reshape(m, padded_n)
     dequantized = dequant_blocks.reshape(m, padded_n)
+    indices = indices_blocks.reshape(m, padded_n)
     if padded_n != n:
         quantized = quantized[:, :n].contiguous()
         dequantized = dequantized[:, :n].contiguous()
+        indices = indices[:, :n].contiguous()
 
     padded_blocks = ((num_blocks + 1) // 2) * 2
     if padded_blocks != num_blocks:
@@ -455,20 +457,21 @@ def _quantize_fp4_axis_last(matrix: torch.Tensor, format_name: str,
         scale_padded[:, :num_blocks] = scale
         scale = scale_padded
 
-    return quantized, scale, dequantized
+    return quantized, scale, dequantized, indices
 
 
 def _quantize_fp4_axis_first(matrix: torch.Tensor, format_name: str,
                               block_size: int = _BLOCK_SIZE
-                              ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    quantized_t, scale_t, dequantized_t = _quantize_fp4_axis_last(
+                              ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    quantized_t, scale_t, dequantized_t, indices_t = _quantize_fp4_axis_last(
         matrix.t().contiguous(), format_name, block_size)
-    return quantized_t.t().contiguous(), scale_t.t().contiguous(), dequantized_t.t().contiguous()
+    return (quantized_t.t().contiguous(), scale_t.t().contiguous(),
+            dequantized_t.t().contiguous(), indices_t.t().contiguous())
 
 
 def _quantize_fp4(matrix: torch.Tensor, format_name: str, axis: int,
                    block_size: int = _BLOCK_SIZE
-                   ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+                   ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     if axis == 0:
         return _quantize_fp4_axis_first(matrix, format_name, block_size)
     if axis == 1:
@@ -495,12 +498,11 @@ def gen_data_fp8_e5m2(row, col, axis):
 
 def gen_data_fp4_e2m1(row, col, axis, trans):
     matrix = torch.randn((row, col), dtype=torch.float32)
-    quantized_matrix, scale_matrix, dequantized_matrix = _quantize_fp4(matrix, "E2M1", axis)
+    _, scale_matrix, dequantized_matrix, fp4_indices = _quantize_fp4(matrix, "E2M1", axis)
 
     if trans == 1:
-        quantized_matrix = quantized_matrix.t().contiguous()
+        fp4_indices = fp4_indices.t().contiguous()
 
-    _, fp4_indices = _quantize_to_fp4_lut(quantized_matrix, "E2M1")
     quantized_matrix_uint8 = _pack_fp4_nibbles(fp4_indices)
 
     return quantized_matrix_uint8, scale_matrix.to(torch.float8_e8m0fnu), dequantized_matrix
@@ -533,13 +535,11 @@ def gen_data(group_m_list, m, n, k, isNz, trans_a = 0, trans_b = 1) -> None:
             # 生成随机 FP32 矩阵
             matrix = torch.randn((k, n), dtype=torch.float32)
             # 量化：axis=0（按行量化），返回量化后的浮点值、scale、反量化结果
-            quantized_vals, scale, dequantized = _quantize_fp4(matrix, "E2M1", axis=0)
+            _, scale, dequantized, fp4_indices = _quantize_fp4(matrix, "E2M1", axis=0)
 
             if trans_b == 1:
-                quantized_vals = quantized_vals.t().contiguous()
+                fp4_indices = fp4_indices.t().contiguous()
 
-            # 从浮点量化值获取 FP4 索引（整数）
-            _, fp4_indices = _quantize_to_fp4_lut(quantized_vals, "E2M1")
             b_indices_list.append(fp4_indices)        # 形状 (k, n)，整数类型
             b_scale_list.append(scale.to(torch.float8_e8m0fnu))
             b_fp32_list.append(dequantized)

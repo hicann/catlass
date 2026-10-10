@@ -57,18 +57,38 @@ def build_e4m3_lut():
 E4M3_LUT = build_e4m3_lut()
 
 
+E4M3_LUT_POS = E4M3_LUT[:128].contiguous()  # 幅值表，单调不减，用于二分最近邻查找
+
+
 def quantize_to_e4m3(data: torch.Tensor) -> torch.Tensor:
+    """最近邻量化到 E4M3 码值，等价于对 256 项全 LUT 做 argmin。
+
+    全 LUT 中 0..127 为正幅值、128..255 为同幅值取负，对同一 ``|x|`` 的距离相同，
+    因此只需在单调的幅值表上二分得到上下邻居，再取更近的一个并按符号补高位，
+    即可避免生成 ``(..., 256)`` 的距离张量。距离相等时取小下标，与 argmin 一致。
+    """
     clamped = torch.clamp(data, E4M3_MIN, E4M3_MAX)
-    dist = torch.abs(clamped.unsqueeze(-1) - E4M3_LUT)
-    indices = torch.argmin(dist, dim=-1)
-    return indices.to(torch.uint8)
+    mag = torch.abs(clamped)
+
+    upper = torch.searchsorted(E4M3_LUT_POS, mag).clamp(max=E4M3_LUT_POS.numel() - 1)
+    lower = (upper - 1).clamp(min=0)
+    upper_val, lower_val = E4M3_LUT_POS[upper], E4M3_LUT_POS[lower]
+    pick_lower = (mag - lower_val) <= (upper_val - mag)
+    code = torch.where(pick_lower, lower, upper)
+
+    indices = code + 128 * (clamped < 0)
+    # 幅值码值为 0 时，argmin 命中的是 +0（下标 0）而非 -0（下标 128）。
+    return torch.where(code == 0, torch.zeros_like(indices), indices).to(torch.uint8)
 
 
-def compute_scale_and_quantize(matrix: torch.Tensor) -> Tuple[torch.Tensor, float]:
-    abs_max = torch.amax(torch.abs(matrix))
+def compute_scale_and_quantize(
+    blocks: torch.Tensor,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """逐 block 计算 scale 并量化，``blocks`` 形状为 (batch, m, n)。"""
+    abs_max = torch.amax(torch.abs(blocks), dim=(-2, -1))
     scale = torch.clamp(abs_max, min=1e-12) / E4M3_MAX
-    quantized = quantize_to_e4m3(matrix / scale)
-    return quantized, scale.item()
+    quantized = quantize_to_e4m3(blocks / scale.view(-1, 1, 1))
+    return quantized, scale
 
 
 def compute_broadcast_matmul_perblock_quant(
@@ -87,21 +107,8 @@ def compute_broadcast_matmul_perblock_quant(
     a_reshaped_fp32 = host_a_fp32.view(batch_count, m, k)
     c_fp32 = torch.matmul(a_reshaped_fp32, host_b_fp32)
 
-    dst_fp8 = torch.zeros(batch_count, m, n, dtype=torch.uint8)
-    scale = torch.zeros(batch_count, dtype=torch.float32)
-    dst_fp8_upgrade = torch.zeros(batch_count, m, n, dtype=torch.uint8)
-    scale_upgrade = torch.zeros(batch_count, dtype=torch.float32)
-
-    for b in range(batch_count):
-        block_slice = c_bf16[b]
-        quantized, sc = compute_scale_and_quantize(block_slice.float())
-        dst_fp8[b] = quantized
-        scale[b] = sc
-
-        block_slice_upgrade = c_fp32[b]
-        quantized_upgrade, sc_upgrade = compute_scale_and_quantize(block_slice_upgrade)
-        dst_fp8_upgrade[b] = quantized_upgrade
-        scale_upgrade[b] = sc_upgrade
+    dst_fp8, scale = compute_scale_and_quantize(c_bf16.float())
+    dst_fp8_upgrade, scale_upgrade = compute_scale_and_quantize(c_fp32)
 
     return dst_fp8, scale, dst_fp8_upgrade, scale_upgrade
 

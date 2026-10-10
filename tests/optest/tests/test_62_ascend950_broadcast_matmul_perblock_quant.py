@@ -44,17 +44,35 @@ def _build_e4m3_lut():
 
 E4M3_LUT = _build_e4m3_lut()
 
+E4M3_LUT_POS = E4M3_LUT[:128].contiguous()  # 幅值表，单调不减，用于二分最近邻查找
+
 
 def _quantize_to_e4m3(data):
+    """最近邻量化到 E4M3 码值，等价于对 256 项全 LUT 做 argmin。
+
+    全 LUT 中 0..127 为正幅值、128..255 为同幅值取负，对同一 ``|x|`` 的距离相同，
+    因此只需在单调的幅值表上二分得到上下邻居，再取更近的一个并按符号补高位，
+    即可避免生成 ``(..., 256)`` 的距离张量。距离相等时取小下标，与 argmin 一致。
+    """
     clamped = torch.clamp(data, E4M3_MIN, E4M3_MAX)
-    dist = torch.abs(clamped.unsqueeze(-1) - E4M3_LUT)
-    return torch.argmin(dist, dim=-1).to(torch.uint8)
+    mag = torch.abs(clamped)
+
+    upper = torch.searchsorted(E4M3_LUT_POS, mag).clamp(max=E4M3_LUT_POS.numel() - 1)
+    lower = (upper - 1).clamp(min=0)
+    upper_val, lower_val = E4M3_LUT_POS[upper], E4M3_LUT_POS[lower]
+    pick_lower = (mag - lower_val) <= (upper_val - mag)
+    code = torch.where(pick_lower, lower, upper)
+
+    indices = code + 128 * (clamped < 0)
+    # 幅值码值为 0 时，argmin 命中的是 +0（下标 0）而非 -0（下标 128）。
+    return torch.where(code == 0, torch.zeros_like(indices), indices).to(torch.uint8)
 
 
-def _compute_scale_and_quantize(matrix):
-    abs_max = torch.amax(torch.abs(matrix))
+def _compute_scale_and_quantize(blocks):
+    """逐 batch 计算 scale 并量化，``blocks`` 形状为 (batch, m, n)。"""
+    abs_max = torch.amax(torch.abs(blocks), dim=(-2, -1))
     scale = torch.clamp(abs_max, min=1e-12) / E4M3_MAX
-    return _quantize_to_e4m3(matrix / scale), scale.item()
+    return _quantize_to_e4m3(blocks / scale.view(-1, 1, 1)), scale
 
 
 def _gen_data(batch_count, m, n, k, a_bf16, b_bf16):
@@ -62,12 +80,8 @@ def _gen_data(batch_count, m, n, k, a_bf16, b_bf16):
     c_bf16 = torch.matmul(a_bf16, b_bf16)
     c_fp32 = torch.matmul(a_fp32, b_fp32)
 
-    golden_dst, golden_scale = torch.zeros(batch_count, m, n, dtype=torch.uint8), torch.zeros(batch_count, dtype=torch.float32)
-    golden_dst_upgrade, golden_scale_upgrade = torch.zeros(batch_count, m, n, dtype=torch.uint8), torch.zeros(batch_count, dtype=torch.float32)
-
-    for b_idx in range(batch_count):
-        golden_dst[b_idx], golden_scale[b_idx] = _compute_scale_and_quantize(c_bf16[b_idx].float())
-        golden_dst_upgrade[b_idx], golden_scale_upgrade[b_idx] = _compute_scale_and_quantize(c_fp32[b_idx])
+    golden_dst, golden_scale = _compute_scale_and_quantize(c_bf16.float())
+    golden_dst_upgrade, golden_scale_upgrade = _compute_scale_and_quantize(c_fp32)
 
     return golden_dst, golden_scale, golden_dst_upgrade, golden_scale_upgrade
 

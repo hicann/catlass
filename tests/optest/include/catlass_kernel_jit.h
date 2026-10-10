@@ -161,199 +161,201 @@ struct SvdQuantMatmulParams : public MatmulParams {
     float qmax = 8.0f; ///< SmoothQuant qmax.
 };
 
+// Architecture-specific entries may be absent from a single-architecture wheel.
+// RUN_NPU_FUNC checks unresolved weak entries before dispatch.
 extern "C" {
 
 /**
  * @brief JIT interface for example 00_basic_matmul.
  */
-void BasicMatmul(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
+__attribute__((weak)) void BasicMatmul(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
  * @brief JIT interface for example 01_batched_matmul.
  */
-void BatchedMatmul(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
+__attribute__((weak)) void BatchedMatmul(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
  * @brief JIT interface for example 02_grouped_matmul_slice_m.
  */
-void GroupedMatmulSliceM(
+__attribute__((weak)) void GroupedMatmulSliceM(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const GroupedMatmulParams& params);
 
 /**
  * @brief JIT interface for example 03_matmul_add.
  */
-void MatmulAdd(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
+__attribute__((weak)) void MatmulAdd(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
  * @brief Reserved JIT interface for example 04_padding_matmul.
  */
-void PaddingMatmul(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
+__attribute__((weak)) void PaddingMatmul(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
  * @brief JIT interface for example 05_grouped_matmul_slice_k.
  */
-void GroupedMatmulSliceK(
+__attribute__((weak)) void GroupedMatmulSliceK(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const GroupedMatmulParams& params);
 
 /**
  * @brief Reserved JIT interface for example 06_optimized_matmul.
  */
-void OptimizedMatmul(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
+__attribute__((weak)) void OptimizedMatmul(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
  * @brief JIT interface for example 07_grouped_matmul_slice_m_per_token_dequant_moe.
  */
-void GroupedMatmulSliceMPerTokenDequantMoe(
+__attribute__((weak)) void GroupedMatmulSliceMPerTokenDequantMoe(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const GroupedMatmulParams& params);
 
 /**
  * @brief Reserved JIT interface for example 08_grouped_matmul.
  */
-void GroupedMatmul(
+__attribute__((weak)) void GroupedMatmul(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const GroupedMatmulParams& params);
 
 /**
  * @brief JIT interface for example 09_splitk_matmul.
  */
-void SplitkMatmul(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
+__attribute__((weak)) void SplitkMatmul(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
  * @brief JIT interface for example 10_grouped_matmul_slice_m_per_token_dequant.
  */
-void GroupedMatmulSliceMPerTokenDequant(
+__attribute__((weak)) void GroupedMatmulSliceMPerTokenDequant(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const GroupedMatmulParams& params);
 
 /**
  * @brief JIT interface for example 11_grouped_matmul_slice_k_per_token_dequant.
  */
-void GroupedMatmulSliceKPerTokenDequant(
+__attribute__((weak)) void GroupedMatmulSliceKPerTokenDequant(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const GroupedMatmulParams& params);
 
 /**
  * @brief JIT interface for example 12_quant_matmul.
  */
-void QuantMatmul(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
+__attribute__((weak)) void QuantMatmul(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
  * @brief Reserved JIT interface for example 13_basic_matmul_tla.
  */
-void BasicMatmulTLA(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
+__attribute__((weak)) void BasicMatmulTLA(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
  * @brief Reserved JIT interface for example 14_optimized_matmul_tla.
  */
-void OptimizedMatmulTLA(
+__attribute__((weak)) void OptimizedMatmulTLA(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
  * @brief Reserved JIT interface for example 15_gemm.
  */
-void Gemm(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const GemmParams& params);
+__attribute__((weak)) void Gemm(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const GemmParams& params);
 
 /**
  * @brief Reserved JIT interface for example 16_group_gemm.
  */
-void GroupGemm(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const GemmParams& params);
+__attribute__((weak)) void GroupGemm(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const GemmParams& params);
 
 /**
  * @brief Reserved JIT interface for example 17_gemv_aiv.
  */
-void GemvAIV(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const GemmParams& params);
+__attribute__((weak)) void GemvAIV(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const GemmParams& params);
 
 /**
  * @brief Reserved JIT interface for example 18_gemv_aic.
  */
-void GemvAIC(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const GemmParams& params);
+__attribute__((weak)) void GemvAIC(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const GemmParams& params);
 
 /**
  * @brief JIT interface for example 20_matmul_bias.
  */
-void MatmulBias(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
+__attribute__((weak)) void MatmulBias(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
  * @brief Reserved JIT interface for example 21_basic_matmul_preload_zN.
  */
-void BasicMatmulPreloadZN(
+__attribute__((weak)) void BasicMatmulPreloadZN(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
  * @brief JIT interface for example 22_padding_splitk_matmul.
  */
-void PaddingSplitkMatmul(
+__attribute__((weak)) void PaddingSplitkMatmul(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
  * @brief Reserved JIT interface for example 25_matmul_full_loadA.
  */
-void MatmulFullLoadA(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
+__attribute__((weak)) void MatmulFullLoadA(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
  * @brief JIT interface for example 26_matmul_relu.
  */
-void MatmulRelu(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
+__attribute__((weak)) void MatmulRelu(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
  * @brief JIT interface for example 27_matmul_gelu.
  */
-void MatmulGelu(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
+__attribute__((weak)) void MatmulGelu(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
  * @brief JIT interface for example 28_matmul_silu.
  */
-void MatmulSilu(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
+__attribute__((weak)) void MatmulSilu(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
  * @brief JIT interface for example 30_w8a16_matmul.
  */
-void W8A16Matmul(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
+__attribute__((weak)) void W8A16Matmul(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
  * @brief Reserved JIT interface for example 31_small_matmul.
  */
-void SmallMatmul(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
+__attribute__((weak)) void SmallMatmul(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
  * @brief JIT interface for example 32_w4a8_matmul.
  */
-void W4A8Matmul(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
+__attribute__((weak)) void W4A8Matmul(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
  * @brief Reserved JIT interface for example 34_single_core_splitk_matmul.
  */
-void SingleCoreSplitkMatmul(
+__attribute__((weak)) void SingleCoreSplitkMatmul(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
  * @brief Reserved JIT interface for example 35_w4a8_grouped_matmul_msd.
  */
-void W4A8GroupedMatmulMSD(
+__attribute__((weak)) void W4A8GroupedMatmulMSD(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const GroupedMatmulParams& params);
 
 /**
  * @brief Reserved JIT interface for example 36_w4a8_matmul_msd.
  */
-void W4A8MatmulMSD(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
+__attribute__((weak)) void W4A8MatmulMSD(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
  * @brief Reserved JIT interface for example 37_streamk_matmul.
  */
-void StreamkMatmul(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
+__attribute__((weak)) void StreamkMatmul(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
  * @brief Reserved JIT interface for example 38_w4a4_matmul_per_token_per_channel_dequant.
  */
-void W4A4MatmulPerTokenPerChannelDequant(
+__attribute__((weak)) void W4A4MatmulPerTokenPerChannelDequant(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
  * @brief Reserved JIT interface for example 41_sparse_matmul_tla.
  */
-void SparseMatmulTLA(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
+__attribute__((weak)) void SparseMatmulTLA(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
  * @brief JIT interface for example 42_quant_optimized_matmul_tla.
  */
-void QuantOptimizedMatmulTLA(
+__attribute__((weak)) void QuantOptimizedMatmulTLA(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
@@ -365,13 +367,13 @@ __attribute__((weak)) void Ascend950BasicMatmul(
 /**
  * @brief JIT interface for example 44_quant_matmul_full_loadA_tla.
  */
-void QuantMatmulFullLoadATLA(
+__attribute__((weak)) void QuantMatmulFullLoadATLA(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
  * @brief Reserved JIT interface for example 45_strided_batched_matmul_tla.
  */
-void StridedBatchedMatmulTLA(
+__attribute__((weak)) void StridedBatchedMatmulTLA(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const StridedBatchedMatmulParams& params);
 
 /**
@@ -407,7 +409,7 @@ __attribute__((weak)) void Ascend950QuantMatmulPerGroupPerBlockTLA(
 /**
  * @brief JIT interface for example 52_quant_multi_core_splitk_matmul_tla.
  */
-void QuantMultiCoreSplitkMatmulTLA(
+__attribute__((weak)) void QuantMultiCoreSplitkMatmulTLA(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
@@ -533,7 +535,7 @@ __attribute__((weak)) void Ascend950MatmulFullLoadA(
 /**
  * @brief JIT interface for example 75_symm.
  */
-void Symm(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const SymmParams& params);
+__attribute__((weak)) void Symm(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const SymmParams& params);
 
 /**
  * @brief JIT interface for example 82_ascend950_basic_syrk.
@@ -549,7 +551,7 @@ __attribute__((weak)) void Ascend950BasicSyrk(
  *
  * D = alpha * X @ X^T + beta * Y. ``params.m`` must equal ``params.n``.
  */
-void Ascend950Syrk(
+__attribute__((weak)) void Ascend950Syrk(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const SyrkParams& params);
 
 /**
@@ -565,7 +567,7 @@ __attribute__((weak)) void Ascend950A8W4GroupedMxMatmul(
 /**
  * @brief JIT interface for example 78_ascend950_dual_matmul_silu_mul.
  */
-void Ascend950DualMatmulSiluMul(
+__attribute__((weak)) void Ascend950DualMatmulSiluMul(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
@@ -583,19 +585,19 @@ __attribute__((weak)) void Ascend950Fp8E4M3QuantMatmul(
 /**
  * @brief JIT interface for experimental/matmul/ascend950_matmul_gather_scatter.
  */
-void Ascend950MatmulGatherScatter(
+__attribute__((weak)) void Ascend950MatmulGatherScatter(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulGatherScatterParams& params);
 
 /**
  * @brief Reserved JIT interface for example 102_dynamic_optimized_matmul.
  */
-void DynamicOptimizedMatmul(
+__attribute__((weak)) void DynamicOptimizedMatmul(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
  * @brief Reserved JIT interface for example 103_dynamic_optimized_quant_matmul_per_token_basic.
  */
-void DynamicOptimizedQuantMatmulPerTokenBasic(
+__attribute__((weak)) void DynamicOptimizedQuantMatmulPerTokenBasic(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
@@ -613,12 +615,12 @@ __attribute__((weak)) void Ascend950TailMultiCoreSplitkMatmul(
 /**
  * @brief JIT interface for example 76_trmm.
  */
-void Trmm(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const TrmmParams& params);
+__attribute__((weak)) void Trmm(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const TrmmParams& params);
 
 /**
  * @brief JIT interface for example 77_planar_complex_matmul.
  */
-void PlanarComplexMatmul(
+__attribute__((weak)) void PlanarComplexMatmul(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**

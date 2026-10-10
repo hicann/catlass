@@ -121,8 +121,8 @@ def ret_check(ret: subprocess.CompletedProcess):
     assert ret.returncode == 0, f"Return code is not zero: {ret.returncode}"
 
 
-def run_case(build_env, executable_name: str, args: list, *, cwd=None):
-    """Build the case target (cmake --build + install) then run its bin."""
+def build_case(build_env, executable_name: str):
+    """Incrementally build and install the requested example target."""
     subprocess.run(
         ["cmake", "--build", build_env, "--target", executable_name, "-j"],
         check=True,
@@ -131,6 +131,11 @@ def run_case(build_env, executable_name: str, args: list, *, cwd=None):
         ["cmake", "--install", build_env, "--component", executable_name],
         check=True,
     )
+
+
+def run_case(build_env, executable_name: str, args: list, *, cwd=None):
+    """Build the case target (cmake --build + install) then run its bin."""
+    build_case(build_env, executable_name)
     args = [str(arg) for arg in args]
     ret = subprocess.run(
         [os.path.join(CMAKE_BINARY_PATH, executable_name)] + args,
@@ -467,6 +472,7 @@ def test_54_ascend950_fp4_mx_matmul_aswt_shape_512_1024_256(build_env):
 
 @only_on_3510
 def test_55_ascend950_mx_grouped_matmul_slice_m(build_env):
+    build_case(build_env, "55_ascend950_mx_grouped_matmul_slice_m")
     # gen_data_compare args: G, M, N, K, trans_b, quant_type, device_id
     for trans, quant_type in itertools.product(("0", "1"), ("float8_e4m3fn", "float8_e5m2", "float4_e2m1fn_x2")):
         case_py = [str(i) for i in [2, 588, 988, 1030]] + [
@@ -492,6 +498,7 @@ def test_55_ascend950_mx_grouped_matmul_slice_m(build_env):
 
 @only_on_3510
 def test_55_ascend950_mx_grouped_matmul_slice_m_aswt_fp4_odd_n_transb(build_env):
+    build_case(build_env, "55_ascend950_mx_grouped_matmul_slice_m_aswt")
     # gen_data_compare args: G, M, N, K, trans_b, quant_type, device_id, --bin ...
     case_py = [str(i) for i in [2, 588, 989, 1030, 1]] + [
         "float4_e2m1fn_x2",
@@ -574,6 +581,7 @@ def test_59_ascend950_a8w4_mx_matmul(build_env):
 
 @only_on_3510
 def test_62_ascend950_broadcast_matmul_perblock_quant(build_env):
+    build_case(build_env, "62_ascend950_broadcast_matmul_perblock_quant")
     # gen_data_compare args: batch_count, m, n, k, device_id
     case_py = [str(i) for i in [5920, 128, 128, 128, 0]]
     case_py[-1] = DEVICE_ID
@@ -675,6 +683,7 @@ def test_70_ascend950_flash_attention_chunk_prefill(build_env):
 
 @only_on_3510
 def test_71_ascend950_fp8_mx_grouped_matmul_finalize_routing(build_env):
+    build_case(build_env, "71_ascend950_fp8_mx_grouped_matmul_finalize_routing_no_deter")
     # gen_data_compare args: batch_count, m, n, k, ..., quant_type, device_id
     case_py = [str(i) for i in [4, 128, 128, 128, 0, 0, 0, 16, 2, 0, 0.0, 0]] + [
         "float8_e5m2",
