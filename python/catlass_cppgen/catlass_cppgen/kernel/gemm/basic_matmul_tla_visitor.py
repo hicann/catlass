@@ -69,12 +69,13 @@ class BasicMatmulTlaVisitorKernel(GemmKernelBase, VisitorKernelBase):
     using ElementA = {element_A};
     using ElementB = {element_B};
     using ElementC = {element_C};
+    using ElementBias = {element_Bias};
     using LayoutTagA = {layout_A};
     using LayoutTagB = {layout_B};
     using LayoutTagC = layout::RowMajor;
 
-    using TileCopy = Gemm::Tile::PackedTileCopyTla<ArchTag, ElementA, LayoutTagA, ElementB, LayoutTagB, ElementC, LayoutTagC>;
-    using BlockMmad = Gemm::Block::BlockMmadTla<DispatchPolicy, L1TileShape, L0TileShape, ElementA, ElementB, ElementC, void, TileCopy>;
+    using TileCopy = Gemm::Tile::PackedTileCopyTla<ArchTag, ElementA, LayoutTagA, ElementB, LayoutTagB, ElementC, LayoutTagC, ElementBias>;
+    using BlockMmad = Gemm::Block::BlockMmadTla<DispatchPolicy, L1TileShape, L0TileShape, ElementA, ElementB, ElementC, ElementBias, TileCopy>;
     using BlockEpilogue = {epilogue_str};
 
     using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
@@ -101,13 +102,29 @@ using EpilogueDispatchPolicy = Epilogue::EpilogueVisitor<false>;
 {evg_args}
 """
 
+    def __init__(self, **kwargs):
+        """初始化 BasicMatmulTlaVisitorKernel."""
+        super().__init__(**kwargs)
+
+        if self.element_Bias is not None and self.element_Bias != "void":
+            self._PARAMS_DEVICE[7] = (GM_ADDR, "deviceBias")  # Fixed bias loc
+
     def get_default_tile_shape(self) -> Tuple[GemmShape, GemmShape]:
         element_max_size = max(  # noqa: F841
             self.element_A.data_size(),
             self.element_B.data_size(),
             self.element_C.data_size(),
         )
-        return GemmShape(256, 256, 128), GemmShape(256, 256, 32)
+
+        l1_m, l1_n, l1_k, l0_k = (
+            256,
+            256,
+            512 // element_max_size,
+            128 // element_max_size,
+        )
+        if self.element_Bias is not None and self.element_Bias != "void":
+            l1_m -= 16
+        return GemmShape(l1_m, l1_n, l1_k), GemmShape(l1_m, l1_n, l0_k)
 
     def get_default_dispatch_policy_list(self) -> List:
         """获取 BasicMatmulKernel 的默认 dispatch_policy 列表.

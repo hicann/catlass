@@ -114,6 +114,77 @@ def epilogue(accum, bias):
         self.check.test_layout(kernel_template, "RowMajor", "TagC")
         self.check.test_arch_tag(kernel_template, Arch.Ascend950)
 
+    def test_codegen_with_evg_with_bias(self):
+        a = OpTensor.from_shape_stride(
+            shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT
+        )
+        b = OpTensor.from_shape_stride(
+            shape=(256, 384), stride=(384, 1), dtype=DataType.FLOAT
+        )
+        bias = OpTensor.from_shape_stride(
+            shape=(384,), stride=(1,), dtype=DataType.FLOAT
+        )
+
+        fn_src = """
+def epilogue(accum, addmm_input):
+    result = relu(accum + addmm_input)
+    return result
+"""
+        example_inputs = {
+            "accum": OpTensor.from_shape_stride(
+                shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT
+            ),
+            "addmm_input": OpTensor.from_shape_stride(
+                shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT
+            ),
+            "result": OpTensor.from_shape_stride(
+                shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT
+            ),
+        }
+
+        gemm_plan = Gemm(
+            atlas_arch=Arch.Ascend950,
+            element=DataType.FLOAT,
+            layout=RowMajor,
+            A=a,
+            B=b,
+            Bias=bias,
+            evg_config={"fn_src": fn_src, "example_inputs": example_inputs},
+        )
+        kernels = gemm_plan.get_kernels()
+        kernel = kernels[0]
+
+        from catlass_cppgen.kernel.gemm.basic_matmul_tla_visitor import (
+            BasicMatmulTlaVisitorKernel,
+        )
+
+        self.assertIsInstance(kernel, BasicMatmulTlaVisitorKernel)
+
+        evg_template = kernel.gen_evg_template()
+        kernel_template = kernel.gen_kernel_template()
+
+        self.check.test_element_dtype(kernel_template, DataType.FLOAT, "A")
+        self.check.test_element_dtype(kernel_template, DataType.FLOAT, "B")
+        self.check.test_element_dtype(kernel_template, DataType.FLOAT, "C")
+        self.check.test_element_dtype(kernel_template, DataType.FLOAT, "Bias")
+        self.check.test_layout(kernel_template, "RowMajor", "TagA")
+        self.check.test_layout(kernel_template, "RowMajor", "TagB")
+        self.check.test_layout(kernel_template, "RowMajor", "TagC")
+        self.check.test_arch_tag(kernel_template, Arch.Ascend950)
+
+        self.check.test_accu_dtype(evg_template, DataType.FLOAT)
+        self.check.test_visitor_compute(
+            evg_template, [EpilogueOp.Add, EpilogueOp.Relu]
+        )
+        self.check.test_tree_visitor(
+            evg_template,
+            (
+                "Compute0, Accum, AddmmInput",
+                "Compute1, EVGCompute0",
+                "Result, EVGCompute1",
+            ),
+        )
+
     def test_codegen_with_evg(self):
         a = OpTensor.from_shape_stride(
             shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT
