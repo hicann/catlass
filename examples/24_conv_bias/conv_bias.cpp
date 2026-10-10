@@ -103,10 +103,36 @@ struct Options {
 
         return 0;
     }
+
+    const bool CanImplement() const
+    {
+        if (strides[0] == 0 || strides[1] == 0 || strides[2] == 0 || dilations[0] == 0 || dilations[1] == 0 ||
+            dilations[2] == 0) {
+            // strides and dilations should not be 0.
+            return false;
+        }
+
+        if (fmapRelated[1] + pads[0] * 2 <=
+                dilations[0] * (filterRelated[0] - 1) + 1 /* di + 2 * padD <= dD * (kd - 1) + 1*/
+            || fmapRelated[3] + pads[1] * 2 <=
+                   dilations[1] * (filterRelated[1] - 1) + 1 /* hi + 2 * padH <= dH * (kh - 1) + 1*/
+            || fmapRelated[4] + pads[2] * 2 <=
+                   dilations[2] * (filterRelated[2] - 1) + 1 /* wi + 2 * padW <= dW * (kw - 1) + 1*/) {
+            // filter size should not be larger than map size.
+            return false;
+        }
+
+        return true;
+    }
 };
 
 static void Run(const Options& options)
 {
+    if (!options.CanImplement()) {
+        std::cerr << "[ERROR]Invalid input parameters!" << std::endl;
+        return;
+    }
+
     aclrtStream stream{nullptr};
 
     ACL_CHECK(aclInit(nullptr));

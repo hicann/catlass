@@ -28,6 +28,15 @@
     W_o=[(W_i + 2 * padding[2] - dilation[2] * (K_w - 1) - 1 ) / stride[2]] + 1
   $$
 
+- 需满足以下基础约束：
+  - 膨胀系数`dilations`和卷积核计算步幅`strides`均不能为零
+  - 卷积核的有效感受野大小不能超过输入特征图的大小，需满足：
+    - `di + 2 * padD > dD * (kd - 1) + 1`
+    - `hi + 2 * padH > dH * (kh - 1) + 1`
+    - `wi + 2 * padW > dW * (kw - 1) + 1`
+
+    其中`di`，`hi`，`wi`为输入特征图的深度、高度和宽度，`kd`，`kh`，`kw`为卷积核的深度、高度和宽度，`dD`，`dH`，`dW`为上述三个方向上的膨胀系数，`padD`，`padH`，`padW`为对应方向上的填充大小。不满足上述约束时，程序打印`[ERROR]Invalid input parameters!`并退出。
+
 - 当前实现相较于cann仅支持w轴全载的基础Conv3D功能，不涉及weight bypass、L1开doublebuffer、pointwise以及w轴切分等优化手段和分支，输入input、weight和bias在L1上的搬运量不能超过硬件限制，即需要满足以下条件：
   $$
     weightL1Size = K_h * K_w * 512 \\

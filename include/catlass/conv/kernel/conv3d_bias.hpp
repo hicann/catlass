@@ -80,6 +80,11 @@ public:
 
     static bool CanImplement(const Arguments& args)
     {
+        const Conv3dParams& shape = args.problemShape;
+        if (shape.sD() == 0 || shape.sH() == 0 || shape.sW() == 0 || shape.dout() == 0 || shape.ho() == 0 ||
+            shape.wo() == 0) {
+            return false;
+        }
         return true;
     }
 

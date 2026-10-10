@@ -28,6 +28,15 @@
     W_o=[(W_i + 2 * padding[2] - dilation[2] * (K_w - 1) - 1 ) / stride[2]] + 1
   $$
 
+- The following basic constraints must be satisfied:
+  - The dilation factors `dilations` and the convolution strides `strides` must not be zero.
+  - The effective receptive field of the convolution kernel must not exceed the input feature map size, that is:
+    - `di + 2 * padD > dD * (kd - 1) + 1`
+    - `hi + 2 * padH > dH * (kh - 1) + 1`
+    - `wi + 2 * padW > dW * (kw - 1) + 1`
+
+    where `di`, `hi`, and `wi` are the depth, height, and width of the input feature map, `kd`, `kh`, and `kw` are the depth, height, and width of the convolution kernel, `dD`, `dH`, and `dW` are the dilation factors along the three axes, and `padD`, `padH`, and `padW` are the padding sizes along the corresponding axes. If any constraint is violated, the program prints `[ERROR]Invalid input parameters!` and exits.
+
 - Compared to a fully optimized CANN implementation, this basic Conv3D variant only supports full loading along the $W$-axis. Advanced performance optimizations, such as weight bypassing, L1 double-buffering, pointwise fusion, and $W$-axis tiling, are not enabled. Consequently, the memory footprints of the input, weight, and bias tensors in the L1 buffer must fit strictly within hardware limits, satisfying the following inequality:
   $$
     weightL1Size = K_h * K_w * 512 \\

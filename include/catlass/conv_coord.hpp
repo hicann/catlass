@@ -15,6 +15,21 @@
 
 namespace Catlass {
 
+/// Computes the conv output size along one axis:
+/// (inSize + totalPad - dilation * (kernel - 1) - 1) / stride + 1.
+/// The intermediate arithmetic is done in int64_t to avoid uint32_t underflow when the padded
+/// input is smaller than the dilated kernel. Returns 0 (no valid output position) in that case
+/// or when stride is 0.
+CATLASS_HOST_DEVICE
+constexpr int64_t ConvOutputSize(int64_t inSize, int64_t totalPad, int64_t kernel, int64_t stride, int64_t dilation)
+{
+    int64_t numerator = inSize + totalPad - dilation * (kernel - 1) - 1;
+    if (numerator < 0 || stride <= 0) {
+        return 0;
+    }
+    return numerator / stride + 1;
+}
+
 /// Shape of conv3d operation
 struct Conv3dParams {
 public:
@@ -60,9 +75,12 @@ public:
         return Conv3dParams(
             fmapShape[0], fmapShape[1], fmapShape[2], fmapShape[3], fmapShape[4], fmapShape[5], filterShape[0],
             filterShape[1], filterShape[2], CeilDiv(filterShape[3], N0),
-            (fmapShape[1] + paddings[0] * 2 - dilations[0] * (filterShape[0] - 1) - 1) / strides[0] + 1, // Do
-            (fmapShape[3] + paddings[1] * 2 - dilations[1] * (filterShape[1] - 1) - 1) / strides[1] + 1, // Ho
-            (fmapShape[4] + paddings[2] * 2 - dilations[2] * (filterShape[2] - 1) - 1) / strides[2] + 1, // Wo
+            static_cast<Index>(
+                ConvOutputSize(fmapShape[1], paddings[0] * 2, filterShape[0], strides[0], dilations[0])), // Do
+            static_cast<Index>(
+                ConvOutputSize(fmapShape[3], paddings[1] * 2, filterShape[1], strides[1], dilations[1])), // Ho
+            static_cast<Index>(
+                ConvOutputSize(fmapShape[4], paddings[2] * 2, filterShape[2], strides[2], dilations[2])), // Wo
             CeilDiv(filterShape[3], fmapShape[5]), filterShape[3], paddings[0], paddings[1], paddings[2], strides[0],
             strides[1], strides[2], dilations[0], dilations[1], dilations[2]);
     }
@@ -1106,8 +1124,8 @@ public:
           configs(kh, kw, padLeft, padRight, padTop, padBottom, strideH, strideW, dilationH, dilationW)
     {
         Index cout1 = CeilDiv(cout, C0);
-        Index ho = (hi + padTop + padBottom - dilationH * (kh - 1) - 1) / strideH + 1;
-        Index wo = (wi + padLeft + padRight - dilationW * (kw - 1) - 1) / strideW + 1;
+        Index ho = static_cast<Index>(ConvOutputSize(hi, padTop + padBottom, kh, strideH, dilationH));
+        Index wo = static_cast<Index>(ConvOutputSize(wi, padLeft + padRight, kw, strideW, dilationW));
         outputShape = MakeCoord(batch, cout1, ho, wo, C0);
         postIm2colShape = MakeCoord(batch, ho, wo, cout, filterShape.cin1());
     }
