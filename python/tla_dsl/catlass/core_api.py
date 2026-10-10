@@ -18,7 +18,7 @@ from catlass._mlir._mlir_libs._mlir import (  # type: ignore[import-not-found]
 from catlass._mlir.dialects import arith as _mlir_arith  # type: ignore[import-not-found]
 
 from . import _tla_type_bridge
-from .params import CastParams
+from .params import CastParams, SatMode
 
 # Element-type tokens the tla.cast lowering supports: signed ints and the AVE
 # float set. Unsigned ints, Bool (i1) and Float64 (f64) are rejected by VectorSSA.to.
@@ -571,6 +571,12 @@ class VectorSSA(_RegisterSSA):
             integers, `tla.Bool` (i1), `tla.Float64` and `tla.Float8E8M0` are
             rejected.
 
+            `tla.Float16` to `tla.BFloat16` uses one direct instruction and
+            preserves all lanes. All round modes are supported. `sat_mode`
+            must be `UNKNOWN`; `NOSAT` and `SAT` are rejected because the
+            instruction has no saturation operand. `reg_slot` `ZERO` and `ONE`
+            have the same effect for this equal-width conversion.
+
             An fp8 operand converts to and from `tla.Float32`, `tla.Float16` and
             `tla.BFloat16`. Only the f32 pair is a single instruction: the f16
             and bf16 pairs are expanded by the lowering into two casts through
@@ -645,6 +651,12 @@ class VectorSSA(_RegisterSSA):
         src_desc = _vector_ssa_type_for_mlir_value(operand_value)
         dst_token = _dtype_to_str(dst_type)
         src_token = src_desc.element_type
+        if (
+            src_token == "f16"
+            and dst_token == "bf16"
+            and params.sat_mode is not SatMode.UNKNOWN
+        ):
+            _op_error("cast", "f16->bf16 cast only supports UNKNOWN sat_mode")
         _require_reg_slot_reachable(src_token, dst_token, params.reg_slot)
         result_desc = _cast_result_descriptor(src_desc, dst_token, params)
         with context:
@@ -8465,15 +8477,23 @@ def _require_reg_slot_reachable(src_token: str, dst_token: str, slot: RegSlot) -
 
     Slots TWO and THREE name a pack quarter, and only an integer cast of 4x
     width or more, or a direct fp8<->f32 cast, reads one (pp0..pp3). Every
-    other cast carries an even/odd part, where mapCastPart folds TWO and THREE
-    onto PART_EVEN -- so accepting them would hand back slot ZERO's lanes with
-    no diagnostic.
+    other width-changing cast carries an even/odd part, where mapCastPart folds
+    TWO and THREE onto PART_EVEN -- so accepting them would hand back slot
+    ZERO's lanes with no diagnostic. The equal-width f16->bf16 instruction
+    preserves all lanes without a selector and also rejects pack quarters.
 
     The fp8<->f32 instruction is the one float exception: it is a 4x-width
     conversion and uses the same pp0..pp3 selector family as i8<->i32.
     """
     if slot not in (RegSlot.TWO, RegSlot.THREE):
         return
+    if src_token == "f16" and dst_token == "bf16":
+        _op_error(
+            "cast",
+            f"invalid reg_slot {slot} for cast 'f16'->'bf16': this equal-width "
+            f"conversion preserves all lanes and does not select a pack quarter; "
+            f"use ZERO or ONE",
+        )
     src_bits = _CAST_TOKEN_BITS.get(src_token, 0)
     dst_bits = _CAST_TOKEN_BITS.get(dst_token, 0)
     int_pair = src_token.startswith("i") and dst_token.startswith("i")

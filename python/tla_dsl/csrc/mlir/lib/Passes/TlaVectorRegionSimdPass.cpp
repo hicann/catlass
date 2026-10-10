@@ -987,7 +987,7 @@ static bool isSupportedCastElementType(Type t)
     return false;
 }
 
-// Build the AVE cast op for a tla.cast, dispatching by (src, dst) element kind.
+// Build the AVE op or regbase intrinsic for a tla.cast, dispatching by (src, dst) element kind.
 // The trait supplies rounding, saturation and register layout; the mask (source
 // width) predicates active lanes.
 static FailureOr<Value> createVectorCastResult(
@@ -1006,6 +1006,18 @@ static FailureOr<Value> createVectorCastResult(
     bool dFloat = isa<FloatType>(d);
     unsigned sb = s.getIntOrFloatBitWidth();
     unsigned db = d.getIntOrFloatBitWidth();
+
+    // AVE vextf has no rounding operand and its lowering only produces f32.
+    // The direct f16 -> bf16 instruction preserves every lane without a part
+    // selector. It has no saturation operand, so only UNKNOWN is accepted;
+    // kernel entry configures CTRL[48] for non-saturation.
+    if (s.isF16() && d.isBF16()) {
+        if (static_cast<::SatMode>(trait[1]) != ::SatMode::unknown)
+            return emitError(loc, "f16->bf16 cast only supports UNKNOWN sat_mode"), failure();
+        Value preg = castMaskToPregType(b, loc, mask, fullPregVecType(b.getContext()));
+        Value round = b.create<arith::ConstantIntOp>(loc, static_cast<int64_t>(rnd.getValue()), 32);
+        return b.create<hivm_regbaseintrins::VcvtffF162BF16InstrOp>(loc, dstVecType, src, preg, round).getResult();
+    }
 
     // fp8 pairs with f32 and nothing else. The AVE op definitions advertise a
     // wider set -- vtruncf lists bf16/f16/f32 sources, vextf lists bf16/f16/f32

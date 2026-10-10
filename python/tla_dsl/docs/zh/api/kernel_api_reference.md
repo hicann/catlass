@@ -51,7 +51,7 @@ Shape / Coord / Stride / Layout / Tensor 等前端结构化值的构造与视图
 
 ### `make_shape`
 
-**源码：** [`catlass.core_api.make_shape`](../../../catlass/core_api.py#L3870)
+**源码：** [`catlass.core_api.make_shape`](../../../catlass/core_api.py#L3873)
 
 功能说明：
 
@@ -93,7 +93,7 @@ zn_shape = tla.make_shape((16, 8), (16, 4))
 
 ### `make_coord`
 
-**源码：** [`catlass.core_api.make_coord`](../../../catlass/core_api.py#L3911)
+**源码：** [`catlass.core_api.make_coord`](../../../catlass/core_api.py#L3914)
 
 功能说明：
 
@@ -124,7 +124,7 @@ coord = tla.make_coord(block_row, 0)
 
 ### `make_stride`
 
-**源码：** [`catlass.core_api.make_stride`](../../../catlass/core_api.py#L3940)
+**源码：** [`catlass.core_api.make_stride`](../../../catlass/core_api.py#L3943)
 
 功能说明：
 
@@ -185,7 +185,7 @@ nz_stride = tla.make_stride((1, 1024), (16, 256))
 
 ### `make_layout`
 
-**源码：** [`catlass.core_api.make_layout`](../../../catlass/core_api.py#L4000)
+**源码：** [`catlass.core_api.make_layout`](../../../catlass/core_api.py#L4003)
 
 功能说明：
 
@@ -245,7 +245,7 @@ zn = tla.make_layout(
 
 ### `make_layout_with_tag`
 
-**源码：** [`catlass.core_api.make_layout_with_tag`](../../../catlass/core_api.py#L4135)
+**源码：** [`catlass.core_api.make_layout_with_tag`](../../../catlass/core_api.py#L4138)
 
 功能说明：
 
@@ -295,7 +295,7 @@ t_l1a = tla.make_tensor(l1a, lay)
 
 ### `tile_view`
 
-**源码：** [`catlass.core_api.tile_view`](../../../catlass/core_api.py#L4293)
+**源码：** [`catlass.core_api.tile_view`](../../../catlass/core_api.py#L4296)
 
 功能说明：
 
@@ -330,7 +330,7 @@ tile = tla.tile_view(
 
 ### `get_tile`
 
-**源码：** [`catlass.core_api.get_tile`](../../../catlass/core_api.py#L4340)
+**源码：** [`catlass.core_api.get_tile`](../../../catlass/core_api.py#L4343)
 
 功能说明：
 
@@ -385,7 +385,7 @@ pad.fill(0)
 
 ### `make_tensor`
 
-**源码：** [`catlass.core_api.make_tensor`](../../../catlass/core_api.py#L4497)
+**源码：** [`catlass.core_api.make_tensor`](../../../catlass/core_api.py#L4500)
 
 功能说明：
 
@@ -424,7 +424,7 @@ tensor = tla.make_tensor(ptr, layout, coord=tla.make_coord(0, 0))
 
 ### `make_tensor_like`
 
-**源码：** [`catlass.core_api.make_tensor_like`](../../../catlass/core_api.py#L4692)
+**源码：** [`catlass.core_api.make_tensor_like`](../../../catlass/core_api.py#L4695)
 
 功能说明：
 
@@ -458,7 +458,7 @@ dst = tla.make_tensor_like(ptr, like=src_tile, layoutTag=tla.arch.RowMajor)
 
 ### `make_ptr`
 
-**源码：** [`catlass.core_api.make_ptr`](../../../catlass/core_api.py#L8865)
+**源码：** [`catlass.core_api.make_ptr`](../../../catlass/core_api.py#L8957)
 
 功能说明：
 
@@ -492,7 +492,7 @@ ptr = tla.make_ptr(tla.Float16, addr, mem_space=tla.AddressSpace.gm)
 
 ### `recast_ptr`
 
-**源码：** [`catlass.core_api.recast_ptr`](../../../catlass/core_api.py#L8919)
+**源码：** [`catlass.core_api.recast_ptr`](../../../catlass/core_api.py#L9011)
 
 功能说明：
 
@@ -715,7 +715,7 @@ def kernel() -> None:
 
 ### `copy`
 
-**源码：** [`catlass.core_api.copy`](../../../catlass/core_api.py#L5174)
+**源码：** [`catlass.core_api.copy`](../../../catlass/core_api.py#L5177)
 
 功能说明：
 
@@ -1009,7 +1009,7 @@ Cube 侧矩阵乘加（`tla.mmad` / `tla.mmad_mx`）。
 
 ### `mmad`
 
-**源码：** [`catlass.core_api.mmad`](../../../catlass/core_api.py#L6338)
+**源码：** [`catlass.core_api.mmad`](../../../catlass/core_api.py#L6341)
 
 功能说明：
 
@@ -1052,7 +1052,7 @@ with tla.cube():
 
 ### `mmad_mx`
 
-**源码：** [`catlass.core_api.mmad_mx`](../../../catlass/core_api.py#L6449)
+**源码：** [`catlass.core_api.mmad_mx`](../../../catlass/core_api.py#L6452)
 
 功能说明：
 
@@ -1113,7 +1113,7 @@ Mask 创建与尾块更新。
 
 #### `create_mask`
 
-**源码：** [`catlass.core_api.create_mask`](../../../catlass/core_api.py#L9193)
+**源码：** [`catlass.core_api.create_mask`](../../../catlass/core_api.py#L9285)
 
 功能说明：
 
@@ -1168,7 +1168,7 @@ with tla.vec.func(mode="simd"):
 
 #### `update_mask`
 
-**源码：** [`catlass.core_api.update_mask`](../../../catlass/core_api.py#L9257)
+**源码：** [`catlass.core_api.update_mask`](../../../catlass/core_api.py#L9349)
 
 功能说明：
 
@@ -1203,7 +1203,7 @@ with tla.vec.func(mode="simd"):
 
 #### `exp`
 
-**源码：** [`catlass.core_api.exp`](../../../catlass/core_api.py#L7312)
+**源码：** [`catlass.core_api.exp`](../../../catlass/core_api.py#L7315)
 
 功能说明：
 
@@ -1236,7 +1236,7 @@ with tla.vec.func(mode="simd"):
 
 #### `log`
 
-**源码：** [`catlass.core_api.log`](../../../catlass/core_api.py#L7334)
+**源码：** [`catlass.core_api.log`](../../../catlass/core_api.py#L7337)
 
 功能说明：
 
@@ -1269,7 +1269,7 @@ with tla.vec.func(mode="simd"):
 
 #### `sqrt`
 
-**源码：** [`catlass.core_api.sqrt`](../../../catlass/core_api.py#L7356)
+**源码：** [`catlass.core_api.sqrt`](../../../catlass/core_api.py#L7359)
 
 功能说明：
 
@@ -1312,7 +1312,7 @@ with tla.cube():
 
 #### `abs`
 
-**源码：** [`catlass.core_api.abs`](../../../catlass/core_api.py#L7389)
+**源码：** [`catlass.core_api.abs`](../../../catlass/core_api.py#L7392)
 
 功能说明：
 
@@ -1345,7 +1345,7 @@ with tla.vec.func(mode="simd"):
 
 #### `neg`
 
-**源码：** [`catlass.core_api.neg`](../../../catlass/core_api.py#L7411)
+**源码：** [`catlass.core_api.neg`](../../../catlass/core_api.py#L7414)
 
 功能说明：
 
@@ -1378,7 +1378,7 @@ with tla.vec.func(mode="simd"):
 
 #### `add`
 
-**源码：** [`catlass.core_api.add`](../../../catlass/core_api.py#L7717)
+**源码：** [`catlass.core_api.add`](../../../catlass/core_api.py#L7720)
 
 功能说明：
 
@@ -1419,7 +1419,7 @@ with tla.vec.func(mode="simd"):
 
 #### `sub`
 
-**源码：** [`catlass.core_api.sub`](../../../catlass/core_api.py#L7763)
+**源码：** [`catlass.core_api.sub`](../../../catlass/core_api.py#L7766)
 
 功能说明：
 
@@ -1457,7 +1457,7 @@ with tla.vec.func(mode="simd"):
 
 #### `mul`
 
-**源码：** [`catlass.core_api.mul`](../../../catlass/core_api.py#L7800)
+**源码：** [`catlass.core_api.mul`](../../../catlass/core_api.py#L7803)
 
 功能说明：
 
@@ -1496,7 +1496,7 @@ with tla.vec.func(mode="simd"):
 
 #### `max`
 
-**源码：** [`catlass.core_api.max`](../../../catlass/core_api.py#L7924)
+**源码：** [`catlass.core_api.max`](../../../catlass/core_api.py#L7927)
 
 功能说明：
 
@@ -1530,7 +1530,7 @@ with tla.vec.func(mode="simd"):
 
 #### `min`
 
-**源码：** [`catlass.core_api.min`](../../../catlass/core_api.py#L7925)
+**源码：** [`catlass.core_api.min`](../../../catlass/core_api.py#L7928)
 
 功能说明：
 
@@ -1564,7 +1564,7 @@ with tla.vec.func(mode="simd"):
 
 #### `div`
 
-**源码：** [`catlass.core_api.div`](../../../catlass/core_api.py#L7929)
+**源码：** [`catlass.core_api.div`](../../../catlass/core_api.py#L7932)
 
 功能说明：
 
@@ -1606,7 +1606,7 @@ Mask / Vector 上的按位与逻辑运算。
 
 #### `shift_left`
 
-**源码：** [`catlass.core_api.shift_left`](../../../catlass/core_api.py#L7609)
+**源码：** [`catlass.core_api.shift_left`](../../../catlass/core_api.py#L7612)
 
 功能说明：
 
@@ -1644,7 +1644,7 @@ with tla.vec.func(mode="simd"):
 
 #### `shift_right`
 
-**源码：** [`catlass.core_api.shift_right`](../../../catlass/core_api.py#L7645)
+**源码：** [`catlass.core_api.shift_right`](../../../catlass/core_api.py#L7648)
 
 功能说明：
 
@@ -1684,7 +1684,7 @@ with tla.vec.func(mode="simd"):
 
 #### `bitwise_not`
 
-**源码：** [`catlass.core_api.bitwise_not`](../../../catlass/core_api.py#L7683)
+**源码：** [`catlass.core_api.bitwise_not`](../../../catlass/core_api.py#L7686)
 
 功能说明：
 
@@ -1717,7 +1717,7 @@ with tla.vec.func(mode="simd"):
 
 #### `bitwise_and`
 
-**源码：** [`catlass.core_api.bitwise_and`](../../../catlass/core_api.py#L8359)
+**源码：** [`catlass.core_api.bitwise_and`](../../../catlass/core_api.py#L8362)
 
 功能说明：
 
@@ -1751,7 +1751,7 @@ with tla.vec.func(mode="simd"):
 
 #### `bitwise_or`
 
-**源码：** [`catlass.core_api.bitwise_or`](../../../catlass/core_api.py#L8397)
+**源码：** [`catlass.core_api.bitwise_or`](../../../catlass/core_api.py#L8400)
 
 功能说明：
 
@@ -1785,7 +1785,7 @@ with tla.vec.func(mode="simd"):
 
 #### `bitwise_xor`
 
-**源码：** [`catlass.core_api.bitwise_xor`](../../../catlass/core_api.py#L8435)
+**源码：** [`catlass.core_api.bitwise_xor`](../../../catlass/core_api.py#L8438)
 
 功能说明：
 
@@ -1821,7 +1821,7 @@ with tla.vec.func(mode="simd"):
 
 #### `where`
 
-**源码：** [`catlass.core_api.where`](../../../catlass/core_api.py#L8101)
+**源码：** [`catlass.core_api.where`](../../../catlass/core_api.py#L8104)
 
 功能说明：
 
@@ -1855,7 +1855,7 @@ with tla.vec.func(mode="simd"):
 
 #### `cmp`
 
-**源码：** [`catlass.core_api.cmp`](../../../catlass/core_api.py#L8283)
+**源码：** [`catlass.core_api.cmp`](../../../catlass/core_api.py#L8286)
 
 功能说明：
 
@@ -1892,7 +1892,7 @@ with tla.vec.func(mode="simd"):
 
 #### `full`
 
-**源码：** [`catlass.core_api.full`](../../../catlass/core_api.py#L6537)
+**源码：** [`catlass.core_api.full`](../../../catlass/core_api.py#L6540)
 
 功能说明：
 
@@ -1934,7 +1934,7 @@ with tla.vec.func(mode="simd"):
 
 #### `arange`
 
-**源码：** [`catlass.core_api.arange`](../../../catlass/core_api.py#L6666)
+**源码：** [`catlass.core_api.arange`](../../../catlass/core_api.py#L6669)
 
 功能说明：
 
@@ -1972,7 +1972,7 @@ with tla.vec.func(mode="simd"):
 
 #### `gather`
 
-**源码：** [`catlass.core_api.gather`](../../../catlass/core_api.py#L8500)
+**源码：** [`catlass.core_api.gather`](../../../catlass/core_api.py#L8520)
 
 功能说明：
 
@@ -2058,7 +2058,7 @@ with tla.vec.func(mode="simd"):
 
 #### `interleave`
 
-**源码：** [`catlass.core_api.interleave`](../../../catlass/core_api.py#L7449)
+**源码：** [`catlass.core_api.interleave`](../../../catlass/core_api.py#L7452)
 
 功能说明：
 
@@ -2092,7 +2092,7 @@ with tla.vec.func(mode="simd"):
 
 #### `deinterleave`
 
-**源码：** [`catlass.core_api.deinterleave`](../../../catlass/core_api.py#L7527)
+**源码：** [`catlass.core_api.deinterleave`](../../../catlass/core_api.py#L7530)
 
 功能说明：
 
@@ -2129,7 +2129,7 @@ with tla.vec.func(mode="simd"):
 
 #### `squeeze`
 
-**源码：** [`catlass.core_api.squeeze`](../../../catlass/core_api.py#L8130)
+**源码：** [`catlass.core_api.squeeze`](../../../catlass/core_api.py#L8133)
 
 功能说明：
 
@@ -2166,7 +2166,7 @@ with tla.vec.func(mode="simd"):
 
 #### `VectorSSA.to`
 
-**源码：** [`catlass.core_api.VectorSSA.to`](../../../catlass/core_api.py#L561)
+**源码：** [`catlass.core_api.VectorSSA.to`](../../../catlass/core_api.py#L555)
 
 功能说明：
 
@@ -2176,6 +2176,10 @@ lowering 支持有符号整数 `tla.Int8` ~ `tla.Int64`、浮点 `tla.Float16` /
 `tla.BFloat16` / `tla.Float32`，以及两种 OCP fp8 格式 `tla.Float8E4M3FN` /
 `tla.Float8E5M2`。无符号整数、`tla.Bool`（i1）、`tla.Float64` 与 `tla.Float8E8M0`
 会被拒绝。
+
+`tla.Float16` 到 `tla.BFloat16` 使用一条直接转换指令，保留全部 lane，支持所有
+舍入模式。`sat_mode` 必须为 `UNKNOWN`；由于指令没有饱和模式参数，`NOSAT`
+和 `SAT` 均会被拒绝。对于这一等宽转换，`reg_slot` 的 `ZERO` 与 `ONE` 效果相同。
 
 fp8 操作数可与 `tla.Float32`、`tla.Float16`、`tla.BFloat16` 互相转换。其中只有
 f32 这一对是单条指令：f16 与 bf16 两对由 lowering 展开为经过 f32 的两次 cast，
@@ -2227,7 +2231,7 @@ with tla.vec.func(mode="simd"):
 
 ### `flag`
 
-**源码：** [`catlass.core_api.flag`](../../../catlass/core_api.py#L5457)
+**源码：** [`catlass.core_api.flag`](../../../catlass/core_api.py#L5460)
 
 功能说明：
 
@@ -2265,7 +2269,7 @@ with tla.vector():
 
 ### `cross_flag`
 
-**源码：** [`catlass.core_api.cross_flag`](../../../catlass/core_api.py#L5510)
+**源码：** [`catlass.core_api.cross_flag`](../../../catlass/core_api.py#L5513)
 
 功能说明：
 
@@ -2297,7 +2301,7 @@ cf = tla.cross_flag("aic_aiv", mode=2)
 
 ### `cross_core_set_flag`
 
-**源码：** [`catlass.core_api.cross_core_set_flag`](../../../catlass/core_api.py#L5586)
+**源码：** [`catlass.core_api.cross_core_set_flag`](../../../catlass/core_api.py#L5589)
 
 功能说明：
 
@@ -2332,7 +2336,7 @@ with tla.cube():
 
 ### `cross_core_wait_flag`
 
-**源码：** [`catlass.core_api.cross_core_wait_flag`](../../../catlass/core_api.py#L5630)
+**源码：** [`catlass.core_api.cross_core_wait_flag`](../../../catlass/core_api.py#L5633)
 
 功能说明：
 
@@ -2366,7 +2370,7 @@ with tla.vector():
 
 ### `set_flag`
 
-**源码：** [`catlass.core_api.set_flag`](../../../catlass/core_api.py#L5673)
+**源码：** [`catlass.core_api.set_flag`](../../../catlass/core_api.py#L5676)
 
 功能说明：
 
@@ -2398,7 +2402,7 @@ with tla.vector():
 
 ### `wait_flag`
 
-**源码：** [`catlass.core_api.wait_flag`](../../../catlass/core_api.py#L5699)
+**源码：** [`catlass.core_api.wait_flag`](../../../catlass/core_api.py#L5702)
 
 功能说明：
 
@@ -2430,7 +2434,7 @@ with tla.vector():
 
 ### `pipe_barrier`
 
-**源码：** [`catlass.core_api.pipe_barrier`](../../../catlass/core_api.py#L5725)
+**源码：** [`catlass.core_api.pipe_barrier`](../../../catlass/core_api.py#L5728)
 
 功能说明：
 
@@ -2462,7 +2466,7 @@ with tla.vector():
 
 ### `mutex`
 
-**源码：** [`catlass.core_api.mutex`](../../../catlass/core_api.py#L5768)
+**源码：** [`catlass.core_api.mutex`](../../../catlass/core_api.py#L5771)
 
 功能说明：
 
@@ -2494,7 +2498,7 @@ mtx = tla.mutex("l1_buf", id=0)
 
 ### `mutex_guard`
 
-**源码：** [`catlass.core_api.mutex_guard`](../../../catlass/core_api.py#L5816)
+**源码：** [`catlass.core_api.mutex_guard`](../../../catlass/core_api.py#L5819)
 
 功能说明：
 
@@ -2526,7 +2530,7 @@ with tla.mutex_guard(mtx):
 
 ### `mutex_lock`
 
-**源码：** [`catlass.core_api.mutex_lock`](../../../catlass/core_api.py#L5857)
+**源码：** [`catlass.core_api.mutex_lock`](../../../catlass/core_api.py#L5860)
 
 功能说明：
 
@@ -2558,7 +2562,7 @@ tla.mutex_lock(mtx, pipe=tla.arch.MTE2)
 
 ### `mutex_unlock`
 
-**源码：** [`catlass.core_api.mutex_unlock`](../../../catlass/core_api.py#L5887)
+**源码：** [`catlass.core_api.mutex_unlock`](../../../catlass/core_api.py#L5890)
 
 功能说明：
 
@@ -2590,7 +2594,7 @@ tla.mutex_unlock(mtx, pipe=tla.arch.MTE2)
 
 ### `local_mem_bar`
 
-**源码：** [`catlass.core_api.local_mem_bar`](../../../catlass/core_api.py#L5917)
+**源码：** [`catlass.core_api.local_mem_bar`](../../../catlass/core_api.py#L5920)
 
 功能说明：
 
@@ -2627,7 +2631,7 @@ with tla.vec.func(mode="simd"):
 
 ### `arch`
 
-**源码：** [`catlass.core_api.arch`](../../../catlass/core_api.py#L9047)
+**源码：** [`catlass.core_api.arch`](../../../catlass/core_api.py#L9139)
 
 功能说明：
 
@@ -2704,7 +2708,7 @@ hi = tla.make_tensor_like(base + HALF, gm_b, tla.arch.RowMajor)
 
 ### `allocate`
 
-**源码：** [`catlass.core_api.allocate`](../../../catlass/core_api.py#L8739)
+**源码：** [`catlass.core_api.allocate`](../../../catlass/core_api.py#L8831)
 
 功能说明：
 
@@ -2747,7 +2751,7 @@ kernel 内标量 / tensor 调试打印。
 
 ### `print`
 
-**源码：** [`catlass.core_api.print`](../../../catlass/core_api.py#L3699)
+**源码：** [`catlass.core_api.print`](../../../catlass/core_api.py#L3702)
 
 功能说明：
 
@@ -2791,7 +2795,7 @@ Cube / Vector / `vec.func` 区域以及 kernel 侧循环范围。
 
 ### `range`
 
-**源码：** [`catlass.core_api.range`](../../../catlass/core_api.py#L5969)
+**源码：** [`catlass.core_api.range`](../../../catlass/core_api.py#L5972)
 
 功能说明：
 
@@ -2825,7 +2829,7 @@ for i in tla.range(0, n, 1):
 
 ### `range_constexpr`
 
-**源码：** [`catlass.core_api.range_constexpr`](../../../catlass/core_api.py#L6019)
+**源码：** [`catlass.core_api.range_constexpr`](../../../catlass/core_api.py#L6022)
 
 功能说明：
 
@@ -2861,7 +2865,7 @@ for k in tla.range_constexpr(0, 4):
 
 ### `cube`
 
-**源码：** [`catlass.core_api.cube`](../../../catlass/core_api.py#L6070)
+**源码：** [`catlass.core_api.cube`](../../../catlass/core_api.py#L6073)
 
 功能说明：
 
@@ -2893,7 +2897,7 @@ with tla.cube():
 
 ### `vector`
 
-**源码：** [`catlass.core_api.vector`](../../../catlass/core_api.py#L6092)
+**源码：** [`catlass.core_api.vector`](../../../catlass/core_api.py#L6095)
 
 功能说明：
 
@@ -2925,7 +2929,7 @@ with tla.vector():
 
 ### `vec.func`
 
-**源码：** [`catlass.core_api._vec_func`](../../../catlass/core_api.py#L6126)
+**源码：** [`catlass.core_api._vec_func`](../../../catlass/core_api.py#L6129)
 
 功能说明：
 
