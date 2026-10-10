@@ -105,7 +105,14 @@ GIT_DESC="unknown"
 GIT_COMMIT="unknown"
 GIT_TS=""
 if cd "$CATLASS_ROOT" 2>/dev/null; then
-    GIT_DESC=$(git describe --tags --always --dirty 2>/dev/null || echo "unknown")
+    # Select the newest tag that fully matches v<major>.<minor>.<patch>.
+    VERSION_TAG=$(git tag --sort=-creatordate 2>/dev/null | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1)
+    if [ -n "$VERSION_TAG" ]; then
+        GIT_DESC=$(git describe --tags --match "$VERSION_TAG" --always --dirty 2>/dev/null || echo "unknown")
+    else
+        # Keep the commit-hash fallback without reselecting excluded tags.
+        GIT_DESC=$(git describe --tags --exclude '*' --always --dirty 2>/dev/null || echo "unknown")
+    fi
     GIT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
     GIT_TS=$(git log -1 --format=%cd --date=format:%Y%m%d%H%M%S 2>/dev/null || echo "")
 fi
