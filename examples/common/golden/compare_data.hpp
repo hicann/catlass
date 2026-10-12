@@ -11,7 +11,10 @@
 #ifndef EXAMPLES_COMMON_GOLDEN_COMPARE_DATA_HPP
 #define EXAMPLES_COMMON_GOLDEN_COMPARE_DATA_HPP
 
+#include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <limits>
 #include <vector>
 
 #include "catlass/gemm_coord.hpp"
@@ -54,6 +57,11 @@ ErrorMetrics ComputeErrorMetrics(
         double cpuVal = static_cast<double>(hostCpu[i]);
         double goldenVal = static_cast<double>(hostGolden[i]);
 
+        if (!std::isfinite(cVal) || !std::isfinite(cpuVal) || !std::isfinite(goldenVal)) {
+            const double invalid = std::numeric_limits<double>::infinity();
+            return {false, invalid, invalid, invalid};
+        }
+
         // Error for hostC
         double diffC = std::fabs(cVal - goldenVal);
         double relativeErrorC = diffC / (std::fabs(goldenVal) + epsilon);
@@ -78,13 +86,66 @@ ErrorMetrics ComputeErrorMetrics(
     double rmseCpu = std::sqrt(sumSquaredErrorCpu / n);
 
     // Compute error ratios (hostC / hostCpu)
-    double mareRatio = (mareCpu > 0) ? mareC / mareCpu : 0.0;
-    double mereRatio = (mereCpu > 0) ? mereC / mereCpu : 0.0;
-    double rmseRatio = (rmseCpu > 0) ? rmseC / rmseCpu : 0.0;
+    // An exact CPU reference only passes when the device is also exact.
+    auto errorRatio = [](double deviceError, double cpuError) {
+        return cpuError > 0 ? deviceError / cpuError :
+                              (deviceError == 0 ? 0.0 : std::numeric_limits<double>::infinity());
+    };
+    double mareRatio = errorRatio(mareC, mareCpu);
+    double mereRatio = errorRatio(mereC, mereCpu);
+    double rmseRatio = errorRatio(rmseC, rmseCpu);
 
     bool passed = (mareRatio <= mareThreshold && mereRatio <= mereThreshold && rmseRatio <= rmseThreshold);
 
     return {passed, mareRatio, mereRatio, rmseRatio};
+}
+
+// Explicit tolerances are useful when comparing directly against a high-precision
+// reference rather than a same-precision CPU baseline.
+struct ElementwiseTolerance {
+    double absolute;
+    double relative;
+    bool preserveNonzero = false; // Require nonzero references to retain their sign and a nonzero result.
+};
+
+struct ElementwiseErrorMetrics {
+    bool passed;
+    uint64_t mismatchCount;
+    double maxAbsoluteError;
+    double rmse;
+};
+
+template <class ElementResult, class ElementGolden>
+ElementwiseErrorMetrics CompareElementwise(
+    const std::vector<ElementResult>& result, const std::vector<ElementGolden>& golden,
+    const ElementwiseTolerance& tolerance)
+{
+    const double invalid = std::numeric_limits<double>::infinity();
+    if (result.empty() || result.size() != golden.size() || !std::isfinite(tolerance.absolute) ||
+        !std::isfinite(tolerance.relative) || tolerance.absolute < 0 || tolerance.relative < 0) {
+        return {false, std::max(result.size(), golden.size()), invalid, invalid};
+    }
+    uint64_t mismatches = 0;
+    double maxError = 0.0;
+    double squaredError = 0.0;
+    for (size_t i = 0; i < result.size(); ++i) {
+        const double actual = static_cast<double>(result[i]);
+        const double expected = static_cast<double>(golden[i]);
+        if (!std::isfinite(actual) || !std::isfinite(expected)) {
+            ++mismatches;
+            maxError = squaredError = invalid;
+            continue;
+        }
+        const double error = std::fabs(actual - expected);
+        bool failed = error > tolerance.absolute + tolerance.relative * std::fabs(expected);
+        if (tolerance.preserveNonzero && expected != 0.0) {
+            failed |= actual == 0.0 || std::signbit(actual) != std::signbit(expected);
+        }
+        mismatches += failed;
+        maxError = std::max(maxError, error);
+        squaredError += error * error;
+    }
+    return {mismatches == 0, mismatches, maxError, std::sqrt(squaredError / result.size())};
 }
 
 template <class ElementResult, class ElementCompare>

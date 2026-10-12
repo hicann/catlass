@@ -167,7 +167,7 @@ uint32_t GetKVSplitParam(
     // cores (>= blockDim * KV_SEQLEN_SLICE * 2). For short sequences, splitting adds extra
     // flash-decoding accumulation that degrades the max/mean relative error (MARE/MERE) on
     // near-zero output elements without any performance benefit. This matches the reference
-    // implementation's split decision (blockDim = AIC core count = 20 here).
+    // implementation's split decision, using the runtime AIC core count in blockDim.
     bool isKVSplit = (tilingHost[TILING_MAX_KVSEQLEN] >= blockDim * KV_SEQLEN_SLICE * NUM2) &&
                      (tilingHost[TILING_BATCH] <= blockDim * SPLITKV_RATION && tilingHost[TILING_MAX_QSEQLEN] == 1);
 

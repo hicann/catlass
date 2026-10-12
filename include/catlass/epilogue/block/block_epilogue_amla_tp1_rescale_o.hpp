@@ -130,17 +130,6 @@ public:
         AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
         AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
 
-        AscendC::Abs<float, false>(
-            tvUbTensor, goUbTensor32[oUbOffset], (uint64_t)0, curRowNum * embedRound / FLOAT_VECTOR_SIZE, {1, 1, 8, 8});
-        AscendC::PipeBarrier<PIPE_V>();
-        AscendC::LocalTensor<uint8_t> cmpMaskUb = tvUbTensor.template ReinterpretCast<uint8_t>();
-        AscendC::CompareScalar(cmpMaskUb, tvUbTensor, (float)1e10, AscendC::CMPMODE::LE, curRowNum * embedRound);
-        AscendC::PipeBarrier<PIPE_V>();
-        AscendC::Select(
-            goUbTensor32[oUbOffset], cmpMaskUb, goUbTensor32[oUbOffset], (float)0.0,
-            AscendC::SELMODE::VSEL_TENSOR_SCALAR_MODE, curRowNum * embedRound);
-        AscendC::PipeBarrier<PIPE_V>();
-
         AscendC::Brcb(
             tvUbTensor.ReinterpretCast<uint32_t>(),
             glUbTensor[taskPingPongFlag].ReinterpretCast<uint32_t>()[rowLoopIdx * ROW_WISE_CYCLE_TILE],

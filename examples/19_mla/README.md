@@ -60,3 +60,63 @@ cd output/bin
 ```text
 Compare success.
 ```
+
+## 精度回归
+
+参考计算统一由 `gen_data.py` 提供。批量用例使用同一个 attention 参考实现的 FP64 模式；
+原有单用例命令保留 FP32 参考。脚本只负责数据生成，不执行算子、比较输出或维护 tiling key。
+需要安装 `numpy` 和 `ml_dtypes`。
+
+```bash
+# 在代码仓根目录运行；--suite smoke 仅生成基础用例
+python examples/19_mla/gen_data.py --suite full --binary ./output/bin/19_mla --output-dir ./mla_test_data --device 0
+./output/bin/19_mla --test ./mla_test_data --device 0
+# 单独运行某个用例
+./output/bin/19_mla --test ./mla_test_data --device 0 --case bf16_repeated_underflow
+```
+
+以下为 Ascend 910B2（24 个 AIC 核）上使用默认种子的成功运行输出，`...` 表示省略的日志。
+数据生成完成后，各用例会打印 `Generated`，并在输出目录写入 `cases.txt`：
+
+```text
+Generated half_zero
+Generated half_cancel
+...
+Generated bf16_tail_tasks
+```
+
+完整回归通过时，所有用例显示 `[       OK ]`，最终汇总为：
+
+```text
+[ RUN      ] half_zero
+...
+Compare success.
+[       OK ] half_zero
+...
+[       OK ] bf16_tail_tasks
+MLA tests: 37 run, 0 failed
+```
+
+单独运行 `bf16_repeated_underflow` 的结果如下：
+
+```text
+[ RUN      ] bf16_repeated_underflow
+TILING_FORMERTASKNUM = 1
+TILING_TAILTASKNUM = 0
+TILING_KVSPLIT = 1536
+TILING_KVCORENUM = 1
+tilingKey : 5
+elements=65536 mismatches=0 max_abs=2.95331e-42 rmse=2.95331e-42
+Compare success.
+[       OK ] bf16_repeated_underflow
+MLA tests: 1 run, 0 failed
+```
+
+`mismatches=0` 表示该用例没有超出容差的元素，`0 failed` 表示所有执行的用例通过，程序退出码为 0。
+具体 tiling 参数、元素数量和误差数值可能随设备核数和生成数据而变化。
+
+生成器查询设备实际 AIC 核数，构造跨任务和尾任务输入，并在所有参考结果生成完成后写入 `cases.txt`。
+切换到不同核数的设备时需要重新生成数据。测试入口位于 `mla.cpp`，直接调用现有 tiling 和 kernel
+启动路径，使用 `common/golden` 的逐元素比较；下溢用例额外要求非零结果及正确符号。
+数值错误、未覆盖预期 kernel、输入文件缺失或尺寸错误均返回非零退出码。
+普通单用例执行的精度比较失败也返回非零退出码。

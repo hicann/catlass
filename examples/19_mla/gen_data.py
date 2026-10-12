@@ -10,11 +10,16 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 
+import argparse
+import json
+import math
 import os
+from pathlib import Path
+import subprocess
 import sys
 import logging
 import numpy as np
-from ml_dtypes import bfloat16
+from ml_dtypes import bfloat16, finfo
 from dataclasses import dataclass
 
 np.random.seed(1)
@@ -92,13 +97,13 @@ class TestPagedMLAttention:
                 sys.exit()
 
     @classmethod
-    def group_matmul(cls, head, kv_head, left, right):
+    def group_matmul(cls, head, kv_head, left, right, compute_dtype=np.float32):
         group_num = head // kv_head
         score = None
         for i in range(kv_head):
             group_score = np.matmul(
-                left[i * group_num : (i + 1) * group_num, :, :].astype(np.float32),
-                right[i : (i + 1), :, :].astype(np.float32),
+                left[i * group_num : (i + 1) * group_num, :, :].astype(compute_dtype),
+                right[i : (i + 1), :, :].astype(compute_dtype),
             )
             if score is None:
                 score = group_score
@@ -122,34 +127,41 @@ class TestPagedMLAttention:
         value,
         scale: float,
         mask,  # (q_seqlen, k_seqlen)
+        reference_dtype=np.float32,
     ):
         # Q * K.T
         query = query
         query = np.transpose(query, (1, 0, 2))
         key = np.transpose(key, (1, 2, 0))
         sim_high = self.group_matmul(
-            query.shape[0], key.shape[0], query, key
+            query.shape[0], key.shape[0], query, key, reference_dtype
         )  # (head_num, q_seqlen, k_seqlen)
         sim_high = sim_high * scale
         if mask is not None:
-            sim_high = sim_high + (
-                mask[: sim_high.shape[-2], : sim_high.shape[-1]] * self.post_mask_factor
-            ).astype(np.float32)
+            sim_high = sim_high + mask[
+                : sim_high.shape[-2], : sim_high.shape[-1]
+            ].astype(reference_dtype)
 
         # softmax
         p_high = self.softmax_numpy(sim_high)
         p = p_high.astype(query.dtype)
-        p_high = p_high.astype(np.float32)
+        p_high = p_high.astype(reference_dtype)
         value = np.transpose(value, (1, 0, 2))
-        out_high = self.group_matmul(query.shape[0], key.shape[0], p_high, value)
-        out = self.group_matmul(query.shape[0], key.shape[0], p, value)
+        out_high = self.group_matmul(
+            query.shape[0], key.shape[0], p_high, value, reference_dtype
+        )
+        out = self.group_matmul(query.shape[0], key.shape[0], p, value, reference_dtype)
         out_high = np.transpose(out_high, (1, 0, 2))
         out = np.transpose(out, (1, 0, 2))
         out = out.astype(query.dtype)
         return out, out_high
 
     def ref_single_query_cached_kv_attention(
-        self, attention_inputs: AttentionInputs, output, true_out
+        self,
+        attention_inputs: AttentionInputs,
+        output,
+        true_out,
+        reference_dtype=np.float32,
     ) -> None:
         num_heads = attention_inputs.query.shape[1]
         kv_heads = attention_inputs.value_cache.shape[2]
@@ -186,7 +198,9 @@ class TestPagedMLAttention:
                 ]
             else:
                 mask = None
-            out, out_high = self.ref_masked_attention(q, keys, values, scale, mask)
+            out, out_high = self.ref_masked_attention(
+                q, keys, values, scale, mask, reference_dtype
+            )
             out = out.reshape(-1, num_heads, head_size_vo)
             out_high = out_high.reshape(-1, num_heads, head_size_vo)
             output[cu_seqlen : cu_seqlen + q_seqlen, :, :] = out
@@ -291,7 +305,7 @@ class TestPagedMLAttention:
         np.array(gen_data_params.k_seqlen_list).astype(np.int32).tofile(
             os.path.join(WORKSPACE, "data", "kv_seqlen.bin")
         )
-        if mask:
+        if mask is not None:
             mask.tofile(os.path.join(WORKSPACE, "data", "mask.bin"))
         ref_output.astype(gen_data_params.dtype).tofile(
             os.path.join(WORKSPACE, "data", "cpu_low.bin")
@@ -301,7 +315,302 @@ class TestPagedMLAttention:
         )
 
 
+# These are the dimensions supported by the MLA example, not hardware core counts.
+HEAD_DIM = 512
+ROPE_DIM = 64
+BLOCK_SIZE = 128
+TP1_HEADS = 128
+MAX_QUERY_LENGTH = 4
+KV_TILE = 4 * BLOCK_SIZE
+SCORE_SCALE = math.sqrt(HEAD_DIM + ROPE_DIM)
+# Select adjacent coordinates in the middle of OTmp, including both signs.
+WITNESS_DIM = HEAD_DIM // 2
+FP32_MIN_NORMAL = np.finfo(np.float32).tiny
+BF16_MIN_SUBNORMAL = float(finfo(bfloat16).smallest_subnormal)
+DTYPES = {"half": np.float16, "bf16": bfloat16}
+
+
+@dataclass
+class DataCase:
+    name: str
+    dtype: str
+    qlens: list[int]
+    klens: list[int]
+    heads: int
+    mode: str
+    family: str = "tp1"
+
+    @property
+    def output_shape(self):
+        return (sum(self.qlens), self.heads, HEAD_DIM)
+
+    @property
+    def num_blocks(self):
+        return len(self.qlens) * ((max(self.klens) + BLOCK_SIZE - 1) // BLOCK_SIZE)
+
+
+def query_core_count(binary, device):
+    run = subprocess.run(
+        [str(binary), "--device-info", "--device", str(device)],
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=120,
+    )
+    core_count = json.loads(run.stdout)["aic_core_count"]
+    if not isinstance(core_count, int) or core_count < 1:
+        raise ValueError(f"Invalid AIC core count: {core_count}")
+    return core_count
+
+
+def create_cases(core_count, suite):
+    if core_count < 1:
+        raise ValueError("AIC core count must be positive")
+    cases = []
+    for dtype in DTYPES:
+        for mode in ("zero", "cancel", "no_update", "all_zero", "large_jump"):
+            cases.append(
+                DataCase(
+                    f"{dtype}_{mode}",
+                    dtype,
+                    [1],
+                    [2 * KV_TILE],
+                    TP1_HEADS,
+                    mode,
+                    "amla",
+                )
+            )
+    if suite == "smoke":
+        return cases
+    for dtype in DTYPES:
+        for length in (BLOCK_SIZE, KV_TILE, KV_TILE + 1, 777, 4096, 16384):
+            cases.append(
+                DataCase(
+                    f"{dtype}_random_{length}",
+                    dtype,
+                    [1],
+                    [length],
+                    TP1_HEADS,
+                    "random",
+                    "amla",
+                )
+            )
+        # Four complete waves, independent of the selected 910B model.
+        cases.append(
+            DataCase(
+                f"{dtype}_multiwave",
+                dtype,
+                [MAX_QUERY_LENGTH] * core_count,
+                [3 * KV_TILE + 1] * core_count,
+                TP1_HEADS,
+                "cancel",
+                "amla",
+            )
+        )
+        cases.append(
+            DataCase(
+                f"{dtype}_ragged",
+                dtype,
+                [1, 2, 3, 4],
+                [128, 513, 1024, 2049],
+                TP1_HEADS,
+                "random",
+            )
+        )
+        cases.append(
+            DataCase(
+                f"{dtype}_tp8",
+                dtype,
+                [1, 2],
+                [KV_TILE, 2 * KV_TILE],
+                TP1_HEADS // 8,
+                "random",
+                "common",
+            )
+        )
+    for mode in (
+        "tiny",
+        "large_value",
+        "subnormal",
+        "tiny_output",
+        "repeated_underflow",
+    ):
+        length = (3 if mode == "repeated_underflow" else 2) * KV_TILE
+        cases.append(
+            DataCase(f"bf16_{mode}", "bf16", [1], [length], TP1_HEADS, mode, "amla")
+        )
+    # Fixed model workloads are retained independently of the device core count.
+    for mode in ("cancel", "random"):
+        cases.append(
+            DataCase(
+                f"bf16_batch40_{mode}", "bf16", [4] * 40, [4096] * 40, TP1_HEADS, mode
+            )
+        )
+    if core_count > 1:
+        # Two complete waves plus one tail token, with each query length <= 4.
+        full_batches, remainder = divmod(2 * core_count + 1, MAX_QUERY_LENGTH)
+        qlens = [MAX_QUERY_LENGTH] * full_batches + ([remainder] if remainder else [])
+        for dtype in DTYPES:
+            cases.append(
+                DataCase(
+                    f"{dtype}_tail_tasks",
+                    dtype,
+                    qlens,
+                    [3 * KV_TILE + 1] * len(qlens),
+                    TP1_HEADS,
+                    "cancel",
+                    "tail",
+                )
+            )
+    return cases
+
+
+def generate_inputs(case, seed):
+    dtype, qlens, klens, heads, mode = (
+        case.dtype,
+        case.qlens,
+        case.klens,
+        case.heads,
+        case.mode,
+    )
+    dt = DTYPES[dtype]
+    rng = np.random.default_rng(seed)
+    nt = sum(qlens)
+    blocks_per_batch = (max(klens) + BLOCK_SIZE - 1) // BLOCK_SIZE
+    nb = len(qlens) * blocks_per_batch
+    q = np.zeros((nt, heads, HEAD_DIM), dtype=dt)
+    qr = np.zeros((nt, heads, ROPE_DIM), dtype=dt)
+    k = np.zeros((nb * BLOCK_SIZE, HEAD_DIM), dtype=dt)
+    kr = np.zeros((nb * BLOCK_SIZE, ROPE_DIM), dtype=dt)
+    table = np.arange(nb, dtype=np.int32).reshape(len(qlens), -1)
+    if mode == "random":
+        q[:] = rng.uniform(-1, 1, q.shape)
+        qr[:] = rng.uniform(-1, 1, qr.shape)
+        k[:] = rng.uniform(-1, 1, k.shape)
+        kr[:] = rng.uniform(-1, 1, kr.shape)
+    else:
+        # Use only RoPE for scores, independently controlling the value/cancellation.
+        qr[:, :, 0] = SCORE_SCALE
+        for b, length in enumerate(klens):
+            start = b * blocks_per_batch * BLOCK_SIZE
+            kb, rb = k[start : start + length], kr[start : start + length]
+            kb[:] = rng.uniform(-1, 1, kb.shape)
+            chunks = np.arange(length) // KV_TILE
+            rb[:, 0] = (chunks * (40 if mode == "large_jump" else 2)).astype(dt)
+            kb[:, WITNESS_DIM] = 2
+            kb[:, WITNESS_DIM + 1] = -3
+            kb[:KV_TILE, WITNESS_DIM] = (
+                0
+                if mode == "zero"
+                else np.where(np.arange(min(KV_TILE, length)) % 2, -1, 1)
+            )
+            kb[:KV_TILE, WITNESS_DIM + 1] = -kb[:KV_TILE, WITNESS_DIM]
+            if mode in ("tiny", "subnormal"):
+                kb[:KV_TILE, WITNESS_DIM] = 0
+                kb[0, WITNESS_DIM] = np.array(
+                    (FP32_MIN_NORMAL if mode == "tiny" else BF16_MIN_SUBNORMAL),
+                    dtype=dt,
+                )
+                kb[:KV_TILE, WITNESS_DIM + 1] = -kb[:KV_TILE, WITNESS_DIM]
+            if mode in ("tiny_output", "repeated_underflow"):
+                kb[:] = 0
+                rb[:, 0] = -64
+                rb[0, 0] = 0
+                rb[KV_TILE, 0] = 2
+                if mode == "repeated_underflow":
+                    rb[2 * KV_TILE, 0] = 4
+                # Exercise every strip, both signs, and packed-mask boundaries.
+                kb[0, :] = np.where(np.arange(HEAD_DIM) % 2, -1, 1) * FP32_MIN_NORMAL
+            if mode == "no_update":
+                rb[:] = 0
+            if mode == "all_zero":
+                kb[:] = 0
+            if mode == "large_value":
+                kb[:] = np.array(2.0**25, dtype=dt)
+    return {
+        "q": q,
+        "q_rope": qr,
+        "k": k,
+        "k_rope": kr,
+        "block_table": table,
+        "q_seqlen": np.array(qlens, np.int32),
+        "kv_seqlen": np.array(klens, np.int32),
+        "q_ntokens": np.array([nt], np.int32),
+    }
+
+
+def compute_case_reference(case, inputs):
+    reference = TestPagedMLAttention()
+    # Reuse the same paged-attention reference as the original single-case CLI.
+    query = np.concatenate((inputs["q"], inputs["q_rope"]), axis=-1)
+    keys = np.concatenate((inputs["k"], inputs["k_rope"]), axis=-1).reshape(
+        case.num_blocks, BLOCK_SIZE, 1, HEAD_DIM + ROPE_DIM
+    )
+    values = inputs["k"].reshape(case.num_blocks, BLOCK_SIZE, 1, HEAD_DIM)
+    attention = reference.AttentionInputs(
+        query, keys, values, inputs["block_table"], case.qlens, case.klens, None, 0
+    )
+    high = np.empty(case.output_shape, dtype=np.float64)
+    low = np.empty(case.output_shape, dtype=DTYPES[case.dtype])
+    reference.ref_single_query_cached_kv_attention(attention, low, high, np.float64)
+    return high, low
+
+
+def generate_suite():
+    parser = argparse.ArgumentParser(
+        description="Generate inputs for the MLA executable's built-in accuracy tests"
+    )
+    parser.add_argument("--suite", choices=["smoke", "full"], required=True)
+    parser.add_argument(
+        "--binary",
+        type=Path,
+        required=True,
+        help="MLA executable used to query the selected device",
+    )
+    parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--device", type=int, default=0)
+    parser.add_argument("--seed", type=int, default=0)
+    args = parser.parse_args()
+    core_count = query_core_count(args.binary.resolve(), args.device)
+    cases = create_cases(core_count, args.suite)
+    args.output_dir.mkdir(parents=True, exist_ok=True)
+    manifest = [f"MLA_TEST_SUITE 1 {core_count}"]
+    for index, case in enumerate(cases):
+        folder = args.output_dir / case.name
+        folder.mkdir(exist_ok=True)
+        inputs = generate_inputs(case, args.seed + index)
+        high, low = compute_case_reference(case, inputs)
+        inputs.update(golden=high.astype(np.float32), golden_fp64=high, cpu_low=low)
+        for name, value in inputs.items():
+            value.tofile(folder / (name + ".bin"))
+        mode = (
+            "underflow"
+            if case.mode in ("tiny_output", "repeated_underflow")
+            else "standard"
+        )
+        family = "any" if case.family == "tp1" else case.family
+        fields = [
+            case.name,
+            str(len(case.qlens)),
+            ",".join(map(str, case.qlens)),
+            ",".join(map(str, case.klens)),
+            str(case.heads),
+            str(case.num_blocks),
+            str(BLOCK_SIZE),
+            case.dtype,
+            mode,
+            family,
+        ]
+        manifest.append(" ".join(fields))
+        print(f"Generated {case.name}", flush=True)
+    # Publish the suite only after every reference was generated successfully.
+    (args.output_dir / "cases.txt").write_text("\n".join(manifest) + "\n")
+
+
 if __name__ == "__main__":
+    if "--suite" in sys.argv[1:]:
+        generate_suite()
+        sys.exit(0)
     os.makedirs(os.path.join(WORKSPACE, "data"), exist_ok=True)
 
     # 修改命令行参数解析逻辑，以接受列表形式的输入

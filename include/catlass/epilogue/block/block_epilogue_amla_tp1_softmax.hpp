@@ -11,11 +11,14 @@
 #ifndef CATLASS_EPILOGUE_BLOCK_BLOCK_EPILOGUE_AMLA_TP1_SOFTMAX_HPP
 #define CATLASS_EPILOGUE_BLOCK_BLOCK_EPILOGUE_AMLA_TP1_SOFTMAX_HPP
 
+#include <climits>
+
 #include "catlass/catlass.hpp"
 #include "catlass/arch/cross_core_sync.hpp"
 #include "catlass/arch/resource.hpp"
 #include "catlass/epilogue/dispatch_policy.hpp"
 #include "catlass/epilogue/tile/tile_copy.hpp"
+#include "catlass/epilogue/tile/amla_exponent_add.h"
 #include "catlass/gemm_coord.hpp"
 #include "catlass/matrix_coord.hpp"
 
@@ -63,6 +66,11 @@ public:
     static constexpr uint32_t PRE_AUTOADD_READY_ID = 0;
     static constexpr uint32_t SM_AUTOADD_READY_ID = 7;
     static constexpr uint32_t BRCB_SIZE = 128;
+    // The specialized TP1 layout reserves two UB blocks per LS/P buffer.
+    static constexpr uint32_t LS_BUFFER_ELEMENTS = 2 * UB_UINT8_BLOCK_SIZE_MLA / sizeof(float);
+    static constexpr uint32_t GUARD_MASK_BYTES = LS_BUFFER_ELEMENTS / CHAR_BIT;
+    static constexpr uint32_t MASK_HALFWORD_BITS = sizeof(uint16_t) * CHAR_BIT;
+    static constexpr uint32_t MASK_WORD_BITS = sizeof(uint32_t) * CHAR_BIT;
 
     CATLASS_DEVICE
     BlockEpilogue(Arch::Resource<ArchTag>& resource, half tor_, uint32_t kvSplitCoreNum_ = 1)
@@ -90,6 +98,19 @@ public:
         constexpr uint32_t EPS_UB_TENSOR_OFFSET = 6 * UB_UINT8_BLOCK_SIZE_MLA + 24 * UB_UINT8_LINE_SIZE;
         constexpr uint32_t N_UB_TENSOR_OFFSET = 6 * UB_UINT8_BLOCK_SIZE_MLA + 26 * UB_UINT8_LINE_SIZE;
 
+        constexpr uint32_t GUARD_THRESHOLD_UB_TENSOR_OFFSET = N_UB_TENSOR_OFFSET + 2 * UB_UINT8_LINE_SIZE;
+        constexpr uint32_t GUARD_MASK_UB_TENSOR_OFFSET = GUARD_THRESHOLD_UB_TENSOR_OFFSET + UB_UINT8_LINE_SIZE;
+        constexpr uint32_t GUARD_NONZERO_MASK_UB_TENSOR_OFFSET = GUARD_MASK_UB_TENSOR_OFFSET + GUARD_MASK_BYTES;
+        constexpr uint32_t GUARD_INPUT_UB_TENSOR_OFFSET = 8 * UB_UINT8_BLOCK_SIZE_MLA;
+        static_assert(GUARD_NONZERO_MASK_UB_TENSOR_OFFSET + GUARD_MASK_BYTES <= GUARD_INPUT_UB_TENSOR_OFFSET);
+        static_assert(GUARD_INPUT_UB_TENSOR_OFFSET + LS_BUFFER_ELEMENTS * sizeof(float) <= TV_UB_TENSOR_OFFSET);
+
+        // Reuse LS/P and final-output buffers only after their stores complete.
+        thresholdUbTensor = resource.ubBuf.template GetBufferByByte<int32_t>(GUARD_THRESHOLD_UB_TENSOR_OFFSET);
+        guardMaskUbTensor = resource.ubBuf.template GetBufferByByte<uint8_t>(GUARD_MASK_UB_TENSOR_OFFSET);
+        guardNonzeroMaskUbTensor =
+            resource.ubBuf.template GetBufferByByte<uint8_t>(GUARD_NONZERO_MASK_UB_TENSOR_OFFSET);
+        guardUbTensor = resource.ubBuf.template GetBufferByByte<float>(GUARD_INPUT_UB_TENSOR_OFFSET);
         tor = tor_;
         kvSplitCoreNum = kvSplitCoreNum_;
         lsUbTensor = resource.ubBuf.template GetBufferByByte<float>(LS_UB_TENSOR_OFFSET);
@@ -657,30 +678,132 @@ public:
     CATLASS_DEVICE
     void AmlaAutoadd(AscendC::GlobalTensor<int32_t> gOTmpInt32, uint32_t subM, uint32_t embed, uint32_t gSPingPongFlag)
     {
-        // update OTmp
+        constexpr int32_t MIN_NORMAL_BITS = 0x00800000;
         AscendC::WaitFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID5);
-        for (uint32_t i = 0; i < BRCB_SIZE / FLOAT_BLOCK_SIZE; i++) {
+        // LS/P and final-output buffers are reused only after their stores.
+        AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID0);
+        AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID1);
+        AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID4);
+        AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID5);
+        // MTE3_MTE2 only gates the load pipe. Bridge it to V before Brcb
+        // overwrites LS: the last P store may still be reading that buffer.
+        AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID5);
+        AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID5);
+        // Positive float encodings are ordered as integers. a >= max(2^23,
+        // 2^23-N) means both the original and updated exponent are nonzero.
+        AscendC::Muls(thresholdUbTensor, NUbTensor[gSPingPongFlag * UB_FLOAT_LINE_SIZE], int32_t(-1), subM);
+        AscendC::PipeBarrier<PIPE_V>();
+        AscendC::Adds(thresholdUbTensor, thresholdUbTensor, MIN_NORMAL_BITS, subM);
+        AscendC::PipeBarrier<PIPE_V>();
+        AscendC::Maxs(thresholdUbTensor, thresholdUbTensor, MIN_NORMAL_BITS, subM);
+        AscendC::PipeBarrier<PIPE_V>();
+        for (uint32_t i = 0; i < BRCB_SIZE / FLOAT_BLOCK_SIZE; ++i) {
             AscendC::Brcb(
                 NBrcbUbTensor.ReinterpretCast<uint32_t>()[i * FLOAT_BLOCK_SIZE],
                 NUbTensor.ReinterpretCast<uint32_t>()[gSPingPongFlag * UB_FLOAT_LINE_SIZE], subM / FLOAT_BLOCK_SIZE,
                 AscendC::BrcbRepeatParams(BRCB_SIZE / FLOAT_BLOCK_SIZE, BRCB_SIZE));
+            AscendC::Brcb(
+                lsUbTensor.ReinterpretCast<uint32_t>()[i * FLOAT_BLOCK_SIZE],
+                thresholdUbTensor.ReinterpretCast<uint32_t>(), subM / FLOAT_BLOCK_SIZE,
+                AscendC::BrcbRepeatParams(BRCB_SIZE / FLOAT_BLOCK_SIZE, BRCB_SIZE));
         }
         AscendC::PipeBarrier<PIPE_V>();
-        AscendC::SetFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID5);
-        AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID5);
-
         Arch::CrossCoreWaitFlag(preAutoAddReady);
-
-        AscendC::SetAtomicAdd<int32_t>();
-
-        for (uint32_t i = 0; i < embed / BRCB_SIZE; i++) {
+        const uint32_t count = subM * BRCB_SIZE;
+        const uint32_t strips = embed / BRCB_SIZE;
+        // 32 KiB strips: thresholds use LS[0,32 KiB), while the second
+        // read buffer uses LS[32,64 KiB). TV holds the atomic increments.
+        AscendC::LocalTensor<float> readBuffers[2] = {guardUbTensor, lsUbTensor[LS_BUFFER_ELEMENTS]};
+        AscendC::DataCopy(
+            readBuffers[0].ReinterpretCast<int32_t>(), gOTmpInt32,
+            AscendC::DataCopyParams(subM, BRCB_SIZE / FLOAT_BLOCK_SIZE, (embed - BRCB_SIZE) / FLOAT_BLOCK_SIZE, 0));
+        AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID6);
+        for (uint32_t i = 0; i < strips; ++i) {
+            uint32_t ping = i % 2;
+            AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID6 + ping);
+            if (i + 1 < strips) {
+                AscendC::DataCopy(
+                    readBuffers[1 - ping].ReinterpretCast<int32_t>(), gOTmpInt32[(i + 1) * BRCB_SIZE],
+                    AscendC::DataCopyParams(
+                        subM, BRCB_SIZE / FLOAT_BLOCK_SIZE, (embed - BRCB_SIZE) / FLOAT_BLOCK_SIZE, 0));
+                AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID6 + 1 - ping);
+            }
+            auto originalUb = readBuffers[ping].ReinterpretCast<int32_t>();
+            AscendC::Abs(tvUbTensor, readBuffers[ping], count);
+            AscendC::PipeBarrier<PIPE_V>();
+            AscendC::Compare(guardMaskUbTensor, tvUbTensor, lsUbTensor, AscendC::CMPMODE::GE, count);
+            AscendC::CompareScalar(guardNonzeroMaskUbTensor, tvUbTensor, 0.0f, AscendC::CMPMODE::NE, count);
+            AscendC::PipeBarrier<PIPE_V>();
+            // Retain N for normal lanes; +/-0 get exactly zero increment.
+            AscendC::Select(
+                tvUbTensor, guardMaskUbTensor, NBrcbUbTensor.ReinterpretCast<float>(), 0.0f,
+                AscendC::SELMODE::VSEL_TENSOR_SCALAR_MODE, count);
+            AscendC::Not(
+                guardMaskUbTensor.ReinterpretCast<uint16_t>(), guardMaskUbTensor.ReinterpretCast<uint16_t>(),
+                count / MASK_HALFWORD_BITS);
+            AscendC::PipeBarrier<PIPE_V>();
+            AscendC::And(
+                guardNonzeroMaskUbTensor.ReinterpretCast<uint16_t>(),
+                guardNonzeroMaskUbTensor.ReinterpretCast<uint16_t>(), guardMaskUbTensor.ReinterpretCast<uint16_t>(),
+                count / MASK_HALFWORD_BITS);
+            AscendC::PipeBarrier<PIPE_V>();
+            // Count the nonzero boundary lanes in hardware. With no exceptions,
+            // GatherMask writes nothing and the broadcast N remains reusable.
+            uint64_t exceptionalCount = 0;
+            AscendC::GatherMask(
+                NBrcbUbTensor, originalUb, guardNonzeroMaskUbTensor.ReinterpretCast<uint32_t>(), true, count,
+                {1, 1, FLOAT_VECTOR_SIZE / FLOAT_BLOCK_SIZE, 0}, exceptionalCount);
+            auto deltaUb = tvUbTensor.ReinterpretCast<int32_t>();
+            if (exceptionalCount != 0) {
+                AscendC::SetFlag<AscendC::HardEvent::V_S>(EVENT_ID6);
+                AscendC::WaitFlag<AscendC::HardEvent::V_S>(EVENT_ID6);
+                auto nonzeroMask = guardNonzeroMaskUbTensor.ReinterpretCast<uint32_t>();
+                for (uint32_t word = 0; word < count / MASK_WORD_BITS; ++word) {
+                    uint32_t mask = nonzeroMask.GetValue(word);
+                    if (mask == 0) {
+                        continue;
+                    }
+                    for (uint32_t bit = 0; bit < MASK_WORD_BITS; ++bit) {
+                        if ((mask & (uint32_t(1) << bit)) != 0) {
+                            uint32_t lane = word * MASK_WORD_BITS + bit;
+                            uint32_t original = static_cast<uint32_t>(originalUb.GetValue(lane));
+                            int32_t n = NUbTensor.GetValue(gSPingPongFlag * UB_FLOAT_LINE_SIZE + lane / BRCB_SIZE);
+                            uint32_t corrected = Tile::AmlaExponentAddBits(original, n);
+                            // Modular bit-pattern difference; the GM update is
+                            // still int32 atomic addition, including this lane.
+                            deltaUb.SetValue(lane, static_cast<int32_t>(corrected - original));
+                        }
+                    }
+                }
+                AscendC::SetFlag<AscendC::HardEvent::S_V>(EVENT_ID6);
+                AscendC::WaitFlag<AscendC::HardEvent::S_V>(EVENT_ID6);
+            }
+            AscendC::SetFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID5);
+            AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID5);
+            AscendC::SetAtomicAdd<int32_t>();
             AscendC::DataCopy(
-                gOTmpInt32[i * BRCB_SIZE], NBrcbUbTensor,
+                gOTmpInt32[i * BRCB_SIZE], deltaUb,
                 AscendC::DataCopyParams(subM, BRCB_SIZE / FLOAT_BLOCK_SIZE, 0, (embed - BRCB_SIZE) / FLOAT_BLOCK_SIZE));
+            AscendC::SetAtomicNone();
+            AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID6);
+            if (exceptionalCount != 0 && i + 1 < strips) {
+                for (uint32_t j = 0; j < BRCB_SIZE / FLOAT_BLOCK_SIZE; ++j) {
+                    AscendC::Brcb(
+                        NBrcbUbTensor.ReinterpretCast<uint32_t>()[j * FLOAT_BLOCK_SIZE],
+                        NUbTensor.ReinterpretCast<uint32_t>()[gSPingPongFlag * UB_FLOAT_LINE_SIZE],
+                        subM / FLOAT_BLOCK_SIZE, AscendC::BrcbRepeatParams(BRCB_SIZE / FLOAT_BLOCK_SIZE, BRCB_SIZE));
+                }
+            }
+            AscendC::WaitFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID6);
         }
-
+        // Low-level mask/reduction APIs must not leak their mask to the next
+        // softmax's <float, false> vector instructions.
+        AscendC::SetVectorMask<int8_t>((uint64_t)-1, (uint64_t)-1);
         AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID5);
-        AscendC::SetAtomicNone();
+        AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID0);
+        AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID1);
+        AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID4);
+        AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID5);
     }
 
     CATLASS_DEVICE
@@ -709,7 +832,7 @@ public:
             uint32_t currM = mInd == mEnd - 1 ? subM - rowOffset : M_SLICE;
             uint32_t isLastM = mInd == mEnd - 1 ? 1 : 0;
             uint32_t isFirstM = mInd == 0 ? 1 : 0;
-            uint32_t sUbOffset = pingpongFlag * 8192;
+            uint32_t sUbOffset = pingpongFlag * LS_BUFFER_ELEMENTS;
             int64_t offsetOutput = rowOffset * qkRoundN;
             auto gOutputThisSubBlock = gOutput[offsetOutput];
             int64_t offsetInput = rowOffset * qkRoundN;
@@ -758,6 +881,10 @@ private:
     AscendC::LocalTensor<float> hcUbTensor;
     AscendC::LocalTensor<float> gcUbTensor;
     AscendC::LocalTensor<float> epsUbTensor;
+    AscendC::LocalTensor<uint8_t> guardNonzeroMaskUbTensor;
+    AscendC::LocalTensor<int32_t> thresholdUbTensor;
+    AscendC::LocalTensor<uint8_t> guardMaskUbTensor;
+    AscendC::LocalTensor<float> guardUbTensor;
     AscendC::LocalTensor<int32_t> NUbTensor;
     AscendC::LocalTensor<int32_t> NBrcbUbTensor;
     Arch::CrossCoreFlag preAutoAddReady{PRE_AUTOADD_READY_ID};

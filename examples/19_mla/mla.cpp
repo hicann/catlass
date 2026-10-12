@@ -17,6 +17,7 @@
 #include <fstream>
 #include <iostream>
 #include <sstream>
+#include <stdexcept>
 #include <vector>
 // Helper methods to check for errors
 #include "golden.hpp"
@@ -44,7 +45,9 @@ vector<uint32_t> splitSeqList(const string& seqStr)
 struct Options {
     static constexpr auto HELPER =
         "Usage: mla batch \"qSeqlenList\" \"kvSeqlenList\" numHeads numBlocks blockSize [--dtype DTYPE "
-        "--datapath DATA_PATH --device DEVICE_ID]\n"
+        "--datapath DATA_PATH --device DEVICE_ID --output OUTPUT_PATH]\n"
+        "       mla --device-info [--device DEVICE_ID]\n"
+        "       mla --test DATA_PATH [--device DEVICE_ID --case CASE_NAME]\n"
         "Example: ./19_mla 4 \"1,2,3,4\" \"128,256,512,1024\" 16 16 128\n";
     static constexpr auto MIN_ARGS = 7;
 
@@ -63,12 +66,49 @@ struct Options {
     uint32_t embeddingSizeRope{64};
     string dataType = "half";
     string dataPath = "../../examples/19_mla/data";
+    string outputPath;
+    bool deviceInfo{false};
+    string testDataPath;
+    string testCase;
+    string expectedKernel;
+    bool fp64Reference{false};
+    bool checkUnderflow{false};
+    uint32_t expectedCoreNum{0};
 
     Options() = default;
 
     // Define function to parse the command-line arguments.
     int Parse(int argc, const char** argv)
     {
+        if (argc >= 2 && string(argv[1]) == "--device-info") {
+            deviceInfo = true;
+            if (argc == 2) {
+                return 0;
+            }
+            if (argc == 4 && string(argv[2]) == "--device") {
+                deviceId = atoi(argv[3]);
+                return 0;
+            }
+            printf(HELPER);
+            return -1;
+        }
+        if (argc >= 3 && string(argv[1]) == "--test") {
+            testDataPath = argv[2];
+            for (int i = 3; i < argc; i += 2) {
+                if (i + 1 >= argc) {
+                    return -1;
+                }
+                string flag = argv[i];
+                if (flag == "--device") {
+                    deviceId = stoul(argv[i + 1]);
+                } else if (flag == "--case") {
+                    testCase = argv[i + 1];
+                } else {
+                    return -1;
+                }
+            }
+            return 0;
+        }
         // The number of arguments must >= 7.
         if (argc < MIN_ARGS) {
             printf(HELPER);
@@ -92,10 +132,16 @@ struct Options {
         blockSize = atoi(argv[argIndex++]);
         while (argIndex < argc) {
             string flag = string(argv[argIndex++]);
+            if (argIndex >= argc) {
+                printf("Error: Missing value for %s.\n", flag.c_str());
+                return -1;
+            }
             if (flag == "--datapath") {
                 dataPath = string(argv[argIndex++]);
             } else if (flag == "--device") {
                 deviceId = atoi(argv[argIndex++]);
+            } else if (flag == "--output") {
+                outputPath = string(argv[argIndex++]);
             } else if (flag == "--dtype") {
                 dataType = string(argv[argIndex++]);
             } else {
@@ -119,9 +165,51 @@ static void FreeMem(uint8_t* host, uint8_t* device)
     ACL_CHECK(aclrtFree(device));
 }
 
+static void ReadDataFile(const string& path, void* destination, size_t bytes)
+{
+    std::ifstream input(path, std::ios::binary | std::ios::ate);
+    if (!input || input.tellg() != static_cast<std::streamoff>(bytes)) {
+        throw std::runtime_error("Missing or incorrectly sized input: " + path);
+    }
+    input.seekg(0);
+    if (!input.read(static_cast<char*>(destination), bytes)) {
+        throw std::runtime_error("Failed to read input: " + path);
+    }
+}
+
+template <class ElementOutput>
+static bool CheckOutput(const Options& options, const vector<ElementOutput>& actual)
+{
+    if (options.fp64Reference) {
+        vector<double> reference(actual.size());
+        ReadDataFile(options.dataPath + "/golden_fp64.bin", reference.data(), reference.size() * sizeof(double));
+        golden::ElementwiseTolerance tolerance = options.dataType == "half" ?
+                                                     golden::ElementwiseTolerance{5e-5, 0.003} :
+                                                     golden::ElementwiseTolerance{5e-4, 0.015};
+        if (options.checkUnderflow) {
+            // One BF16 subnormal ULP; reject a zero result or a changed sign.
+            tolerance = {std::ldexp(1.0, -133), 0.0, true};
+        }
+        auto metrics = golden::CompareElementwise(actual, reference, tolerance);
+        cout << "elements=" << actual.size() << " mismatches=" << metrics.mismatchCount
+             << " max_abs=" << metrics.maxAbsoluteError << " rmse=" << metrics.rmse << endl;
+        return metrics.passed;
+    }
+    vector<float> reference(actual.size());
+    vector<ElementOutput> cpuLow(actual.size());
+    ReadDataFile(options.dataPath + "/golden.bin", reference.data(), reference.size() * sizeof(float));
+    ReadDataFile(options.dataPath + "/cpu_low.bin", cpuLow.data(), cpuLow.size() * sizeof(ElementOutput));
+    auto metrics = golden::ComputeErrorMetrics(actual, cpuLow, reference, 10.0, 2.0, 2.0);
+    if (!metrics.passed) {
+        cerr << "Error ratios exceed thresholds: MARE=" << metrics.mareRatio << " MERE=" << metrics.mereRatio
+             << " RMSE=" << metrics.rmseRatio << endl;
+    }
+    return metrics.passed;
+}
+
 // Allocate several matrices in NPU device memory and call a
 // CATLASS MLA kernel.
-static void Run(const Options& options)
+static bool Run(const Options& options)
 {
     aclrtStream stream{nullptr};
     ACL_CHECK(aclInit(nullptr));
@@ -130,6 +218,17 @@ static void Run(const Options& options)
 
     // Get the number of cube cores of the current hardware
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
+
+    if (options.deviceInfo) {
+        std::cout << "{\"aic_core_count\":" << aicCoreNum << "}" << std::endl;
+        ACL_CHECK(aclrtDestroyStream(stream));
+        ACL_CHECK(aclrtResetDevice(options.deviceId));
+        ACL_CHECK(aclFinalize());
+        return true;
+    }
+    if (options.expectedCoreNum != 0 && options.expectedCoreNum != aicCoreNum) {
+        throw std::runtime_error("Test data was generated for a different AIC core count; regenerate the suite.");
+    }
 
     // Parameters initialization.
     int32_t batch = options.batch;
@@ -154,7 +253,7 @@ static void Run(const Options& options)
 
     if ((dataType != "half") && (dataType != "bf16")) {
         cerr << "[ERROR] dtype must be 'half' or 'bf16'." << endl;
-        return;
+        return false;
     }
 
     int32_t dTypeKey = (dataType == "half") ? 0 : 1;
@@ -163,18 +262,18 @@ static void Run(const Options& options)
     // read qNtokens num
     void* qNtokens = nullptr;
     ACL_CHECK(aclrtMallocHost(&qNtokens, 1 * sizeof(int32_t)));
-    ReadFile(dataPath + "/q_ntokens.bin", qNtokens, 1 * sizeof(int32_t));
+    ReadDataFile(dataPath + "/q_ntokens.bin", qNtokens, 1 * sizeof(int32_t));
     int32_t numTokens = static_cast<int32_t*>(qNtokens)[0];
 
     // read qSeq
     void* qSeq = nullptr;
     ACL_CHECK(aclrtMallocHost(&qSeq, batch * sizeof(int32_t)));
-    ReadFile(dataPath + "/q_seqlen.bin", qSeq, batch * sizeof(int32_t));
+    ReadDataFile(dataPath + "/q_seqlen.bin", qSeq, batch * sizeof(int32_t));
 
     // read kvSeq num
     void* kvSeq = nullptr;
     ACL_CHECK(aclrtMallocHost(&kvSeq, batch * sizeof(int32_t)));
-    ReadFile(dataPath + "/kv_seqlen.bin", kvSeq, batch * sizeof(int32_t));
+    ReadDataFile(dataPath + "/kv_seqlen.bin", kvSeq, batch * sizeof(int32_t));
 
     uint64_t qoSize = (uint64_t)numTokens * (uint64_t)numHeads * (uint64_t)embeddingSize * sizeof(fp16_t);
     uint64_t qRopeSize = (uint64_t)numTokens * (uint64_t)numHeads * (uint64_t)embeddingSizeRope * sizeof(fp16_t);
@@ -194,35 +293,35 @@ static void Run(const Options& options)
     uint8_t* qHost;
     uint8_t* qDevice;
     AllocMem(&qHost, &qDevice, qoSize);
-    ReadFile(dataPath + "/q.bin", qHost, qoSize);
+    ReadDataFile(dataPath + "/q.bin", qHost, qoSize);
     ACL_CHECK(aclrtMemcpy(qDevice, qoSize, qHost, qoSize, ACL_MEMCPY_HOST_TO_DEVICE));
 
     // Allocate matrices in host and device memory and load Matrix q_rope.
     uint8_t* qRopeHost;
     uint8_t* qRopeDevice;
     AllocMem(&qRopeHost, &qRopeDevice, qRopeSize);
-    ReadFile(dataPath + "/q_rope.bin", qRopeHost, qRopeSize);
+    ReadDataFile(dataPath + "/q_rope.bin", qRopeHost, qRopeSize);
     ACL_CHECK(aclrtMemcpy(qRopeDevice, qRopeSize, qRopeHost, qRopeSize, ACL_MEMCPY_HOST_TO_DEVICE));
 
     // Allocate matrices in host and device memory and load Matrix k.
     uint8_t* kHost;
     uint8_t* kDevice;
     AllocMem(&kHost, &kDevice, kvSize);
-    ReadFile(dataPath + "/k.bin", kHost, kvSize);
+    ReadDataFile(dataPath + "/k.bin", kHost, kvSize);
     ACL_CHECK(aclrtMemcpy(kDevice, kvSize, kHost, kvSize, ACL_MEMCPY_HOST_TO_DEVICE));
 
     // Allocate matrices in host and device memory and load Matrix k_rope.
     uint8_t* kRopeHost;
     uint8_t* kRopeDevice;
     AllocMem(&kRopeHost, &kRopeDevice, kRopeSize);
-    ReadFile(dataPath + "/k_rope.bin", kRopeHost, kRopeSize);
+    ReadDataFile(dataPath + "/k_rope.bin", kRopeHost, kRopeSize);
     ACL_CHECK(aclrtMemcpy(kRopeDevice, kRopeSize, kRopeHost, kRopeSize, ACL_MEMCPY_HOST_TO_DEVICE));
 
     // Allocate matrices in host and device memory and load Matrix block_table.
     uint8_t* blockTableHost;
     uint8_t* blockTableDevice;
     AllocMem(&blockTableHost, &blockTableDevice, blockTableSize);
-    ReadFile(dataPath + "/block_table.bin", blockTableHost, blockTableSize);
+    ReadDataFile(dataPath + "/block_table.bin", blockTableHost, blockTableSize);
     ACL_CHECK(aclrtMemcpy(blockTableDevice, blockTableSize, blockTableHost, blockTableSize, ACL_MEMCPY_HOST_TO_DEVICE));
 
     // Allocate matrices in device memory for workspace.
@@ -269,7 +368,9 @@ static void Run(const Options& options)
     mlaInfo.batch = batch;
     mlaInfo.qSeqLen = static_cast<int32_t*>(qSeq);
     mlaInfo.kvSeqLen = static_cast<int32_t*>(kvSeq);
-    MLATiling::GetMLATilingParam(mlaInfo, blockDim, (uint32_t*)tilingHost);
+    if (MLATiling::GetMLATilingParam(mlaInfo, blockDim, (uint32_t*)tilingHost) != 0) {
+        throw std::runtime_error("Invalid MLA tiling parameters");
+    }
     uint32_t tilingKey = MLATiling::GetMLATilingKey(numHeads, dTypeKey, (const uint32_t*)tilingHost);
     std::cout << "tilingKey : " << tilingKey << std::endl;
 
@@ -290,39 +391,52 @@ static void Run(const Options& options)
     ACL_CHECK(aclrtGetHardwareSyncAddr(reinterpret_cast<void**>(&hardwareSyncAddr)));
 
     // use Tp1Spec kernel to get better performance when numHeads = 128
+    string launchedKernel;
     switch (tilingKey) {
-        case 0:
+        case 0: {
+            launchedKernel = "common";
             MLA<half><<<blockDim, nullptr, stream>>>(
                 hardwareSyncAddr, qDevice, qRopeDevice, kDevice, kRopeDevice, blockTableDevice, oDevice, sDevice,
                 pDevice, oTmpDevice, globaloDevice, oCoreTmpDevice, lDevice, tilingDevice);
             break;
-        case 1:
+        }
+        case 1: {
+            launchedKernel = "common";
             MLA<bfloat16_t><<<blockDim, nullptr, stream>>>(
                 hardwareSyncAddr, qDevice, qRopeDevice, kDevice, kRopeDevice, blockTableDevice, oDevice, sDevice,
                 pDevice, oTmpDevice, globaloDevice, oCoreTmpDevice, lDevice, tilingDevice);
             break;
-        case 4:
+        }
+        case 4: {
+            launchedKernel = "amla";
             AMLATp1Spec<half><<<blockDim, nullptr, stream>>>(
                 hardwareSyncAddr, qDevice, qRopeDevice, kDevice, kRopeDevice, blockTableDevice, oDevice, sDevice,
                 pDevice, oTmpDevice, globaloDevice, oCoreTmpDevice, lDevice, tilingDevice);
             break;
-        case 5:
+        }
+        case 5: {
+            launchedKernel = "amla";
             AMLATp1Spec<bfloat16_t><<<blockDim, nullptr, stream>>>(
                 hardwareSyncAddr, qDevice, qRopeDevice, kDevice, kRopeDevice, blockTableDevice, oDevice, sDevice,
                 pDevice, oTmpDevice, globaloDevice, oCoreTmpDevice, lDevice, tilingDevice);
             break;
-        case 7:
+        }
+        case 7: {
+            launchedKernel = "tail";
             MLATp1Spec<half><<<blockDim, nullptr, stream>>>(
                 hardwareSyncAddr, qDevice, qRopeDevice, kDevice, kRopeDevice, blockTableDevice, oDevice, sDevice,
                 pDevice, oTmpDevice, globaloDevice, oCoreTmpDevice, lDevice, tilingDevice);
             break;
-        case 8:
+        }
+        case 8: {
+            launchedKernel = "tail";
             MLATp1Spec<bfloat16_t><<<blockDim, nullptr, stream>>>(
                 hardwareSyncAddr, qDevice, qRopeDevice, kDevice, kRopeDevice, blockTableDevice, oDevice, sDevice,
                 pDevice, oTmpDevice, globaloDevice, oCoreTmpDevice, lDevice, tilingDevice);
             break;
+        }
         default:
-            break;
+            throw std::runtime_error("Unsupported MLA tiling key");
     }
     ACL_CHECK(aclrtSynchronizeStream(stream));
     // Copy the result from device to host
@@ -334,34 +448,22 @@ static void Run(const Options& options)
         ACL_CHECK(aclrtMemcpy(oHostBf16.data(), qoSize, oDevice, qoSize, ACL_MEMCPY_DEVICE_TO_HOST));
     }
 
-    // Compute the golden result
-    vector<float> goldenHost(qoSize / sizeof(fp16_t));
-    const size_t goldenSize = qoSize * 2;
-    ReadFile(dataPath + "/golden.bin", goldenHost.data(), goldenSize);
-
-    // Compute the cpulow result
-    // cpu_low.bin is written in fp16 (same format as result.bin), NOT fp32 like golden.bin.
-    // Read it as fp16 first, then widen to float for comparison.
-    vector<float> cpulowHost(qoSize / sizeof(fp16_t));
-    vector<fp16_t> cpulowFp16Tmp(qoSize / sizeof(fp16_t));
-    const size_t cpulowSize = qoSize; // fp16 binary: qoSize bytes
-    ReadFile(dataPath + "/cpu_low.bin", cpulowFp16Tmp.data(), cpulowSize);
-    for (size_t i = 0; i < cpulowFp16Tmp.size(); ++i) {
-        cpulowHost[i] = static_cast<float>(cpulowFp16Tmp[i]);
+    if (!options.outputPath.empty()) {
+        std::ofstream output(options.outputPath, std::ios::binary);
+        const char* data = dataType == "half" ? reinterpret_cast<const char*>(oHostHalf.data()) :
+                                                reinterpret_cast<const char*>(oHostBf16.data());
+        output.write(data, qoSize);
+        if (!output) {
+            throw std::runtime_error("Failed to write output: " + options.outputPath);
+        }
     }
 
-    // Compute error metrics
-    auto errorMetrics = (dataType == "half") ?
-                            golden::ComputeErrorMetrics(oHostHalf, cpulowHost, goldenHost, 10.0, 2.0, 2.0) :
-                            golden::ComputeErrorMetrics(oHostBf16, cpulowHost, goldenHost, 10.0, 2.0, 2.0);
-    if (errorMetrics.passed) {
-        cout << "Compare success." << endl;
-    } else {
-        cerr << "Error ratios exceed thresholds:" << endl;
-        cerr << "MARE ratio: " << errorMetrics.mareRatio << " (threshold: 10)" << endl;
-        cerr << "MERE ratio: " << errorMetrics.mereRatio << " (threshold: 2)" << endl;
-        cerr << "RMSE ratio: " << errorMetrics.rmseRatio << " (threshold: 2)" << endl;
+    bool passed = dataType == "half" ? CheckOutput(options, oHostHalf) : CheckOutput(options, oHostBf16);
+    if (!options.expectedKernel.empty() && launchedKernel != options.expectedKernel) {
+        cerr << "Expected kernel " << options.expectedKernel << ", launched " << launchedKernel << endl;
+        passed = false;
     }
+    cout << (passed ? "Compare success." : "Compare failed.") << endl;
 
     // Free host memory allocations.
     FreeMem(qHost, qDevice);
@@ -386,16 +488,86 @@ static void Run(const Options& options)
     ACL_CHECK(aclrtDestroyStream(stream));
     ACL_CHECK(aclrtResetDevice(options.deviceId));
     ACL_CHECK(aclFinalize());
+    return passed;
+}
+
+// The manifest contains input parameters and coverage assertions, never kernel keys.
+static bool RunTests(const Options& options)
+{
+    std::ifstream manifest(options.testDataPath + "/cases.txt");
+    string magic;
+    uint32_t version = 0;
+    uint32_t coreCount = 0;
+    if (!(manifest >> magic >> version >> coreCount) || magic != "MLA_TEST_SUITE" || version != 1 || coreCount == 0) {
+        throw std::runtime_error("Invalid MLA test manifest");
+    }
+    string line;
+    getline(manifest, line);
+    uint32_t tested = 0;
+    uint32_t failed = 0;
+    while (getline(manifest, line)) {
+        if (line.empty()) {
+            continue;
+        }
+        std::istringstream fields(line);
+        string name, batch, qlens, klens, heads, blocks, blockSize, dtype, mode, family, extra;
+        if (!(fields >> name >> batch >> qlens >> klens >> heads >> blocks >> blockSize >> dtype >> mode >> family) ||
+            (fields >> extra) || (mode != "standard" && mode != "underflow") ||
+            (family != "any" && family != "common" && family != "amla" && family != "tail")) {
+            throw std::runtime_error("Invalid MLA test case: " + line);
+        }
+        if (!options.testCase.empty() && name != options.testCase) {
+            continue;
+        }
+        vector<string> arguments = {
+            "19_mla",
+            batch,
+            qlens,
+            klens,
+            heads,
+            blocks,
+            blockSize,
+            "--dtype",
+            dtype,
+            "--device",
+            std::to_string(options.deviceId),
+            "--datapath",
+            options.testDataPath + "/" + name,
+            "--output",
+            options.testDataPath + "/" + name + "/result.bin"};
+        vector<const char*> argv;
+        for (const auto& argument : arguments) {
+            argv.push_back(argument.c_str());
+        }
+        Options testOptions;
+        if (testOptions.Parse(argv.size(), argv.data()) != 0) {
+            throw std::runtime_error("Invalid parameters for " + name);
+        }
+        testOptions.fp64Reference = true;
+        testOptions.checkUnderflow = mode == "underflow";
+        testOptions.expectedKernel = family == "any" ? "" : family;
+        testOptions.expectedCoreNum = coreCount;
+        cout << "[ RUN      ] " << name << endl;
+        bool passed = Run(testOptions);
+        ++tested;
+        failed += !passed;
+        cout << (passed ? "[       OK ] " : "[  FAILED  ] ") << name << endl;
+    }
+    cout << "MLA tests: " << tested << " run, " << failed << " failed" << endl;
+    return tested != 0 && failed == 0;
 }
 
 /// Entry point to mla example.
-
 int main(int argc, const char** argv)
 {
-    Options options;
-    if (options.Parse(argc, argv) != 0) {
-        return -1;
+    try {
+        Options options;
+        if (options.Parse(argc, argv) != 0) {
+            return 1;
+        }
+        return (options.testDataPath.empty() ? Run(options) : RunTests(options)) ? 0 : 1;
+    } catch (const std::exception& error) {
+        cerr << error.what() << endl;
+        return 1;
     }
-    Run(options);
-    return 0;
 }
