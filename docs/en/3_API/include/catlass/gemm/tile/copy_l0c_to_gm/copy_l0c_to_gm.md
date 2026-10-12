@@ -13,7 +13,7 @@ The `CopyL0CToGm` template is responsible for moving the matrix multiply-accumul
 - **Per-channel quantization/dequantization**: applies a per-channel scale vector during the movement.
 - **ReLU activation**: directly applies ReLU non-linearity in FixPipe during the movement.
 
-This template is used as member type `CopyL0CToGm` of [TileCopy](../tile_copy/README.md and is usually automatically managed by blockMmad. Explicit declaration is required only during the assembly of the custom kernel template.
+This template is used as member type `CopyL0CToGm` of [TileCopy](../tile_copy/README.md) and is usually automatically managed by blockMmad. Explicit declaration is required only during the assembly of the custom kernel template.
 
 > **Dependencies**: This module depends on the `ScaleGranularity` enumeration and `CopyL0CToDstQuantMode` (Ascend 950)/`CopyL0CToGmQuantMode` (Atlas A2) quantization mode mapping table defined in [copy_l0c_to_dst](../copy_l0c_to_dst/README.md).
 

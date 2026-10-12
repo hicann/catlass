@@ -126,7 +126,7 @@ Through simulation, you can obtain visual data such as **pipeline diagrams**, **
 
 #### Visualizing Profile Data
 
-- Data visualization relies on the [MindStudio Insight](https://www.hiascend.com/en/developer/software/mindstudio/download?versionId=148), which must be downloaded and installed in advance.
+- Data visualization relies on the [MindStudio Insight](https://www.hiascend.com/zh/developer/software/mindstudio/download?versionId=148), which must be downloaded and installed in advance.
 
 ##### Code Hotspot Maps
 
@@ -140,8 +140,8 @@ Obtain the `visualize_data.bin` file from the `simulator` output folder and load
 
 Choose the appropriate tool based on your browser:
 
-- Edge Trace Viewer (enter `edge://tracing` in the Edge address bar) (Microsoft Edge)
-- Chrome Trace Viewer (enter `chrome://tracing` in the Chrome address bar) (Google Chrome or Chrome-based browsers)
+- Use the Edge Trace Viewer tool in the Edge browser: enter `edge://tracing` in the address bar (Microsoft Edge)
+- Use the Chrome Trace Viewer tool in the Chrome browser: enter `chrome://tracing` in the address bar (Google Chrome or Chrome-based browsers)
 - [Perfetto](https://ui.perfetto.dev/) (general)
 
 Import the `trace.json` file to view the simulation instruction pipeline chart.

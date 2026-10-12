@@ -11,7 +11,7 @@ Tile components adopt highly optimized implementations that fully exploit hardwa
 - Optimization for different architectures
 - Efficient memory access patterns
 
-This document uses `TileMmad` as an example to dive into the code structure, main interfaces, and design ideas of tile components. It also covers commonalities of other tile components such as TileCopy.
+This document uses [TileMmad](../../../include/catlass/gemm/tile/tile_mmad.hpp) as an example to dive into the code structure, main interfaces, and design ideas of tile components. It also covers commonalities of other tile components such as TileCopy.
 
 ## Template Assembly Mechanism
 

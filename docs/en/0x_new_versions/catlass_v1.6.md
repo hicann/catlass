@@ -617,7 +617,7 @@ A new synchronization instruction, `mode 4`, has been added to the instruction i
 
 ### New Features at the Device Layer
 
-The 950 platform has no `ffts_address` parameter. The device layer no longer includes this input argument at this generation, and the existing design already supports it.
+The 950 platform has no `hardwareSyncAddress` parameter. The device layer no longer includes this input argument at this generation, and the existing design already supports it.
 
 # Extended Interface Capabilities
 

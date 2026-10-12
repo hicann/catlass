@@ -6,7 +6,7 @@
 
 ## Function
 
-`CopyL0CToGmTla` is the TLA-wrapped version of `CopyL0CToGm`. It is responsible for moving the matrix multiply-accumulate result from L0C (CO1) to Global Memory (GM), with support for type conversion, per-tensor/per-channel quantization and dequantization, and ReLU activation.
+`CopyL0CToGmTla` is the TLA-wrapped version of `CopyL0CToGm`. It is responsible for moving the matrix multiply-accumulate result from L0C (`CO1`) to Global Memory (GM), with support for type conversion, per-tensor/per-channel quantization and dequantization, and ReLU activation.
 
 The key difference from the [non-TLA-version](./copy_l0c_to_gm.md) is that operands are encapsulated via `tla::Tensor`, and partial specializations are automatically dispatched via SFINAE based on the destination layout.
 

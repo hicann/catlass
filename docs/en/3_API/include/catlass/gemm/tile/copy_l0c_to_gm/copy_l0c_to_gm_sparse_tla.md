@@ -6,7 +6,7 @@
 
 ## Function
 
-`CopyL0CToGmSparseTla` is a TLA-style data movement template specifically for Sparse GEMM L0C-to-GM movements. It moves the matrix multiply-accumulate result from L0C (CO1) to Global Memory (GM), with support for type conversions such as float32 → float16.
+`CopyL0CToGmSparseTla` is a TLA-style data movement template specifically for Sparse GEMM L0C-to-GM movements. It moves the matrix multiply-accumulate result from L0C (`CO1`) to Global Memory (GM), with support for type conversions (such as `QuantMode_t::F322F16`).
 
 Unlike the regular [CopyL0CToGmTla](./tile_copy_tla.md), `CopyL0CToGmSparseTla` uses the `FixpipeParamsV220` parameter structure (instead of `FixpipeParams`) to control the movement dimensions, making it suitable for Sparse GEMM scenarios where sparse outputs are interleaved with dense outputs.
 

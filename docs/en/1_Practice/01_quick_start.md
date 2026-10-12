@@ -2,11 +2,21 @@
 
 ## Environment Setup
 
-> **Note**: Ensure that [basic dependencies](../../../README_en.md#-software-and-hardware-requirements), [NPU driver](https://www.hiascend.com/hardware/firmware-drivers/community), and firmware have been installed before you start.
+### **Checking Basic Dependencies**
 
-### **Installing the Community Edition CANN Toolkit**
+Confirm that the [basic dependencies](../../../README_en.md#-software-and-hardware-requirements) meet the requirements, and check whether the [NPU driver](https://www.hiascend.com/hardware/firmware-drivers/community) is installed.
 
-Download the CANN development kit `Ascend-cann-toolkit_{version}_linux-{arch}.run` based on the type of your [Ascend product](https://www.hiascend.com/document/detail/en/AscendFAQ/ProduTech/productform/hardwaredesc_0001.html). For details about the download link, see [CANN toolkit](https://www.hiascend.com/en/developer/download/community/result?module=cann). (For details about the CATLASS version support, see [Required Software and Hardware](../../../README_en.md#-software-and-hardware-requirements).)
+```bash
+gcc --version
+cmake --version
+npu-smi info    # If the output is abnormal, install the driver by referring to the online installation method in "1. Installing CANN" below.
+```
+
+### **Installing CANN**
+
+It is recommended to first use the online installation method [CANN Quick Installation](https://www.hiascend.com/cann/download) to install `CANN toolkit` and the `NPU driver`.
+
+Alternatively, download the corresponding CANN development kit `Ascend-cann-toolkit_{version}_linux-{arch}.run` based on the category of your [Ascend product](https://www.hiascend.com/document/detail/en/AscendFAQ/ProduTech/productform/hardwaredesc_0001.html). For details about the download link, see [CANN toolkit](https://www.hiascend.com/en/developer/download/community/result?module=cann). (For details about the CATLASS version support, see [Required Software and Hardware](../../../README_en.md#-software-and-hardware-requirements).)
 
 Then, install the CANN development kit. (For details, see [CANN Installation Guide](https://www.hiascend.com/document/detail/en/canncommercial/850/softwareinst/instg/instg_0008.html?Mode=PmIns&InstallType=local&OS=openEuler&Software=cannToolKit).)
 
@@ -20,10 +30,6 @@ chmod +x Ascend-cann-toolkit_{version}_linux-{arch}.run
 - `{version}`: CANN package version
 - `{arch}`: system architecture
 - `{install_path}`: installation path, which defaults to `/usr/local/Ascend`
-
-For details about other online installation methods, see [CANN Quick Installation](https://www.hiascend.com/cann/download).
-
-### **Enabling the CANN Environment**
 
 After installation, execute the following command to enable the CANN environment.
 
@@ -47,6 +53,9 @@ git clone https://gitcode.com/cann/catlass.git
 
 > The template library provides a set of reusable templates and basic components to empower matrix multiplication operator development. Operator samples can be found [here](../../../examples).
 
+- Samples whose names contain `ascend950` are supported only on Ascend 950PR/Ascend 950DT products.
+- Other samples are supported only on Atlas A2/Atlas A3 products, and the architecture tag `ArchTag` in the code is uniformly `Arch::AtlasA2`.
+
 ### **Building the Sample**
 
 Go to the root directory of the project and run the following build command:
@@ -63,7 +72,7 @@ bash scripts/build.sh [options] <target>
   - `--enable_profiling`: Enables the profiling tool. For details, see [Tuning Performance in a CATLASS Sample Project](./evaluation/performance_tools.md#profiling-overview).
   - `--enable_print`: Enables the compiler's print functionality. For details, see [Device-Side Printing Based on `cce::printf`](./evaluation/print.md).
   - `--enable_ascendc_dump`: Enables `Ascend C` operator debugging APIs. For details, see [Using Ascend C Operator Debugging APIs in a CATLASS Sample Project](./evaluation/ascendc_dump.md).
-  - `-DCATLASS_ARCH`: Specifies the NPU architecture. Currently, `2201` and `3510` are supported.
+  - `-DCATLASS_ARCH`: Specifies the NPU architecture. Currently, `2201` and `3510` are supported. If not specified, the default is `2201` (Atlas A2/Atlas A3 products).
   - `-D<option>`: Passes other build options to CMake.
 
 - `target`: Specifies the operator sample to build. You can specify a specific sample name or one of the following:
@@ -72,7 +81,7 @@ bash scripts/build.sh [options] <target>
   - `torch_library`: Builds the Torch extension. For details, see [Python-based CATLASS Sample Calls](../../../examples/python_extension/README.md).
   - `mstuner_catlass`: Builds msTuner_CATLASS. For details, see [`mstuner_catlass` Usage Guide](../../../tools/tuner/README.md).
 
-Take the [basic_matmul](../../../examples/00_basic_matmul/README.md) sample as an example. Run the following command:
+Take the [basic_matmul](../../../examples/00_basic_matmul/README.md) sample as an example. Run the following command (for other samples that support the Ascend 950 series products, add `-DCATLASS_ARCH=3510`):
 
 ```bash
 # Build the operator component.
@@ -106,4 +115,4 @@ After executing the operator sample, the following result indicates that the com
 Compare success.
 ```
 
-For details about how to start developing your first operator, see [Host-Side Code Assembly Guide](./02_host_example_assembly.md).
+To start complete development of your first innovative operator, see the [Innovative Example Development Guide](./10_innovative_example_development_guide.md). To try host-side operator template assembly, see the [Host-Side Code Assembly Guide](./02_host_example_assembly.md).

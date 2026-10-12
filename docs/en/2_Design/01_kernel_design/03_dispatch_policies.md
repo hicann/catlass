@@ -1,6 +1,6 @@
 # Block Dispatch Policies
 
-DispatchPolicy is an important template parameter of BlockMmad. Each DispatchPolicy is defined in `include/catlass/gemm/dispatch_policy`. This document briefly describes the functions, parameters, and examples of the following four DispatchPolicies.
+DispatchPolicy is an important template parameter of BlockMmad. Each DispatchPolicy is defined in [dispatch_policy.hpp](../../../../include/catlass/gemm/dispatch_policy.hpp). This document briefly describes the functions, parameters, and examples of the following four DispatchPolicies.
 
 - MmadAtlasA2Pingpong
 - MmadAtlasA2Preload

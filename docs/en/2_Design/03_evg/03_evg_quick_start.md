@@ -138,15 +138,15 @@ There is a fixed convention in the current implementation: Although `ptrC/layout
 
 ## Step 5: Build and Execute
 
-Take `39_ascend950_matmul_add_evg` as an example. The build method is the same as that of other samples.
+Take [`64_ascend950_matmul_evg_add`](../../../../examples/64_ascend950_matmul_evg/matmul_evg_add.cpp) as an example. The build method is the same as that of other samples.
 
 ```bash
-bash scripts/build.sh 39_ascend950_matmul_add_evg -DCATLASS_ARCH=3510
+bash scripts/build.sh 64_ascend950_matmul_evg_add -DCATLASS_ARCH=3510
 ```
 
 ```bash
 cd output/bin
-./39_ascend950_matmul_add_evg 256 512 1024 0
+./64_ascend950_matmul_evg_add 256 512 1024 0
 ```
 
 If `Compare success.` is displayed, the result of the `Matmul + Add` link meets the expectation.
@@ -164,4 +164,14 @@ When referring to the code, preferentially check the following files:
 - `include/catlass/epilogue/fusion/fusion.hpp`
 - `include/catlass/gemm/kernel/basic_matmul_tla_visitor.hpp`
 - `include/catlass/epilogue/block/block_epilogue_visitor.hpp`
-- EVG sample code
+- EVG sample code (all located in [`examples/64_ascend950_matmul_evg/`](../../../../examples/64_ascend950_matmul_evg/)):
+
+| Scenario                  | Source File                                                                                                | Description                                             |
+| --------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| D = C + X (example in this document) | [`matmul_evg_add.cpp`](../../../../examples/64_ascend950_matmul_evg/matmul_evg_add.cpp)               | `TreeVisitor`, GM workspace                      |
+| D = LeakyRelu(C)      | [`matmul_evg_leaky_relu.cpp`](../../../../examples/64_ascend950_matmul_evg/matmul_evg_leaky_relu.cpp) | Single-operator activation                                       |
+| D = Sigmoid(C)        | [`matmul_evg_sigmoid.cpp`](../../../../examples/64_ascend950_matmul_evg/matmul_evg_sigmoid.cpp)       | Single-operator activation                                       |
+| D = Silu(C)           | [`matmul_evg_silu.cpp`](../../../../examples/64_ascend950_matmul_evg/matmul_evg_silu.cpp)             | Single-operator activation                                       |
+| D = Tanh(C)           | [`matmul_evg_tanh.cpp`](../../../../examples/64_ascend950_matmul_evg/matmul_evg_tanh.cpp)             | `TopologicalVisitor` multi-node graph                    |
+| D = C + bias          | [`matmul_evg_bias.cpp`](../../../../examples/64_ascend950_matmul_evg/matmul_evg_bias.cpp)             | `VisitorRowBroadcast` row broadcast                     |
+| D = C + X (UB path)  | [`matmul_evg_add_ub.cpp`](../../../../examples/64_ascend950_matmul_evg/matmul_evg_add_ub.cpp)         | L0C→UB workspace, used with `BasicMatmulTlaUbVisitor` |

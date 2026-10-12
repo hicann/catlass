@@ -20,7 +20,7 @@ The B matrix is loaded via `CopyGmToL1BIdx`, which additionally moves the index 
 | `CopyGmToL1B` | `TileCopySparseTla<ArchTag, TensorB, TensorL1B>` | Matrix B: GM → L1 (TLA)|
 | `CopyGmToL1BIdx` | `TileCopySparseTla<ArchTag, TensorIdx, TensorL1BIdx>` | B index: GM → L1 (TLA)|
 | `CopyL1ToL0A` | `TileCopySparseTla<ArchTag, TensorL1A, TensorL0A>` | Matrix A: L1 → L0A (TLA)|
-| `CopyL1ToL0B` | `CopyL1ToL0BSparseTla<ArchTag, ElementA, TensorL1B, TensorL0B, TensorL1BIdx>` | Matrix B: L1 → L0B (sparse TLA)|
+| `CopyL1ToL0B` | `CopyL1ToL0BSparseTla<ArchTag, ElementB, TensorL1B, TensorL0B, TensorL1BIdx>` | Matrix B: L1 → L0B (sparse TLA)|
 | `CopyL0CToGm` | `CopyL0CToGmSparseTla<ArchTag, TensorL0C, TensorC>` | L0C → GM (sparse TLA)|
 
 ## Template Prototype

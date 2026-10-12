@@ -109,6 +109,8 @@ static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace)
 }
 ```
 
+The `ToUnderlyingArguments` function is called internally by the `Initialize` function of the `DeviceGemm` class.
+
 ## Key Functions
 
 ### CanImplement

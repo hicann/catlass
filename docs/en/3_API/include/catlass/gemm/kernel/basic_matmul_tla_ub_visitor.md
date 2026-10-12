@@ -47,7 +47,7 @@ Note that the `ToUnderlyingArguments()` implementation of the current visitor ke
 
 ## Workspace Rules
 
-GetWorkspaceSize() returns only:
+`GetWorkspaceSize()` returns only:
 
 ```cpp
 EVG::get_workspace_size(...)
@@ -57,6 +57,6 @@ This is because intermediate MMAD results no longer require extra storage alloca
 
 ## Usage Conditions
 
-- The current implementation is constrained to Arch::Ascend950.
+- The current implementation is constrained to `Arch::Ascend950`.
 - `BlockEpilogue::USE_UB_WORKSPACE` must evaluate to `true`.
 - This path is suitable for scenarios where minimizing intermediate writeback latency is a priority.

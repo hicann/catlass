@@ -6,7 +6,7 @@
 
 ## Function
 
-`CopyGmToL1GMMPTD` is a non-TLA template for data movement from Global Memory (GM) to L1, specifically designed for the Permute-Transpose-DataCopy (PTD) stage in Group Matrix Multiplication (GMM). This template adds a special optimization for single-row matrices (using strided DataCopy), and provides an extended calling interface that allows manual stride specification.
+`CopyGmToL1GMMPTD` is a non-TLA template for data movement from Global Memory (GM) to L1, specifically designed for the Permute-Transpose-DataCopy (PTD) stage in Group Matrix Multiplication (GMM). On top of `Nd2Nz` movement, this template adds a special optimization for single-row matrices (using strided DataCopy), and provides an extended calling interface that allows manual stride specification.
 
 The `Arch::AtlasA2` and `Arch::Ascend950` architectures are supported.
 

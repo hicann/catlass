@@ -6,7 +6,7 @@
 
 ## Function
 
-`TileCopyWithPrologueDeqPerTensor` is a data movement template collection that includes Prologue dequantization (per-tensor) and extends [TileCopy](./tile_copy.md) by adding PrologueA and PrologueB operator types, while fixing `CopyL0CToGm` to perform per-tensor quantization.
+`TileCopyWithPrologueDeqPerTensor` is a data movement template collection that includes Prologue dequantization (per-tensor) and extends [TileCopy](./tile_copy.md) by adding `PrologueA` / `PrologueB` operator types, while fixing `CopyL0CToGm` to perform per-tensor quantization.
 
 This template is designed for quantized inference scenarios: quantized weights stored in Global Memory (GM), dequantization during the Prologue stage, and per-tensor quantization applied on the L0C-to-GM write-back.
 

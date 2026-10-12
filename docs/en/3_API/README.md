@@ -10,4 +10,6 @@ CATLASS provides a layered GEMM API architecture to assemble templates hierarchi
 | [epilogue/block](./include/catlass/epilogue/block/README.md)   |                       The block-level epilogue component for GEMM, which can also be applied to non-GEMM computations.                       |
 | [epilogue/fusion](./include/catlass/epilogue/fusion/README.md) |                                       The graph orchestrator and foundational node components for EVG.                                       |
 | [epilogue/tile](./include/catlass/epilogue/tile/README.md)     |                           Leverages base APIs to construct the NPU microkernels required for epilogue operations.                            |
+| [conv/tile](./include/catlass/conv/tile/README.md)             |                              Leverages base APIs to construct the NPU microkernels required for Conv primitives.                              |
+| [gemv/tile](./include/catlass/gemv/tile/README.md)             |                              Leverages base APIs to construct the NPU microkernels required for Gemv primitives.                              |
 | [TLA](./include/tla/README.md)                                 | Tensor Layout Architecture. Abstracts underlying data storage details and provides generalized algorithms for multidimensional array access. |

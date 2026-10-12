@@ -298,7 +298,7 @@ ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceC), sizeC, ACL_MEM_MALLOC
 
 This section of the code performs the following tasks:
 
-- Selects the architecture and dispatch policy
+- Selects the architecture and dispatch policy (for Atlas A2/A3 products, set `ArchTag = Arch::AtlasA2`; for Ascend 950PR/950DT products, use `ArchTag = Arch::Ascend950`)
 - Defines the tile shapes
 - Assembles the Block layer and Kernel layer components
 - Initializes the Device layer adapter
@@ -416,13 +416,22 @@ set(EXAMPLE_ATLASA2
 )
 ```
 
-After the CANN package is installed and the CANN environment is enabled, run the following command:
+After the CANN package is installed and the CANN environment is enabled, run the compilation command (for Ascend 950PR/950DT, add `-DCATLASS_ARCH=3510`):
 
 ```bash
 bash scripts/build.sh basic_matmul
 ```
 
 ### Run
+
+Run parameter description:
+
+| Argument | Meaning | Type | Range |
+|------|------|------|---------|
+| m | Number of rows of matrix A | Positive integer | ≥ 1 |
+| n | Number of columns of matrix B | Positive integer | ≥ 1 |
+| k | Number of columns of matrix A / number of rows of matrix B | Positive integer | ≥ 1 |
+| device_id | Device ID | Non-negative integer | 0 ~ number of devices-1, default 0 |
 
 ```bash
 cd output/bin

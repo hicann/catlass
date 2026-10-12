@@ -31,7 +31,7 @@ struct CopyL1ToL0BSparseTla {
 
 | Condition| Description| Implementation Location| API Reference|
 | :------ | :------ | :------ | :------ |
-| `isSparseEnalbd` | B matrix ColumnMajor→nZ + index | `atlasa2/copy_l1_to_l0b.hpp` | [copy_l1_to_l0b](../copy_l1_to_l0b/copy_l1_to_l0b_sparse_tla.md) |
+| `isSparseEnabled` | B matrix ColumnMajor→nZ + index | `atlasa2/copy_l1_to_l0b.hpp` | [copy_l1_to_l0b](../copy_l1_to_l0b/copy_l1_to_l0b_sparse_tla.md) |
 
 ## APIs
 

@@ -6,7 +6,7 @@
 
 ## Function
 
-`CopyL1ToL0A` implements Fmap data movement from L1 to L0A (non-TLA style) in convolution  scenarios, while performing the im2col operation. Using `LoadData3D`/`LoadData3DParamsV2`, it converts the NC1HWC0 layout to the zZ fractal format.
+`CopyL1ToL0A` implements Fmap data movement from L1 to L0A (non-TLA style) in convolution  scenarios, while performing the im2col operation. Using `LoadData3D`/`LoadData3DParamsV2`, it converts the `NC1HWC0` layout to the `zZ` fractal format.
 
 - Applicability: Atlas A2
 - Style: non-TLA

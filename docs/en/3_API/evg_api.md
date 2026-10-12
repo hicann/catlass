@@ -6,11 +6,11 @@
 
 | Level  | Entry                                                                                                                                                | Purpose                                                                                                              |
 | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| Kernel | `BasicMatmulTlaVisitor`<br>Code path: include/catlass/gemm/kernel/basic_matmul_tla_visitor.hpp                                                       | The AIC writes MMAD results to the Global Memory (GM) workspace, and the AIV subsequently executes the EVG pipeline. |
-| Kernel | `BasicMatmulTlaUbVisitor`<br>Code path: include/catlass/gemm/kernel/basic_matmul_tla_ub_visitor.hpp                                                  | The AIC retains results in the Unified Buffer (UB), and the AIV executes the EVG pipeline directly within the UB.    |
+| Kernel | `BasicMatmulTlaVisitor`<br>Code path: `include/catlass/gemm/kernel/basic_matmul_tla_visitor.hpp`                                                       | The AIC writes MMAD results to the Global Memory (GM) workspace, and the AIV subsequently executes the EVG pipeline. |
+| Kernel | `BasicMatmulTlaUbVisitor`<br>Code path: `include/catlass/gemm/kernel/basic_matmul_tla_ub_visitor.hpp`                                                  | The AIC retains results in the Unified Buffer (UB), and the AIV executes the EVG pipeline directly within the UB.    |
 | Block  | `BlockEpilogue<EpilogueVisitor<...>, ArchTag, ComputeLength, EVG, ElementC>`<br>Code path: include/catlass/epilogue/block/block_epilogue_visitor.hpp | Coordinates tile slicing, double-buffering configurations, and three-phase pipeline scheduling.                      |
-| Fusion | `TreeVisitor`<br>Code path: include/catlass/epilogue/fusion/tree_visitor.hpp                                                                         | Describes epilogue using a hierarchical tree structure definition.                                                   |
-| Fusion | `TopologicalVisitor`<br>Code path: include/catlass/epilogue/fusion/topological_visitor.hpp                                                           | Describes epilogue using a Directed Acyclic Graph (DAG) to enable intermediate result reuse.                         |
+| Fusion | `TreeVisitor`<br>Code path: `include/catlass/epilogue/fusion/tree_visitor.hpp`                                                                         | Describes epilogue using a hierarchical tree structure definition.                                                   |
+| Fusion | `TopologicalVisitor`<br>Code path: `include/catlass/epilogue/fusion/topological_visitor.hpp`                                                           | Describes epilogue using a Directed Acyclic Graph (DAG) to enable intermediate result reuse.                         |
 
 ## Integration Sequence
 
@@ -650,57 +650,66 @@ If the UB workspace path is used:
 
 `computeLength` indicates the number of elements processed by the current execution pipeline in each iteration. Theoretically, a larger value reduces iteration overhead and maximizes performance. However, it cannot exceed the hard physical limits of the UB. In practice, you must calculate the maximum allowable capacity before declaring `computeLength`.
 
-The calculation depends on three variables:
+The calculation considers four things:
 
-- Total UB capacity allocated to the EVG
-- Number of concurrently resident UB buffers
-- Whether double buffering is enabled
+- The total UB capacity that can be allocated to the EVG (for the GM path, `ArchTag::UB_SIZE`; for the UB path, `evgUbBudget`)
+- The number of concurrently resident UB buffers (denoted as `evgUbNodes`)
+- The number of epilogue double-buffer stages (denoted as `evgUbStages`, which is fixed to `2` in the current samples)
+- Downward alignment by `BYTE_PER_C0` (using `RoundDown`)
 
-The final calculated capacity must be aligned downward to `BYTE_PER_C0`.
-
-### Example 1: D = C + X Through the GM Workspace Path
-
-This execution pipeline requires three concurrently resident UB buffers:
-
-- `C`
-- `X`
-- `Out`
-
-Since double buffering is enabled, the maximum valid `computeLength` can be derived using the following formula:
+### GM Workspace Path
 
 ```cpp
-constexpr uint32_t computeLength =
-    (ArchTag::UB_SIZE / 3 / 2 / sizeof(ElementC)) / BYTE_PER_C0 * BYTE_PER_C0;
+constexpr uint32_t evgUbNodes = N;    // Number of Visitors in the current EVG that each occupy UB
+constexpr uint32_t evgUbStages = 2;   // Epilogue double buffering
+constexpr uint32_t computeLength = RoundDown(
+    ArchTag::UB_SIZE / evgUbNodes / evgUbStages / sizeof(ElementC), BYTE_PER_C0);
 ```
 
-For the A5 architecture, EVG reference code rarely utilizes the absolute maximum theoretical UB size to avoid runtime allocation failures. Instead, a conservative budget of `216 × 1024` bytes is typically substituted as the total available workspace:
+`evgUbNodes` is the number of Visitors in the graph that each occupy UB. Check each node implementation one by one. The `sizeof(ElementC)` in the formula assumes that the element type of every slot is the same; when `VisitorCast` is involved, the `sizeof` of each slot differs, so the formula cannot be applied directly.
+
+| Visitor | Counted in `evgUbNodes` | Bytes per slot | Description |
+|---------|-------------------|----------|------|
+| `VisitorAccLoad` (GM path) | Yes | `sizeof(Element)` | `USE_UB_WORKSPACE = false` |
+| `VisitorAccLoad` (UB path) | No | — | `USE_UB_WORKSPACE = true`; reuses the `C` written to UB by MMAD |
+| `VisitorAuxLoad` | Yes | `sizeof(Element)` | |
+| `VisitorRowBroadcast` | Yes | `sizeof(Element)` | |
+| `VisitorCompute` | Yes | `sizeof(ElementCompute)` | |
+| `VisitorCast` | Yes | `sizeof(ElementTo)` | With mixed precision, `sizeof(ElementC)` cannot be used uniformly |
+| `VisitorAuxStore` | No | — | The current implementation does not write back to the UB compute buffer |
+
+### Example 1: `D = C + X` Through the GM Workspace Path (add)
+
+`AccLoad`, `AuxLoad`, and `Compute` each occupy one UB buffer, so `evgUbNodes = 3`:
 
 ```cpp
-constexpr uint32_t computeLength =
-    (216 * 1024 / 3 / 2 / sizeof(ElementC)) / BYTE_PER_C0 * BYTE_PER_C0;
+constexpr uint32_t evgUbNodes = 3;    // AccLoad + AuxLoad + Compute
+constexpr uint32_t evgUbStages = 2;
+constexpr uint32_t computeLength = RoundDown(
+    ArchTag::UB_SIZE / evgUbNodes / evgUbStages / sizeof(ElementC), BYTE_PER_C0);
 ```
 
-The value `216 × 1024` represents the safe, conservative budget limit for the A5 architecture.
+### Example 2: GM Workspace Single Operator (sigmoid / silu / leaky_relu)
 
-### Example 2: `D = C + X` Through the UB Workspace Path
+`AccLoad + Compute`, so `evgUbNodes = 2`.
 
-If the UB workspace path is used, `VisitorAccLoad<..., true>` does not allocate an additional UB buffer. Therefore, the pipeline only needs to reserve space for the following two buffers:
+### Example 3: TopologicalVisitor (tanh)
 
-- `X`
-- `Out`
+`AccLoad` and the seven `Compute` nodes each occupy UB, so `evgUbNodes = 8`.
 
-However, the EVG can no longer claim the entire UB workspace because a fixed segment has been pre-allocated to hold the raw MMAD output. In the current implementation, the EVG's memory allocation offset starts at `ArchTag::L0C_SIZE / 2`. Adhering to the same conservative budget model, the total available space is calculated by taking the base `216 × 1024` budget. The maximum valid `computeLength` formula is written as:
+### Example 4: `D = C + X` Through the UB Workspace Path (add_ub)
+
+`VisitorAccLoad<..., true>` reuses the `C` written by MMAD into the first half of UB and does not occupy a separate slot; `[0, L0C_SIZE/2)` is reserved for the MMAD result, and the EVG allocates starting from `L0C_SIZE/2`:
 
 ```cpp
-constexpr uint32_t computeLength =
-    ((216 * 1024 - ArchTag::L0C_SIZE / 2) / 2 / 2 / sizeof(ElementC)) /
-    BYTE_PER_C0 * BYTE_PER_C0;
+constexpr uint32_t evgUbNodes = 2;    // AuxLoad + Compute
+constexpr uint32_t evgUbStages = 2;
+constexpr uint32_t evgUbBudget = ArchTag::UB_SIZE - ArchTag::L0C_SIZE / 2;
+constexpr uint32_t computeLength = RoundDown(
+    evgUbBudget / evgUbNodes / evgUbStages / sizeof(ElementC), BYTE_PER_C0);
 ```
 
-### Allocation Rules
+### Usage Rules
 
-- For each unique node that allocates its own UB workspace, increment the buffer count in the denominator by 1.
-- `VisitorAuxStore` generally does not occupy an independent computation buffer and should be excluded from the count.
-- Under the GM workspace path, `VisitorAccLoad`, `VisitorAuxLoad`, `VisitorRowBroadcast`, `VisitorCompute`, and `VisitorCast` typically need to be counted.
-- Under the UB workspace path, `VisitorAccLoad<..., true>` is excluded from the buffer count because it directly operates on the MMAD output already resident in the UB.
-- Under the UB workspace path, the memory footprint reserved for the MMAD output must be subtracted from the total available UB budget before calculating the maximum value.
+- When extending the EVG graph or integrating a custom Visitor, check its implementation to determine whether it occupies UB and what its per-slot `sizeof` is
+- On the UB path, use `evgUbBudget = UB_SIZE - L0C_SIZE/2` in place of the entire `UB_SIZE`

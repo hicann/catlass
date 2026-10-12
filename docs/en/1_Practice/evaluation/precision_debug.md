@@ -439,9 +439,13 @@ The following are precision pitfalls that occur repeatedly in CATLASS developmen
 
 **Cause**: The ATC compiler caches built kernels. If the cache is not cleared, even after modifying the source code, the old version still runs.
 
-**Troubleshooting**: bash
+**Troubleshooting**:
+
+```bash
 rm -rf build/
 rm -rf $HOME/atc_data/kernel_cache/
+```
+
 Alternatively, add the `--clean` option during build.
 
 ## Debugging Strategy Hierarchy

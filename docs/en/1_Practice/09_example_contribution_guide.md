@@ -61,7 +61,7 @@ examples/${id}_${op_name}/
 
 ### Build and Testing
 
-Run the following commands to build and test (using A2 as an example):
+Run the following commands to build and test (using Atlas A2 as an example; when the build option `-DCATLASS_ARCH` is not specified, the default architecture is `2201` (Atlas A2/Atlas A3 products)):
 
 ```bash
 # Build the operator sample.
