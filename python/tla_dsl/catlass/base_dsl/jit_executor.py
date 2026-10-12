@@ -183,9 +183,8 @@ class ExecutionArgs:
         )
 
     def filter_runtime_signature(self, sig: inspect.Signature) -> inspect.Signature:
-        """Drop Constexpr parameters from a signature."""
+        """Drop static parameters (``Constexpr`` and method receivers)."""
         from .runtime.jit_arg_adapters import is_arg_annotation_constexpr
-        from .typing import is_constexpr_annotation
 
         filtered_params = []
         for index, (name, param) in enumerate(sig.parameters.items()):
@@ -195,14 +194,10 @@ class ExecutionArgs:
             ):
                 filtered_params.append(param)
                 continue
-            # Execution lowering classifies explicit kernel parameters by
-            # annotation, after callable/method binding has taken place.
-            is_static = (
-                is_constexpr_annotation(param.annotation)
-                if self.argument_trees is not None
-                else is_arg_annotation_constexpr(param.annotation, name, index, None)
-            )
-            if is_static:
+            # One rule classifies static parameters, so the launch signature
+            # agrees with execution lowering on which slots the compiled plan
+            # has: a leading ``self`` / ``cls`` receiver is static too.
+            if is_arg_annotation_constexpr(param.annotation, name, index, None):
                 continue
             filtered_params.append(param)
         return sig.replace(parameters=filtered_params)
@@ -579,8 +574,7 @@ class JitCompiledFunction:
         """Total Unified Buffer this kernel allocates statically, in bytes.
 
         The launch-sized region is not counted: its extent is chosen per launch,
-        not compiled in. Named after CuTe DSL's ``get_kernel_smem_size``, which
-        answers the same question about shared memory.
+        not compiled in.
         """
         return self.jit_module.ub_static_bytes
 
@@ -636,8 +630,8 @@ class JitCompiledFunction:
             - *`stream`* (`Any`, via `**launch_kwargs`): Optional ACL stream handle.
               When omitted, uses the current stream for the executor's device.
             - *`ub`* (`int`, via `**launch_kwargs`): Bytes of UB to back the
-              kernel's `tla.arch.get_dyn_ub` region with, as CuTe DSL's
-              `launch(smem=...)` sizes dynamic shared memory. Optional, default
+              kernel's `tla.arch.get_dyn_ub` region with, i.e. the size of the
+              dynamic shared memory the launch provides. Optional, default
               `0`. Rejected unless the kernel declares a region, and rejected
               above `artifact.max_ub_bytes`. Ask for what the kernel uses: the
               launch hands over exactly this much, and on SIMT the UB left

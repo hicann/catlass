@@ -48,6 +48,83 @@ shape，应在编译和启动所用的 Host tensor 上正确标记动态维度�
 
 ---
 
+## 以类实例组织 Kernel
+
+编译期配置（tile size、stage 数、向量长度等）可以放在实例里，与 kernel 和编译入口封装成同一个抽象。kernel 写成实例方法，第一个参数 `self` 不进入启动 ABI，`self.attr` 在编译时折叠为常量：
+
+```python
+from functools import cache
+
+import catlass.tla as tla
+from catlass.tla.runtime import make_fake_tensor
+
+VL_ELE = 64               # f32 的 SIMD 向量长度
+
+
+class VectorAddWithStaticLength:
+    """gm_c = gm_a + gm_b，长度 n_ele 在编译期确定。"""
+
+    def __init__(self, n_ele: int, vl_ele: int = VL_ELE) -> None:
+        self.n_ele = n_ele
+        self.vl_ele = vl_ele
+
+    @tla.jit
+    def __call__(self, gm_a, gm_b, gm_c):
+        self.kernel(gm_a, gm_b, gm_c)
+
+    @tla.kernel
+    def kernel(self, gm_a, gm_b, gm_c):
+        ub_a = tla.make_tensor_like(
+            tla.allocate(self.n_ele, tla.Float32, tla.AddressSpace.ub, 256),
+            gm_a, tla.arch.RowMajor,
+        )
+        ...                                    # 受篇幅限制，省略 kernel 主逻辑
+
+        with tla.vec.func(mode="simd"):
+            for i in tla.range(self.n_ele // self.vl_ele):
+                ...                            # 循环上界为编译期常量
+
+    @cache
+    @staticmethod
+    def compile(n_ele: int, vl_ele: int = VL_ELE):
+        fake = make_fake_tensor(tla.Float32, (n_ele,), (1,))
+        return tla.compile(
+            VectorAddWithStaticLength(n_ele, vl_ele), fake, fake, fake,
+            options="--npu-arch 3510",
+        )
+
+
+compiled = VectorAddWithStaticLength.compile(n_ele=384)
+compiled(gm_a, gm_b, gm_c, block_num=1)
+```
+
+### 编译入口的写法
+
+| 写法 | 入口如何确定 | 何时使用 |
+|------|--------------|----------|
+| `tla.compile(实例, gm_a, gm_b, gm_c)` | 取类自己的 `@tla.jit __call__`，编译它一行转发到的 kernel 方法，方法名不限 | 默认写法 |
+| `tla.compile(实例.kernel, gm_a, gm_b, gm_c)` | 直接点名 kernel 方法；从实例读到它时，该实例随属性读取一并作为 receiver | 类里有多个 kernel，需要指定其中一个 |
+
+两种写法编译出的产物相同：实例作为 receiver 排在编译类型样本的第 0 位，落进 kernel 的 `self` 参数，不占启动 ABI。`n_ele` / `vl_ele` 是编译期输入，不同实例得到不同的编译产物；`gm_a`、`gm_b`、`gm_c` 仍是启动时传入的 tensor。
+
+完整 kernel 与可运行版本见 [vector_add_with_static_length.py](../../../../examples/end_to_end/kernel_in_class/vector_add_with_static_length.py)。
+
+约束：
+
+- kernel 的第一个参数是 `self` 时，它只承载编译期配置，不占启动 ABI。判定按位置和名字进行：位置 0 且名为 `self` 即为接收者（`cls` 需要 `classmethod` 宿主），不区分该函数是否定义在类里。
+- `@tla.jit __call__` 必须是 `self.<kernel>(...)` 形式的纯转发，并按自身参数顺序传参；其它形式的 `@tla.jit __call__` 函数体不支持。
+
+入口不合法时的报错：
+
+| 情况 | 报错内容 |
+|------|----------|
+| 类里没有 `@tla.jit __call__` | `declares no @tla.jit __call__`，并给出正确写法 |
+| `__call__` 不是一行纯转发 | 指出具体原因：语句数、关键字实参、实参不是自身参数名、参数顺序不符等 |
+| 转发目标不是本类的 `@tla.kernel` 方法 | `not one of that class's @tla.kernel methods` |
+| 转发参数个数与 kernel 的运行时参数个数不一致 | `forwards N parameters to 'kernel', which takes M (self excluded)` |
+
+---
+
 ## 用户需要认识的对象
 
 编译和启动过程中会遇到以下对象：
@@ -176,3 +253,4 @@ executor。
 - 不同 stream：复用同一个 `compiled`，在启动前切换 stream 上下文。
 - 仅需类型样本：用 `make_fake_tensor` 编译，启动时换成真实绑定 tensor。
 - 跨 shape 复用：正确标记动态 layout；不要依赖缓存忽略静态 shape 差异。
+- 配置封装：把编译期配置放进实例属性，用类实例作为 `tla.compile` 的第一个参数。

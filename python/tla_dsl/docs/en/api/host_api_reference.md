@@ -367,7 +367,7 @@ The Unified Buffer is 256 KB, of which the compiler reserves 8 KB (2 KB Ascend C
 
 #### `compile`
 
-**Source:** [`catlass.base_dsl.compiler.CompileCallable.__call__`](../../../catlass/base_dsl/compiler.py#L11)
+**Source:** [`catlass.base_dsl.compiler.CompileCallable.__call__`](../../../catlass/base_dsl/compiler.py#L118)
 
 Description:
 
@@ -384,39 +384,62 @@ tla.compile(func: Any, *args: Any, **kwargs: Any) -> JitCompiledFunction
 
 Parameters:
 
-- *`func`* (`TlaJitFunction`): Decorated `@tla.kernel` function. Required.
+- *`func`* (`TlaJitFunction | Any`): Decorated `@tla.kernel` function,
+  or a class instance whose `@tla.jit __call__` names its kernel. Required.
 - *`args`* (`Any`): Host tensors / scalars / `@dataclass` instances used
   as compile type samples (e.g. `from_dlpack` or `make_fake_tensor`
-  results).
+  results); they need not be bound NPU buffers.
 - *`kwargs`*: Host compile kwargs. Pass `options="--npu-arch 3510"` to
   select the public chip name; see the option table above for every
   accepted option. Cache / IR dump / force-recompile use
-  `CATLASS_DSL_*` environment variables.
+  `CATLASS_DSL_*` environment variables. Launch kwargs such as
+  `block_num` / `stream` belong on the returned compiled function, not
+  here.
 
 Constraints:
 
-- `func` must be a `@tla.kernel` `TlaJitFunction`.
-- `args` are compile-time type samples; they need not be bound NPU
-  buffers (`make_fake_tensor` is valid).
-- Pass the public chip name with `options="--npu-arch 3510"`;
-  unsupported tokens raise at compile time. Switch options such as
-  `--cce-disable-asc-reserved-ubuf` take no value.
-- Launch kwargs such as `block_num` / `stream` belong on the returned
-  compiled function, not on `tla.compile`.
+- `func` must be a `@tla.kernel` `TlaJitFunction`, or an instance of a
+  class that declares one.
+- A kernel read off an instance (`instance.kernel`) carries that instance
+  as its receiver.
+- Passing a class instance compiles the kernel its `@tla.jit __call__`
+  forwards to, so the class must declare that `__call__`. The forward must
+  be a plain `self.<kernel>(...)` call passing the receiver's own parameters
+  in order; any other `@tla.jit __call__` body is rejected.
+- A kernel method's first `self` parameter is compile-time configuration.
+  It occupies no runtime ABI slot, and `self.attr` reads fold into the
+  kernel as constants while it is staged.
 
 Example:
 
 ```python
 compiled = tla.compile(vadd, tx, ty, options="--npu-arch 3510")
-compiled(tx, ty, block_num=1)
-compiled(tx, ty, block_num=1)  # launch again with the same binary
+compiled(tx, ty, block_num=1)  # launch; call again to reuse the binary
+
+class VectorAddWithStaticLength:
+    def __init__(self, n_ele: int, vl_ele: int = 64):
+        self.n_ele, self.vl_ele = n_ele, vl_ele
+
+    @tla.jit
+    def __call__(self, gm_a, gm_b, gm_c):
+        self.kernel(gm_a, gm_b, gm_c)
+
+    @tla.kernel
+    def kernel(self, gm_a, gm_b, gm_c):
+        ...  # gm_c = gm_a + gm_b; the trip count comes from self.n_ele
+
+compiled = tla.compile(
+    VectorAddWithStaticLength(384), gm_a, gm_b, gm_c,
+    options="--npu-arch 3510",
+)
+compiled(gm_a, gm_b, gm_c, block_num=1)
 ```
 
 ---
 
 #### `TlaJitFunction.compile`
 
-**Source:** [`catlass.dsl.TlaJitFunction.compile`](../../../catlass/dsl.py#L198)
+**Source:** [`catlass.dsl.TlaJitFunction.compile`](../../../catlass/dsl.py#L208)
 
 Description:
 
@@ -467,7 +490,7 @@ Run a compiled kernel on the NPU by calling the `JitCompiledFunction` returned b
 
 #### `JitCompiledFunction.__call__`
 
-**Source:** [`catlass.base_dsl.jit_executor.JitCompiledFunction.__call__`](../../../catlass/base_dsl/jit_executor.py#L614)
+**Source:** [`catlass.base_dsl.jit_executor.JitCompiledFunction.__call__`](../../../catlass/base_dsl/jit_executor.py#L608)
 
 Description:
 
@@ -494,8 +517,8 @@ Parameters:
 - *`stream`* (`Any`, via `**launch_kwargs`): Optional ACL stream handle.
   When omitted, uses the current stream for the executor's device.
 - *`ub`* (`int`, via `**launch_kwargs`): Bytes of UB to back the
-  kernel's `tla.arch.get_dyn_ub` region with, as CuTe DSL's
-  `launch(smem=...)` sizes dynamic shared memory. Optional, default
+  kernel's `tla.arch.get_dyn_ub` region with, i.e. the size of the
+  dynamic shared memory the launch provides. Optional, default
   `0`. Rejected unless the kernel declares a region, and rejected
   above `artifact.max_ub_bytes`. Ask for what the kernel uses: the
   launch hands over exactly this much, and on SIMT the UB left
@@ -525,7 +548,7 @@ Dump frontend TLA IR without building a device binary or launching. See `TlaJitF
 
 #### `TlaJitFunction.dump_mlir`
 
-**Source:** [`catlass.dsl.TlaJitFunction.dump_mlir`](../../../catlass/dsl.py#L259)
+**Source:** [`catlass.dsl.TlaJitFunction.dump_mlir`](../../../catlass/dsl.py#L269)
 
 Description:
 

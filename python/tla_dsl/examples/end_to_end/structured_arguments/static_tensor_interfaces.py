@@ -31,9 +31,14 @@ def copy_with_offset(aux, output: tla.Tensor, get_tensor: tla.Constexpr):
     output[0] = src[0] + src.element_type(1)
 
 
+# The first parameter is deliberately not named ``self``: a leading ``self`` is
+# the compile-time receiver reserved by the kernel-class organization rule, so it
+# would leave the runtime ABI.
 @tla.kernel
-def copy_from_self(self: tla.Tensor, output: tla.Tensor, offset: tla.Constexpr):
-    output[0] = self[0] + self.element_type(offset)
+def copy_from_tensor(
+    input_tensor: tla.Tensor, output: tla.Tensor, offset: tla.Constexpr
+):
+    output[0] = input_tensor[0] + input_tensor.element_type(offset)
 
 
 def main():
@@ -48,11 +53,11 @@ def main():
         src = torch.tensor([3.0], dtype=dtype, device=f"npu:{args.device}")
         out = torch.zeros_like(src)
         ts, to = [tla.from_dlpack(t, layout_tag=tla.arch.RowMajor) for t in (src, out)]
-        artifact = tla.compile(copy_from_self, ts, to, 1, options="--npu-arch 3510")
+        artifact = tla.compile(copy_from_tensor, ts, to, 1, options="--npu-arch 3510")
         artifact(ts, to, block_num=1)
         torch.npu.synchronize()
         assert out.item() == 4.0
-        print(f"PASS {dtype} self: runtime parameter and Constexpr launch signature")
+        print(f"PASS {dtype} tensor: runtime parameter and Constexpr launch signature")
         cases = (
             ("direct", ts, lambda x: x),
             ("tuple", (ts,), lambda x: x[0]),

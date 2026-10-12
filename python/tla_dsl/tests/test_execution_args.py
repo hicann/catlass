@@ -112,10 +112,19 @@ def test_launch_rejects_unbound_tensor_in_each_container(
     assert checks == [tensor, tensor, tensor]
 
 
-@pytest.mark.parametrize("name", ["value", "self", "cls"])
-def test_tree_launch_signature_uses_annotations_not_parameter_names(name):
-    from catlass.base_dsl.runtime.argument_tree import build_runtime_argument_tree
-
+@pytest.mark.parametrize(
+    "name,runtime_names",
+    [
+        ("value", ("value",)),
+        # ``is_arg_annotation_constexpr`` reserves a leading ``self`` by position
+        # and name, so it leaves the runtime signature like a ``Constexpr`` does.
+        ("self", ()),
+        # ``cls`` is reserved only when the owner is a classmethod, and this
+        # synthetic signature has no owner, so it stays a runtime parameter.
+        ("cls", ("cls",)),
+    ],
+)
+def test_tree_launch_signature_follows_ported_constexpr_rule(name, runtime_names):
     sig = inspect.Signature(
         [
             inspect.Parameter(name, inspect.Parameter.POSITIONAL_OR_KEYWORD),
@@ -126,21 +135,28 @@ def test_tree_launch_signature_uses_annotations_not_parameter_names(name):
             ),
         ]
     )
+    runtime_args = (1,) if runtime_names else ()
     binder = ExecutionArgs(
-        original_signature=sig, argument_trees=(build_runtime_argument_tree(1),)
+        original_signature=sig,
+        argument_trees=tuple(
+            build_runtime_argument_tree(1) for _ in runtime_names
+        ),
     )
-    assert tuple(binder.signature.parameters) == (name,)
-    assert binder.get_rectified_args_from_original_args((1, 128)) == (1,)
-    assert binder.get_rectified_args_from_original_args((1,)) == (1,)
+    assert tuple(binder.signature.parameters) == runtime_names
+    assert binder.get_rectified_args_from_original_args((1, 128)) == runtime_args
+    assert binder.get_rectified_args_from_original_args((1,)) == runtime_args
 
 
 def test_lowered_self_parameter_and_launch_signature_agree():
     from catlass.base_dsl import BaseDSL
 
-    def kernel(self, tile: tla.Constexpr):
-        _ = self + tile
+    def kernel(self, value, tile: tla.Constexpr):
+        _ = self + value + tile
 
-    lowered = BaseDSL()._lower(kernel, kind="kernel", options={}, type_args=(1, 128))
+    lowered = BaseDSL()._lower(
+        kernel, kind="kernel", options={}, type_args=(1, 3, 128)
+    )
+    # ``self`` and ``tile`` are compile-time; only ``value`` reaches the ABI.
     assert len(lowered.argument_trees) == 1
     binder = ExecutionArgs(
         original_signature=inspect.signature(kernel),
@@ -149,7 +165,7 @@ def test_lowered_self_parameter_and_launch_signature_agree():
             lowered.module
         ).kernel_abi,
     )
-    assert tuple(binder.signature.parameters) == ("self",)
+    assert tuple(binder.signature.parameters) == ("value",)
     assert binder.generate_launch_payload((3,))[:4] == struct.pack("i", 3)
 
 

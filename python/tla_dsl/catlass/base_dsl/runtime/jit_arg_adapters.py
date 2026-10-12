@@ -316,6 +316,32 @@ def is_arg_annotation_constexpr(
     return is_constexpr_annotation(arg_annotation)
 
 
+def receiver_argument_name(parameters: Sequence[Any]) -> str | None:
+    """Name of the leading ``self`` receiver this path reserves, else ``None``.
+
+    A leading ``self`` carries compile-time configuration, so it takes no runtime
+    ABI slot. ``is_arg_annotation_constexpr`` also reserves a classmethod's
+    ``cls``, but that needs the owning function, and callers here pass none, so
+    this helper never answers ``cls``. Callers that need to know *which*
+    parameter that is — to skip it in a gate, or to drop it from a kernel's
+    runtime parameter list — ask here instead of re-deriving the rule.
+    """
+
+    if not parameters:
+        return None
+    first = parameters[0]
+    if first.kind in (
+        inspect.Parameter.VAR_POSITIONAL,
+        inspect.Parameter.VAR_KEYWORD,
+    ):
+        return None
+    if first.name not in ("self", "cls"):
+        return None
+    if not is_arg_annotation_constexpr(first.annotation, first.name, 0, None):
+        return None
+    return first.name
+
+
 def is_argument_constexpr(
     arg: Any,
     arg_annotation: Any,
@@ -357,5 +383,6 @@ __all__ = [
     "_PointerLaunchArg",
     "is_arg_annotation_constexpr",
     "is_argument_constexpr",
+    "receiver_argument_name",
     "_is_compile_time_callable",
 ]

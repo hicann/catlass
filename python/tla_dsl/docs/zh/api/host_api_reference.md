@@ -347,7 +347,7 @@ executor。缓存 / 架构 / IR dump 等非函数参数见
 
 #### `compile`
 
-**源码：** [`catlass.base_dsl.compiler.CompileCallable.__call__`](../../../catlass/base_dsl/compiler.py#L11)
+**源码：** [`catlass.base_dsl.compiler.CompileCallable.__call__`](../../../catlass/base_dsl/compiler.py#L118)
 
 功能说明：
 
@@ -363,27 +363,40 @@ tla.compile(func: Any, *args: Any, **kwargs: Any) -> JitCompiledFunction
 
 参数说明：
 
-- *`func`*（`TlaJitFunction`）：被 `@tla.kernel` 装饰的函数。必填。
-- *`args`*（`Any`）：作为编译类型样本的 Host tensor / 标量 / `@dataclass` 实例
-  （如 `from_dlpack` 或 `make_fake_tensor` 的返回值）。
-- *`kwargs`*：Host 编译参数。用 `options="--npu-arch 3510"` 指定芯片名，
-  全部可用取值见[编译选项](#编译选项)。
-  缓存 / IR dump / 强制重编译由 `CATLASS_DSL_*` 环境变量控制。
+- *`func`*（`TlaJitFunction | Any`）：被 `@tla.kernel` 装饰的函数，或由 `@tla.jit __call__` 指出其 kernel 的类实例。必填。
+- *`args`*（`Any`）：作为编译类型样本的 Host tensor / 标量 / `@dataclass` 实例（如 `from_dlpack` 或 `make_fake_tensor` 的返回值）；不必绑定 NPU 缓冲。
+- *`kwargs`*：Host 编译参数。用 `options="--npu-arch 3510"` 指定芯片名，全部可用取值见[编译选项](#编译选项)。缓存 / IR dump / 强制重编译由 `CATLASS_DSL_*` 环境变量控制。`block_num` / `stream` 等启动参数写在返回的编译函数上，而不是这里。
 
 约束说明：
 
-- `func` 必须是 `@tla.kernel` 得到的 `TlaJitFunction`。
-- `args` 只作编译期类型样本，不必绑定 NPU 缓冲（`make_fake_tensor` 合法）。
-- 用 `options="--npu-arch 3510"` 指定芯片名；不支持的取值在编译时报错。
-- `block_num` / `stream` 等启动参数写在返回的编译函数上，而不是
-  `tla.compile`。
+- `func` 必须是 `@tla.kernel` 得到的 `TlaJitFunction`，或由 `@tla.jit __call__` 指出其 kernel 的类实例。
+- 从实例读到的 kernel 方法（`实例.kernel`）自带该实例作为 receiver，该实例排在编译类型样本的第 0 位，落进 kernel 的 `self` 参数。
+- 传入类实例时编译其 `@tla.jit __call__` 转发到的 kernel，因此类必须声明该 `__call__`。转发必须是 `self.<kernel>(...)` 形式的纯调用，并按自身参数顺序传参；其它形式的 `@tla.jit __call__` 函数体不支持。
+- kernel 方法的第一个 `self` 参数是编译期配置：不占启动 ABI，`self.attr` 在编译时折叠为常量。
 
 调用示例：
 
 ```python
 compiled = tla.compile(vadd, tx, ty, options="--npu-arch 3510")
-compiled(tx, ty, block_num=1)
-compiled(tx, ty, block_num=1)  # 同一份二进制再次启动
+compiled(tx, ty, block_num=1)  # 启动；再次调用复用同一份二进制
+
+class VectorAddWithStaticLength:
+    def __init__(self, n_ele: int, vl_ele: int = 64):
+        self.n_ele, self.vl_ele = n_ele, vl_ele
+
+    @tla.jit
+    def __call__(self, gm_a, gm_b, gm_c):
+        self.kernel(gm_a, gm_b, gm_c)
+
+    @tla.kernel
+    def kernel(self, gm_a, gm_b, gm_c):
+        ...  # gm_c = gm_a + gm_b；循环次数由 self.n_ele 在编译期确定
+
+compiled = tla.compile(
+    VectorAddWithStaticLength(384), gm_a, gm_b, gm_c,
+    options="--npu-arch 3510",
+)
+compiled(gm_a, gm_b, gm_c, block_num=1)
 ```
 
 ---

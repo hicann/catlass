@@ -29,13 +29,17 @@ from .base_dsl.runtime.argument_binding import (
     _RuntimeArgumentProxy,
 )
 from .base_dsl.utils.tree_utils import tree_unflatten
-from .base_dsl.typing import Numeric, is_constexpr_annotation
+from .base_dsl.typing import Numeric
 from .dsl import (
     _jit_helper_inline,
     is_jit_callable,
     unwrap_jit_callable,
 )
-from .base_dsl.runtime.jit_arg_adapters import _is_compile_time_callable
+from .base_dsl.runtime.jit_arg_adapters import (
+    _is_compile_time_callable,
+    is_arg_annotation_constexpr,
+    receiver_argument_name,
+)
 from .frontend_diagnostics import (
     FrontendDiagnosticError,
     SourceLocation,
@@ -190,11 +194,31 @@ def lower_jit_to_tlair_module_by_execution(
     sig = BaseDSL()._get_signature(fn)
     params = list(sig.parameters.values())
     arg_names = [p.name for p in params]
-    constexpr_names = {p.name for p in params if is_constexpr_annotation(p.annotation)}
+    # One rule decides what is compile-time: ``is_arg_annotation_constexpr``
+    # reserves a leading ``self`` / ``cls`` receiver in addition to
+    # ``Constexpr`` annotations. The receiver carries compile-time configuration,
+    # so ``self.attr`` reads fold as the body is staged and the instance takes no
+    # runtime ABI leaf.
+    constexpr_names = {
+        p.name
+        for index, p in enumerate(params)
+        if is_arg_annotation_constexpr(p.annotation, p.name, index, None)
+    }
+    receiver_name = receiver_argument_name(params)
     kw_only = inspect.Parameter.KEYWORD_ONLY
     keyword_only_names = {p.name for p in params if p.kind is kw_only}
     call_args = _prepare_call_args(arg_names=arg_names, type_args=type_args)
     for name, value in zip(arg_names, call_args, strict=False):
+        if name == receiver_name:
+            # The receiver is a compile-time configuration object, not a kernel
+            # value; its attributes are read while the body is staged.
+            if isinstance(value, (Tensor, Numeric)):
+                raise TlaLoweringError(
+                    f"kernel parameter {name!r} is the compile-time receiver, "
+                    "but a runtime value was passed for it; rename the parameter "
+                    "when it carries data"
+                )
+            continue
         if name in constexpr_names:
             # Constexpr values are compile-time inputs, not runtime ABI leaves.
             if (

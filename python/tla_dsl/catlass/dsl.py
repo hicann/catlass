@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import contextvars
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import functools
 import inspect
 from typing import Any, Callable, Mapping, Sequence
@@ -161,6 +161,8 @@ class TlaJitFunction:
     kind: str
     options: Mapping[str, Any]
     decorator_location: DSLLocation | None = None
+    #: The instance this kernel was read off, if any.
+    receiver: Any | None = None
     _mlir: str | None = None
     _base_dsl: BaseDSL | None = None
     _lowered: Any | None = None
@@ -187,6 +189,14 @@ class TlaJitFunction:
         object.__setattr__(
             self, "__annotations__", dict(annotations) if annotations else {}
         )
+
+    def __get__(self, obj: Any, objtype: type | None = None) -> TlaJitFunction:
+        """Bind the kernel to ``obj`` the way a plain method would."""
+
+        if obj is None:
+            return self
+        # The memo fields belong to the unbound kernel.
+        return replace(self, receiver=obj, _mlir=None, _base_dsl=None, _lowered=None)
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         raise TypeError(
