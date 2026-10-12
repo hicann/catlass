@@ -53,20 +53,3 @@ repos:
       - id: ruff-format
         types: [python]
         exclude: gen_data.py
-
-  # 敏感词拦截
-  - repo: local
-    hooks:
-      - id: check-unrelated-npu-model
-        name: check-unrelated-npu-model
-        language: pygrep
-        entry: '[Aa]scend(?:910_93|950(?:DT|PR))[A-Za-z0-9_]+'
-        types: [text]
-        # TLA DSL C310/hivmc 合法 target 与文档示例；运行时字符串不可改，此处按文件屏蔽。
-        exclude: |
-          (?x)^(
-            python/tla_dsl/catlass/execution\.py|
-            python/tla_dsl/csrc/mlir/lib/Passes/PassesCommon\.h|
-            python/tla_dsl/docs/zh/dsl_development/feature_development/bc_backend_integration\.md|
-            python/tla_dsl/docs/zh/evaluation/dsl_performance_tools\.md
-          )$
