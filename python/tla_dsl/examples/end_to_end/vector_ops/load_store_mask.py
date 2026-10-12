@@ -81,8 +81,9 @@ def load_store_mask(mem_src: tla.Tensor, mem_out: tla.Tensor) -> None:
 
             pattern = tla.create_mask(pattern=tla.mask.H, dtype=_DTYPE)
             mask_ub.store(pattern, MaskStoreParams())
-            loaded = mask_ub.load(MaskLoadParams())
 
+            tla.local_mem_bar(tla.params.MemType.VEC_STORE, tla.params.MemType.VEC_LOAD)
+            loaded = mask_ub.load(MaskLoadParams())
             out_ub.store(value, mask=loaded)
 
         tla.set_flag(vec_done)

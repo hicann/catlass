@@ -462,6 +462,9 @@ def multi_core_splitk_mmad_kernel(
                 # Add workspace rows 1..factor-1 into row 0.
                 vec_chunk_shape = tla.make_shape(1, ELE_PER_VECTOR_BLOCK)
                 for sk_idx in tla.range(1, _splitk.splitk_factor):
+                    tla.local_mem_bar(
+                        tla.params.MemType.VEC_STORE, tla.params.MemType.VEC_LOAD
+                    )
                     for vl_idx in tla.range(_splitk.reduce_vl_loops):
                         reduce_acc_chunk = tla.tile_view(
                             ub_reduce_acc,
@@ -684,7 +687,11 @@ def run(args: argparse.Namespace) -> int:
         _tiling_params,
         _swizzle_params,
         _splitk_params,
-        options="--npu-arch 3510",
+        options=(
+            "--npu-arch 3510"
+            " --cce-disable-asc-reserved-ubuf"
+            " --cce-disable-vf-stack-reserved-ubuf"
+        ),
     )
     artifact(a_tensor, b_tensor, c_tensor, w_tensor, block_num=block_num)
     torch.npu.synchronize()
