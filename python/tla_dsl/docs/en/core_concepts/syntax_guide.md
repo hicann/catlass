@@ -107,7 +107,7 @@ A literal Boolean condition is compile-time directly. Use `tla.const_expr(...)` 
 
 ### `with` Regions
 
-The Huawei NPU has two compute regions; device operations must be placed in their corresponding region:
+The Ascend NPU has two compute regions; device operations must be placed in their corresponding region:
 
 - **Cube region**: hosts matrix operations such as `tla.mmad`, entered with `with tla.cube(...)`.
 - **Vector region**: hosts element-wise and vector operations, entered with `with tla.vector(...)`. Use `tla.vec.func(mode="simd")` for a SIMD Vector Function sub-region.
