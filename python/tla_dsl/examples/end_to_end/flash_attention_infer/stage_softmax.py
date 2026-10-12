@@ -506,6 +506,7 @@ def _mask_sf_mid_n64(
                     params=tla.params.BlockStoreParams(block_stride=65),
                     mask=preg_all_b16,
                 )
+            tla.local_mem_bar(tla.params.MemType.VEC_STORE, tla.params.MemType.VEC_LOAD)
             ub_now_sum_i_de = tla.tile_view(
                 nowSumAddr, tla.make_shape(VL_F32), tla.make_coord(0)
             )
@@ -624,6 +625,7 @@ def _mask_sf_mid_n64(
                     params=tla.params.BlockStoreParams(block_stride=65),
                     mask=preg_all_b16,
                 )
+            tla.local_mem_bar(tla.params.MemType.VEC_STORE, tla.params.MemType.VEC_LOAD)
             ub_now_sum_i_de = tla.tile_view(
                 nowSumAddr, tla.make_shape(VL_F32), tla.make_coord(0)
             )
@@ -739,6 +741,7 @@ def _mask_sf_mid_nlt64(
                     params=tla.params.BlockStoreParams(block_stride=65),
                     mask=preg_all_b16,
                 )
+            tla.local_mem_bar(tla.params.MemType.VEC_STORE, tla.params.MemType.VEC_LOAD)
             ub_now_sum_i_de = tla.tile_view(
                 nowSumAddr, tla.make_shape(VL_F32), tla.make_coord(0)
             )
@@ -830,6 +833,7 @@ def _mask_sf_mid_nlt64(
                     params=tla.params.BlockStoreParams(block_stride=65),
                     mask=preg_all_b16,
                 )
+            tla.local_mem_bar(tla.params.MemType.VEC_STORE, tla.params.MemType.VEC_LOAD)
             ub_now_sum_i_de = tla.tile_view(
                 nowSumAddr, tla.make_shape(VL_F32), tla.make_coord(0)
             )
@@ -1118,6 +1122,7 @@ def _sf_mid_n64(
                 params=tla.params.BlockStoreParams(block_stride=65),
                 mask=preg_all_b16,
             )
+        tla.local_mem_bar(tla.params.MemType.VEC_STORE, tla.params.MemType.VEC_LOAD)
         ub_now_sum_i_de = tla.tile_view(
             nowSumAddr, tla.make_shape(VL_F32), tla.make_coord(0)
         )
@@ -1223,6 +1228,7 @@ def _sf_mid_nlt64(
                 params=tla.params.BlockStoreParams(block_stride=65),
                 mask=preg_all_b16,
             )
+        tla.local_mem_bar(tla.params.MemType.VEC_STORE, tla.params.MemType.VEC_LOAD)
         ub_now_sum_i_de = tla.tile_view(
             nowSumAddr, tla.make_shape(VL_F32), tla.make_coord(0)
         )
