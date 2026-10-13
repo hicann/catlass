@@ -265,7 +265,7 @@ module {
 
 // CHECK-LABEL: func.func private @vector_region_
 // CHECK-NOT: ave.hir.pge
-// CHECK: %[[I64_PLT:.*]], %{{.*}} = ave.hir.plt {{.*}} {element_alignment_bit_width = 32 : i32}
+// CHECK: %[[I64_PLT:.*]], %{{.*}} = ave.hir.plt {{.*}} {functionType = #ave.func_dist_type<pb32>}
 // CHECK: ave.hir.masked_store <NORM_B64> {{.*}}, %[[I64_PLT]],
 
 // CHECK-LABEL: func.func private @vector_region_

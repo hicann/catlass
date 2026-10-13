@@ -42,6 +42,7 @@ _WRITE_SIZE = 24
 _PRINT_TLV_SIZE = 24
 _PRINT_TENSOR_TLV_SIZE = 72
 _PRINT_SHAPE_TLV_SIZE = 48
+_MAX_SHAPE_DIM = 8
 _TENSOR_PAYLOAD_ALIGNMENT = 32
 # FIFO payload capacity leaves at most 262112 f32 values (see print_tensor.cpp).
 _MAX_TENSOR_ELEMENTS = 262112
@@ -793,8 +794,35 @@ def _render_tensor(tlv: memoryview, shape_tlv: memoryview, logical_block: int) -
     _write_stdout("".join(parts))
 
 
+def _embedded_shape_tlv(tlv: memoryview) -> memoryview | None:
+    """Shape TLV equivalent for a tensor TLV that describes its own shape.
+
+    CANN 9.2 writes dim/shape straight into the tensor TLV and emits no
+    standalone shape TLV. Rebuild the 48-byte shape TLV the rest of this module
+    expects, or return None when the tensor carries no usable shape (a corrupt
+    record).
+    """
+
+    if len(tlv) < _PRINT_TENSOR_TLV_SIZE:
+        return None
+    dim = struct.unpack_from("<I", tlv, 28)[0]
+    if not 1 <= dim <= _MAX_SHAPE_DIM:
+        return None
+    extents = struct.unpack_from("<8I", tlv, 32)
+    if any(extent == 0 for extent in extents[:dim]):
+        return None
+    shape_tlv = bytearray(_PRINT_SHAPE_TLV_SIZE)
+    struct.pack_into("<III", shape_tlv, 0, _FIFO_SHAPE, _PRINT_SHAPE_TLV_SIZE - 8, dim)
+    struct.pack_into("<8I", shape_tlv, 12, *extents)
+    return memoryview(shape_tlv)
+
+
 def _validate_tensor_tlv(tlv: memoryview, total: int, shape_tlv: memoryview) -> None:
-    """Mirror RuntimeWrapper.cpp ``validate_tensor_tlv`` checks."""
+    """Mirror RuntimeWrapper.cpp ``validate_tensor_tlv`` checks.
+
+    The tensor TLV carries its own dim/shape (CANN 9.2 layout); ``shape_tlv``
+    is the equivalent 48-byte shape record rebuilt from those fields.
+    """
     if total < _PRINT_TENSOR_TLV_SIZE:
         raise AscDebugFifoError("malformed tensor print FIFO: truncated tensor header")
     length = struct.unpack_from("<I", tlv, 4)[0]
@@ -821,9 +849,9 @@ def _validate_tensor_tlv(tlv: memoryview, total: int, shape_tlv: memoryview) -> 
         raise AscDebugFifoError(
             "malformed tensor print FIFO: unsupported tensor position"
         )
-    if dim != 0:
+    if dim == 0:
         raise AscDebugFifoError(
-            "malformed tensor print FIFO: tensor dimension must be zero"
+            "malformed tensor print FIFO: tensor dimension must be set"
         )
     if _decode_subblock(desc) < -1:
         raise AscDebugFifoError(
@@ -842,9 +870,9 @@ def _validate_tensor_tlv(tlv: memoryview, total: int, shape_tlv: memoryview) -> 
         raise AscDebugFifoError(
             "malformed tensor print FIFO: tensor payload size does not match record"
         )
-    if any(extent != 0 for extent in tensor_shape):
+    if any(extent == 0 for extent in tensor_shape[:dim]):
         raise AscDebugFifoError(
-            "malformed tensor print FIFO: tensor shape metadata must be zero"
+            "malformed tensor print FIFO: tensor shape extents must be set"
         )
     if len(shape_tlv) != _PRINT_SHAPE_TLV_SIZE:
         raise AscDebugFifoError(
@@ -898,7 +926,6 @@ def _decode_tensor_records(host: memoryview, fifo: _FifoData) -> None:
             )
         offset = 0
         written = int(buf_offset)
-        pending_shape: memoryview | None = None
         while offset < written:
             if offset + 8 > written:
                 raise AscDebugFifoError(
@@ -911,27 +938,18 @@ def _decode_tensor_records(host: memoryview, fifo: _FifoData) -> None:
                     "malformed tensor print FIFO: TLV length exceeds captured bytes"
                 )
             chunk = ring[offset : offset + total]
-            if typ == _FIFO_SHAPE:
-                if pending_shape is not None:
-                    raise AscDebugFifoError(
-                        "malformed tensor print FIFO: shape record is missing its tensor record"
-                    )
-                if total != _PRINT_SHAPE_TLV_SIZE:
-                    raise AscDebugFifoError(
-                        "malformed tensor print FIFO: invalid shape record size"
-                    )
-                pending_shape = chunk
-                offset += total
-                continue
+            # CANN 9.2 writes dim/shape straight into the tensor TLV and emits no
+            # standalone shape record. That is the only layout supported here.
             if typ != _FIFO_TENSOR:
                 raise AscDebugFifoError(
                     "malformed tensor print FIFO: unexpected record type"
                 )
-            if pending_shape is None:
+            shape_tlv = _embedded_shape_tlv(chunk)
+            if shape_tlv is None:
                 raise AscDebugFifoError(
                     "malformed tensor print FIFO: tensor record missing shape"
                 )
-            _validate_tensor_tlv(chunk, total, pending_shape)
+            _validate_tensor_tlv(chunk, total, shape_tlv)
             desc = struct.unpack_from("<I", chunk, 16)[0]
             block_idx = struct.unpack_from("<H", chunk, 26)[0]
             subblock = _decode_subblock(desc)
@@ -946,13 +964,8 @@ def _decode_tensor_records(host: memoryview, fifo: _FifoData) -> None:
                 raise AscDebugFifoError(
                     "malformed tensor print FIFO: tensor block index exceeds launch block_num"
                 )
-            records.append((pending_shape, chunk, logical))
-            pending_shape = None
+            records.append((shape_tlv, chunk, logical))
             offset += total
-        if pending_shape is not None:
-            raise AscDebugFifoError(
-                "malformed tensor print FIFO: shape record is missing its tensor record"
-            )
     if not records:
         _write_stdout("TLA debug: no records captured\n")
         return

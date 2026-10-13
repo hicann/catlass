@@ -40,7 +40,7 @@ module {
 
 // CHECK-LABEL: func.func @compare_mask_lowering
 // CHECK-LABEL: func.func private @vector_region_{{[0-9]+}}
-// CHECK: ave.hir.pge <H> {element_alignment_bit_width = 32 : i32} : vector<256xi1>
+// CHECK: ave.hir.pge <H> {functionType = #ave.func_dist_type<pb32>} : vector<256xi1>
 // CHECK: ave.hir.vcmp <LT> {{.*}} : vector<64xf32>, vector<256xi1> -> vector<256xi1>
 // CHECK: ave.hir.vcmps <GE> {{.*}} : vector<64xf32>, f32, vector<256xi1> -> vector<256xi1>
 // CHECK: ave.hir.vadd

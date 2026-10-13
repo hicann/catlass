@@ -7,7 +7,7 @@
 
 module {
 // CHECK-LABEL: func.func @half_to_bf16_round
-// CHECK: %[[MASK:.*]] = ave.hir.pge <ALL> {element_alignment_bit_width = 16 : i32} : vector<256xi1>
+// CHECK: %[[MASK:.*]] = ave.hir.pge <ALL> {functionType = #ave.func_dist_type<pb16>} : vector<256xi1>
 // CHECK: %[[RND:.*]] = arith.constant 1 : i32
 // CHECK: "hivm_regbaseintrins.intr.hivm.vcvtff.f162bf16.x"(%{{.*}}, %[[MASK]], %[[RND]]) : (vector<128xf16>, vector<256xi1>, i32) -> vector<128xbf16>
   func.func @half_to_bf16_round(%sm: memref<128xf16, #hivm.address_space<ub>>,
@@ -32,7 +32,7 @@ module {
   }
 
 // CHECK-LABEL: func.func @half_to_bf16_floor
-// CHECK: %[[MASK:.*]] = ave.hir.pge <M4> {element_alignment_bit_width = 16 : i32} : vector<256xi1>
+// CHECK: %[[MASK:.*]] = ave.hir.pge <M4> {functionType = #ave.func_dist_type<pb16>} : vector<256xi1>
 // CHECK: %[[RND:.*]] = arith.constant 2 : i32
 // CHECK: "hivm_regbaseintrins.intr.hivm.vcvtff.f162bf16.x"(%{{.*}}, %[[MASK]], %[[RND]]) : (vector<128xf16>, vector<256xi1>, i32) -> vector<128xbf16>
   func.func @half_to_bf16_floor(%sm: memref<128xf16, #hivm.address_space<ub>>,
@@ -58,7 +58,7 @@ module {
   }
 
 // CHECK-LABEL: func.func @half_to_bf16_ceil
-// CHECK: %[[MASK:.*]] = ave.hir.pge <ALL> {element_alignment_bit_width = 16 : i32} : vector<256xi1>
+// CHECK: %[[MASK:.*]] = ave.hir.pge <ALL> {functionType = #ave.func_dist_type<pb16>} : vector<256xi1>
 // CHECK: %[[RND:.*]] = arith.constant 3 : i32
 // CHECK: "hivm_regbaseintrins.intr.hivm.vcvtff.f162bf16.x"(%{{.*}}, %[[MASK]], %[[RND]]) : (vector<128xf16>, vector<256xi1>, i32) -> vector<128xbf16>
   func.func @half_to_bf16_ceil(%sm: memref<128xf16, #hivm.address_space<ub>>,
@@ -83,7 +83,7 @@ module {
   }
 
 // CHECK-LABEL: func.func @half_to_bf16_trunc
-// CHECK: %[[MASK:.*]] = ave.hir.pge <M4> {element_alignment_bit_width = 16 : i32} : vector<256xi1>
+// CHECK: %[[MASK:.*]] = ave.hir.pge <M4> {functionType = #ave.func_dist_type<pb16>} : vector<256xi1>
 // CHECK: %[[RND:.*]] = arith.constant 4 : i32
 // CHECK: "hivm_regbaseintrins.intr.hivm.vcvtff.f162bf16.x"(%{{.*}}, %[[MASK]], %[[RND]]) : (vector<128xf16>, vector<256xi1>, i32) -> vector<128xbf16>
   func.func @half_to_bf16_trunc(%sm: memref<128xf16, #hivm.address_space<ub>>,

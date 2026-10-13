@@ -275,10 +275,10 @@ def test_debug_print_output_accepts_unordered_f32_records_from_distinct_blocks()
     example._verify_debug_output(
         "\n".join(
             (
-                "TLA printf: core=0 block=3 v=1.250000",
-                "TLA printf: core=1 block=1 v=1.250000",
-                "TLA printf: core=0 block=0 v=1.250000",
-                "TLA printf: core=1 block=2 v=1.250000",
+                "TLA printf: core=0 block=3 [AIC Block 0/1] v=1.250000",
+                "TLA printf: core=1 block=1 [AIV Block 0/1] v=1.250000",
+                "TLA printf: core=0 block=0 [AIC Block 0/1] v=1.250000",
+                "TLA printf: core=1 block=2 [AIV Block 0/1] v=1.250000",
             )
         ),
         dtype="f32",
@@ -294,8 +294,7 @@ def test_debug_print_output_ignores_cann_diagnostic_records() -> None:
         "\n".join(
             (
                 "TLA printf: core=0 block=0 [WARNING]: CANN TimeStamp is invalid",
-                "TLA printf: core=0 block=0 [AIV Block 0/1] ",
-                "TLA printf: core=0 block=0 x=-128",
+                "TLA printf: core=0 block=0 [AIC Block 0/1] x=-128",
             )
         ),
         dtype="i8",
@@ -311,8 +310,8 @@ def test_debug_print_output_rejects_unexpected_scalar_records() -> None:
         example._verify_debug_output(
             "\n".join(
                 (
-                    "TLA printf: core=0 block=0 x=-128",
-                    "TLA printf: core=0 block=0 x=127",
+                    "TLA printf: core=0 block=0 [AIC Block 0/1] x=-128",
+                    "TLA printf: core=0 block=0 [AIC Block 0/1] x=127",
                 )
             ),
             dtype="i8",
@@ -326,7 +325,7 @@ def test_debug_print_output_rejects_duplicate_multiblock_records() -> None:
 
     with pytest.raises(RuntimeError, match="distinct blocks"):
         example._verify_debug_output(
-            "\n".join("TLA printf: core=0 block=0 v=1.250000" for _ in range(4)),
+            "\n".join("TLA printf: core=0 block=0 [AIC Block 0/1] v=1.250000" for _ in range(4)),
             dtype="f32",
             expected_value="1.250000",
             expect_count=4,
@@ -399,14 +398,14 @@ def test_debug_print_expression_rejects_unsigned_arithmetic(dtype: str) -> None:
 @pytest.mark.parametrize(
     ("dtype", "expected_value", "line"),
     (
-        ("i8", "-128", "TLA printf: core=0 block=0 x=-128"),
-        ("i16", "-32768", "TLA printf: core=0 block=0 x=-32768"),
-        ("i32", "-37", "TLA printf: core=0 block=0 x=-37"),
-        ("u8", "255", "TLA printf: core=0 block=0 x=255"),
-        ("u16", "65535", "TLA printf: core=0 block=0 x=65535"),
-        ("u32", "4294967295", "TLA printf: core=0 block=0 x=4294967295"),
-        ("f16", "1.250000", "TLA printf: core=0 block=0 v=1.250000"),
-        ("f32", "1.250000", "TLA printf: core=0 block=0 v=1.250000"),
+        ("i8", "-128", "TLA printf: core=0 block=0 [AIC Block 0/1] x=-128"),
+        ("i16", "-32768", "TLA printf: core=0 block=0 [AIC Block 0/1] x=-32768"),
+        ("i32", "-37", "TLA printf: core=0 block=0 [AIC Block 0/1] x=-37"),
+        ("u8", "255", "TLA printf: core=0 block=0 [AIC Block 0/1] x=255"),
+        ("u16", "65535", "TLA printf: core=0 block=0 [AIC Block 0/1] x=65535"),
+        ("u32", "4294967295", "TLA printf: core=0 block=0 [AIC Block 0/1] x=4294967295"),
+        ("f16", "1.250000", "TLA printf: core=0 block=0 [AIC Block 0/1] v=1.250000"),
+        ("f32", "1.250000", "TLA printf: core=0 block=0 [AIC Block 0/1] v=1.250000"),
     ),
 )
 def test_debug_print_output_accepts_full_scalar_matrix(
@@ -422,13 +421,13 @@ def test_debug_print_output_accepts_full_scalar_matrix(
 @pytest.mark.parametrize(
     ("print_region", "output"),
     (
-        ("cube", "TLA printf: core=0 block=0 x=-37"),
+        ("cube", "TLA printf: core=0 block=0 [AIC Block 0/1] x=-37"),
         (
             "vector",
             "\n".join(
                 (
-                    "TLA printf: core=1 block=0 v=1.250000",
-                    "TLA printf: core=2 block=0 v=1.250000",
+                    "TLA printf: core=1 block=0 [AIV Block 0/1] v=1.250000",
+                    "TLA printf: core=2 block=0 [AIV Block 0/1] v=1.250000",
                 )
             ),
         ),
@@ -436,9 +435,9 @@ def test_debug_print_output_accepts_full_scalar_matrix(
             "both",
             "\n".join(
                 (
-                    "TLA printf: core=1 block=0 v=1.250000",
-                    "TLA printf: core=2 block=0 v=1.250000",
-                    "TLA printf: core=0 block=0 x=-37",
+                    "TLA printf: core=1 block=0 [AIV Block 0/1] v=1.250000",
+                    "TLA printf: core=2 block=0 [AIV Block 0/1] v=1.250000",
+                    "TLA printf: core=0 block=0 [AIC Block 0/1] x=-37",
                 )
             ),
         ),
@@ -459,8 +458,7 @@ def test_debug_print_mixed_output_ignores_cann_diagnostic_records() -> None:
         "\n".join(
             (
                 "TLA printf: core=0 block=0 [WARNING]: CANN TimeStamp is invalid",
-                "TLA printf: core=0 block=0 [AIC Block 0/1] ",
-                "TLA printf: core=0 block=0 x=-37",
+                "TLA printf: core=0 block=0 [AIC Block 0/1] x=-37",
             )
         ),
         print_region="cube",
@@ -509,15 +507,15 @@ def test_debug_print_mixed_exposes_full_scalar_matrix() -> None:
 @pytest.mark.parametrize(
     ("print_region", "dtype", "expected_value", "output"),
     (
-        ("cube", "u32", "4294967295", "TLA printf: core=0 block=0 x=4294967295"),
+        ("cube", "u32", "4294967295", "TLA printf: core=0 block=0 [AIC Block 0/1] x=4294967295"),
         (
             "vector",
             "i8",
             "-128",
             "\n".join(
                 (
-                    "TLA printf: core=1 block=0 x=-128",
-                    "TLA printf: core=2 block=0 x=-128",
+                    "TLA printf: core=1 block=0 [AIV Block 0/1] x=-128",
+                    "TLA printf: core=2 block=0 [AIV Block 0/1] x=-128",
                 )
             ),
         ),
@@ -527,9 +525,9 @@ def test_debug_print_mixed_exposes_full_scalar_matrix() -> None:
             "1.250000",
             "\n".join(
                 (
-                    "TLA printf: core=1 block=0 v=1.250000",
-                    "TLA printf: core=2 block=0 v=1.250000",
-                    "TLA printf: core=0 block=0 v=1.250000",
+                    "TLA printf: core=1 block=0 [AIV Block 0/1] v=1.250000",
+                    "TLA printf: core=2 block=0 [AIV Block 0/1] v=1.250000",
+                    "TLA printf: core=0 block=0 [AIC Block 0/1] v=1.250000",
                 )
             ),
         ),
@@ -555,8 +553,8 @@ def test_debug_print_mixed_output_accepts_typed_matrix(
             "vector",
             "\n".join(
                 (
-                    "TLA printf: core=1 block=0 v=1.250000",
-                    "TLA printf: core=1 block=0 v=1.250000",
+                    "TLA printf: core=1 block=0 [AIV Block 0/1] v=1.250000",
+                    "TLA printf: core=1 block=0 [AIV Block 0/1] v=1.250000",
                 )
             ),
         ),
@@ -564,18 +562,18 @@ def test_debug_print_mixed_output_accepts_typed_matrix(
             "vector",
             "\n".join(
                 (
-                    "TLA printf: core=1 block=0 v=1.250000",
-                    "TLA printf: core=2 block=1 v=1.250000",
+                    "TLA printf: core=1 block=0 [AIV Block 0/1] v=1.250000",
+                    "TLA printf: core=2 block=1 [AIV Block 0/1] v=1.250000",
                 )
             ),
         ),
-        ("cube", "\n".join(("TLA printf: core=0 block=0 x=-36",))),
+        ("cube", "\n".join(("TLA printf: core=0 block=0 [AIC Block 0/1] x=-36",))),
         (
             "both",
             "\n".join(
                 (
-                    "TLA printf: core=1 block=0 v=1.250000",
-                    "TLA printf: core=2 block=0 v=1.250000",
+                    "TLA printf: core=1 block=0 [AIV Block 0/1] v=1.250000",
+                    "TLA printf: core=2 block=0 [AIV Block 0/1] v=1.250000",
                 )
             ),
         ),
@@ -599,8 +597,8 @@ def test_debug_print_mixed_output_rejects_invalid_native_frames(
 @pytest.mark.parametrize(
     ("dtype", "expected_value", "line"),
     (
-        ("i32", "-37", "TLA printf: core=0 block=0 x=-37"),
-        ("f32", "1.250000", "TLA printf: core=0 block=0 v=1.250000"),
+        ("i32", "-37", "TLA printf: core=0 block=0 [AIC Block 0/1] x=-37"),
+        ("f32", "1.250000", "TLA printf: core=0 block=0 [AIC Block 0/1] v=1.250000"),
     ),
 )
 def test_debug_print_aic_output_uses_scalar_frame(

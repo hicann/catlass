@@ -711,28 +711,26 @@ static Value createVectorBinaryResult(
 {
     switch (kind) {
         case VectorBinaryKind::Add:
-            return b.create<hivmave::VFAddOp>(loc, vecType, lhs, rhs, mask, Value()).getResult();
+            return b.create<hivmave::VFAddOp>(loc, vecType, lhs, rhs, mask).getResult();
         case VectorBinaryKind::Sub:
-            return b.create<hivmave::VFSubOp>(loc, vecType, lhs, rhs, mask, Value()).getResult();
+            return b.create<hivmave::VFSubOp>(loc, vecType, lhs, rhs, mask).getResult();
         case VectorBinaryKind::Mul:
-            return b.create<hivmave::VFMulOp>(loc, vecType, lhs, rhs, mask, Value()).getResult();
+            return b.create<hivmave::VFMulOp>(loc, vecType, lhs, rhs, mask).getResult();
         case VectorBinaryKind::Div: {
             auto cast = hivm::TypeFn::cast_signed;
             if (auto intType = dyn_cast<IntegerType>(elementType))
                 if (intType.getSignedness() == IntegerType::Unsigned)
                     cast = hivm::TypeFn::cast_unsigned;
-            return b
-                .create<hivmave::VFDivOp>(
-                    loc, vecType, lhs, rhs, mask, hivm::TypeFnAttr::get(b.getContext(), cast), Value())
+            return b.create<hivmave::VFDivOp>(loc, vecType, lhs, rhs, mask, hivm::TypeFnAttr::get(b.getContext(), cast))
                 .getResult();
         }
         case VectorBinaryKind::Max:
-            return b.create<hivmave::VFMaxOp>(loc, vecType, lhs, rhs, mask, Value()).getResult();
+            return b.create<hivmave::VFMaxOp>(loc, vecType, lhs, rhs, mask).getResult();
         case VectorBinaryKind::Min:
-            return b.create<hivmave::VFMinOp>(loc, vecType, lhs, rhs, mask, Value()).getResult();
+            return b.create<hivmave::VFMinOp>(loc, vecType, lhs, rhs, mask).getResult();
         case VectorBinaryKind::And:
             if (isa<::tla::VectorSSAType>(tlaOperandType))
-                return b.create<hivmave::VFAndOp>(loc, vecType, lhs, rhs, mask, Value()).getResult();
+                return b.create<hivmave::VFAndOp>(loc, vecType, lhs, rhs, mask).getResult();
             if (isa<::tla::MaskSSAType>(tlaOperandType))
                 return b
                     .create<hivmave::PregAndOp>(
@@ -742,7 +740,7 @@ static Value createVectorBinaryResult(
             return nullptr;
         case VectorBinaryKind::Or:
             if (isa<::tla::VectorSSAType>(tlaOperandType))
-                return b.create<hivmave::VFOrOp>(loc, vecType, lhs, rhs, mask, Value()).getResult();
+                return b.create<hivmave::VFOrOp>(loc, vecType, lhs, rhs, mask).getResult();
             if (isa<::tla::MaskSSAType>(tlaOperandType))
                 return b
                     .create<hivmave::PregOrOp>(
@@ -752,7 +750,7 @@ static Value createVectorBinaryResult(
             return nullptr;
         case VectorBinaryKind::Xor:
             if (isa<::tla::VectorSSAType>(tlaOperandType))
-                return b.create<hivmave::VFXorOp>(loc, vecType, lhs, rhs, mask, Value()).getResult();
+                return b.create<hivmave::VFXorOp>(loc, vecType, lhs, rhs, mask).getResult();
             if (isa<::tla::MaskSSAType>(tlaOperandType))
                 return b
                     .create<hivmave::PregXorOp>(
@@ -789,15 +787,20 @@ static int64_t maskElementBitWidthForLanes(int64_t lanes)
 // semantic element width so HIVMAVE lowering still selects pge/plt.b8/b16/b32
 // from N instead of the full container width.
 //
-// Prefer string attrs over mlir::utils::elementAlignmentBitWidth (removed /
-// unavailable on current AscendNPU-IR).
-static constexpr llvm::StringLiteral kElementAlignmentBitWidth = "element_alignment_bit_width";
+// The bit width is carried by functionType (hivmave::FunctionDistType, i.e.
+// #ave.func_dist_type<pb8|pb16|pb32>). Without it, readers fall back to the
+// container width (VL_BITS / predicate size), so even an f32 operand gets a b8
+// mask that covers the wrong elements.
+static constexpr llvm::StringLiteral kFunctionType = "functionType";
 static void annotateFullPregWidth(OpBuilder& b, Operation* op, VectorType resultType, int64_t semanticLanes)
 {
     if (resultType.getNumElements() == semanticLanes)
         return;
     const int64_t bitWidth = maskElementBitWidthForLanes(semanticLanes);
-    op->setAttr(kElementAlignmentBitWidth, b.getI32IntegerAttr(bitWidth));
+    hivmave::FunctionDistType dist = bitWidth >= 32 ? hivmave::FunctionDistType::PB32 :
+                                     bitWidth >= 16 ? hivmave::FunctionDistType::PB16 :
+                                                      hivmave::FunctionDistType::PB8;
+    op->setAttr(kFunctionType, hivmave::FunctionDistTypeAttr::get(b.getContext(), dist));
 }
 
 static Value createPredicatePge(
@@ -965,7 +968,7 @@ static Value createE5M2ToF16Result(
         b.create<hivmave::VFExtSIOp>(loc, dstBitsType, srcBits, mask, part, hivmave::VCVT_PPTypeAttr()).getResult();
     Value shift = b.create<arith::ConstantIntOp>(loc, 8, 16);
     Value sign = b.create<arith::ConstantOp>(loc, b.getI1Type(), b.getBoolAttr(false));
-    Value shifted = b.create<hivmave::VFShlsOp>(loc, dstBitsType, widened, shift, mask, sign, Value()).getResult();
+    Value shifted = b.create<hivmave::VFShlsOp>(loc, dstBitsType, widened, shift, mask, sign).getResult();
     return b.create<mlir::vector::BitCastOp>(loc, dstVecType, shifted).getResult();
 }
 
@@ -1056,7 +1059,7 @@ static FailureOr<Value> createVectorCastResult(
             auto srcBitsType = VectorType::get(srcVecType.getShape(), b.getIntegerType(sb));
             Value srcBits = b.create<mlir::vector::BitCastOp>(loc, srcBitsType, src).getResult();
             // and-with-self under the predicate: keeps active lanes, zeros the rest.
-            Value gated = b.create<hivmave::VFAndOp>(loc, srcBitsType, srcBits, srcBits, mask, Value()).getResult();
+            Value gated = b.create<hivmave::VFAndOp>(loc, srcBitsType, srcBits, srcBits, mask).getResult();
             gatedSrc = b.create<mlir::vector::BitCastOp>(loc, srcVecType, gated).getResult();
             legMask = allTrueMaskFor(fullMasks, loc, srcVecType, srcVecType);
         }
@@ -1129,8 +1132,7 @@ static FailureOr<Value> createVectorCastResult(
             Value dstEvenBits = b.create<mlir::vector::BitCastOp>(loc, dstBitsType, dstEven).getResult();
             Value dstOddBits = b.create<mlir::vector::BitCastOp>(loc, dstBitsType, dstOdd).getResult();
             Value dstMask = allTrueMaskFor(fullMasks, loc, dstBitsType, dstBitsType);
-            Value dstBits =
-                b.create<hivmave::VFOrOp>(loc, dstBitsType, dstEvenBits, dstOddBits, dstMask, Value()).getResult();
+            Value dstBits = b.create<hivmave::VFOrOp>(loc, dstBitsType, dstEvenBits, dstOddBits, dstMask).getResult();
             return b.create<mlir::vector::BitCastOp>(loc, dstVecType, dstBits).getResult();
         }
     }
@@ -1207,18 +1209,18 @@ static Value createVectorUnaryResult(
 {
     switch (kind) {
         case VectorUnaryKind::Exp:
-            return b.create<hivmave::VFExpOp>(loc, vecType, operand, mask, Value()).getResult();
+            return b.create<hivmave::VFExpOp>(loc, vecType, operand, mask).getResult();
         case VectorUnaryKind::Log:
-            return b.create<hivmave::VFLnOp>(loc, vecType, operand, mask, Value()).getResult();
+            return b.create<hivmave::VFLnOp>(loc, vecType, operand, mask).getResult();
         case VectorUnaryKind::Sqrt:
-            return b.create<hivmave::VFSqrtOp>(loc, vecType, operand, mask, Value()).getResult();
+            return b.create<hivmave::VFSqrtOp>(loc, vecType, operand, mask).getResult();
         case VectorUnaryKind::Abs:
-            return b.create<hivmave::VFAbsOp>(loc, vecType, operand, mask, Value()).getResult();
+            return b.create<hivmave::VFAbsOp>(loc, vecType, operand, mask).getResult();
         case VectorUnaryKind::Neg:
-            return b.create<hivmave::VFNegOp>(loc, vecType, operand, mask, Value()).getResult();
+            return b.create<hivmave::VFNegOp>(loc, vecType, operand, mask).getResult();
         case VectorUnaryKind::Not:
             if (isa<::tla::VectorSSAType>(tlaOperandType))
-                return b.create<hivmave::VFNotOp>(loc, vecType, operand, mask, Value()).getResult();
+                return b.create<hivmave::VFNotOp>(loc, vecType, operand, mask).getResult();
             if (isa<::tla::MaskSSAType>(tlaOperandType))
                 return b
                     .create<hivmave::PregNotOp>(
@@ -1546,12 +1548,12 @@ static FailureOr<Value> createVectorScalarBinaryResult(
     if (info.kind == VectorBinaryKind::Add || info.kind == VectorBinaryKind::Mul ||
         info.kind == VectorBinaryKind::Max || info.kind == VectorBinaryKind::Min) {
         if (info.kind == VectorBinaryKind::Add)
-            return b.create<hivmave::VFAddsOp>(loc, ctx.vecType, lhs, scalar, mask, Value()).getResult();
+            return b.create<hivmave::VFAddsOp>(loc, ctx.vecType, lhs, scalar, mask).getResult();
         if (info.kind == VectorBinaryKind::Mul)
-            return b.create<hivmave::VFMulsOp>(loc, ctx.vecType, lhs, scalar, mask, Value()).getResult();
+            return b.create<hivmave::VFMulsOp>(loc, ctx.vecType, lhs, scalar, mask).getResult();
         if (info.kind == VectorBinaryKind::Max)
-            return b.create<hivmave::VFMaxsOp>(loc, ctx.vecType, lhs, scalar, mask, Value()).getResult();
-        return b.create<hivmave::VFMinsOp>(loc, ctx.vecType, lhs, scalar, mask, Value()).getResult();
+            return b.create<hivmave::VFMaxsOp>(loc, ctx.vecType, lhs, scalar, mask).getResult();
+        return b.create<hivmave::VFMinsOp>(loc, ctx.vecType, lhs, scalar, mask).getResult();
     }
 
     Value rhs = b.create<hivmave::VFBroadcastScalarOp>(loc, ctx.vecType, scalar).getRes();

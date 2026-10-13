@@ -53,12 +53,12 @@ module {
 
 // CHECK-LABEL: func.func @predicate_width_b16
 // CHECK-LABEL: func.func private @vector_region_
-// CHECK: ave.hir.pge <H> {element_alignment_bit_width = 16 : i32} : vector<256xi1>
-// CHECK: ave.hir.plt {{.*}} {element_alignment_bit_width = 16 : i32} : vector<256xi1>, index
+// CHECK: ave.hir.pge <H> {functionType = #ave.func_dist_type<pb16>} : vector<256xi1>
+// CHECK: ave.hir.plt {{.*}} {functionType = #ave.func_dist_type<pb16>} : vector<256xi1>, index
 
 // CHECK-LABEL: func.func @predicate_width_b8
 // CHECK-LABEL: func.func private @vector_region_
 // CHECK: ave.hir.pge <H> : vector<256xi1>
-// CHECK-NOT: element_alignment_bit_width
+// CHECK-NOT: functionType
 // CHECK: ave.hir.plt {{.*}} : vector<256xi1>, index
-// CHECK-NOT: element_alignment_bit_width
+// CHECK-NOT: functionType

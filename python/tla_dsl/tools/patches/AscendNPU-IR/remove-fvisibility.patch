@@ -1,0 +1,11 @@
+--- a/build-tools/build.sh
++++ b/build-tools/build.sh
+@@ -606,7 +606,7 @@
+   fi
+
+   # Base compile flags
+-  COMMON_FLAGS="-fno-common -fvisibility=hidden -fno-strict-aliasing -pipe"
++  COMMON_FLAGS="-fno-common -fno-strict-aliasing -pipe"
+   COMMON_FLAGS+=" -Wformat=2 -Wfloat-equal -Wswitch-default -Wcast-align -Wvla -Wunused -Wundef"
+
+   # OS-specific flags

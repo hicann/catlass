@@ -131,17 +131,22 @@ def _capture_c_stdout(launch: Callable[[], None]) -> str:
         os.close(saved_stdout)
 
 
+# Device-side printf from CANN 9.2 folds the block tag into the same record as
+# the value, so value lines carry a "[AIV Block n/m] " prefix.
+_BLOCK_TAG_PREFIX = r"\[(?:AIC|AIV) Block [0-9]+/[0-9]+\] "
+
+
 def _verify_debug_output(
     output: str, *, dtype: str, expected_value: str, expect_count: int
 ) -> None:
     tag = "v" if dtype in {"f16", "f32"} else "x"
     pattern = re.compile(
-        rf"^TLA printf: core=[0-9]+ block=([0-9]+) {tag}={re.escape(expected_value)}$"
+        rf"^TLA printf: core=[0-9]+ block=([0-9]+) "
+        rf"{_BLOCK_TAG_PREFIX}{tag}={re.escape(expected_value)}$"
     )
     diagnostic = re.compile(
         r"^TLA printf: core=[0-9]+ block=[0-9]+ "
-        r"(?:\[WARNING\]: CANN TimeStamp is invalid.*|"
-        r"\[(?:AIC|AIV) Block [0-9]+/[0-9]+\]\s*)$"
+        r"\[WARNING\]: CANN TimeStamp is invalid.*$"
     )
     matches = []
     unexpected = []

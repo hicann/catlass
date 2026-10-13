@@ -51,10 +51,9 @@ set(CATLASS_DSL_HIVM_HEADER
 set(CATLASS_DSL_HIVM_ENUMS_INC
     ${CATLASS_DSL_HIVM_INCLUDE_DIR}/bishengir/Interfaces/BiShengIREnums.h.inc)
 set(CATLASS_DSL_HIVM_REQUIRED_LIBS
-    MLIRHIVMUtils
-    MLIRHIVMDialect
-    MLIRHIVMTransforms
-    MLIRHIVMToStandard
+    BiShengIRHIVMDialect
+    BiShengIRHIVMTransforms
+    BiShengIRHIVMToStandard
     MLIRAVEDialect
     MLIRHIVMAVETransforms
     MLIRAVEUtils
@@ -62,21 +61,20 @@ set(CATLASS_DSL_HIVM_REQUIRED_LIBS
     MLIRHIVMAVEToStandard
     MLIRHIVMRegbaseIntrinsDialect
     MLIRHIVMRegbaseIntrinsUtils
-    MLIRHFusionToHIVM
+    BiShengIRHFusionToHIVM
     MLIRTensorUtils
-    MLIRAnnotationDialect
+    BiShengIRAnnotationDialect
     BiShengIRDialectUtils
     BiShengIRTensorDialect
-    MLIRHFusionDialect
-    MLIRHFusionUtils
-    MLIRMathExtDialect
+    BiShengIRHFusionDialect
+    BiShengIRHFusionUtils
+    BiShengIRMathExtDialect
     BiShengIRSymbolDialect
     BiShengIRMemRefDialect
-    MLIRMemRefExtDialect
-    MLIRHACCUtils
-    MLIRHACCTransforms
-    MLIRHACCDialect
-    MLIRHMAPDialect
+    BiShengIRMemRefExtDialect
+    BiShengIRHACCUtils
+    BiShengIRHACCTransforms
+    BiShengIRHACCDialect
     BiShengIRScopeDialect)
 if(NOT EXISTS ${CATLASS_DSL_HIVM_HEADER} OR NOT EXISTS ${CATLASS_DSL_HIVM_ENUMS_INC})
   message(FATAL_ERROR
@@ -195,6 +193,7 @@ foreach(_inc ${METAPASSES_TBLGEN_INCLUDES})
     list(APPEND METAPASSES_TBLGEN_INCLUDE_FLAGS -I ${_inc})
   endif()
 endforeach()
+list(APPEND METAPASSES_TBLGEN_INCLUDE_FLAGS -D BSPUB_DAVINCI_BISHENGIR_A5)
 set(METAPASSES_TBLGEN_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/tblgen)
 
 # tla dialect TableGen outputs (dialect/attrs/types/ops).
@@ -242,6 +241,7 @@ include_directories(${LLVM_INCLUDE_DIRS})
 include_directories(${MLIR_INCLUDE_DIRS})
 
 add_compile_definitions("MLIR_PYTHON_PACKAGE_PREFIX=catlass._mlir.")
+add_compile_definitions(BSPUB_DAVINCI_BISHENGIR_A5)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 

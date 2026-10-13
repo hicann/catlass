@@ -21,7 +21,7 @@ from typing import Callable
 import catlass.tla as tla
 import sys
 
-from debug_print import DTYPE_SPECS
+from debug_print import DTYPE_SPECS, _BLOCK_TAG_PREFIX
 
 _CANN_DIAGNOSTIC = re.compile(
     r"^TLA printf: core=[0-9]+ block=[0-9]+ "
@@ -149,7 +149,7 @@ def _verify_mixed_debug_output(
         tag = "v" if dtype in {"f16", "f32"} else "x"
         pattern = re.compile(
             rf"^TLA printf: core=(?P<core>[0-9]+) block=0 "
-            rf"{tag}={re.escape(expected_value)}$"
+            rf"{_BLOCK_TAG_PREFIX}{tag}={re.escape(expected_value)}$"
         )
         matches = [pattern.fullmatch(line) for line in framed]
         cores = {match.group("core") for match in matches if match is not None}
@@ -168,9 +168,12 @@ def _verify_mixed_debug_output(
 
     if dtype is None:
         expected = {
-            "cube": re.compile(r"^TLA printf: core=[0-9]+ block=0 x=-37$"),
+            "cube": re.compile(
+                rf"^TLA printf: core=[0-9]+ block=0 {_BLOCK_TAG_PREFIX}x=-37$"
+            ),
             "vector": re.compile(
-                r"^TLA printf: core=(?P<core>[0-9]+) block=0 v=1\.250000$"
+                rf"^TLA printf: core=(?P<core>[0-9]+) block=0 "
+                rf"{_BLOCK_TAG_PREFIX}v=1\.250000$"
             ),
         }
     matching = {

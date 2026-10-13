@@ -46,7 +46,7 @@ module {
 
 // CHECK-LABEL: func.func private @vector_region_{{[0-9]+}}
 // CHECK-NOT: builtin.unrealized_conversion_cast
-// CHECK: ave.hir.pge <H> {element_alignment_bit_width = 32 : i32} : vector<256xi1>
+// CHECK: ave.hir.pge <H> {functionType = #ave.func_dist_type<pb32>} : vector<256xi1>
 // CHECK: scf.if {{.*}} -> (vector<64xf32>, vector<256xi1>)
 // CHECK: ave.hir.vabs
 // CHECK: ave.hir.preg.not <b32>

@@ -177,13 +177,14 @@ def test_debug_fifo_ignores_shape_slots_beyond_declared_rank() -> None:
     struct.pack_into("<I", tensor_tlv, 16, 0x54500000)
     struct.pack_into("<H", tensor_tlv, 24, 5)  # Hardware::L0C
     struct.pack_into("<I", tensor_tlv, 68, 4)
+    # CANN 9.2 fills dim/shape into the tensor TLV itself; slots beyond the
+    # declared rank are left untouched by the device.
+    struct.pack_into("<I", tensor_tlv, 28, 1)
+    struct.pack_into("<8I", tensor_tlv, 32, 1, 9, 9, 9, 9, 9, 9, 9)
 
-    shape_tlv = bytearray(48)
-    struct.pack_into("<III", shape_tlv, 0, 3, 40, 1)
-    struct.pack_into("<8I", shape_tlv, 12, 1, 9, 9, 9, 9, 9, 9, 9)
-    struct.pack_into("<I", shape_tlv, 44, 0)
-
-    fifo_mod._validate_tensor_tlv(memoryview(tensor_tlv), total, memoryview(shape_tlv))
+    shape_tlv = fifo_mod._embedded_shape_tlv(memoryview(tensor_tlv))
+    assert shape_tlv is not None
+    fifo_mod._validate_tensor_tlv(memoryview(tensor_tlv), total, shape_tlv)
 
 
 def _fifo_capture(

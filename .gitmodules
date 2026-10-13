@@ -5,4 +5,4 @@
 [submodule "python/tla_dsl/3rdparty/AscendNPU-IR"]
 	path = python/tla_dsl/3rdparty/AscendNPU-IR
 	url = https://gitcode.com/Ascend/AscendNPU-IR.git
-	branch = feature/regbase
+	branch = stable
