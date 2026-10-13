@@ -728,6 +728,7 @@ def test_public_compile_dry_run_invokes_typed_bridge_and_hivmc_a5(
                 str(cache_dir / "lowered.mlir"),
                 "--target=Ascend950PR_9589",
                 "--mlir-print-op-on-diagnostic",
+                "--append-bisheng-options=-mllvm --cce-vf-auto-sync=fused",
                 "--disable-ffts",
                 "--enable-hivm-compile=False",
                 f"--link-aicore-bitcode={template_bc.resolve()}",
@@ -2117,6 +2118,7 @@ def test_build_hivmc_a5_command_links_template_bitcode_for_aic(tmp_path) -> None
         str(mlir_path),
         "--target=Ascend950PR_9589",
         "--mlir-print-op-on-diagnostic",
+        "--append-bisheng-options=-mllvm --cce-vf-auto-sync=fused",
         "--disable-ffts",
         "--enable-hivm-compile=False",
         f"--link-aicore-bitcode={template_bc.resolve()}",
@@ -2147,12 +2149,37 @@ def test_build_hivmc_a5_command_links_template_bitcode_for_aiv(tmp_path) -> None
         str(mlir_path),
         "--target=Ascend950PR_9589",
         "--mlir-print-op-on-diagnostic",
+        "--append-bisheng-options=-mllvm --cce-vf-auto-sync=fused",
         "--disable-ffts",
         "--enable-hivm-compile=False",
         f"--link-aicore-bitcode={template_bc.resolve()}",
         "-o",
         str(kernel_binary_path),
     ]
+
+
+def test_build_hivmc_a5_command_always_overrides_autosync_to_fused(
+    tmp_path,
+) -> None:
+    compiler = tmp_path / "hivmc-a5"
+    mlir_path = tmp_path / "kernel.mlir"
+    kernel_binary_path = tmp_path / "kernel.o"
+    template_bc = tmp_path / "meta_op.aiv.c310.bc"
+    template_bc.write_bytes(b"bc")
+
+    command = execution._build_hivmc_a5_command(
+        compiler=compiler,
+        mlir_path=mlir_path,
+        kernel_binary_path=kernel_binary_path,
+        compile_option=execution.TlaCompileOption(
+            kernel_mode="aiv", arch_scope="aiv.c310"
+        ),
+        bitcodes=str(template_bc.resolve()),
+    )
+
+    assert (
+        "--append-bisheng-options=-mllvm --cce-vf-auto-sync=fused" in command
+    )
 
 
 class _TypedPointer:
