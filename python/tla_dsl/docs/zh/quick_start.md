@@ -4,10 +4,6 @@ nav_order: 10
 
 # 快速开始
 
-> **当前版本暂不提供构建好的二进制产品包。**
->
-> 请先阅读[开发者指南](dsl_development/index.md)完成环境配置与源码构建，使用 Release 模式构建出 `ascend-catlass-dsl` wheel 后，再回到本文档进行安装测试。
-
 ## 兼容性要求
 
 - 支持产品：Ascend 950 系列产品
@@ -17,34 +13,35 @@ nav_order: 10
 
 ## 安装
 
+正式版本的 wheel 包会上传到 PyPI，可直接通过 pip 安装：
+
 ```bash
-pip install dist/ascend-catlass-dsl-*.whl
+pip install ascend-catlass-dsl
 # 检查是否安装成功
 python -c "import catlass"
 ```
 
-> 若您当前位于 `/path/to/catlass/python/tla_dsl` 目录下，则可能会导入失败，因为 Python 默认优先从当前目录导入，即优先导入源码树中的 `catlass` 模块，而非之前安装的wheel。源码树中的`catlass`仅为 Python 部分的源码，缺少对应的 DSL 二进制扩展，建议在任意工作目录新建文件夹，并在其中运行示例。
+> 在 `/path/to/catlass/python/tla_dsl` 目录下执行 `import catlass` 时，Python 默认优先从当前目录导入，命中的是源码树中的 `catlass`，而非上一步安装的 wheel。源码树中的 `catlass` 仅包含 Python 部分源码，缺少对应的 DSL 二进制扩展，因此运行示例需切换到其他工作目录。
 
-安装完成后，需预编译数据搬运等 BC 模板（首次约 20 秒，结果自动缓存）：
+如需体验最新特性，也可参考[开发者指南](dsl_development/index.md)完成环境配置与源码构建，自行编译 wheel 包。
+
+安装完成后需预编译数据搬运等 BC 模板（首次约 20 秒，结果自动缓存）；缓存目录可通过 `CATLASS_DSL_CACHE_DIR` 环境变量指定，默认值为 `$HOME/.cache/catlass/bc/`。
 
 ```bash
 python -m catlass.bc_compile
 ```
 
-后续自动复用缓存，可通过 `CATLASS_DSL_CACHE_DIR` 环境变量指定缓存目录，默认值为 `$HOME/.cache/catlass/bc/`。更换 DSL 包或 CANN 环境后需重新编译，可用以下命令清理缓存：
+更换 DSL 包或 CANN 环境后需重新编译，可按需清理缓存或忽略缓存重新编译：
 
 ```bash
 python -m catlass.bc_compile --clean
-```
-
-```bash
 # 强制：忽略缓存，重新编译
 python -m catlass.bc_compile --force
 ```
 
 ## 编写一个最简单的 matmul 算子
 
-下列代码实现了一个最简单的 matmul 算子，仅使用一个cube核、一次tile循环，用于快速体验CATLASS DSL。
+下列代码实现了一个最简单的 matmul 算子，仅使用一个 cube 核、一次 tile 循环，用于快速体验 CATLASS DSL。
 
 ```python
 # catlass_dsl_matmul.py
