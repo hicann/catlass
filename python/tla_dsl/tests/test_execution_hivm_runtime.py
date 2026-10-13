@@ -11,6 +11,7 @@ import os
 import re
 import struct
 import sys
+import time
 import types
 
 import pytest
@@ -670,7 +671,7 @@ def test_public_compile_dry_run_invokes_typed_bridge_and_hivmc_a5(
 
     monkeypatch.setattr(base_dsl_mod.BaseDSL, "_lower", fake_lower)
     monkeypatch.setattr(execution, "resolve_bridge_extension_path", lambda: bridge_path)
-    monkeypatch.setattr(execution, "_resolve_hivmc_a5", lambda: hivm_compile)
+    monkeypatch.setattr(execution, "_find_hivmc_a5", lambda: hivm_compile)
     monkeypatch.setattr(execution, "_tool_version", lambda _x: "test-version")
     monkeypatch.setattr(
         execution,
@@ -845,7 +846,7 @@ def test_generated_kernel_bridge_lowers_live_module(monkeypatch, tmp_path) -> No
         lambda *_a, **_k: _FakeLowered(tlair_mlir, module=lowered_module),
     )
     monkeypatch.setattr(execution, "resolve_bridge_extension_path", lambda: None)
-    monkeypatch.setattr(execution, "_resolve_hivmc_a5", lambda: hivm_compile)
+    monkeypatch.setattr(execution, "_find_hivmc_a5", lambda: hivm_compile)
     monkeypatch.setattr(execution, "_tool_version", lambda _x: "test-version")
     monkeypatch.setattr(
         execution, "_get_bc_paths", lambda scope, **_kwargs: str(template_bc.resolve())
@@ -906,6 +907,10 @@ def test_compile_and_cache_preserves_diagnostics_when_writing_pass_ir_dump(
         rendered="kernel.py:7:2: error: typed pipeline failed",
     )
     pass_ir_dump = "// ----- IR Dump After failing-pass -----\\nmodule {}\\n"
+    dump_dir = tmp_path / "dumps"
+
+    monkeypatch.setenv("CATLASS_DSL_KEEP", "tla-passes")
+    monkeypatch.setenv("CATLASS_DSL_DUMP_DIR", str(dump_dir))
 
     monkeypatch.setattr(
         base_dsl_mod.BaseDSL,
@@ -913,7 +918,7 @@ def test_compile_and_cache_preserves_diagnostics_when_writing_pass_ir_dump(
         lambda *_args, **_kwargs: _FakeLowered(tlair_mlir, module=object()),
     )
     monkeypatch.setattr(execution, "resolve_bridge_extension_path", lambda: None)
-    monkeypatch.setattr(execution, "_resolve_hivmc_a5", lambda: tmp_path / "hivmc-a5")
+    monkeypatch.setattr(execution, "_find_hivmc_a5", lambda: tmp_path / "hivmc-a5")
     monkeypatch.setattr(execution, "_tool_version", lambda _path: "test-version")
     monkeypatch.setattr(
         execution,
@@ -942,6 +947,7 @@ def test_compile_and_cache_preserves_diagnostics_when_writing_pass_ir_dump(
     assert "pass IR dump:" not in str(exc_info.value)
     assert "pass IR dump:" in exc_info.value.format(verbose=True)
     assert len(list((tmp_path / "cache").rglob("pass-ir-dump.mlir"))) == 1
+    assert (dump_dir / "zero_arg_kernel.tla-passes.mlir").read_text() == pass_ir_dump
 
 
 def test_force_recompile_refreshes_launched_artifact_in_memory_cache(
@@ -962,7 +968,7 @@ def test_force_recompile_refreshes_launched_artifact_in_memory_cache(
         lambda *_args, **_kwargs: _FakeLowered(tlair_mlir, module=lowered_module),
     )
     monkeypatch.setattr(execution, "resolve_bridge_extension_path", lambda: None)
-    monkeypatch.setattr(execution, "_resolve_hivmc_a5", lambda: hivm_compile)
+    monkeypatch.setattr(execution, "_find_hivmc_a5", lambda: hivm_compile)
     monkeypatch.setattr(execution, "_tool_version", lambda _path: "test-version")
     monkeypatch.setattr(
         execution, "_get_bc_paths", lambda scope, **_kwargs: str(template_bc.resolve())
@@ -1130,7 +1136,7 @@ def test_cache_hit_preserves_recursive_tree_and_launches_same_payload(
         ),
     )
     monkeypatch.setattr(execution, "resolve_bridge_extension_path", lambda: None)
-    monkeypatch.setattr(execution, "_resolve_hivmc_a5", lambda: hivm_compile)
+    monkeypatch.setattr(execution, "_find_hivmc_a5", lambda: hivm_compile)
     monkeypatch.setattr(execution, "_tool_version", lambda _path: "test-version")
     monkeypatch.setattr(execution, "_mlir_build_dirs", lambda: [tmp_path])
     monkeypatch.setattr(
@@ -1224,7 +1230,7 @@ def test_cache_hits_ignore_helper_manifest_records(
         ),
     )
     monkeypatch.setattr(execution, "resolve_bridge_extension_path", lambda: None)
-    monkeypatch.setattr(execution, "_resolve_hivmc_a5", lambda: hivmc)
+    monkeypatch.setattr(execution, "_find_hivmc_a5", lambda: hivmc)
     monkeypatch.setattr(execution, "_tool_version", lambda _path: "test-version")
     monkeypatch.setattr(
         execution, "_get_bc_paths", lambda *_args, **_kwargs: str(helper)
@@ -1308,7 +1314,7 @@ def test_compile_rejects_invalid_lowering_before_hivmc(
         lambda *_args, **_kwargs: _FakeLowered(tlair_mlir, module=object()),
     )
     monkeypatch.setattr(execution, "resolve_bridge_extension_path", lambda: None)
-    monkeypatch.setattr(execution, "_resolve_hivmc_a5", lambda: hivmc)
+    monkeypatch.setattr(execution, "_find_hivmc_a5", lambda: hivmc)
     monkeypatch.setattr(execution, "_tool_version", lambda _path: "test-version")
     monkeypatch.setattr(
         execution,

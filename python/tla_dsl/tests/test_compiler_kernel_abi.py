@@ -644,7 +644,7 @@ def test_compile_artifact_propagates_and_persists_kernel_abi(
         base_dsl_mod.BaseDSL, "_lower", lambda *_a, **_k: _FakeLowered()
     )
     monkeypatch.setattr(execution, "resolve_bridge_extension_path", lambda: None)
-    monkeypatch.setattr(execution, "_resolve_hivmc_a5", lambda: hivmc)
+    monkeypatch.setattr(execution, "_find_hivmc_a5", lambda: hivmc)
     monkeypatch.setattr(execution, "_tool_version", lambda _path: "test-version")
     monkeypatch.setattr(
         execution,

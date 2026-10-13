@@ -54,9 +54,13 @@ class _ManagedExport:
         *,
         shape: tuple[int, int] = (2, 3),
         strides: tuple[int, int] | None = (3, 1),
+        device_type: int = int(DLDeviceType.kDLNpuCandidate1),
     ) -> None:
         self._shape = shape
         self._strides = strides
+        self._device_type = int(device_type)
+        #: Every ``stream=`` value ``from_dlpack`` asked this producer for.
+        self.requested_streams: list[int | None] = []
         # Identify this producer by value, so the callbacks below do not close
         # over `self` and keep it alive past the point a test drops it.
         self._id = len(_DELETER_CALLS)
@@ -73,7 +77,7 @@ class _ManagedExport:
         extents = (ctypes.c_int64 * len(self._shape))(*self._shape)
         managed = DLManagedTensor()
         managed.dl_tensor.data = ctypes.cast(elems.ctypes.data, ctypes.c_void_p)
-        managed.dl_tensor.device = DLDevice(int(DLDeviceType.kDLNpuCandidate1), 0)
+        managed.dl_tensor.device = DLDevice(self._device_type, 0)
         managed.dl_tensor.ndim = len(self._shape)
         managed.dl_tensor.dtype = DLDataType(int(DLDataTypeCode.kDLFloat), 32, 1)
         managed.dl_tensor.shape = ctypes.cast(extents, ctypes.POINTER(ctypes.c_int64))
@@ -98,8 +102,11 @@ class _ManagedExport:
         _PINS.extend([elems, extents, managed, deleter])
         return managed
 
+    def __dlpack_device__(self) -> tuple[int, int]:
+        return (self._device_type, 0)
+
     def __dlpack__(self, stream: int | None = None) -> Any:
-        del stream
+        self.requested_streams.append(stream)
         managed = self._build_managed()
 
         producer_id = self._id
@@ -223,5 +230,52 @@ def test_from_dlpack_rejects_an_already_consumed_capsule() -> None:
         from_dlpack(replay, layout_tag=tla.arch.RowMajor)
 
     del tensor
+    gc.collect()
+    assert exporter.deleter_calls == 1
+
+
+def test_from_dlpack_binds_a_host_buffer_for_compile_only() -> None:
+    """A host buffer carries full metadata but no launchable address."""
+    tensor = from_dlpack(
+        _ManagedExport(shape=(3, 2), strides=(2, 1), device_type=DLDeviceType.kDLCPU),
+        layout_tag=tla.arch.RowMajor,
+    )
+
+    # Identical metadata to the device binding -- that is the whole point: a
+    # compile-only path can reuse the run path's tensor construction verbatim.
+    assert (tensor.shape, tensor.stride, tensor.origin_shape) == (
+        (3, 2),
+        (2, 1),
+        (3, 2),
+    )
+    assert tensor.data_ptr == 0
+    with pytest.raises(RuntimeError, match="not bound to a device address"):
+        tensor.__c_pointers__()
+
+
+def test_from_dlpack_asks_a_host_producer_for_no_stream() -> None:
+    """A stream is a device-queue handle; torch asserts when given one on CPU."""
+    exporter = _ManagedExport(device_type=DLDeviceType.kDLCPU)
+
+    from_dlpack(exporter, layout_tag=tla.arch.RowMajor)
+
+    assert exporter.requested_streams == [None]
+
+
+def test_from_dlpack_keeps_asking_a_device_producer_for_no_sync() -> None:
+    exporter = _ManagedExport()
+
+    from_dlpack(exporter, layout_tag=tla.arch.RowMajor)
+
+    assert exporter.requested_streams == [-1]
+
+
+def test_from_dlpack_still_rejects_a_foreign_device() -> None:
+    # 2 is dlpack.h's kDLCUDA: neither Ascend nor host, so still a hard error.
+    exporter = _ManagedExport(device_type=2)
+
+    with pytest.raises(RuntimeTensorError, match="not .*an Ascend/NPU device"):
+        from_dlpack(exporter, layout_tag=tla.arch.RowMajor)
+
     gc.collect()
     assert exporter.deleter_calls == 1

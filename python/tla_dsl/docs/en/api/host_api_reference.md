@@ -490,7 +490,7 @@ Run a compiled kernel on the NPU by calling the `JitCompiledFunction` returned b
 
 #### `JitCompiledFunction.__call__`
 
-**Source:** [`catlass.base_dsl.jit_executor.JitCompiledFunction.__call__`](../../../catlass/base_dsl/jit_executor.py#L608)
+**Source:** [`catlass.base_dsl.jit_executor.JitCompiledFunction.__call__`](../../../catlass/base_dsl/jit_executor.py#L611)
 
 Description:
 
@@ -591,7 +591,7 @@ Bind a real NPU buffer with `from_dlpack`, or a metadata-only sample with `make_
 
 #### `from_dlpack`
 
-**Source:** [`catlass.tla.runtime.from_dlpack`](../../../catlass/tla/runtime.py#L625)
+**Source:** [`catlass.tla.runtime.from_dlpack`](../../../catlass/tla/runtime.py#L653)
 
 Description:
 
@@ -606,9 +606,11 @@ tla.from_dlpack(tensor_dlpack: object, *, layout_tag: Any, origin_shape: Any | N
 
 Parameters:
 
-- *`tensor_dlpack`* (`object`): Object implementing `__dlpack__()`. Must
-  be an Ascend/NPU buffer (e.g. `torch_npu`). CPU / NumPy are rejected.
-  Required.
+- *`tensor_dlpack`* (`object`): Object implementing `__dlpack__()`.
+  An Ascend/NPU buffer (e.g. `torch_npu`) gives a launchable tensor. A
+  host (CPU) buffer, such as a torch tensor on CPU, is accepted too,
+  but only its metadata is taken: the result has `data_ptr == 0`, so
+  it can be compiled against and not launched. Required.
 - *`layout_tag`* (`tla.arch.*`): Layout tag such as `tla.arch.RowMajor`,
   `tla.arch.ColumnMajor`, `tla.arch.zN`. Required.
 - *`origin_shape`* (`tuple | int | None`): Logical origin as a Python int
@@ -625,6 +627,8 @@ Parameters:
 
 Constraints:
 
+- A host (CPU) buffer binds metadata only. Use it to compile a kernel
+  without a device present; launching with it raises.
 - Ownership follows the DLPack consumer contract: the capsule is consumed
   and its deleter runs when the returned tensor is destroyed. A reference
   to `tensor_dlpack` is also retained, so a temporary source such as
@@ -653,7 +657,7 @@ ty = from_dlpack(
 
 #### `make_fake_tensor`
 
-**Source:** [`catlass.tla.runtime.make_fake_tensor`](../../../catlass/tla/runtime.py#L887)
+**Source:** [`catlass.tla.runtime.make_fake_tensor`](../../../catlass/tla/runtime.py#L928)
 
 Description:
 
@@ -710,7 +714,7 @@ Mark static layout extents dynamic. See also `docs/zh/kernel_development/core_co
 
 #### `Tensor.mark_layout_dynamic`
 
-**Source:** [`catlass.tla.runtime._Tensor.mark_layout_dynamic`](../../../catlass/tla/runtime.py#L268)
+**Source:** [`catlass.tla.runtime._Tensor.mark_layout_dynamic`](../../../catlass/tla/runtime.py#L296)
 
 Description:
 
@@ -752,7 +756,7 @@ artifact = tla.compile(my_kernel, ta, options="--npu-arch 3510")
 
 #### `Tensor.mark_compact_shape_dynamic`
 
-**Source:** [`catlass.tla.runtime._Tensor.mark_compact_shape_dynamic`](../../../catlass/tla/runtime.py#L366)
+**Source:** [`catlass.tla.runtime._Tensor.mark_compact_shape_dynamic`](../../../catlass/tla/runtime.py#L394)
 
 Description:
 

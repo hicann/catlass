@@ -584,7 +584,7 @@ print(text[:500])
 
 #### `from_dlpack`
 
-**源码：** [`catlass.tla.runtime.from_dlpack`](../../../catlass/tla/runtime.py#L625)
+**源码：** [`catlass.tla.runtime.from_dlpack`](../../../catlass/tla/runtime.py#L653)
 
 功能说明：
 
@@ -598,8 +598,10 @@ tla.from_dlpack(tensor_dlpack: object, *, layout_tag: Any, origin_shape: Any | N
 
 参数说明：
 
-- *`tensor_dlpack`*（`object`）：实现了 `__dlpack__()` 的对象。须为 Ascend/NPU
-  缓冲（如 `torch_npu`）。CPU / NumPy 不可用。必填。
+- *`tensor_dlpack`*（`object`）：实现了 `__dlpack__()` 的对象。Ascend/NPU
+  缓冲（如 `torch_npu`）得到可下发的 tensor；Host（CPU）缓冲（如 CPU 上的
+  torch 张量）也可传入，但只取其元数据，返回的 tensor `data_ptr == 0`，
+  仅可用于编译，不可下发。必填。
 - *`layout_tag`*（`tla.arch.*`）：布局标签，如 `tla.arch.RowMajor`、
   `tla.arch.ColumnMajor`、`tla.arch.zN`。必填。
 - *`origin_shape`*（`tuple | int | None`）：逻辑 origin，Python int 树。
@@ -614,6 +616,7 @@ tla.from_dlpack(tensor_dlpack: object, *, layout_tag: Any, origin_shape: Any | N
 
 约束说明：
 
+- Host（CPU）缓冲只绑定元数据，可在无设备的环境下编译 kernel；用它下发会抛异常。
 - 所有权遵循 DLPack consumer 约定：capsule 会被消费，返回的 Host tensor
   销毁时调用 deleter；同时会保留对 `tensor_dlpack` 的引用，因此
   `from_dlpack(x.contiguous().to(device), ...)` 这类临时源是安全的。
@@ -640,7 +643,7 @@ ty = from_dlpack(
 
 #### `make_fake_tensor`
 
-**源码：** [`catlass.tla.runtime.make_fake_tensor`](../../../catlass/tla/runtime.py#L887)
+**源码：** [`catlass.tla.runtime.make_fake_tensor`](../../../catlass/tla/runtime.py#L928)
 
 功能说明：
 
@@ -692,7 +695,7 @@ fzn = make_fake_tensor(
 
 #### `Tensor.mark_layout_dynamic`
 
-**源码：** [`catlass.tla.runtime._Tensor.mark_layout_dynamic`](../../../catlass/tla/runtime.py#L268)
+**源码：** [`catlass.tla.runtime._Tensor.mark_layout_dynamic`](../../../catlass/tla/runtime.py#L296)
 
 功能说明：
 
@@ -730,7 +733,7 @@ artifact = tla.compile(my_kernel, ta, options="--npu-arch 3510")
 
 #### `Tensor.mark_compact_shape_dynamic`
 
-**源码：** [`catlass.tla.runtime._Tensor.mark_compact_shape_dynamic`](../../../catlass/tla/runtime.py#L366)
+**源码：** [`catlass.tla.runtime._Tensor.mark_compact_shape_dynamic`](../../../catlass/tla/runtime.py#L394)
 
 功能说明：
 

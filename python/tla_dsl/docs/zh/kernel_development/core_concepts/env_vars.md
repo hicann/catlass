@@ -73,15 +73,21 @@ nav_order: 50
 编译成功后，将指定产物**额外复制**到导出目录（见 `CATLASS_DSL_DUMP_DIR`）。
 可指定多项，以英文逗号分隔，不区分大小写；无法识别的名称将被忽略。
 
+每个取值对应一个产物，以产出该产物的流水线阶段命名。
+
 | 取值 | 含义 |
 | --- | --- |
 | 默认值：空 | 不额外复制；产物仍保留在缓存目录中 |
-| `ir` | 复制编译后的中间 IR（`.mlir`） |
-| `ir-debug` | 复制更早阶段、便于调试的 IR（`.tlair.mlir`）；若存在过程 dump，一并复制 |
-| `kernel` | 复制设备侧编译产物（`.o`） |
+| `tla-ir` | 前端 TLA IR（`<kernel>.tlair.mlir`） |
+| `tla-passes` | TLA pass 流水线逐 pass 的 IR dump（`<kernel>.tla-passes.mlir`）；该取值自动开启 `CATLASS_DSL_PRINT_IR` |
+| `hivmc-input` | 送入 hivmc-a5 的 MLIR（`<kernel>.mlir`） |
+| `kernel` | 设备侧编译产物（`.o`） |
 | `all` | 导出上述全部产物 |
 
-示例：`ir,kernel` 或 `all`。
+示例：`tla-ir,kernel` 或 `all`。
+
+每个取值只启用其自身产物所需的工作，因此请求某个产物不会顺带产出其他产物。
+旧取值 `ir` 与 `ir-debug` 已移除：`ir-debug` 同时代表两个产物，若保留为别名，会让未请求过程 dump 的调用方也被动开启 IR 打印。
 
 ---
 
@@ -94,7 +100,7 @@ nav_order: 50
 | 默认值：空 | 启用 `KEEP` 时导出到当前工作目录 |
 | 目录路径 | 导出到该目录；若不存在则自动创建 |
 
-说明：仅设置本变量而未启用 `KEEP` 时，不会自动导出 `ir` / `kernel` 等产物；若同时启用 `PRINT_IR`，过程 dump 仍会写入本目录。
+说明：仅设置本变量而未启用 `KEEP` 时，不会导出任何产物；产物导出完全由 `KEEP` 的取值决定。
 
 ---
 

@@ -57,8 +57,13 @@ if TYPE_CHECKING:
     from .base_dsl.jit_executor import JitCompiledFunction
     from .execution_lowering import ExternCompileSpec
 
-# CATLASS_DSL_KEEP tokens: ir / ir-debug / kernel.
-_KEEP_ALL_TOKENS: frozenset[str] = frozenset({"ir", "ir-debug", "kernel"})
+#: CATLASS_DSL_KEEP tokens: one per compile artifact, each named after the
+#: pipeline stage that produces it (see _parse_keep_tokens).  Every token stands
+#: for exactly one artifact, so no token can quietly turn on work the caller did
+#: not ask for.
+_KEEP_CANONICAL_TOKENS: frozenset[str] = frozenset(
+    {"tla-ir", "tla-passes", "hivmc-input", "kernel"}
+)
 _POINTER_ABI_SIZE = 8
 _DYNAMIC_GM_MEMREF_FIELDS = (
     "allocated",
@@ -386,8 +391,12 @@ def _compile_kernel(
     extern_compile_specs = lowered.extern_compile_specs
     tlair_mlir = lowered.asm(generic=True)
     entrypoint = _extract_entrypoint(tlair_mlir)
+    # Everything below needs CANN; the frontend IR does not, so flush it first.
+    _write_early_tlair_dump(entrypoint, tlair_mlir)
     compiler_bridge_path = resolve_bridge_extension_path()
-    hivmc = _resolve_hivmc_a5()
+    # Located, not required: the pass pipeline below runs without CANN, and the
+    # device-code step raises for itself once the IR has been flushed.
+    hivmc = _find_hivmc_a5()
     target = _resolve_kernel_target(compile_option)
     cache_dir = compile_option.cache_dir or _default_cache_dir()
     lowered_argument_trees = lowered.argument_trees
@@ -511,6 +520,7 @@ def _compile_kernel(
     except TlaKernelCompileError as exc:
         if exc.pass_ir_dump:
             _write_pass_ir_dump(pass_dump_path, exc.pass_ir_dump)
+            _write_early_lowering_dump(entrypoint, None, exc.pass_ir_dump)
             raise TlaKernelCompileError(
                 str(exc),
                 diagnostics=exc.diagnostics,
@@ -532,6 +542,10 @@ def _compile_kernel(
     lowered_llvm = mlir_path.read_text()
     if not lowered_llvm.strip():
         raise TlaKernelCompileError("Compiler produced empty lowered MLIR.")
+    # The pass pipeline is done and needed no CANN, so flush its IR before the
+    # device-code step, which does. After the emptiness check, so a failed
+    # lowering is reported as that rather than exported as an empty artifact.
+    _write_early_lowering_dump(entrypoint, lowered_llvm, lowering_result.pass_ir_dump)
     static_metadata = _analyze_compiled_artifact_static_metadata(
         tlair_mlir, lowered_llvm
     )
@@ -552,6 +566,11 @@ def _compile_kernel(
     abi_packer = _prepare_compiled_abi_packer(
         kernel_abi, expected_entrypoint=expected_entrypoint
     )
+    # Everything above this point ran without CANN and has already exported its
+    # IR. This is the first step that needs hivmc-a5, so it is where a missing
+    # toolkit is reported.
+    if hivmc is None:
+        raise _hivmc_a5_not_found_error()
     variant = _select_bc_aggregate_variant(static_metadata)
     bitcodes = _resolve_hivm_template_bitcode(resolved_option, variant=variant)
     helper_bitcode_files = bitcodes.split(",")
@@ -693,7 +712,7 @@ def _new_jit_compiled_function(
     lowered_llvm: str,
     entrypoint: str,
     compiler_bridge_path: Path | None,
-    hivmc_path: Path,
+    hivmc_path: Path | None,
     kernel_binary_path: Path,
     compile_option: TlaCompileOption,
     pass_ir_dump: str,
@@ -1813,7 +1832,12 @@ def compile_option_from_kwargs(kwargs: Mapping[str, Any]) -> TlaCompileOption:
         force_recompile=_env_truthy("CATLASS_DSL_FORCE_RECOMPILE", default="0"),
         kernel_mode=core_type,
         arch_scope=arch_scope,
-        print_ir=_env_truthy("CATLASS_DSL_PRINT_IR", default="0"),
+        # Asking to keep the pass dump is asking for it to be produced, so the
+        # token alone is enough; CATLASS_DSL_PRINT_IR stays an independent knob.
+        print_ir=(
+            _env_truthy("CATLASS_DSL_PRINT_IR", default="0")
+            or "tla-passes" in _parse_keep_tokens(os.getenv("CATLASS_DSL_KEEP", ""))
+        ),
         cce_disable_asc_reserved_ubuf="cce_disable_asc_reserved_ubuf" in parsed_options,
         cce_disable_vf_stack_reserved_ubuf="cce_disable_vf_stack_reserved_ubuf"
         in parsed_options,
@@ -1888,7 +1912,7 @@ def _cache_key(
     entrypoint: str,
     compile_option: TlaCompileOption,
     compiler_bridge_path: Path | None,
-    hivmc: Path,
+    hivmc: Path | None,
     target: TlaKernelTarget,
     extern_compile_specs: Sequence[ExternCompileSpec] = (),
 ) -> str:
@@ -1912,9 +1936,11 @@ def _cache_key(
         "arch_scope": compile_option.arch_scope,
         "cce_arch": target.cce_arch,
         "compiler_bridge": str(compiler_bridge_path) if compiler_bridge_path else None,
-        "hivmc": str(hivmc),
+        "hivmc": str(hivmc) if hivmc is not None else None,
         "compiler_bridge_fingerprint": _tool_fingerprint(compiler_bridge_path),
-        "hivmc_fingerprint": _tool_metadata_fingerprint(hivmc),
+        "hivmc_fingerprint": (
+            _tool_metadata_fingerprint(hivmc) if hivmc is not None else None
+        ),
         "mlir": tlair_mlir,
         "print_ir": compile_option.print_ir,
         "cce_disable_asc_reserved_ubuf": compile_option.cce_disable_asc_reserved_ubuf,
@@ -2001,39 +2027,44 @@ def _default_cache_dir() -> Path:
 
 
 def _write_pass_ir_dump(pass_dump_path: Path, text: str) -> None:
-    """Write pass IR dump to the cache path; mirror to DUMP_DIR when set."""
+    """Write the pass IR dump to its cache path.
+
+    Export to ``CATLASS_DSL_DUMP_DIR`` is the ``tla-passes`` keep token's job,
+    which names the file after the kernel; this used to mirror here too, under
+    one unstemmed name that two kernels sharing a dump directory would
+    overwrite in turn.
+    """
     pass_dump_path.write_text(text)
-    dump_dir_env = os.getenv("CATLASS_DSL_DUMP_DIR")
-    if not dump_dir_env:
-        return
-    dump_dir = Path(dump_dir_env).expanduser().resolve()
-    dump_dir.mkdir(parents=True, exist_ok=True)
-    (dump_dir / pass_dump_path.name).write_text(text)
 
 
 def _parse_keep_tokens(raw: str) -> frozenset[str]:
     """Parse ``CATLASS_DSL_KEEP`` into canonical artifact tokens.
 
-    Tokens (comma-separated, case-insensitive):
-      ir        — lowered MLIR after the Ascend pipeline (``*.mlir``)
-      ir-debug  — TLA IR before HIVM lowering (``*.tlair.mlir``); also
-                  ``*.pass-ir-dump.mlir`` when pass dump text is available
-      kernel    — device object ``*.o``
-      all       — expand to every token above
+    Tokens (comma-separated, case-insensitive), one per artifact:
+      tla-ir        — frontend TLA IR (``*.tlair.mlir``)
+      tla-passes    — the TLA pass pipeline, before/after each pass
+                      (``*.tla-passes.mlir``); turns the pipeline's IR printing
+                      on, which is the one token that costs compile work
+      hivmc-input   — the MLIR handed to hivmc-a5 (``*.mlir``)
+      kernel        — device object (``*.o``)
+      all           — expand to every token above
 
-    Unknown tokens are ignored.
+    Each token enables only the work its own artifact needs, so asking for one
+    artifact never produces another.  Unknown tokens are ignored, which retires
+    the former ``ir`` and ``ir-debug`` spellings: ``ir-debug`` stood for two
+    artifacts at once, and keeping it as an alias for the pair would have made it
+    turn IR printing on for callers who never asked for the pass dump.
     """
     tokens = frozenset(t.strip().lower() for t in raw.split(",") if t.strip())
     if "all" in tokens:
-        return _KEEP_ALL_TOKENS
-    return tokens & _KEEP_ALL_TOKENS
+        return _KEEP_CANONICAL_TOKENS
+    return tokens & _KEEP_CANONICAL_TOKENS
 
 
-def _copy_kept_artifacts(compiled: "JitCompiledFunction") -> None:
-    """Copy selected compile artifacts to DUMP_DIR (or CWD) when KEEP is set."""
-    tokens = _parse_keep_tokens(os.getenv("CATLASS_DSL_KEEP", ""))
+def _resolve_keep_dump_dir(tokens: frozenset[str]) -> Path | None:
+    """Resolve the ``CATLASS_DSL_DUMP_DIR`` (or CWD) target for kept artifacts."""
     if not tokens:
-        return
+        return None
     dump_dir_env = os.getenv("CATLASS_DSL_DUMP_DIR")
     dump_dir = (
         Path(dump_dir_env).expanduser().resolve()
@@ -2041,14 +2072,96 @@ def _copy_kept_artifacts(compiled: "JitCompiledFunction") -> None:
         else Path.cwd().resolve()
     )
     dump_dir.mkdir(parents=True, exist_ok=True)
+    return dump_dir
+
+
+def _write_early_tlair_dump(stem: str, tlair_mlir: str) -> None:
+    """Flush the frontend TLA IR before any CANN-dependent compile step.
+
+    The frontend IR is complete as soon as the kernel has been lowered, which
+    happens before the bridge extension and hivmc are resolved.  Writing it
+    here keeps ``CATLASS_DSL_KEEP=tla-ir`` useful without a CANN
+    installation, and keeps the dump available when a later stage fails.
+    ``_copy_kept_artifacts`` rewrites the same file with identical content once
+    a compile succeeds.
+    """
+    tokens = _parse_keep_tokens(os.getenv("CATLASS_DSL_KEEP", ""))
+    if "tla-ir" not in tokens:
+        return
+    try:
+        dump_dir = _resolve_keep_dump_dir(tokens)
+    except OSError as exc:
+        print(
+            f"warning: could not write TLA IR dump for {stem}: {exc}",
+            file=sys.stderr,
+        )
+        return
+    if dump_dir is None:
+        return
+    try:
+        (dump_dir / f"{stem}.tlair.mlir").write_text(tlair_mlir)
+    except OSError as exc:
+        print(
+            f"warning: could not write TLA IR dump for {stem}: {exc}",
+            file=sys.stderr,
+        )
+
+
+def _write_early_lowering_dump(
+    stem: str, lowered_llvm: str | None, pass_ir_dump: str | None
+) -> None:
+    """Flush available TLA pass pipeline artifacts before the device-code step.
+
+    Companion to ``_write_early_tlair_dump`` one stage later: the lowered MLIR
+    and the pass-by-pass dump are complete once the pipeline succeeds, which is
+    still before hivmc is needed. A failing pipeline has only the pass-by-pass
+    dump, but it is still exported for ``tla-passes``. ``_copy_kept_artifacts``
+    rewrites the same files with identical content once a compile succeeds.
+    """
+    tokens = _parse_keep_tokens(os.getenv("CATLASS_DSL_KEEP", ""))
+    try:
+        dump_dir = _resolve_keep_dump_dir(tokens)
+    except OSError as exc:
+        print(
+            f"warning: could not write lowered IR dump for {stem}: {exc}",
+            file=sys.stderr,
+        )
+        return
+    if dump_dir is None:
+        return
+    if "hivmc-input" in tokens and lowered_llvm:
+        try:
+            (dump_dir / f"{stem}.mlir").write_text(lowered_llvm)
+        except OSError as exc:
+            print(
+                f"warning: could not write lowered IR dump for {stem}: {exc}",
+                file=sys.stderr,
+            )
+            return
+    if "tla-passes" in tokens and pass_ir_dump:
+        try:
+            (dump_dir / f"{stem}.tla-passes.mlir").write_text(pass_ir_dump)
+        except OSError as exc:
+            print(
+                f"warning: could not write lowered IR dump for {stem}: {exc}",
+                file=sys.stderr,
+            )
+
+
+def _copy_kept_artifacts(compiled: "JitCompiledFunction") -> None:
+    """Copy selected compile artifacts to DUMP_DIR (or CWD) when KEEP is set."""
+    tokens = _parse_keep_tokens(os.getenv("CATLASS_DSL_KEEP", ""))
+    dump_dir = _resolve_keep_dump_dir(tokens)
+    if dump_dir is None:
+        return
     artifacts = compiled.artifacts
     stem = compiled.entrypoint or compiled.cache_key
-    if "ir" in tokens:
+    if "hivmc-input" in tokens:
         (dump_dir / f"{stem}.mlir").write_text(artifacts.LLVM)
-    if "ir-debug" in tokens:
+    if "tla-ir" in tokens:
         (dump_dir / f"{stem}.tlair.mlir").write_text(artifacts.MLIR)
-        if artifacts.PASS_IR_DUMP:
-            (dump_dir / f"{stem}.pass-ir-dump.mlir").write_text(artifacts.PASS_IR_DUMP)
+    if "tla-passes" in tokens and artifacts.PASS_IR_DUMP:
+        (dump_dir / f"{stem}.tla-passes.mlir").write_text(artifacts.PASS_IR_DUMP)
     if "kernel" in tokens and artifacts.BINARY.exists():
         shutil.copy2(artifacts.BINARY, dump_dir / f"{stem}.o")
 
@@ -2083,8 +2196,15 @@ def _resolve_kernel_target(compile_option: TlaCompileOption) -> TlaKernelTarget:
         raise TlaExecutionError(str(exc)) from exc
 
 
-def _resolve_hivmc_a5() -> Path:
-    """Resolve ``hivmc-a5`` from PATH / ``ASCEND_HOME_PATH`` after ``set_env.sh``."""
+def _find_hivmc_a5() -> Path | None:
+    """Locate ``hivmc-a5`` on PATH / under ``ASCEND_HOME_PATH``, or return ``None``.
+
+    Only the final device-code step needs ``hivmc-a5``; everything before it --
+    the frontend lowering and the whole TLA pass pipeline -- runs without a CANN
+    installation.  Resolving it without raising lets those stages complete and
+    flush their IR, so a missing toolkit reports at the step that truly needs it
+    instead of refusing to start.
+    """
 
     which = shutil.which("hivmc-a5")
     if which:
@@ -2094,7 +2214,11 @@ def _resolve_hivmc_a5() -> Path:
         candidate = Path(ascend_home).expanduser().resolve() / "bin" / "hivmc-a5"
         if candidate.exists():
             return candidate
-    raise TlaBackendCompilerNotFoundError(
+    return None
+
+
+def _hivmc_a5_not_found_error() -> TlaBackendCompilerNotFoundError:
+    return TlaBackendCompilerNotFoundError(
         "hivmc-a5 not found on PATH. Source the CANN toolkit "
         "(`source .../ascend-toolkit/set_env.sh`) so `hivmc-a5` is available."
     )

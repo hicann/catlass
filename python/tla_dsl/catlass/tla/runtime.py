@@ -11,6 +11,7 @@ from catlass._mlir import ir as mlir_ir  # type: ignore[assignment]
 from ..address_space import AddressSpace
 from ..base_dsl.runtime.dlpack_types import (
     ASCEND_DEVICE_TYPES,
+    DLDeviceType,
     DLManagedTensor,
 )
 from ..types import (
@@ -46,6 +47,21 @@ class DlpackBridgeError(RuntimeError):
     """Raised when DLPack export or parsing fails."""
 
 
+def dlpack_device_type(tensor: Any) -> int | None:
+    """Read ``__dlpack_device__()``'s device type, or ``None`` if unavailable."""
+    probe = getattr(tensor, "__dlpack_device__", None)
+    if probe is None:
+        return None
+    try:
+        device = probe()
+    except Exception:  # noqa: BLE001 - a broken probe must not mask the export
+        return None
+    try:
+        return int(device[0])
+    except (TypeError, ValueError, IndexError):
+        return None
+
+
 def export_dlpack_capsule(tensor: Any, *, stream: int | None = -1) -> Any:
     """Call ``__dlpack__``, preferring ``stream=-1`` when supported."""
     if not hasattr(tensor, "__dlpack__"):
@@ -56,12 +72,18 @@ def export_dlpack_capsule(tensor: Any, *, stream: int | None = -1) -> Any:
         raise DlpackBridgeError(
             "tensor exposes __dlpack_device__ only; full __dlpack__() is required"
         )
+    # A stream is a device-queue handle, so it is meaningless for a host buffer
+    # and producers say so bluntly: torch asserts `stream should be None on cpu`.
+    # Ask for no stream up front rather than relying on the retry below -- an
+    # AssertionError is not something a library should be catching by habit.
+    if stream is not None and dlpack_device_type(tensor) == DLDeviceType.kDLCPU:
+        stream = None
     if stream is not None:
         try:
             return tensor.__dlpack__(stream=stream)  # type: ignore[attr-defined]
-        except (TypeError, RuntimeError):
+        except (TypeError, RuntimeError, AssertionError):
             # NumPy raises RuntimeError ("only supports stream=None"); others may
-            # reject unknown stream via TypeError.
+            # reject unknown stream via TypeError, or assert on it.
             pass
     return tensor.__dlpack__()  # type: ignore[attr-defined]
 
@@ -263,7 +285,13 @@ class _Tensor(TensorABC):
 
     def _require_bound(self) -> None:
         if not getattr(self, "_external_binding", False) or self.data_ptr == 0:
-            raise RuntimeError("Tensor buffer is not bound; use from_dlpack first.")
+            raise RuntimeError(
+                "Tensor buffer is not bound to a device address, so it can be "
+                "compiled against but not launched; it came from "
+                "make_fake_tensor or from a host (CPU) buffer. Bind the device "
+                "buffer with from_dlpack (e.g. move the torch tensor to 'npu' "
+                "first)."
+            )
 
     def mark_layout_dynamic(self, leading_dim: int | None = None) -> "_Tensor":
         """Directory: Host Tensor / Dynamic Layout
@@ -637,9 +665,11 @@ def from_dlpack(
         object shares the device buffer of `tensor_dlpack`.
 
         Parameters:
-        - *`tensor_dlpack`* (`object`): Object implementing `__dlpack__()`. Must
-          be an Ascend/NPU buffer (e.g. `torch_npu`). CPU / NumPy are rejected.
-          Required.
+        - *`tensor_dlpack`* (`object`): Object implementing `__dlpack__()`.
+          An Ascend/NPU buffer (e.g. `torch_npu`) gives a launchable tensor. A
+          host (CPU) buffer, such as a torch tensor on CPU, is accepted too,
+          but only its metadata is taken: the result has `data_ptr == 0`, so
+          it can be compiled against and not launched. Required.
         - *`layout_tag`* (`tla.arch.*`): Layout tag such as `tla.arch.RowMajor`,
           `tla.arch.ColumnMajor`, `tla.arch.zN`. Required.
         - *`origin_shape`* (`tuple | int | None`): Logical origin as a Python int
@@ -655,6 +685,8 @@ def from_dlpack(
           bit width as the exported buffer.
 
         Constraints:
+        - A host (CPU) buffer binds metadata only. Use it to compile a kernel
+          without a device present; launching with it raises.
         - Ownership follows the DLPack consumer contract: the capsule is consumed
           and its deleter runs when the returned tensor is destroyed. A reference
           to `tensor_dlpack` is also retained, so a temporary source such as
@@ -715,12 +747,21 @@ def from_dlpack(
 
     device_type = int(parsed["device_type"])
     device_id = int(parsed["device_id"])
-    if device_type not in ASCEND_DEVICE_TYPES:
+    # A host buffer describes shape, stride, dtype and layout exactly as well as
+    # a device one; the only thing it cannot supply is an address the kernel
+    # could be launched against. Bind it metadata-only (``data_ptr == 0``) so a
+    # compile-only path can reuse the run path's own tensor construction instead
+    # of restating the shapes beside it, and leave launching to _require_bound.
+    host_resident = device_type == DLDeviceType.kDLCPU
+    if not host_resident and device_type not in ASCEND_DEVICE_TYPES:
         raise RuntimeTensorError(
             f"DLPack device_type={device_type} device_id={device_id} is not "
             f"an Ascend/NPU device; from_dlpack requires a device-resident buffer "
-            f"(supported types: {sorted(ASCEND_DEVICE_TYPES)})."
+            f"(supported types: {sorted(ASCEND_DEVICE_TYPES)}), or a host buffer "
+            f"for compile-only use."
         )
+    if host_resident:
+        data_ptr = 0
 
     lanes = int(parsed["dtype_lanes"])
     if lanes != 1:
@@ -867,7 +908,7 @@ def from_dlpack(
     )
     if assumed_align is not None:
         tensor._assumed_align = int(assumed_align)
-    tensor._external_binding = True
+    tensor._external_binding = not host_resident
 
     # Take ownership of the buffer the tensor is about to point at. Everything
     # that can reject the capsule has run by now, so a failure past this point

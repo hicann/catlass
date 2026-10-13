@@ -61,7 +61,7 @@ def from_dlpack(
 
 | 参数 | 说明 |
 |------|------|
-| `tensor_dlpack` | 实现 `__dlpack__` 的对象；须为 **Ascend/NPU 设备**上的缓冲区，CPU / NumPy 不可用 |
+| `tensor_dlpack` | 实现 `__dlpack__` 的对象。**Ascend/NPU 设备**上的缓冲区得到可下发的张量；Host（CPU）缓冲区（CPU 上的 torch 张量、NumPy 数组）也可传入，但只取其元数据（`data_ptr == 0`），仅可用于编译，不可下发 |
 | `layout_tag` | **必填**。`tla.arch` 布局标签：一维 `RowMajor`；二维线性 `RowMajor` / `ColumnMajor`；以及 `zN` / `nZ` / `L0Clayout` / `zNUnAlign`（逻辑二维，shape/stride 为嵌套四元组） |
 | `origin_shape` | 可选。逻辑 origin，普通 `tuple`（如 `(M, K)`）。省略时由框架张量的 shape 与 `layout_tag` 推导 |
 | `assumed_align` | **预留参数**。当前传入值不影响实际行为 |

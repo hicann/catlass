@@ -70,18 +70,24 @@ Controls whether to print the intermediate representation (IR) during compilatio
 
 ### `CATLASS_DSL_KEEP`
 
-After a successful compilation, **additionally copies** the specified artifacts to the export directory (see `CATLASS_DSL_DUMP_DIR`).
-Multiple items can be specified, separated by English commas, case-insensitive; unrecognized names are ignored.
+After a successful compile, **additionally copies** the selected artifacts into the export directory (see `CATLASS_DSL_DUMP_DIR`).
+Several values may be given, separated by commas, case-insensitively; unrecognized names are ignored.
+
+Each value selects exactly one artifact and is named after the pipeline stage that produces it.
 
 | Value | Meaning |
 | --- | --- |
-| Default: empty | Copy nothing extra; artifacts are still kept in the cache directory |
-| `ir` | Copy the compiled intermediate IR (`.mlir`) |
-| `ir-debug` | Copy the earlier-stage IR convenient for debugging (`.tlair.mlir`); if a process dump exists, copy that too |
-| `kernel` | Copy the device-side compiled artifact (`.o`) |
-| `all` | Export all of the artifacts above |
+| Default: empty | Nothing is copied; the artifacts still remain in the cache directory |
+| `tla-ir` | Frontend TLA IR (`<kernel>.tlair.mlir`) |
+| `tla-passes` | Per-pass IR dump of the TLA pass pipeline (`<kernel>.tla-passes.mlir`); this value enables `CATLASS_DSL_PRINT_IR` on its own |
+| `hivmc-input` | The MLIR handed to hivmc-a5 (`<kernel>.mlir`) |
+| `kernel` | The device-side compile product (`.o`) |
+| `all` | Export every artifact above |
 
-Example: `ir,kernel` or `all`.
+For example: `tla-ir,kernel` or `all`.
+
+Each value enables only the work its own artifact requires, so requesting one artifact never produces another as a side effect.
+The former values `ir` and `ir-debug` have been **removed**: `ir-debug` stood for two artifacts at once, and keeping it as an alias would have enabled IR printing for callers that never asked for the pass dump.
 
 ---
 
@@ -91,10 +97,10 @@ The destination directory for files exported by `KEEP`.
 
 | Value | Meaning |
 | --- | --- |
-| Default: empty | Export to the current working directory when `KEEP` is enabled |
-| Directory path | Export to this directory; created automatically if it does not exist |
+| Default: empty | Export into the current working directory when `KEEP` is enabled |
+| Directory path | Export into this directory, creating it if it does not exist |
 
-Note: setting only this variable without enabling `KEEP` does not export artifacts such as `ir` / `kernel` automatically; if `PRINT_IR` is also enabled, the process dump is still written to this directory.
+Note: setting this variable alone, without enabling `KEEP`, exports nothing; what is exported is decided entirely by the value of `KEEP`.
 
 ---
 

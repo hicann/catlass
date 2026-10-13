@@ -75,7 +75,10 @@ class JitFunctionArtifacts:
     BINARY: Path
     cache_key: str
     cache_dir: Path
-    hivmc_path: Path
+    # None where no CANN installation was found: the frontend and the whole TLA
+    # pass pipeline run without one, so a compile can get this far having never
+    # resolved hivmc-a5.
+    hivmc_path: Path | None
     PASS_IR_DUMP: str | None = None
     compiler_bridge_path: Path | None = None
 
