@@ -168,27 +168,25 @@ echo "  dsl           : ${RUN_DSL}"
 echo "============================================================"
 
 # ============================================================================
-# 3. DSL CI：ut_type=ir 或 lit 时，只执行 DSL 测试
+# 3. DSL CI：ut_type=dsl 时，只执行 DSL 测试
 # ============================================================================
 
-if [ "${ut_type:-}" = "ir" ] || [ "${ut_type:-}" = "lit" ]; then
+if [ "${ut_type:-}" = "dsl" ]; then
     if [ "${RUN_DSL}" != "true" ]; then
         echo "no dsl ut (python/tla_dsl unchanged)"
         exit 0
     fi
 
+    echo "View DSL test result in RDV log."
+    exit 0
+
     export CATLASS_DSL_PREBUILT_ASCENDNPU_IR=/opt/AscendNPU-IR
     cd "${WORKSPACE}/python/tla_dsl" || exit 1
 
-    if [ "${ut_type}" = "ir" ]; then
-        run_test "dsl_build" bash "${WORKSPACE}/python/tla_dsl/build.sh" || true
-        run_test "dsl_pytest" python -m pytest -q "${WORKSPACE}/python/tla_dsl/tests" || true
-    else
-        export PATH="/opt/AscendNPU-IR/build/bin:${PATH}"
-        run_test "dsl_build" bash "${WORKSPACE}/python/tla_dsl/build.sh" || true
-        run_test "dsl_lit" llvm-lit -sv "${WORKSPACE}/python/tla_dsl/csrc/mlir/build/tests/lit" || true
-    fi
-
+    run_test "dsl_build" bash "${WORKSPACE}/python/tla_dsl/build.sh" || true
+    run_test "dsl_pytest" python -m pytest -q "${WORKSPACE}/python/tla_dsl/tests" || true
+    export PATH="/opt/AscendNPU-IR/build/bin:${PATH}"
+    run_test "dsl_lit" llvm-lit -sv "${WORKSPACE}/python/tla_dsl/csrc/mlir/build/tests/lit" || true
     exit "${FAILED}"
 fi
 
@@ -237,8 +235,22 @@ if [ "${#EXAMPLE_CASES[@]}" -gt 0 ]; then
         EXAMPLE_FILTER="${EXAMPLE_FILTER}${case_name}"
     done
 
-    run_test "example" \
-        python3 -m pytest -q "${WORKSPACE}/tests/test_example.py" -k "${EXAMPLE_FILTER}" || true
+    # 样例未注册用例时 pytest 以 rc=5 结束，记 SKIP；其余收集错误仍照常报红。
+    if [ "${DRY_RUN}" -eq 1 ]; then
+        run_test "example" \
+            python3 -m pytest -q "${WORKSPACE}/tests/test_example.py" -k "${EXAMPLE_FILTER}"
+    else
+        python3 -m pytest --collect-only -q "${WORKSPACE}/tests/test_example.py" -k "${EXAMPLE_FILTER}" \
+            > /dev/null 2>&1
+        if [ $? -eq 5 ]; then
+            echo
+            echo "=== [example] ==="
+            echo "    [SKIP] example (样例未注册用例: ${EXAMPLE_FILTER})"
+        else
+            run_test "example" \
+                python3 -m pytest -q "${WORKSPACE}/tests/test_example.py" -k "${EXAMPLE_FILTER}" || true
+        fi
+    fi
 
     # optest：把受影响用例名透传给 run_optest.sh，由后者按数字前缀匹配 tests/test_NN_*.py；
     # 不传参数时 run_optest.sh 执行 tests/ 全量（tests/run_all_test.sh 走该默认路径）。
