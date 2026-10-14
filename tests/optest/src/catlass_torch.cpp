@@ -21,6 +21,7 @@
 #include "common/workspace.h"
 #include "template/basic_conv2d.h"
 #include "template/batched_matmul.h"
+#include "template/batched_matmul_softmax.h"
 #include "template/dual_matmul.h"
 #include "template/flash_attention.h"
 #include "template/fag_tla.h"
@@ -233,6 +234,11 @@ REGISTER_TORCH_FUNC(ascend950_basic_matmul);
 using Ascend950BatchedMatmulOp = BatchedMatmulLike<CatlassKernel::Ascend950BatchedMatmul>;
 static auto& ascend950_batched_matmul = Ascend950BatchedMatmulOp::Run;
 REGISTER_TORCH_FUNC(ascend950_batched_matmul);
+
+using Ascend950BatchedMatmulSoftmaxOp =
+    BatchedMatmulSoftmaxLike<CatlassKernel::Ascend950BatchedMatmulSoftmax>;
+static auto& ascend950_batched_matmul_softmax = Ascend950BatchedMatmulSoftmaxOp::Run;
+REGISTER_TORCH_FUNC(ascend950_batched_matmul_softmax);
 
 using Ascend950StreamkMatmulOp = MatmulLike<CatlassKernel::Ascend950StreamkMatmul>;
 static auto& ascend950_streamk_matmul = Ascend950StreamkMatmulOp::Run;

@@ -493,6 +493,12 @@ __attribute__((weak)) void Ascend950BatchedMatmul(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
+ * @brief JIT interface for example 87_ascend950_batched_matmul_softmax.
+ */
+void Ascend950BatchedMatmulSoftmax(
+    const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
+
+/**
  * @brief Reserved JIT interface for example 65_ascend950_fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant.
  */
 __attribute__((weak)) void Ascend950Fp8MxGroupedMatmulSliceMSwigluMxQuant(

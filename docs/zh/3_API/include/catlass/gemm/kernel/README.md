@@ -2,22 +2,25 @@
 
 ## API 清单
 
-| 组件名                                                          |              描述               |
-| :-------------------------------------------------------------- | :-----------------------------: |
-| [basic_matmul](./basic_matmul.md)                               |      Common模板基础矩阵乘       |
-| [basic_matmul_tla_visitor](./basic_matmul_tla_visitor.md)       | EVG 的 GM workspace kernel 入口 |
-| [basic_matmul_tla_ub_visitor](./basic_matmul_tla_ub_visitor.md) | EVG 的 UB workspace kernel 入口 |
+- [basic_matmul](./basic_matmul.md)：Common 模板基础矩阵乘。
+- [batched_matmul_softmax_tla](./batched_matmul_softmax_tla.md)：批量矩阵乘
+  与行 Softmax 融合模板。
+- [basic_matmul_tla_visitor](./basic_matmul_tla_visitor.md)：EVG 的 GM
+  workspace kernel 入口。
+- [basic_matmul_tla_ub_visitor](./basic_matmul_tla_ub_visitor.md)：EVG 的 UB
+  workspace kernel 入口。
 
 ## API 拆解
 
 命名空间为`Catlass::Gemm::Kernel`，类模板包含如下核心成员：
 
-| 类型     |              名称               |                                          功能 |
-| :------- | :-----------------------------: | --------------------------------------------: |
-| struct   |             Params              |         kernel通过`<<< >>>`调用核函数时的入参 |
-| struct   |            Arguments            |                  device封装后kernel使用的入参 |
-| 静态函数 |        bool CanImplement        |                             Arguments校验接口 |
-| 静态函数 |     size_t GetWorkspaceSize     |          基于Arguments计算需要的workSpaceSize |
-| 静态函数 |  Params ToUnderlyingArguments   |             将Arguments转换为核函数入参Params |
-| 函数     | void operator()\<AscendC::AIC\> |                 输入Params，完成AIC上mmad计算 |
-| 函数     | void operator()\<AscendC::AIV\> | 输入Params，完成AIV上计算，如前处理、尾处理等 |
+- `Params`：kernel 通过 `<<< >>>` 调用核函数时的入参。
+- `Arguments`：device 封装后 kernel 使用的入参。
+- `bool CanImplement`：`Arguments` 校验接口。
+- `size_t GetWorkspaceSize`：基于 `Arguments` 计算所需 workspace 大小。
+- `Params ToUnderlyingArguments`：将 `Arguments` 转换为核函数入参
+  `Params`。
+- `void operator()<AscendC::AIC>`：输入 `Params`，完成 AIC 上的 MMAD
+  计算。
+- `void operator()<AscendC::AIV>`：输入 `Params`，完成 AIV 上的计算，
+  如前处理、尾处理等。

@@ -14,6 +14,7 @@ from .ascend950_basic_conv2d_tla import ascend950_basic_conv2d_tla  # example 56
 from .ascend950_basic_matmul import ascend950_basic_matmul  # example 43
 from .ascend950_basic_matmul_gemv import ascend950_basic_matmul_gemv  # example 50
 from .ascend950_batched_matmul import ascend950_batched_matmul  # example 67
+from .ascend950_batched_matmul_softmax import ascend950_batched_matmul_softmax  # example 87
 from .ascend950_flash_attention_chunk_prefill import (
     ascend950_flash_attention_chunk_prefill,  # example 70
 )
@@ -206,6 +207,7 @@ __all__ = [
     "ascend950_fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant",  # example 65
     "ascend950_streamk_matmul",  # example 66
     "ascend950_batched_matmul",  # example 67
+    "ascend950_batched_matmul_softmax",  # example 87
     "ascend950_multi_core_splitk_matmul",  # example 68
     "ascend950_tail_multi_core_splitk_matmul",  # example 69
     "ascend950_flash_attention_chunk_prefill",  # example 70

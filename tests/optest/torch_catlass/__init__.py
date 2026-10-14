@@ -71,6 +71,7 @@ __all__ = [
     "ascend950_dual_matmul_silu_mul",
     "ascend950_matmul_gather_scatter",
     "ascend950_batched_matmul",
+    "ascend950_batched_matmul_softmax",
     "ascend950_streamk_matmul",
     "flash_attention_infer",
     "x_attention",
