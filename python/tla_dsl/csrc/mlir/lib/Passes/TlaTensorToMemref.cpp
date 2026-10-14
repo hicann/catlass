@@ -606,6 +606,15 @@ static StringRef copyRuntimeElemSuffix(Type elementType)
         return "int16_t";
     if (elementType.isSignlessInteger(32))
         return "int32_t";
+    // Unsigned cube / vector staging routes (see bc/Cube/dma.cpp and
+    // bc/Vector/dma.cpp). u64 is absent on purpose: i64 has no GM<->UB or
+    // GM->L1 route either.
+    if (elementType.isUnsignedInteger(8))
+        return "uint8_t";
+    if (elementType.isUnsignedInteger(16))
+        return "uint16_t";
+    if (elementType.isUnsignedInteger(32))
+        return "uint32_t";
     if (elementType.isFloat8E4M3FN())
         return "fp8_e4m3fn_t";
     if (elementType.isFloat8E5M2())

@@ -38,7 +38,8 @@ from vector_op_harness import (
 
 VEC_REG_BYTES = 256
 MASK_REG_BITS = 256
-ALL_DTYPES = ("f32", "f16", "i8")
+ALL_DTYPES = ("f32", "f16", "i8", "u8")
+_UNSIGNED = frozenset({"u8"})
 
 _DTYPE: type[Any] = tla.Float32
 _ELE = VEC_REG_BYTES // 4
@@ -137,8 +138,11 @@ def _set_kernel_config(
 
 def _make_inputs(args: Any, dtype_name: str, torch: Any) -> tuple[Any, ...]:
     _, dtype, _ = _set_kernel_config(args.op, dtype_name, args.shape)
-    idx = torch.arange(_ELE, dtype=torch.int32, device="npu")
-    return (((idx % 31) - 15).to(dtype),)
+    idx = torch.arange(_ELE, dtype=torch.int64)
+    # u8: full 0..255 so GM↔UB copy cannot hide behind a signed twin.
+    if dtype_name in _UNSIGNED:
+        return (((idx % 256).to(dtype)).to("npu"),)
+    return ((((idx % 31) - 15).to(dtype)).to("npu"),)
 
 
 def _expected(op_name: str, inputs: tuple[Any, ...]) -> Any:

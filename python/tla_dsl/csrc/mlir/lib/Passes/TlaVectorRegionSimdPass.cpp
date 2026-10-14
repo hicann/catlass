@@ -702,13 +702,27 @@ static hivmave::MaskWidthAttr maskWidthAttrForMaskType(OpBuilder& b, ::tla::Mask
     return hivmave::MaskWidthAttr::get(b.getContext(), maskWidthForMaskType(maskType));
 }
 
+// AVE vectors are signless; peel unsigned from the tla operand when present.
+static Type tlaElementOr(Type tlaType, Type fallback)
+{
+    if (auto v = dyn_cast<::tla::VectorSSAType>(tlaType))
+        return v.getElementType();
+    return fallback;
+}
+
+static bool isUnsignedInt(Type type)
+{
+    auto i = dyn_cast<IntegerType>(type);
+    return i && i.isUnsigned();
+}
+
 // Build the AVE vector op for a tla binary op. The mask controls active lanes.
-// For div the signedness is carried as the TypeFn cast attribute (cast_unsigned
-// for unsigned integer element types, cast_signed otherwise).
+// Div uses TypeFn for signedness; unsigned max/min select vumax/vumin.
 static Value createVectorBinaryResult(
     OpBuilder& b, Location loc, VectorBinaryKind kind, Type tlaOperandType, Type elementType, VectorType vecType,
     Value lhs, Value rhs, Value mask)
 {
+    const bool isUnsigned = isUnsignedInt(tlaElementOr(tlaOperandType, elementType));
     switch (kind) {
         case VectorBinaryKind::Add:
             return b.create<hivmave::VFAddOp>(loc, vecType, lhs, rhs, mask).getResult();
@@ -717,16 +731,17 @@ static Value createVectorBinaryResult(
         case VectorBinaryKind::Mul:
             return b.create<hivmave::VFMulOp>(loc, vecType, lhs, rhs, mask).getResult();
         case VectorBinaryKind::Div: {
-            auto cast = hivm::TypeFn::cast_signed;
-            if (auto intType = dyn_cast<IntegerType>(elementType))
-                if (intType.getSignedness() == IntegerType::Unsigned)
-                    cast = hivm::TypeFn::cast_unsigned;
+            auto cast = isUnsigned ? hivm::TypeFn::cast_unsigned : hivm::TypeFn::cast_signed;
             return b.create<hivmave::VFDivOp>(loc, vecType, lhs, rhs, mask, hivm::TypeFnAttr::get(b.getContext(), cast))
                 .getResult();
         }
         case VectorBinaryKind::Max:
+            if (isUnsigned)
+                return b.create<hivmave::VMaxUIOp>(loc, vecType, lhs, rhs, mask).getResult();
             return b.create<hivmave::VFMaxOp>(loc, vecType, lhs, rhs, mask).getResult();
         case VectorBinaryKind::Min:
+            if (isUnsigned)
+                return b.create<hivmave::VMinUIOp>(loc, vecType, lhs, rhs, mask).getResult();
             return b.create<hivmave::VFMinOp>(loc, vecType, lhs, rhs, mask).getResult();
         case VectorBinaryKind::And:
             if (isa<::tla::VectorSSAType>(tlaOperandType))
@@ -982,7 +997,7 @@ static bool isSupportedCastElementType(Type t)
     if (auto f = dyn_cast<FloatType>(t))
         return f.getWidth() == 16 || f.getWidth() == 32 || isAveFloat8Type(t);
     if (auto i = dyn_cast<IntegerType>(t)) {
-        if (i.isUnsigned() || i.getWidth() == 1) // unsigned / bool
+        if (i.getWidth() == 1) // bool
             return false;
         unsigned w = i.getWidth();
         return w == 8 || w == 16 || w == 32 || w == 64;
@@ -990,12 +1005,97 @@ static bool isSupportedCastElementType(Type t)
     return false;
 }
 
+// Bitcast an integer vector between unsigned and signless of the same width.
+// AVE cast ops are typed on signless integers; unsigned VectorSSA stays
+// unsigned so Compare can select VCmpU*.
+static Value bitcastIntVectorSignedness(OpBuilder& b, Location loc, Value v, Type targetElem)
+{
+    auto srcTy = cast<VectorType>(v.getType());
+    if (srcTy.getElementType() == targetElem)
+        return v;
+    auto dstTy = VectorType::get(srcTy.getShape(), targetElem);
+    return b.create<mlir::vector::BitCastOp>(loc, dstTy, v).getResult();
+}
+
+static Type signlessIntOfWidth(MLIRContext* ctx, unsigned width)
+{
+    return IntegerType::get(ctx, width);
+}
+
+// Unsigned cast routes are an explicit short list (frontend
+// `_CAST_UNSIGNED_ROUTES`): a missing AVE arm reaches llvm_unreachable.
+static FailureOr<Value> createUnsignedVectorCastResult(
+    OpBuilder& b, AutoFullPredicateCache& fullMasks, Location loc, VectorType srcVecType, VectorType dstVecType,
+    Type tlaSrcElem, Type tlaDstElem, Value src, Value mask, bool hasUserMask, hivmave::VCVT_PartTypeAttr part,
+    hivmave::VCVT_PPTypeAttr pp, hivm::RoundModeAttr rnd, BoolAttr sat)
+{
+    unsigned sb = tlaSrcElem.getIntOrFloatBitWidth();
+    unsigned db = tlaDstElem.getIntOrFloatBitWidth();
+    const bool sUnsigned = tlaSrcElem.isUnsignedInteger();
+    const bool dUnsigned = tlaDstElem.isUnsignedInteger();
+    auto nullPart = hivmave::VCVT_PartTypeAttr();
+    auto nullPP = hivmave::VCVT_PPTypeAttr();
+    MLIRContext* ctx = b.getContext();
+
+    if ((sUnsigned && sb == 64) || (dUnsigned && db == 64))
+        return failure();
+
+    Value aveSrc = src;
+    VectorType aveSrcTy = srcVecType;
+    if (sUnsigned) {
+        Type signless = signlessIntOfWidth(ctx, sb);
+        aveSrc = bitcastIntVectorSignedness(b, loc, src, signless);
+        aveSrcTy = cast<VectorType>(aveSrc.getType());
+    }
+
+    // Keep the AVE region signless; signedness lives on the tla type.
+    auto wrapDst = [&](Value aveDst) -> Value { return aveDst; };
+
+    if (sUnsigned && sb == 8 && tlaDstElem.isF32()) {
+        Value gated = aveSrc;
+        Value legMask = mask;
+        if (hasUserMask) {
+            gated = b.create<hivmave::VFAndOp>(loc, aveSrcTy, aveSrc, aveSrc, mask).getResult();
+            legMask = allTrueMaskFor(fullMasks, loc, aveSrcTy, aveSrcTy);
+        }
+        auto midType = VectorType::get(dstVecType.getShape(), b.getIntegerType(32));
+        Value mid = b.create<hivmave::VFExtUIOp>(loc, midType, gated, legMask, nullPart, pp).getResult();
+        Value midMask = hasUserMask ? allTrueMaskFor(fullMasks, loc, midType, midType) : legMask;
+        return b.create<hivmave::VFSIntToFpOp>(loc, dstVecType, mid, midMask, rnd, nullPart).getResult();
+    }
+
+    if (sUnsigned && sb == 8 && tlaDstElem.isF16())
+        return b.create<hivmave::VFUIntToFpOp>(loc, dstVecType, aveSrc, mask, hivm::RoundModeAttr(), part).getResult();
+    if (tlaSrcElem.isF16() && dUnsigned && db == 8) {
+        auto aveDstTy = VectorType::get(dstVecType.getShape(), signlessIntOfWidth(ctx, 8));
+        Value aveDst = b.create<hivmave::VFFpToUIntOp>(loc, aveDstTy, src, mask, rnd, sat, part).getResult();
+        return wrapDst(aveDst);
+    }
+
+    if (!sUnsigned || !dUnsigned)
+        return failure();
+
+    auto aveDstTy = VectorType::get(dstVecType.getShape(), signlessIntOfWidth(ctx, db));
+    if (db > sb) {
+        if (db / sb >= 4)
+            return wrapDst(b.create<hivmave::VFExtUIOp>(loc, aveDstTy, aveSrc, mask, nullPart, pp).getResult());
+        return wrapDst(b.create<hivmave::VFExtUIOp>(loc, aveDstTy, aveSrc, mask, part, nullPP).getResult());
+    }
+    if (db == sb)
+        return failure();
+
+    auto uni = hivm::UnsignedModeAttr::get(ctx, hivm::UnsignedMode::UI2UI);
+    if (sb / db >= 4)
+        return wrapDst(b.create<hivmave::VFTruncIOp>(loc, aveDstTy, aveSrc, mask, sat, nullPart, pp, uni).getResult());
+    return wrapDst(b.create<hivmave::VFTruncIOp>(loc, aveDstTy, aveSrc, mask, sat, part, nullPP, uni).getResult());
+}
+
 // Build the AVE op or regbase intrinsic for a tla.cast, dispatching by (src, dst) element kind.
 // The trait supplies rounding, saturation and register layout; the mask (source
 // width) predicates active lanes.
 static FailureOr<Value> createVectorCastResult(
     OpBuilder& b, AutoFullPredicateCache& fullMasks, Location loc, VectorType srcVecType, VectorType dstVecType,
-    ArrayRef<int32_t> trait, Value src, Value mask, bool hasUserMask)
+    Type tlaSrcElem, Type tlaDstElem, ArrayRef<int32_t> trait, Value src, Value mask, bool hasUserMask)
 {
     // trait codes: [0] reg_slot, [1] sat_mode, [2] round_mode.
     Type s = srcVecType.getElementType();
@@ -1021,6 +1121,11 @@ static FailureOr<Value> createVectorCastResult(
         Value round = b.create<arith::ConstantIntOp>(loc, static_cast<int64_t>(rnd.getValue()), 32);
         return b.create<hivm_regbaseintrins::VcvtffF162BF16InstrOp>(loc, dstVecType, src, preg, round).getResult();
     }
+
+    if (tlaSrcElem.isUnsignedInteger() || tlaDstElem.isUnsignedInteger())
+        return createUnsignedVectorCastResult(
+            b, fullMasks, loc, srcVecType, dstVecType, tlaSrcElem, tlaDstElem, src, mask, hasUserMask, part, pp, rnd,
+            sat);
 
     // fp8 pairs with f32 and nothing else. The AVE op definitions advertise a
     // wider set -- vtruncf lists bf16/f16/f32 sources, vextf lists bf16/f16/f32
@@ -1243,6 +1348,16 @@ struct VecLowerCtx {
     VectorType maskVecType;
 };
 
+// AVE rejects ui*; map unsigned tla elements to signless of the same width.
+// Signedness for Compare/Cast/Div/Reduce/Max/Min stays on the tla type.
+static Type aveVectorElementType(Type elementType)
+{
+    if (auto intType = dyn_cast<IntegerType>(elementType))
+        if (intType.isUnsigned())
+            return IntegerType::get(elementType.getContext(), intType.getWidth());
+    return elementType;
+}
+
 // Build the per-op {lanes, elementType, vecType, maskVecType} for a given
 // element type. Each op derives its own types this way rather than reusing a
 // region-global width: a tla.cast may have produced operands whose element
@@ -1256,7 +1371,8 @@ static FailureOr<VecLowerCtx> deriveVecCtxForElement(Type elementType)
         return failure();
     int64_t lanes = *lanesOr;
     return VecLowerCtx{
-        lanes, elementType, VectorType::get({lanes}, elementType), fullPregVecType(elementType.getContext())};
+        lanes, elementType, VectorType::get({lanes}, aveVectorElementType(elementType)),
+        fullPregVecType(elementType.getContext())};
 }
 
 // Return the value already mapped into the helper, or clone an arith.constant
@@ -1528,7 +1644,8 @@ static FailureOr<Value> materializeVectorScalarValue(
     // intrinsic ABI rather than the source vector element type.
     if (info.kind == VectorBinaryKind::ShiftLeft || info.kind == VectorBinaryKind::ShiftRight)
         return scalar;
-    auto castScalar = castScalarForVectorElement(scalar, ctx.elementType);
+    // Match the AVE (signless) ABI; ctx.elementType may still be unsigned.
+    auto castScalar = castScalarForVectorElement(scalar, aveVectorElementType(ctx.elementType));
     if (failed(castScalar))
         return failure();
     return *castScalar;
@@ -1551,8 +1668,13 @@ static FailureOr<Value> createVectorScalarBinaryResult(
             return b.create<hivmave::VFAddsOp>(loc, ctx.vecType, lhs, scalar, mask).getResult();
         if (info.kind == VectorBinaryKind::Mul)
             return b.create<hivmave::VFMulsOp>(loc, ctx.vecType, lhs, scalar, mask).getResult();
-        if (info.kind == VectorBinaryKind::Max)
+        if (info.kind == VectorBinaryKind::Max) {
+            if (isUnsignedInt(ctx.elementType))
+                return b.create<hivmave::VMaxsUIOp>(loc, ctx.vecType, lhs, scalar, mask).getResult();
             return b.create<hivmave::VFMaxsOp>(loc, ctx.vecType, lhs, scalar, mask).getResult();
+        }
+        if (isUnsignedInt(ctx.elementType))
+            return b.create<hivmave::VMinsUIOp>(loc, ctx.vecType, lhs, scalar, mask).getResult();
         return b.create<hivmave::VFMinsOp>(loc, ctx.vecType, lhs, scalar, mask).getResult();
     }
 
@@ -1804,15 +1926,17 @@ static LogicalResult lowerCast(
     auto dstLanesOr = getVectorLaneCount(dstType.getElementType());
     if (failed(dstLanesOr))
         return castOp.emitError("unsupported tla.cast destination element type"), failure();
-    auto dstVecType = VectorType::get({*dstLanesOr}, dstType.getElementType());
+    Type tlaSrcElem = cast<::tla::VectorSSAType>(castOp.getSource().getType()).getElementType();
+    Type tlaDstElem = dstType.getElementType();
+    auto dstVecType = VectorType::get({*dstLanesOr}, aveVectorElementType(tlaDstElem));
     // Reject casts whose source or destination element type has no AVE cast path
-    // (unsigned integers, i1/bool, f64) rather than emitting invalid AVE IR.
-    if (!isSupportedCastElementType(srcVecType.getElementType()) ||
-        !isSupportedCastElementType(dstVecType.getElementType()))
+    // (i1/bool, f64). Unsigned routes are gated by createUnsignedVectorCastResult.
+    if (!isSupportedCastElementType(tlaSrcElem) || !isSupportedCastElementType(tlaDstElem))
         return castOp.emitError(
                    "unsupported tla.cast element type: only signed "
-                   "integers (i8/i16/i32/i64) and floats (f16/bf16/f32) "
-                   "are supported; unsigned, bool and f64 are not"),
+                   "integers (i8/i16/i32/i64), unsigned integers "
+                   "(u8/u16/u32) and floats (f16/bf16/f32) "
+                   "are supported; bool and f64 are not"),
                failure();
     ArrayRef<int32_t> trait = castOp.getTrait();
     if (trait.size() != 3)
@@ -1827,8 +1951,8 @@ static LogicalResult lowerCast(
     } else {
         mask = allTrueMaskFor(fullMasks, loc, srcVecType, castOp.getSource().getType());
     }
-    auto result =
-        createVectorCastResult(b, fullMasks, loc, srcVecType, dstVecType, trait, src, mask, (bool)castOp.getMask());
+    auto result = createVectorCastResult(
+        b, fullMasks, loc, srcVecType, dstVecType, tlaSrcElem, tlaDstElem, trait, src, mask, (bool)castOp.getMask());
     if (failed(result))
         return castOp.emitError("unsupported tla.cast element type conversion"), failure();
     valueMap[castOp.getResult()] = *result;
@@ -1944,7 +2068,6 @@ static LogicalResult lowerVectorBinary(
     auto opVecType = dyn_cast<VectorType>(lhs.getType());
     if (!opVecType)
         return failure();
-    Type opElemType = opVecType.getElementType();
     Value mask;
     if (operands.mask) {
         mask = valueMap.lookup(operands.mask);
@@ -1953,8 +2076,9 @@ static LogicalResult lowerVectorBinary(
     } else {
         mask = allTrueMaskFor(fullMasks, loc, opVecType, operands.lhs.getType());
     }
-    Value result =
-        createVectorBinaryResult(b, loc, info->kind, operands.lhs.getType(), opElemType, opVecType, lhs, rhs, mask);
+    // createVectorBinaryResult peels unsigned from the tla lhs type.
+    Value result = createVectorBinaryResult(
+        b, loc, info->kind, operands.lhs.getType(), opVecType.getElementType(), opVecType, lhs, rhs, mask);
     if (!result)
         return failure();
     valueMap[op.getResult(0)] = result;
@@ -1972,11 +2096,11 @@ static LogicalResult lowerVectorScalarBinary(
     Value lhs = valueMap.lookup(operands.lhs);
     if (!lhs)
         return failure();
-    // Element type follows the lhs vector operand, not the region width.
+    // Derive ctx from tla element so unsigned max/min still select VMaxsUI.
     auto lhsTy = dyn_cast<VectorType>(lhs.getType());
     if (!lhsTy)
         return failure();
-    auto opCtx = deriveVecCtxForElement(lhsTy.getElementType());
+    auto opCtx = deriveVecCtxForElement(tlaElementOr(operands.lhs.getType(), lhsTy.getElementType()));
     if (failed(opCtx))
         return failure();
     auto scalarOr = materializeVectorScalarValue(b, *info, valueMap, *opCtx);
@@ -2037,11 +2161,12 @@ static LogicalResult lowerReduce(
     Value operand = valueMap.lookup(reduceOp->getOperand(0));
     if (!operand)
         return failure();
-    // Reduction width follows the operand vector's element type.
+    // AVE operand is signless; CombiningKind UMAX/UMIN needs the tla element type.
     auto operandTy = dyn_cast<VectorType>(operand.getType());
     if (!operandTy)
         return failure();
-    auto opCtx = deriveVecCtxForElement(operandTy.getElementType());
+    Type tlaElem = tlaElementOr(reduceOp->getOperand(0).getType(), operandTy.getElementType());
+    auto opCtx = deriveVecCtxForElement(tlaElem);
     if (failed(opCtx))
         return failure();
     Value mask;
@@ -2300,16 +2425,41 @@ static LogicalResult lowerCmp(
     if (!lhs)
         return failure();
     // The compare's operand width fixes both the input vectors and the i1 mask
-    // result width.
-    auto lhsTy = dyn_cast<VectorType>(lhs.getType());
-    if (!lhsTy)
-        return failure();
-    auto opCtx = deriveVecCtxForElement(lhsTy.getElementType());
+    // result width. Prefer the tla element type so unsigned compares keep
+    // unsigned semantics after aveVectorElementType maps the AVE vector to
+    // signless.
+    Type tlaElem = lhs.getType();
+    if (auto tlaVec = dyn_cast<::tla::VectorSSAType>(cmpOp.getLhs().getType()))
+        tlaElem = tlaVec.getElementType();
+    else if (auto lhsTy = dyn_cast<VectorType>(lhs.getType()))
+        tlaElem = lhsTy.getElementType();
+    auto opCtx = deriveVecCtxForElement(tlaElem);
     if (failed(opCtx))
         return failure();
     auto cmpType = mapCmpMode(cmpOp.getMode());
     if (!cmpType)
         return cmpOp.emitError("unknown tla.cmp mode: ") << cmpOp.getMode(), failure();
+    // With signless AVE vectors, HIVMCmpOpLowering's isUnsignedInteger path
+    // never fires. Remap relational modes to the explicit unsigned CmpType
+    // variants so VCmpU* is selected.
+    if (auto intTy = dyn_cast<IntegerType>(tlaElem); intTy && intTy.isUnsigned()) {
+        switch (*cmpType) {
+            case hivmave::CmpType::LT:
+                cmpType = hivmave::CmpType::ULT;
+                break;
+            case hivmave::CmpType::GT:
+                cmpType = hivmave::CmpType::UGT;
+                break;
+            case hivmave::CmpType::LE:
+                cmpType = hivmave::CmpType::ULE;
+                break;
+            case hivmave::CmpType::GE:
+                cmpType = hivmave::CmpType::UGE;
+                break;
+            default:
+                break;
+        }
+    }
     Value mask;
     if (cmpOp.getMask()) {
         mask = valueMap.lookup(cmpOp.getMask());
@@ -2330,8 +2480,15 @@ static LogicalResult lowerCmp(
         auto scalarOr = castScalarForVectorElement(rhs, opCtx->elementType);
         if (failed(scalarOr))
             return failure();
-        valueMap[cmpOp.getResult()] =
-            b.create<hivmave::VFCmpS>(loc, opCtx->maskVecType, *cmpType, lhs, *scalarOr, mask);
+        Value scalar = *scalarOr;
+        // VFCmpS scalar ODS is signless; keep the vector unsigned for VCmpU*.
+        if (auto intTy = dyn_cast<IntegerType>(scalar.getType())) {
+            if (intTy.isUnsigned()) {
+                Type signless = IntegerType::get(b.getContext(), intTy.getWidth());
+                scalar = b.create<UnrealizedConversionCastOp>(loc, signless, scalar).getResult(0);
+            }
+        }
+        valueMap[cmpOp.getResult()] = b.create<hivmave::VFCmpS>(loc, opCtx->maskVecType, *cmpType, lhs, scalar, mask);
     }
     return success();
 }

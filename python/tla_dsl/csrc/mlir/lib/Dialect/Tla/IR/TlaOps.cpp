@@ -63,7 +63,14 @@ static bool isSupportedCmpElementType(mlir::Type elementType)
     if (elementType.isF16() || elementType.isF32())
         return true;
     auto intType = mlir::dyn_cast<mlir::IntegerType>(elementType);
-    return intType && (intType.isSignless() || intType.isUnsigned()) && intType.getWidth() == 32;
+    if (!intType)
+        return false;
+    unsigned width = intType.getWidth();
+    // Frontend whitelist: u8/u16/u32 + i32. Signed/signless only at 32-bit;
+    // unsigned also at 8/16 so VCmpU* can be selected for the top-half values.
+    if (intType.isUnsigned())
+        return width == 8 || width == 16 || width == 32;
+    return (intType.isSignless() || intType.isSigned()) && width == 32;
 }
 
 static bool isSupportedPrintTensorInteger(mlir::Type elementType)

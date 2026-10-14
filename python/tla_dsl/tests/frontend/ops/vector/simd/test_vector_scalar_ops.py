@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-from catlass.tla.runtime import make_fake_tensor
-
-
+import os
 from collections.abc import Callable
 
 import pytest
 
 import catlass.tla as tla
 import catlass.runtime as runtime_mod
+from catlass.tla.runtime import from_dlpack, make_fake_tensor
 
 
 def _vector_tensor(dtype: object = tla.Float32) -> tla.Tensor:
@@ -149,3 +148,134 @@ def test_integer_vector_scalar_rejects_fractional_literal() -> None:
         invalid_integer_scalar_fraction_kernel.dump_mlir(
             type_args=(_vector_tensor(tla.Int32),)
         )
+
+
+# --- unsigned max/min signed-twin guard (u16 65535 vs 1) -------------------
+
+_U16_N = 128
+_U16_HI = 65535
+_U16_LO = 1
+
+
+@tla.kernel
+def u16_max_gm_kernel(mem_x: tla.Tensor, mem_y: tla.Tensor, mem_z: tla.Tensor) -> None:
+    ub_loaded = tla.flag("ub_loaded", tla.arch.MTE2, tla.arch.VECTOR)
+    vec_done = tla.flag("vec_done", tla.arch.VECTOR, tla.arch.MTE3)
+    x_gm = tla.tile_view(mem_x, tla.make_shape(_U16_N), tla.make_coord(0))
+    y_gm = tla.tile_view(mem_y, tla.make_shape(_U16_N), tla.make_coord(0))
+    z_gm = tla.tile_view(mem_z, tla.make_shape(_U16_N), tla.make_coord(0))
+    x_ub = tla.make_tensor_like(
+        tla.allocate(_U16_N, tla.UInt16, tla.AddressSpace.ub, 256),
+        x_gm,
+        tla.arch.RowMajor,
+    )
+    y_ub = tla.make_tensor_like(
+        tla.allocate(_U16_N, tla.UInt16, tla.AddressSpace.ub, 256),
+        y_gm,
+        tla.arch.RowMajor,
+    )
+    z_ub = tla.make_tensor_like(
+        tla.allocate(_U16_N, tla.UInt16, tla.AddressSpace.ub, 256),
+        z_gm,
+        tla.arch.RowMajor,
+    )
+    with tla.vector():
+        tla.copy(x_ub, x_gm)
+        tla.copy(y_ub, y_gm)
+        tla.set_flag(ub_loaded)
+        tla.wait_flag(ub_loaded)
+        with tla.vec.func(mode="simd"):
+            xv = tla.tile_view(x_ub, tla.make_shape(_U16_N), tla.make_coord(0)).load()
+            yv = tla.tile_view(y_ub, tla.make_shape(_U16_N), tla.make_coord(0)).load()
+            tla.tile_view(z_ub, tla.make_shape(_U16_N), tla.make_coord(0)).store(
+                tla.max(xv, yv)
+            )
+        tla.set_flag(vec_done)
+        tla.wait_flag(vec_done)
+        tla.copy(z_gm, z_ub)
+        tla.pipe_barrier(tla.pipes.ALL)
+
+
+@tla.kernel
+def u16_min_gm_kernel(mem_x: tla.Tensor, mem_y: tla.Tensor, mem_z: tla.Tensor) -> None:
+    ub_loaded = tla.flag("ub_loaded", tla.arch.MTE2, tla.arch.VECTOR)
+    vec_done = tla.flag("vec_done", tla.arch.VECTOR, tla.arch.MTE3)
+    x_gm = tla.tile_view(mem_x, tla.make_shape(_U16_N), tla.make_coord(0))
+    y_gm = tla.tile_view(mem_y, tla.make_shape(_U16_N), tla.make_coord(0))
+    z_gm = tla.tile_view(mem_z, tla.make_shape(_U16_N), tla.make_coord(0))
+    x_ub = tla.make_tensor_like(
+        tla.allocate(_U16_N, tla.UInt16, tla.AddressSpace.ub, 256),
+        x_gm,
+        tla.arch.RowMajor,
+    )
+    y_ub = tla.make_tensor_like(
+        tla.allocate(_U16_N, tla.UInt16, tla.AddressSpace.ub, 256),
+        y_gm,
+        tla.arch.RowMajor,
+    )
+    z_ub = tla.make_tensor_like(
+        tla.allocate(_U16_N, tla.UInt16, tla.AddressSpace.ub, 256),
+        z_gm,
+        tla.arch.RowMajor,
+    )
+    with tla.vector():
+        tla.copy(x_ub, x_gm)
+        tla.copy(y_ub, y_gm)
+        tla.set_flag(ub_loaded)
+        tla.wait_flag(ub_loaded)
+        with tla.vec.func(mode="simd"):
+            xv = tla.tile_view(x_ub, tla.make_shape(_U16_N), tla.make_coord(0)).load()
+            yv = tla.tile_view(y_ub, tla.make_shape(_U16_N), tla.make_coord(0)).load()
+            tla.tile_view(z_ub, tla.make_shape(_U16_N), tla.make_coord(0)).store(
+                tla.min(xv, yv)
+            )
+        tla.set_flag(vec_done)
+        tla.wait_flag(vec_done)
+        tla.copy(z_gm, z_ub)
+        tla.pipe_barrier(tla.pipes.ALL)
+
+
+def _as_tla_tensor(buf):
+    return from_dlpack(
+        buf.contiguous(),
+        layout_tag=tla.arch.RowMajor,
+        origin_shape=tuple(buf.shape),
+    )
+
+
+@pytest.fixture
+def npu_device_for_unsigned_maxmin(
+    monkeypatch: pytest.MonkeyPatch, isolated_compile_cache
+) -> int:
+    del isolated_compile_cache
+    if not os.environ.get("ASCEND_HOME_PATH"):
+        pytest.skip("CANN environment required: source set_env.sh")
+    monkeypatch.setenv("TORCH_DEVICE_BACKEND_AUTOLOAD", "0")
+    torch = pytest.importorskip("torch")
+    pytest.importorskip("torch_npu", exc_type=ImportError)
+    if not torch.npu.is_available():
+        pytest.skip("No accessible Ascend NPU")
+    device = int(os.environ.get("CATLASS_TEST_NPU_DEVICE", "2"))
+    torch.npu.set_device(device)
+    return device
+
+
+def test_u16_max_min_65535_vs_1_on_npu(npu_device_for_unsigned_maxmin: int) -> None:
+    """Signed twin would yield max→1 / min→65535; unsigned must keep 65535 / 1."""
+    import torch
+
+    del npu_device_for_unsigned_maxmin
+    a = torch.full((_U16_N,), _U16_HI, dtype=torch.uint16, device="cpu").npu()
+    b = torch.full((_U16_N,), _U16_LO, dtype=torch.uint16, device="cpu").npu()
+    out = torch.zeros((_U16_N,), dtype=torch.uint16, device="npu")
+    tx, ty, tz = _as_tla_tensor(a), _as_tla_tensor(b), _as_tla_tensor(out)
+
+    art = tla.compile(u16_max_gm_kernel, tx, ty, tz, options="--npu-arch 3510")
+    art(tx, ty, tz, block_num=1)
+    torch.npu.synchronize()
+    assert bool((out.cpu() == _U16_HI).all())
+
+    art = tla.compile(u16_min_gm_kernel, tx, ty, tz, options="--npu-arch 3510")
+    art(tx, ty, tz, block_num=1)
+    torch.npu.synchronize()
+    assert bool((out.cpu() == _U16_LO).all())

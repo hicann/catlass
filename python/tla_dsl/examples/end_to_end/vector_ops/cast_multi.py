@@ -188,6 +188,13 @@ _TRAIT_I8_PP1 = _i8_pp_trait(tla.params.RegSlot.ONE)
 _TRAIT_I8_PP2 = _i8_pp_trait(tla.params.RegSlot.TWO)
 _TRAIT_I8_PP3 = _i8_pp_trait(tla.params.RegSlot.THREE)
 
+# Unsigned twin of the i8 chain: f16→u8→u32/f32 with values a+200 (>=128).
+_TRAIT_U = tla.params.CastParams(
+    reg_slot=tla.params.RegSlot.ZERO,
+    sat_mode=tla.params.SatMode.NOSAT,
+    round_mode=tla.params.RoundMode.CAST_TRUNC,
+)
+
 
 @tla.kernel
 def cast_multi(
@@ -410,6 +417,15 @@ def cast_multi(
                     + bf_to_e5m2_f32
                 )
 
+                # Unsigned: (a+200) via f16↔u8 (values >=128 bite signed twin).
+                u_contrib = (
+                    (a_v + 200.0)
+                    .to(tla.Float16, _TRAIT_F16_A)
+                    .to(tla.UInt8, _TRAIT_U)
+                    .to(tla.Float16, _TRAIT_U)
+                    .to(tla.Float32, _TRAIT_TO_F32_EVEN)
+                )
+
                 out_chunk.store(
                     sum_f32
                     + (max_f32 - min_f32)
@@ -418,6 +434,7 @@ def cast_multi(
                     + prod16_f32
                     + sum8_f32
                     + fp8_contrib
+                    + u_contrib
                 )
 
         tla.set_flag(vec_done)
@@ -529,6 +546,7 @@ def _expected(op_name: str, inputs: tuple[Any, ...]) -> Any:
     fp8_contrib = f8_rt + f16_to_f8 + e5_rt + bf_to_e4m3 + bf_to_e5m2
     prod16_f32 = (a.to(torch.int32) * c.to(torch.int32)).to(f32)
     sum8_f32 = (a.to(torch.int32) + b.to(torch.int32)).to(f32)
+    u_contrib = (a + 200.0).to(torch.float16).to(torch.uint8).to(torch.float16).to(f32)
     return (
         sum_f32
         + (max_f32 - min_f32)
@@ -536,7 +554,8 @@ def _expected(op_name: str, inputs: tuple[Any, ...]) -> Any:
         + int_contrib
         + prod16_f32
         + sum8_f32
-        + fp8_contrib,
+        + fp8_contrib
+        + u_contrib,
     )
 
 

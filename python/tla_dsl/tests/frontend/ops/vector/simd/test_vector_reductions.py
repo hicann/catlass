@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-from catlass.tla.runtime import make_fake_tensor
-
-
+import os
 from typing import Any
 
 import pytest
@@ -10,6 +8,7 @@ import pytest
 import catlass.tla as tla
 from catlass.execution_lowering import UnsupportedExecutionLowering
 import catlass.runtime as runtime_mod
+from catlass.tla.runtime import from_dlpack, make_fake_tensor
 
 
 def _vector_tensor(dtype: type[tla.Numeric] = tla.Float32, shape: int = 64) -> tla.Tensor:
@@ -191,3 +190,104 @@ def test_reduce_requires_explicit_mask() -> None:
         match=r"missing.*keyword-only.*argument.*'mask'",
     ):
         vector_reduce_no_mask_kernel.dump_mlir(type_args=(_vector_tensor(),))
+
+
+# --- unsigned reduce signed-twin guard (u16 65535 vs 1) --------------------
+
+_U16_N = 128
+_U16_HI = 65535
+_U16_LO = 1
+
+
+@tla.kernel
+def u16_reduce_gm_kernel(
+    mem_x: tla.Tensor, mem_max: tla.Tensor, mem_min: tla.Tensor
+) -> None:
+    loaded = tla.flag("loaded", tla.arch.MTE2, tla.arch.VECTOR)
+    done = tla.flag("done", tla.arch.VECTOR, tla.arch.MTE3)
+    x_gm = tla.tile_view(mem_x, tla.make_shape(_U16_N), tla.make_coord(0))
+    max_gm = tla.tile_view(mem_max, tla.make_shape(1), tla.make_coord(0))
+    min_gm = tla.tile_view(mem_min, tla.make_shape(1), tla.make_coord(0))
+    x_ub = tla.make_tensor_like(
+        tla.allocate(_U16_N, tla.UInt16, tla.AddressSpace.ub, 256),
+        x_gm,
+        tla.arch.RowMajor,
+    )
+    max_ub = tla.make_tensor_like(
+        tla.allocate(1, tla.UInt16, tla.AddressSpace.ub, 256),
+        max_gm,
+        tla.arch.RowMajor,
+    )
+    min_ub = tla.make_tensor_like(
+        tla.allocate(1, tla.UInt16, tla.AddressSpace.ub, 256),
+        min_gm,
+        tla.arch.RowMajor,
+    )
+    with tla.vector():
+        tla.copy(x_ub, x_gm)
+        tla.set_flag(loaded)
+        tla.wait_flag(loaded)
+        with tla.vec.func(mode="simd"):
+            va = tla.tile_view(x_ub, tla.make_shape(_U16_N), tla.make_coord(0)).load()
+            mask = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.UInt16)
+            tla.tile_view(max_ub, tla.make_shape(1), tla.make_coord(0)).store(
+                va.reduce(tla.ReductionOp.MAX, mask=mask)
+            )
+            tla.tile_view(min_ub, tla.make_shape(1), tla.make_coord(0)).store(
+                va.reduce(tla.ReductionOp.MIN, mask=mask)
+            )
+        tla.set_flag(done)
+        tla.wait_flag(done)
+        tla.copy(max_gm, max_ub)
+        tla.copy(min_gm, min_ub)
+        tla.pipe_barrier(tla.pipes.ALL)
+
+
+def _as_tla_tensor(buf):
+    return from_dlpack(
+        buf.contiguous(),
+        layout_tag=tla.arch.RowMajor,
+        origin_shape=tuple(buf.shape),
+    )
+
+
+@pytest.fixture
+def npu_device_for_unsigned_reduce(
+    monkeypatch: pytest.MonkeyPatch, isolated_compile_cache
+) -> int:
+    del isolated_compile_cache
+    if not os.environ.get("ASCEND_HOME_PATH"):
+        pytest.skip("CANN environment required: source set_env.sh")
+    monkeypatch.setenv("TORCH_DEVICE_BACKEND_AUTOLOAD", "0")
+    torch = pytest.importorskip("torch")
+    pytest.importorskip("torch_npu", exc_type=ImportError)
+    if not torch.npu.is_available():
+        pytest.skip("No accessible Ascend NPU")
+    device = int(os.environ.get("CATLASS_TEST_NPU_DEVICE", "2"))
+    torch.npu.set_device(device)
+    return device
+
+
+def test_u16_reduce_max_min_65535_vs_1_on_npu(
+    npu_device_for_unsigned_reduce: int,
+) -> None:
+    """Signed twin would yield max→1 / min→65535; unsigned must keep 65535 / 1."""
+    import torch
+
+    del npu_device_for_unsigned_reduce
+    vals = [_U16_LO] * _U16_N
+    vals[0] = _U16_HI
+    a = torch.tensor(vals, dtype=torch.uint16, device="cpu").npu()
+    out_max = torch.zeros((1,), dtype=torch.uint16, device="npu")
+    out_min = torch.zeros((1,), dtype=torch.uint16, device="npu")
+    tx, tmax, tmin = (
+        _as_tla_tensor(a),
+        _as_tla_tensor(out_max),
+        _as_tla_tensor(out_min),
+    )
+
+    art = tla.compile(u16_reduce_gm_kernel, tx, tmax, tmin, options="--npu-arch 3510")
+    art(tx, tmax, tmin, block_num=1)
+    torch.npu.synchronize()
+    assert int(out_max.cpu().item()) == _U16_HI
+    assert int(out_min.cpu().item()) == _U16_LO

@@ -32,7 +32,10 @@ from vector_op_harness import (
 VECTOR_ELE = 400
 VL_ELE = 64
 LOOPS = (VECTOR_ELE + VL_ELE - 1) // VL_ELE
-ALL_DTYPES = ("f32",)
+ALL_DTYPES = ("f32", "u8", "u16", "u32")
+_UNSIGNED = frozenset({"u8", "u16", "u32"})
+# Values above each signed boundary so VCmp vs VCmpU disagree.
+_UNSIGNED_BIAS = {"u8": 128, "u16": 32768, "u32": 0x80000000}
 
 _KERNEL_DTYPE = tla.Float32
 _KERNEL_ELEMENT_BYTES = 4
@@ -228,7 +231,9 @@ def _operator_specs() -> dict[str, dict[str, Any]]:
 
 
 def _is_unsupported_case(op_name: str, dtype_name: str) -> bool:
-    del op_name, dtype_name
+    # Unsigned only covers vector-vector cmp (VCmpU); scalar/fused ops use f32 0.0.
+    if dtype_name in _UNSIGNED:
+        return not op_name.startswith("vector_vector_")
     return False
 
 
@@ -281,7 +286,14 @@ def _configure_batch(
 def _make_inputs(args: Any, dtype_name: str, torch: Any) -> tuple[Any, Any]:
     _, dtype, _ = _set_kernel_config(args.op, dtype_name, args.shape)
     device = "npu"
-    idx = torch.arange(VECTOR_ELE, dtype=dtype, device=device)
+    # NPU arange lacks uint; build on CPU then .to(npu).
+    idx = torch.arange(VECTOR_ELE, dtype=torch.int64)
+    if dtype_name in _UNSIGNED:
+        bias = _UNSIGNED_BIAS[dtype_name]
+        a64 = (idx % 50) + (bias - 10)
+        b64 = torch.flip(a64, dims=[0])
+        return a64.to(dtype).to(device), b64.to(dtype).to(device)
+    idx = idx.to(dtype=dtype, device=device)
     a = ((idx % 31) - 15.0) * 0.5
     b = torch.flip(a, dims=[0]) + 0.25
     return a, b
@@ -290,18 +302,24 @@ def _make_inputs(args: Any, dtype_name: str, torch: Any) -> tuple[Any, Any]:
 def _chunk_expected(a: Any, b: Any, op_name: str, torch: Any) -> Any:
     if op_name.startswith("vector_vector_"):
         mode = op_name.removeprefix("vector_vector_")
+        # Unsigned: compare in int64 so values above the signed bound stay correct.
+        # Float: keep native compare — casting to int64 truncates fractions.
+        if a.dtype in (torch.uint8, torch.uint16, torch.uint32):
+            lhs, rhs = a.to(torch.int64), b.to(torch.int64)
+        else:
+            lhs, rhs = a, b
         if mode == "lt":
-            return torch.where(a < b, a, b)
+            return torch.where(lhs < rhs, a, b)
         if mode == "le":
-            return torch.where(a <= b, a, b)
+            return torch.where(lhs <= rhs, a, b)
         if mode == "gt":
-            return torch.where(a > b, a, b)
+            return torch.where(lhs > rhs, a, b)
         if mode == "ge":
-            return torch.where(a >= b, a, b)
+            return torch.where(lhs >= rhs, a, b)
         if mode == "eq":
-            return torch.where(a == b, a, b)
+            return torch.where(lhs == rhs, a, b)
         if mode == "ne":
-            return torch.where(a != b, a, b)
+            return torch.where(lhs != rhs, a, b)
     if op_name == "vector_scalar_gt":
         return torch.where(a > 0.0, a, torch.zeros_like(a))
     if op_name == "vector_scalar_ge":

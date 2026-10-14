@@ -20,8 +20,9 @@ from catlass._mlir.dialects import arith as _mlir_arith  # type: ignore[import-n
 from . import _tla_type_bridge
 from .params import CastParams, SatMode
 
-# Element-type tokens the tla.cast lowering supports: signed ints and the AVE
-# float set. Unsigned ints, Bool (i1) and Float64 (f64) are rejected by VectorSSA.to.
+# Element-type tokens the tla.cast lowering supports: signed ints, unsigned
+# ints and the AVE float set. Bool (i1) and Float64 (f64) are rejected by
+# VectorSSA.to.
 #
 # f8e8m0 is absent on purpose: it is a block-scale exponent, an opaque byte
 # converted by shifting rather than by a cast.
@@ -33,14 +34,38 @@ _CAST_TOKEN_BITS = {
     "i16": 16,
     "i32": 32,
     "i64": 64,
+    "u8": 8,
+    "u16": 16,
+    "u32": 32,
+    "u64": 64,
     "f8e4m3fn": 8,
     "f8e5m2": 8,
     "f16": 16,
     "bf16": 16,
     "f32": 32,
 }
+_CAST_UNSIGNED_DTYPES = frozenset({"u8", "u16", "u32", "u64"})
 _CAST_SUPPORTED_DTYPES = (
-    frozenset({"i8", "i16", "i32", "i64", "f16", "bf16", "f32"}) | _CAST_FP8_DTYPES
+    frozenset({"i8", "i16", "i32", "i64", "f16", "bf16", "f32"})
+    | _CAST_UNSIGNED_DTYPES
+    | _CAST_FP8_DTYPES
+)
+
+# Reachable unsigned cast routes. Not derivable from widths: AVE advertises
+# more than HIVMAVEToAVEIntrin implements, and a missing route hits
+# llvm_unreachable rather than a diagnostic.
+_CAST_UNSIGNED_ROUTES = frozenset(
+    {
+        ("u8", "u16"),
+        ("u16", "u32"),
+        ("u8", "u32"),
+        ("u16", "u8"),
+        ("u32", "u16"),
+        ("u32", "u8"),
+        ("u8", "f16"),
+        ("f16", "u8"),
+        ("u8", "f32"),
+    }
 )
 from catlass._mlir.dialects import tla as _tla_ops_gen  # type: ignore[import-not-found]
 from .base_dsl import ast_helpers as _ast_helpers
@@ -104,7 +129,7 @@ _PIPE_VALUES = {
     "fix",
 }
 _MISSING = object()
-_SUPPORTED_COMPARE_ELEMENT_TYPES = frozenset({"f16", "f32", "i32", "u32"})
+_SUPPORTED_COMPARE_ELEMENT_TYPES = frozenset({"f16", "f32", "i32", "u32", "u16", "u8"})
 _MASK_CMP_MODES = ("lt", "le", "gt", "ge", "eq", "ne")
 # The two packed 4-bit cube float formats. Same width, different exponent /
 # mantissa split, and the two matmul operands may use different ones.
@@ -566,10 +591,11 @@ class VectorSSA(_RegisterSSA):
             Convert a register-resident vector to another element type.
 
             The lowering supports the signed integers `tla.Int8` .. `tla.Int64`,
-            the floats `tla.Float16` / `tla.BFloat16` / `tla.Float32`, and the
-            two OCP fp8 formats `tla.Float8E4M3FN` / `tla.Float8E5M2`. Unsigned
-            integers, `tla.Bool` (i1), `tla.Float64` and `tla.Float8E8M0` are
-            rejected.
+            the unsigned integers `tla.UInt8` .. `tla.UInt32` on the reachable
+            routes in `_CAST_UNSIGNED_ROUTES`, the floats `tla.Float16` /
+            `tla.BFloat16` / `tla.Float32`, and the two OCP fp8 formats
+            `tla.Float8E4M3FN` / `tla.Float8E5M2`. `tla.Bool` (i1),
+            `tla.Float64` and `tla.Float8E8M0` are rejected.
 
             `tla.Float16` to `tla.BFloat16` uses one direct instruction and
             preserves all lanes. All round modes are supported. `sat_mode`
@@ -625,15 +651,13 @@ class VectorSSA(_RegisterSSA):
                 f"invalid argument 'dst_type' (position 0): expected a concrete "
                 f"Numeric element type, got {_type_name(dst_type)}",
             )
-        # The lowering only emits signed-int and {f16,bf16,f32} AVE cast paths, so
-        # reject unsigned ints, Bool (i1) and Float64 up front (rather than
-        # emitting AVE IR the backend cannot legalize / would treat as signed).
         if dst_type.dtype not in _CAST_SUPPORTED_DTYPES:
             _op_error(
                 "cast",
                 f"unsupported cast target dtype '{dst_type.dtype}': tla.cast "
-                f"supports signed integers (i8/i16/i32/i64) and floats "
-                f"(f16/bf16/f32/f8e4m3fn/f8e5m2); unsigned, bool, f64 and "
+                f"supports signed integers (i8/i16/i32/i64), unsigned integers "
+                f"(u8/u16/u32/u64) and floats "
+                f"(f16/bf16/f32/f8e4m3fn/f8e5m2); bool, f64 and "
                 f"f8e8m0 are not supported",
             )
         if not isinstance(params, CastParams):
@@ -657,6 +681,7 @@ class VectorSSA(_RegisterSSA):
             and params.sat_mode is not SatMode.UNKNOWN
         ):
             _op_error("cast", "f16->bf16 cast only supports UNKNOWN sat_mode")
+        _require_unsigned_cast_route(src_token, dst_token)
         _require_reg_slot_reachable(src_token, dst_token, params.reg_slot)
         result_desc = _cast_result_descriptor(src_desc, dst_token, params)
         with context:
@@ -4887,17 +4912,39 @@ _COPY_VECTOR_ROUTES = {("gm", "ub"), ("ub", "gm"), ("ub", "l1")}
 _SUPPORTED_CUBE_COPY_ROUTES = {
     # (src_addr, src_layout, dst_addr, dst_layout) : dtypes
     # GM->L1
-    ("gm", "RowMajor", "l1", "zN"): ("f32", "f16", "bf16", "i8", "f8e4m3fn", "f8e5m2", "f4e2m1", "f4e1m2"),
-    ("gm", "ColumnMajor", "l1", "nZ"): ("f32", "f16", "bf16", "i8", "f8e4m3fn", "f8e5m2", "f4e2m1", "f4e1m2"),
+    ("gm", "RowMajor", "l1", "zN"): (
+        "f32",
+        "f16",
+        "bf16",
+        "i8",
+        "u16",
+        "u32",
+        "f8e4m3fn",
+        "f8e5m2",
+        "f4e2m1",
+        "f4e1m2",
+    ),
+    ("gm", "ColumnMajor", "l1", "nZ"): (
+        "f32",
+        "f16",
+        "bf16",
+        "i8",
+        "u16",
+        "u32",
+        "f8e4m3fn",
+        "f8e5m2",
+        "f4e2m1",
+        "f4e1m2",
+    ),
     ("gm", "RowMajorMxScaleA", "l1", "zZMxScale"): ("f8e8m0",),
     ("gm", "ColMajorMxScaleA", "l1", "zZMxScale"): ("f8e8m0",),
     ("gm", "RowMajorMxScaleB", "l1", "nNMxScale"): ("f8e8m0",),
     ("gm", "ColMajorMxScaleB", "l1", "nNMxScale"): ("f8e8m0",),
-    # L1->L0
-    ("l1", "zN", "l0a", "zN"): ("f32", "f16", "bf16", "i8", "f8e4m3fn", "f8e5m2"),
-    ("l1", "nZ", "l0a", "zN"): ("f32", "f16", "bf16", "i8", "f8e4m3fn", "f8e5m2"),
-    ("l1", "zN", "l0b", "nZ"): ("f32", "f16", "bf16", "i8", "f8e4m3fn", "f8e5m2"),
-    ("l1", "nZ", "l0b", "nZ"): ("f32", "f16", "bf16", "i8", "f8e4m3fn", "f8e5m2"),
+    # L1->L0 — AscendC LoadData 2dv2 accepts u32 but not u16 on dav-3510.
+    ("l1", "zN", "l0a", "zN"): ("f32", "f16", "bf16", "i8", "u32", "f8e4m3fn", "f8e5m2"),
+    ("l1", "nZ", "l0a", "zN"): ("f32", "f16", "bf16", "i8", "u32", "f8e4m3fn", "f8e5m2"),
+    ("l1", "zN", "l0b", "nZ"): ("f32", "f16", "bf16", "i8", "u32", "f8e4m3fn", "f8e5m2"),
+    ("l1", "nZ", "l0b", "nZ"): ("f32", "f16", "bf16", "i8", "u32", "f8e4m3fn", "f8e5m2"),
 }
 
 # Cube copy that carries a scale
@@ -4912,8 +4959,32 @@ _SUPPORTED_CUBE_MXFP_WITH_SCALE_COPY_ROUTES = {
 # Vector copy
 _SUPPORTED_VECTOR_COPY_ROUTES = {
     # (src_addr, src_layout, dst_addr, dst_layout) : dtypes
-    ("gm", "RowMajor", "ub", "RowMajor"): ("f32", "f16", "bf16", "i32", "i16", "i8", "f8e4m3fn", "f8e5m2"),
-    ("ub", "RowMajor", "gm", "RowMajor"): ("f32", "f16", "bf16", "i32", "i16", "i8", "f8e4m3fn", "f8e5m2"),
+    ("gm", "RowMajor", "ub", "RowMajor"): (
+        "f32",
+        "f16",
+        "bf16",
+        "i32",
+        "i16",
+        "i8",
+        "u32",
+        "u16",
+        "u8",
+        "f8e4m3fn",
+        "f8e5m2",
+    ),
+    ("ub", "RowMajor", "gm", "RowMajor"): (
+        "f32",
+        "f16",
+        "bf16",
+        "i32",
+        "i16",
+        "i8",
+        "u32",
+        "u16",
+        "u8",
+        "f8e4m3fn",
+        "f8e5m2",
+    ),
     ("ub", "RowMajor", "l1", "zN"): ("f32", "f16", "bf16", "i8", "f8e4m3fn", "f8e5m2"),
     ("ub", "zN", "l1", "zN"): ("f32", "f16", "bf16", "i8", "f8e4m3fn", "f8e5m2"),
     ("ub", "zNUnAlign", "l1", "zN"): ("f32", "f16", "bf16", "i8", "f8e4m3fn", "f8e5m2"),
@@ -8304,6 +8375,7 @@ def cmp(
         Constraints:
         - Must be called inside a `@tla.kernel`-decorated kernel function.
         - Must be called inside `tla.vec.func()`; `mode` must be a supported compare mnemonic.
+        - Element type must be one of f16/f32/i32/u32/u16/u8.
 
         Example:
         ```python
@@ -8472,6 +8544,32 @@ def bitwise_xor(
     )
 
 
+def _require_unsigned_cast_route(src_token: str, dst_token: str) -> None:
+    """Refuse a cast the unsigned AVE instruction set cannot express."""
+    src_unsigned = src_token in _CAST_UNSIGNED_DTYPES
+    dst_unsigned = dst_token in _CAST_UNSIGNED_DTYPES
+    if not src_unsigned and not dst_unsigned:
+        return
+    src_signed_int = src_token.startswith("i")
+    dst_signed_int = dst_token.startswith("i")
+    if (src_unsigned and dst_signed_int) or (dst_unsigned and src_signed_int):
+        _op_error(
+            "cast",
+            f"unsupported cast '{src_token}'->'{dst_token}': tla.cast requires "
+            f"matching signedness, so a signed integer does not convert to or "
+            f"from an unsigned one; cast within one signedness, or reinterpret "
+            f"the bits explicitly",
+        )
+    if (src_token, dst_token) not in _CAST_UNSIGNED_ROUTES:
+        routes = ", ".join(f"{a}->{b}" for a, b in sorted(_CAST_UNSIGNED_ROUTES))
+        _op_error(
+            "cast",
+            f"unsupported cast '{src_token}'->'{dst_token}': the unsigned "
+            f"integers do not form a complete width lattice. Supported unsigned "
+            f"routes are {routes}",
+        )
+
+
 def _require_reg_slot_reachable(src_token: str, dst_token: str, slot: RegSlot) -> None:
     """Refuse a reg_slot the lowering would quietly ignore.
 
@@ -8496,7 +8594,9 @@ def _require_reg_slot_reachable(src_token: str, dst_token: str, slot: RegSlot) -
         )
     src_bits = _CAST_TOKEN_BITS.get(src_token, 0)
     dst_bits = _CAST_TOKEN_BITS.get(dst_token, 0)
-    int_pair = src_token.startswith("i") and dst_token.startswith("i")
+    int_pair = (src_token.startswith("i") and dst_token.startswith("i")) or (
+        src_token in _CAST_UNSIGNED_DTYPES and dst_token in _CAST_UNSIGNED_DTYPES
+    )
     ratio = (
         _builtins.max(src_bits, dst_bits) // _builtins.min(src_bits, dst_bits)
         if src_bits and dst_bits
@@ -8505,7 +8605,10 @@ def _require_reg_slot_reachable(src_token: str, dst_token: str, slot: RegSlot) -
     fp8_f32_pair = (src_token in _CAST_FP8_DTYPES and dst_token == "f32") or (
         src_token == "f32" and dst_token in _CAST_FP8_DTYPES
     )
-    if (int_pair and ratio >= 4) or fp8_f32_pair:
+    # u8 -> f32 is composed as a 4x widen then convert; reg_slot still names
+    # the pack quarter of the widen leg.
+    u8_f32_pair = src_token == "u8" and dst_token == "f32"
+    if (int_pair and ratio >= 4) or fp8_f32_pair or u8_f32_pair:
         return
     _op_error(
         "cast",

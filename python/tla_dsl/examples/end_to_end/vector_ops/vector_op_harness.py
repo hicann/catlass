@@ -40,6 +40,9 @@ DTYPES: dict[str, DTypeSpec] = {
     "i8": DTypeSpec("i8", tla.Int8, "int8", -101, 1),
     "i16": DTypeSpec("i16", tla.Int16, "int16", -7, 2),
     "i32": DTypeSpec("i32", tla.Int32, "int32", -7, 4),
+    "u8": DTypeSpec("u8", tla.UInt8, "uint8", 0, 1),
+    "u16": DTypeSpec("u16", tla.UInt16, "uint16", 0, 2),
+    "u32": DTypeSpec("u32", tla.UInt32, "uint32", 0, 4),
 }
 
 
@@ -231,13 +234,13 @@ class DirectVectorOpHarness:
         inputs = self.config.make_inputs(args, dtype_name, torch)
         device = "npu"
         sentinel = args.sentinel if args.sentinel is not None else default_sentinel
+        # Build on CPU then .to(npu): NPU fill rejects uint fill_value promotion.
         outputs = tuple(
             torch.full(
                 (self.config.get_vector_elements(),),
                 sentinel,
                 dtype=torch_dt,
-                device=device,
-            )
+            ).to(device)
             for _ in range(self.config.output_count)
         )
         expected = self.config.expected(args.op, inputs)
@@ -274,12 +277,12 @@ class DirectVectorOpHarness:
         for output_index, (actual, expected_output) in enumerate(
             zip(outputs, expected_outputs, strict=True)
         ):
+            # Compare on CPU: NPU eq lacks u16/u32 (and some other integer dtypes).
+            act_c, exp_c = actual.cpu(), expected_output.cpu()
             if dtype_name in self.config.float_dtypes:
-                expected_match = torch.isclose(
-                    actual, expected_output, rtol=0.0, atol=args.atol
-                )
+                expected_match = torch.isclose(act_c, exp_c, rtol=0.0, atol=args.atol)
             else:
-                expected_match = actual.eq(expected_output)
+                expected_match = act_c.eq(exp_c)
             output_matches.append(bool(expected_match.all()))
             mismatch = expected_match.logical_not().nonzero(as_tuple=False)
             bad = [int(v) for v in mismatch.flatten().tolist()]
@@ -292,8 +295,8 @@ class DirectVectorOpHarness:
                 first_mismatch = {
                     "output": output_index,
                     "index": index,
-                    "actual": actual[index].item(),
-                    "expected": expected_output[index].item(),
+                    "actual": act_c[index].item(),
+                    "expected": exp_c[index].item(),
                 }
 
         print(
@@ -321,10 +324,12 @@ class DirectVectorOpHarness:
         for output_index, (actual, expected) in enumerate(
             zip(actual_outputs, expected_outputs, strict=True)
         ):
+            # Compare on CPU: NPU eq lacks u16/u32 (and some other integer dtypes).
+            act_c, exp_c = actual.cpu(), expected.cpu()
             if dtype_name in self.config.float_dtypes:
-                matches = torch.isclose(actual, expected, rtol=0.0, atol=atol)
+                matches = torch.isclose(act_c, exp_c, rtol=0.0, atol=atol)
             else:
-                matches = actual.eq(expected)
+                matches = act_c.eq(exp_c)
             output_matches.append(bool(matches.all()))
             mismatch = matches.logical_not().nonzero(as_tuple=False)
             if first_mismatch is None and mismatch.numel():
@@ -332,8 +337,8 @@ class DirectVectorOpHarness:
                 first_mismatch = {
                     "output": output_index,
                     "index": index,
-                    "actual": actual[index].item(),
-                    "expected": expected[index].item(),
+                    "actual": act_c[index].item(),
+                    "expected": exp_c[index].item(),
                 }
         print(
             f"batch_case op={op_name} dtype={dtype_name} "
@@ -385,6 +390,7 @@ class DirectVectorOpHarness:
             torch.cat([inputs[index] for inputs in case_inputs])
             for index in range(self.config.input_count)
         )
+        # Build on CPU then .to(npu): NPU fill rejects uint fill_value promotion.
         packed_outputs = tuple(
             torch.cat(
                 [
@@ -392,11 +398,10 @@ class DirectVectorOpHarness:
                         (shape_num_elements(shape),),
                         sentinels[case_index],
                         dtype=batch_torch_dtype,
-                        device="npu",
                     )
                     for case_index in range(len(ops))
                 ]
-            )
+            ).to("npu")
             for _ in range(self.config.output_count)
         )
         tla_inputs = tuple(

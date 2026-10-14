@@ -205,6 +205,13 @@ def test_cmp_rejects_unsupported_dtype() -> None:
         scalar_cmp_i64_kernel.dump_mlir(type_args=(tensor,))
 
 
+@pytest.mark.parametrize("dtype,shape", [(tla.UInt8, 256), (tla.UInt16, 128), (tla.UInt32, 64)])
+def test_cmp_accepts_unsigned_element_types(dtype, shape: int) -> None:
+    tensor = _vector_tensor(shape=shape, dtype=dtype)
+    mlir = cmp_kernel.dump_mlir(type_args=(tensor, tensor))
+    assert mlir.count("tla.cmp") == 4
+
+
 def test_cmp_accepts_static_tile_with_dynamic_tile_view() -> None:
     tensor = _vector_tensor(shape=256)
     mlir = static_vs_dynamic_tile_cmp_kernel.dump_mlir(type_args=(tensor,))
