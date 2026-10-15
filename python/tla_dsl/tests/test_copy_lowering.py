@@ -12,7 +12,9 @@ import catlass.runtime as runtime_mod
 
 def _require_hivm_tla_compile() -> pathlib.Path:
     repo_root = pathlib.Path(__file__).resolve().parents[1]
-    tla_compile = repo_root / "csrc" / "mlir" / "build" / "tools" / "tla-compile" / "TlaCompile"
+    tla_compile = (
+        repo_root / "csrc" / "mlir" / "build" / "tools" / "tla-compile" / "TlaCompile"
+    )
     if not tla_compile.exists():
         raise AssertionError("TlaCompile binary not found. Build csrc/mlir first.")
     return tla_compile
@@ -51,6 +53,16 @@ def copy_l1_to_gm_kernel(mem_in: tla.Tensor) -> None:
     )
     with tla.cube():
         tla.copy(mem_in, l1)
+
+
+@tla.kernel
+def copy_ub_to_ub_kernel(mem_in: tla.Tensor) -> None:
+    src_ptr = tla.allocate((32, 32), tla.Float32, tla.AddressSpace.ub, 256)
+    dst_ptr = tla.allocate((32, 32), tla.Float32, tla.AddressSpace.ub, 256)
+    src = tla.make_tensor_like(src_ptr, mem_in, tla.arch.RowMajor)
+    dst = tla.make_tensor_like(dst_ptr, mem_in, tla.arch.RowMajor)
+    with tla.vector():
+        tla.copy(dst, src)
 
 
 def test_frontend_rejects_copy_l1_to_gm() -> None:
@@ -128,12 +140,12 @@ def test_frontend_rejects_unscaled_fp4_l1_to_l0a_copy() -> None:
 def test_frontend_copy_gm_to_l1_lowers_to_runtime_call(tmp_path) -> None:
     tla_compile = _require_hivm_tla_compile()
     mem = make_fake_tensor(
-              tla.Float32,
-              (128, 128),
-              (128, 1),
-              origin_shape=(128, 128),
-              layout_tag=tla.arch.RowMajor,
-          )
+        tla.Float32,
+        (128, 128),
+        (128, 1),
+        origin_shape=(128, 128),
+        layout_tag=tla.arch.RowMajor,
+    )
 
     mlir = copy_gm_to_l1_kernel.dump_mlir(type_args=(mem,))
     assert "!tla.layout<!tla.shape<(16,2),(8,4)>" in mlir
@@ -173,12 +185,12 @@ def test_frontend_copy_gm_to_l1_lowers_to_runtime_call(tmp_path) -> None:
 def test_kernel_gm_arg_copies_directly_to_ub(tmp_path) -> None:
     tla_compile = _require_hivm_tla_compile()
     mem_in = make_fake_tensor(
-                 tla.Float32,
-                 (16, 16),
-                 (16, 1),
-                 origin_shape=(16, 16),
-                 layout_tag=tla.arch.RowMajor,
-             )
+        tla.Float32,
+        (16, 16),
+        (16, 1),
+        origin_shape=(16, 16),
+        layout_tag=tla.arch.RowMajor,
+    )
 
     mlir = copy_kernel_arg_directly_to_ub_kernel.dump_mlir(type_args=(mem_in,))
     assert "tla.tile_view" not in mlir
@@ -223,18 +235,14 @@ def copy_dynamic_l0c_to_ub_split_m_kernel(gm_c: tla.Tensor) -> None:
     ub_ptr = tla.allocate((64, 128), tla.Float32, tla.AddressSpace.ub, 512)
 
     for col in tla.range(tla.arch.block_idx(), 1, tla.arch.block_num()):
-        gm_tile = tla.tile_view(
-            gm_c, tla.make_shape(128, 128), tla.make_coord(0, col)
-        )
+        gm_tile = tla.tile_view(gm_c, tla.make_shape(128, 128), tla.make_coord(0, col))
         l0c = tla.make_tensor_like(l0c_ptr, gm_tile, tla.arch.L0Clayout)
         ub = tla.make_tensor_like(ub_ptr, l0c, tla.arch.RowMajor)
         with tla.cube():
             tla.copy(
                 ub,
                 l0c,
-                tla.params.CopyL0C2DstParams(
-                    l0c2ub_mode=tla.params.L0C2UBMode.SPLIT_M
-                ),
+                tla.params.CopyL0C2DstParams(l0c2ub_mode=tla.params.L0C2UBMode.SPLIT_M),
             )
 
 
@@ -242,12 +250,12 @@ def test_split_m_dynamic_RowMajor_stride_uses_child_n_extent(tmp_path) -> None:
     """Split-M destination stride0 must be aligned N, not the L0C packing stride."""
     tla_compile = _require_hivm_tla_compile()
     gm_c = make_fake_tensor(
-               tla.Float32,
-               (128, 128),
-               (1, 128),
-               origin_shape=(128, 128),
-               layout_tag=tla.arch.ColumnMajor,
-           )
+        tla.Float32,
+        (128, 128),
+        (1, 128),
+        origin_shape=(128, 128),
+        layout_tag=tla.arch.ColumnMajor,
+    )
 
     mlir = copy_dynamic_l0c_to_ub_split_m_kernel.dump_mlir(type_args=(gm_c,))
     assert "!tla.shape<128,?>" in mlir
@@ -290,9 +298,7 @@ _MAKE_TENSOR_LIKE_CHILD_LAYOUT = tla.arch.RowMajor
 
 
 @tla.kernel
-def make_tensor_like_layout_pair_kernel(
-    mem_in: tla.Tensor, m: int, n: int
-) -> None:
+def make_tensor_like_layout_pair_kernel(mem_in: tla.Tensor, m: int, n: int) -> None:
     """Build one dynamic parent->child make_tensor_like layout pair."""
     root = tla.make_tensor(
         mem_in.ptr,
@@ -305,12 +311,8 @@ def make_tensor_like_layout_pair_kernel(
     parent_ptr = tla.allocate((128, 128), tla.Float32, tla.AddressSpace.l1, 512)
     child_ptr = tla.allocate((128, 128), tla.Float32, tla.AddressSpace.l1, 512)
     with tla.cube():
-        parent = tla.make_tensor_like(
-            parent_ptr, root, _MAKE_TENSOR_LIKE_PARENT_LAYOUT
-        )
-        child = tla.make_tensor_like(
-            child_ptr, parent, _MAKE_TENSOR_LIKE_CHILD_LAYOUT
-        )
+        parent = tla.make_tensor_like(parent_ptr, root, _MAKE_TENSOR_LIKE_PARENT_LAYOUT)
+        child = tla.make_tensor_like(child_ptr, parent, _MAKE_TENSOR_LIKE_CHILD_LAYOUT)
         tla.make_shape(child.origin_shape[0], child.origin_shape[1])
 
 
@@ -330,9 +332,7 @@ def _tensor_desc_metadata(
     )
 
 
-def _index_binary_operands(
-    mlir: str, result: str, op_name: str
-) -> tuple[str, str]:
+def _index_binary_operands(mlir: str, result: str, op_name: str) -> tuple[str, str]:
     ssa = r"%[A-Za-z0-9_]+"
     match = re.search(
         rf"^\s*{re.escape(result)} = arith\.{op_name} "
@@ -364,9 +364,7 @@ def _assert_f32_dynamic_stride_is_32b_aligned(
     )
 
 
-def _llvm_i64_binary_operands(
-    mlir: str, result: str, op_name: str
-) -> tuple[str, str]:
+def _llvm_i64_binary_operands(mlir: str, result: str, op_name: str) -> tuple[str, str]:
     ssa = r"%[A-Za-z0-9_]+"
     match = re.search(
         rf"^\s*{re.escape(result)} = llvm\.{op_name} "
@@ -415,25 +413,19 @@ def test_make_tensor_like_supports_every_layout_pair(
     tmp_path,
 ) -> None:
     """All seven layouts can be the parent and child of make_tensor_like."""
-    monkeypatch.setitem(
-        globals(), "_MAKE_TENSOR_LIKE_PARENT_LAYOUT", parent_layout
-    )
-    monkeypatch.setitem(
-        globals(), "_MAKE_TENSOR_LIKE_CHILD_LAYOUT", child_layout
-    )
+    monkeypatch.setitem(globals(), "_MAKE_TENSOR_LIKE_PARENT_LAYOUT", parent_layout)
+    monkeypatch.setitem(globals(), "_MAKE_TENSOR_LIKE_CHILD_LAYOUT", child_layout)
     mem_in = make_fake_tensor(
-                 tla.Float32,
-                 (128, 128),
-                 (128, 1),
-                 origin_shape=(128, 128),
-                 layout_tag=tla.arch.RowMajor,
-             )
-
-    mlir = make_tensor_like_layout_pair_kernel.dump_mlir(
-        type_args=(mem_in, 64, 96)
+        tla.Float32,
+        (128, 128),
+        (128, 1),
+        origin_shape=(128, 128),
+        layout_tag=tla.arch.RowMajor,
     )
-    assert f'layoutTag(<{parent_name}>)' in mlir
-    assert f'layoutTag(<{child_name}>)' in mlir
+
+    mlir = make_tensor_like_layout_pair_kernel.dump_mlir(type_args=(mem_in, 64, 96))
+    assert f"layoutTag(<{parent_name}>)" in mlir
+    assert f"layoutTag(<{child_name}>)" in mlir
     assert "!tla.shape<?,?>" in mlir
 
     input_path = tmp_path / f"layout_pair_{parent_name}_to_{child_name}.mlir"
@@ -497,19 +489,19 @@ def test_nested_ub_subtile_copy_lowers(tmp_path) -> None:
     """GM<->UB staging copies lower to vector-core (AIV) cifax runtime calls."""
     tla_compile = _require_hivm_tla_compile()
     mem_in = make_fake_tensor(
-                 tla.Float32,
-                 (64, 64),
-                 (64, 1),
-                 origin_shape=(64, 64),
-                 layout_tag=tla.arch.RowMajor,
-             )
+        tla.Float32,
+        (64, 64),
+        (64, 1),
+        origin_shape=(64, 64),
+        layout_tag=tla.arch.RowMajor,
+    )
     mem_out = make_fake_tensor(
-                  tla.Float32,
-                  (32, 32),
-                  (32, 1),
-                  origin_shape=(32, 32),
-                  layout_tag=tla.arch.RowMajor,
-              )
+        tla.Float32,
+        (32, 32),
+        (32, 1),
+        origin_shape=(32, 32),
+        layout_tag=tla.arch.RowMajor,
+    )
 
     mlir = nested_ub_subtile_copy_kernel.dump_mlir(type_args=(mem_in, mem_out))
     input_path = tmp_path / "nested_ub_subtile_copy.mlir"
@@ -545,23 +537,23 @@ def test_ptradd_ub_subtile_copy_applies_ptr_offset(tmp_path) -> None:
     """The ptr_add offset is preserved in the cifax base pointer_cast and tile payload."""
     tla_compile = _require_hivm_tla_compile()
     mem_in = make_fake_tensor(
-                 tla.Float32,
-                 (64, 64),
-                 (64, 1),
-                 origin_shape=(64, 64),
-                 layout_tag=tla.arch.RowMajor,
-             )
+        tla.Float32,
+        (64, 64),
+        (64, 1),
+        origin_shape=(64, 64),
+        layout_tag=tla.arch.RowMajor,
+    )
     mem_src = make_fake_tensor(
-                  tla.Float32,
-                  (32, 32),
-                  (32, 1),
-                  origin_shape=(32, 32),
-                  layout_tag=tla.arch.RowMajor,
-              )
+        tla.Float32,
+        (32, 32),
+        (32, 1),
+        origin_shape=(32, 32),
+        layout_tag=tla.arch.RowMajor,
+    )
 
     mlir = ptradd_ub_subtile_copy_kernel.dump_mlir(type_args=(mem_in, mem_src))
     input_path = tmp_path / "ptradd_ub_subtile.mlir"
-    input_path.write_text(mlir),
+    (input_path.write_text(mlir),)
     output_path = tmp_path / "out.mlir"
     result = subprocess.run(
         [
@@ -585,3 +577,230 @@ def test_ptradd_ub_subtile_copy_applies_ptr_offset(tmp_path) -> None:
     # (32*64+32 = 2080) from coord/stride at runtime.
     assert "arith.constant 64 : i64" in out
     assert '"tla.copy"' not in out
+
+
+# UB -> UB is not an MTE transfer -- no engine has UB on both sides. It goes
+# through the DataCopy meta-op (MOV.UB.TO.UB) for every row length: the move
+# counts in whole 32-byte blocks and rounds a ragged row up to one. The frontend
+# must accept the route inside a tla.vector region rather than rejecting it as
+# unsupported.
+def _ub_to_ub_kernel(dtype, cols):
+    """A UB->UB copy of a 1 x cols tile, built for one dtype."""
+
+    @tla.kernel
+    def kernel(mem_in: tla.Tensor) -> None:
+        src = tla.make_tensor_like(
+            tla.allocate((1, cols), dtype, tla.AddressSpace.ub, 256),
+            mem_in,
+            tla.arch.RowMajor,
+        )
+        dst = tla.make_tensor_like(
+            tla.allocate((1, cols), dtype, tla.AddressSpace.ub, 256),
+            mem_in,
+            tla.arch.RowMajor,
+        )
+        with tla.vector():
+            tla.copy(dst, src)
+
+    return kernel
+
+
+# The route is accepted for every registered width. A 64-element row is a whole
+# number of 32-byte blocks for each of these dtypes, so it takes the DataCopy
+# meta-op path (a tla.copy op).
+@pytest.mark.parametrize(
+    "dtype",
+    [
+        tla.Float32,
+        tla.Float16,
+        tla.BFloat16,
+        tla.Int32,
+        tla.Int16,
+        tla.Int8,
+        tla.Float8E4M3FN,
+        tla.Float8E5M2,
+    ],
+)
+def test_frontend_copy_ub_to_ub_accepts_every_registered_dtype(dtype) -> None:
+    mem = make_fake_tensor(
+        dtype, (1, 64), (64, 1), origin_shape=(1, 64), layout_tag=tla.arch.RowMajor
+    )
+    mlir = _ub_to_ub_kernel(dtype, 64).dump_mlir(type_args=(mem,))
+    assert "tla.copy" in mlir
+
+
+# A byte row that is not a whole number of 32-byte blocks takes the same
+# DataCopy meta-op as a block-aligned one: the move rounds the row up to whole
+# blocks. Every width is accepted -- b8 included.
+@pytest.mark.parametrize("dtype", [tla.Int8, tla.Float8E4M3FN, tla.Float8E5M2])
+@pytest.mark.parametrize("cols", [1, 17, 48, 63, 64])
+def test_frontend_copy_ub_to_ub_accepts_byte_rows(dtype, cols) -> None:
+    mem = make_fake_tensor(
+        dtype,
+        (1, cols),
+        (cols, 1),
+        origin_shape=(1, cols),
+        layout_tag=tla.arch.RowMajor,
+    )
+    mlir = _ub_to_ub_kernel(dtype, cols).dump_mlir(type_args=(mem,))
+    assert "tla.copy" in mlir
+
+
+def test_frontend_copy_ub_to_ub_lowers_to_runtime_call() -> None:
+    mem = make_fake_tensor(
+        tla.Float32,
+        (32, 32),
+        (32, 1),
+        origin_shape=(32, 32),
+        layout_tag=tla.arch.RowMajor,
+    )
+    mlir = copy_ub_to_ub_kernel.dump_mlir(type_args=(mem,))
+    assert "tla.copy" in mlir
+
+
+# An enclosing tla.vec.func region does not change which route a UB->UB copy
+# takes: the meta-op is emitted inside one exactly as it is outside, and a ragged
+# row is rounded up to whole blocks either way.
+def _ub_to_ub_in_vec_func_kernel(dtype, cols):
+    """A UB->UB copy of a 1 x cols tile, written inside a tla.vec.func region."""
+
+    @tla.kernel
+    def kernel(mem_in: tla.Tensor) -> None:
+        src = tla.make_tensor_like(
+            tla.allocate((1, cols), dtype, tla.AddressSpace.ub, 256),
+            mem_in,
+            tla.arch.RowMajor,
+        )
+        dst = tla.make_tensor_like(
+            tla.allocate((1, cols), dtype, tla.AddressSpace.ub, 256),
+            mem_in,
+            tla.arch.RowMajor,
+        )
+        with tla.vector():
+            with tla.vec.func(mode="simd"):
+                tla.copy(dst, src)
+
+    return kernel
+
+
+# 48 bytes of f32 (12 elements) and 48 bytes of i8 are both one and a half
+# blocks; 17 bytes of fp8 is just over half of one. All of them are copied.
+@pytest.mark.parametrize(
+    ("dtype", "cols"),
+    [
+        (tla.Float32, 12),
+        (tla.Float16, 24),
+        (tla.Int8, 48),
+        (tla.Float8E4M3FN, 17),
+        (tla.Float32, 8),
+        (tla.Int8, 32),
+    ],
+)
+def test_frontend_copy_ub_to_ub_inside_vec_func_takes_the_metaop(dtype, cols) -> None:
+    mem = make_fake_tensor(
+        dtype,
+        (1, cols),
+        (cols, 1),
+        origin_shape=(1, cols),
+        layout_tag=tla.arch.RowMajor,
+    )
+    mlir = _ub_to_ub_in_vec_func_kernel(dtype, cols).dump_mlir(type_args=(mem,))
+    assert "tla.copy" in mlir
+
+
+# A padded sub-tile with a ragged row is copied as long as the pitch leaves a
+# whole number of blocks of slack for the rounded row. A 64x64 f32 parent sliced
+# to 64x12 has a 256-byte pitch and a 48-byte row, rounded to 64.
+def test_frontend_copy_ub_to_ub_accepts_ragged_subtile_with_padded_pitch() -> None:
+    @tla.kernel
+    def kernel(mem_in: tla.Tensor) -> None:
+        src_root = tla.make_tensor_like(
+            tla.allocate((64, 64), tla.Float32, tla.AddressSpace.ub, 256),
+            mem_in,
+            tla.arch.RowMajor,
+        )
+        dst_root = tla.make_tensor_like(
+            tla.allocate((64, 64), tla.Float32, tla.AddressSpace.ub, 256),
+            mem_in,
+            tla.arch.RowMajor,
+        )
+        src = tla.tile_view(src_root, tla.make_shape(64, 12), tla.make_coord(0, 0))
+        dst = tla.tile_view(dst_root, tla.make_shape(64, 12), tla.make_coord(0, 0))
+        with tla.vector():
+            tla.copy(dst, src)
+
+    mem = make_fake_tensor(
+        tla.Float32,
+        (64, 64),
+        (64, 1),
+        origin_shape=(64, 64),
+        layout_tag=tla.arch.RowMajor,
+    )
+    assert "tla.copy" in kernel.dump_mlir(type_args=(mem,))
+
+
+# The block move addresses whole blocks, so a tile that does not *start* on one
+# has no route. A 12-element f32 tile at tile index 1 begins at byte 48.
+def test_frontend_copy_ub_to_ub_rejects_unaligned_origin() -> None:
+    @tla.kernel
+    def kernel(mem_in: tla.Tensor) -> None:
+        src_root = tla.make_tensor_like(
+            tla.allocate((64, 64), tla.Float32, tla.AddressSpace.ub, 256),
+            mem_in,
+            tla.arch.RowMajor,
+        )
+        dst_root = tla.make_tensor_like(
+            tla.allocate((64, 64), tla.Float32, tla.AddressSpace.ub, 256),
+            mem_in,
+            tla.arch.RowMajor,
+        )
+        src = tla.tile_view(src_root, tla.make_shape(64, 12), tla.make_coord(0, 1))
+        dst = tla.tile_view(dst_root, tla.make_shape(64, 12), tla.make_coord(0, 1))
+        with tla.vector():
+            tla.copy(dst, src)
+
+    mem = make_fake_tensor(
+        tla.Float32,
+        (64, 64),
+        (64, 1),
+        origin_shape=(64, 64),
+        layout_tag=tla.arch.RowMajor,
+    )
+    with pytest.raises(
+        runtime_mod.TlaCoreAPIError,
+        match=r"source tile starts at byte 48 of its parent",
+    ):
+        kernel.dump_mlir(type_args=(mem,))
+
+
+# A multi-row ragged tile is copied, because a UB allocation's row pitch is
+# padded to 32 bytes: 4 x 12 f32 is a 48-byte row with a 64-byte pitch, so the
+# tail the block move rounds up to lands in that padding rather than on the next
+# row. (The frontend still refuses a pitch too narrow to carry it, which is what
+# makes the meta-op's gap arithmetic exact, but an allocation cannot produce
+# one.)
+def test_frontend_copy_ub_to_ub_accepts_ragged_rows_with_padded_pitch() -> None:
+    mem = make_fake_tensor(
+        tla.Float32,
+        (4, 12),
+        (12, 1),
+        origin_shape=(4, 12),
+        layout_tag=tla.arch.RowMajor,
+    )
+
+    @tla.kernel
+    def kernel(mem_in: tla.Tensor) -> None:
+        src = tla.make_tensor_like(
+            tla.allocate((4, 12), tla.Float32, tla.AddressSpace.ub, 256),
+            mem_in,
+            tla.arch.RowMajor,
+        )
+        dst = tla.make_tensor_like(
+            tla.allocate((4, 12), tla.Float32, tla.AddressSpace.ub, 256),
+            mem_in,
+            tla.arch.RowMajor,
+        )
+        with tla.vector():
+            tla.copy(dst, src)
+
+    assert "tla.copy" in kernel.dump_mlir(type_args=(mem,))

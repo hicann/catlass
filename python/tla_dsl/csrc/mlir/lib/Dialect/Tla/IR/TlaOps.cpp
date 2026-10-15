@@ -1202,9 +1202,9 @@ mlir::LogicalResult CopyOp::verify()
         (src == AddressSpace::l0c && dst == AddressSpace::ub) ||
         (src == AddressSpace::l0c && dst == AddressSpace::l1) || (src == AddressSpace::l1 && dst == AddressSpace::ub);
     // Vector staging copies: GM->UB, UB->GM, UB->L1.
-    bool vectorRoute = (src == AddressSpace::gm && dst == AddressSpace::ub) ||
-                       (src == AddressSpace::ub && dst == AddressSpace::gm) ||
-                       (src == AddressSpace::ub && dst == AddressSpace::l1);
+    bool vectorRoute =
+        (src == AddressSpace::gm && dst == AddressSpace::ub) || (src == AddressSpace::ub && dst == AddressSpace::gm) ||
+        (src == AddressSpace::ub && dst == AddressSpace::l1) || (src == AddressSpace::ub && dst == AddressSpace::ub);
 
     if (cubeRoute && !hasEnclosingRegion<CubeOp>(getOperation()))
         return emitOpError(

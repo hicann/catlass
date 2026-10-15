@@ -719,8 +719,14 @@ def kernel() -> None:
 
 功能说明：
 
-在 tile 之间拷贝数据。硬件通路由 `src`/`dst` 地址空间决定（vector：GM↔UB、UB→L1；
-cube：GM→L1、L1→L0A/L0B、L0C→GM|UB|L1）。两侧 layout tag 选择格式转换（例如 ND→zN）。
+在 tile 之间拷贝数据。硬件通路由 `src`/`dst` 地址空间决定（vector：GM↔UB、UB→L1、
+UB→UB；cube：GM→L1、L1→L0A/L0B、L0C→GM|UB|L1）。
+UB→UB 一律走专用的 `MOV.UB.TO.UB` 块搬运，因此支持所有元素宽度（含 1 字节类型）
+与任意行长度。该搬运以 32 字节块为单位计数，所以当每行不是 32 字节块的整数倍时，
+行长度会向上取整，该行自身的 32 字节对齐填充也随之一起搬运。因此有两种几何形状会
+被拒绝，而不会被拷贝：一是起始地址不在 32 字节边界上的 tile（子块视图可能产生这种
+情况）；二是行间距不足以容纳取整后整行的多行 tile，此时取整后的行会越界写入下一行。
+两侧 layout tag 选择格式转换（例如 ND→zN）。
 
 vector 通路支持的元素类型：
 
@@ -728,12 +734,13 @@ vector 通路支持的元素类型：
 |---|---|---|
 | GM → UB | `RowMajor` → `RowMajor` | `f32`、`f16`、`bf16`、`i32`、`i16`、`i8`、`f8e4m3fn`、`f8e5m2` |
 | UB → GM | `RowMajor` → `RowMajor` | 同上 |
+| UB → UB | `RowMajor` → `RowMajor` | `f32`、`f16`、`bf16`、`i32`、`i16`、`i8`、`f8e4m3fn`、`f8e5m2` |
 | UB → L1 | `RowMajor` → `zN` | `f32`、`f16`、`bf16`、`i8`、`f8e4m3fn`、`f8e5m2` |
 | UB → L1 | `zN` → `zN` | 同上 |
 | UB → L1 | `zNUnAlign` → `zN` | 同上 |
 
 UB → L1 的目的 layout 只能是 `zN`；没有以 UB 为源、`nZ` 为目的的通路。`i16` /
-`i32` 只有 GM↔UB，没有 UB→L1。
+`i32` 只有 GM↔UB 与 UB→UB，没有 UB→L1。
 
 `zN` 源的 UB tile 需要先在 UB 里按 zN 摆好：用 `BlockStoreParams` 的带 stride
 block store 把每行分块写入打了 `zN` tag 的 UB view（见

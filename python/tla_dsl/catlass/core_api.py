@@ -4905,7 +4905,8 @@ _COPY_CUBE_ROUTES = {
     ("l0c", "ub"),
     ("l1", "ub"),
 }
-_COPY_VECTOR_ROUTES = {("gm", "ub"), ("ub", "gm"), ("ub", "l1")}
+
+_COPY_VECTOR_ROUTES = {("gm", "ub"), ("ub", "gm"), ("ub", "l1"), ("ub", "ub")}
 
 # fmt: off
 # Cube copy
@@ -4985,6 +4986,11 @@ _SUPPORTED_VECTOR_COPY_ROUTES = {
         "f8e4m3fn",
         "f8e5m2",
     ),
+    # UB -> UB is DataCopy (MOV.UB.TO.UB) throughout, with a ragged row rounded
+    # up to whole 32-byte blocks, so every element width is carried, 1-byte
+    # included. The unsigned widths are absent because the meta-op is not
+    # registered for them; see REGISTER_UB_TO_UB in csrc/mlir/bc/Vector/dma.cpp.
+    ("ub", "RowMajor", "ub", "RowMajor"): ("f32", "f16", "bf16", "i32", "i16", "i8", "f8e4m3fn", "f8e5m2"),
     ("ub", "RowMajor", "l1", "zN"): ("f32", "f16", "bf16", "i8", "f8e4m3fn", "f8e5m2"),
     ("ub", "zN", "l1", "zN"): ("f32", "f16", "bf16", "i8", "f8e4m3fn", "f8e5m2"),
     ("ub", "zNUnAlign", "l1", "zN"): ("f32", "f16", "bf16", "i8", "f8e4m3fn", "f8e5m2"),
@@ -5244,6 +5250,96 @@ def _tensor_fill_impl(
     _tla_ops_gen.fill(dest, value_val, coord_val, shape_val, loc=loc)
 
 
+def _ubub_static_geometry(src_desc, dst_desc, src_dtype):
+    """Static block geometry of a UB->UB copy, or ``None`` when it is not
+    statically known (dynamic or non-2D shapes, or a src/dst shape mismatch).
+    """
+    try:
+        # The extent is the origin shape: it is the tile's valid region, while
+        # ``shape`` is the packing it is addressed through, which a tail tile
+        # pads out past that region. ``copyUBToUB`` sizes the move the same way.
+        s_shape, d_shape = src_desc.origin_shape, dst_desc.origin_shape
+        s_stride, d_stride = src_desc.stride, dst_desc.stride
+        s_coord, d_coord = src_desc.coord, dst_desc.coord
+        if len(s_shape) != 2 or len(d_shape) != 2:
+            return None
+        rows, cols = int(s_shape[-2]), int(s_shape[-1])
+        s_pitch, d_pitch = int(s_stride[-2]), int(d_stride[-2])
+        if (rows, cols) != (int(d_shape[-2]), int(d_shape[-1])):
+            return None
+        # The coordinate is the tile's origin inside its parent, in elements.
+        s_base = int(s_coord[-2]) * s_pitch + int(s_coord[-1])
+        d_base = int(d_coord[-2]) * d_pitch + int(d_coord[-1])
+    except (TypeError, ValueError, IndexError, KeyError):
+        return None
+    esz = dtype_size_bytes(src_dtype)
+    row_bytes = cols * esz
+    return {
+        "rows": rows,
+        "cols": cols,
+        "esz": esz,
+        "row_bytes": row_bytes,
+        "row_bytes_rounded": -(-row_bytes // 32) * 32,
+        "src_base_bytes": s_base * esz,
+        "dst_base_bytes": d_base * esz,
+        "src_pitch_bytes": s_pitch * esz,
+        "dst_pitch_bytes": d_pitch * esz,
+    }
+
+
+def _ubub_require_metaop_representable(geom) -> None:
+    """Reject the UB->UB geometries the ``MOV.UB.TO.UB`` block move cannot copy.
+
+    The meta-op rounds the row length *up* to a whole number of 32-byte blocks
+    (see ``copyUBToUB`` in ``csrc/mlir/bc/Vector/dma.cpp``), so it moves the
+    row's alignment fill along with the row. Two things have to hold for that to
+    be a copy rather than a corruption, and neither is checkable on the device:
+
+    - Both origins must sit on a 32-byte boundary, because the block move
+      addresses whole blocks. A sub-block view can break this -- a 12-element
+      f32 tile at tile index 1 starts at byte 48.
+    - When there is more than one row, every row pitch must leave room for the
+      rounded row, and the slack must itself be a whole number of blocks so the
+      inter-row gap is exact. Otherwise the rounded row runs over the head of
+      the next one.
+
+    A single-row copy needs no pitch at all: the rounded tail lands in the
+    buffer's own 32-byte alignment fill.
+    """
+    if geom is None:
+        return
+    row_bytes, row_ru = geom["row_bytes"], geom["row_bytes_rounded"]
+    for base_bytes, side in (
+        (geom["src_base_bytes"], "source"),
+        (geom["dst_base_bytes"], "destination"),
+    ):
+        if base_bytes % 32 != 0:
+            _op_error(
+                "copy",
+                f"unsupported UB->UB copy: the {side} tile starts at byte "
+                f"{base_bytes} of its parent, which is not a multiple of 32. The "
+                "MOV.UB.TO.UB block move addresses whole 32-byte blocks, so it "
+                "cannot start there. Align the tile's offset (or its width) to 32 "
+                "bytes.",
+            )
+    if geom["rows"] <= 1:
+        return
+    for pitch_bytes, side in (
+        (geom["src_pitch_bytes"], "source"),
+        (geom["dst_pitch_bytes"], "destination"),
+    ):
+        if pitch_bytes < row_ru or (pitch_bytes - row_ru) % 32 != 0:
+            _op_error(
+                "copy",
+                f"unsupported UB->UB copy: rows of {row_bytes} bytes are rounded "
+                f"up to {row_ru} for the MOV.UB.TO.UB block move, which the "
+                f"{side} row pitch of {pitch_bytes} bytes cannot carry -- the "
+                "rounded row would run into the next one, and the inter-row gap "
+                "is itself counted in whole blocks. Pad the row pitch to a "
+                f"multiple of 32 bytes that is at least {row_ru}.",
+            )
+
+
 @dsl_user_op
 def copy(
     dst: Tensor,
@@ -5256,8 +5352,17 @@ def copy(
     """Directory: Data Movement
     Description:
         Copy data between tiles. The hardware path follows `src`/`dst` address spaces
-        (vector: GM↔UB, UB→L1; cube: GM→L1, L1→L0A/L0B, L0C→GM|UB|L1).
-        Layout tags on the tiles select format conversion (for example ND→zN).
+        (vector: GM↔UB, UB→L1, UB→UB; cube: GM→L1, L1→L0A/L0B, L0C→GM|UB|L1).
+        UB→UB always uses the dedicated `MOV.UB.TO.UB` block move, so any element
+        width (1-byte types included) and any row length are accepted. That move
+        counts in whole 32-byte blocks, so a row that is not a whole number of
+        blocks is rounded *up* and its alignment fill travels with it. Two
+        geometries are therefore rejected rather than copied: a tile whose origin
+        is not on a 32-byte boundary (which a sub-block view can produce), and a
+        multi-row tile whose row pitch does not leave a whole number of blocks of
+        slack for the rounded row, where the rounded row would run into the next
+        one. Layout tags on the tiles select format conversion (for example
+        ND→zN).
 
         Copy / tiling sizes follow each tile's logical `origin_shape`
         (not the nested physical `shape`). Physical `shape` / `stride` describe
@@ -5513,6 +5618,14 @@ def copy(
         _runtime._current_frontend_state().mx_scaled_l0_values.add(dst_value)
         # An MX load is its own op in the dialect.
         return _tla_ops_gen.copy_mx(dst_value, src_value, scale_value, loc=loc)
+
+    # UB->UB is the meta-op's MOV.UB.TO.UB block move for every row length; it
+    # rounds a ragged row up to whole blocks, which only copies for the
+    # geometries this guard admits.
+    if _route == ("ub", "ub") and src_layout == "RowMajor" and dst_layout == "RowMajor":
+        _ubub_require_metaop_representable(
+            _ubub_static_geometry(src_desc, dst_desc, src_dtype)
+        )
 
     return _tla_ops_gen.copy(
         dst_value,

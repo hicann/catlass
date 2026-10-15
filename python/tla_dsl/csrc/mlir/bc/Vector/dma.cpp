@@ -20,6 +20,69 @@ CATLASS_DEVICE void copyUBToGM(
     Catlass::Epilogue::Tile::CopyUb2GmTla<ArchTag, decltype(srcTensor), decltype(dstTensor)>{}(dstTensor, srcTensor);
 }
 
+// UB -> UB. DataCopy with DataCopyParams lowers to MOV.UB.TO.UB (arch 3510), a
+// single block move that carries any element width and any row length.
+//
+// The move is block-based: blockLen and both gaps are counts of 32-byte blocks.
+// A row whose byte length is not a whole number of blocks is rounded up, so the
+// move carries the row's own 32-byte alignment fill along with the row, and the
+// gaps are measured from the rounded row end. tla.copy admits only the
+// geometries where that is a copy -- both origins on a block boundary, and a row
+// pitch with whole-block slack for the rounded row -- which is what makes the
+// block arithmetic below exact. The guard is
+// _ubub_require_metaop_representable in core_api.py.
+template <class ArchTag, LayoutTag SrcLayout, LayoutTag DstLayout, typename T>
+CATLASS_DEVICE void copyUBToUB(
+    memref_t<__ubuf__ T, 1>* src, memref_t<__ubuf__ T, 1>* dst, const TensorDesc& srcDesc, const TensorDesc& dstDesc)
+{
+    AscendC::LocalTensor<T> srcTensor(AscendC::TPosition::VECCALC, localAddr(src), elementCount(src));
+    AscendC::LocalTensor<T> dstTensor(AscendC::TPosition::VECCALC, localAddr(dst), elementCount(dst));
+
+    constexpr uint32_t kBlockBytes = 32;
+    // originShape is the tile's valid extent; shape is the packing it is
+    // addressed through, which a tail tile pads out beyond that extent. The move
+    // carries the valid elements, so it is sized from the origin, as every other
+    // route here is.
+    const uint32_t rows = static_cast<uint32_t>(srcDesc.originShape0);
+    const uint32_t cols = static_cast<uint32_t>(srcDesc.originShape1);
+    const uint32_t rowBytes = cols * static_cast<uint32_t>(sizeof(T));
+    const uint32_t srcPitchBytes = static_cast<uint32_t>(srcDesc.stride0) * static_cast<uint32_t>(sizeof(T));
+    const uint32_t dstPitchBytes = static_cast<uint32_t>(dstDesc.stride0) * static_cast<uint32_t>(sizeof(T));
+
+    // The descriptor's coordinate is the tile's origin inside its parent, in
+    // elements. Every other route reaches it through makeTlaTileCoord(), which
+    // builds a tla::Tensor that folds the coordinate into the address; this one
+    // drives DataCopy from a raw LocalTensor, so it has to apply the coordinate
+    // itself. Without this a sub-block view (a padded 64x32 slice of a 64x64
+    // tile, say) copies at the parent's origin instead, silently landing the
+    // wrong data -- the row pitch below is honoured, but the base is not.
+    const uint32_t srcElemOffset =
+        static_cast<uint32_t>(static_cast<int64_t>(srcDesc.coord0) * srcDesc.stride0 + srcDesc.coord1);
+    const uint32_t dstElemOffset =
+        static_cast<uint32_t>(static_cast<int64_t>(dstDesc.coord0) * dstDesc.stride0 + dstDesc.coord1);
+
+    // Rounding the row length up is what makes every row length expressible.
+    // The alternative is to round down, which is what AscendC's own Level-2
+    // overload does -- its header states that no error is reported in NPU mode
+    // and that the value is rounded down by 32B -- and that drops the tail of
+    // every row. There is no DataCopyPad for a local-to-local move to pick
+    // instead, so rounding up, into the row's own alignment fill, is the only
+    // direction that moves all of the bytes.
+    const uint32_t rowBlocks = (rowBytes + kBlockBytes - 1) / kBlockBytes;
+    const uint32_t rowBlockBytes = rowBlocks * kBlockBytes;
+    // A single-row copy has no gap to express, and its pitch is allowed to be
+    // narrower than the rounded row, so clamp rather than underflow.
+    const uint32_t srcGapBlocks = srcPitchBytes > rowBlockBytes ? (srcPitchBytes - rowBlockBytes) / kBlockBytes : 0;
+    const uint32_t dstGapBlocks = dstPitchBytes > rowBlockBytes ? (dstPitchBytes - rowBlockBytes) / kBlockBytes : 0;
+
+    AscendC::DataCopyParams params;
+    params.blockCount = static_cast<uint16_t>(rows);
+    params.blockLen = static_cast<uint16_t>(rowBlocks);
+    params.srcGap = static_cast<uint16_t>(srcGapBlocks);
+    params.dstGap = static_cast<uint16_t>(dstGapBlocks);
+    AscendC::DataCopy(dstTensor[dstElemOffset], srcTensor[srcElemOffset], params);
+}
+
 template <class ArchTag, LayoutTag SrcLayout, LayoutTag DstLayout, typename T>
 CATLASS_DEVICE void copyUBToL1(
     memref_t<__ubuf__ T, 1>* src, memref_t<__cbuf__ T, 1>* dst, const TensorDesc& srcDesc, const TensorDesc& dstDesc)
@@ -88,6 +151,15 @@ extern "C" {
             src, dst, TENSOR_DESC_12(src), TENSOR_DESC_12(dst));                                                      \
     }
 
+#define REGISTER_UB_TO_UB(LayoutSrc, LayoutDst, DType)                                                           \
+    [aicore] __attribute__((always_inline)) void _mlir_ciface_copy_ub_##LayoutSrc##_to_ub_##LayoutDst##_##DType( \
+        memref_t<__ubuf__ DType, 1>* src, memref_t<__ubuf__ DType, 1>* dst, DESC_ABI_PARAMS(src),                \
+        DESC_ABI_PARAMS(dst))                                                                                    \
+    {                                                                                                            \
+        copyUBToUB<Catlass::Arch::Ascend950, LayoutTag::LayoutSrc, LayoutTag::LayoutDst, DType>(                 \
+            src, dst, TENSOR_DESC_12(src), TENSOR_DESC_12(dst));                                                 \
+    }
+
 #define REGISTER_UB_TO_L1(LayoutSrc, LayoutDst, DType)                                                           \
     [aicore] __attribute__((always_inline)) void _mlir_ciface_copy_ub_##LayoutSrc##_to_l1_##LayoutDst##_##DType( \
         memref_t<__ubuf__ DType, 1>* src, memref_t<__cbuf__ DType, 1>* dst, DESC_ABI_PARAMS(src),                \
@@ -125,6 +197,27 @@ REGISTER_UB_TO_GM(RowMajor, RowMajor, uint16_t)
 REGISTER_UB_TO_GM(RowMajor, RowMajor, uint32_t)
 REGISTER_UB_TO_GM_AS_BYTES(RowMajor, RowMajor, fp8_e4m3fn_t)
 REGISTER_UB_TO_GM_AS_BYTES(RowMajor, RowMajor, fp8_e5m2_t)
+
+// fp8 rides the route as bytes: DataCopy moves blocks, so the element type only
+// has to describe the width. int8_t is registered directly.
+#define REGISTER_UB_TO_UB_AS_BYTES(LayoutSrc, LayoutDst, DType)                                                  \
+    [aicore] __attribute__((always_inline)) void _mlir_ciface_copy_ub_##LayoutSrc##_to_ub_##LayoutDst##_##DType( \
+        memref_t<__ubuf__ DType, 1>* src, memref_t<__ubuf__ DType, 1>* dst, DESC_ABI_PARAMS(src),                \
+        DESC_ABI_PARAMS(dst))                                                                                    \
+    {                                                                                                            \
+        copyUBToUB<Catlass::Arch::Ascend950, LayoutTag::LayoutSrc, LayoutTag::LayoutDst, int8_t>(                \
+            reinterpret_cast<memref_t<__ubuf__ int8_t, 1>*>(src),                                                \
+            reinterpret_cast<memref_t<__ubuf__ int8_t, 1>*>(dst), TENSOR_DESC_12(src), TENSOR_DESC_12(dst));     \
+    }
+
+REGISTER_UB_TO_UB(RowMajor, RowMajor, float)
+REGISTER_UB_TO_UB(RowMajor, RowMajor, half)
+REGISTER_UB_TO_UB(RowMajor, RowMajor, bf16)
+REGISTER_UB_TO_UB(RowMajor, RowMajor, int32_t)
+REGISTER_UB_TO_UB(RowMajor, RowMajor, int16_t)
+REGISTER_UB_TO_UB(RowMajor, RowMajor, int8_t)
+REGISTER_UB_TO_UB_AS_BYTES(RowMajor, RowMajor, fp8_e4m3fn_t)
+REGISTER_UB_TO_UB_AS_BYTES(RowMajor, RowMajor, fp8_e5m2_t)
 
 REGISTER_UB_TO_L1(RowMajor, zN, float)
 REGISTER_UB_TO_L1(RowMajor, zN, half)
