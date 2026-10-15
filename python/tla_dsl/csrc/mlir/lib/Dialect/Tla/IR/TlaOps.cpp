@@ -925,6 +925,42 @@ mlir::LogicalResult SqueezeOp::verify()
     return verifyMaskMatchesVector(getOperation(), getMask(), getSrc().getType());
 }
 
+mlir::LogicalResult HistogramsOp::verify()
+{
+    if (!hasEnclosingRegion<VecFuncOp>(getOperation()))
+        return emitOpError("must be nested inside a tla.vec.func region");
+
+    auto srcTy = mlir::dyn_cast<VectorSSAType>(getSrc().getType());
+    if (!srcTy)
+        return emitOpError("src must be !tla.vector");
+    auto srcElem = mlir::dyn_cast<mlir::IntegerType>(srcTy.getElementType());
+    if (!srcElem || srcElem.getWidth() != 8)
+        return emitOpError("src element type must be i8 or ui8");
+
+    auto dstTy = mlir::dyn_cast<VectorSSAType>(getDst().getType());
+    if (!dstTy)
+        return emitOpError("dst must be !tla.vector");
+    auto dstElem = mlir::dyn_cast<mlir::IntegerType>(dstTy.getElementType());
+    if (!dstElem || dstElem.getWidth() != 16)
+        return emitOpError("dst element type must be i16 or ui16");
+
+    auto resultTy = mlir::dyn_cast<VectorSSAType>(getResult().getType());
+    if (!resultTy)
+        return emitOpError("result must be !tla.vector");
+    if (resultTy != dstTy)
+        return emitOpError("dst type must match result type");
+
+    // VL = 256B: 256 x i8 in, 128 x i16 out.
+    if (srcTy.getValidLanes() != mlir::ShapedType::kDynamic && srcTy.getValidLanes() != 256)
+        return emitOpError("src must have 256 lanes (full VL for i8)");
+    if (dstTy.getValidLanes() != mlir::ShapedType::kDynamic && dstTy.getValidLanes() != 128)
+        return emitOpError("dst must have 128 lanes (full VL for i16)");
+
+    if (getMask())
+        return verifyMaskMatchesVector(getOperation(), getMask(), getSrc().getType());
+    return mlir::success();
+}
+
 mlir::LogicalResult CastOp::verify()
 {
     if (!hasEnclosingRegion<VecFuncOp>(getOperation()))

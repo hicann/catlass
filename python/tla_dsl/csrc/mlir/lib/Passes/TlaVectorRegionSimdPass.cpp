@@ -445,9 +445,9 @@ static bool isVectorComputeOp(Operation* op)
 {
     return getAnyVectorOperationInfo(op).has_value() || isa_and_nonnull<::tla::CmpOp>(op) ||
            isa_and_nonnull<::tla::WhereOp>(op) || isa_and_nonnull<::tla::SqueezeOp>(op) ||
-           isa_and_nonnull<::tla::ReduceOp>(op) || isa_and_nonnull<::tla::GatherOp>(op) ||
-           isa_and_nonnull<::tla::CastOp>(op) || isa_and_nonnull<::tla::InterleaveOp>(op) ||
-           isa_and_nonnull<::tla::DeInterleaveOp>(op);
+           isa_and_nonnull<::tla::HistogramsOp>(op) || isa_and_nonnull<::tla::ReduceOp>(op) ||
+           isa_and_nonnull<::tla::GatherOp>(op) || isa_and_nonnull<::tla::CastOp>(op) ||
+           isa_and_nonnull<::tla::InterleaveOp>(op) || isa_and_nonnull<::tla::DeInterleaveOp>(op);
 }
 
 static void annotateAivLibraryCall(func::FuncOp callee)
@@ -537,6 +537,20 @@ static std::string getGatherRegLibraryCallName(Type elementType)
     return {};
 }
 
+// mode / type mirror HistogramsParams / AscendC (BIN half vs FREQUENCY|ACCUMULATE).
+static std::string getHistogramsLibraryCallName(HistogramsBin mode, HistogramsType type)
+{
+    const bool accumulate = type == HistogramsType::accumulate;
+    const bool bin1 = mode == HistogramsBin::bin1;
+    if (!accumulate && !bin1)
+        return "histograms_frequency_bin0_u8";
+    if (!accumulate && bin1)
+        return "histograms_frequency_bin1_u8";
+    if (accumulate && !bin1)
+        return "histograms_accumulate_bin0_u8";
+    return "histograms_accumulate_bin1_u8";
+}
+
 static func::FuncOp getOrCreateSqueezeLibraryCall(
     ModuleOp module, Location loc, VectorType vecType, VectorType pregType, StringRef calleeName)
 {
@@ -557,6 +571,20 @@ static func::FuncOp getOrCreateGatherRegLibraryCall(
         return existing;
     OpBuilder moduleBuilder(module.getBodyRegion());
     auto fnType = FunctionType::get(module.getContext(), {srcVecType, indexVecType}, {srcVecType});
+    auto callee = moduleBuilder.create<func::FuncOp>(loc, calleeName, fnType);
+    callee.setPrivate();
+    callee->setAttr("llvm.emit_c_interface", UnitAttr::get(module.getContext()));
+    return callee;
+}
+
+static func::FuncOp getOrCreateHistogramsLibraryCall(
+    ModuleOp module, Location loc, VectorType srcVecType, VectorType dstVecType, VectorType pregType,
+    StringRef calleeName)
+{
+    if (auto existing = module.lookupSymbol<func::FuncOp>(calleeName))
+        return existing;
+    OpBuilder moduleBuilder(module.getBodyRegion());
+    auto fnType = FunctionType::get(module.getContext(), {srcVecType, dstVecType, pregType}, {dstVecType});
     auto callee = moduleBuilder.create<func::FuncOp>(loc, calleeName, fnType);
     callee.setPrivate();
     callee->setAttr("llvm.emit_c_interface", UnitAttr::get(module.getContext()));
@@ -2785,6 +2813,68 @@ static LogicalResult lowerNestedVectorOp(
     if (auto squeezeOp = dyn_cast<::tla::SqueezeOp>(op))
         return lowerSqueeze(squeezeOp, b, module, valueMap, fullMasks);
 
+    // tla.histograms: Reg FREQUENCY/ACCUMULATE histogram via linked bitcode
+    // (dhistv2 / chistv2). Not lowered through HIVMAVE.
+    if (auto histOp = dyn_cast<::tla::HistogramsOp>(op)) {
+        Value src = valueMap.lookup(histOp.getSrc());
+        if (!src)
+            return failure();
+        auto srcTy = dyn_cast<VectorType>(src.getType());
+        if (!srcTy)
+            return failure();
+        auto srcElem = dyn_cast<IntegerType>(srcTy.getElementType());
+        if (!srcElem || srcElem.getWidth() != 8)
+            return histOp.emitError("tla.histograms src must be i8/ui8"), failure();
+
+        auto histResultSSA = dyn_cast<VectorSSAType>(histOp.getResult().getType());
+        if (!histResultSSA)
+            return failure();
+        Type resultElemType = histResultSSA.getElementType();
+        auto resultElemInt = dyn_cast<IntegerType>(resultElemType);
+        if (!resultElemInt || resultElemInt.getWidth() != 16)
+            return histOp.emitError("tla.histograms result must be i16/ui16"), failure();
+
+        auto srcCtx = deriveVecCtxForElement(srcElem);
+        auto dstCtx = deriveVecCtxForElement(resultElemType);
+        if (failed(srcCtx) || failed(dstCtx))
+            return failure();
+
+        std::string calleeName =
+            getHistogramsLibraryCallName(histOp.getMode().getHistogramsBin(), histOp.getHistType().getHistogramsType());
+        VectorType pregVecType = fullPregVecType(b.getContext());
+        Value mask;
+        if (histOp.getMask()) {
+            mask = valueMap.lookup(histOp.getMask());
+            if (!mask)
+                return failure();
+        } else {
+            mask = fullMasks.get(loc, srcCtx->lanes);
+        }
+        Value preg = castMaskToPregType(b, loc, mask, pregVecType);
+
+        // dst is required (in-place accumulator). Callers zero with
+        // tla.full(0, ...) when starting a fresh histogram; no Pass-side zeroing.
+        Value dst = valueMap.lookup(histOp.getDst());
+        if (!dst)
+            return failure();
+
+        VectorType srcU8Type =
+            VectorType::get(srcCtx->vecType.getShape(), IntegerType::get(b.getContext(), 8, IntegerType::Unsigned));
+        VectorType dstU16Type =
+            VectorType::get(dstCtx->vecType.getShape(), IntegerType::get(b.getContext(), 16, IntegerType::Unsigned));
+        if (src.getType() != srcU8Type)
+            src = b.create<UnrealizedConversionCastOp>(loc, srcU8Type, src).getResult(0);
+        if (dst.getType() != dstU16Type)
+            dst = b.create<UnrealizedConversionCastOp>(loc, dstU16Type, dst).getResult(0);
+
+        auto callee = getOrCreateHistogramsLibraryCall(module, loc, srcU8Type, dstU16Type, pregVecType, calleeName);
+        Value result = b.create<func::CallOp>(loc, callee, ValueRange{src, dst, preg}).getResult(0);
+        if (result.getType() != dstCtx->vecType)
+            result = b.create<UnrealizedConversionCastOp>(loc, dstCtx->vecType, result).getResult(0);
+        valueMap[histOp.getResult()] = result;
+        return success();
+    }
+
     if (auto reduceOp = dyn_cast<::tla::ReduceOp>(op))
         return lowerReduce(reduceOp, b, module, valueMap, fullMasks);
 
@@ -3383,6 +3473,18 @@ public:
                     return rewriter.notifyMatchFailure(
                         vecFuncOp,
                         "expected tla.squeeze mask from create/update mask or "
+                        "prior mask compute op");
+            } else if (auto histOp = dyn_cast<::tla::HistogramsOp>(computeOp)) {
+                if (!producedValues.contains(histOp.getSrc()))
+                    return rewriter.notifyMatchFailure(
+                        vecFuncOp, "expected tla.histograms src from tla.load or prior compute op");
+                if (!producedValues.contains(histOp.getDst()))
+                    return rewriter.notifyMatchFailure(
+                        vecFuncOp, "expected tla.histograms dst from tla.full, tla.load, or prior compute op");
+                if (histOp.getMask() && !producedValues.contains(histOp.getMask()))
+                    return rewriter.notifyMatchFailure(
+                        vecFuncOp,
+                        "expected tla.histograms mask from create/update mask or "
                         "prior mask compute op");
             } else if (auto reduceOp = dyn_cast<::tla::ReduceOp>(computeOp)) {
                 Value operand = reduceOp.getOperand();

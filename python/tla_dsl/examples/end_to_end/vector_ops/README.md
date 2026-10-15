@@ -91,6 +91,7 @@ def vector_op(mem_in: tla.Tensor, mem_out: tla.Tensor) -> None:
 ├── multi_binary.py
 ├── reduction_ops.py
 ├── register_control_flow.py
+├── histograms_op.py
 ├── squeeze_op.py
 ├── store_pack.py
 ├── unary_ops.py
@@ -118,6 +119,7 @@ def vector_op(mem_in: tla.Tensor, mem_out: tla.Tensor) -> None:
 | [**`load_store_mask.py`**](load_store_mask.py) | 掩码搬运往返示例，掩码 UB 与伴随向量同 dtype；另含 u8 GM↔UB（含 128..255）。 |
 | [**`store_pack.py`**](store_pack.py) | 压缩存储示例，取得低半有效数位做紧凑存储。 |
 | [**`reduction_ops.py`**](reduction_ops.py) | `tla.reduce` 归约示例，支持 `add`/`max`/`min` 三种模式，覆盖对齐与非对齐场景。 |
+| [**`histograms_op.py`**](histograms_op.py) | `tla.histograms` 独立上板样例：FREQUENCY/ACCUMULATE × BIN0/BIN1（`full(0)` 清零 / 跨调用累加 / 全零 CDF）。 |
 | [**`squeeze_op.py`**](squeeze_op.py) | `tla.squeeze` 示例，按掩码（M4）压缩有效 lane 并紧凑写回。 |
 | [**`register_control_flow.py`**](register_control_flow.py) | 控制流示例，演示 for-loop 控制流及 `VectorSSA` 与 `MaskSSA` 跨循环边界存活。 |
 | [**`load_and_store_scalar_after_reduction.py`**](load_and_store_scalar_after_reduction.py) | UB 标量访问示例，对归约结果做标量 `load` / `store` 操作。 |
@@ -181,11 +183,15 @@ python examples/end_to_end/vector_ops/unary_ops.py exp --sweep --dtypes f16 f32 
 # 批量模式（多个算子打包、多核并发）
 python examples/end_to_end/vector_ops/binary_op.py --batch-run add sub mul max
 
-  # `gather_reg_op.py` 执行（需显式 `--run` ）
+# `gather_reg_op.py` 执行（需显式 `--run` ）
 python examples/end_to_end/vector_ops/gather_reg_op.py --run --device 0
 
 # `gather_op.py` 执行（需显式 `--run` ）
 python examples/end_to_end/vector_ops/gather_op.py --run --device 0
+
+# `histograms_op.py` 执行（需显式 `--run` ）
+python examples/end_to_end/vector_ops/histograms_op.py --run --device 0
+
 # MaskLoadDist 独立脚本（需显式 `--run` ）
 python examples/end_to_end/vector_ops/load_mask_dist.py ds --run --device 0
 python examples/end_to_end/vector_ops/load_mask_dist.py us --run --device 0
@@ -659,10 +665,12 @@ first mismatch=None
 - 文件位置：
   - `gather_op.py`：`tla.gather` 按索引收集（UB→Reg）。
   - `gather_reg_op.py`：`tla.gather` Reg→Reg（`vselr`）。
+  - `histograms_op.py`：Reg 直方图（BIN0/BIN1）。
 
 - 功能说明：
   - **`gather_op.py`**（f32，独立脚本）——`tla.gather` 依据 int32 索引向量从源向量收集元素并写回目标向量；源向量、索引向量与目标向量均为 64 lane。
   - **`gather_reg_op.py`**（f16，独立脚本）——`tla.gather` Reg→Reg 置换，128-lane f16 + i16 索引位型。
+  - **`histograms_op.py`**（i8→i16，独立脚本）——`tla.histograms` 全组合：FREQUENCY/ACCUMULATE × BIN0/BIN1；`dst` 必传（`tla.full(0)` 清零）；另测 FREQUENCY 跨调用累加与 ACCUMULATE 全零（BIN1=256）。
 
 - 约束说明：
   - 支持的数据类型：
@@ -671,9 +679,11 @@ first mismatch=None
     |------|---------------|
     | `gather_op.py` | f32 |
     | `gather_reg_op.py` | f16 + i16 索引 |
+    | `histograms_op.py` | i8 输入（u8 位型）/ i16 输出 |
 
   - `gather_op.py`：仅 f32；必须显式传 `--run`，否则退出；索引为 i32；`VECTOR_ELE = 64`；默认 `--device 0`；精度校验 `atol=1e-4`。
   - `gather_reg_op.py`：必须 `--run`；固定 `VL_ELE=128`；默认 `--device 0`。
+  - `histograms_op.py`：必须 `--run`；`--mode frequency|accumulate|frequency_into|all`（默认 `all`）；固定 `SRC_ELE=256`、`DST_ELE=128`；默认 `--device 0`。
 
 - 执行示例：
   ```bash
@@ -685,6 +695,9 @@ first mismatch=None
 
   # Reg→Reg Gather 上板
   python examples/end_to_end/vector_ops/gather_reg_op.py --run --device 0
+
+  # Reg 直方图上板（ACCUMULATE + FREQUENCY into）
+  python examples/end_to_end/vector_ops/histograms_op.py --run --device 0
   ```
 
 ### 广播（独立脚本）

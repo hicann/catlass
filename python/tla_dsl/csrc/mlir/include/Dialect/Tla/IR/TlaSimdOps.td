@@ -272,6 +272,48 @@ def Tla_GatherOp : Tla_Op<"gather", [Pure]> {
   let hasVerifier = 1;
 }
 
+def Tla_HistogramsOp : Tla_Op<"histograms", [Pure]> {
+  let summary = "Reg FREQUENCY/ACCUMULATE histogram via AIV bc";
+  let description = [{
+  Compute a register-resident histogram half (128 u16 lanes):
+
+  * ``type = frequency`` → CCE ``dhistv2`` (per-value counts in a half-range):
+    ``mode = bin0`` → ``dst[v] += #{src == v}`` for ``v ∈ [0, 127]``;
+    ``mode = bin1`` → ``dst[v - 128] += #{src == v}`` for ``v ∈ [128, 255]``.
+  * ``type = accumulate`` → CCE ``chistv2`` (CDF over full u8, then split):
+    ``mode = bin0`` → ``dst[n] += #{src <= n}`` for ``n ∈ [0, 127]``;
+    ``mode = bin1`` → ``dst[n] += #{src <= 128 + n}`` for ``n ∈ [0, 127]``
+    (low-half inputs contribute; not a ``[128, 255]``-only bucket).
+
+  ``src`` must be an 8-bit integer VectorSSA (256 lanes / VL). ``dst`` is the
+  **required** u16 accumulator (128 lanes / VL); the op accumulates onto the
+  prior ``dst`` value. Callers zero explicitly (e.g. ``tla.full(0, ...)``)
+  for a fresh histogram. Optional ``mask`` predicates which ``src`` lanes
+  participate. ``result`` has the same type as ``dst``.
+
+  Lowering is **AIV bc only** (``func.call @histograms_*``), not HIVMAVE.
+  }];
+  let arguments = (ins
+    Tla_VectorSSAType:$src,
+    Tla_VectorSSAType:$dst,
+    Optional<Tla_MaskSSAType>:$mask,
+    // histType avoids clashing with Operation::getType.
+    Tla_HistogramsBinAttr:$mode,
+    Tla_HistogramsTypeAttr:$histType
+  );
+  let results = (outs Tla_VectorSSAType:$result);
+  let assemblyFormat = [{
+    $src `,` $dst (`mask` $mask^)?
+    `mode` $mode
+    `type` $histType
+    attr-dict `:`
+    qualified(type($src)) `,` qualified(type($dst))
+    (`mask` qualified(type($mask))^)?
+    `->` qualified(type($result))
+  }];
+  let hasVerifier = 1;
+}
+
 def Tla_SqueezeOp : Tla_Op<"squeeze", [Pure]> {
   let summary = "Mask-compress vector lanes into low indices";
   let description = [{

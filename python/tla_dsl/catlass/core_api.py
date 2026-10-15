@@ -112,6 +112,9 @@ from .params import (
     ComputeOrder,
     CopyL0C2DstParams,
     CopyParams,
+    HistogramsBinType,
+    HistogramsParams,
+    HistogramsType,
     L0C2UBMode,
     MemType,
     QuantMode,
@@ -8354,6 +8357,169 @@ def squeeze(
     return VectorSSA(result)
 
 
+def _normalize_histograms_params(params: HistogramsParams) -> HistogramsParams:
+    """Accept enum or str for HistogramsParams fields; return enum-typed params."""
+    mode = params.mode
+    hist_type = params.type
+    if isinstance(mode, str):
+        try:
+            mode = HistogramsBinType(mode)
+        except ValueError:
+            _op_error(
+                "histograms",
+                f"invalid HistogramsParams.mode: expected HistogramsBinType or "
+                f"'bin0'|'bin1', got {mode!r}",
+            )
+    elif not isinstance(mode, HistogramsBinType):
+        _op_error(
+            "histograms",
+            f"invalid HistogramsParams.mode: expected HistogramsBinType, "
+            f"got {_type_name(mode)}",
+        )
+    if isinstance(hist_type, str):
+        try:
+            hist_type = HistogramsType(hist_type)
+        except ValueError:
+            _op_error(
+                "histograms",
+                f"invalid HistogramsParams.type: expected HistogramsType or "
+                f"'frequency'|'accumulate', got {hist_type!r}",
+            )
+    elif not isinstance(hist_type, HistogramsType):
+        _op_error(
+            "histograms",
+            f"invalid HistogramsParams.type: expected HistogramsType, "
+            f"got {_type_name(hist_type)}",
+        )
+    return HistogramsParams(mode=mode, type=hist_type)
+
+
+@dsl_user_op
+def histograms(
+    src: VectorSSA,
+    dst: VectorSSA,
+    params: HistogramsParams,
+    mask: MaskSSA | None = None,
+    *,
+    loc: mlir_ir.Location | None = None,
+) -> VectorSSA:
+    """Directory: Vector Compute / Histogram
+
+    Description:
+        Reg-resident FREQUENCY / ACCUMULATE histogram.
+
+        Lowers via AIV bc to ``dhistv2`` (FREQUENCY) or ``chistv2`` (ACCUMULATE).
+        Does **not** use HIVMAVE / AscendNPU-IR hist ops.
+
+        ``params.mode`` selects the 128-lane half (``HistogramsBinType``);
+        ``params.type`` selects FREQUENCY / ACCUMULATE (``HistogramsType``).
+        Their math differs — do **not** read ``BIN1`` as “[128, 255] only” under
+        ACCUMULATE (see :class:`~catlass.params.HistogramsParams`).
+
+        FREQUENCY (``dhistv2``): per-value counts in a half-range —
+        ``BIN0`` ``dst[v] += #{src == v}`` for ``v ∈ [0,127]``;
+        ``BIN1`` ``dst[v-128] += #{src == v}`` for ``v ∈ [128,255]``.
+
+        ACCUMULATE (``chistv2``): CDF over the full u8 domain, then split —
+        ``BIN0`` ``dst[n] += #{src <= n}`` for ``n ∈ [0,127]``;
+        ``BIN1`` ``dst[n] += #{src <= 128+n}`` for ``n ∈ [0,127]``
+        (low-half inputs contribute to ``BIN1``).
+
+        Parameters:
+        - `src` (`VectorSSA`): ``i8``/``ui8`` source register (256 lanes). Required.
+        - `dst` (`VectorSSA`): ``i16``/``ui16`` accumulator (128 lanes). Required.
+          Accumulates onto the prior ``dst`` value. For a fresh histogram, pass
+          ``tla.full(0, dtype=...)`` first. Cross-call accumulate: pass the
+          previous result again.
+        - `params` (`HistogramsParams`): ``mode`` (BIN0/BIN1) and ``type``
+          (FREQUENCY/ACCUMULATE). Required.
+        - `mask` (`MaskSSA`): Optional lane mask; default all-true.
+
+        Returns:
+        - `VectorSSA` updated histogram half (same type as ``dst``).
+
+        Constraints:
+        - Must be called inside `@tla.kernel` and `tla.vec.func()`.
+
+        Example:
+        ```python
+        hist_params = tla.params.HistogramsParams(
+            mode=tla.params.HistogramsBinType.BIN0,
+            type=tla.params.HistogramsType.ACCUMULATE,
+        )
+        with tla.vec.func(mode="simd"):
+            hist_lo = tla.full(0, dtype=tla.Int16)
+            hist_lo = tla.histograms(keys_u8, hist_lo, hist_params, mask=m)
+        ```
+    """
+    _require_category("histograms", "src", src, "vector_ssa", 0)
+    _require_category("histograms", "dst", dst, "vector_ssa", 1)
+    if not isinstance(params, HistogramsParams):
+        _op_error(
+            "histograms",
+            f"invalid argument 'params' (position 2): expected HistogramsParams, "
+            f"got {_type_name(params)}",
+        )
+    if mask is not None:
+        _require_category("histograms", "mask", mask, "mask_ssa", 3)
+    _require_frontend_state("histograms")
+    _runtime._require_enclosing_region("histograms", "vec.func")
+
+    params = _normalize_histograms_params(params)
+    mode_token = params.mode.value
+    type_token = params.type.value
+
+    src_value = _as_value(src)
+    src_desc = _vector_ssa_type_for_mlir_value(src_value)
+    if src_desc.element_type not in ("i8", "ui8", "u8"):
+        _op_error(
+            "histograms",
+            f"src element type must be i8/ui8, got {src_desc.element_type}",
+        )
+    if src_desc.valid_lanes is not None and src_desc.valid_lanes != 256:
+        _op_error(
+            "histograms",
+            f"src must have 256 lanes (full VL for i8), got {src_desc.valid_lanes}",
+        )
+
+    dst_value = _as_value(dst)
+    dst_desc = _vector_ssa_type_for_mlir_value(dst_value)
+    if dst_desc.element_type not in ("i16", "ui16", "u16"):
+        _op_error(
+            "histograms",
+            f"dst element type must be i16/ui16, got {dst_desc.element_type}",
+        )
+    if dst_desc.valid_lanes is not None and dst_desc.valid_lanes != 128:
+        _op_error(
+            "histograms",
+            f"dst must have 128 lanes (full VL for i16), got {dst_desc.valid_lanes}",
+        )
+
+    mask_value = _as_value(mask) if mask is not None else None
+    if mask_value is not None:
+        _require_mask_matches_vector("histograms", mask_value, src_value)
+
+    context = src_value.type.context
+    # mode → histograms_bin; type → histograms_type.
+    mode_attr = mlir_ir.Attribute.parse(
+        f"#tla.histograms_bin<{mode_token}>", context=context
+    )
+    hist_type_attr = mlir_ir.Attribute.parse(
+        f"#tla.histograms_type<{type_token}>", context=context
+    )
+
+    result = _tla_ops_gen.histograms(
+        dst_desc.to_mlir_type(context),
+        src_value,
+        dst_value,
+        mask=mask_value,
+        mode=mode_attr,
+        hist_type=hist_type_attr,
+        loc=loc,
+    )
+    return VectorSSA(result)
+
+
 def _emit_bitwise_unary(
     op_name: str,
     emitter: Any,
@@ -9790,6 +9956,9 @@ __all__ = [
     "shift_right",
     "where",
     "squeeze",
+    "HistogramsType",
+    "HistogramsBinType",
+    "histograms",
     "bitwise_not",
     "bitwise_and",
     "bitwise_or",

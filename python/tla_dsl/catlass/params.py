@@ -400,6 +400,56 @@ class CastParams:
         ]
 
 
+class HistogramsBinType(enum.Enum):
+    """Which 128-lane half of the u8 domain ``tla.histograms`` writes.
+
+    Semantics depend on ``HistogramsParams.type`` (see :class:`HistogramsParams`).
+    """
+
+    BIN0 = "bin0"
+    BIN1 = "bin1"
+
+    def __str__(self) -> str:
+        return self.value
+
+
+class HistogramsType(enum.Enum):
+    """Histogram kind selected by ``HistogramsParams.type``.
+
+    ``FREQUENCY`` → ``dhistv2`` (per-value counts);
+    ``ACCUMULATE`` → ``chistv2`` (prefix / CDF counts).
+    """
+
+    FREQUENCY = "frequency"
+    ACCUMULATE = "accumulate"
+
+    def __str__(self) -> str:
+        return self.value
+
+
+@dataclass(frozen=True)
+class HistogramsParams:
+    """Knobs for ``tla.histograms``: ``mode`` (half) and ``type`` (kind).
+
+    Args:
+        mode: which 128-lane half (:class:`HistogramsBinType`) — ``BIN0`` / ``BIN1``.
+        type: FREQUENCY / ACCUMULATE (:class:`HistogramsType`).
+
+    Math (masked ``src`` lanes only; result is added onto prior ``dst``):
+
+    * **FREQUENCY** (``dhistv2``) — per-value counts in a half-range:
+      - ``BIN0``: ``dst[v] += #{src == v}`` for ``v ∈ [0, 127]``
+      - ``BIN1``: ``dst[v - 128] += #{src == v}`` for ``v ∈ [128, 255]``
+    * **ACCUMULATE** (``chistv2``) — CDF over the full u8 domain, then split:
+      - ``BIN0``: ``dst[n] += #{src <= n}`` for ``n ∈ [0, 127]``
+      - ``BIN1``: ``dst[n] += #{src <= 128 + n}`` for ``n ∈ [0, 127]``
+        (includes low-half inputs; not a ``[128, 255]``-only bucket)
+    """
+
+    mode: HistogramsBinType
+    type: HistogramsType
+
+
 class MemType(enum.IntEnum):
     VEC_STORE = 0
     VEC_LOAD = 1

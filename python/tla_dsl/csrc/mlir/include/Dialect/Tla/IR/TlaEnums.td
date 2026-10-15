@@ -258,6 +258,38 @@ def Tla_AtomicModeAttr : Tla_EnumAttr<"AtomicMode", "atomic_mode"> {
   }];
 }
 
+// ---------------------------------------------------------------------------
+// Histograms: FREQUENCY / ACCUMULATE + BIN0 / BIN1
+// ---------------------------------------------------------------------------
+
+def Tla_HistogramsType_Frequency : I32EnumAttrCase<"frequency", 0>;
+def Tla_HistogramsType_Accumulate : I32EnumAttrCase<"accumulate", 1>;
+
+def Tla_HistogramsType_Enum : Tla_I32Enum<"HistogramsType",
+    "Reg histogram type (FREQUENCY / ACCUMULATE)", [
+  Tla_HistogramsType_Frequency,
+  Tla_HistogramsType_Accumulate
+]>;
+
+def Tla_HistogramsTypeAttr : Tla_EnumAttr<"HistogramsType", "histograms_type"> {
+  let parameters = (ins EnumParameter<Tla_HistogramsType_Enum>:$histograms_type);
+  let assemblyFormat = "`<` params `>`";
+}
+
+def Tla_HistogramsBin_Bin0 : I32EnumAttrCase<"bin0", 0>;
+def Tla_HistogramsBin_Bin1 : I32EnumAttrCase<"bin1", 1>;
+
+def Tla_HistogramsBin_Enum : Tla_I32Enum<"HistogramsBin",
+    "Reg histogram bin half (BIN0 / BIN1)", [
+  Tla_HistogramsBin_Bin0,
+  Tla_HistogramsBin_Bin1
+]>;
+
+def Tla_HistogramsBinAttr : Tla_EnumAttr<"HistogramsBin", "histograms_bin"> {
+  let parameters = (ins EnumParameter<Tla_HistogramsBin_Enum>:$histograms_bin);
+  let assemblyFormat = "`<` params `>`";
+}
+
 // ComputeOrder: mmad M/N compute-direction priority (CTRL[51]).
 // M_FIRST(0) is the hardware default; N_FIRST(1) flips the priority. Lowered to
 // hivm::SetCtrlOp in TlaCubeRegionPass; absence keeps the hardware default.
