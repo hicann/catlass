@@ -29,7 +29,7 @@
 
   依次对应 `tla.simt_sqrt`、`tla.simt_abs`、`tla.simt_exp`、`tla.simt_log`、`tla.simt_pow`。
 
-- 支持产品型号：Ascend 950 系列产品
+- 支持产品型号：Ascend 950PR&950DT 系列产品
 
 ## 样例参数说明
 

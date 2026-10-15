@@ -20,7 +20,7 @@
 
   线程几何为三维的 `(64, 4, 2)`，即每个 block 512 个线程，用于同时验证 y、z 分量。kernel 内先把三维线程号线性化为 `tid`，再按 `gid = block_idx * tdim + tid`、`stride = block_num * tdim` 跨步遍历，使整个 launch 的所有线程共同覆盖一次数组，而不是每个 block 各自重复计算全部数据。
 
-- 支持产品型号：Ascend 950 系列产品
+- 支持产品型号：Ascend 950PR&950DT 系列产品
 
 ## 样例参数说明
 

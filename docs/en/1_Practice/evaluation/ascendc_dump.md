@@ -68,7 +68,7 @@ void operator()<AscendC::AIC>(Params const &params) {
     ```
 
 - ⚠ Precautions
-  - [`DumpTensor`](https://www.hiascend.com/document/detail/en/canncommercial/850/API/ascendcopapi/atlasascendc_api_07_0192.html) **does not support printing values on `L0A`, `L0B`, and `FixPipe`. In particular, on `Ascend 950PR/Ascend 950DT`**, values on `L1` cannot be printed.
+  - [`DumpTensor`](https://www.hiascend.com/document/detail/en/canncommercial/850/API/ascendcopapi/atlasascendc_api_07_0192.html) **does not support printing values on `L0A`, `L0B`, and `FixPipe`. In particular, on `Ascend 950PR&950DT series products`**, values on `L1` cannot be printed.
 
 ### Output Example (For Reference Only. The Actual Output May Vary Depending on the Hardware and Operator Implementation.)
 

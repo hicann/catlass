@@ -10,7 +10,7 @@ nav_order: 10
 
 ## Compatibility Requirements
 
-- Supported products: Ascend 950 series products
+- Supported products: Ascend 950PR&950DT series products
 - Operating system: Linux supported by CANN (`aarch64` / `x86_64`)
 - CANN version: `>= 9.1.0`
 - Python: `>=3.10, <3.14`

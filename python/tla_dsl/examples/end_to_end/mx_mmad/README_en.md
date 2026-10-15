@@ -13,7 +13,7 @@
   $$
 
   where $A$ and $B$ are input matrices in the shape of `(m, k)` and `(k, n)`, respectively. $C$ is the output matrix in the shape of `(m, n)`. $s^{A}$ and $s^{B}$ are the E8M0 block scale matrices in the shape of `(m, ceil(k/32))` and `(ceil(k/32), n)`, respectively.
-- Supported products: Ascend 950PR&950DT products
+- Supported products: Ascend 950PR&950DT series products
 
 ## Parameters
 

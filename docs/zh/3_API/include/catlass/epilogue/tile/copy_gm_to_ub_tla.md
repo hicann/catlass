@@ -8,7 +8,7 @@
 
 `CopyGm2UbTla` 实现 epilogue 阶段从 GM 到 UB 的 TLA 风格数据搬运。通过 `tla::Tensor` 封装操作数，利用 SFINAE 根据源/目的 Layout 自动选择搬运策略。
 
-- 适用范围：AtlasA2（RowMajor）、Ascend950（VectorLayout / RowMajor）
+- 适用范围：Atlas A2/A3 系列产品（RowMajor）、Ascend 950PR&950DT 系列产品（VectorLayout / RowMajor）
 - 风格：TLA（`tla::Tensor` 接口）
 - 与 [CopyGm2Ub](./copy_gm_to_ub/README.md) 的区别：TLA 风格，通过 `decltype` 推导模板参数
 

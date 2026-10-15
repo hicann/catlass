@@ -161,5 +161,4 @@ Compare success.
 - This example is used only as a reference for integrating the CATLASS operator into msopgen. To ensure code simplicity, generalization is not supported, such as multiple operators or platforms.
 - Currently, only the example of integrating the `basic_matmul` operator is provided.
 - The example supports only the following products:
-  - `Atlas A2 training products/Atlas A2 inference products` (`2201` architecture)
-  - `Atlas A3 training products/Atlas A3 inference products` (`2201` architecture)
+  - `Atlas A2/A3 series products` (`2201` architecture)

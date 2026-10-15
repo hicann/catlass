@@ -31,7 +31,7 @@ Before writing code, you first need to clarify the core requirements of the oper
 
 ### Solution Design
 
-Based on the requirements analysis and component investigation, design the overall implementation solution of the operator. The solution design of example 44 reflects the principle of "reference and reuse first, innovative development second":
+Based on the requirements analysis and component investigation, design the overall implementation solution of the operator. The solution design of example 44 reflects the principle of "maximize reuse, minimize innovation":
 
 **(1) Selection of template parameters**
 
@@ -65,7 +65,7 @@ Design the pipeline of data transfer and computation. The pipeline scheme of exa
 - Then the main loop is entered, transferring the K-dimension blocks of the B matrix into L1 with pingpong, while performing the L1→L0 data transfer and the Cube computation
 - The A matrix resides in L1 and does not need to be transferred repeatedly, thus reducing MTE2 bandwidth pressure
 
-<img src="https://raw.gitcode.com/user-images/assets/7631999/1de46727-7c46-411e-936c-7a437d951a3a/3e9c799e1de0405d89f07a6bfd7d7c54.png_tplv-a9rns2rl98-image-qvalue.png" width="60%">
+<img src="https://raw.gitcode.com/user-images/assets/7631999/1de46727-7c46-411e-936c-7a437d951a3a/3e9c799e1de0405d89f07a6bfd7d7c54.png_tplv-a9rns2rl98-image-qvalue.png" alt="Example 44 pipeline design: the A matrix is moved into L1 in one pass and then stays resident; the B matrix is moved into L1 in pingpong blocks; data movement overlaps with Cube computation" width="60%">
 
 ### Documentation Design
 
@@ -81,7 +81,7 @@ The documentation structure of the example should be planned during the design s
 
 Set up the development environment by referring to [Quick Start](./01_quick_start.md), then organize the code according to the following directory structure:
 
-```bash
+```text
 examples/44_quant_matmul_full_loadA_tla/   # example directory
 ├── CMakeLists.txt                          # build configuration
 ├── README.md                               # usage instructions
@@ -130,7 +130,7 @@ The Kernel layer is the execution entry of the operator, responsible for schedul
 
 **(1) Parameter structure design**
 
-Define two levels of parameter structures, `Arguments` (user interface layer) and `Params` (kernel execution layer). The Arguments of example 44 contain problemShape, aicCoreNum, the input tensor group (A/B/Bias), and the output tensor group (Scale/PerTokenScale/D).
+Define two levels of parameter structures, `Arguments` (user interface layer) and `Params` (kernel execution layer). The Arguments of example 44 contain problemShape, aicCoreNum, the input tensor group (A/B), and the output tensor group (Scale/PerTokenScale/D).
 
 **(2) AIC core implementation**
 

@@ -20,7 +20,7 @@
 
   The thread geometry is the three-dimensional `(64, 4, 2)`, that is 512 threads per block, so that the y and z components are exercised as well. The kernel first linearizes the three-dimensional thread index into `tid`, then walks the array with `gid = block_idx * tdim + tid` and `stride = block_num * tdim`, so that all threads of the whole launch cover the array exactly once instead of every block redundantly computing all of it.
 
-- Supported products: Ascend 950 series products
+- Supported products: Ascend 950PR&950DT series products
 
 ## Parameters
 

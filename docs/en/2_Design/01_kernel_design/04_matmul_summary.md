@@ -25,7 +25,7 @@ Note that this document only summarizes samples related to matrix multiplication
 - Theoretical template: `Common`
 - Engineering optimization:
   - `Pipeline optimization (Multi-Buffer)`
-  - `Read bandwidth optimization (padding) - PaddingMatrixND`
+  - `Read bandwidth optimization (Padding) - PaddingMatrixND`
 - Key deliverables
   - host: [04_padding_matmul](../../../../examples/04_padding_matmul/padding_matmul.cpp)
   - kernel: [padding_matmul.hpp](../../../../include/catlass/gemm/kernel/padding_matmul.hpp)
@@ -41,7 +41,7 @@ Note that this document only summarizes samples related to matrix multiplication
 - Engineering optimization:
   - `Pipeline optimization (Multi-Buffer)`
   - `Pipeline optimization (Preload)`
-  - `Read bandwidth optimization (padding) - PaddingMatrixNZ`
+  - `Read bandwidth optimization (Padding) - PaddingMatrixNZ`
   - `Read bandwidth optimization (ShuffleK)`
   - `Read bandwidth optimization (instruction replacement in small-M scenarios)` (requires modifying the sample to enable)
 - Key deliverables
@@ -91,7 +91,7 @@ Note that this document only summarizes samples related to matrix multiplication
 - Theoretical template: `MultiCoreSplitK`
 - Engineering optimization:
   - `Pipeline optimization (Multi-Buffer)`
-  - `Read bandwidth optimization (padding) - PaddingMatrixND`
+  - `Read bandwidth optimization (Padding) - PaddingMatrixND`
 - Key deliverables
   - host: [22_padding_splitk_matmul](../../../../examples/22_padding_splitk_matmul/padding_splitk_matmul.cpp)
   - kernel: [padding_splitk_matmul.hpp](../../../../include/catlass/gemm/kernel/padding_splitk_matmul.hpp)
@@ -142,7 +142,7 @@ Note that this document only summarizes samples related to matrix multiplication
 - Theoretical template: `SingleCoreSplitK`
 - Engineering optimization:
   - <idp:inline displayname="code" id="code416252411819">Pipeline optimization (Multi-Buffer)</idp:inline>
-  - <idp:inline displayname="code" id="code11507244191919">Read bandwidth optimization (padding) - PaddingMatrixNZ</idp:inline>
+  - <idp:inline displayname="code" id="code11507244191919">Read bandwidth optimization (Padding) - PaddingMatrixNZ</idp:inline>
   - `Write bandwidth optimization`
 - Key deliverables
   - host: [34_single_core_splitk_matmul](../../../../examples/34_single_core_splitk_matmul/single_core_splitk.cpp)
@@ -234,7 +234,7 @@ When $m_1$ and $n_1$ are large, load imbalance may occur. That is, the number of
 
 ### Amount of Data Read
 
-Each basic task block needs to move $m_1K+Kn_1$ elements of data. The total amount of data read is the same as that for the `Common` template:
+Each basic task block needs to move $m_1k+kn_1$ elements of data. The total amount of data read is the same as that for the `Common` template:
 
 $2Byte * [m_1k+kn_1] * \frac{MNK}{m_1n_1k} = 2Byte * MNK * [\frac{1}{m_1}+\frac{1}{n_1}]$
 
@@ -443,7 +443,7 @@ In the ShuffleK solution shown in the figure, the starting movement index $j$ is
 - [block_mmad_preload_async.hpp](../../../../include/catlass/gemm/block/block_mmad_preload_async.hpp)
 - [block_mmad_preload_async_with_callback.hpp](../../../../include/catlass/gemm/block/block_mmad_preload_async_with_callback.hpp)
 
-The above block-layer implementation code achieves staggering by setting the starting L1 index to `CoreIdx/kTileCount`:
+The above block-layer implementation code achieves staggering by setting the starting L1 index to `CoreIdx % kTileCount`:
 
 ```cpp
 kTileCount = CeilDiv<L1TileShape::K>(actualShape.k());
@@ -574,7 +574,7 @@ For the above scenarios, an AIV can be used to rearrange the data format. When t
 
 </details>
 
-## Brief Overview of Template Application
+## Template Application
 
 For details, see the select_kernel policy of [102_dynamic_optimized_matmul](../../../../examples/102_dynamic_optimized_matmul/include/select_kernel_b16.h).
 
@@ -608,7 +608,7 @@ Then, identify whether the scenario fits each template and compare with the perf
 
   - The following two scenarios are met:
     - The number of basic task blocks is less than half of the number of AIC cores, and the $K$ axis is sufficiently large: $taskBlocks < aicCoreNum / 2, K > 5120$
-    - The number of basic task blocks is less than 3, and the $K$ axis is not small: $taskBlocks <= 2, K > 1024$
+    - The number of basic task blocks is less than 3, and the $K$ axis is relatively large: $taskBlocks <= 2, K > 1024$
 - [06_optimized_matmul](../../../../examples/06_optimized_matmul/optimized_matmul.cpp) (with padding prologue) and [21_basic_matmul_preload_zN](../../../../examples/21_basic_matmul_preload_zN/basic_matmul_preload_zN.cpp) (manually change to ND input)
   - These feature stronger generalization and are suitable for the remaining scenarios.
   - If padding is not required, you are advised to use the [21_basic_matmul_preload_zN](../../../../examples/21_basic_matmul_preload_zN/basic_matmul_preload_zN.cpp) template to reduce the overhead of MIX operator compilation and launch.
@@ -620,7 +620,7 @@ Then, identify whether the scenario fits each template and compare with the perf
 <details>
 <summary><strong><font size="4">Padding Selection</font></strong></summary>
 
-Consider padding prologue when Stride is not 512-byte aligned. However, the overhead introduced by padding and the MIX operator compilation and launch overhead must be considered (the small-shape method in [31_small_matmul](../../../../examples/31_small_matmul/small_matmul.cpp) is not recommended for additional padding adaptation).
+Consider padding prologue when Stride is not 512-byte aligned. However, the overhead introduced by padding and the MIX operator compilation and launch overhead must be considered (using [31_small_matmul](../../../../examples/31_small_matmul/small_matmul.cpp) in small-shape scenarios is not recommended for additional padding adaptation).
 
 Developers are advised to try `PaddingMatrixND`, `PaddingMatrixBlockND`, and `PaddingMatrixNZ` themselves. In terms of generalization, `PaddingMatrixNZ` has more advantages.
 

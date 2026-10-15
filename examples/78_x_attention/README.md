@@ -101,7 +101,7 @@ PyTorch 接口的 query/output shape 为 `(B*R,H,D)`；mode 0 的 unshared KV �
 
 ### 执行示例
 
-准备匹配 Atlas A2/A3 的 CANN 环境；生成数据需要 Python 3、NumPy，bf16 另需 ml_dtypes。从 CATLASS 仓库根目录执行：
+准备匹配 Atlas A2/A3 系列产品的 CANN 环境；生成数据需要 Python 3、NumPy，bf16 另需 ml_dtypes。从 CATLASS 仓库根目录执行：
 
 1. 加载环境并编译样例。
 

@@ -31,11 +31,15 @@
 | -------- | ------------ | ---- |
 | `Atlas A2` / `Atlas A3` | `AtlasA2` / `AtlasA3` | 产品名，中间必须带空格 |
 | `Ascend 950` / `Ascend 950PR` / `Ascend 950DT` | `Ascend950` / `Ascend950PR` | 产品名，中间必须带空格 |
+| `Atlas A2/A3 系列产品` | `Atlas A2/A3产品` | 同时指代 A2、A3 两代产品时的合写形式（斜杠分隔）；并列的「训练/推理系列产品」条目应合并为此形式。单独指代仍用 `Atlas A2` / `Atlas A3` |
+| `Ascend 950PR&950DT 系列产品` | `Ascend 950PR/Ascend 950DT产品` | 同时指代 950PR、950DT 时的合写形式；单独指代仍用 `Ascend 950PR` / `Ascend 950DT` |
 | `AI Core` | `AICore` | 计算核心，中间必须带空格 |
 | `Ascend C` | `AscendC` | 正文写法必须带空格；仅 C++ 命名空间 `AscendC::` 保持无空格原样 |
 | `Flash Attention` | `FlashAttention` | 正文写法带空格；仅代码标识符/样例名（如 `FlashAttentionInfer`）保持原样 |
 | `L2 Cache` | `L2Cache` | 缓存名称带空格；仅 profiling 产出文件名 `L2Cache.csv` 保持原样 |
 | `Cube Core` | `Cube-core` | 不带连字符 |
+| `CANN toolkit` | `CANN开发套件包` | CANN 开发套件包统一写作 `CANN toolkit` |
+| `Padding` | `padding` | 工程优化项名称首字母大写，如「读取带宽优化(Padding)」 |
 | `PIPE_FIX` | `PIPE_FIXED` | Ascend C 流水类型枚举值；勿臆造 `PIPE_FIXED` |
 
 #### 中文错别字与用词
@@ -55,6 +59,8 @@
 | 简洁地描述 | 简洁的描述 | 修饰动词用副词「地」 |
 | 使用 | 完成使用 | 去除冗余动词，如「在 workspace 上使用…」 |
 | 详细使用示例…请参考 | 详细参考使用示例…请参考 | 去除重复的「参考」 |
+| 启用 | 使能 | 功能或编译选项的开关统一用「启用」，不用「使能」 |
+| 无法 | 没法 | 书面表述统一用「无法」，不用口语「没法」 |
 
 #### 英文拼写易错项
 
@@ -69,13 +75,15 @@
 | `block` | `bloc` | 正文单词拼写 |
 | `width` | `wight` | 参数含义注释 |
 | `true` | `ture` | 布尔字面量 |
+| `CPU` | `cpu` | 正文缩写统一大写 |
 
 其他易错项：
 
 - **代码形式优先**：术语若位于代码块或行内代码（反引号）中，一律保持代码原样，不补空格、不拆分（如 `Arch::AtlasA2`、`AscendC::GlobalTensor`、`MmadAtlasA2Pingpong`、`FlashAttentionInfer`）；仅代码块之外的正文、标题、表格文字按上表更正。
-- **代码块语言标记**：`json` 代码块内不得出现 `//` 注释（会导致解析失败）；语言标记须与内容一致（C++ 代码请用 `c++`）。
+- **代码块语言标记**：`json` 代码块内不得出现 `//` 注释（会导致解析失败）；语言标记须与内容一致（C++ 代码请用 `c++`；回显、目录树等非命令内容用 `text`，不要用 `bash`）。
 - **命令行参数**：必须使用 ASCII 连字符 `--`（如 `--details`），不得混入 en-dash `–` 等全角/破折号字符。
 - **示例代码一致性**：文档中的示例代码须与可编译形式一致，模板参数、逗号与标识符拼写不得有误（如模板参数列表末尾逗号、`loadDataParams` 等）。
+- **图片 `alt` 属性**：使用 `<img>` 标签插入图片时补充 `alt` 属性，简要描述图片内容。
 - **Markdown 结构**：标题层级逐级递增，不得从 H3 直接跳到 H5；有序列表编号连续，不得重复或跳号。
 
 ## 目录快速导航

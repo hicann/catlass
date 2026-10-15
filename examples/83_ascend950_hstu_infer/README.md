@@ -12,7 +12,7 @@ P = siluScale · S · sigmoid(S)      // Vector 侧逐元素 SiLU（可选 causa
 O = P · V                           // Cube 侧 MMAD
 ```
 
-- 支持产品型号：Ascend950 系列产品
+- 支持产品型号：Ascend 950PR&950DT 系列产品
 
 ## 样例参数说明
 

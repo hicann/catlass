@@ -2,12 +2,11 @@
 
 ## How do I specify the target hardware architecture for CATLASS?
 
-At the first community meeting in March 2026, we officially confirmed that the CATLASS community mainline would add support for the next-generation Ascend hardware, Ascend 950PR and Ascend 950DT. Official support starts with CATLASS 1.5.0. To distinguish the underlying interface implementations across platforms, this support introduces a compilation macro that must be set in the corresponding build commands.
+At the first community meeting in March 2026, we officially confirmed that the CATLASS community mainline would add support for the next-generation Ascend hardware, the Ascend 950PR&950DT series products. Official support starts with CATLASS 1.5.0. To distinguish the underlying interface implementations across platforms, this support introduces a compilation macro that must be set in the corresponding build commands.
 
 - New macro: `CATLASS_ARCH`, which specifies the target architecture. Its value is listed in the `__NPU_ARCH__` column of [SIMD BuiltIn Keywords](https://www.hiascend.com/document/detail/en/canncommercial/900beta2/opdevg/Ascendcopdevg/atlas_ascendc_10_10053.html).
-  - `Atlas A2 Training Series Products / Atlas A2 Inference Series Products`: `2201`
-  - `Atlas A3 Training Series Products / Atlas A3 Inference Series Products`: `2201`
-  - `Ascend 950PR/Ascend 950DT`: `3510`
+  - `Atlas A2/A3 series products`: `2201`
+  - `Ascend 950PR&950DT series products`: `3510`
 
 - Usage by scenario:
   - `bisheng` command line: `bisheng ... -DCATLASS_ARCH=2201 ...`

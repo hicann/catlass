@@ -19,7 +19,7 @@ The following sections list all required dependency software; choose an installa
 
 ## Build Environment Requirements
 
-CATLASS DSL supports only Ascend950 series products.
+CATLASS DSL supports only Ascend 950PR&950DT series products.
 
 | Component | Version or requirement |
 | --- | --- |

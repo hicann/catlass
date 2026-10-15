@@ -29,7 +29,7 @@
 
   These map in order to `tla.simt_sqrt`, `tla.simt_abs`, `tla.simt_exp`, `tla.simt_log`, and `tla.simt_pow`.
 
-- Supported products: Ascend 950 series products
+- Supported products: Ascend 950PR&950DT series products
 
 ## Parameters
 

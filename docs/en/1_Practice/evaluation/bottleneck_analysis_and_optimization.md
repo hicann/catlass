@@ -125,13 +125,13 @@ Two notes: When multiple movement instructions execute simultaneously, they shar
 
 ### Theoretical Execution Time of Computation Pipelines
 
-The theoretical execution time of computation-related pipelines (Cube/Vector/Scalar) is calculated as "amount of computation (elements) divided by theoretical compute". Using the Vector theoretical peak compute of 11.06 TOPS for `float16` as an example, the theoretical execution time for a single instruction operating on 32K `float16` elements is:
+The theoretical execution time of computation-related pipelines (Cube/Vector/Scalar) is calculated as "amount of computation (elements) divided by theoretical compute". Using the Vector theoretical peak compute of 11.06 TOPS for `float16` as an example, the theoretical execution time for a single instruction operating on 32768 `float16` elements is:
 
 ```
 32K / 11.06TOPS ≈ 0.003 μs
 ```
 
-Cube and Vector/Scalar are calculated separately and then summed, because the three can execute in parallel to a certain extent. In practice, the larger of the two is used as the primary reference.
+Cube and Vector/Scalar are calculated separately and then summed, because the three can execute in parallel to a certain extent. In practice, the larger of the theoretical movement-pipeline and computation-pipeline execution times is used as the primary reference.
 
 ## Performance Bottleneck Analysis Methods
 
@@ -199,7 +199,7 @@ Methods: Reasonably arrange the order of movement and computation instructions t
 
 Applicable scenarios: Block Dim does not saturate all available cores, or the amount of data moved in a single transaction exceeds L1 buffer, causing redundant data movement.
 
-Methods: Adjust L0/L1 TileShape so that the number of tiles matches the number of AI Cores, reducing final-round tailing. Select appropriate Swizzle strategies to improve A/B access locality. Use msTuner_CATLASS to automatically search for optimal parameter combinations.
+Methods: Adjust L0/L1 TileShape so that the number of tiles matches the number of AI Cores, reducing the tailing caused by the final round. Select appropriate Swizzle strategies to improve A/B access locality. Use msTuner_CATLASS to automatically search for optimal parameter combinations.
 
 ### Memory Optimization
 

@@ -68,7 +68,7 @@ void operator()<AscendC::AIC>(Params const &params) {
     ```
 
 - ⚠ 注意事项
-  - 目前[`DumpTensor`](https://www.hiascend.com/document/redirect/CannCommunityascendcapidumptensor)**不**支持打印`L0A`、`L0B`、`FixPipe`上的数值。特别地，在`Ascend 950PR/Ascend 950DT`上，额外**不**支持打印`L1`上的数值。
+  - 目前[`DumpTensor`](https://www.hiascend.com/document/redirect/CannCommunityascendcapidumptensor)**不**支持打印`L0A`、`L0B`、`FixPipe`上的数值。特别地，在`Ascend 950PR&950DT 系列产品`上，额外**不**支持打印`L1`上的数值。
 
 ### 输出示例（仅为示例，实际输出可能因硬件和算子实现不同而有所差异）
 

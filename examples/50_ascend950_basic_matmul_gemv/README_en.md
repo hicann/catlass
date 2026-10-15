@@ -13,7 +13,7 @@
   $$
 
   where $A$ is the input vector in the shape of `(1, k)`, $B$ is the input matrix in the shape of `(k, n)`, and $C$ is the output vector in the shape of `(1, n)`.
-- Supported products: Ascend 950PR&DT products
+- Supported products: Ascend 950PR&950DT series products
 
 ## Parameters
 
