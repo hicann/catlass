@@ -122,10 +122,10 @@ _HIVM_TEMPLATE_BITCODE_ATTRS = {
     "meta_op.aiv.print.c310.bc": ("hivm.aiv_bitcode", "hivm.aiv_bitcode"),
 }
 _MAX_KERNEL_ABI_PAYLOAD_SIZE = 1 << 20
-# Bumped when HIVMC append-bisheng defaults change (e.g. cce-vf-auto-sync=fused),
-# so pre-existing disk caches cannot silently reuse binaries built under the old
-# HIVMC-injected ``global`` autosync policy.
-_ONLINE_CACHE_ABI_VERSION = 9
+# Bumped when HIVMC append-bisheng defaults change (e.g. cce-vf-auto-sync=fused,
+# cce-enable-dynamic-misched=true), so pre-existing disk caches cannot silently
+# reuse binaries built under the old HIVMC-injected ``global`` autosync policy.
+_ONLINE_CACHE_ABI_VERSION = 10
 
 
 class TlaExecutionError(RuntimeError):
@@ -1947,6 +1947,7 @@ def _cache_key(
         "cce_disable_vf_stack_reserved_ubuf": compile_option.cce_disable_vf_stack_reserved_ubuf,
         # Fixed HIVMC override; bump with ``_ONLINE_CACHE_ABI_VERSION`` if changed.
         "cce_vf_auto_sync": "fused",
+        "cce_enable_dynamic_misched": True,
         "extern_compile_specs": extern_compile_identities,
         "extern_compile_environment": extern_compile_environment,
     }
@@ -2544,6 +2545,9 @@ def _build_hivmc_a5_command(
     # VF auto-sync (whole-kernel; later ``-mllvm`` overrides HIVMC's injected
     # ``global``). Always force ``fused``; no developer override knob.
     reserve_flags.extend(["-mllvm", "--cce-vf-auto-sync=fused"])
+    # Dynamic scheduling (whole-kernel). Kept in the same
+    # ``--append-bisheng-options`` so a single occurrence reaches bisheng.
+    reserve_flags.extend(["-mllvm", "-cce-enable-dynamic-misched=true"])
     if reserve_flags:
         # hivmc has no option of its own for these; it forwards whatever this
         # carries on to bisheng, which is where they are understood.

@@ -727,7 +727,8 @@ def test_public_compile_dry_run_invokes_typed_bridge_and_hivmc_a5(
                 str(cache_dir / "lowered.mlir"),
                 "--target=Ascend950PR_9589",
                 "--mlir-print-op-on-diagnostic",
-                "--append-bisheng-options=-mllvm --cce-vf-auto-sync=fused",
+                "--append-bisheng-options=-mllvm --cce-vf-auto-sync=fused"
+        " -mllvm -cce-enable-dynamic-misched=true",
                 "--disable-ffts",
                 "--enable-hivm-compile=False",
                 f"--link-aicore-bitcode={template_bc.resolve()}",
@@ -2122,7 +2123,8 @@ def test_build_hivmc_a5_command_links_template_bitcode_for_aic(tmp_path) -> None
         str(mlir_path),
         "--target=Ascend950PR_9589",
         "--mlir-print-op-on-diagnostic",
-        "--append-bisheng-options=-mllvm --cce-vf-auto-sync=fused",
+        "--append-bisheng-options=-mllvm --cce-vf-auto-sync=fused"
+        " -mllvm -cce-enable-dynamic-misched=true",
         "--disable-ffts",
         "--enable-hivm-compile=False",
         f"--link-aicore-bitcode={template_bc.resolve()}",
@@ -2153,7 +2155,8 @@ def test_build_hivmc_a5_command_links_template_bitcode_for_aiv(tmp_path) -> None
         str(mlir_path),
         "--target=Ascend950PR_9589",
         "--mlir-print-op-on-diagnostic",
-        "--append-bisheng-options=-mllvm --cce-vf-auto-sync=fused",
+        "--append-bisheng-options=-mllvm --cce-vf-auto-sync=fused"
+        " -mllvm -cce-enable-dynamic-misched=true",
         "--disable-ffts",
         "--enable-hivm-compile=False",
         f"--link-aicore-bitcode={template_bc.resolve()}",
@@ -2182,7 +2185,8 @@ def test_build_hivmc_a5_command_always_overrides_autosync_to_fused(
     )
 
     assert (
-        "--append-bisheng-options=-mllvm --cce-vf-auto-sync=fused" in command
+        "--append-bisheng-options=-mllvm --cce-vf-auto-sync=fused"
+        " -mllvm -cce-enable-dynamic-misched=true" in command
     )
 
 
