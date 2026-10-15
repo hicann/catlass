@@ -178,8 +178,7 @@ std::vector<uint64_t> CompareData(
     for (uint64_t i = 0; i < result.size(); ++i) {
         ElementCompare actualValue = static_cast<ElementCompare>(result[i]);
         ElementCompare expectValue = expect[i];
-        ElementCompare diff = std::abs(actualValue - expectValue);
-        if (diff != 0) {
+        if (actualValue != expectValue) {
             errorIndices.push_back(i);
         }
     }
