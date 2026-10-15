@@ -9,6 +9,8 @@
 # BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 # See LICENSE in the root of the software repository for the full text of the License.
 
+# ruff: noqa: E501
+
 import ctypes
 import os
 import re
@@ -70,6 +72,7 @@ __all__ = [
     "ascend950_matmul_full_loadA",
     "ascend950_dual_matmul_silu_mul",
     "ascend950_matmul_gather_scatter",
+    "ascend950_matmul_permute",
     "ascend950_batched_matmul",
     "ascend950_batched_matmul_softmax",
     "ascend950_streamk_matmul",

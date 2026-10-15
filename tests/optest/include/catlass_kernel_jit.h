@@ -595,6 +595,12 @@ __attribute__((weak)) void Ascend950MatmulGatherScatter(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulGatherScatterParams& params);
 
 /**
+ * @brief JIT interface for example 88_ascend950_matmul_permute.
+ */
+void Ascend950MatmulPermute(
+    const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
+
+/**
  * @brief Reserved JIT interface for example 102_dynamic_optimized_matmul.
  */
 __attribute__((weak)) void DynamicOptimizedMatmul(

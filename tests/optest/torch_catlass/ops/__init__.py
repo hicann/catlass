@@ -47,6 +47,7 @@ from .ascend950_matmul_fixpipe_opti import ascend950_matmul_fixpipe_opti  # exam
 from .ascend950_matmul_full_dequant import ascend950_matmul_full_dequant  # example 57
 from .ascend950_matmul_full_loadA import ascend950_matmul_full_loadA  # example 73
 from .ascend950_dual_matmul_silu_mul import ascend950_dual_matmul_silu_mul  # example 78
+from .ascend950_matmul_permute import ascend950_matmul_permute  # example 88
 from .ascend950_mx_grouped_matmul_slice_m import ascend950_mx_grouped_matmul_slice_m  # example 55
 from .ascend950_mx_matmul import (  # example 53, 54, 58, 59, 63
     ascend950_a8w4_mx_matmul,
@@ -219,6 +220,7 @@ __all__ = [
     "ascend950_basic_conv2d_tla",  # example 56
     "ascend950_matmul_full_loadA",  # example 73
     "ascend950_dual_matmul_silu_mul",  # example 78
+    "ascend950_matmul_permute",  # example 88
     "symm",  # example 75
     "trmm",  # example 76
     "planar_complex_matmul",  # example 77
