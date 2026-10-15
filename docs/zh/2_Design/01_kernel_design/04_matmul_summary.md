@@ -10,7 +10,7 @@
 <summary><strong><font size="4">00_basic_matmul</font></strong></summary>
 
 - 理论模板：`Common模板`
-- 工程优化：`流水优化（Multi Buffer）`
+- 工程优化：`流水优化(Multi Buffer)`
 - 关键交付件
   - host：[00_basic_matmul](../../../../examples/00_basic_matmul/basic_matmul.cpp)
   - kernel：[basic_matmul.hpp](../../../../include/catlass/gemm/kernel/basic_matmul.hpp)
@@ -24,8 +24,8 @@
 
 - 理论模板：`Common模板`
 - 工程优化：
-  - `流水优化（Multi Buffer）`
-  - `读取带宽优化（padding）- PaddingMatrixND`
+- `流水优化(Multi Buffer)`
+- `读取带宽优化(Padding)- PaddingMatrixND`
 - 关键交付件
   - host：[04_padding_matmul](../../../../examples/04_padding_matmul/padding_matmul.cpp)
   - kernel：[padding_matmul.hpp](../../../../include/catlass/gemm/kernel/padding_matmul.hpp)
@@ -39,10 +39,10 @@
 
 - 理论模板：`Common模板`
 - 工程优化：
-  - `流水优化（Multi Buffer）`
-  - `流水优化（Preload）`
-  - `读取带宽优化（Padding）- PaddingMatrixNZ`
-  - `读取带宽优化（ShuffleK）`
+- `流水优化(Multi Buffer)`
+- `流水优化(Preload)`
+- `读取带宽优化(Padding)- PaddingMatrixNZ`
+- `读取带宽优化(ShuffleK)`
   - `读取带宽优化（小M下指令替换）`（需要修改样例使能）
 - 关键交付件
   - host：[06_optimized_matmul](../../../../examples/06_optimized_matmul/optimized_matmul.cpp)
@@ -58,7 +58,7 @@
 <summary><strong><font size="4">09_splitk_matmul</font></strong></summary>
 
 - 理论模板：`多核切K模板 MultiCoreSplitK`
-- 工程优化：`流水优化（Multi Buffer）`
+- 工程优化：`流水优化(Multi Buffer)`
 - 关键交付件
   - host：[09_splitk_matmul](../../../../examples/09_splitk_matmul/splitk_matmul.cpp)
   - kernel：[splitk_matmul.hpp](../../../../include/catlass/gemm/kernel/splitk_matmul.hpp)
@@ -74,9 +74,9 @@
 
 - 理论模板：`Common模板`
 - 工程优化：
-  - `流水优化（Multi Buffer）`
-  - `流水优化（Preload）`
-  - `读取带宽优化（ShuffleK）`
+- `流水优化(Multi Buffer)`
+- `流水优化(Preload)`
+- `读取带宽优化(ShuffleK)`
 - 关键交付件
   - host：[21_basic_matmul_preload_zN](../../../../examples/21_basic_matmul_preload_zN/basic_matmul_preload_zN.cpp)
   - kernel：[basic_matmul_preload.hpp](../../../../include/catlass/gemm/kernel/basic_matmul_preload.hpp)
@@ -90,8 +90,8 @@
 
 - 理论模板：`多核切K模板 MultiCoreSplitK`
 - 工程优化：
-  - `流水优化（Multi Buffer）`
-  - `读取带宽优化（padding）- PaddingMatrixND`
+- `流水优化(Multi Buffer)`
+- `读取带宽优化(Padding)- PaddingMatrixND`
 - 关键交付件
   - host：[22_padding_splitk_matmul](../../../../examples/22_padding_splitk_matmul/padding_splitk_matmul.cpp)
   - kernel：[padding_splitk_matmul.hpp](../../../../include/catlass/gemm/kernel/padding_splitk_matmul.hpp)
@@ -109,8 +109,8 @@
 
 - 理论模板：`Common模板`
 - 工程优化：
-  - `流水优化（Multi Buffer）`(全载的A矩阵在L1上不使用多buffer)
-  - `读取带宽优化（L1常驻）`
+- `流水优化(Multi Buffer)`(全载的A矩阵在L1上不使用多buffer)
+- `读取带宽优化(L1常驻)`
 - 关键交付件
   - host：[25_matmul_full_loadA](../../../../examples/25_matmul_full_loadA/matmul_full_loadA.cpp)
   - kernel：[matmul_full_loadA.hpp](../../../../include/catlass/gemm/kernel/matmul_full_loadA.hpp)
@@ -125,7 +125,7 @@
 
 - 理论模板：`Common模板`
 - 工程优化：
-  - `流水优化（Multi Buffer）`
+- `流水优化(Multi Buffer)`
   - `Scalar开销消减`
 - 关键交付件
   - host：[31_small_matmul](../../../../examples/31_small_matmul/small_matmul.cpp)
@@ -141,8 +141,8 @@
 
 - 理论模板：`单核切K模板 SingleCoreSplitK`
 - 工程优化：
-  - `流水优化（Multi Buffer）`
-  - `读取带宽优化（Padding）- PaddingMatrixNZ`
+- `流水优化(Multi Buffer)`
+- `读取带宽优化(Padding)- PaddingMatrixNZ`
   - `写出带宽优化`
 - 关键交付件
   - host：[34_single_core_splitk_matmul](../../../../examples/34_single_core_splitk_matmul/single_core_splitk.cpp)
@@ -157,10 +157,10 @@
 <details>
 <summary><strong><font size="4">37_streamk_matmul</font></strong></summary>
 
-- 理论模板：`尾轮多核切K`的 StreamK 方案，详见[设计文档](../../../../examples/102_dynamic_optimized_matmul/docs/zh/StreamkMatmul.md)
+- 理论模板：`尾轮多核切K`的StreamK方案，详见[设计文档](../../../../examples/102_dynamic_optimized_matmul/docs/zh/StreamkMatmul.md)
 - 工程优化：
-  - `流水优化（Multi Buffer）`
-  - `读取带宽优化（ShuffleK）`
+- `流水优化(Multi Buffer)`
+- `读取带宽优化(ShuffleK)`
 - 关键交付件
   - host：[37_streamk_matmul](../../../../examples/37_streamk_matmul/streamk_matmul.cpp)
   - kernel：[streamk_matmul.hpp](../../../../include/catlass/gemm/kernel/streamk_matmul.hpp)
@@ -234,7 +234,7 @@ $2MNK$
 
 ### 读取数据量
 
-每个基本任务块需要搬运$m_1K+Kn_1$的数据，总读取量与`Common模板`一致：
+每个基本任务块需要搬运$m_1k+kn_1$的数据，总读取量与`Common模板`一致：
 
 $2Byte * [m_1k+kn_1] * \frac{MNK}{m_1n_1k} = 2Byte * MNK * [\frac{1}{m_1}+\frac{1}{n_1}]$
 
@@ -263,7 +263,7 @@ $2Byte * MNK / k$
 - 搬入L1Cache时的TileShape：$m_1$，$n_1$，$k_1$
 - 搬入L0A/L0B、搬出L0C时的TileShape：$m_0$，$n_0$，$k_0$
 
-相比`Common模板`，为了减少读取数据量，进一步增大抽象上的$m_1$、$n_1$，考虑将$m_1k_1$的tile块直接与对应的所有$k_1n_1$的tile块完成计算（等同于将$n_1$放大到$N$），此时输出$m_0n_0$的tile块没法在$L0C$常驻累加，需要及时搬出，通过`atomicAdd`在`GM`上累加。硬件上约束如下：
+相比`Common模板`，为了减少读取数据量，进一步增大抽象上的$m_1$、$n_1$，考虑将$m_1k_1$的tile块直接与对应的所有$k_1n_1$的tile块完成计算（等同于将$n_1$放大到$N$），此时输出$m_0n_0$的tile块无法在$L0C$常驻累加，需要及时搬出，通过`atomicAdd`在`GM`上累加。硬件上约束如下：
 
 - $m_1k_1*L1Stage_A + n_1k_1*L1Stage_B <= L1Size / 2Byte$
 - $m_0k_0*L0AStage <= L0ASize / 2Byte$
@@ -305,7 +305,7 @@ $2Byte * MNK / k_1$
 
 <img src="https://raw.gitcode.com/user-images/assets/7801479/59f2458f-719d-4711-8ed9-5e51732de2d0/SingleBuffer.png" width="100%">
 
-如果在AIC的L1/L0A/L0B/L0C上，每次载入数据tile块时都尽量填满所有空间，会导致各PIPE的流水串行，整体效率低下
+如果在AIC的L1/L0A/L0B/L0C上，每次载入数据tile块时都尽量填满所有空间，会导致各PIPE的流水串行，整体效率低下。
 
 ### 优化方案
 
@@ -443,7 +443,7 @@ ShuffleK方案如图所示，根据$CoreIdx$来偏移起始搬运序号$j$，$Co
 - [block_mmad_preload_async.hpp](../../../../include/catlass/gemm/block/block_mmad_preload_async.hpp)
 - [block_mmad_preload_async_with_callback.hpp](../../../../include/catlass/gemm/block/block_mmad_preload_async_with_callback.hpp)
 
-上述Block层实现代码通过设置起始L1序号为`CoreIdx/kTileCount`来实现错位：
+上述Block层实现代码通过设置起始L1序号为`CoreIdx % kTileCount`来实现错位：
 
 ```cpp
 kTileCount = CeilDiv<L1TileShape::K>(actualShape.k());
@@ -522,9 +522,9 @@ struct TileCopyOpt : public Catlass::Gemm::Tile::TileCopy<ArchTag, AType, BType,
 
 ### 优化方案
 
-消减冗余的scalar计算
+消减冗余的scalar计算。
 
-- kernel内不使用 BlockScheduler 来将任务块分配给物理核，手动计算每个物理核对应的任务块
+- kernel内不使用BlockScheduler来将任务块分配给物理核，手动计算每个物理核对应的任务块
 - kernel内消除基本块循环（每个AIC仅处理1个任务块）
 - kernel内简化offset相关计算
 - blockMmad内消除L1A/L1B的$m$、$n$的循环
@@ -574,7 +574,7 @@ struct TileCopyOpt : public Catlass::Gemm::Tile::TileCopy<ArchTag, AType, BType,
 
 </details>
 
-## 模板应用浅述
+## 模板应用
 
 参考[102_dynamic_optimized_matmul的select_kernel策略](../../../../examples/102_dynamic_optimized_matmul/include/select_kernel_b16.h)
 
@@ -586,7 +586,7 @@ struct TileCopyOpt : public Catlass::Gemm::Tile::TileCopy<ArchTag, AType, BType,
 依次识别是否满足各模板适合场景，并和性能基线作比较：
 
 - [31_small_matmul](../../../../examples/31_small_matmul/small_matmul.cpp)：
-  - 计算当前基本任务块 taskBlocks
+- 计算当前基本任务块taskBlocks
 
     ```cpp
     taskBlocks = CeilDiv(M, m1) * CeilDiv(N, n1);
@@ -600,7 +600,7 @@ struct TileCopyOpt : public Catlass::Gemm::Tile::TileCopy<ArchTag, AType, BType,
     - 满足下列场景其一，修改$m_1 = 256$、$n_1 = 128$
       - A矩阵和B矩阵均为ColumnMajor
       - A矩阵为ColumnMajor，B矩阵为RowMajor，且$M > N$
-  - 计算当前基本任务块 taskBlocks
+- 计算当前基本任务块taskBlocks
 
     ```cpp
     taskBlocks = CeilDiv(M, m1) * CeilDiv(N, n1);
@@ -608,19 +608,19 @@ struct TileCopyOpt : public Catlass::Gemm::Tile::TileCopy<ArchTag, AType, BType,
 
   - 满足下列两种场景：
     - 基本任务块小于一半AIC数，且$K$轴够大：$taskBlocks < aicCoreNum / 2, K > 5120$
-    - 基本任务块小于3块，且$K$轴不会小：$taskBlocks <= 2, K > 1024$
+- 基本任务块小于3块，且$K$轴较大：$taskBlocks <= 2, K > 1024$
 - [06_optimized_matmul](../../../../examples/06_optimized_matmul/optimized_matmul.cpp)（带Padding前处理）和[21_basic_matmul_preload_zN](../../../../examples/21_basic_matmul_preload_zN/basic_matmul_preload_zN.cpp)（手动改为ND输入）
   - 泛化性更强，适用于剩余场景
   - 不需要使用Padding时，为了节约MIX算子编译启动的开销，建议使用[21_basic_matmul_preload_zN](../../../../examples/21_basic_matmul_preload_zN/basic_matmul_preload_zN.cpp)模板
 
-⚠️ 全载特性的使用[25_matmul_full_loadA](../../../../examples/25_matmul_full_loadA/matmul_full_loadA.cpp) 和 单核切K方案[34_single_core_splitk_matmul](../../../../examples/34_single_core_splitk_matmul/single_core_splitk.cpp)的适用场景待完善
+⚠️ 全载特性的使用[25_matmul_full_loadA](../../../../examples/25_matmul_full_loadA/matmul_full_loadA.cpp) 和单核切K方案[34_single_core_splitk_matmul](../../../../examples/34_single_core_splitk_matmul/single_core_splitk.cpp)的适用场景待完善。
 
 </details>
 
 <details>
 <summary><strong><font size="4">Padding选择</font></strong></summary>
 
-当Stride非512Byte对齐时可以考虑使用Padding前处理，但需要考虑Padding带来的开销以及MIX算子编译启动的开销（小shape[31_small_matmul](../../../../examples/31_small_matmul/small_matmul.cpp)方法不推荐额外适配Padding）
+当Stride非512Byte对齐时可以考虑使用Padding前处理，但需要考虑Padding带来的开销以及MIX算子编译启动的开销（小shape场景使用[31_small_matmul](../../../../examples/31_small_matmul/small_matmul.cpp)时不推荐额外适配Padding）。
 
 `PaddingMatrixND`、`PaddingMatrixBlockND`和`PaddingMatrixNZ`建议开发者自行尝试，泛化上`PaddingMatrixNZ`更具有优势。
 

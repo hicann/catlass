@@ -1,6 +1,6 @@
 # 创新样例开发流程指南
 
-该文档面向需要在 CATLASS模板库中开发创新算子样例的开发者，以[样例44](../../../examples/44_quant_matmul_full_loadA_tla/README.md) `quant_matmul_full_loadA_tla`（量化矩阵乘A矩阵全载）为案例，说明从需求分析、方案设计到组件开发、测试合入的完整流程，帮助开发者快速掌握创新样例的开发方法。
+该文档面向需要在CATLASS模板库中开发创新算子样例的开发者，以[样例44](../../../examples/44_quant_matmul_full_loadA_tla/README.md) `quant_matmul_full_loadA_tla`（量化矩阵乘A矩阵全载）为案例，说明从需求分析、方案设计到组件开发、测试合入的完整流程，帮助开发者快速掌握创新样例的开发方法。
 
 ## 什么是创新样例
 
@@ -31,7 +31,7 @@ CATLASS模板库中的每个样例都是在已有样例基础上的创新和扩�
 
 ### 方案设计
 
-根据需求分析和组件调研结果，设计算子的整体实现方案。样例44的方案设计体现了"参考复用为主、创新开发为辅"的原则：
+根据需求分析和组件调研结果，设计算子的整体实现方案。样例44的方案设计体现了“最大化复用、最小化创新”的原则：
 
 **（1）模板参数选择**
 
@@ -65,7 +65,7 @@ CATLASS模板库中的每个样例都是在已有样例基础上的创新和扩�
 - 之后进入主循环，pingpong搬运B矩阵的K维分块到L1，同时执行L1→L0的数据搬运和Cube计算
 - A矩阵常驻L1，无需重复搬运，从而减少MTE2带宽压力
 
-<img src="https://raw.gitcode.com/user-images/assets/7631999/1de46727-7c46-411e-936c-7a437d951a3a/3e9c799e1de0405d89f07a6bfd7d7c54.png_tplv-a9rns2rl98-image-qvalue.png" width="60%">
+<img src="https://raw.gitcode.com/user-images/assets/7631999/1de46727-7c46-411e-936c-7a437d951a3a/3e9c799e1de0405d89f07a6bfd7d7c54.png_tplv-a9rns2rl98-image-qvalue.png" alt="样例44流水设计方案：A矩阵一次性搬入L1后常驻复用，B矩阵分块pingpong搬运至L1，数据搬运与Cube计算重叠执行" width="60%">
 
 ### 文档设计
 
@@ -81,7 +81,7 @@ CATLASS模板库中的每个样例都是在已有样例基础上的创新和扩�
 
 参考[快速上手](./01_quick_start.md)搭建开发环境，然后按照以下目录结构组织代码：
 
-```bash
+```text
 examples/44_quant_matmul_full_loadA_tla/   # 样例目录
 ├── CMakeLists.txt                          # 编译配置
 ├── README.md                               # 使用说明
@@ -130,7 +130,7 @@ Kernel层是算子的执行入口，负责调度器初始化、全局张量定�
 
 **（1）参数结构设计**
 
-定义`Arguments`（用户接口层）和`Params`（内核执行层）两层参数结构。样例44的Arguments包含problemShape、aicCoreNum、输入张量组（A/B/Bias）和输出张量组（Scale/PerTokenScale/D）。
+定义`Arguments`（用户接口层）和`Params`（内核执行层）两层参数结构。样例44的Arguments包含problemShape、aicCoreNum、输入张量组（A/B）和输出张量组（Scale/PerTokenScale/D）。
 
 **（2）AIC核实现**
 
@@ -254,4 +254,4 @@ bash scripts/build.sh 44_quant_matmul_full_loadA_tla
 3. **逐层实现**：按照Host→Kernel→Block→Tile的顺序，自顶向下完成各层代码。优先复用和改写已有组件，仅在必要时开发新组件。
 4. **验证收益**：通过精度和性能测试，确认新特性达到了预期效果。
 
-样例44通过结合量化矩阵乘（复用样例42）和A矩阵全载（参考样例25），所有组件均通过复用或TLA改写完成，就在N轴较大的量化矩阵乘场景中实现了5%~15%的性能提升，充分体现了"最大化复用、最小化创新"的开发原则。开发者在设计自己的样例时，应首先完成全面的组件调研，再确定创新点和开发方案。
+样例44通过结合量化矩阵乘（复用样例42）和A矩阵全载（参考样例25），所有组件均通过复用或TLA改写完成，就在N轴较大的量化矩阵乘场景中实现了5%~15%的性能提升，充分体现了“最大化复用、最小化创新”的开发原则。开发者在设计自己的样例时，应首先完成全面的组件调研，再确定创新点和开发方案。

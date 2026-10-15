@@ -10,7 +10,7 @@ CATLASS示例工程适配CANN提供的主流性能调测工具，工具的详细
 
 ### msProf — 单算子性能分析
 
-[msProf](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/devaids/optool/atlasopdev_16_0082.html)是单算子性能分析工具，对应指令为`msprof op`，支持上板和仿真两种运行模式。使用方式见[msProf&Profiling](./performance_tools.md#msprof-single-operator-analysis)。
+[msProf](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/devaids/optool/atlasopdev_16_0082.html)是单算子性能分析工具，对应指令为`msprof op`，支持上板和仿真两种运行模式。使用方式见[msProf&Profiling](./performance_tools.md#用msprof进行单算子性能分析--msprof-single-operator-analysis-)。
 
 **上板性能采集**
 
@@ -84,7 +84,7 @@ cd output/bin
 msprof ./00_basic_matmul 256 512 1024 0
 ```
 
-详细使用教程见[用Profiling进行整网性能分析](./performance_tools.md#profiling-network-analysis)。性能数据各字段含义参见[msProf性能数据文件参考](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/devaids/Profiling/atlasprofiling_16_0057.html)。
+详细使用教程见[用Profiling进行整网性能分析](./performance_tools.md#用profiling进行整网性能分析--profiling-network-analysis-)。性能数据各字段含义参见[msProf性能数据文件参考](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/devaids/Profiling/atlasprofiling_16_0057.html)。
 
 ### msTuner_CATLASS — Tiling自动寻优
 
@@ -115,7 +115,7 @@ bash scripts/build.sh -DCATLASS_LIBRARY_KERNELS=00_basic_matmul mstuner_catlass
 
 ### 搬运流水理论耗时
 
-搬运相关流水（MTE1/MTE2/MTE3）的理论耗时计算公式为"搬运数据量（Byte）除以理论带宽"。假设GM峰值带宽约1.8 TB/s，`float16`类型的4096×4096矩阵搬运理论耗时如下：
+搬运相关流水（MTE1/MTE2/MTE3）的理论耗时计算公式为“搬运数据量（Byte）除以理论带宽”。假设GM峰值带宽约1.8TB/s，`float16`类型的4096×4096矩阵搬运理论耗时如下：
 
 ```text
 2Byte × 4096 × 4096 / 1.8TB/s ≈ 18.64 μs
@@ -125,13 +125,13 @@ bash scripts/build.sh -DCATLASS_LIBRARY_KERNELS=00_basic_matmul mstuner_catlass
 
 ### 计算流水理论耗时
 
-计算相关流水（Cube/Vector/Scalar）的理论耗时计算公式为"计算数据量（Element）除以理论算力"。以`float16`类型Vector理论峰值算力11.06 TOPS为例，32K个`float16` Element单指令计算理论耗时如下：
+计算相关流水（Cube/Vector/Scalar）的理论耗时计算公式为“计算数据量（Element）除以理论算力”。以`float16`类型Vector理论峰值算力11.06TOPS为例，32768个`float16` Element单指令计算理论耗时如下：
 
 ```text
 32K / 11.06TOPS ≈ 0.003 μs
 ```
 
-Cube和Vector/Scalar分开计算后再求和，因为三者可并行执行到一定程度。实际分析中以两者中较大者为主要参照。
+Cube和Vector/Scalar分开计算后再求和，因为三者可并行执行到一定程度。实际分析中以搬运流水与计算流水理论耗时中较大者为主要参照。
 
 ## 性能瓶颈分析方法
 
@@ -158,7 +158,7 @@ Cube和Vector/Scalar分开计算后再求和，因为三者可并行执行到一
 | Cube/Vector耗时占主导    | Compute bound | 计算流水优化           |
 | 两者均不接近理论值       | 流水隐藏不足  | 用仿真流水图进一步分析 |
 
-示例：MatMul算子shape为 (2048, 12288) × (12288, 6144)，bfloat16类型。理论搬运约111.8 μs，但实际`aic_mte2_time`远大于该值。原因是输入数据总大小超过L1空间（512 KB），矩阵数据需重复搬运，应结合Tiling优化和仿真流水图进一步分析。
+示例：MatMul算子shape为 (2048, 12288) × (12288, 6144)，bfloat16类型。理论搬运约111.8μs，但实际`aic_mte2_time`远大于该值。原因是输入数据总大小超过L1空间（512KB），矩阵数据需重复搬运，应结合Tiling优化和仿真流水图进一步分析。
 
 ### 上板Profiling分析Tiling情况
 
@@ -199,13 +199,13 @@ Cube和Vector/Scalar分开计算后再求和，因为三者可并行执行到一
 
 适用场景：Block Dim未用满所有可用核，或单次搬运数据量超过L1缓存导致数据重复搬运。
 
-主要手段：调整L0/L1 TileShape使基本块数量与AI Core数量匹配，减少尾轮长尾；选择合适的Swizzle策略改善A/B访问局部性；使用msTuner_CATLASS自动搜索最优参数组合。
+主要手段：调整L0/L1 TileShape使基本块数量与AI Core数量匹配，减少尾轮造成的长尾耗时；选择合适的Swizzle策略改善A/B访问局部性；使用msTuner_CATLASS自动搜索最优参数组合。
 
 ### 内存优化
 
 适用场景：`Memory.csv`/`MemoryL0.csv`显示带宽利用率偏低，或`L2Cache.csv`显示Cache命中率低，或`ResourceConflictRatio.csv`显示UB Bank Conflict占比高。
 
-主要手段：调整数据搬运粒度以匹配硬件带宽特性，提高带宽利用率；优化数据排布以提高L2 Cache命中率；减少UB上同一Bank的读写冲突或Bank Group的读读冲突；CV融合场景优先使用片上缓存中转中间结果，避免"UB到GM再到L1"的低效路径。
+主要手段：调整数据搬运粒度以匹配硬件带宽特性，提高带宽利用率；优化数据排布以提高L2 Cache命中率；减少UB上同一Bank的读写冲突或Bank Group的读读冲突；CV融合场景优先使用片上缓存中转中间结果，避免“UB到GM再到L1”的低效路径。
 
 ### 头尾开销优化
 
@@ -217,8 +217,8 @@ Cube和Vector/Scalar分开计算后再求和，因为三者可并行执行到一
 
 | 工具                                | 用途                   | CATLASS文档                                                                                                                                                       |
 | ----------------------------------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| msProf（`msprof op`）               | 单算子上板性能采集     | [msProf&Profiling](./performance_tools.md#msprof-single-operator-analysis)                                                                                             |
-| msProf仿真（`msprof op simulator`） | 单算子仿真流水图采集   | [性能流水仿真](./performance_tools.md#performance-pipeline-simulation)                                                                                                               |
-| Profiling（`msprof`）               | 整网性能数据采集与分析 | [用Profiling进行整网性能分析](./performance_tools.md#profiling-network-analysis)                                                                                 |
+| msProf（`msprof op`）               | 单算子上板性能采集     | [msProf&Profiling](./performance_tools.md#用msprof进行单算子性能分析--msprof-single-operator-analysis-   )                                                                                             |
+| msProf仿真（`msprof op simulator`） | 单算子仿真流水图采集   | [性能流水仿真](./performance_tools.md#性能流水仿真--performance-pipeline-simulation-)                                                                                                               |
+| Profiling（`msprof`）               | 整网性能数据采集与分析 | [用Profiling进行整网性能分析](./performance_tools.md#用profiling进行整网性能分析--profiling-network-analysis-)                                                                                 |
 | msTuner_CATLASS                     | Tiling参数自动寻优     | [msTuner_CATLASS README](../../../../tools/tuner/README.md)                                                                                                       |
 | MindStudio Insight                  | 性能数据可视化分析     | [MindStudio Insight用户指南](https://www.hiascend.com/document/detail/zh/mindstudio/80RC1/GUI_baseddevelopmenttool/msascendinsightug/Insight_userguide_0002.html) |
