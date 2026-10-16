@@ -38,7 +38,7 @@ description: Catlass Gemm/Tile组件单元测试编写技能。当需要为 Copy
 4. 运行验证     → cmake 构建 + gtest 测试
 ```
 
-## About Tile-level utilties
+## About Tile-level utilities
 
 ### Top to down
 
@@ -49,7 +49,7 @@ Tile 层搬运组件的公共入口头文件按 `CATLASS_ARCH` 宏分发到架�
 
 每条通路的 Struct 族谱（各特化 + 关键分支逻辑）见对应 `referrence/` 文件的「组件族谱」章节。
 
-### What is the kind of this utilty?
+### What is the kind of this utility?
 
 编写 UT 前先定位组件的三个特征：
 

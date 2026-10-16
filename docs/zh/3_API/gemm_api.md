@@ -33,7 +33,7 @@ for (int block_m = 0; block_m < MatmulM; block_m += BlockTileM) {
 } // block_m
 ```
 
-前两重嵌套的 `for`循环对应于多个AICore上的并行性。代码上并不将它们显式地表达为两重for循环，而是通过BlockIdx来区分不同核心处理的数据块。
+前两重嵌套的 `for`循环对应于多个AI Core上的并行性。代码上并不将它们显式地表达为两重for循环，而是通过BlockIdx来区分不同核心处理的数据块。
 
 在两重嵌套的 `for`循环内部，将全局内存分片，然后将分片搬运到更“局部”的内存（如L1 Buffer或L0 Buffer）并执行MMAD计算。这些分片拷贝和分片MMAD计算的迭代通常是完全静态的，并且完全展开。
 

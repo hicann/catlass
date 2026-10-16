@@ -181,7 +181,7 @@ CalcLocalRowSum            // ll = rowsum(P)
 UpdateGlobalRowSum         // gl = dm * gl + ll
 ```
 
-`dm = exp(gm_old - gm_new)` 即上一轮 P 需要整体乘的衰减因子，交给 RescaleO 使用——这就是经典的 FlashAttention online softmax 递推。
+`dm = exp(gm_old - gm_new)` 即上一轮 P 需要整体乘的衰减因子，交给 RescaleO 使用——这就是经典的 Flash Attention online softmax 递推。
 
 ### 双 operator()：无 mask 版与带 mask 版
 

@@ -33,7 +33,7 @@
 | BlockMmad      | [BlockMmadTla](../../include/catlass/gemm/block/block_mmad_pingpong_tla.hpp)                                      | MX量化矩阵乘，DispatchPolicy=`MmadMx<Ascend950, true, 16>` |
 | TileCopy       | [PackedMxTileCopyTla](../../include/catlass/gemm/block/block_mmad.hpp)                                            | GM→L1→UB数据搬运                                           |
 | BlockEpilogue  | [BlockEpilogueFinalizeRouting](../../include/catlass/epilogue/block/block_epilogue_finalize_routing.hpp)          | 输出清零 + SharedInput赋值 + Logit加权 + Scatter Add       |
-| BlockScheduler | [ColumnBlockSwizzle](../../include/catlass/gemm/block/block_swizzle.hpp)                                          | 按列分块调度，分配到各AICore                               |
+| BlockScheduler | [ColumnBlockSwizzle](../../include/catlass/gemm/block/block_swizzle.hpp)                                          | 按列分块调度，分配到各AI Core                              |
 
 #### 非确定性版（no_deter）
 

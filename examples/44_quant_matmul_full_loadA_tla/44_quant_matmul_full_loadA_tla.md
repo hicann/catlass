@@ -34,7 +34,7 @@ CATLASS [`44_quant_matmul_full_loadA_tla`样例](./README.md)算子是基于CATL
 ![A矩阵全载流水图](https://raw.gitcode.com/user-images/assets/7631999/1de46727-7c46-411e-936c-7a437d951a3a/3e9c799e1de0405d89f07a6bfd7d7c54.png_tplv-a9rns2rl98-image-qvalue.png "3e9c799e1de0405d89f07a6bfd7d7c54.png~tplv-a9rns2rl98-image-qvalue.png")
 
 - 采用A矩阵全载模板时，需要一半的L1空间以放入`L1TileShape::M * problemShape.K`的数据，若L1空间不够A矩阵全载，则返回报错。
-- A矩阵全载时，N轴越大，单核越能多次复用L1中的A矩阵、无需再从GM或L2Cache搬运A矩阵，性能收益就越大。
+- A矩阵全载时，N轴越大，单核越能多次复用L1中的A矩阵、无需再从GM或L2 Cache搬运A矩阵，性能收益就越大。
 - A矩阵全载时，N轴较小，无法复用A矩阵，性能收益较00_basic_matmul可能会出现劣化。
 - 若`problemShape.M > L1TileShape::M`，可使用`GemmIdentityBlockSwizzleL1FullLoad<SwizzleOffset, SwizzleDirection, AicCoreNum>`策略，使得每个核需要处理的基本块尽可能地连在一起，提升A矩阵分核全载时的块间复用率。
 - 若`problemShape.M <= L1TileShape::M`，即M方向不切块分核，此时使用`GemmIdentityBlockSwizzle`策略即可适用，常用的策略参数选取可参考[swizzle_explanation](../../docs/zh/2_Design/01_kernel_design/02_swizzle.md)。

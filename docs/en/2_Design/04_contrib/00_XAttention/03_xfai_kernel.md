@@ -181,7 +181,7 @@ CalcLocalRowSum            // ll = rowsum(P)
 UpdateGlobalRowSum         // gl = dm * gl + ll
 ```
 
-`dm = exp(gm_old - gm_new)` is the decay factor by which the previous round of P must be multiplied as a whole, and it is handed to RescaleO — this is the classic FlashAttention online softmax recurrence.
+`dm = exp(gm_old - gm_new)` is the decay factor by which the previous round of P must be multiplied as a whole, and it is handed to RescaleO — this is the classic Flash Attention online softmax recurrence.
 
 ### Two operator() Overloads: Without Mask and With Mask
 
