@@ -59,7 +59,7 @@ runtime = [
 dev = [
   {include-group = "runtime"},
   "pytest",
-  "lit==19.1.7",
+  "lit==18.1.8",
   "ruff",
   "black",
   "mypy",
