@@ -804,3 +804,76 @@ def test_frontend_copy_ub_to_ub_accepts_ragged_rows_with_padded_pitch() -> None:
             tla.copy(dst, src)
 
     assert "tla.copy" in kernel.dump_mlir(type_args=(mem,))
+
+
+# UB -> UB with a ColumnMajor destination is a transposing copy: both tiles keep
+# the logical (M, N) shape and the bytes land as (N, M). It is its own route,
+# served by the meta-op's VNCHWCONV, so it reaches a runtime call distinct from
+# the straight RowMajor->RowMajor one.
+def _ub_to_ub_transpose_kernel(dtype, rows, cols):
+    """A transposing UB->UB copy of a rows x cols tile, built for one dtype."""
+
+    @tla.kernel
+    def kernel(mem_in: tla.Tensor) -> None:
+        src = tla.make_tensor_like(
+            tla.allocate((rows, cols), dtype, tla.AddressSpace.ub, 256),
+            mem_in,
+            tla.arch.RowMajor,
+        )
+        dst = tla.make_tensor_like(
+            tla.allocate((cols, rows), dtype, tla.AddressSpace.ub, 256),
+            mem_in,
+            tla.arch.ColumnMajor,
+        )
+        with tla.vector():
+            tla.copy(dst, src)
+
+    return kernel
+
+
+@pytest.mark.parametrize(
+    "dtype",
+    [
+        tla.Float32,
+        tla.Float16,
+        tla.BFloat16,
+        tla.Int32,
+        tla.Int16,
+        tla.Int8,
+        tla.Float8E4M3FN,
+        tla.Float8E5M2,
+    ],
+)
+def test_frontend_copy_ub_to_ub_transpose_accepts_every_registered_dtype(dtype) -> None:
+    mem = make_fake_tensor(
+        dtype, (64, 64), (64, 1), origin_shape=(64, 64), layout_tag=tla.arch.RowMajor
+    )
+    mlir = _ub_to_ub_transpose_kernel(dtype, 64, 64).dump_mlir(type_args=(mem,))
+    # Every registered width rides VNCHWCONV, so the op survives to a tla.copy.
+    assert "tla.copy" in mlir
+
+
+def test_frontend_copy_ub_to_ub_transpose_is_its_own_route() -> None:
+    """The transposing copy must not be served by the straight route's callee."""
+    mem = make_fake_tensor(
+        tla.Float32, (64, 64), (64, 1), origin_shape=(64, 64), layout_tag=tla.arch.RowMajor
+    )
+    mlir = _ub_to_ub_transpose_kernel(tla.Float32, 64, 64).dump_mlir(type_args=(mem,))
+    assert "tla.copy" in mlir
+    # The layout tags are what separate the two routes, and the destination's
+    # ColumnMajor tag is what picks the transposing callee further down.
+    assert "ColumnMajor" in mlir
+
+
+def test_frontend_copy_ub_to_ub_transpose_refuses_a_shape_the_metaop_cannot_do() -> None:
+    """A tile that is not a whole number of VNCHWCONV blocks is refused.
+
+    16 rows by C0 columns is the block, so a 24x40 f16 tile is neither a whole
+    number of rows nor of columns and would have the meta-op read and write past
+    the tile's edges.
+    """
+    mem = make_fake_tensor(
+        tla.Float16, (24, 40), (40, 1), origin_shape=(24, 40), layout_tag=tla.arch.RowMajor
+    )
+    with pytest.raises(Exception, match="multiple of"):
+        _ub_to_ub_transpose_kernel(tla.Float16, 24, 40).dump_mlir(type_args=(mem,))

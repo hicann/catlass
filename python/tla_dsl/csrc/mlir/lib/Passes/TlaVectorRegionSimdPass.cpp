@@ -599,6 +599,10 @@ static std::string getStoreWithStrideLibraryCallName(Type elementType)
         return "store_with_stride_half";
     } else if (elementType.isBF16()) {
         return "store_with_stride_bf16";
+    } else if (elementType.isInteger(32)) {
+        return elementType.isUnsignedInteger() ? "store_with_stride_uint32" : "store_with_stride_int32";
+    } else if (elementType.isInteger(16)) {
+        return elementType.isUnsignedInteger() ? "store_with_stride_uint16" : "store_with_stride_int16";
     } else if (isa<Float8E4M3FNType>(elementType)) {
         return "store_with_stride_fp8_e4m3fn";
     } else if (isa<Float8E5M2Type>(elementType)) {

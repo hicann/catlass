@@ -726,6 +726,12 @@ UB→UB 一律走专用的 `MOV.UB.TO.UB` 块搬运，因此支持所有元素�
 行长度会向上取整，该行自身的 32 字节对齐填充也随之一起搬运。因此有两种几何形状会
 被拒绝，而不会被拷贝：一是起始地址不在 32 字节边界上的 tile（子块视图可能产生这种
 情况）；二是行间距不足以容纳取整后整行的多行 tile，此时取整后的行会越界写入下一行。
+目的 tile 打 `ColumnMajor` tag 的 UB→UB 拷贝是**转置**：两侧 tile 带同样的逻辑
+形状 `(M, N)`，落到内存里的是 `(N, M)` 的转置结果，与 L0C→GM、L0C→UB 表达转置的
+方式一致。底层由 `VNCHWCONV`（vector 单元原生的转置指令）实现，它一次搬运 16 行 ×
+C0 列的整块数据，C0 为一个 32 字节 DataBlock 内的元素个数（4 / 2 / 1 字节类型分别
+为 8 / 16 / 32）；1 字节类型需要四次调用才能覆盖其 32×32 的块。因此 tile 的形状
+必须是整数个这样的块：16 行 × C0 列，1 字节类型为 32 行 × 32 列。
 两侧 layout tag 选择格式转换（例如 ND→zN）。
 
 vector 通路支持的元素类型：
@@ -735,6 +741,7 @@ vector 通路支持的元素类型：
 | GM → UB | `RowMajor` → `RowMajor` | `f32`、`f16`、`bf16`、`i32`、`i16`、`i8`、`f8e4m3fn`、`f8e5m2` |
 | UB → GM | `RowMajor` → `RowMajor` | 同上 |
 | UB → UB | `RowMajor` → `RowMajor` | `f32`、`f16`、`bf16`、`i32`、`i16`、`i8`、`f8e4m3fn`、`f8e5m2` |
+| UB → UB | `RowMajor` → `ColumnMajor`（转置） | 同上 |
 | UB → L1 | `RowMajor` → `zN` | `f32`、`f16`、`bf16`、`i8`、`f8e4m3fn`、`f8e5m2` |
 | UB → L1 | `zN` → `zN` | 同上 |
 | UB → L1 | `zNUnAlign` → `zN` | 同上 |
@@ -891,6 +898,8 @@ Vector 拷贝通路
 |----------|------------|----------|------------|--------|
 |`gm`|`RowMajor`|`ub`|`RowMajor`|`f32`,`f16`,`bf16`,`i32`,`i16`,`i8`,`f8e4m3fn`,`f8e5m2`|
 |`ub`|`RowMajor`|`gm`|`RowMajor`|`f32`,`f16`,`bf16`,`i32`,`i16`,`i8`,`f8e4m3fn`,`f8e5m2`|
+|`ub`|`RowMajor`|`ub`|`RowMajor`|`f32`,`f16`,`bf16`,`i32`,`i16`,`i8`,`f8e4m3fn`,`f8e5m2`|
+|`ub`|`RowMajor`|`ub`|`ColumnMajor`|`f32`,`f16`,`bf16`,`i32`,`i16`,`i8`,`f8e4m3fn`,`f8e5m2`|
 |`ub`|`RowMajor`|`l1`|`zN`|`f32`,`f16`,`bf16`,`i8`,`f8e4m3fn`,`f8e5m2`|
 |`ub`|`zN`|`l1`|`zN`|`f32`,`f16`,`bf16`,`i8`,`f8e4m3fn`,`f8e5m2`|
 |`ub`|`zNUnAlign`|`l1`|`zN`|`f32`,`f16`,`bf16`,`i8`,`f8e4m3fn`,`f8e5m2`|

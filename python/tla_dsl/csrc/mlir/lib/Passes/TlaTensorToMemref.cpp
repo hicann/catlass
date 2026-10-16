@@ -699,6 +699,18 @@ std::string getCopyRouteCallee(
             return {};
         return Twine("copy_ub_RowMajor_to_ub_RowMajor_").concat(suffix).str();
     }
+    // UB (row-major) -> UB (column-major): the transposing sibling of the route
+    // above. VNCHWCONV (AscendC TransDataTo5HD) is the vector unit's native
+    // transpose and carries b8/b16/b32, so every registered width rides it.
+    if (*srcSpace == hivm::AddressSpace::UB && *dstSpace == hivm::AddressSpace::UB &&
+        srcLayout == LayoutTag::RowMajor && dstLayout == LayoutTag::ColumnMajor) {
+        if (srcElementType != dstElem)
+            return {};
+        StringRef suffix = copyRuntimeElemSuffix(srcElementType);
+        if (suffix.empty())
+            return {};
+        return Twine("copy_ub_RowMajor_to_ub_ColumnMajor_").concat(suffix).str();
+    }
     // UB (row-major) -> GM (row-major): vector-core staging store.
     if (*srcSpace == hivm::AddressSpace::UB && *dstSpace == hivm::AddressSpace::GM &&
         srcLayout == LayoutTag::RowMajor && dstLayout == LayoutTag::RowMajor) {
@@ -964,7 +976,9 @@ static bool isAivTemplateRuntimeCall(StringRef name)
 {
     return name.starts_with("copy_ub_RowMajor_to_l1_zN_") || name.starts_with("copy_ub_zN_to_l1_zN_") ||
            name.starts_with("copy_gm_RowMajor_to_ub_RowMajor_") ||
-           name.starts_with("copy_ub_RowMajor_to_gm_RowMajor_") || name.starts_with("copy_ub_RowMajor_to_ub_RowMajor_");
+           name.starts_with("copy_ub_RowMajor_to_gm_RowMajor_") ||
+           name.starts_with("copy_ub_RowMajor_to_ub_RowMajor_") ||
+           name.starts_with("copy_ub_RowMajor_to_ub_ColumnMajor_");
 }
 
 static void annotateAicTemplateRuntimeCall(func::FuncOp func)

@@ -83,6 +83,129 @@ CATLASS_DEVICE void copyUBToUB(
     AscendC::DataCopy(dstTensor[dstElemOffset], srcTensor[srcElemOffset], params);
 }
 
+// UB -> UB, transposing: dst[j][i] = src[i][j].
+//
+// src is a logical (M, N) RowMajor tile whose rows are srcDesc.stride0 elements
+// apart. dst carries the same logical (M, N) shape tagged ColumnMajor, which is
+// physically an (N, M) RowMajor array whose rows are dstDesc.stride1 elements
+// apart -- so the copy is a transpose in memory with no shape bookkeeping on the
+// caller's side.
+//
+// The engine is VNCHWCONV (AscendC::TransDataTo5HD), the vector unit's native
+// transpose. It takes 16 source and 16 destination addresses through the VA
+// registers and transposes the block they span. A 32-byte DataBlock holds
+// C0 = 32 / sizeof(T) elements, so the natural block is 16 rows x C0 columns:
+// square (16x16) for b16, and 16x8 / 16x32 for b32 / b8, where the wider side is
+// covered by pairing up the address list.
+template <typename T>
+CATLASS_DEVICE void transposeTileUB(
+    __ubuf__ T* dst, __ubuf__ T* src, uint32_t rows, uint32_t cols, uint32_t srcPitch, uint32_t dstPitch)
+{
+    constexpr uint32_t kList = 16;           // VA address-list length
+    constexpr uint32_t kC0 = 32 / sizeof(T); // elements in a 32-byte DataBlock
+    constexpr uint32_t kMaxRepeat = 255;
+    // b8 needs four calls to cover a tile, and they span 32 source rows; every
+    // other width covers its tile from one address list of 16 rows.
+    constexpr uint32_t kTileRows = (sizeof(T) == 1) ? 2 * kList : kList;
+
+    // Walking one column block to the next moves src by kC0 elements -- exactly
+    // one 32-byte DataBlock for every width -- and dst by kC0 transposed rows,
+    // i.e. kC0 * dstPitch elements, which is dstPitch DataBlocks. Both steps are
+    // uniform, so the whole row of blocks is one call with repeatTimes and the 16
+    // MOVEVA that load the address list are paid once per row block instead of
+    // once per block. (CANN's own 3510 cumsum transpose uses these same two
+    // strides.)
+    const uint16_t srcRepStride = 1;
+    const uint16_t dstRepStride = static_cast<uint16_t>(dstPitch);
+
+    uint64_t srcList[kList];
+    uint64_t dstList[kList];
+
+    for (uint32_t i0 = 0; i0 < rows; i0 += kTileRows) {
+        for (uint32_t j0 = 0; j0 < cols; j0 += kC0 * kMaxRepeat) {
+            const uint32_t left = (cols - j0) / kC0;
+            const uint32_t repeats = (left < kMaxRepeat) ? left : kMaxRepeat;
+            AscendC::TransDataTo5HDParams params(
+                false, false, static_cast<uint8_t>(repeats), repeats == 1 ? 0 : dstRepStride,
+                repeats == 1 ? 0 : srcRepStride);
+
+            if constexpr (sizeof(T) == 2) {
+                // The b16 block is square: 16 source rows in, 16 transposed rows
+                // out, one destination address each.
+                for (uint32_t k = 0; k < kList; ++k) {
+                    srcList[k] = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(src + (i0 + k) * srcPitch + j0));
+                    dstList[k] = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(dst + (j0 + k) * dstPitch + i0));
+                }
+                AscendC::TransDataTo5HD<T>(dstList, srcList, params);
+            } else if constexpr (sizeof(T) == 4) {
+                // The b32 block is 16 rows x 8 columns, so it transposes to 8 rows
+                // of 16 elements -- two 32-byte destination blocks per row, which
+                // is why the destination list is filled in pairs.
+                for (uint32_t k = 0; k < kList; ++k) {
+                    srcList[k] = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(src + (i0 + k) * srcPitch + j0));
+                }
+                for (uint32_t k = 0; k < kC0; ++k) {
+                    __ubuf__ T* row = dst + (j0 + k) * dstPitch + i0;
+                    dstList[2 * k] = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(row));
+                    dstList[2 * k + 1] = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(row + kC0));
+                }
+                AscendC::TransDataTo5HD<T>(dstList, srcList, params);
+            } else {
+                // The b8 DataBlock holds 32 elements but the address list is only
+                // 16 entries long, so one call moves a 16x16 quarter of the 32x32
+                // tile: srcHighHalf picks which 16 of the block's 32 columns are
+                // read, dstHighHalf which 16-byte half of the destination block is
+                // written (equivalently, which 16 source rows feed it).
+                for (uint32_t q = 0; q < 4; ++q) {
+                    const bool srcHigh = (q & 1) != 0; // columns j0+16..j0+31
+                    const bool dstHigh = (q & 2) != 0; // source rows i0+16..i0+31
+                    const uint32_t rowBase = i0 + (dstHigh ? kList : 0);
+                    const uint32_t colBase = j0 + (srcHigh ? kList : 0);
+                    for (uint32_t k = 0; k < kList; ++k) {
+                        srcList[k] =
+                            static_cast<uint64_t>(reinterpret_cast<uintptr_t>(src + (rowBase + k) * srcPitch + j0));
+                        dstList[k] =
+                            static_cast<uint64_t>(reinterpret_cast<uintptr_t>(dst + (colBase + k) * dstPitch + i0));
+                    }
+                    params.srcHighHalf = srcHigh;
+                    params.dstHighHalf = dstHigh;
+                    AscendC::TransDataTo5HD<T>(dstList, srcList, params);
+                }
+            }
+        }
+    }
+}
+
+template <class ArchTag, LayoutTag SrcLayout, LayoutTag DstLayout, typename T>
+CATLASS_DEVICE void copyUBToUBTranspose(
+    memref_t<__ubuf__ T, 1>* src, memref_t<__ubuf__ T, 1>* dst, const TensorDesc& srcDesc, const TensorDesc& dstDesc)
+{
+    __ubuf__ T* srcPtr = reinterpret_cast<__ubuf__ T*>(static_cast<uintptr_t>(localAddr(src)));
+    __ubuf__ T* dstPtr = reinterpret_cast<__ubuf__ T*>(static_cast<uintptr_t>(localAddr(dst)));
+    // The descriptor's coordinate is the tile's origin inside its parent, in
+    // elements, and localAddr() carries only the allocation's own base. Like the
+    // straight UB -> UB move above, this route drives the hardware from a raw
+    // pointer rather than from a tla::Tensor, so nothing folds the coordinate in
+    // for it and it has to do so itself.
+    //
+    // The two sides fold differently, because the destination is ColumnMajor:
+    // src is a RowMajor (M, N) tile pitched by stride0, so its origin is at
+    // coord0 rows down and coord1 elements across; dst carries the same logical
+    // (M, N) coordinate over an (N, M) array pitched by stride1, so there the
+    // logical column is the physical row and the two terms swap. Folding the
+    // destination the way the source folds would land every non-square offset
+    // tile at the wrong address.
+    srcPtr += static_cast<uint32_t>(static_cast<int64_t>(srcDesc.coord0) * srcDesc.stride0 + srcDesc.coord1);
+    dstPtr += static_cast<uint32_t>(static_cast<int64_t>(dstDesc.coord1) * dstDesc.stride1 + dstDesc.coord0);
+    // originShape is the tile's valid extent; shape is the packing it is
+    // addressed through, which a tail tile pads out beyond that extent. The
+    // transpose carries the valid elements, so it is sized from the origin, as
+    // the straight UB -> UB move and every other route here are.
+    transposeTileUB<T>(
+        dstPtr, srcPtr, static_cast<uint32_t>(srcDesc.originShape0), static_cast<uint32_t>(srcDesc.originShape1),
+        static_cast<uint32_t>(srcDesc.stride0), static_cast<uint32_t>(dstDesc.stride1));
+}
+
 template <class ArchTag, LayoutTag SrcLayout, LayoutTag DstLayout, typename T>
 CATLASS_DEVICE void copyUBToL1(
     memref_t<__ubuf__ T, 1>* src, memref_t<__cbuf__ T, 1>* dst, const TensorDesc& srcDesc, const TensorDesc& dstDesc)
@@ -218,6 +341,37 @@ REGISTER_UB_TO_UB(RowMajor, RowMajor, int16_t)
 REGISTER_UB_TO_UB(RowMajor, RowMajor, int8_t)
 REGISTER_UB_TO_UB_AS_BYTES(RowMajor, RowMajor, fp8_e4m3fn_t)
 REGISTER_UB_TO_UB_AS_BYTES(RowMajor, RowMajor, fp8_e5m2_t)
+
+// Transposing UB -> UB: the destination tile is tagged ColumnMajor, so the same
+// logical (M, N) shape lands as an (N, M) array. VNCHWCONV carries b8/b16/b32,
+// and fp8 rides as bytes exactly as the straight copy does.
+#define REGISTER_UB_TO_UB_T(LayoutSrc, LayoutDst, DType)                                                         \
+    [aicore] __attribute__((always_inline)) void _mlir_ciface_copy_ub_##LayoutSrc##_to_ub_##LayoutDst##_##DType( \
+        memref_t<__ubuf__ DType, 1>* src, memref_t<__ubuf__ DType, 1>* dst, DESC_ABI_PARAMS(src),                \
+        DESC_ABI_PARAMS(dst))                                                                                    \
+    {                                                                                                            \
+        copyUBToUBTranspose<Catlass::Arch::Ascend950, LayoutTag::LayoutSrc, LayoutTag::LayoutDst, DType>(        \
+            src, dst, TENSOR_DESC_12(src), TENSOR_DESC_12(dst));                                                 \
+    }
+
+#define REGISTER_UB_TO_UB_T_AS_BYTES(LayoutSrc, LayoutDst, DType)                                                \
+    [aicore] __attribute__((always_inline)) void _mlir_ciface_copy_ub_##LayoutSrc##_to_ub_##LayoutDst##_##DType( \
+        memref_t<__ubuf__ DType, 1>* src, memref_t<__ubuf__ DType, 1>* dst, DESC_ABI_PARAMS(src),                \
+        DESC_ABI_PARAMS(dst))                                                                                    \
+    {                                                                                                            \
+        copyUBToUBTranspose<Catlass::Arch::Ascend950, LayoutTag::LayoutSrc, LayoutTag::LayoutDst, int8_t>(       \
+            reinterpret_cast<memref_t<__ubuf__ int8_t, 1>*>(src),                                                \
+            reinterpret_cast<memref_t<__ubuf__ int8_t, 1>*>(dst), TENSOR_DESC_12(src), TENSOR_DESC_12(dst));     \
+    }
+
+REGISTER_UB_TO_UB_T(RowMajor, ColumnMajor, float)
+REGISTER_UB_TO_UB_T(RowMajor, ColumnMajor, half)
+REGISTER_UB_TO_UB_T(RowMajor, ColumnMajor, bf16)
+REGISTER_UB_TO_UB_T(RowMajor, ColumnMajor, int32_t)
+REGISTER_UB_TO_UB_T(RowMajor, ColumnMajor, int16_t)
+REGISTER_UB_TO_UB_T(RowMajor, ColumnMajor, int8_t)
+REGISTER_UB_TO_UB_T_AS_BYTES(RowMajor, ColumnMajor, fp8_e4m3fn_t)
+REGISTER_UB_TO_UB_T_AS_BYTES(RowMajor, ColumnMajor, fp8_e5m2_t)
 
 REGISTER_UB_TO_L1(RowMajor, zN, float)
 REGISTER_UB_TO_L1(RowMajor, zN, half)

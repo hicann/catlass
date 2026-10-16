@@ -41,6 +41,14 @@ extern "C" {
 REGISTER_VSSTB(float, float)
 REGISTER_VSSTB(half, half)
 REGISTER_VSSTB(bfloat16_t, bf16)
+// vsstb moves DataBlocks and never interprets the element type beyond its
+// width, so the integer widths ride the same macro. The load side has carried
+// int32/uint32/int16/uint16 all along; the store side stopped at int8, which is
+// the only reason a block-strided store rejected i16/i32.
+REGISTER_VSSTB(int32_t, int32)
+REGISTER_VSSTB(uint32_t, uint32)
+REGISTER_VSSTB(int16_t, int16)
+REGISTER_VSSTB(uint16_t, uint16)
 REGISTER_VSSTB(int8_t, int8)
 REGISTER_VSSTB_AS_BYTES(fp8_e4m3fn_t, fp8_e4m3fn)
 REGISTER_VSSTB_AS_BYTES(fp8_e5m2_t, fp8_e5m2)

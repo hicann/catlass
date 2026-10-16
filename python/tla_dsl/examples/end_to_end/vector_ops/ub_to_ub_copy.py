@@ -1,5 +1,8 @@
 """UB->UB copy across dtypes and tile shapes, checked on device.
 
+Covers both forms of the route: the straight copy, and the transposing copy a
+ColumnMajor destination asks for (``--mode``, default both).
+
 The frontend behaviour -- which dtypes the route accepts, and the two geometries
 it refuses (an origin off a 32-byte boundary, and a row pitch too narrow to
 carry the rounded row) -- lives in
@@ -22,11 +25,27 @@ The cases deliberately cover the paths the simple tests miss:
   * offset views       -- a view whose origin is not its parent's, on one side
                           and on both, with rows offset as well as columns
                           (OFFSET_CASES, driven by ub_to_ub_copy_offset)
+
+The transposing form is expressed by tagging the destination ColumnMajor:
+``tla.copy(dst_cm, src_rm)`` with both tiles of logical shape ``(M, N)`` writes
+``dst[j][i] = src[i][j]``, an ``(N, M)`` array in memory. The layout tag is the
+whole API -- no shape bookkeeping on the caller's side -- exactly as it is for
+the ND->zN staging routes. Under it is the meta-op's ``VNCHWCONV`` (AscendC
+``TransDataTo5HD``), the vector unit's native transpose: it moves a whole block
+of 16 source rows by C0 columns, C0 being the elements in a 32-byte DataBlock,
+and a 1-byte type covers its 32x32 block in four calls. Its cases run on that
+block grid, and shapes a dtype's block size cannot express are skipped rather
+than counted as failures. It has its own offset-view cases
+(TRANSPOSE_OFFSET_CASES, driven by ub_to_ub_transpose_offset), which are what
+pin the tile coordinate down on both descriptors -- and, through the non-square
+ones, pin down that the ColumnMajor destination folds its coordinate with the
+two terms swapped.
 """
 
 from __future__ import annotations
 
 import argparse
+import builtins as _builtins
 
 import catlass.tla as tla
 import torch
@@ -108,12 +127,92 @@ OFFSET_CASES = [
     ("sub-block, few rows", 8, 128, 128, 8, 12, (0, 8), (0, 8)),
 ]
 
+# Transposing cases: (name, M, N) -- src is M x N, dst is N x M.
+TRANSPOSE_CASES = [
+    ("square 16", 16, 16),
+    ("square 32", 32, 32),
+    ("square 64", 64, 64),
+    ("wide 32x128", 32, 128),
+    ("tall 128x32", 128, 32),
+    ("square 128", 128, 128),
+    ("wide 32x256", 32, 256),
+    ("wide 64x256", 64, 256),
+    # Column counts that are a whole number of DataBlocks without being a round
+    # multiple of the block grid, so the meta-op's repeat loop ends on an
+    # awkward boundary rather than a power of two. C0 is 8 / 16 / 32 elements
+    # for b32 / b16 / b8, so a tail that is on the grid for one width is off it
+    # for another and is skipped there.
+    ("tail 64x72", 64, 72),
+    ("tail 32x144", 32, 144),
+    ("tail 32x288", 32, 288),
+    ("tail 96x200", 96, 200),
+]
+
+# Transposing views whose origin is NOT the parent's. TRANSPOSE_CASES all sit at
+# tile (0, 0), where a route that ignores the descriptor's tile coordinate is
+# indistinguishable from one that honours it. These sit elsewhere, and the
+# non-square ones also separate the two ways the destination coordinate can be
+# folded: dst is ColumnMajor, so its logical column is its physical row, and
+# folding it like the RowMajor source lands a non-square offset tile at the
+# wrong address rather than merely at a shifted one.
+#
+# Every view extent stays on the meta-op's block grid (a multiple of 16x C0, or
+# 32x32 for a 1-byte type), and the origins are whole multiples of the extents,
+# so an offset case is skipped for a dtype on exactly the same grounds as a
+# plain one.
+#
+# Each case gives: name, src parent M, src parent N, view M, view N, src tile,
+# dst tile. The destination parent is the transpose of the source parent, and a
+# dst tile (r, c) names the same logical (M, N) coordinate as a src tile does.
+TRANSPOSE_OFFSET_CASES = [
+    ("col offset", 64, 64, 32, 32, (0, 1), (0, 1)),
+    ("row offset", 64, 64, 32, 32, (1, 0), (1, 0)),
+    ("row and col offset", 64, 64, 32, 32, (1, 1), (1, 1)),
+    ("differing origins", 64, 64, 32, 32, (0, 1), (1, 0)),
+    # Non-square views: the two destination foldings disagree here.
+    ("non-square, col offset", 64, 128, 32, 64, (0, 1), (0, 1)),
+    ("non-square, both", 64, 128, 32, 64, (1, 1), (1, 1)),
+    ("non-square, differing", 64, 128, 32, 64, (1, 0), (0, 1)),
+]
+
 _DT = tla.Float32
 _TORCH_DT = torch.float32
 _ROWS, _SRC_COLS, _DST_COLS, _VIEW_COLS = 1, 64, 64, 64
 _P_ROWS, _P_SRC, _P_DST, _V_ROWS, _V_COLS = 64, 64, 64, 64, 32
 _SRC_TILE, _DST_TILE = (0, 0), (0, 0)
+_M, _N, _REPS = 32, 32, 1
+_PM, _PN, _TM, _TN = 64, 64, 32, 32
+_T_SRC_TILE, _T_DST_TILE = (0, 0), (0, 0)
 SENTINEL = -7
+
+
+def _is_fp8(torch_dt) -> bool:
+    return torch_dt in (torch.float8_e4m3fn, torch.float8_e5m2)
+
+
+def _bits(t):
+    """fp8 has no comparison kernels; compare the bytes instead."""
+    return t.view(torch.int8) if _is_fp8(t.dtype) else t
+
+
+def _as_tla(tensors):
+    """Hand device buffers to the DSL.
+
+    fp8 does not cross dlpack, so those are handed over as their bytes with the
+    element type declared, exactly as fp8_full_lanes.py does for the GM<->UB
+    routes.
+    """
+    if _is_fp8(tensors[0].dtype):
+        return [
+            from_dlpack(
+                t.view(torch.int8),
+                layout_tag=tla.arch.RowMajor,
+                origin_shape=tuple(t.shape),
+                element_type=_DT,
+            )
+            for t in tensors
+        ]
+    return [from_dlpack(t, layout_tag=tla.arch.RowMajor) for t in tensors]
 
 
 @tla.kernel
@@ -297,39 +396,19 @@ def run_case(name, rows, sc, dc, vc, dtype_key) -> bool:
             .reshape(rows, sc)
             .npu()
         )
-    if _TORCH_DT in (torch.float8_e4m3fn, torch.float8_e5m2):
+    if _is_fp8(_TORCH_DT):
         # torch.full has no fp8 kernel on NPU: fill as int8, then view.
         y = torch.full((rows, dc), SENTINEL, dtype=torch.int8).npu().view(_TORCH_DT)
         x = x.view(torch.int8).npu().view(_TORCH_DT) if not x.is_npu else x
     else:
         y = torch.full((rows, dc), SENTINEL, dtype=_TORCH_DT, device="npu")
-    if _TORCH_DT in (torch.float8_e4m3fn, torch.float8_e5m2):
-        # fp8 does not cross dlpack: hand over the bytes and declare the element
-        # type, exactly as fp8_full_lanes.py does for the GM<->UB routes.
-        tla_args = [
-            from_dlpack(
-                t.view(torch.int8),
-                layout_tag=tla.arch.RowMajor,
-                origin_shape=tuple(t.shape),
-                element_type=_DT,
-            )
-            for t in (x, y)
-        ]
-    else:
-        tla_args = [from_dlpack(t, layout_tag=tla.arch.RowMajor) for t in (x, y)]
 
+    tla_args = _as_tla((x, y))
     artifact = tla.compile(ub_to_ub_copy, *tla_args, options="--npu-arch 3510")
     artifact(*tla_args, block_num=1)
     torch.npu.synchronize()
 
-    def bits(t):
-        return (
-            t.view(torch.int8)
-            if t.dtype in (torch.float8_e4m3fn, torch.float8_e5m2)
-            else t
-        )
-
-    yb, xb = bits(y), bits(x)
+    yb, xb = _bits(y), _bits(x)
     copied_ok = bool((yb[:, :vc] == xb[:, :vc]).all())
     guard_from = _rounded_cols(vc, dtype_key)
     guard_ok = bool((yb[:, guard_from:] == SENTINEL).all()) if dc > guard_from else True
@@ -354,36 +433,284 @@ def run_case(name, rows, sc, dc, vc, dtype_key) -> bool:
     return ok
 
 
+def _repeat_transpose(dst, src, reps: int) -> None:
+    """Emit `reps` back-to-back transposes into the same destination.
+
+    Separates the transpose from the GM<->UB staging: staging is constant across
+    rep counts, so the slope of device time over `reps` is the transpose alone.
+    The loop lives in a helper because a Python `for` in traced kernel source is
+    rewritten into a dynamic scf loop and fails to lower.
+    """
+    for _ in _builtins.range(reps):
+        tla.copy(dst, src)
+        tla.pipe_barrier(tla.pipes.ALL)
+
+
+@tla.kernel
+def ub_to_ub_transpose(mem_x: tla.Tensor, mem_y: tla.Tensor) -> None:
+    loaded = tla.flag("loaded", tla.arch.MTE2, tla.arch.VECTOR)
+    done = tla.flag("done", tla.arch.VECTOR, tla.arch.MTE3)
+
+    m, n = _M, _N
+
+    x_gm = tla.tile_view(mem_x, tla.make_shape(m, n), tla.make_coord(0, 0))
+    y_gm = tla.tile_view(mem_y, tla.make_shape(n, m), tla.make_coord(0, 0))
+
+    x_ub = tla.make_tensor_like(
+        tla.allocate((m, n), _DT, tla.AddressSpace.ub, 256), x_gm, tla.arch.RowMajor
+    )
+    y_ptr = tla.allocate((n, m), _DT, tla.AddressSpace.ub, 256)
+    # Two views of the same buffer: ColumnMajor (M, N) is the transpose
+    # destination, RowMajor (N, M) is the very same bytes staged back out.
+    y_ub_t = tla.make_tensor_like(y_ptr, x_gm, tla.arch.ColumnMajor)
+    y_ub = tla.make_tensor_like(y_ptr, y_gm, tla.arch.RowMajor)
+
+    with tla.vector():
+        tla.copy(x_ub, x_gm)
+        tla.set_flag(loaded)
+        tla.wait_flag(loaded)
+        _repeat_transpose(y_ub_t, x_ub, _REPS)
+        tla.set_flag(done)
+        tla.wait_flag(done)
+        tla.copy(y_gm, y_ub)
+        tla.pipe_barrier(tla.pipes.ALL)
+
+
+@tla.kernel
+def ub_to_ub_transpose_offset(mem_x: tla.Tensor, mem_y: tla.Tensor) -> None:
+    loaded = tla.flag("loaded", tla.arch.MTE2, tla.arch.VECTOR)
+    done = tla.flag("done", tla.arch.VECTOR, tla.arch.MTE3)
+
+    pm, pn = _PM, _PN
+    vm, vn = _TM, _TN
+    src_r, src_c = _T_SRC_TILE
+    dst_r, dst_c = _T_DST_TILE
+
+    x_gm = tla.tile_view(mem_x, tla.make_shape(pm, pn), tla.make_coord(0, 0))
+    y_gm = tla.tile_view(mem_y, tla.make_shape(pn, pm), tla.make_coord(0, 0))
+
+    x_ub = tla.make_tensor_like(
+        tla.allocate((pm, pn), _DT, tla.AddressSpace.ub, 256), x_gm, tla.arch.RowMajor
+    )
+    y_ptr = tla.allocate((pn, pm), _DT, tla.AddressSpace.ub, 256)
+    # The same two views of one buffer as the aligned transpose uses, over the
+    # whole parent: ColumnMajor (PM, PN) to transpose into, RowMajor (PN, PM) to
+    # stage the identical bytes back out. The views below then carve a tile out
+    # of each, which is what puts a coordinate on both descriptors.
+    y_ub_t = tla.make_tensor_like(y_ptr, x_gm, tla.arch.ColumnMajor)
+    y_ub = tla.make_tensor_like(y_ptr, y_gm, tla.arch.RowMajor)
+
+    with tla.vector():
+        tla.copy(x_ub, x_gm)
+        tla.copy(y_ub, y_gm)
+        tla.set_flag(loaded)
+        tla.wait_flag(loaded)
+        src_v = tla.tile_view(
+            x_ub, tla.make_shape(vm, vn), tla.make_coord(src_r, src_c)
+        )
+        dst_v = tla.tile_view(
+            y_ub_t, tla.make_shape(vm, vn), tla.make_coord(dst_r, dst_c)
+        )
+        tla.copy(dst_v, src_v)
+        tla.set_flag(done)
+        tla.wait_flag(done)
+        tla.copy(y_gm, y_ub)
+        tla.pipe_barrier(tla.pipes.ALL)
+
+
+def run_transpose_offset_case(
+    name, pm, pn, vm, vn, src_tile, dst_tile, dtype_key
+) -> bool:
+    global _DT, _TORCH_DT, _PM, _PN, _TM, _TN, _T_SRC_TILE, _T_DST_TILE
+    _DT, _TORCH_DT, _ = _DTYPES[dtype_key]
+    _PM, _PN, _TM, _TN = pm, pn, vm, vn
+    _T_SRC_TILE, _T_DST_TILE = src_tile, dst_tile
+
+    seed = (torch.arange(pm * pn, dtype=torch.int32) % 97).reshape(pm, pn)
+    if _is_fp8(_TORCH_DT):
+        x = seed.to(torch.int8).npu().view(_TORCH_DT)
+        y = torch.full((pn, pm), SENTINEL, dtype=torch.int8).npu().view(_TORCH_DT)
+    else:
+        x = seed.to(_TORCH_DT).npu()
+        y = torch.full((pn, pm), SENTINEL, dtype=_TORCH_DT, device="npu")
+
+    tla_args = _as_tla((x, y))
+    artifact = tla.compile(
+        ub_to_ub_transpose_offset, *tla_args, options="--npu-arch 3510"
+    )
+    artifact(*tla_args, block_num=1)
+    torch.npu.synchronize()
+
+    got, src = _bits(y).cpu(), _bits(x).cpu()
+    sr, sc = src_tile[0] * vm, src_tile[1] * vn
+    # The destination region is the transpose of the source region's position:
+    # the logical (M, N) coordinate (dr, dc) addresses row dc, column dr of the
+    # (PN, PM) array.
+    dr, dc = dst_tile[0] * vm, dst_tile[1] * vn
+    want = src[sr : sr + vm, sc : sc + vn].t().contiguous()
+    region = got[dc : dc + vn, dr : dr + vm]
+    copied_ok = bool((region == want).all())
+    # Nothing outside the destination tile may move: the transpose writes whole
+    # DataBlocks and the extents are on the block grid, so there is no alignment
+    # fill to excuse here as the straight copy has.
+    rest = got.clone()
+    rest[dc : dc + vn, dr : dr + vm] = SENTINEL
+    guard_ok = bool((rest == SENTINEL).all())
+
+    print(
+        f"  {name:<28} {vm}x{vn} src@{(sr, sc)} dst@{(dc, dr)} "
+        f"of {pm}x{pn} [{dtype_key}]  "
+        f"copy={'ok' if copied_ok else 'BAD'} "
+        f"guard={'ok' if guard_ok else 'CLOBBERED'}"
+    )
+    if not copied_ok:
+        bad = int((region != want).sum())
+        print(f"      {bad}/{vm * vn} wrong; row0 got {region[0, :8].tolist()}")
+        print(f"                        want {want[0, :8].tolist()}")
+    if not guard_ok:
+        bad = int((rest != SENTINEL).sum())
+        print(f"      {bad} elements outside the tile clobbered")
+    return copied_ok and guard_ok
+
+
+def run_transpose_case(name, m, n, dtype_key) -> bool:
+    global _DT, _TORCH_DT, _M, _N
+    _DT, _TORCH_DT, _ = _DTYPES[dtype_key]
+    _M, _N = m, n
+
+    seed = (torch.arange(m * n, dtype=torch.int32) % 97).reshape(m, n)
+    if _is_fp8(_TORCH_DT):
+        x = seed.to(torch.int8).npu().view(_TORCH_DT)
+        y = torch.zeros((n, m), dtype=torch.int8).npu().view(_TORCH_DT)
+    else:
+        x = seed.to(_TORCH_DT).npu()
+        y = torch.zeros((n, m), dtype=_TORCH_DT, device="npu")
+
+    tla_args = _as_tla((x, y))
+    artifact = tla.compile(ub_to_ub_transpose, *tla_args, options="--npu-arch 3510")
+    artifact(*tla_args, block_num=1)
+    torch.npu.synchronize()
+
+    got, want = _bits(y).cpu(), _bits(x).cpu().t().contiguous()
+    ok = bool((got == want).all())
+    print(f"  {name:<24} {m}x{n} -> {n}x{m} [{dtype_key}]  {'ok' if ok else 'BAD'}")
+    if not ok:
+        bad = int((got != want).sum())
+        print(f"      {bad}/{m * n} wrong; row0 got {got[0, :8].tolist()}")
+        print(f"                        want {want[0, :8].tolist()}")
+    return ok
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--device", type=int, default=0)
     parser.add_argument("--dtypes", default="f32,f16", help="comma-separated")
+    parser.add_argument(
+        "--mode",
+        choices=("copy", "transpose", "both"),
+        default="both",
+        help="which form of the UB->UB route to check",
+    )
+    parser.add_argument(
+        "--reps",
+        type=int,
+        default=1,
+        help="transposes emitted per kernel; the slope over this isolates the "
+        "transpose from the GM<->UB staging (correctness still holds, the "
+        "transpose is idempotent into the same destination)",
+    )
+    parser.add_argument(
+        "--shapes", default="", help="transpose only: comma-separated MxN"
+    )
     args = parser.parse_args()
     torch.npu.set_device(args.device)
+
+    global _REPS
+    _REPS = args.reps
+
+    t_cases = TRANSPOSE_CASES
+    if args.shapes:
+        t_cases = [
+            (spec, *(int(v) for v in spec.lower().split("x")))
+            for spec in args.shapes.split(",")
+        ]
 
     results = []
     for dtype_key in args.dtypes.split(","):
         print(f"\n=== dtype {dtype_key} ===")
-        for name, rows, sc, dc, vc in CASES:
-            try:
-                ok = run_case(name, rows, sc, dc, vc, dtype_key)
-                results.append((f"{dtype_key}/{name}", ok))
-            except Exception as exc:
-                kind = type(exc).__name__
-                print(f"  {name:<24} RAISED {kind}: {str(exc)[:70]}")
-                results.append((f"{dtype_key}/{name}", False))
+        if args.mode in ("copy", "both"):
+            for name, rows, sc, dc, vc in CASES:
+                try:
+                    ok = run_case(name, rows, sc, dc, vc, dtype_key)
+                    results.append((f"{dtype_key}/copy {name}", ok))
+                except Exception as exc:
+                    kind = type(exc).__name__
+                    print(f"  {name:<24} RAISED {kind}: {str(exc)[:70]}")
+                    results.append((f"{dtype_key}/copy {name}", False))
+        if args.mode in ("transpose", "both"):
+            # VNCHWCONV works in whole blocks of 16 rows by C0 columns, C0
+            # being the elements in a 32-byte DataBlock; a 1-byte type spans 32
+            # rows because it covers its block in four calls. A shape off that
+            # grid is not a failure. lanes is 256/esz and C0 is 32/esz, so C0 is
+            # lanes/8 for every width.
+            c0 = _DTYPES[dtype_key][2] // 8
+            tile_rows = 32 if c0 == 32 else 16
+            for name, m, n in t_cases:
+                if m % tile_rows or n % c0:
+                    print(
+                        f"  {name:<24} {m}x{n} [{dtype_key}]  "
+                        f"n/a (needs a multiple of {tile_rows}x{c0})"
+                    )
+                    continue
+                try:
+                    ok = run_transpose_case(name, m, n, dtype_key)
+                    results.append((f"{dtype_key}/transpose {name}", ok))
+                except Exception as exc:
+                    kind = type(exc).__name__
+                    print(f"  {name:<24} RAISED {kind}: {str(exc)[:70]}")
+                    results.append((f"{dtype_key}/transpose {name}", False))
 
-        print("  -- offset views --")
-        for name, pr, sc, dc, vr, vc, src_tile, dst_tile in OFFSET_CASES:
-            try:
-                ok = run_offset_case(
-                    name, pr, sc, dc, vr, vc, src_tile, dst_tile, dtype_key
-                )
-                results.append((f"{dtype_key}/offset {name}", ok))
-            except Exception as exc:
-                kind = type(exc).__name__
-                print(f"  {name:<28} RAISED {kind}: {str(exc)[:70]}")
-                results.append((f"{dtype_key}/offset {name}", False))
+            if not args.shapes:
+                print("  -- offset transposing views --")
+                for (
+                    name,
+                    pm,
+                    pn,
+                    vm,
+                    vn,
+                    src_tile,
+                    dst_tile,
+                ) in TRANSPOSE_OFFSET_CASES:
+                    if vm % tile_rows or vn % c0:
+                        print(
+                            f"  {name:<28} {vm}x{vn} [{dtype_key}]  "
+                            f"n/a (needs a multiple of {tile_rows}x{c0})"
+                        )
+                        continue
+                    try:
+                        ok = run_transpose_offset_case(
+                            name, pm, pn, vm, vn, src_tile, dst_tile, dtype_key
+                        )
+                        results.append((f"{dtype_key}/transpose offset {name}", ok))
+                    except Exception as exc:
+                        kind = type(exc).__name__
+                        print(f"  {name:<28} RAISED {kind}: {str(exc)[:70]}")
+                        results.append((f"{dtype_key}/transpose offset {name}", False))
+
+        # Offset views are a form of the straight copy, so they follow --mode
+        # copy, not the transposing cases above.
+        if args.mode in ("copy", "both"):
+            print("  -- offset views --")
+            for name, pr, sc, dc, vr, vc, src_tile, dst_tile in OFFSET_CASES:
+                try:
+                    ok = run_offset_case(
+                        name, pr, sc, dc, vr, vc, src_tile, dst_tile, dtype_key
+                    )
+                    results.append((f"{dtype_key}/offset {name}", ok))
+                except Exception as exc:
+                    kind = type(exc).__name__
+                    print(f"  {name:<28} RAISED {kind}: {str(exc)[:70]}")
+                    results.append((f"{dtype_key}/offset {name}", False))
 
     failed = [n for n, ok in results if not ok]
     print(f"\n{len(results) - len(failed)}/{len(results)} cases correct")

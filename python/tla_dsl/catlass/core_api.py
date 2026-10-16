@@ -5,6 +5,7 @@ from __future__ import annotations
 import builtins as _builtins
 import inspect
 import math
+import os
 import sys
 from dataclasses import dataclass
 from enum import Enum
@@ -4994,6 +4995,10 @@ _SUPPORTED_VECTOR_COPY_ROUTES = {
     # included. The unsigned widths are absent because the meta-op is not
     # registered for them; see REGISTER_UB_TO_UB in csrc/mlir/bc/Vector/dma.cpp.
     ("ub", "RowMajor", "ub", "RowMajor"): ("f32", "f16", "bf16", "i32", "i16", "i8", "f8e4m3fn", "f8e5m2"),
+    # UB -> UB transposing: the destination tile is tagged ColumnMajor, so the
+    # same logical (M, N) shape lands as an (N, M) array. VNCHWCONV carries every
+    # UB element width.
+    ("ub", "RowMajor", "ub", "ColumnMajor"): ("f32", "f16", "bf16", "i32", "i16", "i8", "f8e4m3fn", "f8e5m2"),
     ("ub", "RowMajor", "l1", "zN"): ("f32", "f16", "bf16", "i8", "f8e4m3fn", "f8e5m2"),
     ("ub", "zN", "l1", "zN"): ("f32", "f16", "bf16", "i8", "f8e4m3fn", "f8e5m2"),
     ("ub", "zNUnAlign", "l1", "zN"): ("f32", "f16", "bf16", "i8", "f8e4m3fn", "f8e5m2"),
@@ -5343,6 +5348,40 @@ def _ubub_require_metaop_representable(geom) -> None:
             )
 
 
+def _validate_ubub_transpose_shape(src_desc, dst_desc, src_dtype) -> None:
+    """Reject a tile VNCHWCONV cannot transpose.
+
+    The meta-op transposes whole blocks, so the tile has to be a whole number of
+    them: 16 source rows (32 for b8, which needs four calls to cover its tile) by
+    C0 columns, C0 being the elements in a 32-byte DataBlock. A tile that is not
+    a multiple of that would have the meta-op read and write past its own edges,
+    so it is rejected here rather than silently corrupting neighbouring data.
+
+    The extent checked is `origin_shape`, the tile's valid extent, because that
+    is what the meta-op transposes -- `shape` is the packing it is addressed
+    through, which a tail tile pads out further.
+    """
+    esz = dtype_size_bytes(src_dtype)
+    if esz not in (1, 2, 4):
+        return
+    c0 = 32 // esz
+    tile_rows = 32 if esz == 1 else 16
+    try:
+        shape = src_desc.origin_shape
+        if len(shape) != 2:
+            return
+        rows, cols = int(shape[-2]), int(shape[-1])
+    except (TypeError, ValueError, IndexError, KeyError):
+        return  # dynamic shape: nothing to check at compile time
+    if rows % tile_rows or cols % c0:
+        _op_error(
+            "copy",
+            f"transposing UB->UB copy of a {rows}x{cols} {src_dtype} tile: the "
+            f"shape must be a multiple of {tile_rows}x{c0} for a {esz}-byte "
+            f"element",
+        )
+
+
 @dsl_user_op
 def copy(
     dst: Tensor,
@@ -5366,6 +5405,14 @@ def copy(
         slack for the rounded row, where the rounded row would run into the next
         one. Layout tags on the tiles select format conversion (for example
         ND→zN).
+        A UB→UB copy whose destination is tagged `ColumnMajor` is a **transpose**:
+        both tiles carry the same logical `(M, N)` shape and the bytes land as the
+        `(N, M)` transpose, the same way the L0C→GM and L0C→UB routes express one.
+        The engine is `VNCHWCONV`, the vector unit's native transpose, which moves
+        whole 16-row by C0-column blocks, C0 being the elements in a 32-byte
+        DataBlock (8 / 16 / 32 for 4 / 2 / 1-byte types). The tile must therefore
+        be a whole number of those blocks: 16 rows by C0 columns, or 32 rows by 32
+        columns for a 1-byte type, which needs four calls to cover its block.
 
         Copy / tiling sizes follow each tile's logical `origin_shape`
         (not the nested physical `shape`). Physical `shape` / `stride` describe
@@ -5629,6 +5676,16 @@ def copy(
         _ubub_require_metaop_representable(
             _ubub_static_geometry(src_desc, dst_desc, src_dtype)
         )
+
+    # Transposing UB->UB is the meta-op's VNCHWCONV, which transposes whole
+    # 16-row-by-C0-column blocks; this guard admits only the tiles that are a
+    # whole number of them.
+    if (
+        _route == ("ub", "ub")
+        and src_layout == "RowMajor"
+        and dst_layout == "ColumnMajor"
+    ):
+        _validate_ubub_transpose_shape(src_desc, dst_desc, src_dtype)
 
     return _tla_ops_gen.copy(
         dst_value,
