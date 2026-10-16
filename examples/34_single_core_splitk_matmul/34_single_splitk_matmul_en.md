@@ -254,6 +254,6 @@ However, it should be noted that if the M and N dimensions are too small, or if 
 Note:
 
 - The benchmark refers to the [BasicMatmul](../00_basic_matmul/README.md) operator.
-- All recorded metrics represent the total execution time of the kernel function, collected with the [`msprof`](https://www.hiascend.com/document/detail/en/canncommercial/850/devaids/optool/atlasopdev_16_0082.html) profiling tool.
+- All recorded metrics represent the total execution time of the kernel function, collected with the [`msprof`](https://www.hiascend.com/en/document/redirect/CannCommunitymsOpProf) profiling tool.
 - In the preceding test case, matrices A, B, and C are in `layout::RowMajor` format.
 - Test environment: The NPU model is 910B2, and the CANN package version is 8.2.RC1.

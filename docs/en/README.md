@@ -85,7 +85,7 @@ Introduces the project positioning, layered modular design, and repository struc
 
 ### Related APIs
 
-- [Ascend C API](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/900beta1/API/ascendcopapi/atlasascendc_api_07_0003.html): Ascend C API reference
+- [Ascend C API](https://www.hiascend.com/en/document/redirect/CannCommercialAscendCApi): Ascend C API reference
 
 ## 4 Appendix
 
@@ -94,7 +94,7 @@ Introduces the project positioning, layered modular design, and repository struc
 #### Fundamentals
 
 - [C++ Templates Explained](https://www.runoob.com/w3cnote/c-templates-detail.html)
-- [Ascend C Operator Development Documentation](https://www.hiascend.com/document/detail/en/canncommercial/850/opdevg/Ascendcopdevg/atlas_ascendc_map_10_0002.html)
+- [Ascend C Operator Development Documentation](https://www.hiascend.com/en/document/redirect/CannCommunityOpdevAscendC)
 
 #### Advanced Topics
 

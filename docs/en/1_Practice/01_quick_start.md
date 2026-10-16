@@ -77,7 +77,7 @@ bash scripts/build.sh [options] <target>
 - `options`: Optional build options. Currently supported options include:
   - `--clean`: Clears the previous build and output directories (the default paths are `/build` and `/output`, respectively).
   - `--debug`: Compiles in debug mode.
-  - `--msdebug`: Enables [msDebug](https://www.hiascend.com/document/detail/en/canncommercial/850/devaids/optool/atlasopdev_16_0062.html). For details, see [Using msDebug in a CATLASS Sample Project](./evaluation/msdebug.md).
+  - `--msdebug`: Enables [msDebug](https://www.hiascend.com/en/document/redirect/CannCommunityToolMsdebug). For details, see [Using msDebug in a CATLASS Sample Project](./evaluation/msdebug.md).
   - `--simulator`: Enables the simulator mode. After this option is enabled, the code will not run on an actual NPU. For details, see [CATLASS Sample Simulation](./evaluation/performance_tools.md#example-with-msprof-op-simulator).
   - `--enable_profiling`: Enables the profiling tool. For details, see [Tuning Performance in a CATLASS Sample Project](./evaluation/performance_tools.md#profiling-overview).
   - `--enable_print`: Enables the compiler's print functionality. For details, see [Device-Side Printing Based on `cce::printf`](./evaluation/print.md).

@@ -16,6 +16,14 @@ uv build                         # PEP 517 构建
 python -m pip wheel .            # 直接 wheel 构建
 ```
 
+CANN 8.5.0 不支持 Ascend 950（3510）的 kernel 编译，在该版本上构建需关闭 950 支持：
+
+```bash
+bash build.sh --disable-ascend950
+```
+
+该选项设置 `DISABLE_ASCEND950=ON`（C++ 侧对应 `ENABLE_ASCEND950=0`）与 `CATLASS_ARCH_LIST=2201`，仅编译 2201 架构的 kernel。
+
 ## 构建流程 (build.sh)
 
 ```text

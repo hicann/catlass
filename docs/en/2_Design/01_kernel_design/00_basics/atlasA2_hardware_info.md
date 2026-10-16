@@ -2,11 +2,11 @@
 
 ## Programming Model
 
-<https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/opdevg/Ascendcopdevg/atlas\_ascendc\_10\_00028.html>
+<https://www.hiascend.com/en/document/redirect/CannCommunityAscendCOnHost>
 
 ## Architecture Diagram
 
-<https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/opdevg/Ascendcopdevg/atlas\_ascendc\_10\_0011.html>
+<https://www.hiascend.com/en/document/redirect/CannCommunityAscendCOnHost>
 
 ## Memory Units
 

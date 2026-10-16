@@ -29,7 +29,7 @@ When collecting data, it is recommended to prepare two sets of results:
 | Per-core task amount or per-core latency    | Determine whether the inter-core load is balanced              |
 | Workspace size and alignment information    | Determine whether intermediate results between CV stages introduce an extra GM bottleneck |
 
-If you need to observe finer pipeline parallelism, you can combine this with [performance pipeline simulation](../evaluation/performance_tools.md#performance-pipeline-simulation), focusing on whether AIC and AIV are waiting on each other for a long time.
+If you need to observe finer pipeline parallelism, you can combine this with [performance pipeline simulation](../evaluation/performance_tools.md#profile-pipeline-simulation), focusing on whether AIC and AIV are waiting on each other for a long time.
 
 ### Building a fusion benefit model
 

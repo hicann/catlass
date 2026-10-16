@@ -1,10 +1,10 @@
 # Using Ascend C Operator Debugging APIs in a CATLASS Sample Project
 
-Ascend C operator debugging APIs are the debugging capabilities of Ascend C. They can be used to print internal kernel information ([printf](https://www.hiascend.com/document/detail/en/canncommercial/850/API/ascendcopapi/atlasascendc_api_07_0193.html)) and view tensor content ([DumpTensor](https://www.hiascend.com/document/detail/en/canncommercial/850/API/ascendcopapi/atlasascendc_api_07_0192.html)).
+Ascend C operator debugging APIs are the debugging capabilities of Ascend C. They can be used to print internal kernel information ([printf](https://www.hiascend.com/en/document/redirect/CannCommunityascendcapiprintf)) and view tensor content ([DumpTensor](https://www.hiascend.com/en/document/redirect/CannCommunityascendcapidumptensor)).
 
 ## Examples
 
-The following uses `00_basic_matmul` as an example to demonstrate the test process based on [Ascend C operator debugging APIs](https://www.hiascend.com/document/detail/en/canncommercial/850/API/ascendcopapi/atlasascendc_api_07_0192.html).
+The following uses `00_basic_matmul` as an example to demonstrate the test process based on [Ascend C operator debugging APIs](https://www.hiascend.com/en/document/redirect/CannCommunityascendcapidumptensor).
 
 ### Inserting Debugging Code
 
@@ -68,7 +68,7 @@ void operator()<AscendC::AIC>(Params const &params) {
     ```
 
 - ⚠ Precautions
-  - [`DumpTensor`](https://www.hiascend.com/document/detail/en/canncommercial/850/API/ascendcopapi/atlasascendc_api_07_0192.html) **does not support printing values on `L0A`, `L0B`, and `FixPipe`. In particular, on `Ascend 950PR&950DT series products`**, values on `L1` cannot be printed.
+  - [`DumpTensor`](https://www.hiascend.com/en/document/redirect/CannCommunityascendcapidumptensor) **does not support printing values on `L0A`, `L0B`, and `FixPipe`. In particular, on `Ascend 950PR&950DT series products`**, values on `L1` cannot be printed.
 
 ### Output Example (For Reference Only. The Actual Output May Vary Depending on the Hardware and Operator Implementation.)
 

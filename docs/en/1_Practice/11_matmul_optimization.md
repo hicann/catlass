@@ -14,10 +14,10 @@ First, the task partitioning logic for each core. Samples in the repository such
 
 ### Matmul Hardware Visualization
 
-See [Basic Architecture](https://www.hiascend.com/document/detail/en/canncommercial/850/opdevg/Ascendcopdevg/atlas_ascendc_10_0008.html).
+See [Basic Architecture](https://www.hiascend.com/en/document/redirect/CannCommunityAscendChibasic).
 The following figure shows the hardware architecture involved in basic Matmul tiling, data movement, and computation. Because double buffering is enabled, two tiles of data are stored in L1/L0A/L0B.
 
-<img src="https://www.hiascend.com/doc_center/source/zh/canncommercial/850/opdevg/Ascendcopdevg/figure/zh-cn_image_0000002502735896.png" width="80%">
+<img src="https://www.hiascend.com/doc_center/source/zh/CANNCommunityEdition/850/opdevg/Ascendcopdevg/figure/zh-cn_image_0000002502735896.png" width="80%">
 
 ### TileShape Constraints
 

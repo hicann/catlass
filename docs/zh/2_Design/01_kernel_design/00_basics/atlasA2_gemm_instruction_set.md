@@ -16,9 +16,9 @@
 
 4. FractalSize：小分形所包含的元素个数，为16\*(32/sizeof(T))，当输入数据类型分别为int8/f16/f32时，该变量取值为512/256/128
 
-5. DataCopy系列接口使用方式：相关接口[详见](https://www.hiascend.com/document/detail/zh/canncommercial/850/API/ascendcopapi/atlasascendc_api_07_00127.html)
+5. DataCopy系列接口使用方式：相关接口[详见](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/latest/API/ascendcopapi/docs/zh/api/SIMD-API/basic_api/cube_compute_ISASI/cube_compute_load/DataCopy_GMToL1_ND2NZ.md)
 
-6. LoadData系列接口使用方式：相关接口[详见](https://www.hiascend.com/document/detail/zh/canncommercial/850/API/ascendcopapi/atlasascendc_api_07_00169.html)
+6. LoadData系列接口使用方式：相关接口[详见](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/latest/API/ascendcopapi/docs/zh/api/SIMD-API/basic_api/cube_compute_ISASI/cube_compute_load/LoadData_2D.md)
 
 7. 具体使用情况如下(这里转置指的是L1-小分形到L0-小分形的变化)：
 
@@ -428,7 +428,7 @@ __aicore__ inline void SplitB()
 
 #### Fixpipe
 
-通过Fixpipe指令进行搬运时，需要配置MmadParams的结构体成员，具体的含义可参考[Fixpipe-数据搬运](https://www.hiascend.com/document/detail/zh/canncommercial/850/API/ascendcopapi/atlasascendc_api_07_0251.html)。其中，fixpipeParams.srcStride的单位是32/sizeof(T)个元素，其含义是源NZ矩阵中相邻小分形的起始地址偏移(RowMajor)矩阵中同一行的元素在源NZ矩阵中处于相邻的Z排布，该参数的取值是L0C上C矩阵M轴向16对齐后的长度
+通过Fixpipe指令进行搬运时，需要配置MmadParams的结构体成员，具体的含义可参考[Fixpipe-数据搬运](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/latest/API/ascendcopapi/docs/zh/api/SIMD-API/basic_api/cube_compute_ISASI/cube_compute_store/Fixpipe_L0CToGM.md)。其中，fixpipeParams.srcStride的单位是32/sizeof(T)个元素，其含义是源NZ矩阵中相邻小分形的起始地址偏移(RowMajor)矩阵中同一行的元素在源NZ矩阵中处于相邻的Z排布，该参数的取值是L0C上C矩阵M轴向16对齐后的长度
 
 ```cpp
 AscendC::FixpipeParamsV220 fixpipeParams;
@@ -447,7 +447,7 @@ fixpipeParams.dstNdStride = 0;
 
 ### 矩阵计算
 
-下面介绍如何配置Mmad指令的MmadParams结构体成员，各个变量的具体含义详见[Mmad-矩阵计算](https://www.hiascend.com/document/detail/zh/canncommercial/850/API/ascendcopapi/atlasascendc_api_07_0249.html)
+下面介绍如何配置Mmad指令的MmadParams结构体成员，各个变量的具体含义详见[Mmad-矩阵计算](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/latest/API/ascendcopapi/docs/zh/api/SIMD-API/basic_api/cube_compute_ISASI/mmad_compute/Mmad.md)
 
 需要注意的是，当Mmad指令执行时，矩阵计算单元会从L0A/L0B连续读入多个分形参与矩阵乘计算，读入分形的数量根据MmadParams结构体的成员变量m,n,k的取值以及Mmad指令对L0A/L0B上A矩阵/B矩阵各个轴的对齐要求而来
 
@@ -529,8 +529,8 @@ AIC/AIV内并行的指令流水一共有8条
 
 核间同步常用指令集有：
 
-- [SyncAll](https://www.hiascend.com/document/detail/zh/canncommercial/900/API/ascendcopapi/atlasascendc_api_07_0204.html)
-- [CrossCoreSetFlag](https://www.hiascend.com/document/detail/zh/canncommercial/900/API/ascendcopapi/atlasascendc_api_07_0273.html)配套[CrossCoreWaitFlag](https://www.hiascend.com/document/detail/zh/canncommercial/900/API/ascendcopapi/atlasascendc_api_07_0274.html)
+- [SyncAll](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/latest/API/ascendcopapi/docs/zh/api/SIMD-API/basic_api/sync_control/inter_core_sync/SyncAll.md)
+- [CrossCoreSetFlag](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/latest/API/ascendcopapi/docs/zh/api/SIMD-API/basic_api/sync_control/inter_core_sync/CrossCoreSetFlag_ISASI.md)配套[CrossCoreWaitFlag](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/latest/API/ascendcopapi/docs/zh/api/SIMD-API/basic_api/sync_control/inter_core_sync/CrossCoreWaitFlag_ISASI.md)
 
 其中`CrossCoreSetFlag`配套`CrossCoreWaitFlag`实现的同步控制分为以下几种模式：
 
@@ -538,4 +538,4 @@ AIC/AIV内并行的指令流水一共有8条
 - `模式1`：AI Core内部，AIV核之间的同步控制。如果两个AIV核都运行了CrossCoreSetFlag，CrossCoreWaitFlag后续的指令才会执行。
 - `模式2`：AI Core内部，AIC与AIV之间的同步控制。在AIC核执行CrossCoreSetFlag之后， 两个AIV上CrossCoreWaitFlag后续的指令才会继续执行；两个AIV都执行CrossCoreSetFlag后，AIC上CrossCoreWaitFlag后续的指令才能执行。
 
-![](https://www.hiascend.com/doc_center/source/zh/canncommercial/900/API/ascendcopapi/figure/zh-cn_image_0000002562462709.png)
+![](https://www.hiascend.com/doc_center/source/zh/CANNCommunityEdition/900/API/ascendcopapi/figure/zh-cn_image_0000002562462709.png)

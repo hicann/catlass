@@ -10,7 +10,7 @@ CATLASS sample projects adapt to the mainstream performance tuning tools provide
 
 ### msProf — Single-Operator Profiling
 
-[msProf](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/devaids/optool/atlasopdev_16_0082.html) is a single-operator profiling tool. Its command is `msprof op`. It supports both on-board and simulation execution modes. For details, see [msProf & Profiling](./performance_tools.md#single-operator-profiling-using-msprof).
+[msProf](https://www.hiascend.com/en/document/redirect/CannCommunitymsOpProf) is a single-operator profiling tool. Its command is `msprof op`. It supports both on-board and simulation execution modes. For details, see [msProf & Profiling](./performance_tools.md#single-operator-profiling-using-msprof).
 
 **On-board Profiling**
 
@@ -73,7 +73,7 @@ Notes:
 
 ### Profiling — Whole-Network Profiling
 
-[Profiling](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/devaids/Profiling/atlasprofiling_16_0010.html) is a whole-network profiler. Its corresponding command is `msprof`. Although CATLASS primarily targets single-operator scenarios, single-operator call samples can also be profiled using this tool.
+[Profiling](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/latest/devaids/Profiling/atlasprofiling_16_0001.html) is a whole-network profiler. Its corresponding command is `msprof`. Although CATLASS primarily targets single-operator scenarios, single-operator call samples can also be profiled using this tool.
 
 ```bash
 # Enable the profiling API during build
@@ -84,7 +84,7 @@ cd output/bin
 msprof ./00_basic_matmul 256 512 1024 0
 ```
 
-For details, see [Whole-Network Profiling](./performance_tools.md#whole-network-profiling). For details about the fields in the profile data, see [msProf Profile Data File Reference](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/devaids/Profiling/atlasprofiling_16_0057.html).
+For details, see [Whole-Network Profiling](./performance_tools.md#whole-network-profiling). For details about the fields in the profile data, see [msProf Profile Data File Reference](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/latest/devaids/Profiling/atlasprofiling_16_0057.html).
 
 ### msTuner_CATLASS — Tiling Auto-Tuning
 
@@ -117,7 +117,7 @@ Before analyzing profile data, calculate the theoretical performance values as a
 
 The theoretical execution time of movement-related pipelines (MTE1/MTE2/MTE3) is calculated as "amount of data moved (bytes) divided by theoretical bandwidth". Assuming a GM peak bandwidth of approximately 1.8 TB/s, the theoretical movement time for a `float16` matrix of size 4096×4096 is:
 
-```
+```bash
 2 × 4096 × 4096 / 1.8TB/s ≈ 18.64 μs
 ```
 
@@ -127,7 +127,7 @@ Two notes: When multiple movement instructions execute simultaneously, they shar
 
 The theoretical execution time of computation-related pipelines (Cube/Vector/Scalar) is calculated as "amount of computation (elements) divided by theoretical compute". Using the Vector theoretical peak compute of 11.06 TOPS for `float16` as an example, the theoretical execution time for a single instruction operating on 32768 `float16` elements is:
 
-```
+```bash
 32K / 11.06TOPS ≈ 0.003 μs
 ```
 
@@ -221,4 +221,4 @@ Methods: Adjust the number of cores to balance compute parallelism and kernel la
 | msProf simulation (`msprof op simulator`)| Single-operator simulation trace collection| [Profiling Pipeline Simulation](./performance_tools.md#profile-pipeline-simulation)|
 | Profiling (`msProf`)| Network-wide profile data collection and analysis| [Whole-Network Profiling](./performance_tools.md#whole-network-profiling)|
 | msTuner_CATLASS | Tiling parameter auto-tuning| [msTuner_CATLASS README](../../../../tools/tuner/README.md) |
-| MindStudio Insight | Profile data visualization and analysis| [MindStudio Insight User Guide](https://www.hiascend.com/document/detail/en/mindstudio/80RC1/GUI_baseddevelopmenttool/msascendinsightug/Insight_userguide_0002.html)|
+| MindStudio Insight | Profile data visualization and analysis| [MindStudio Insight User Guide](https://www.hiascend.com/document/detail/en/mindstudio/latest/visualization_tool/MindStudioInsight/docs/en/user_guide/overview.md)|

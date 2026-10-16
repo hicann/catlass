@@ -127,5 +127,5 @@ kernel.o=<cache-dir>/kernel.o
   `halGetMaxResMapType`、`halResMap` 和 `halResUnmap`。L0A/L0B 暂不支持。
 - 在大 shape 精度调试时，可使用 `--block-num 1` 减少并发打印核数，避免不同 block 的输出相互交错。它不保证减少 tile 内打印的总行数。
 - 打印调试接口的底层实现调用 AscendC 调测接口，可阅读以下文档获取更多信息：
-  - [AscendC::DumpTensor](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/910/API/ascendcopapi/docs/api/SIMD-API/%E5%9F%BA%E7%A1%80API/%E8%B0%83%E8%AF%95%E6%8E%A5%E5%8F%A3/%E4%B8%8A%E6%9D%BF%E6%89%93%E5%8D%B0/DumpTensor.md)
-  - [AscendC::printf](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/910/API/ascendcopapi/docs/api/SIMD-API/%E5%9F%BA%E7%A1%80API/%E8%B0%83%E8%AF%95%E6%8E%A5%E5%8F%A3/%E4%B8%8A%E6%9D%BF%E6%89%93%E5%8D%B0/printf.md)
+  - [AscendC::DumpTensor](https://www.hiascend.com/document/redirect/CannCommunityascendcapidumptensor)
+  - [AscendC::printf](https://www.hiascend.com/document/redirect/CannCommunityascendcapiprintf)

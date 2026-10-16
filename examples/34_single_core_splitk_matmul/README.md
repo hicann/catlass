@@ -6,7 +6,7 @@
 
 ## 参数说明
 
-本样例直调参数包括m, n, k, deviceId，与[00_basic_matmul参数](../00_basic_matmul/README.md#参数说明)条件一致。
+本样例直调参数包括m, n, k, deviceId，与[00_basic_matmul参数](../00_basic_matmul/README.md#样例参数说明)条件一致。
 相应地，算子原型有如下设计：
 
 | 名称/Name | 类型/Class | 数据类型/Dtype   | 维度/Dims | 格式/Format | 描述/Description |

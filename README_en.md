@@ -57,7 +57,7 @@ The template library enables fast development for custom scenarios. It provides 
   <img src="docs/assets/images/Grouped_en.png" alt="GroupedMatmul Performance Comparison" width="90%">
 </p>
 
-This repository is the co-created repository for CATLASS. It combines the strengths of the Ascend ecosystem to jointly design and develop operator templates, and provides high-performance implementation code examples for typical operators. For an overview, see [here](./docs/en/2_Design/00_project_overview.md#catlass-project-introduction).
+This repository is the co-created repository for CATLASS. It combines the strengths of the Ascend ecosystem to jointly design and develop operator templates, and provides high-performance implementation code examples for typical operators. For an overview, see [here](./docs/en/2_Design/00_project_overview.md#introduction-to-catlass).
 
 ## ⚡️ Quick Start
 

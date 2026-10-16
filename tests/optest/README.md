@@ -165,6 +165,14 @@ tests/optest/
 bash build.sh
 ```
 
+CANN 8.5.0 不支持 Ascend 950（3510）的 kernel 编译，在该版本上构建需关闭 950 支持：
+
+```bash
+bash build.sh --disable-ascend950
+```
+
+该选项设置 `DISABLE_ASCEND950=ON`（C++ 侧对应 `ENABLE_ASCEND950=0`）与 `CATLASS_ARCH_LIST=2201`，仅编译 2201 架构的 kernel。
+
 ### 测试
 
 ```bash
@@ -200,6 +208,7 @@ pytest tests/ -v
 | `build.sh --build-type`     | CMake 构建类型                         | `Release`（默认）, `Debug`   |
 | `build.sh --skip-wheel`     | 跳过 wheel 打包，使用 editable install | —                            |
 | `build.sh --clean`          | 清理 JIT 缓存 + 构建产物               | —                            |
+| `build.sh --disable-ascend950` | 关闭 Ascend 950（3510）支持，CANN 8.5.0 上编译必选 | —                        |
 | `CATLASS_ARCH_LIST` (CMake) | 限制 kernel 编译/验证的 NPU 架构（prebuilt 编译 + JIT 模板构建期验证） | 分号分隔列表，如 `2201;3510` |
 
 > prebuilt kernel 默认为每个 arch 编译两份：普通版本和 `_ms` (sanitizer) 版本，无需额外选项。

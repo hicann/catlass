@@ -1,28 +1,28 @@
 # Tuning Performance in a CATLASS Sample Project
 
-CANN provides performance tuning tools for two operator development scenarios: single-operator and whole-network. These tools are [**msProf**](https://www.hiascend.com/document/detail/en/canncommercial/850/devaids/optool/atlasopdev_16_0082.html) and [**Profiling**](https://www.hiascend.com/document/detail/en/canncommercial/850/devaids/Profiling/atlasprofiling_16_0010.html).
+CANN provides performance tuning tools for two operator development scenarios: single-operator and whole-network. These tools are [**msProf**](https://www.hiascend.com/en/document/redirect/CannCommunitymsOpProf) and [**Profiling**](https://www.hiascend.com/en/document/redirect/CannCommunitymsopprofuserguide).
 
 ## Performance Tuning Tool Overview
 
 ### msProf
 
-[msProf](https://www.hiascend.com/document/detail/en/canncommercial/850/devaids/optool/atlasopdev_16_0082.html) is a single-operator profiler. The corresponding commands are `msprof op` and `msopprof`.
+[msProf](https://www.hiascend.com/en/document/redirect/CannCommunitymsOpProf) is a single-operator profiler. The corresponding commands are `msprof op` and `msopprof`.
 
-[msProf](https://www.hiascend.com/document/detail/en/canncommercial/850/devaids/optool/atlasopdev_16_0082.html) collects and analyzes key profile data of operators running on Ascend AI processors. Based on the output profile data, you can quickly locate software and hardware performance bottlenecks in operators, improving the efficiency of operator profiling.
+[msProf](https://www.hiascend.com/en/document/redirect/CannCommunitymsOpProf) collects and analyzes key profile data of operators running on Ascend AI processors. Based on the output profile data, you can quickly locate software and hardware performance bottlenecks in operators, improving the efficiency of operator profiling.
 
 Profile data can currently be collected and automatically parsed based on various running modes (onboard or simulation) and file formats (executable files or operator binary `.o` files).
 
 ### Profiling Overview
 
-[Profiling](https://www.hiascend.com/document/detail/en/canncommercial/850/devaids/Profiling/atlasprofiling_16_0010.html) is a whole-network profiler. Its corresponding command is `msprof`.
+[Profiling](https://www.hiascend.com/en/document/redirect/CannCommunitymsopprofuserguide) is a whole-network profiler. Its corresponding command is `msprof`.
 
-[Profiling](https://www.hiascend.com/document/detail/en/canncommercial/850/devaids/Profiling/atlasprofiling_16_0010.html) collects and parses the AI job runtime profile data, system data of Ascend AI processors, and other required data.
+[Profiling](https://www.hiascend.com/en/document/redirect/CannCommunitymsopprofuserguide) collects and parses the AI job runtime profile data, system data of Ascend AI processors, and other required data.
 
 The basic `msprof` profiling commands query the basic information about profiling, including parameter description, AI job file, data storage path, and custom environment variables.
 
 ## Single-Operator Profiling Using `msProf`
 
-Using `00_basic_matmul` as an example, this section demonstrates the profiling process using [msProf](https://www.hiascend.com/document/detail/en/canncommercial/850/devaids/optool/atlasopdev_16_0082.html).
+Using `00_basic_matmul` as an example, this section demonstrates the profiling process using [msProf](https://www.hiascend.com/en/document/redirect/CannCommunitymsOpProf).
 
 ### Onboard Profiling
 
@@ -48,7 +48,7 @@ Common parameters:
 | `--warm-up`      | No               | Specifies the number of warm-up times (for chip frequency increasing).                                    | Integer (default: 5)                        | For small shape scenarios, consider increasing to 30. |
 | `--output`       | No               | Specifies the data output path.                                                                           | Valid path (default: the current directory) | Ensure that the path is writable.                     |
 
-For more parameters, see [msProf Overview](https://www.hiascend.com/document/detail/en/canncommercial/850/devaids/optool/atlasopdev_16_0082.html).
+For more parameters, see [msProf Overview](https://www.hiascend.com/en/document/redirect/CannCommunitymsOpProf).
 
 - ⚠ Precautions
   - The tool reads the performance of the first operator by default. When debugging with the example, results can be obtained directly. If integrating with another project where other operators may exist (even if you test only one operator), results may not be obtained if the operator name is not specified with `--kernel-name` during profiling.
@@ -154,7 +154,7 @@ Obtain the `visualize_data.bin` file from the `simulator/` output folder. Load t
 
 ### Viewing More Visual Data with MindStudio Insight
 
-Data collected by msProf can be imported into [MindStudio Insight](https://www.hiascend.com/document/detail/en/mindstudio/80RC1/GUI_baseddevelopmenttool/msascendinsightug/Insight_userguide_0002.html) for further analysis of operator computation bottlenecks. You can import the `visualize_data.bin` file into the tool to visually analyze operator performance.
+Data collected by msProf can be imported into [MindStudio Insight](https://www.hiascend.com/document/detail/en/mindstudio/latest/visualization_tool/MindStudioInsight/docs/en/user_guide/overview.md) for further analysis of operator computation bottlenecks. You can import the `visualize_data.bin` file into the tool to visually analyze operator performance.
 
 ![MindStudio Insight Details](https://www.hiascend.com/doc_center/source/zh/mindstudio/80RC1/GUI_baseddevelopmenttool/msascendinsightug/figure/zh-cn_image_0000002274911037.png)
 
@@ -162,7 +162,7 @@ Data collected by msProf can be imported into [MindStudio Insight](https://www.h
 
 ## Whole-Network Profiling
 
-Although CATLASS only provides single-operator call examples, the single-operator call examples can also be analyzed for performance using [Profiling](https://www.hiascend.com/document/detail/en/canncommercial/850/devaids/Profiling/atlasprofiling_16_0010.html).
+Although CATLASS only provides single-operator call examples, the single-operator call examples can also be analyzed for performance using [Profiling](https://www.hiascend.com/en/document/redirect/CannCommunitymsopprofuserguide).
 
 The following uses `00_basic_matmul` as an example.
 
@@ -182,4 +182,4 @@ The following uses `00_basic_matmul` as an example.
     msprof ./00_basic_matmul 256 512 1024 0
     ```
 
-For details about the functions of each profile data file, see [msProf Profile Data File Reference](https://www.hiascend.com/document/detail/en/canncommercial/850/devaids/Profiling/atlasprofiling_16_0057.html).
+For details about the functions of each profile data file, see [msProf Profile Data File Reference](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/latest/devaids/Profiling/atlasprofiling_16_0057.html).

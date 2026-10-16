@@ -10,9 +10,9 @@ nav_order: 20
 
 ### msProf简介
 
-* [msProf](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/devaids/optool/atlasopdev_16_0082.html)是单算子性能分析工具，对应的指令为msprof op或msopprof。
+* [msProf](https://www.hiascend.com/document/redirect/CannCommunitymsOpProf)是单算子性能分析工具，对应的指令为msprof op或msopprof。
 
-* [msProf](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/devaids/optool/atlasopdev_16_0082.html)工具用于采集和分析运行在昇腾AI处理器上算子的关键性能指标，用户可根据输出的性能数据，快速定位算子的软、硬件性能瓶颈，提升算子性能的分析效率。
+* [msProf](https://www.hiascend.com/document/redirect/CannCommunitymsOpProf)工具用于采集和分析运行在昇腾AI处理器上算子的关键性能指标，用户可根据输出的性能数据，快速定位算子的软、硬件性能瓶颈，提升算子性能的分析效率。
 
 ### Profiling简介
 
@@ -80,7 +80,7 @@ msprof op --application="python examples/end_to_end/basic_mixed/basic_mixed.py"
 * `MTE2 bandwidth utilization lower than 80% when active.`：提示内存搬运通道利用率偏低。
 * `aicore compute usage lower than 20%.`：提示矩阵计算核心算力未充分释放。
 
-获取更多数据解析相关内容，请参考 [用msProf进行单算子性能分析](../../../../../../docs/zh/1_Practice/evaluation/performance_tools.md#用msprof进行单算子性能分析)。
+获取更多数据解析相关内容，请参考 [用msProf进行单算子性能分析](../../../../../../docs/zh/1_Practice/evaluation/performance_tools.md#用msprof进行单算子性能分析--msprof-single-operator-analysis-)。
 
 ### 性能流水仿真
 
@@ -140,7 +140,7 @@ msprof op simulator --soc-version=Ascendxxxyy --core-id=0 --kernel-name=basic_mi
 ```
 
 获取仿真输出文件夹simulator下的visualize_data.bin，通过[MindStudio Insight](https://www.hiascend.com/document/detail/zh/mindstudio/latest/GUI_baseddevelopmenttool/MindStudioInsight/docs/zh/user_guide/overview.md)工具加载bin文件查看代码热点图。
-关于如何对仿真数据进行深度解析，请参考 [性能流水仿真](../../../../../../docs/zh/1_Practice/evaluation/performance_tools.md#性能流水仿真)；
+关于如何对仿真数据进行深度解析，请参考 [性能流水仿真](../../../../../../docs/zh/1_Practice/evaluation/performance_tools.md#性能流水仿真--performance-pipeline-simulation-)；
 关于如何将数据导出并进行图形化深度解析，请参考 [MindStudio Insight](https://www.hiascend.com/document/detail/zh/mindstudio/latest/GUI_baseddevelopmenttool/MindStudioInsight/docs/zh/user_guide/overview.md)。
 
 ## 用Profiling进行整网性能分析
@@ -185,4 +185,4 @@ msprof --application="python examples/end_to_end/basic_mixed/basic_mixed.py"
 
 * device_{id}目录主要保存各个Device运行昇腾AI应用的性能原始数据和AI处理器系统原始数据。
 * host目录主要保存上层应用接口（msproftx）的昇腾AI应用运行性能原始数据和Host系统原始数据。
-关于如何对数据进行深度解析，请参考 [性能数据文件](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/devaids/Profiling/atlasprofiling_16_0057.html)。
+关于如何对数据进行深度解析，请参考 [性能数据文件](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/latest/devaids/Profiling/docs/zh/user_guide/profile_data_file_references.md)。

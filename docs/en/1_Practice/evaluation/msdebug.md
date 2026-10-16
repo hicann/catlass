@@ -1,6 +1,6 @@
 # Using msDebug in a CATLASS Sample Project
 
-[msDebug](https://www.hiascend.com/document/detail/en/canncommercial/850/devaids/optool/atlasopdev_16_0062.html) is a tool for debugging operator programs running on NPUs. This tool provides operator developers with a mechanism for debugging operators on Ascend devices. Debugging methods include reading device memory and registers, as well as pausing and resuming program execution.
+[msDebug](https://www.hiascend.com/en/document/redirect/CannCommunityToolMsdebug) is a tool for debugging operator programs running on NPUs. This tool provides operator developers with a mechanism for debugging operators on Ascend devices. Debugging methods include reading device memory and registers, as well as pausing and resuming program execution.
 
 - ⚠️ **Note**: If you are developing and debugging using containers, ensure that `/dev/drv_debug` is mapped into containers (refer to the [driver check guide](https://www.hiascend.com/document/caselibrary/detail/atlasopdev_0006)).
 
@@ -10,7 +10,7 @@ The following uses `00_basic_matmul` as an example to describe how to use msDebu
 
 ### Enabling the Driver's Debugging Function
 
-Refer to the [msDebug overview](https://www.hiascend.com/document/detail/en/canncommercial/850/devaids/optool/atlasopdev_16_0062.html) to install the driver in `debug` mode, or execute `echo 1 > /proc/debug_switch` to enable the debug channel on a driver installed in `full` mode.
+Refer to the [msDebug overview](https://www.hiascend.com/en/document/redirect/CannCommunityToolMsdebug) to install the driver in `debug` mode, or execute `echo 1 > /proc/debug_switch` to enable the debug channel on a driver installed in `full` mode.
 
 To avoid security issues, do not enable the debug channel in production environments.
 

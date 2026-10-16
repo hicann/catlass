@@ -6,7 +6,7 @@
 
 ## 功能说明
 
-`TileMmad` 使用 [AscendC::Mmad](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/API/ascendcopapi/atlasascendc_api_07_0249.html) 基础 API 完成矩阵乘加 `C += A * B`。操作数 A 在 L0A，B 在 L0B，C 在 L0C，排布格式分别为 zZ、nZ、zN。非 TLA 实现。
+`TileMmad` 使用 [AscendC::Mmad](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/latest/API/ascendcopapi/docs/zh/api/SIMD-API/basic_api/cube_compute_ISASI/mmad_compute/Mmad.md) 基础 API 完成矩阵乘加 `C += A * B`。操作数 A 在 L0A，B 在 L0B，C 在 L0C，排布格式分别为 zZ、nZ、zN。非 TLA 实现。
 
 支持两种调用模式：
 

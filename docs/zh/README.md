@@ -85,7 +85,7 @@
 
 ### 相关 API
 
-- [Ascend C API](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/900beta1/API/ascendcopapi/atlasascendc_api_07_0003.html)：昇腾社区Ascend C API列表
+- [Ascend C API](https://www.hiascend.com/document/redirect/CannCommercialAscendCApi)：昇腾社区Ascend C API列表
 
 ## 4 附录
 

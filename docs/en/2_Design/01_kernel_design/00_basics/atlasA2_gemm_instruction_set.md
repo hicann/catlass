@@ -16,9 +16,9 @@ First, the relevant definitions:
 
 4. FractalSize: the number of elements contained in a small fractal, which is 16\*(32/sizeof(T)); when the input data type is int8/f16/f32, this variable takes the value 512/256/128.
 
-5. Usage of the DataCopy family of interfaces: see [details](https://www.hiascend.com/document/detail/en/canncommercial/850/API/ascendcopapi/atlasascendc_api_07_00127.html).
+5. Usage of the DataCopy family of interfaces: see [details](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/latest/API/ascendcopapi/docs/en/api/SIMD-API/basic_api/cube_compute_ISASI/cube_compute_load/DataCopy_GMToL1_ND2NZ.md).
 
-6. Usage of the LoadData family of interfaces: see [details](https://www.hiascend.com/document/detail/en/canncommercial/850/API/ascendcopapi/atlasascendc_api_07_00169.html).
+6. Usage of the LoadData family of interfaces: see [details](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/latest/API/ascendcopapi/docs/en/api/SIMD-API/basic_api/cube_compute_ISASI/cube_compute_load/LoadData_2D.md).
 
 7. The specific usage is as follows (here "transpose" refers to the change from the L1 small fractal to the L0 small fractal):
 
@@ -428,7 +428,7 @@ Same as above.
 
 #### Fixpipe
 
-When moving data through the Fixpipe instruction, the members of the MmadParams struct must be configured; for their specific meaning, see [Fixpipe - Data Movement](https://www.hiascend.com/document/detail/en/canncommercial/850/API/ascendcopapi/atlasascendc_api_07_0251.html). Here the unit of fixpipeParams.srcStride is 32/sizeof(T) elements; it means the start address offset of adjacent small fractals in the source NZ matrix. The elements of the same row in the (RowMajor) matrix are in adjacent Z arrangement in the source NZ matrix, and the value of this parameter is the length of the C matrix on L0C after aligning the M axis to 16.
+When moving data through the Fixpipe instruction, the members of the MmadParams struct must be configured; for their specific meaning, see [Fixpipe - Data Movement](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/latest/API/ascendcopapi/docs/en/api/SIMD-API/basic_api/cube_compute_ISASI/cube_compute_store/Fixpipe_L0CToGM.md). Here the unit of fixpipeParams.srcStride is 32/sizeof(T) elements; it means the start address offset of adjacent small fractals in the source NZ matrix. The elements of the same row in the (RowMajor) matrix are in adjacent Z arrangement in the source NZ matrix, and the value of this parameter is the length of the C matrix on L0C after aligning the M axis to 16.
 
 ```cpp
 AscendC::FixpipeParamsV220 fixpipeParams;
@@ -447,7 +447,7 @@ fixpipeParams.dstNdStride = 0;
 
 ### Matrix Computation
 
-The following describes how to configure the members of the MmadParams struct of the Mmad instruction; for the specific meaning of each variable, see [Mmad - Matrix Computation](https://www.hiascend.com/document/detail/en/canncommercial/850/API/ascendcopapi/atlasascendc_api_07_0249.html).
+The following describes how to configure the members of the MmadParams struct of the Mmad instruction; for the specific meaning of each variable, see [Mmad - Matrix Computation](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/latest/API/ascendcopapi/docs/en/api/SIMD-API/basic_api/cube_compute_ISASI/mmad_compute/Mmad.md).
 
 Note that when the Mmad instruction executes, the matrix computation unit reads multiple fractals consecutively from L0A/L0B to participate in the matrix multiply; the number of fractals read depends on the values of the members m, n, and k of the MmadParams struct and on the alignment requirements of the Mmad instruction for each axis of the A matrix/B matrix on L0A/L0B.
 
@@ -529,8 +529,8 @@ The inter-core synchronization mechanism applies only to AIC/AIV Mix operators, 
 
 Commonly used inter-core synchronization instruction sets:
 
-- [SyncAll](https://www.hiascend.com/document/detail/en/canncommercial/900/API/ascendcopapi/atlasascendc_api_07_0204.html)
-- [CrossCoreSetFlag](https://www.hiascend.com/document/detail/en/canncommercial/900/API/ascendcopapi/atlasascendc_api_07_0273.html) with [CrossCoreWaitFlag](https://www.hiascend.com/document/detail/en/canncommercial/900/API/ascendcopapi/atlasascendc_api_07_0274.html)
+- [SyncAll](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/latest/API/ascendcopapi/docs/en/api/SIMD-API/basic_api/sync_control/inter_core_sync/SyncAll.md)
+- [CrossCoreSetFlag](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/latest/API/ascendcopapi/docs/en/api/SIMD-API/basic_api/sync_control/inter_core_sync/CrossCoreSetFlag_ISASI.md) with [CrossCoreWaitFlag](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/latest/API/ascendcopapi/docs/en/api/SIMD-API/basic_api/sync_control/inter_core_sync/CrossCoreWaitFlag_ISASI.md)
 
 The synchronization control implemented by `CrossCoreSetFlag` together with `CrossCoreWaitFlag` is divided into the following modes:
 
@@ -538,4 +538,4 @@ The synchronization control implemented by `CrossCoreSetFlag` together with `Cro
 - `Mode 1`: synchronization control between AIV cores inside an AI Core. The instructions after CrossCoreWaitFlag are executed only after both AIV cores have run CrossCoreSetFlag.
 - `Mode 2`: synchronization control between AIC and AIV inside an AI Core. After the AIC core executes CrossCoreSetFlag, the instructions after CrossCoreWaitFlag on both AIV cores continue to execute; after both AIV cores execute CrossCoreSetFlag, the instructions after CrossCoreWaitFlag on the AIC core can execute.
 
-![](https://www.hiascend.com/doc_center/source/zh/canncommercial/900/API/ascendcopapi/figure/zh-cn_image_0000002562462709.png)
+![](https://www.hiascend.com/doc_center/source/zh/CANNCommunityEdition/900/API/ascendcopapi/figure/zh-cn_image_0000002562462709.png)

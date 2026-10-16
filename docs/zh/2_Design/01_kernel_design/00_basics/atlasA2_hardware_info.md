@@ -2,11 +2,11 @@
 
 ## 编程模型
 
-<https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/opdevg/Ascendcopdevg/atlas\_ascendc\_10\_00028.html>
+<https://www.hiascend.com/document/redirect/CannCommunityAscendCOnHost>
 
 ## 架构图
 
-<https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/opdevg/Ascendcopdevg/atlas\_ascendc\_10\_0011.html>
+<https://www.hiascend.com/document/redirect/CannCommunityAscendCOnHost>
 
 ## 内存单元
 

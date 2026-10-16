@@ -380,7 +380,7 @@ An example of the instruction pipeline diagram for each pipe is as follows. Ulti
 
 When data read is the main pipeline, optimizing read bandwidth can yield performance gains. Using the FP16 matrix A as an example, the following low-bandwidth scenarios currently exist:
 
-- **Low bandwidth due to Stride not being 512-byte aligned** When the movement parameter srcDValue (see [DataCopy-ND2NZ Movement with Channel Conversion](https://www.hiascend.com/document/detail/en/canncommercial/83RC1/API/ascendcopapi/atlasascendc_api_07_00127.html)) is not 512-byte aligned, the bandwidth decreases significantly.
+- **Low bandwidth due to Stride not being 512-byte aligned** When the movement parameter srcDValue (see [DataCopy-ND2NZ Movement with Channel Conversion](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/latest/API/ascendcopapi/docs/en/api/SIMD-API/basic_api/memory_vector_compute/data_move/DataCopy_GMToUB_ND2NZ.md)) is not 512-byte aligned, the bandwidth decreases significantly.
 - **Low bandwidth due to movement instruction restrictions**. For ND2NZ movement instructions, the srcDValue parameter is of type uint16, with a maximum value of 65535. When K > 65535, the movement instruction must be called repeatedly in the M direction with ndNum=1, reducing read bandwidth.
 - **ND2NZ with channel conversion has bandwidth loss** compared to ND2ND (no layout conversion).
 
@@ -460,7 +460,7 @@ firstTileIdx = startTileIdx % kTileCount;
 
 <img src="https://raw.gitcode.com/user-images/assets/7801479/e3a90904-677a-4973-b3b5-93e93ea072e2/6smallM.png" width="80%">
 
-In matrix computation, when $M$ is small (for example, $M$ < 8), using DataCopy with ND2NZ with channel conversion (see [DataCopy - ND2NZ Movement with Channel Conversion](https://www.hiascend.com/document/detail/en/canncommercial/83RC1/API/ascendcopapi/atlasascendc_api_07_00127.html)) is not efficient.
+In matrix computation, when $M$ is small (for example, $M$ < 8), using DataCopy with ND2NZ with channel conversion (see [DataCopy - ND2NZ Movement with Channel Conversion](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/latest/API/ascendcopapi/docs/en/api/SIMD-API/basic_api/memory_vector_compute/data_move/DataCopy_GMToUB_ND2NZ.md)) is not efficient.
 
 ### Optimization Solution
 

@@ -19,7 +19,7 @@ The overall design of this test case is the same as that of [_basic_matmul](../3
 
 ## Example
 
-- After obtaining the code, compile the corresponding operator executable file. For details, see [Template Library Quick Start](../../docs/en/1_Practice/01_quick_start.md#operator-compilation). This test case is an Ascend 950 operator. During compilation, you need to add -DCATLASS_ARCH=3510.
+- After obtaining the code, compile the corresponding operator executable file. For details, see [Template Library Quick Start](../../docs/en/1_Practice/01_quick_start.md#build-and-execution). This test case is an Ascend 950 operator. During compilation, you need to add -DCATLASS_ARCH=3510.
 - Execute the operator.
 
 ```bash

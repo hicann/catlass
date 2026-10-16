@@ -165,7 +165,7 @@ The op is defined in [Tla.td](../../../../csrc/mlir/include/Dialect/Tla/IR/Tla.t
 This is the key step of bc integration. `tla.copy` is eliminated in two passes (one for the cube route and one for the vector route, with symmetric logic):
 
 - **cube side**: `LowerTlaCopyPattern` in [TlaCubeRegionPass.cpp](../../../../csrc/mlir/lib/Passes/TlaCubeRegionPass.cpp) (lines 197–400)
-- **vector side**: `LowerCopyPattern` in [TlaVectorRegionPass.cpp](../../../../csrc/mlir/lib/Passes/TlaVectorRegionPass.cpp) (lines 2531–2622)
+- **vector side**: `LowerCopyPattern` in [TlaVectorRegionCommon.cpp](../../../../csrc/mlir/lib/Passes/TlaVectorRegionCommon.cpp) (lines 110–199)
 
 What they do:
 
@@ -293,7 +293,7 @@ If the route belongs to the existing legal set, the frontend route table in [cor
 | C++ verifier | [TlaOps.cpp](../../../../csrc/mlir/lib/Dialect/Tla/IR/TlaOps.cpp) | `CopyOp::verify` 594–638 |
 | pass pipeline | [PassRegistry.cpp](../../../../csrc/mlir/lib/Passes/PassRegistry.cpp) | `buildTlaPipeline` 42–82 |
 | cube copy lowering | [TlaCubeRegionPass.cpp](../../../../csrc/mlir/lib/Passes/TlaCubeRegionPass.cpp) | `LowerTlaCopyPattern` 197–400 |
-| vector copy lowering | [TlaVectorRegionPass.cpp](../../../../csrc/mlir/lib/Passes/TlaVectorRegionPass.cpp) | `LowerCopyPattern` 2531–2622 |
+| vector copy lowering | [TlaVectorRegionCommon.cpp](../../../../csrc/mlir/lib/Passes/TlaVectorRegionCommon.cpp) | `LowerCopyPattern` 110–199 |
 | route selection/payload | [TlaTensorToMemref.cpp](../../../../csrc/mlir/lib/Passes/TlaTensorToMemref.cpp) | `getCopyRouteCallee` 606–733 |
 | C++ move templates | [include/catlass/gemm/tile/ascend950/](../../../../../../include/catlass/gemm/tile/ascend950/) | `copy_gm_to_l1.hpp`, `copy_l0c_to_gm.hpp`, etc. |
 | stub implementation (cube) | [csrc/mlir/bc/Cube/dma.cpp](../../../../csrc/mlir/bc/Cube/dma.cpp) | GM->L1 stub from line 131 |

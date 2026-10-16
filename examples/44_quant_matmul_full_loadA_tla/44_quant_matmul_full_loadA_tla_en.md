@@ -55,6 +55,6 @@ When the same tileShape and swizzle parameters are used, the performance of the 
 Note:
 
 - The benchmark is the [QuantMatmul](../12_quant_matmul/README.md) operator.
-- The total time consumed by the kernel function is obtained using the [msprof](https://www.hiascend.com/document/detail/en/canncommercial/850/devaids/optool/atlasopdev_16_0082.html) tool.
+- The total time consumed by the kernel function is obtained using the [msprof](https://www.hiascend.com/en/document/redirect/CannCommunitymsOpProf) tool.
 - In the preceding test case, matrices A, B, and the output matrix are in `layout::RowMajor` format.
 - Test environment description: The NPU model is 910B1, and the CANN package version is 9.0.0.

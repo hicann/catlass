@@ -1,14 +1,14 @@
 # 在CATLASS样例工程进行性能调优
 
-CANN对算子开发的两个场景——单算子与整网开发，分别提供了对应的性能调优工具：[**msProf**](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/devaids/optool/atlasopdev_16_0082.html)和[**Profiling**](https://www.hiascend.com/document/redirect/CannCommunitymsopprofuserguide)。
+CANN对算子开发的两个场景——单算子与整网开发，分别提供了对应的性能调优工具：[**msProf**](https://www.hiascend.com/document/redirect/CannCommunitymsOpProf)和[**Profiling**](https://www.hiascend.com/document/redirect/CannCommunitymsopprofuserguide)。
 
 ## 性能调优工具简介
 
 ### msProf简介
 
-[msProf](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/devaids/optool/atlasopdev_16_0082.html)是单算子性能分析工具，对应的指令为`msprof op`或`msopprof`。
+[msProf](https://www.hiascend.com/document/redirect/CannCommunitymsOpProf)是单算子性能分析工具，对应的指令为`msprof op`或`msopprof`。
 
-[msProf](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/devaids/optool/atlasopdev_16_0082.html)工具用于采集和分析运行在昇腾AI处理器上算子的关键性能指标，用户可根据输出的性能数据，快速定位算子的软、硬件性能瓶颈，提升算子性能的分析效率。
+[msProf](https://www.hiascend.com/document/redirect/CannCommunitymsOpProf)工具用于采集和分析运行在昇腾AI处理器上算子的关键性能指标，用户可根据输出的性能数据，快速定位算子的软、硬件性能瓶颈，提升算子性能的分析效率。
 
 当前支持基于不同运行模式（上板或仿真）和不同文件形式（可执行文件或算子二进制`.o`文件）进行性能数据的采集和自动解析。
 
@@ -22,7 +22,7 @@ CANN对算子开发的两个场景——单算子与整网开发，分别提供�
 
 ## 用`msProf`进行单算子性能分析 { #msprof-single-operator-analysis }
 
-以`00_basic_matmul`为例，演示基于[msProf](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/devaids/optool/atlasopdev_16_0082.html)的性能分析过程。
+以`00_basic_matmul`为例，演示基于[msProf](https://www.hiascend.com/document/redirect/CannCommunitymsOpProf)的性能分析过程。
 
 ### 上板性能采集
 
@@ -48,7 +48,7 @@ msprof op --application="./00_basic_matmul 256 512 1024 0"
 | `--warm-up`      | 可选           | 预热次数（解决芯片未提频问题）               | 整数（默认 5）                | 小 shape 场景建议提高到 30   |
 | `--output`       | 可选           | 指定数据输出路径                             | 有效路径（默认当前目录）      | 需确保路径可写               |
 
-更多参数可参考[msProf工具概述](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/devaids/optool/atlasopdev_16_0082.html)。
+更多参数可参考[msProf工具概述](https://www.hiascend.com/document/redirect/CannCommunitymsOpProf)。
 
 - ⚠ 注意事项
   - 工具默认会读取第一个算子的性能，使用example进行调测时可直接获取到结果；若接入其他工程，工程中可能存在其他算子（虽然只跑某一个算子的用例），如果性能分析时未通过`--kernel-name`指定算子名称，则可能读取不到结果。
@@ -154,7 +154,7 @@ msprof op ./00_basic_matmul 256 512 1024 0
 
 ### 用MindStudio Insight查看更多可视化数据
 
-msProf工具采集到的数据，可导入可视化工具[MindStudio Insight](https://www.hiascend.com/document/detail/zh/mindstudio/80RC1/GUI_baseddevelopmenttool/msascendinsightug/Insight_userguide_0002.html)中，以便进一步分析算子计算瓶颈。将`visualize_data.bin`导入工具内，即可可视化地分析算子性能。
+msProf工具采集到的数据，可导入可视化工具[MindStudio Insight](https://www.hiascend.com/document/redirect/MindStudioinsight)中，以便进一步分析算子计算瓶颈。将`visualize_data.bin`导入工具内，即可可视化地分析算子性能。
 
 ![MindStudio Insight Details](https://www.hiascend.com/doc_center/source/zh/mindstudio/80RC1/GUI_baseddevelopmenttool/msascendinsightug/figure/zh-cn_image_0000002274911037.png)
 
@@ -182,4 +182,4 @@ msProf工具采集到的数据，可导入可视化工具[MindStudio Insight](ht
     msprof ./00_basic_matmul 256 512 1024 0
     ```
 
-可参考[msProf性能数据文件参考](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/devaids/Profiling/atlasprofiling_16_0057.html)了解性能数据各文件的功能。
+可参考[msProf性能数据文件参考](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/latest/devaids/Profiling/docs/zh/user_guide/profile_data_file_references.md)了解性能数据各文件的功能。

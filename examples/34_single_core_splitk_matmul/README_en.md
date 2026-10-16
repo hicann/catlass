@@ -6,7 +6,7 @@
 
 ## Parameters
 
-The command-line arguments for this sample include $M$, $N$, $K$, and `deviceId`, adhering to the identical structural criteria used in [00_basic_matmul Parameters](../00_basic_matmul/README.md#parameters).
+The command-line arguments for this sample include $M$, $N$, $K$, and `deviceId`, adhering to the identical structural criteria used in [00_basic_matmul Parameters](../00_basic_matmul/README_en.md#parameters).
 The underlying operator prototype is structured as follows:
 
 | Name | Class     | Data Type        | Dimensions | Format | Description                           |

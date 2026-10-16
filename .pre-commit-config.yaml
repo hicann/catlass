@@ -53,3 +53,14 @@ repos:
       - id: ruff-format
         types: [python]
         exclude: gen_data.py
+
+  # Markdown 内部链接有效性检查
+  - repo: local
+    hooks:
+      - id: check-md-links
+        name: check-md-links
+        description: 校验 Markdown 中的仓库内相对链接与标题锚点是否有效
+        entry: python scripts/check_md_links.py
+        args: ["--no-external"]
+        language: python
+        files: \.md$

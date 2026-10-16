@@ -21,9 +21,9 @@ CATLASS示例工程可适配大多数[CANN](https://www.hiascend.com/cann)提供
 
 工具介绍：
 
-- [msProf&Profiling](./evaluation/performance_tools.md) - 基于性能调优工具[msProf](https://www.hiascend.com/document/redirect/CannCommunitymsopprofuserguide)和[Profiling](https://www.hiascend.com/document/detail/zh/canncommercial/850/graph/graphdevg/atlasag_25_0056.html)进行调优实践
-  - [单算子性能分析：msProf](./evaluation/performance_tools.md#msprof-single-operator-analysis)
-  - [整网性能分析：Profiling](./evaluation/performance_tools.md#profiling-network-analysis)
+- [msProf&Profiling](./evaluation/performance_tools.md) - 基于性能调优工具[msProf](https://www.hiascend.com/document/redirect/CannCommunitymsopprofuserguide)和[Profiling](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/latest/programug/graphdevg/docs/zh/user_guides/graph_dev/more_features/profiling_data_collection.md)进行调优实践
+  - [单算子性能分析：msProf](../1_Practice/evaluation/performance_tools.md#用msprof进行单算子性能分析--msprof-single-operator-analysis-)
+  - [整网性能分析：Profiling](../1_Practice/evaluation/performance_tools.md#用profiling进行整网性能分析--profiling-network-analysis-)
 - [msTuner_CATLASS](../../../tools/tuner/README.md) - Tiling自动寻优工具
 
 相关实践：

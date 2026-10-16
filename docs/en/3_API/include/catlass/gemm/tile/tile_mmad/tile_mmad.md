@@ -6,9 +6,10 @@
 
 ## Function
 
-`TileMmad` utilizes basic API [AscendC::Mmad] (https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/API/ascendcopapi/atlasascendc_api_07_0249.html) to perform the matrix multiply-accumulate operation `C += A * B`. The operands reside in the following cache locations: A in L0A, B in L0B, and C in L0C, with fixed data layouts of zZ, nZ, and zN respectively. This is a non-TLA implementation.
+`TileMmad` utilizes basic API [AscendC::mmad basic API](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/latest/API/ascendcopapi/docs/en/api/SIMD-API/basic_api/cube_compute_ISASI/mmad_compute/Mmad.md) to perform the matrix multiply-accumulate operation `C += A * B`. The operands reside in the following cache locations: A in L0A, B in L0B, and C in L0C, with fixed data layouts of zZ, nZ, and zN respectively. This is a non-TLA implementation.
 
 Two calling modes are supported:
+
 - Without Bias: standard matrix multiply-accumulate
 - With Bias: Loads the bias from the Bias Tensor (BT) into L0C before executing matrix multiply-accumulate.
 

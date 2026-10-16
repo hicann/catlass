@@ -10,9 +10,9 @@ The following document describes the complete workflow of end-to-end compilation
 
 ### msProf Overview
 
-* [msProf](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/devaids/optool/atlasopdev_16_0082.html) is a single-operator performance analysis tool whose command is `msprof op` or `msopprof`.
+* [msProf](https://www.hiascend.com/document/redirect/CannCommunitymsOpProf) is a single-operator performance analysis tool whose command is `msprof op` or `msopprof`.
 
-* The [msProf](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/devaids/optool/atlasopdev_16_0082.html) tool collects and analyzes key performance metrics of operators running on Ascend AI processors. Based on the output performance data, users can quickly locate software and hardware performance bottlenecks of operators and improve the efficiency of operator performance analysis.
+* The [msProf](https://www.hiascend.com/document/redirect/CannCommunitymsOpProf) tool collects and analyzes key performance metrics of operators running on Ascend AI processors. Based on the output performance data, users can quickly locate software and hardware performance bottlenecks of operators and improve the efficiency of operator performance analysis.
 
 ### Profiling Overview
 
@@ -185,4 +185,4 @@ After the run finishes, an example performance data directory structure is as fo
 
 * The device_{id} directory mainly stores the raw performance data of each Device running Ascend AI applications and the raw system data of the AI processors.
 * The host directory mainly stores the raw performance data of the Ascend AI application running through the upper-layer application interface (msproftx) and the raw Host system data.
-For how to deeply parse the data, see [Performance Data Files](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/devaids/Profiling/atlasprofiling_16_0057.html).
+For how to deeply parse the data, see [Performance Data Files](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/latest/devaids/Profiling/docs/zh/user_guide/profile_data_file_references.md).

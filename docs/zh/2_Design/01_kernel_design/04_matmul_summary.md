@@ -380,7 +380,7 @@ for ... {
 
 当数据读取为主流水时，优化读取带宽能带来性能收益，以fp16的A矩阵为例，目前有以下几种低带宽场景：
 
-- **Stride非512Byte对齐导致的低带宽**。搬运参数srcDValue（详见[昇腾文档：DataCopy-随路转换ND2NZ搬运](https://www.hiascend.com/document/detail/zh/canncommercial/83RC1/API/ascendcopapi/atlasascendc_api_07_00127.html)）非512Byte对齐时，带宽会有明显下降。
+- **Stride非512Byte对齐导致的低带宽**。搬运参数srcDValue（详见[昇腾文档：DataCopy-随路转换ND2NZ搬运](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/latest/API/ascendcopapi/docs/zh/api/SIMD-API/basic_api/cube_compute_ISASI/cube_compute_load/DataCopy_GMToL1_ND2NZ.md)）非512Byte对齐时，带宽会有明显下降。
 - **搬运指令限制导致的低带宽**。ND2NZ的搬运指令，参数srcDValue是uint16类型，最大值65535。当K>65535时，只能通过取ndNum = 1，在m方向循环调用搬运指令，降低了读取带宽。
 - 相比ND2ND不转换排布，**ND2NZ随路转换有带宽损失**。
 
@@ -460,7 +460,7 @@ firstTileIdx = startTileIdx % kTileCount;
 
 <img src="https://raw.gitcode.com/user-images/assets/7801479/e3a90904-677a-4973-b3b5-93e93ea072e2/6smallM.png" width="80%">
 
-矩阵计算中，当$M$很小时（例如$M$ < 8），采用随路ND2NZ的DataCopy（详见[昇腾文档：DataCopy-随路转换ND2NZ搬运](https://www.hiascend.com/document/detail/zh/canncommercial/83RC1/API/ascendcopapi/atlasascendc_api_07_00127.html)）效率不高。
+矩阵计算中，当$M$很小时（例如$M$ < 8），采用随路ND2NZ的DataCopy（详见[昇腾文档：DataCopy-随路转换ND2NZ搬运](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/latest/API/ascendcopapi/docs/zh/api/SIMD-API/basic_api/cube_compute_ISASI/cube_compute_load/DataCopy_GMToL1_ND2NZ.md)）效率不高。
 
 ### 优化方案
 

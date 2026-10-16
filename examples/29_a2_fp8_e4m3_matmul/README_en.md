@@ -73,7 +73,7 @@ Compare success.
 
 1. Compared with FP16 Matmul, this sample has obvious GPU memory benefits for large-shape cases.
 
-2. For small-shape scenarios, you can refer to [catlass_optimize_guidance](../../docs/en/1_Practice/11_matmul_optimization.md#tileshape adjustment) to perform tiling optimization on the sample.
+2. For small-shape scenarios, you can refer to [catlass_optimize_guidance](../../docs/en/1_Practice/11_matmul_optimization.md#tileshape-adjustment) to perform tiling optimization on the sample.
 
 3. The input of `gen_data.py` supports trans_a and trans_b, but the 29_a2_fp8_e4m3_matmul executable file does not support them. It is only an example where both trans_a and trans_b are 0.
 
