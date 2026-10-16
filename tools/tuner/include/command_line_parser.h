@@ -16,6 +16,7 @@
 #include <map>
 #include <unordered_set>
 #include <algorithm>
+#include <cstdint>
 
 namespace Catlass {
 

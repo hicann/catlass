@@ -240,13 +240,17 @@ void Profiler::Stop()
         return;
     }
 
-    int drvRes = prof_stop(deviceId_, CHANNEL_STARS_SOC_LOG_BUFFER);
-    if (drvRes != 0) {
-        LOGE("Channel %u prof_stop failed, %d", CHANNEL_STARS_SOC_LOG_BUFFER, drvRes);
-    }
+    // 先停止读线程，再关闭 profiling 通道。否则读线程会在 prof_stop 执行期间
+    // 继续对同一通道发起 prof_channel_poll/read，与驱动的停通道操作并发，
+    // 可能导致 prof_stop 阻塞不返回。
     running_ = false;
     if (readThread_.joinable()) {
         readThread_.join();
+    }
+
+    int drvRes = prof_stop(deviceId_, CHANNEL_STARS_SOC_LOG_BUFFER);
+    if (drvRes != 0) {
+        LOGE("Channel %u prof_stop failed, %d", CHANNEL_STARS_SOC_LOG_BUFFER, drvRes);
     }
 }
 

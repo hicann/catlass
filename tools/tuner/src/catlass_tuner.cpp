@@ -53,11 +53,6 @@ bool CatlassTuner::Init()
         return false;
     }
 
-    if (!profileHandler_.Init()) {
-        LOGE("Start profile channel failed, will not run operators");
-        return false;
-    }
-
     if (!DeviceMemoryManager::Instance().InitCacheClear()) {
         LOGW("Init resource for clear l2cache failed, won't clear l2cache before each kernel");
         return false;
@@ -106,6 +101,13 @@ void CatlassTuner::Run()
         LOGE("Initialize operator manifest failed");
         return;
     } else if (!InitOperators(pool)) {
+        return;
+    }
+
+    // 算子配置构建成功后再启动 profiling，避免非法输入等提前返回时
+    // 关闭 profiling 通道（prof_stop）在部分驱动/固件状态下阻塞导致进程卡死。
+    if (!profileHandler_.Init()) {
+        LOGE("Start profile channel failed, will not run operators");
         return;
     }
 
