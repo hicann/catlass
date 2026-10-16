@@ -102,7 +102,7 @@ __all__ = [
 ]
 
 _catlass_loaded: bool = False
-
+_log_level = int(os.getenv("CATLASS_JIT_LOG_LEVEL", "0"))
 
 def enable_mssanitizer():
     """Enable Ascend memory sanitizer for subsequent JIT compilations."""
@@ -149,7 +149,8 @@ def _load_so_files(lib_dir):
     for lib_file in sorted(os.listdir(lib_dir)):
         if lib_file.endswith(".so"):
             lib_path = os.path.join(lib_dir, lib_file)
-            print(f"Loading library: {lib_path}")
+            if _log_level:
+                print(f"Loading library: {lib_path}")
             _dl_mode = getattr(os, "RTLD_NOW", 0x2)
             if lib_file.endswith("_ms.so"):
                 # Sanitizer builds export the same kernel symbols; keep them local
@@ -190,29 +191,31 @@ def _load_kernel_libs():
     """Load JIT and architecture-specific kernel libraries once per process."""
     global _catlass_loaded
     if not _catlass_loaded:
-        print("Loading kernel libraries...")
         base = _find_pkg_dir()
 
         os.environ["CATLASS_JIT_PKG_DIR"] = base
 
         # 1. JIT 编译器 & JIT kernel 入口 — 先加载编译器，再加载统一入口库
         jit_dir = os.path.join(base, "lib", "jit")
-        if os.path.exists(jit_dir):
+        if os.path.exists(jit_dir):  
             mode = getattr(os, "RTLD_NOW", 0x2) | getattr(os, "RTLD_GLOBAL", 0x100)
             compiler = os.path.join(jit_dir, "libcatlass_kernel_jit_compiler.so")
             if os.path.exists(compiler):
-                print(f"Loading JIT compiler: {compiler}")
+                if _log_level:
+                    print(f"Loading JIT compiler: {compiler}")
                 ctypes.CDLL(compiler, mode=mode)
             jit_lib = os.path.join(jit_dir, "libcatlass_kernel_jit.so")
             if os.path.exists(jit_lib):
-                print(f"Loading JIT library: {jit_lib}")
+                if _log_level:
+                    print(f"Loading JIT library: {jit_lib}")
                 ctypes.CDLL(jit_lib, mode=mode)
 
         # 2. 架构相关内核
         arch = get_npu_arch()
         arch_dir = os.path.join(base, "lib", str(arch))
         if os.path.exists(arch_dir):
-            print(f"Loading architecture-specific kernels from: {arch_dir}")
+            if _log_level: 
+                print(f"Loading architecture-specific kernels from: {arch_dir}")
             _load_so_files(arch_dir)
 
         if not os.path.exists(jit_dir) and not os.path.exists(arch_dir):
@@ -225,7 +228,8 @@ def _load_main_lib():
     """Load the PyTorch extension that registers ``torch.ops.catlass`` ops."""
     base = _find_pkg_dir()
     lib_path = os.path.join(base, "lib", "libcatlass_torch.so")
-    print(f"Loading main library: {lib_path}")
+    if _log_level:
+        print(f"Loading main library: {lib_path}")
     torch.ops.load_library(lib_path)
 
 
