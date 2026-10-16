@@ -12,6 +12,7 @@
 
 import argparse
 import os
+import shutil
 from typing import Dict, Optional, Tuple
 
 import torch
@@ -300,8 +301,9 @@ if __name__ == "__main__":
 
     data = generate_svd_quant_matmul_data(args)
     save_path = f"{_SCRIPT_DIR}/data/"
-    os.system(f"rm -rf {save_path}")
-    os.system(f"mkdir -p {save_path}/input {save_path}/golden")
+    shutil.rmtree(save_path, ignore_errors=True)
+    os.makedirs(f"{save_path}/input", exist_ok=True)
+    os.makedirs(f"{save_path}/golden", exist_ok=True)
 
     dtype16 = data["x"].dtype
     torch.tensor(data["x"].untyped_storage(), dtype=dtype16).numpy().tofile(f"{save_path}/input/x.bin")
