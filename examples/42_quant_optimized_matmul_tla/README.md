@@ -27,6 +27,11 @@
 
 ## 使用范围说明
 
+支持范围：
+- 当 A 为 `RowMajor` 且 B 为 `RowMajor` 时，需满足 `N < 65536`。
+- 当 A 为 `ColumnMajor` 且 B 为 `RowMajor` 时，需满足 `M < 65536`、`N < 65536`。
+- 当 A 为 `ColumnMajor` 且 B 为 `ColumnMajor` 时，需满足 `M < 65536`。
+
 推荐范围：
 - `M ≥ 256、N ≥ 256、256 < K ≤ 3072`
 
