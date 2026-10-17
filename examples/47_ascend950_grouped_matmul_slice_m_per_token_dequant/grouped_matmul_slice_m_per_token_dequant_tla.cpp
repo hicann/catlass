@@ -23,7 +23,7 @@
 #include "catlass/epilogue/block/block_epilogue.hpp"
 #include "catlass/epilogue/dispatch_policy.hpp"
 #include "catlass/gemm/block/block_mmad.hpp"
-#include "catlass/gemm/block/block_scheduler_aswt.hpp"
+#include "catlass/gemm/block/block_swizzle_grouped_aswt.hpp"
 #include "catlass/gemm/device/device_gemm.hpp"
 #include "catlass/gemm/dispatch_policy.hpp"
 #include "catlass/gemm/gemm_type.hpp"
@@ -152,8 +152,7 @@ static void Run(Options const& options)
     using BlockEpilogue = Epilogue::Block::BlockEpilogue<
         DispatchPolicyDequant, EpilogueTileShape, ElementC, ElementScale, ElementPerToken, ElementD,
         TilePerTokenDequant, TileCopyEpilogue>;
-    constexpr bool isGmm = true;
-    using BlockScheduler = typename Gemm::Block::BlockSchedulerAswt<L1TileShape, L0TileShape, isGmm>;
+    using BlockScheduler = typename Gemm::Block::GemmGroupedAswtTailSplitSwizzle<4, false, false>;
     // kernel level
     using MatmulKernel =
         Gemm::Kernel::GroupedMatmulSliceMPerTokenTla<BlockMmadTla, BlockEpilogue, BlockScheduler, int64_t>;

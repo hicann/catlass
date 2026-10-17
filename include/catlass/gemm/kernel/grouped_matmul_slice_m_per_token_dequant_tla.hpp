@@ -147,8 +147,6 @@ public:
         gmDequant.SetGlobalBuffer(params.ptrDequant);
 
 #ifdef __DAV_CUBE__
-        int64_t curBlockIdx = AscendC::GetBlockIdx();
-
         auto layoutA = tla::MakeLayout<ElementA, LayoutA>(m, k);
         auto gmATensor = tla::MakeTensor(gmA, layoutA, Arch::PositionGM{});
 
@@ -161,7 +159,6 @@ public:
 
 #ifdef __DAV_VEC__
         int64_t subBlockIdx = AscendC::GetSubBlockIdx();
-        int64_t curBlockIdx = AscendC::GetBlockIdx() >> 1;
 
         auto layoutScale = tla::MakeLayout<ElementScale>(n * params.problemCount);
         auto gmScaleVector = tla::MakeTensor(gmScale, layoutScale, Arch::PositionGM{});
@@ -184,43 +181,43 @@ public:
         int64_t totalN = 0;
         int64_t totalK = 0;
         uint32_t ubListId = 0;
-        int64_t blockNum = AscendC::GetBlockNum();
-        BlockScheduler blockScheduler(curBlockIdx, blockNum);
+        BlockScheduler blockScheduler(L1_TILE_M, L1_TILE_N);
         for (uint32_t groupIdx = 0; groupIdx < params.problemCount; ++groupIdx) {
             uint32_t currentM = (groupIdx == 0) ? groupList.GetValue(groupIdx) :
                                                   (groupList.GetValue(groupIdx) - groupList.GetValue(groupIdx - 1));
+            // 空组仍占用一个 B / scale 组槽位：跳过其 tile，仅累加组偏移
+            if (currentM == 0) {
+                totalN += n;
+                totalK += k;
+                continue;
+            }
             GemmCoord inGroupProblemShape{currentM, n, k};
-            blockScheduler.UpdateGroupParams(inGroupProblemShape);
-            if (groupIdx == params.problemCount - 1 && (blockScheduler.GetEndBlockIdx() + 1) <= blockNum / 2) {
+            blockScheduler.UpdateNextProblem(inGroupProblemShape);
+            bool isLastGroup = (groupIdx == params.problemCount - 1);
+            if (isLastGroup && blockScheduler.NeedTailSplit()) {
                 blockScheduler.UpdateTailTile();
             }
-            uint32_t coreLoops = blockScheduler.round_;
-            for (uint32_t loopIdx = 0; loopIdx < coreLoops; ++loopIdx) {
-                bool isLastGroupRound = groupIdx == params.problemCount - 1 && loopIdx == blockScheduler.round_ - 1 &&
-                                        curBlockIdx <= blockScheduler.GetEndBlockIdx();
-                blockScheduler.UpdateMNTileIdx(loopIdx, isLastGroupRound);
-                blockScheduler.UpdateBlockShape(loopIdx, isLastGroupRound);
-                auto blockShape = blockScheduler.GetBlockShape();
-                auto blkElemCoord = blockScheduler.GetBlockCoordByElement();
-
-                uint32_t mCoord = blkElemCoord.m();
-                uint32_t blockM = blockShape.m();
-                uint32_t nCoord = blkElemCoord.n();
-                uint32_t blockN = blockShape.n();
+            GemmCoord blockCoord;
+            while (blockScheduler.GetTileIdx(blockCoord)) {
+                auto blockShape = blockScheduler.GetBlockShape(blockCoord);
+                if (blockShape.m == 0 || blockShape.n == 0) {
+                    continue;
+                }
+                uint32_t mCoord = blockCoord.m() * L1_TILE_M + blockShape.mOffset;
+                uint32_t nCoord = blockCoord.n() * L1_TILE_N + blockShape.nOffset;
+                uint32_t blockM = blockShape.m;
+                uint32_t blockN = blockShape.n;
+                GemmCoord blockGemmShape{blockM, blockN, k};
 #ifdef __DAV_CUBE__
-                uint32_t kCoord = blkElemCoord.k();
-                uint32_t blockK = blockShape.k();
-                auto gmATile =
-                    GetTile(gmATensor, tla::MakeCoord(totalM + mCoord, kCoord), tla::MakeShape(blockM, blockK));
-                auto gmBTile =
-                    GetTile(gmBTensor, tla::MakeCoord(totalK + kCoord, nCoord), tla::MakeShape(blockK, blockN));
+                auto gmATile = GetTile(gmATensor, tla::MakeCoord(totalM + mCoord, 0), tla::MakeShape(blockM, k));
+                auto gmBTile = GetTile(gmBTensor, tla::MakeCoord(totalK, nCoord), tla::MakeShape(k, blockN));
                 auto layoutGmm =
                     tla::MakeLayout(tla::MakeShape(blockM, blockN), tla::MakeStride(TileShape::COLUMN, tla::Int<1>{}));
                 auto ubGmmTensor = tla::MakeTensor(ubGmmResList[ubListId], layoutGmm, Arch::PositionUB{});
 
                 AscendC::CrossCoreWaitFlag<AIC_SYNC_AIV_MODE_4, PIPE_FIX>(AIV_SYNC_AIC_FLAG + ubListId);
                 AscendC::CrossCoreWaitFlag<AIC_SYNC_AIV_MODE_4, PIPE_FIX>(AIV_SYNC_AIC_FLAG + FLAG_ID_MAX + ubListId);
-                blockMmadTla(gmATile, gmBTile, ubGmmTensor, blockShape);
+                blockMmadTla(gmATile, gmBTile, ubGmmTensor, blockGemmShape);
                 AscendC::CrossCoreSetFlag<AIC_SYNC_AIV_MODE_4, PIPE_FIX>(AIC_SYNC_AIV_FLAG + ubListId);
                 AscendC::CrossCoreSetFlag<AIC_SYNC_AIV_MODE_4, PIPE_FIX>(AIC_SYNC_AIV_FLAG + FLAG_ID_MAX + ubListId);
 #endif
