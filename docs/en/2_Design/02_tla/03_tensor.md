@@ -307,13 +307,19 @@ The logical results of these two code snippets are the same, but the second meth
 
 `MakeTensorLike` is used to create a new tensor whose logical size is the same as that of the `likeTensor`. The most common use case is: starting from an existing tile view, construct a corresponding Tensor in another level of memory, automatically inheriting its `originShape()`.
 
-When layoutBase is not specified, the behavior is to decide the layout based on LayoutTagDst, infer ElementDst from LikeTensor::Element, extract the size from likeTensor's originShape, and call MakeLayout<ElementDst, LayoutTagDst>(originShape()) to construct the target layout (which may round up the shape at fractal granularity due to fractal layout legality requirements).
+Without `layoutBase`, `LayoutTagDst` determines the destination layout, and `ElementDst` is either inferred
+from `LikeTensor::Element` or explicitly specified. Logical dimensions are taken from `likeTensor.originShape()`;
+fractal layouts may round up `shape` to the required block sizes.
 
 If layoutBase is specified, use MakeLayout(layoutBase.shape(), layoutBase.stride(), likeTensor.originShape()) to construct the target layout.
 
 Again, it must be emphasized: `MakeTensorLike` constructs a new view and does not perform data movement. It simply binds the user-provided `builtinTensor` as a new TLA `Tensor` and makes this new view reuse the logical size semantics of `likeTensor`.
 
-Currently, `MakeTensorLike` supports only `likeTensor.rank <= 2`.
+`MakeTensorLike` supports reference tensors of rank 1 or 2. Without `layoutBase`, a rank-1 input requires
+`LayoutTagDst` to be `Catlass::layout::VectorLayout`. It uses `MakeLayout(len)` to construct a unit-stride
+layout, taking `len` from the reference tensor's `originShape()`. Rank-2 inputs use the two-argument
+constructor with the element type and layout tag. With `layoutBase`, the destination retains its
+`shape` and `stride` while inheriting `originShape` from the reference tensor.
 
 The interface serves three typical scenarios.
 

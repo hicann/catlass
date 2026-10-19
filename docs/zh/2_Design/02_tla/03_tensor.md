@@ -307,13 +307,17 @@ for (uint32_t kTile = 0; kTile < kTiles; ++kTile) {
 
 `MakeTensorLike` 用于创建一个“逻辑尺寸与 `likeTensor` 一致”的新 Tensor。最常见的用途是：从一个已有 tile 视图出发，在另一层内存中构造对应 Tensor，并自动继承其 `originShape()`。
 
-在未指定layoutBase时，行为为根据 LayoutTagDst 决定布局，从 LikeTensor::Element 推断 ElementDst，从 likeTensor 的 originShape 提取尺寸。调用MakeLayout<ElementDst, LayoutTagDst>(originShape())构造目标 layout（可能会因分形布局合法要求对shape进行以分形为粒度的向上取整）。
+未指定 `layoutBase` 时，根据 `LayoutTagDst` 决定布局，`ElementDst` 可从 `LikeTensor::Element` 推断或显式指定。
+从 `likeTensor.originShape()` 提取逻辑尺寸，构造目标 layout；分形布局的 `shape` 可能按分形粒度向上取整。
 
 指定layoutBase时，使用MakeLayout(layoutBase.shape(), layoutBase.stride(), likeTensor.originShape())构造目标layout。
 
 这里仍然需要强调：`MakeTensorLike` 构造的是新视图，不执行数据搬运。它只是把用户传入的 `builtinTensor` 绑定成一个新的 TLA `Tensor`，并让这个新视图复用 `likeTensor` 的逻辑尺寸语义。
 
-当前 `MakeTensorLike` 仅支持 `likeTensor.rank <= 2`。
+当前 `MakeTensorLike` 支持 rank 为 1 或 2 的参考 Tensor。未指定 `layoutBase` 时，一维输入要求
+`LayoutTagDst` 为 `Catlass::layout::VectorLayout`，通过 `MakeLayout(len)` 构造步长为 1 的布局，
+其中 `len` 来自参考 Tensor 的 `originShape()`；二维输入使用带元素类型和布局标签的双参数构造接口。
+指定 `layoutBase` 时，目标 `shape` 和 `stride` 来自该布局，`originShape` 仍继承自参考 Tensor。
 
 接口分为三类典型场景。
 

@@ -94,7 +94,9 @@ bash scripts/build.sh --tests catlass_unittest -DENABLE_COVERAGE=ON
 cd build && make coverage_collect
 ```
 
-上述过程也可以直接运行测试脚本`tests/run_unittest.sh`完成，预期测试例通过且全覆盖。
+上述过程也可以直接运行测试脚本`tests/run_unittest.sh`完成，覆盖率以当前代码实际生成的报告为准。
+
+以下为历史输出示例，其中包含已迁移的 TLA 头文件路径，不代表当前版本的路径或覆盖率。
 
 ```plain
 Overall coverage rate:

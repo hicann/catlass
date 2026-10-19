@@ -160,10 +160,10 @@ public:
 #ifdef __DAV_VEC__
         int64_t subBlockIdx = AscendC::GetSubBlockIdx();
 
-        auto layoutScale = tla::MakeLayout<ElementScale>(n * params.problemCount);
+        auto layoutScale = tla::MakeLayout(n * params.problemCount);
         auto gmScaleVector = tla::MakeTensor(gmScale, layoutScale, Arch::PositionGM{});
 
-        auto layoutPerToken = tla::MakeLayout<ElementPerToken>(m);
+        auto layoutPerToken = tla::MakeLayout(m);
         auto gmPerTokenVector = tla::MakeTensor(gmPerToken, layoutPerToken, Arch::PositionGM{});
 
         auto layoutDequant = tla::MakeLayout<ElementDequant, LayoutDequant>(m, n);

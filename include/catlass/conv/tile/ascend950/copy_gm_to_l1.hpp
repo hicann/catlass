@@ -40,8 +40,8 @@ struct CopyGmToL1ATla {
         uint32_t dstStrideCin1 = tla::get<1>(dstTensor.stride()); // Hi * Wi * ELE_NUM_PER_C0
         uint32_t wiOrg = tla::get<2>(srcTensor.stride()) / ELE_NUM_PER_C0;
 
-        auto dstOffset = dstTensor.layout()(dstTensor.coord());
-        auto srcOffset = srcTensor.layout()(srcTensor.coord());
+        int64_t dstOffset = dstTensor.layout()(dstTensor.coord());
+        int64_t srcOffset = srcTensor.layout()(srcTensor.coord());
 
         for (int cin1Idx = 0; cin1Idx < cin1Actual; cin1Idx++) {
             AscendC::DataCopy(

@@ -14,7 +14,7 @@
 #include "catlass/catlass.hpp"
 #include "catlass/epilogue/matmul_permute_policy.hpp"
 #include "basic_api/kernel_operator_intf.h"
-#include "tla/int_tuple.hpp"
+#include "tla/tuple.hpp"
 
 namespace Catlass::Epilogue::Tile {
 

@@ -82,8 +82,8 @@ struct CopyL1ToL0BTla {
         loadDataParams.ifTranspose = false;
         loadDataParams.addrMode = 0;
 
-        auto dstOffset = dstTensor.layout()(dstTensor.coord());
-        auto srcOffset = srcTensor.layout()(srcTensor.coord());
+        int64_t dstOffset = dstTensor.layout()(dstTensor.coord());
+        int64_t srcOffset = srcTensor.layout()(srcTensor.coord());
 
         for (uint32_t i = 0; i < tla::get<0, 1>(dstTensor.shape()); i++) {
             AscendC::LoadData(dstTensor.data()[dstOffset], srcTensor.data()[srcOffset], loadDataParams);

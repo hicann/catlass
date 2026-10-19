@@ -12,6 +12,7 @@
 #define CATLASS_NUMERIC_SIZE_HPP
 
 #include "catlass/catlass.hpp"
+#include "tla/integral/integral_constant.hpp"
 
 #include <cstddef>
 #include <type_traits>
@@ -60,11 +61,47 @@ CATLASS_HOST_DEVICE constexpr ReturnType BitsToBytes(T bits)
     return (static_cast<ReturnType>(bits) + static_cast<ReturnType>(7)) / static_cast<ReturnType>(8);
 }
 
+template <auto t>
+CATLASS_HOST_DEVICE constexpr auto BitsToBytes(tla::Int<t>)
+{
+    return tla::Int<BitsToBytes(t)>{};
+}
+
 /// Returns the number of bits required to hold a specified number of bytes
 template <typename ReturnType = size_t, typename T>
 CATLASS_HOST_DEVICE constexpr ReturnType BytesToBits(T bytes)
 {
     return static_cast<ReturnType>(bytes) * static_cast<ReturnType>(8);
+}
+
+template <auto t>
+CATLASS_HOST_DEVICE constexpr auto BytesToBits(tla::Int<t>)
+{
+    return tla::Int<BytesToBits(t)>{};
+}
+
+template <typename Element, typename ReturnType = size_t, typename T>
+CATLASS_HOST_DEVICE constexpr ReturnType BytesToElements(T bytes)
+{
+    return BytesToBits<ReturnType>(bytes) / ReturnType(SizeOfBits<Element>::value);
+}
+
+template <typename Element, auto t>
+CATLASS_HOST_DEVICE constexpr auto BytesToElements(tla::Int<t>)
+{
+    return tla::Int<BytesToElements<Element>(t)>{};
+}
+
+template <typename Element, typename ReturnType = size_t, typename T>
+CATLASS_HOST_DEVICE constexpr ReturnType ElementsToBytes(T elements)
+{
+    return BitsToBytes<ReturnType>(elements * SizeOfBits<Element>::value);
+}
+
+template <typename Element, auto t>
+CATLASS_HOST_DEVICE constexpr auto ElementsToBytes(tla::Int<t>)
+{
+    return tla::Int<ElementsToBytes<Element>(t)>{};
 }
 
 } // namespace Catlass

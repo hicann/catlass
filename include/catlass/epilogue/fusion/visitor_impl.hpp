@@ -15,7 +15,7 @@
 #include "catlass/arch/resource.hpp"
 #include "catlass/epilogue/fusion/visitor_impl_base.hpp"
 #include "catlass/layout/layout.hpp"
-#include "tla/int_tuple.hpp"
+#include "tla/tuple/tuple_math.hpp"
 
 namespace Catlass::Epilogue::Fusion {
 

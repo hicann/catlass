@@ -42,11 +42,11 @@ TLA uses `originShape` to express the logically valid range. Therefore, users ty
 
 ### Tuple
 
-TLA is built on [`tla::tuple`](../../../../include/tla/tuple.hpp). Its purpose is similar to `std::tuple`. Both represent a fixed-length sequence of elements. The difference is that TLA provides customizations for template metaprogramming and high-performance scenarios.
+TLA is built on [`tla::tuple`](../../../../include/tla/tuple/tuple.hpp). Its purpose is similar to `std::tuple`. Both represent a fixed-length sequence of elements. The difference is that TLA provides customizations for template metaprogramming and high-performance scenarios.
 
 ### IntTuple
 
-[`IntTuple`](../../../../include/tla/int_tuple.hpp) is one of the most commonly used basic concepts in TLA. It can be:
+[`IntTuple`](../../../../include/tla/tuple/tuple_math.hpp) is one of the most commonly used basic concepts in TLA. It can be:
 
 - An integer, such as `int{2}` or `size_t{16}`
 - A compile-time integer, such as `Int<3>{}` or its alias `_3`

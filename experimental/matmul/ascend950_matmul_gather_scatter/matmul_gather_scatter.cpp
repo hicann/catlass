@@ -29,7 +29,6 @@
 #include "catlass/gemm/tile/matmul_gather_scatter_tile_copy.h"
 #include "catlass/layout/layout.hpp"
 #include "tla/layout.hpp"
-#include "tla/tuple.hpp"
 
 #include "golden.hpp"
 #include "helper.hpp"
@@ -56,10 +55,10 @@ constexpr uint32_t L1B_STAGES = 2;
 
 // Keep one FullLoad profile per Gather mode. The runtime branch selects only
 // AIV Gather versus AIC Gather; arbitrary shapes use the SIMT kernel.
-using L1TileM128N256 = tla::tuple<tla::Int<128>, tla::Int<256>, tla::Int<128>>;
-using L0TileM128N256 = tla::tuple<tla::Int<128>, tla::Int<256>, tla::Int<64>>;
-using L1TileM96N256 = tla::tuple<tla::Int<96>, tla::Int<256>, tla::Int<128>>;
-using L0TileM96N256 = tla::tuple<tla::Int<96>, tla::Int<256>, tla::Int<64>>;
+using L1TileM128N256 = tla::Shape<tla::Int<128>, tla::Int<256>, tla::Int<128>>;
+using L0TileM128N256 = tla::Shape<tla::Int<128>, tla::Int<256>, tla::Int<64>>;
+using L1TileM96N256 = tla::Shape<tla::Int<96>, tla::Int<256>, tla::Int<128>>;
+using L0TileM96N256 = tla::Shape<tla::Int<96>, tla::Int<256>, tla::Int<64>>;
 
 struct AivGatherKernelMode {
     static constexpr bool AIV_GATHER = true;

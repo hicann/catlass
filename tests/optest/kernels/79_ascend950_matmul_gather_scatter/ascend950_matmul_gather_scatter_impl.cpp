@@ -26,7 +26,6 @@
 #include "common/kernel_runner.h"
 #include "common/tile_shape_scaler_tla.h"
 #include "tla/layout.hpp"
-#include "tla/tuple.hpp"
 
 using namespace Catlass;
 
@@ -46,10 +45,10 @@ constexpr uint32_t OUTPUT_UB_STAGES = 1;
 constexpr uint32_t L1B_STAGES = 2;
 
 // Match the experimental example: one FullLoad profile for each Gather mode.
-using BaseL1TileM128N256 = tla::tuple<tla::Int<128>, tla::Int<256>, tla::Int<128>>;
-using BaseL0TileM128N256 = tla::tuple<tla::Int<128>, tla::Int<256>, tla::Int<64>>;
-using BaseL1TileM96N256 = tla::tuple<tla::Int<96>, tla::Int<256>, tla::Int<128>>;
-using BaseL0TileM96N256 = tla::tuple<tla::Int<96>, tla::Int<256>, tla::Int<64>>;
+using BaseL1TileM128N256 = tla::Shape<tla::Int<128>, tla::Int<256>, tla::Int<128>>;
+using BaseL0TileM128N256 = tla::Shape<tla::Int<128>, tla::Int<256>, tla::Int<64>>;
+using BaseL1TileM96N256 = tla::Shape<tla::Int<96>, tla::Int<256>, tla::Int<128>>;
+using BaseL0TileM96N256 = tla::Shape<tla::Int<96>, tla::Int<256>, tla::Int<64>>;
 
 using L1TileM128N256 = typename TileShapeScalerTLA<half, half, BaseL1TileM128N256>::type;
 using L0TileM128N256 = typename TileShapeScalerTLA<half, half, BaseL0TileM128N256>::type;

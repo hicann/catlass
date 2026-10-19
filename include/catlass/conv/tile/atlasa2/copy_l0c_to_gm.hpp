@@ -142,9 +142,9 @@ struct CopyL0CToGmTla<Catlass::Arch::AtlasA2, TensorSrc_, TensorDst_, ScaleGranu
         intriParams.reluEn = reluEn;
         intriParams.unitFlag = unitFlag;
 
-        auto dstOffset = dstTensor.layout()(dstTensor.coord());
-        auto srcOffset = srcTensor.layout()(srcTensor.coord());
-        auto srcOffsetInner = woActual * ELE_NUM_PER_C0;
+        int64_t dstOffset = dstTensor.layout()(dstTensor.coord());
+        int64_t srcOffset = srcTensor.layout()(srcTensor.coord());
+        int64_t srcOffsetInner = woActual * ELE_NUM_PER_C0;
 
         // Call AscendC Fixpipe
         for (int hoIdx = 0; hoIdx < hoActual; hoIdx++) {

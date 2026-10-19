@@ -698,10 +698,10 @@ public:
         uint32_t m = tla::get<0>(ubGmmRes.shape());
         uint32_t n = tla::get<1>(ubGmmRes.shape());
 
-        auto scaleLayout = tla::MakeLayout<ElementScale>(n);
+        auto scaleLayout = tla::MakeLayout(n);
         auto ubScale = tla::MakeTensor(ubScaleList[ubListId], scaleLayout, Arch::PositionUB{});
 
-        auto perTokenLayout = tla::MakeLayout<ElementPerToken>(m);
+        auto perTokenLayout = tla::MakeLayout(m);
         auto ubPerToken = tla::MakeTensor(ubPerTokenList[ubListId], perTokenLayout, Arch::PositionUB{});
 
         auto ubDequantOut = tla::MakeTensor(

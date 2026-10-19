@@ -42,11 +42,11 @@ TLA 使用 `originShape` 表达“逻辑上实际有效的范围”。因此，�
 
 ### Tuple
 
-TLA 以 [`tla::tuple`](../../../../include/tla/tuple.hpp) 为基础。它与 `std::tuple` 的用途相似，都是表达定长元素序列；不同之处在于，TLA 对模板元编程和高性能场景做了定制。
+TLA 以 [`tla::tuple`](../../../../include/tla/tuple/tuple.hpp) 为基础。它与 `std::tuple` 的用途相似，都是表达定长元素序列；不同之处在于，TLA 对模板元编程和高性能场景做了定制。
 
 ### IntTuple
 
-[`IntTuple`](../../../../include/tla/int_tuple.hpp) 是 TLA 中最常用的基础概念之一。它可以是：
+[`IntTuple`](../../../../include/tla/tuple/tuple_math.hpp) 是 TLA 中最常用的基础概念之一。它可以是：
 
 - 一个整数，例如 `int{2}`、`size_t{16}`。
 - 一个编译期整数，例如 `Int<3>{}` 或别名 `_3`。

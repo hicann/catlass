@@ -240,7 +240,7 @@ def test_32_w4a8_matmul(build_env):
     # example args: m, n, k, device_id
     case_cpp = [str(i) for i in [860, 5712, 4535, 0]]
     case_cpp[-1] = DEVICE_ID
-    run_case(build_env, "32_w4a8_matmul", case_cpp)
+    run_case(build_env, "32_w4a8_matmul", case_cpp, cwd=CMAKE_BINARY_PATH)
 
 
 @only_on_2201

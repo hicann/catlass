@@ -12,9 +12,12 @@
 #define TLA_TENSOR_HPP
 
 #include "catlass/arch/arch.hpp"
-#include "tla/layout.hpp"                    // tla::Shape
-#include "tla/numeric/integral_constant.hpp" // tla::is_integral
-#include "tla/int_tuple.hpp"
+#include "tla/layout.hpp"
+#include "tla/integral/integral_constant.hpp"
+#include "tla/integral/integral_sequence.hpp"
+#include "tla/integral/integral_math.hpp"
+#include "tla/tuple/tuple_math.hpp"
+#include "tla/tuple/tuple_algorithms.hpp"
 
 namespace tla {
 
@@ -39,7 +42,7 @@ struct coord_elem_is_underscore : tla::is_underscore<typename coord_elem_type<Co
 
 // Count underscores.
 template <class Coord, int I, class Enable = void>
-struct underscore_count_from : tla::integral_constant<int, 0> {};
+struct underscore_count_from : tla::C<0> {};
 template <class Coord, int I>
 struct underscore_count_from<Coord, I, std::enable_if_t<(I >= 0)>> {
     static constexpr int value =
@@ -47,8 +50,7 @@ struct underscore_count_from<Coord, I, std::enable_if_t<(I >= 0)>> {
 };
 template <class Coord>
 struct underscore_count
-    : tla::integral_constant<
-          int, underscore_count_from<Coord, (int)tla::tuple_size<tla::remove_cvref_t<Coord>>::value - 1>::value> {};
+    : tla::C<underscore_count_from<Coord, (int)tla::tuple_size<tla::remove_cvref_t<Coord>>::value - 1>::value> {};
 
 // Build index sequences for underscore dims (stable 0..R-1 recursion).
 template <class Coord, int I, int R, int... Is>
@@ -101,6 +103,9 @@ CATLASS_HOST_DEVICE constexpr auto select_layout(Layout const& layout, seq<Is...
     return tla::MakeLayout(shape_new, stride_new, origin_new);
 }
 
+template <size_t N>
+using MakeZeroTuple = decltype(tla::tuple_repeat<N>(tla::Int<0>{}));
+
 } // namespace detail
 
 //
@@ -134,7 +139,7 @@ CATLASS_HOST_DEVICE constexpr auto slice_and_offset(
 
     // Compute base offset using zeros for underscores
     auto coord0 = detail::replace_underscore_with_zero(coord_arg);
-    auto full0 = Add(base_coord, coord0);
+    auto full0 = base_coord + coord0;
     auto offset = (int64_t)layout(full0);
 
     // Determine output dims (underscored dims) and build projected layout.
@@ -171,7 +176,7 @@ CATLASS_DEVICE constexpr auto GetTileImpl(TensorT const& tensor, CoordT const& c
     static_assert(is_tuple<ShapeT>::value && depth_v<ShapeT> == 1 && rank_v<ShapeT> == R, "Shape rank mismatch.");
 
     auto layoutNew = GetTileLayout(tensor.layout(), shape, coord);
-    auto coordNew = Add(tensor.coord(), coord);
+    auto coordNew = tensor.coord() + coord;
     return MakeTensor(tensor.data(), layoutNew, coordNew, Catlass::Arch::PositionType<TensorT::position>{});
 }
 
@@ -186,7 +191,7 @@ CATLASS_DEVICE constexpr auto TileViewImpl(
 
     auto elementOffset = HadamardU32(tileCoord, tileShape, tuple_seq<TileCoord>{});
     auto layoutNew = GetTileLayout(tensor.layout(), tileShape, elementOffset);
-    auto coordNew = Add(tensor.coord(), elementOffset);
+    auto coordNew = tensor.coord() + elementOffset;
     return MakeTensor(tensor.data(), layoutNew, coordNew, Catlass::Arch::PositionType<TensorT::position>{});
 }
 
@@ -287,13 +292,13 @@ struct Tensor {
                     data_new, layout_proj, CoordZ{});
             } else {
                 // No underscore: point view at coord() + coord_arg
-                auto full = Add(coord(), coord_arg);
+                auto full = coord() + coord_arg;
                 return data()[layout()(full)];
             }
         } else {
             // Scalar coordinate convenience (rank-1): treat it as a 1D coord tuple.
             static_assert(Layout::rank == 1, "Tensor::operator()(scalar) is only supported for rank-1 tensors.");
-            auto full = Add(coord(), MakeCoord(coord_arg));
+            auto full = coord() + MakeCoord(coord_arg);
             return data()[layout()(full)];
         }
     }
@@ -392,9 +397,12 @@ CATLASS_HOST_DEVICE constexpr auto MakeTensorLike(
     static_assert(
         std::is_same_v<typename BuiltinTensor::PrimType, ElementDst>,
         "BuiltinTensor element type must match specified ElementDst type");
-    // 根据目标布局格式（LayoutTagDst）和指定的元素类型构造 layout
+    // rank-1 uses VectorLayout; rank-2 uses the requested layout and element type.
     if constexpr (LikeTensor::rank == 1) {
-        auto layoutNominal = MakeLayout<ElementDst, LayoutTagDst>(get<0>(likeTensor.layout().originShape()));
+        static_assert(
+            std::is_same_v<LayoutTagDst, Catlass::layout::VectorLayout>,
+            "MakeTensorLike: rank-1 likeTensor requires Catlass::layout::VectorLayout.");
+        auto layoutNominal = MakeLayout(get<0>(likeTensor.layout().originShape()));
         using Coord0 = detail::MakeZeroTuple<decltype(layoutNominal)::rank>;
         return Tensor<BuiltinTensor, decltype(layoutNominal), Coord0, PositionType::value>(
             builtinTensor, layoutNominal);
