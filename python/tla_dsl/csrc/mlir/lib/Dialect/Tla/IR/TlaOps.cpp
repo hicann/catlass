@@ -968,6 +968,30 @@ mlir::LogicalResult CastOp::verify()
     return verifyMaskMatchesVector(getOperation(), getMask(), getSource().getType());
 }
 
+mlir::LogicalResult BitCastOp::verify()
+{
+    if (!hasEnclosingRegion<VecFuncOp>(getOperation()))
+        return emitOpError("must be nested inside a tla.vec.func region");
+
+    VectorSSAType sourceType = getSource().getType();
+    VectorSSAType resultType = getResult().getType();
+    if (sourceType.getValidLanes() != resultType.getValidLanes())
+        return emitOpError() << "preserves the lane count, got " << sourceType.getValidLanes() << " source lane(s) and "
+                             << resultType.getValidLanes() << " result lane(s)";
+
+    int64_t sourceBits = getBitSizeOfFixedWidthScalarType(sourceType.getElementType());
+    int64_t resultBits = getBitSizeOfFixedWidthScalarType(resultType.getElementType());
+    if (sourceBits <= 0 || resultBits <= 0)
+        return emitOpError() << "unsupported element type: source " << sourceType.getElementType() << ", result "
+                             << resultType.getElementType();
+    if (sourceBits != resultBits)
+        return emitOpError() << "requires source and result element types of the same width, got "
+                             << sourceType.getElementType() << " (" << sourceBits << " bits) and "
+                             << resultType.getElementType() << " (" << resultBits << " bits)";
+
+    return mlir::success();
+}
+
 mlir::LogicalResult ReduceOp::verify()
 {
     if (!hasEnclosingRegion<VecFuncOp>(getOperation()))

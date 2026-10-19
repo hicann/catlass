@@ -2178,7 +2178,7 @@ with tla.vec.func(mode="simd"):
 
 ### 类型转换
 
-寄存器 vector 上的元素类型转换（`VectorSSA.to`）。
+寄存器 vector 上的元素类型转换（`VectorSSA.to`）与同位宽按位重解释（`VectorSSA.bitcast`）。
 
 #### `VectorSSA.to`
 
@@ -2237,6 +2237,53 @@ trait = tla.params.CastParams(
 )
 with tla.vec.func(mode="simd"):
     wide = narrow.to(tla.Float32, trait)
+```
+
+#### `VectorSSA.bitcast`
+
+**源码：** [`catlass.core_api.VectorSSA.bitcast`](../../../catlass/core_api.py#L690)
+
+功能说明：
+
+将寄存器内 vector 的比特按另一种**同位宽**元素类型重新解释。该操作不做任何数值
+转换，也不产生硬件指令：寄存器的比特保持原样，只有元素类型改变，因此开销为零。
+
+这使得浮点数的比特模式在 DSL 前端变得可读——取出指数、通过移入第 23 位构造
+`2**k`、清除符号位——而不必经由 UB 以另一种元素类型存取一轮。
+
+同位宽的组合为 `f32`/`i32`/`u32`、`f16`/`bf16`/`i16`/`u16`、
+`i8`/`u8`/`f8e4m3fn`/`f8e5m2` 以及 `i64`/`u64`，lane 数保持不变。位宽变化属于
+`VectorSSA.to` 的职责，在此会被拒绝。`tla.Bool`（i1）、`tla.Float8E8M0` 与打包的
+fp4 格式不是合法的 `!tla.vector` 元素类型，同样会被拒绝。
+
+需要注意，`i64`/`u64` 虽然可以通过校验，但目前并不可达：`tla.make_tensor_like`
+拒绝 `i64` 元素类型，因此没有任何路径能产生 64 位的 vector 寄存器。
+
+函数原型：
+
+```python
+VectorSSA.bitcast(dst_type: Any) -> Any
+```
+
+参数说明：
+
+- `dst_type`（`type[Numeric]`）：重新解释为的同位宽元素类型。必填。
+
+约束说明：
+
+- 须在 `@tla.kernel` 装饰的 kernel 函数体内调用。
+- 须在 `tla.vec.func()` 内调用。
+- `dst_type` 的位宽须与源元素类型相同。
+- 重解释为源自身的元素类型是空操作，直接返回 `self`。
+
+调用示例：
+
+```python
+with tla.vec.func(mode="simd"):
+    bits = x.bitcast(tla.Int32)
+    exponent = tla.bitwise_and(
+        tla.shift_right(bits, 23, mask=m), tla.full(0xFF, tla.Int32)
+    )
 ```
 
 ---

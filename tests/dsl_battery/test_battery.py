@@ -482,6 +482,13 @@ def _cases(device: int) -> Iterator[tuple[str, list[list[str]]]]:
         "vector-cast-multi",
         [["vector_ops/cast_multi.py", "cast_multi", "--shape", "256", *dev]],
     )
+    # Same-width bit reinterpretation: the f32 round trips through i32 and u32
+    # are subtracted to zero, so a rewritten register shows as a mismatch
+    # rather than hiding behind the exponent term.
+    yield (
+        "vector-bitcast",
+        [["vector_ops/bitcast_op.py", "bitcast", "--shape", "256", *dev]],
+    )
     yield (
         "vector-gather",
         [["vector_ops/gather_op.py", "--run", *dev]],

@@ -68,6 +68,44 @@ _CAST_UNSIGNED_ROUTES = frozenset(
         ("u8", "f32"),
     }
 )
+
+# Element types tla.bitcast may reinterpret. Membership is not the whole rule:
+# the source and destination must also have the *same* width, which is checked
+# against dtype_size_bytes rather than enumerated as pairs.
+#
+# Two 1-byte formats are deliberately absent, for the same underlying reason:
+# !tla.vector requires a builtin MLIR integer or float element type (see
+# VectorSSAType::verify), and neither f8e8m0 nor the packed fp4 formats is one.
+# f8e8m0 is spelled as the TLA dialect type !tla.f8e8m0 because LLVM 19 has no
+# Float8E8M0FNU, so !tla.vector<Nxf8e8m0> cannot be constructed at all; naming
+# it here would turn a frontend mistake into a failure deep in the
+# vector-region lowering. When the toolchain reaches LLVM 20 and f8e8m0 becomes
+# a builtin float, it can simply be added below. fp4 is excluded on top of that
+# because a 4-bit float is not a register element type either way: an fp4
+# register is an i8 carrier holding two values per lane, which makes
+# reinterpreting it a src_format question rather than a bitcast.
+#
+# i64/u64 are admitted and verify correctly, but note there is no supported way
+# to *obtain* a 64-bit vector register today -- tla.make_tensor_like rejects an
+# i64 element type, so the load path cannot produce one. They are kept so the
+# op stays correct for a 64-bit vector if one ever becomes constructible.
+_BITCAST_ELEMENT_TYPES = frozenset(
+    {
+        "i8",
+        "i16",
+        "i32",
+        "i64",
+        "u8",
+        "u16",
+        "u32",
+        "u64",
+        "f16",
+        "bf16",
+        "f32",
+        "f8e4m3fn",
+        "f8e5m2",
+    }
+)
 from catlass._mlir.dialects import tla as _tla_ops_gen  # type: ignore[import-not-found]
 from .base_dsl import ast_helpers as _ast_helpers
 from .base_dsl.op import _ExternUsage, dsl_user_op, _capture_user_loc
@@ -698,6 +736,97 @@ class VectorSSA(_RegisterSSA):
             operand_value,
             trait_attr,
             mask=mask_value,
+            loc=loc,
+        )
+        return VectorSSA(result)
+
+    @dsl_user_op
+    def bitcast(
+        self,
+        dst_type: Any,
+        *,
+        loc: mlir_ir.Location | None = None,
+    ) -> Any:
+        """Directory: Vector Compute / Type Conversion
+
+        Description:
+            Reinterpret the bits of a register-resident vector as another
+            element type of the **same bit width**. Nothing is computed and no
+            hardware instruction is emitted: the register keeps its bits and
+            only its element type changes, so the op is free.
+
+            This is what makes a float's bit pattern reachable from the DSL --
+            extracting an exponent, building `2**k` by shifting into bit 23,
+            clearing a sign bit -- without a store/load round trip through UB at
+            a different element type.
+
+            The same-width pairs are `f32`/`i32`/`u32`, `f16`/`bf16`/`i16`/`u16`,
+            `i8`/`u8`/`f8e4m3fn`/`f8e5m2`, and `i64`/`u64`. The lane count is
+            preserved. A width change is `VectorSSA.to`'s job and is rejected
+            here. `tla.Bool` (i1), `tla.Float8E8M0` and the packed fp4 formats
+            are not valid `!tla.vector` element types and are rejected too.
+
+            Note that `i64`/`u64` verify but are not reachable in practice:
+            nothing can currently produce a 64-bit vector register, because
+            `tla.make_tensor_like` rejects an `i64` element type.
+
+            Parameters:
+            - `dst_type` (`type[Numeric]`): Same-width element type to
+              reinterpret as. Required.
+
+            Constraints:
+            - Must be called inside a `@tla.kernel`-decorated kernel function.
+            - Must be called inside `tla.vec.func()`.
+            - `dst_type` must have the same width as the source element type.
+            - A bitcast to the source's own element type returns `self`.
+
+            Example:
+            ```python
+            with tla.vec.func(mode="simd"):
+                bits = x.bitcast(tla.Int32)
+                exponent = tla.shift_right(bits, 23, mask=m)
+            ```
+        """
+        _require_category("bitcast", "operand", self, "vector_ssa", 0)
+        if not (
+            isinstance(dst_type, type)
+            and issubclass(dst_type, Numeric)
+            and dst_type.dtype
+        ):
+            _op_error(
+                "bitcast",
+                f"invalid argument 'dst_type' (position 0): expected a concrete "
+                f"Numeric element type, got {_type_name(dst_type)}",
+            )
+        _require_frontend_state("bitcast")
+        _runtime._require_enclosing_region("bitcast", "vec.func")
+        operand_value = _as_value(self)
+        src_desc = _vector_ssa_type_for_mlir_value(operand_value)
+        src_token = src_desc.element_type
+        dst_token = _dtype_to_str(dst_type)
+        for role, token in (("source", src_token), ("destination", dst_token)):
+            if token not in _BITCAST_ELEMENT_TYPES:
+                _op_error(
+                    "bitcast",
+                    f"unsupported {role} element type '{token}': tla.bitcast "
+                    f"supports {', '.join(sorted(_BITCAST_ELEMENT_TYPES))}",
+                )
+        if dst_token == src_token:
+            return self
+        src_bytes = dtype_size_bytes(src_token)
+        dst_bytes = dtype_size_bytes(dst_token)
+        if src_bytes != dst_bytes:
+            _op_error(
+                "bitcast",
+                f"requires the same element width: {src_token} is {src_bytes} "
+                f"byte(s) and {dst_token} is {dst_bytes} byte(s); use "
+                f"VectorSSA.to for a width change",
+            )
+        result_desc = TlaVectorSSATypeDescriptor(src_desc.valid_lanes, dst_token)
+        context = operand_value.type.context
+        result = _tla_ops_gen.bitcast(
+            result_desc.to_mlir_type(context),
+            operand_value,
             loc=loc,
         )
         return VectorSSA(result)
@@ -9550,6 +9679,7 @@ _require_generated("bitwise_or")
 _require_generated("bitwise_xor")
 _require_generated("divs")
 _require_generated("reduce")
+_require_generated("bitcast")
 _require_generated("interleave")
 _require_generated("deinterleave")
 for _unary_op_name in ("exp", "log", "sqrt", "abs", "neg"):

@@ -447,7 +447,8 @@ static bool isVectorComputeOp(Operation* op)
            isa_and_nonnull<::tla::WhereOp>(op) || isa_and_nonnull<::tla::SqueezeOp>(op) ||
            isa_and_nonnull<::tla::HistogramsOp>(op) || isa_and_nonnull<::tla::ReduceOp>(op) ||
            isa_and_nonnull<::tla::GatherOp>(op) || isa_and_nonnull<::tla::CastOp>(op) ||
-           isa_and_nonnull<::tla::InterleaveOp>(op) || isa_and_nonnull<::tla::DeInterleaveOp>(op);
+           isa_and_nonnull<::tla::BitCastOp>(op) || isa_and_nonnull<::tla::InterleaveOp>(op) ||
+           isa_and_nonnull<::tla::DeInterleaveOp>(op);
 }
 
 static void annotateAivLibraryCall(func::FuncOp callee)
@@ -1937,6 +1938,27 @@ static LogicalResult lowerLoad(
     return success();
 }
 
+/// tla.bitcast: same-width bit reinterpretation. The register keeps its bits
+/// and only the element type changes, so this lowers to MLIR's vector.bitcast.
+static LogicalResult lowerBitCast(::tla::BitCastOp bitCastOp, OpBuilder& b, DenseMap<Value, Value>& valueMap)
+{
+    Location loc = bitCastOp.getLoc();
+    Value src = valueMap.lookup(bitCastOp.getSource());
+    if (!src)
+        return failure();
+    auto srcVecType = dyn_cast<VectorType>(src.getType());
+    if (!srcVecType)
+        return bitCastOp.emitError("tla.bitcast source is not a vector value"), failure();
+    Type dstElementType = bitCastOp.getResult().getType().getElementType();
+    // Values stay signless; signedness lives in the !tla.vector type only.
+    if (auto intType = dyn_cast<IntegerType>(dstElementType))
+        if (!intType.isSignless())
+            dstElementType = b.getIntegerType(intType.getWidth());
+    auto dstVecType = VectorType::get(srcVecType.getShape(), dstElementType);
+    valueMap[bitCastOp.getResult()] = b.create<mlir::vector::BitCastOp>(loc, dstVecType, src).getResult();
+    return success();
+}
+
 /// tla.cast: element-type conversion. The source vector already carries its
 /// width; the destination width is one full 256-byte register's worth of the
 /// target element type. The cast op picks the AVE cast (vtruncf / vfptosi /
@@ -2780,6 +2802,9 @@ static LogicalResult lowerNestedVectorOp(
         return lowerLocalMemBar(b, localMemBarOp);
     }
 
+    if (auto bitCastOp = dyn_cast<::tla::BitCastOp>(op))
+        return lowerBitCast(bitCastOp, b, valueMap);
+
     if (auto castOp = dyn_cast<::tla::CastOp>(op))
         return lowerCast(castOp, b, module, valueMap, fullMasks);
 
@@ -3520,6 +3545,10 @@ public:
                 if (!producedValues.contains(gatherOp.getY()))
                     return rewriter.notifyMatchFailure(
                         vecFuncOp, "expected tla.gather y operand from tla.load or prior compute op");
+            } else if (auto bitCastOp = dyn_cast<::tla::BitCastOp>(computeOp)) {
+                if (!producedValues.contains(bitCastOp.getSource()))
+                    return rewriter.notifyMatchFailure(
+                        vecFuncOp, "expected tla.bitcast source from tla.load or prior compute op");
             } else if (auto castOp = dyn_cast<::tla::CastOp>(computeOp)) {
                 if (castOp.getMask() && !producedValues.contains(castOp.getMask()))
                     return rewriter.notifyMatchFailure(vecFuncOp, "expected tla.cast mask from a legal mask producer");

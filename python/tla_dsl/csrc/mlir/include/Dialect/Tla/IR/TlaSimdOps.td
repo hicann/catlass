@@ -348,6 +348,28 @@ def Tla_CastOp : Tla_Op<"cast", [Pure]> {
   let hasVerifier = 1;
 }
 
+def Tla_BitCastOp : Tla_Op<"bitcast", [Pure]> {
+  let summary = "Same-width vector bit reinterpretation on VectorSSA values";
+  let description = [{
+    Reinterpret the bits of a register-resident VectorSSA value as another
+    element type of the **same bit width** (e.g. ``f32`` -> ``i32``,
+    ``f16`` -> ``i16``). No numeric conversion takes place and no hardware
+    instruction is emitted: the op lowers to ``vector.bitcast`` and costs zero
+    cycles.
+
+    The lane count is preserved, so source and result must have the same
+    ``valid_lanes`` and the same element width. Changing the lane count is
+    ``tla.cast``'s job, not this op's. Because nothing is computed, there is no
+    mask and no cast trait.
+  }];
+  let arguments = (ins Tla_VectorSSAType:$source);
+  let results = (outs Tla_VectorSSAType:$result);
+  let assemblyFormat = [{
+    $source attr-dict `:` qualified(type($source)) `->` qualified(type($result))
+  }];
+  let hasVerifier = 1;
+}
+
 def Tla_WhereOp : Tla_Op<"where", [Pure]> {
   let summary = "Vector select on VectorSSA values";
   let description = [{
