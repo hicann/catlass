@@ -54,6 +54,7 @@
 - `batch` 满足 `1 ≤ batch ≤ 16`：kernel 无硬上限，但与 seqlen/heads 共享同一条数据量公式，开大 batch 需等比缩小 seqlen 或 numHeads。
 - 头数满足 `1 ≤ kvHeads ≤ numHeads ≤ 8` 且 `numHeads % kvHeads == 0`：除整除关系外无其它硬约束，heads 放大等价于放大 Q 数据量。
 - `qkHeadSize`、`vHeadSize`、`blockSize` 为 kernel 模板实例化的离散取值（{64,128,192} / {64,128} / {128,256,512,1024}），无连续范围。
+- `query`/`keyCache`/`valueCache` 张量的数值范围推荐在 `[-1, 1]`以内，避免过大的动态范围致使绝对误差超阈值上限。
 
 ## 使用示例
 

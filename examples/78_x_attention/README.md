@@ -69,6 +69,7 @@ PyTorch 接口的 query/output shape 为 `(B*R,H,D)`；mode 0 的 unshared KV �
 
 推荐使用场景：
 
+- Query、shared KV 张量的数值范围推荐在 `[-5, 5]`以内，避免过大的动态范围致使绝对误差超阈值上限
 - 多 beam 共享同一前缀、各自保留短 decode 上下文的单步推理；共享前缀可避免为每个 beam 重复存储 shared KV。
 - 已使用 shared 分页缓存时选择 mode 0；shared KV 连续存放、unshared KV 按 request 管理时选择 mode 1。
 - MHA（H=N）、MQA（N=1）或 GQA 均须满足上述范围。建议先用下方小规模示例验证，再按设备内存与业务实际 shape 测试性能。

@@ -90,6 +90,9 @@ const uint32_t pvL0TileK = 64;
 | `silu_scale`（`siluScale`） | SiLU 缩放系数 | 计算无溢出的实数（`P = silu_scale · S · sigmoid(S)`） | `0.1` |
 | `is_varied_len`（`isVariedLen`） | 变长序列标志 | `0`：定长；`1`：随机变长 | `0` / `1` |
 
+推荐范围：
+- `Q`/`K`/`V` 张量的数值范围推荐在 `[-1, 1]`以内，避免过大的动态范围致使绝对误差超阈值上限
+
 ## 使用示例
 
 ### 命令行参数

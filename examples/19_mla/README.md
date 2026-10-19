@@ -14,6 +14,28 @@
 │   └── README.md
 ```
 
+## 使用范围说明
+
+以下是本样例的参数约束及推荐场景：
+
+| 参数 | 说明 | 约束 | 推荐范围 |
+| --- | --- | --- | --- |
+| `headDim`（`D`） | Query/Key 非 Rope 部分头维度 | 固定为 `512` | `512` |
+| `qkRopeDim`（`D_r`） | Query/Key Rope 部分头维 | 固定为 `64` | `64` |
+| `numHeads`（`N_h`） | Query 头数 | 取值 {16, 32, 64, 128} | `16` / `32` / `64` / `128` （取128时走 TP1-spec kernel） |
+| `kvHeads` | KV 头数 | 固定为 `1`（整除 `numHeads`） | `1` |
+| `batch` | batch 数量 | `≥ 1`；通用 kernel（`N_h ∈ {16,32,64}`）受 AIC 核数限制，TP1-spec kernel（`N_h = 128`）`batch ≤ 40` | `1` ~ `16` |
+| `qSeqlen`（`S_q`） | 每 batch 的 Query 序列长度 | `1 ≤ qSeqlen ≤ 4` | `1` ~ `4` |
+| `kvSeqlen`（`S_kv`） | 每 batch 的 KV 序列长度 | `128 ≤ kvSeqlen ≤ 16384` 且 `kvSeqlen ≥ qSeqlen` | `128` ~ `16384` |
+| `blockSize`（`B`） | Paged KV cache 分块大小 | 固定为 `128` | `128` |
+| `numBlocks` | KV cache 物理块数 | `numBlocks ≥ batch * ceil(kvSeqlen / blockSize)` | — |
+| `sparseMode` | 掩码模式 | `0`：无 mask；`1`：causal mask | `0` / `1` |
+| `dtype` | 数据类型 | `half` / `bf16` | `half` / `bf16` |
+
+推荐范围：
+- 使用 Paged KV cache承载长上下文，`blockSize` 固定为 `128`, `kvSeqlen` 可覆盖至 `16384`。
+- `Q`/`K`（以及其 Rope 部分）张量的数值范围推荐在 `[-5, 5]`以内，避免过大的动态范围致使绝对误差超阈值上限
+
 ## 使用示例
 
 - 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/zh/1_Practice/01_quick_start.md#编译执行)
