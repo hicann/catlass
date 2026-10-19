@@ -12,9 +12,16 @@
 #include "jit_compiler.h"
 
 #include <algorithm>
+#include <cerrno>
+#include <chrono>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
+#include <random>
+#include <thread>
 
+#include <fcntl.h>
+#include <sys/file.h>
 #include <unistd.h>
 
 #include "jit_config.h"
@@ -23,6 +30,103 @@
 namespace fs = std::filesystem;
 
 namespace CatlassKernel {
+
+namespace {
+
+void JitWarn(const std::string& message)
+{
+    std::fprintf(stderr, "[JIT][WARN] %s\n", message.c_str());
+}
+
+class CacheEntryLock {
+public:
+    explicit CacheEntryLock(const std::string& lockPath)
+    {
+        using Clock = std::chrono::steady_clock;
+        constexpr auto kPollInterval = std::chrono::milliseconds(50);
+        constexpr auto kLogInterval = std::chrono::seconds(30);
+        // Longer than any expected compile. The env override exists for tests.
+        const char* timeoutEnv = std::getenv("CATLASS_JIT_LOCK_TIMEOUT_SEC");
+        const auto timeout = std::chrono::seconds(timeoutEnv ? std::atoi(timeoutEnv) : 30 * 60);
+
+        // O_CLOEXEC keeps the compiler subprocess from inheriting the lock, which would hold it
+        // past this object's lifetime. O_RDONLY lets a lock file created by another user work on
+        // local filesystems; where an exclusive lock needs write access (NFS), flock() fails and
+        // the compile continues without the lock.
+        lockFd_ = ::open(lockPath.c_str(), O_CREAT | O_RDONLY | O_CLOEXEC, 0666);
+        if (lockFd_ < 0) {
+            JitWarn(
+                "cannot open lock file, compiling without cross-process lock: " + lockPath + ": " +
+                std::strerror(errno));
+            return;
+        }
+
+        const auto waitStart = Clock::now();
+        auto nextLogTime = waitStart;
+        while (::flock(lockFd_, LOCK_EX | LOCK_NB) != 0) {
+            const int error = errno;
+            if (error == EINTR) {
+                continue;
+            }
+            if (error != EWOULDBLOCK) {
+                release();
+                // Any other failure (no flock() on some network mounts, EBADF on NFS) must not stop
+                // the compile; atomic publication alone still keeps readers safe.
+                JitWarn("flock failed, compiling without cross-process lock: " + lockPath + ": " + std::strerror(error));
+                return;
+            }
+
+            const auto now = Clock::now();
+            const double waitedSeconds = std::chrono::duration<double>(now - waitStart).count();
+            if (now - waitStart >= timeout) {
+                // A hung compiler on another rank must not hang every other rank with it.
+                release();
+                JitWarn(
+                    "cache lock timeout after " + std::to_string(static_cast<int>(waitedSeconds)) +
+                    "s, compiling without cross-process lock: " + lockPath);
+                return;
+            }
+            if (now >= nextLogTime) {
+                JitWarn("waiting " + std::to_string(static_cast<int>(waitedSeconds)) + "s for cache lock: " + lockPath);
+                nextLogTime = now + kLogInterval;
+            }
+            std::this_thread::sleep_for(kPollInterval);
+        }
+    }
+
+    ~CacheEntryLock()
+    {
+        release();
+    }
+
+    CacheEntryLock(const CacheEntryLock&) = delete;
+    CacheEntryLock& operator=(const CacheEntryLock&) = delete;
+
+private:
+    void release() noexcept
+    {
+        if (lockFd_ >= 0) {
+            (void)::flock(lockFd_, LOCK_UN);
+            (void)::close(lockFd_);
+            lockFd_ = -1;
+        }
+    }
+
+    int lockFd_ = -1;
+};
+
+std::string MakeTempOutputPath(const std::string& soPath)
+{
+    char hostname[256] = {};
+    if (::gethostname(hostname, sizeof(hostname) - 1) != 0) {
+        hostname[0] = '\0';
+    }
+    std::random_device randomSource;
+    return soPath + ".tmp." + hostname + "." + std::to_string(::getpid()) + "." + std::to_string(randomSource()) +
+           ".so";
+}
+
+} // namespace
 
 JitCompiler& JitCompiler::instance()
 {
@@ -65,6 +169,9 @@ void JitCompiler::lazyInit()
         bishengPath_ = FindCompilerPath();
         JIT_CHECK(!bishengPath_.empty(), "bisheng compiler not found (set ASCEND_HOME_PATH)");
 
+        includeArgs_ = BuildIncludeArgsFromEnv();
+        versionDefine_ = JitConfig::VersionDefine((ver && *ver) ? ver : "unknown");
+
         npuArch_ = GetCurrentNPUArch();
 
         templateBase_ = ResolveTemplateBase();
@@ -86,76 +193,138 @@ JitEntryFn JitCompiler::getKernel(const char* templatePath, const MacroMap& macr
 
     JIT_CHECK(templatePath && templatePath[0], "templatePath is empty");
 
-    auto makeKernelUuid = [&](const MacroMap& macroValues) -> std::string {
-        std::vector<std::pair<std::string, std::string>> sorted;
-        sorted.reserve(macroValues.size() + 2);
-        for (const auto& kv : macroValues) {
-            sorted.emplace_back(kv.first, kv.second);
-        }
-        sorted.emplace_back("__ARCH__", npuArch_);
-        sorted.emplace_back("__KT__", std::to_string(static_cast<int>(kt)));
-        std::sort(sorted.begin(), sorted.end());
+    const std::vector<std::string> kernelTypeFlags =
+        macros.count("KERNEL_TYPE") ? std::vector<std::string>{} : JitConfig::KernelTypeFlags(kt);
 
-        std::string input;
-        for (const auto& kv : sorted) {
-            input += kv.first + "=" + kv.second + "&";
+    // Key of loaded_: the compile inputs that can differ between calls. Inputs fixed for the
+    // process (compiler, include paths, version) are omitted to keep this lookup cheap.
+    auto makeMemoryKey = [&]() -> std::string {
+        std::vector<std::pair<std::string, std::string>> inputs;
+        inputs.reserve(macros.size() + 5);
+        for (const auto& macro : macros) {
+            inputs.emplace_back(macro.first, macro.second);
         }
-        return Sha256::hash(input);
+        const char* sanitize = std::getenv(JitConfig::kSanitizeEnv);
+        inputs.emplace_back("__ARCH__", npuArch_);
+        inputs.emplace_back("__KT__", std::to_string(static_cast<int>(kt)));
+        for (const auto& flag : kernelTypeFlags) {
+            inputs.emplace_back("__KT_FLAG__", flag);
+        }
+        inputs.emplace_back("__SANITIZE__", sanitize ? sanitize : "");
+        inputs.emplace_back("__TEMPLATE__", templatePath);
+        std::sort(inputs.begin(), inputs.end());
+
+        std::string key;
+        for (const auto& input : inputs) {
+            key += input.first + "=" + input.second + "&";
+        }
+        return key;
     };
 
-    const std::string cacheKey = makeKernelUuid(macros);
-    const std::string soPath = cacheDir_ + "/" + cacheKey + ".so";
+    const std::string memoryKey = makeMemoryKey();
 
-    {
-        std::lock_guard<std::mutex> lk(mutex_);
-        auto it = loaded_.find(cacheKey);
-        if (it != loaded_.end()) {
-            JIT_LOG(JitLogLevel::Debug, "mem hit: %s %s", cacheKey.c_str(), targetName.c_str());
-            return it->second.entry;
-        }
+    auto findLoaded = [this, &memoryKey]() -> JitEntryFn {
+        std::lock_guard<std::mutex> mapLock(mutex_);
+        auto it = loaded_.find(memoryKey);
+        return it != loaded_.end() ? it->second.entry : nullptr;
+    };
+
+    if (JitEntryFn entry = findLoaded()) {
+        JIT_LOG(JitLogLevel::Debug, "mem hit: %s", targetName.c_str());
+        return entry;
     }
 
+    const std::vector<std::string> compilerArgs = buildCompilerArgs(targetName, templatePath, macros, kernelTypeFlags);
+    const std::string diskKey = [&] {
+        std::string input;
+        for (const auto& arg : compilerArgs) {
+            input += arg;
+            input += '\n';
+        }
+        return Sha256::hash(input);
+    }();
+    const std::string soPath = cacheDir_ + "/" + diskKey + ".so";
+
+    // Step 1: serialize the threads of this process that want this same entry. mutex_ only guards
+    // the map lookup, so threads waiting here never block requests for other kernels.
+    std::mutex* entryMutex = nullptr;
+    {
+        std::lock_guard<std::mutex> mapLock(mutex_);
+        entryMutex = &compileMutexes_[diskKey];
+    }
+    std::lock_guard<std::mutex> entryLock(*entryMutex);
+
+    // Step 2: another thread may have loaded the entry while this one waited.
+    if (JitEntryFn entry = findLoaded()) {
+        return entry;
+    }
+
+    SharedLib lib;
+
+    // Step 3: compile unless the entry is already on disk. The cross-process lock normally lets only
+    // one rank of a distributed job compile a given kernel; if it is unavailable or times out, the
+    // rank compiles anyway and atomic publication keeps the result safe.
     {
         std::error_code ec;
         if (!fs::is_regular_file(soPath, ec)) {
-            std::lock_guard<std::mutex> lk(mutex_);
+            const std::string parentDir = fs::path(soPath).parent_path().string();
+            fs::create_directories(parentDir, ec);
+            JIT_CHECK(!ec, "mkdir failed: " + parentDir + ": " + ec.message());
 
-            {
-                auto it = loaded_.find(cacheKey);
-                if (it != loaded_.end())
-                    return it->second.entry;
-            }
-
+            CacheEntryLock crossProcessLock(soPath + ".lock");
+            // Another process may have published the entry while this one waited for the lock.
             if (!fs::is_regular_file(soPath, ec)) {
                 JIT_LOG(JitLogLevel::Info, "compiling: %s \xe2\x86\x92 %s", targetName.c_str(), soPath.c_str());
-
-                fs::create_directories(fs::path(soPath).parent_path(), ec);
-                JIT_CHECK(!ec, "mkdir failed: " + std::string(fs::path(soPath).parent_path()) + ": " + ec.message());
-                compile(targetName, templatePath, macros, kt, soPath);
+                lib = compileAndPublish(compilerArgs, soPath);
             }
         }
     }
 
-    SharedLib lib(soPath);
+    // Step 4: retain the validated handle, or load an entry already on disk.
+    if (!lib) {
+        lib = SharedLib(soPath);
+    }
     auto* entry = reinterpret_cast<JitEntryFn>(lib.sym(entrySymbol));
 
     {
-        std::lock_guard<std::mutex> lk(mutex_);
-        auto it = loaded_.find(cacheKey);
+        std::lock_guard<std::mutex> mapLock(mutex_);
+        auto it = loaded_.find(memoryKey);
         if (it != loaded_.end()) {
             return it->second.entry;
         }
-        loaded_.emplace(cacheKey, LoadedKernel{std::move(lib), entry});
+        loaded_.emplace(memoryKey, LoadedKernel{std::move(lib), entry});
     }
 
     return entry;
 }
 
-void JitCompiler::compile(
-    std::string_view name, std::string_view templatePath, const MacroMap& macros, JitKernelType kt,
-    const std::string& soPath)
+SharedLib JitCompiler::compileAndPublish(const std::vector<std::string>& args, const std::string& soPath)
 {
-    auto args = buildCompilerArgs(name, templatePath, macros, kt, soPath);
+    // Compile to a temporary file in the same directory and move it into place with rename(),
+    // which is atomic: a reader sees either no entry at all or a complete shared object.
+    // A process killed mid-compile leaves its temporary file behind, because deleting stale
+    // temporaries is only safe when the lock covers every writer, and it does not on every
+    // shared filesystem.
+    const std::string tempPath = MakeTempOutputPath(soPath);
+    try {
+        compile(args, tempPath);
+        // Keep the validated handle so library constructors run only once for this compilation.
+        SharedLib lib(tempPath);
+        (void)lib.sym("run");
+        std::error_code ec;
+        fs::rename(tempPath, soPath, ec);
+        JIT_CHECK(!ec, "publish failed: " + tempPath + " -> " + soPath + ": " + ec.message());
+        return lib;
+    } catch (...) {
+        (void)::unlink(tempPath.c_str());
+        throw;
+    }
+}
+
+void JitCompiler::compile(std::vector<std::string> args, const std::string& soPath)
+{
+    args.push_back("-o");
+    args.push_back(soPath);
 
     auto cmdJoin = [](const std::vector<std::string>& args) -> std::string {
         std::string cmd;
@@ -178,16 +347,11 @@ void JitCompiler::compile(
             "compile failed (exit=" + std::to_string(result.exitCode) + ")\n" + "command: " + cmdStr + "\n" +
             "output:\n" + result.output);
     }
-
-    {
-        std::error_code ec;
-        JIT_CHECK(fs::is_regular_file(soPath, ec), "compiler succeeded but output not created: " + soPath);
-    }
 }
 
 std::vector<std::string> JitCompiler::buildCompilerArgs(
-    std::string_view name, std::string_view templatePath, const MacroMap& macros, JitKernelType kt,
-    const std::string& soPath)
+    std::string_view name, std::string_view templatePath, const MacroMap& macros,
+    const std::vector<std::string>& kernelTypeFlags)
 {
     std::vector<std::string> args;
     args.reserve(32);
@@ -207,12 +371,7 @@ std::vector<std::string> JitCompiler::buildCompilerArgs(
         args.insert(args.end(), archFlags.begin(), archFlags.end());
     }
 
-    if (macros.count("KERNEL_TYPE")) {
-        JIT_LOG(JitLogLevel::Info, "KERNEL_TYPE already set in macros, skip KernelTypeFlags");
-    } else {
-        auto ktFlags = JitConfig::KernelTypeFlags(kt);
-        args.insert(args.end(), ktFlags.begin(), ktFlags.end());
-    }
+    args.insert(args.end(), kernelTypeFlags.begin(), kernelTypeFlags.end());
 
     {
         const char* ms = std::getenv(JitConfig::kSanitizeEnv);
@@ -223,10 +382,7 @@ std::vector<std::string> JitCompiler::buildCompilerArgs(
         }
     }
 
-    {
-        const char* ver = std::getenv(JitConfig::kVersionEnv);
-        args.push_back(JitConfig::VersionDefine(ver ? ver : "unknown"));
-    }
+    args.push_back(versionDefine_);
 
     auto sortedMacros = [](const MacroMap& macros) {
         std::vector<std::pair<std::string, std::string>> result;
@@ -251,12 +407,9 @@ std::vector<std::string> JitCompiler::buildCompilerArgs(
         args.push_back("-DCATLASS_JIT_KERNEL_NAME=" + kn);
     }
 
-    auto extraIncludes = BuildIncludeArgsFromEnv();
-    args.insert(args.end(), extraIncludes.begin(), extraIncludes.end());
+    args.insert(args.end(), includeArgs_.begin(), includeArgs_.end());
 
     args.push_back(templateBase_.empty() ? std::string(templatePath) : templateBase_ + std::string(templatePath));
-    args.push_back("-o");
-    args.push_back(soPath);
 
     return args;
 }

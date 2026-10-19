@@ -136,7 +136,11 @@ public:
      * @brief Return a compiled kernel entry for a template and macro set.
      *
      * The method first checks the in-memory cache, then a disk cache, and only
-     * invokes bisheng when no matching shared object exists.
+     * invokes bisheng when no matching shared object exists. Normally only one thread
+     * or process compiles a given entry at a time; if the cross-process file lock is
+     * unavailable or times out, the entry may be compiled more than once. New entries
+     * are published atomically either way, so readers never load a partially written
+     * shared object.
      *
      * @param templatePath Template path relative to the resolved template base.
      * @param macros Preprocessor macros that define the template specialization.
@@ -160,35 +164,42 @@ private:
     void lazyInit();
 
     /**
-     * @brief Compile one template specialization into a shared object.
-     * @param name Kernel short name used for diagnostics and fallback macro naming.
-     * @param templatePath Path to the Ascend C template source file.
-     * @param macros Preprocessor definitions for template specialization.
-     * @param kt Kernel type used to select the KERNEL_TYPE compiler flag.
+     * @brief Run the compiler and write the shared object to soPath.
+     * @param args Compiler argument vector from buildCompilerArgs, without the output option.
      * @param soPath Output path for the compiled shared object.
      */
-    void compile(
-        std::string_view name, std::string_view templatePath, const MacroMap& macros, JitKernelType kt,
-        const std::string& soPath);
+    void compile(std::vector<std::string> args, const std::string& soPath);
+
+    /**
+     * @brief Compile and load a temporary library, then publish it with an atomic rename.
+     * @param args Compiler argument vector from buildCompilerArgs, without the output option.
+     * @param soPath Final path in the disk cache. It never holds a partially written file.
+     * @return Loaded library with its required run symbol validated before publication.
+     */
+    [[nodiscard]] SharedLib compileAndPublish(const std::vector<std::string>& args, const std::string& soPath);
 
     /**
      * @brief Build the bisheng command line for a JIT compilation.
+     *
+     * The output option is not included. The disk cache key is a hash of this vector.
+     *
      * @param name Kernel short name used for diagnostics and fallback macro naming.
      * @param templatePath Path to the Ascend C template source file.
      * @param macros Preprocessor definitions for template specialization.
-     * @param kt Kernel type used to select the KERNEL_TYPE compiler flag.
-     * @param soPath Output path for the compiled shared object.
-     * @return Complete compiler argument vector ready for subprocess invocation.
+     * @param kernelTypeFlags Effective KERNEL_TYPE options, empty when supplied in macros.
+     * @return Compiler argument vector without the output option.
      */
     [[nodiscard]] std::vector<std::string> buildCompilerArgs(
-        std::string_view name, std::string_view templatePath, const MacroMap& macros, JitKernelType kt,
-        const std::string& soPath);
+        std::string_view name, std::string_view templatePath, const MacroMap& macros,
+        const std::vector<std::string>& kernelTypeFlags);
 
     std::once_flag initFlag_;
     std::string cacheDir_;
     std::string bishengPath_;
     std::string npuArch_;
     std::string templateBase_;
+    std::string versionDefine_;
+    std::vector<std::string> includeArgs_;
 
     struct LoadedKernel {
         SharedLib lib;
@@ -196,6 +207,8 @@ private:
     };
 
     std::unordered_map<std::string, LoadedKernel> loaded_;
+    /// Compile mutex per disk-cache key; entries are never erased, so references stay valid.
+    std::unordered_map<std::string, std::mutex> compileMutexes_;
     std::mutex mutex_;
 };
 
