@@ -31,8 +31,8 @@
 | -------- | ------------ | ---- |
 | `Atlas A2` / `Atlas A3` | `AtlasA2` / `AtlasA3` | 产品名，中间必须带空格 |
 | `Ascend 950` / `Ascend 950PR` / `Ascend 950DT` | `Ascend950` / `Ascend950PR` | 产品名，中间必须带空格 |
-| `Atlas A2/A3 系列产品` | `Atlas A2/A3产品` | 同时指代 A2、A3 两代产品时的合写形式（斜杠分隔）；并列的「训练/推理系列产品」条目应合并为此形式。单独指代仍用 `Atlas A2` / `Atlas A3` |
-| `Ascend 950PR&950DT 系列产品` | `Ascend 950PR/Ascend 950DT产品` | 同时指代 950PR、950DT 时的合写形式；单独指代仍用 `Ascend 950PR` / `Ascend 950DT` |
+| `Atlas A2/A3系列产品` | `Atlas A2/A3产品` | 同时指代 A2、A3 两代产品时的合写形式（斜杠分隔）；并列的「训练/推理系列产品」条目应合并为此形式。单独指代仍用 `Atlas A2` / `Atlas A3` |
+| `Ascend 950PR&950DT系列产品` | `Ascend 950PR/Ascend 950DT产品` | 同时指代 950PR、950DT 时的合写形式；单独指代仍用 `Ascend 950PR` / `Ascend 950DT` |
 | `AI Core` | `AICore` | 计算核心，中间必须带空格 |
 | `Ascend C` | `AscendC` | 正文写法必须带空格；仅 C++ 命名空间 `AscendC::` 保持无空格原样 |
 | `Flash Attention` | `FlashAttention` | 正文写法带空格；仅代码标识符/样例名（如 `FlashAttentionInfer`）保持原样 |

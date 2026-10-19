@@ -8,7 +8,7 @@
 
 `CopyGmToL1BTla` 实现 Conv 场景下 Filter（卷积核）从 GM 到 L1 的 TLA 风格搬运。对应 B 矩阵，布局为 `CI1KHKWCOCI0` → `CI1KHKWCOCI0`。
 
-- 适用范围：Atlas A2/A3 系列产品、Ascend 950PR&950DT 系列产品
+- 适用范围：Atlas A2/A3系列产品、Ascend 950PR&950DT系列产品
 - 风格：TLA
 
 ## 模板原型

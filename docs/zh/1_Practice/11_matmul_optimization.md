@@ -16,14 +16,14 @@ CATLASS算子模板库的定位，是针对GEMM类算子提供的模板样例库
 
 ### Matmul硬件可视化
 
-Atlas A2/A3 系列产品硬件架构，参考[昇腾社区文档-基本架构](https://www.hiascend.com/document/redirect/CannCommunityAscendChibasic)。
+Atlas A2/A3系列产品硬件架构，参考[昇腾社区文档-基本架构](https://www.hiascend.com/document/redirect/CannCommunityAscendChibasic)。
 基础matmul切块、数据搬运、计算涉及的硬件架构如下图，由于使能了doubleBuffer，在L1/L0A/L0B上会保存两块Tile数据。
 
 <img src="https://www.hiascend.com/doc_center/source/zh/CANNCommunityEdition/850/opdevg/Ascendcopdevg/figure/zh-cn_image_0000002502735896.png" width="80%">
 
 ### TileShape约束
 
-由上可知TileShape在设置时要保证不能超出L1/L0A/L0B/L0C空间大小，同时TileShape取值必须是16的倍数。Atlas A2/A3 系列产品相关硬件参数参考[Arch::AtlasA2](../../../include/catlass/arch/arch.hpp)，Ascend 950PR&950DT 系列产品相关硬件参数参考[Arch::Ascend950](../../../include/catlass/arch/arch.hpp)，下文以Atlas A2/A3 系列产品为举例场景。
+由上可知TileShape在设置时要保证不能超出L1/L0A/L0B/L0C空间大小，同时TileShape取值必须是16的倍数。Atlas A2/A3系列产品相关硬件参数参考[Arch::AtlasA2](../../../include/catlass/arch/arch.hpp)，Ascend 950PR&950DT系列产品相关硬件参数参考[Arch::Ascend950](../../../include/catlass/arch/arch.hpp)，下文以Atlas A2/A3系列产品为举例场景。
 
 - 场景一：fp16输入输出，L1TileShape<128,256,256>，L0TileShape<128,256,64>
 

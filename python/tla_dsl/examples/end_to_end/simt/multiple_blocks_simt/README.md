@@ -20,7 +20,7 @@
 
   本样例中，线程块为三维的`(64, 4, 2)`，即每个block内512个线程。kernel内先把block内三维线程索引展平为`tid`，再按SIMT区域内全局线程索引`gid = block_idx * tdim + tid`、SIMT区域内线程总数作为步长`stride = block_num * tdim`跨步遍历，将整个数组分发给所有线程。
 
-- 支持产品型号：Ascend 950PR&950DT 系列产品
+- 支持产品型号：Ascend 950PR&950DT系列产品
 
 ## 样例参数说明
 

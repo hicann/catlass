@@ -63,8 +63,8 @@ git clone https://gitcode.com/cann/catlass.git
 
 > 模板库提供了一套可复用的模板、基础组件，用于矩阵乘法算子开发，算子样例可见[样例目录](../../../examples)。
 
-- 样例名称里带`ascend950`字样的仅支持Ascend 950PR&950DT 系列产品。
-- 其他样例仅支持Atlas A2/A3 系列产品，代码中架构标签`ArchTag`统一使用`Arch::AtlasA2`。
+- 样例名称里带`ascend950`字样的仅支持Ascend 950PR&950DT系列产品。
+- 其他样例仅支持Atlas A2/A3系列产品，代码中架构标签`ArchTag`统一使用`Arch::AtlasA2`。
 
 ### 样例编译
 
@@ -82,7 +82,7 @@ bash scripts/build.sh [options] <target>
   - `--enable_profiling`：启用Profiling工具，详见[CATLASS样例性能调优](./evaluation/performance_tools.md#profiling简介--profiling-introduction-)。
   - `--enable_print`：启用编译器的打印功能，详见[基于`cce::printf`进行设备侧打印](./evaluation/print.md)。
   - `--enable_ascendc_dump`：启用`AscendC`相关算子调测API，详见[CATLASS样例使用AscendC算子调测API](./evaluation/ascendc_dump.md)。
-  - `-DCATLASS_ARCH`：指明NPU架构，当前支持`2201`（Atlas A2/A3 系列产品）和`3510`（Ascend 950PR&950DT 系列产品），不指明则默认为`2201`。
+  - `-DCATLASS_ARCH`：指明NPU架构，当前支持`2201`（Atlas A2/A3系列产品）和`3510`（Ascend 950PR&950DT系列产品），不指明则默认为`2201`。
   - `-D<option>`：给CMake传递其他的编译选项。
 
 - `target`：要编译的算子样例，可指定为特定的样例名，也可指定为：
@@ -91,7 +91,7 @@ bash scripts/build.sh [options] <target>
   - `torch_library`：编译torch扩展，详见[Python调用CATLASS样例](../../../examples/python_extension/README.md)。
   - `mstuner_catlass`：编译msTuner_CATLASS工具，详见[`mstuner_catlass`使用说明](../../../tools/tuner/README.md)。
 
-以[00_basic_matmul](../../../examples/00_basic_matmul/README.md)样例编译过程为例，执行下述指令（若为其他支持Ascend 950PR&950DT 系列产品的样例，需要添加`-DCATLASS_ARCH=3510`。）：
+以[00_basic_matmul](../../../examples/00_basic_matmul/README.md)样例编译过程为例，执行下述指令（若为其他支持Ascend 950PR&950DT系列产品的样例，需要添加`-DCATLASS_ARCH=3510`。）：
 
 ```bash
 # 编译算子组件

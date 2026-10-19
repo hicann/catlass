@@ -29,7 +29,7 @@
 
   内层循环结束后归一化输出 $O_{\text{final}} = O / l$，结果转回 FP16/BF16 写回 GM。
 
-- 支持产品型号：Ascend 950PR&950DT 系列产品。
+- 支持产品型号：Ascend 950PR&950DT系列产品。
 
 ### Mask 模式
 

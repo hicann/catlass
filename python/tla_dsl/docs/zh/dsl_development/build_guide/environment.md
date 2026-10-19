@@ -19,7 +19,7 @@ nav_order: 10
 
 ## 构建环境要求
 
-CATLASS DSL 仅支持 Ascend 950PR&950DT 系列产品。
+CATLASS DSL 仅支持 Ascend 950PR&950DT系列产品。
 
 | 组件 | 版本或要求 |
 | --- | --- |

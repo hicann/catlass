@@ -6,7 +6,7 @@ nav_order: 10
 
 ## 兼容性要求
 
-- 支持产品：Ascend 950PR&950DT 系列产品
+- 支持产品：Ascend 950PR&950DT系列产品
 - 操作系统：CANN 支持的 Linux（`aarch64` / `x86_64`）
 - CANN 版本：`>= 9.1.0`
 - Python：`>=3.10, <3.14`

@@ -12,7 +12,7 @@
   $$
 
   其中 $Q$ 是形如 `(batch*qSeqlen, numHeads, qkHeadSize)` 的查询矩阵，$K$、$V$ 为分页 KV cache，形如 `(numBlocks, kvHeads, blockSize, headDim)`，$d$ 为 `qkHeadSize`，$M$ 为底对齐的 causal 掩码（仅支持 mask 场景，`maskType` 固定为 1，不支持无掩码）；GQA 场景下 `numHeads` 为 `kvHeads` 的正整数倍。
-- 支持产品型号：Ascend 950PR&950DT 系列产品
+- 支持产品型号：Ascend 950PR&950DT系列产品
 
 ## 样例参数说明
 

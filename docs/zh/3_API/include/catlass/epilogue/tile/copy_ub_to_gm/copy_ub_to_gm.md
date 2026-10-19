@@ -8,7 +8,7 @@
 
 `CopyUb2Gm` 实现 epilogue 阶段从 UB 到 GM 的数据搬运操作。用于将 epilogue 处理完成后的最终结果从 Unified Buffer 写回到 Global Memory。
 
-- 适用范围：Atlas A2/A3 系列产品、Ascend 950PR&950DT 系列产品
+- 适用范围：Atlas A2/A3系列产品、Ascend 950PR&950DT系列产品
 - 风格：非 TLA，直接操作 `AscendC::GlobalTensor` / `AscendC::LocalTensor`
 - 通过 `AscendC::DataCopyPad` 实现带 stride 的数据搬运
 

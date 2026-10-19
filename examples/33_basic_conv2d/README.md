@@ -34,16 +34,16 @@
 
 - 考虑到空间分配，需满足下述条件（为做区分下述公式中小写的符号为运行时常量，反之是编译期常量）：
   - `L1_STAGES * FmapSize + L1_STAGES * FilterSize <= L1_SIZE`
-    其中`L1_STAGES`在开double-buffer的情形下为2，不启用为1，L1_SIZE是512K（Atlas A2/A3 系列产品），FmapSize和FilterSize的具体计算公式为：
+    其中`L1_STAGES`在开double-buffer的情形下为2，不启用为1，L1_SIZE是512K（Atlas A2/A3系列产品），FmapSize和FilterSize的具体计算公式为：
     - `FmapSize = Cin1 * hi * wi * C0 * sizeof(ElementFmap)`, `Cin1`为`FmapL1TileShape`下的Tiling常量（输入通道数），hi和wi由`FmapL1TileShape`下的`Ho`和`Wo`（输出特征尺寸）可反推得到，逆运算为：
       1. `hi = (Ho - 1) * strideH + dilationH * (kh - 1) + 1`
       2. `wi = (Wo - 1) * strideW + dilationW * (kw - 1) + 1`
 
     - `FilterSize = Cin1 * kh * kw * Cout * C0`，`Cin1`为`FilterL1TileShape`下的Tiling常量（输入通道数）, `Cout`是`FilterL1TileShape`下`Cout`（输出通道数）对齐到`C0`后的值
 
-  - `L0A_STAGES * FmapL0ASize <= L0A_SIZE`, 其中`FmapL1ASize`具体为`Ho * Wo * max(L0K, kh * kw * C0) * sizeof(ElementFmap)`，`L0K`为`L0TileShape`下的Tiling常量, `L0A_SIZE`等于64K（Atlas A2/A3 系列产品）
-  - `L0B_STAGES * FilterL0BSize <= L0B_SIZE`, 其中`FilterL0BSize`具体为`max(L0K, kh * kw * C0) * CoutL0 * sizeof(ElementFilter)`，`L0K`为`L0TileShape`下的Tiling常量, `CoutL0`是`L0N`对齐到`C0`的大小，`L0B_SIZE`也等于64K（Atlas A2/A3 系列产品）
-  - `Ho * Wo * Cout * sizeof(ElementOut) <= L0C_SIZE`, 其中`L0C_SIZE`等于128K（Atlas A2/A3 系列产品），`Ho`, `Wo`, `Cout`均为`FilterL1TileShape`中的Tiling常量。
+  - `L0A_STAGES * FmapL0ASize <= L0A_SIZE`, 其中`FmapL1ASize`具体为`Ho * Wo * max(L0K, kh * kw * C0) * sizeof(ElementFmap)`，`L0K`为`L0TileShape`下的Tiling常量, `L0A_SIZE`等于64K（Atlas A2/A3系列产品）
+  - `L0B_STAGES * FilterL0BSize <= L0B_SIZE`, 其中`FilterL0BSize`具体为`max(L0K, kh * kw * C0) * CoutL0 * sizeof(ElementFilter)`，`L0K`为`L0TileShape`下的Tiling常量, `CoutL0`是`L0N`对齐到`C0`的大小，`L0B_SIZE`也等于64K（Atlas A2/A3系列产品）
+  - `Ho * Wo * Cout * sizeof(ElementOut) <= L0C_SIZE`, 其中`L0C_SIZE`等于128K（Atlas A2/A3系列产品），`Ho`, `Wo`, `Cout`均为`FilterL1TileShape`中的Tiling常量。
   （样例中ElementFmap，ElementFilter和ElementOutput为fp16类型）
 
 ## 使用示例
