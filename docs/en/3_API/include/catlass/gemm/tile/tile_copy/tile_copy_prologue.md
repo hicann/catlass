@@ -42,6 +42,7 @@ struct TileCopyWithPrologue;
 ## Member Type Derivation
 
 Mostly identical to `TileCopy`, with the following additions:
+
 ```cpp
 using PrologueA = PrologueA_;
 using PrologueB = PrologueB_;

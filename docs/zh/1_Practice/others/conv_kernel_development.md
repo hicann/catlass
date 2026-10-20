@@ -23,7 +23,7 @@ $$
 
 Conv2D本质上可以转化为矩阵乘（Im2col + GEMM），Catlass中通过tile级别的BlockConv2d组件直接实现滑窗计算，避免显式Im2col重排。
 
-**数据排布**
+**数据布局**
 
 Conv2D涉及三种数据布局，均为5维Tensor：
 

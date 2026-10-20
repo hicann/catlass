@@ -131,7 +131,7 @@ tests/optest/
 
 ## 昇腾与架构识别说明
 
-本项目面向昇腾 NPU 的 CANN/Ascend C 开发栈，相关术语和 SoC 信息以昇腾公开开发文档为准。
+本项目面向昇腾 NPU 的 CANN/AscendC 开发栈，相关术语和 SoC 信息以昇腾公开开发文档为准。
 
 - Python loader 侧：通过 `torch_npu.npu.get_device_name()` 映射 arch id，用于加载 `torch_catlass/lib/<arch>/` 下的预构建库。
 - JIT 编译侧：通过 `GetCurrentNPUArch()`（AscendC 平台 API）获取当前 SoC 对应架构，用于设置编译参数。

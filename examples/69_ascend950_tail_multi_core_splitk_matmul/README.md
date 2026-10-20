@@ -28,7 +28,6 @@ cd output/bin
 Compare success.
 ```
 
-
 ## 模板推荐场景
 
 推荐 MNK 范围：约定L1上的分块大小为`m1 n1 k1`，设 `blocks = ceil(M/m1)×ceil(N/n1)`，推荐 `C < blocks < 1.5C 且 K > 1024`（C 为 AI Core 核数），即 1~1.5 波且尾轮有残余块的场景。

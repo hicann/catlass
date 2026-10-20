@@ -12,7 +12,6 @@ TLA DSL 通过 `@tla.kernel(auto_sync="v0")` 提供实验性自动同步能力�
 
 `v0` 只处理单个 AIC 或 AIV 内部各流水之间的核内同步，不生成 Cube/Vector 核间同步，也不生成Vector核编程中VF内的同步。
 
-
 ## 用户接口与使用约束
 
 ### 启用方式

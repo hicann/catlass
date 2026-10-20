@@ -5,6 +5,7 @@ nav_order: 20
 # 使用 Conda 构建开发环境
 
 使用Conda构建开发环境，不包括以下内容:
+
 - CANN Toolkit
 - AscendNPU-IR
 - torch/torch_npu
@@ -49,4 +50,5 @@ export CATLASS_DSL_PREBUILT_ASCENDNPU_IR="/path/to/catlass/python/tla_dsl/3rdpar
 ```
 
 ## 安装 torch/torch_npu
+
 运行 NPU 示例时，按照 [PyTorch Ascend 安装部署](https://www.hiascend.com/developer/software/ai-frameworks/pytorch/download)安装与 CANN 和驱动匹配的 `torch`、`torch-npu`。

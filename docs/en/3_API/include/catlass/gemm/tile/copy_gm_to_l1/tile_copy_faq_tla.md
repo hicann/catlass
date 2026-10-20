@@ -6,7 +6,7 @@
 
 ## Function
 
-`TileCopyFAQTla` is a TLA-style FlashAttention LoadQ data movement template. It moves multi-matrix data from global memory to L1 and converts it into the zN fractal format, serving the Q-matrix preloading phase of FlashAttention. The source data is 3D (`ndNum` × `nValue` × `dValue`) and is converted to zN format in one step using `Nd2NzParams`.
+`TileCopyFAQTla` is a TLA-style Flash Attention LoadQ data movement template. It moves multi-matrix data from global memory to L1 and converts it into the zN fractal format, serving the Q-matrix preloading phase of FlashAttention. The source data is 3D (`ndNum` × `nValue` × `dValue`) and is converted to zN format in one step using `Nd2NzParams`.
 
 > **Restriction**: This template supports only the Atlas A2 architecture (`CATLASS_ARCH == 2201`) and is not supported on Ascend 950.
 

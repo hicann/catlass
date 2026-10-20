@@ -77,7 +77,7 @@ O = FlashAttention(Q, K, V, mask)
 
 ### MXFP8 数据格式
 
-MXFP8（Microscale FP8）是一种基于分块的浮点量化方案：
+MXFP8（Microscaled FP8）是一种基于分块的浮点量化方案：
 
 - **数据格式**：矩阵元素采用 `float8_e4m3_t`，每个元素占1字节
 - **缩放因子**：沿量化轴方向，每32个连续元素共享一个 `float8_e8m0_t` 格式的缩放因子（MX Scale）

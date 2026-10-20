@@ -9,6 +9,7 @@
 `PrologueTraits` is a trait template that unifies the interface of Prologue operators (such as `TileCastInt8ToFp16Dequant`) into a set of Tensor type aliases. This allows upper-level templates like blockMmad to uniformly access the Prologue's input and output Tensor types.
 
 key roles:
+
 - Deduces `TensorSrc`/`TensorDst` as fully-qualified `AscendC::GlobalTensor<T>` types based on `Prologue::ElementSrc`/`Prologue::ElementDst`.
 - Provides a partial specialization for `void`, offering a safe, null-type fallback.
 

@@ -43,7 +43,7 @@ Compare success.
 
 ## 使用说明
 
-1、 `gen_data.py`的输入支持trans_a和trans_b，但58_ascend950_fp8_mx_batch_matmul可执行文件不支持，仅仅是trans_a为0及trans_b为1的example示例。
+1、 `gen_data.py`的输入支持trans_a和trans_b，但58_ascend950_fp8_mx_batch_matmul可执行文件不支持，仅仅是trans_a为0及trans_b为1的示例。
 
 若要对应转置情况请修改example示例中的layout，因为layout隐式表征转置状态，即layout::RowMajor表示不转置，layout::ColumnMajor表示转置。
 

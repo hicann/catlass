@@ -51,4 +51,4 @@ export CATLASS_DSL_PREBUILT_ASCENDNPU_IR="/path/to/catlass/python/tla_dsl/3rdpar
 
 ## Installing torch/torch_npu
 
-To run NPU examples, install the `torch` and `torch-npu` versions matching your CANN and driver as described in [PyTorch Ascend Installation and Deployment](https://www.hiascend.com/developer/software/ai-frameworks/pytorch/download).
+To run NPU examples, install the `torch` and `torch_npu` versions matching your CANN and driver as described in [PyTorch Ascend Installation and Deployment](https://www.hiascend.com/developer/software/ai-frameworks/pytorch/download).

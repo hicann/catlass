@@ -9,7 +9,7 @@
 | [01_fa_unshared_kernel.md](./01_fa_unshared_kernel.md) | FA Unshared | 非 shared expert（unshared）场景的 Flash Attention，MHA/GQA 基础形态 | 3 个 |
 | [02_fai_split_row_kernel.md](./02_fai_split_row_kernel.md) | FAI SplitRow | 推理 Flash Attention，按行切分免 Combine 的 split-KV 变体 | 4 个 |
 | [03_xfai_kernel.md](./03_xfai_kernel.md) | XFAI | Atlas A2 推理 Flash Attention，AIC QK→AIV Softmax→AIC PV 跨核流水，支持 Paged KV | 5 个 |
-| [04_fd_kernel.md](./04_fd_kernel.md) | FD | XFAI 的深度性能演化版（FlashAttention-Decode 形态），含通用 CombineScale | 3 个 |
+| [04_fd_kernel.md](./04_fd_kernel.md) | FD | XFAI 的深度性能演化版（Flash Attention-Decode 形态），含通用 CombineScale | 3 个 |
 | [05_xa_tla_kernel.md](./05_xa_tla_kernel.md) | XA TLA | Atlas A5（Ascend950）TLA 指令版 Flash Attention，shared/unshared 双形态 | 8 个 |
 
 ## 新增模板清单

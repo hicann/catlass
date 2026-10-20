@@ -6,7 +6,7 @@ Tile components are the lowest-level computation and data operation units in the
 
 Tile components adopt highly optimized implementations that fully exploit hardware features, including:
 
-- Direct calls to Ascend C underlying APIs
+- Direct calls to AscendC underlying APIs
 - Support for multiple data types and layouts
 - Optimization for different architectures
 - Efficient memory access patterns

@@ -50,64 +50,64 @@ For this, the new interface designs in CATLASS include:
 
 1. `MakeMxScaleLayout`: Constructs the layout for MxScale input.
 
-```c++
-// Make a MxScale layout with Rows and Cols.
-template <class Element,   // Input data type
-          class LayoutTag, // Input layout type: row/col/zZ/nN
-          bool isMxScaleB, // Whether it is the left or right matrix
-          class T,         // rows/cols data type, both dynamic and static types allowed
-          class U>
-CATLASS_HOST_DEVICE constexpr
-auto MakeMxScaleLayout(T const& rows, U const& cols)
-```
+    ```c++
+    // Make a MxScale layout with Rows and Cols.
+    template <class Element,   // Input data type
+            class LayoutTag, // Input layout type: row/col/zZ/nN
+            bool isMxScaleB, // Whether it is the left or right matrix
+            class T,         // rows/cols data type, both dynamic and static types allowed
+            class U>
+    CATLASS_HOST_DEVICE constexpr
+    auto MakeMxScaleLayout(T const& rows, U const& cols)
+    ```
 
 2. `TileCopyTla`: Specialized for GMToL1 and L1ToL0 MxScale-related types.
 
-```c++
-// GMToL1
-/// Partial specialization for CopyGmToL1, Ascend950, fp8_e8m0_t, B ColumnMajor in and nN out.
-template <class LayoutSrc, class LayoutDst, class CoordSrc, class CoordDst>
-struct TileCopyTla<
-    Arch::Ascend950,
-    tla::Tensor<AscendC::GlobalTensor<float8_e8m0_t>, LayoutSrc, CoordSrc, AscendC::TPosition::GM>,
-    tla::Tensor<AscendC::LocalTensor<float8_e8m0_t>, LayoutDst, CoordDst, AscendC::TPosition::A1>,
-    std::enable_if_t<
-        tla::detail::isMxScaleBTrans<float8_e8m0_t, LayoutSrc>::value &&
-        tla::detail::isMxScalenN<float8_e8m0_t, LayoutDst>::value>> {
+    ```c++
+    // GMToL1
+    /// Partial specialization for CopyGmToL1, Ascend950, fp8_e8m0_t, B ColumnMajor in and nN out.
+    template <class LayoutSrc, class LayoutDst, class CoordSrc, class CoordDst>
+    struct TileCopyTla<
+        Arch::Ascend950,
+        tla::Tensor<AscendC::GlobalTensor<float8_e8m0_t>, LayoutSrc, CoordSrc, AscendC::TPosition::GM>,
+        tla::Tensor<AscendC::LocalTensor<float8_e8m0_t>, LayoutDst, CoordDst, AscendC::TPosition::A1>,
+        std::enable_if_t<
+            tla::detail::isMxScaleBTrans<float8_e8m0_t, LayoutSrc>::value &&
+            tla::detail::isMxScalenN<float8_e8m0_t, LayoutDst>::value>> {
 
-    CATLASS_DEVICE
-    TileCopyTla() {};
+        CATLASS_DEVICE
+        TileCopyTla() {};
 
-    template <class TensorDst, class TensorSrc>
-    CATLASS_DEVICE void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor){
-        // Implementation
-        // ....
+        template <class TensorDst, class TensorSrc>
+        CATLASS_DEVICE void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor){
+            // Implementation
+            // ....
+        }
     }
-}
 
-// L1ToL0
-// Partial specialization for CopyL1ToL0A, Ascend950, B8 or B4, nZ in and zN out. (Transpose A)
-template <class ElementSrc, class ElementDst, class LayoutSrc, class LayoutDst, class CoordSrc, class CoordDst>
-struct TileCopyTla<
-    Arch::Ascend950,
-    tla::Tensor<AscendC::LocalTensor<ElementSrc>, LayoutSrc, CoordSrc, AscendC::TPosition::A1>,
-    tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, CoordDst, AscendC::TPosition::A2>,
-    std::enable_if_t<
-        AscendC::Std::is_one_of_v<ElementSrc, int8_t, float8_e4m3_t, float8_e5m2_t, float4_e2m1x2_t, float4_e1m2x2_t> &&
-        AscendC::Std::is_one_of_v<ElementDst, int8_t, float8_e4m3_t, float8_e5m2_t, float4_e2m1x2_t, float4_e1m2x2_t> &&
-        tla::detail::isnZ<ElementSrc, LayoutSrc>::value && tla::detail::iszN<ElementDst, LayoutDst>::value>> {
-    static constexpr uint32_t ELE_NUM_PER_C0 = BytesToBits(BYTE_PER_C0) / SizeOfBits<ElementSrc>::value;
-    static constexpr uint32_t ELE_NUM_PER_FRACTAL = BytesToBits(BYTE_PER_FRACTAL) / SizeOfBits<ElementSrc>::value;
-    template <class TensorDst, class TensorSrc, class TensorMxScale>
-    CATLASS_DEVICE
-    void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor, TensorMxScale const &scaleTensor)
-    {
-    // ... Implementation
+    // L1ToL0
+    // Partial specialization for CopyL1ToL0A, Ascend950, B8 or B4, nZ in and zN out. (Transpose A)
+    template <class ElementSrc, class ElementDst, class LayoutSrc, class LayoutDst, class CoordSrc, class CoordDst>
+    struct TileCopyTla<
+        Arch::Ascend950,
+        tla::Tensor<AscendC::LocalTensor<ElementSrc>, LayoutSrc, CoordSrc, AscendC::TPosition::A1>,
+        tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, CoordDst, AscendC::TPosition::A2>,
+        std::enable_if_t<
+            AscendC::Std::is_one_of_v<ElementSrc, int8_t, float8_e4m3_t, float8_e5m2_t, float4_e2m1x2_t, float4_e1m2x2_t> &&
+            AscendC::Std::is_one_of_v<ElementDst, int8_t, float8_e4m3_t, float8_e5m2_t, float4_e2m1x2_t, float4_e1m2x2_t> &&
+            tla::detail::isnZ<ElementSrc, LayoutSrc>::value && tla::detail::iszN<ElementDst, LayoutDst>::value>> {
+        static constexpr uint32_t ELE_NUM_PER_C0 = BytesToBits(BYTE_PER_C0) / SizeOfBits<ElementSrc>::value;
+        static constexpr uint32_t ELE_NUM_PER_FRACTAL = BytesToBits(BYTE_PER_FRACTAL) / SizeOfBits<ElementSrc>::value;
+        template <class TensorDst, class TensorSrc, class TensorMxScale>
+        CATLASS_DEVICE
+        void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor, TensorMxScale const &scaleTensor)
+        {
+        // ... Implementation
+        }
     }
-}
-```
+    ```
 
-3.  `PackedMxTileCopyTla`: TileCopy encapsulation for MxScale movement
+3. `PackedMxTileCopyTla`: TileCopy encapsulation for MxScale movement
 
 ```c++
 template <
@@ -153,6 +153,7 @@ Take FP8 as an example. During movement, the 32-byte aligned positions along the
 
 2. Under ColumnMajor, M is the inner axis. When (32, 30) is moved to L1, the K direction will not be automatically zeroed. Therefore, 34 columns of data in the K direction need to be zeroed.
 ![Left: RowMajor, where the K axis is automatically padded with zero. Right: ColumnMajor, where the K axis needs to be explicitly padded with 0|697](<../../assets/images/CATLASS%20new%20version%20capability%20introduction-zeropadding.png>)
+
 ```c++
 // Init Zero for k axis
 InitZeroInL1A(tensorL1A, tla::MakeShape(mL1Actual, kL1ActualNext));
@@ -170,77 +171,77 @@ CATLASS adopts a hierarchical design. Therefore, new features are introduced bas
 
 1. Data movement: DN2NZ movement
 
-![](<../../assets/images//CATLASS new version capability introduction-image-1.png>)
+    ![](<../../assets/images//CATLASS new version capability introduction-image-1.png>)
 
-```c++
-/// Partial specialization for CopyGmToL1, Ascend950, fp8_e8m0_t, MxScaleA RowMajor in and zZ out.
-template <class LayoutSrc, class LayoutDst, class CoordSrc, class CoordDst>
-struct TileCopyTla<
-    Arch::Ascend950,
-    tla::Tensor<AscendC::GlobalTensor<float8_e8m0_t>, LayoutSrc, CoordSrc, AscendC::TPosition::GM>,
-    tla::Tensor<AscendC::LocalTensor<float8_e8m0_t>, LayoutDst, CoordDst, AscendC::TPosition::A1>,
-    std::enable_if_t<
-        tla::detail::isMxScaleANoTrans<float8_e8m0_t, LayoutSrc>::value &&
-        tla::detail::isMxScalezZ<float8_e8m0_t, LayoutDst>::value>> {
+    ```c++
+    /// Partial specialization for CopyGmToL1, Ascend950, fp8_e8m0_t, MxScaleA RowMajor in and zZ out.
+    template <class LayoutSrc, class LayoutDst, class CoordSrc, class CoordDst>
+    struct TileCopyTla<
+        Arch::Ascend950,
+        tla::Tensor<AscendC::GlobalTensor<float8_e8m0_t>, LayoutSrc, CoordSrc, AscendC::TPosition::GM>,
+        tla::Tensor<AscendC::LocalTensor<float8_e8m0_t>, LayoutDst, CoordDst, AscendC::TPosition::A1>,
+        std::enable_if_t<
+            tla::detail::isMxScaleANoTrans<float8_e8m0_t, LayoutSrc>::value &&
+            tla::detail::isMxScalezZ<float8_e8m0_t, LayoutDst>::value>> {
 
-    CATLASS_DEVICE
-    TileCopyTla() {};
+        CATLASS_DEVICE
+        TileCopyTla() {};
 
-    template <class TensorDst, class TensorSrc>
-    CATLASS_DEVICE void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor)
-    {
-      // Other logic
-      // ... ...
-        AscendC::Dn2NzParams intriParams;
-        intriParams.dnNum = 1;
-        intriParams.nValue = CeilDiv<MX_SCALE_COPY_GROUP_NUM>(cols);
-        intriParams.dValue = rows;
-        intriParams.srcDnMatrixStride = 0;
-        intriParams.srcDValue = CeilDiv<MX_SCALE_COPY_GROUP_NUM>(srcDValue);
-        intriParams.dstNzC0Stride = dstOuterStrideRow / BYTE_PER_C0;
-        intriParams.dstNzNStride = 1;
-        intriParams.dstNzMatrixStride = 0;
-      // Other logic
-      // ... ...
-      AscendC::DataCopy(dstHalf, srcHalf, intriParams);
+        template <class TensorDst, class TensorSrc>
+        CATLASS_DEVICE void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor)
+        {
+        // Other logic
+        // ... ...
+            AscendC::Dn2NzParams intriParams;
+            intriParams.dnNum = 1;
+            intriParams.nValue = CeilDiv<MX_SCALE_COPY_GROUP_NUM>(cols);
+            intriParams.dValue = rows;
+            intriParams.srcDnMatrixStride = 0;
+            intriParams.srcDValue = CeilDiv<MX_SCALE_COPY_GROUP_NUM>(srcDValue);
+            intriParams.dstNzC0Stride = dstOuterStrideRow / BYTE_PER_C0;
+            intriParams.dstNzNStride = 1;
+            intriParams.dstNzMatrixStride = 0;
+        // Other logic
+        // ... ...
+        AscendC::DataCopy(dstHalf, srcHalf, intriParams);
+        }
     }
-}
-```
+    ```
 
 2. Extended support for FP4 data movement
 
-```c++
-/// Partial specialization for CopyGmToL1, Ascend950, RowMajor in and zN out.
-template <class ElementSrc, class ElementDst, class LayoutSrc, class LayoutDst, class CoordSrc, class CoordDst>
-struct TileCopyTla<
-    Arch::Ascend950,
-    tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc, CoordSrc, AscendC::TPosition::GM>,
-    tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, CoordDst, AscendC::TPosition::A1>,
-    std::enable_if_t<tla::detail::isRowMajor<LayoutSrc>::value && tla::detail::iszN<ElementDst, LayoutDst>::value>> {
-    static constexpr uint32_t ELE_NUM_PER_C0 = BytesToBits(BYTE_PER_C0) / SizeOfBits<ElementSrc>::value;
+    ```c++
+    /// Partial specialization for CopyGmToL1, Ascend950, RowMajor in and zN out.
+    template <class ElementSrc, class ElementDst, class LayoutSrc, class LayoutDst, class CoordSrc, class CoordDst>
+    struct TileCopyTla<
+        Arch::Ascend950,
+        tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc, CoordSrc, AscendC::TPosition::GM>,
+        tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, CoordDst, AscendC::TPosition::A1>,
+        std::enable_if_t<tla::detail::isRowMajor<LayoutSrc>::value && tla::detail::iszN<ElementDst, LayoutDst>::value>> {
+        static constexpr uint32_t ELE_NUM_PER_C0 = BytesToBits(BYTE_PER_C0) / SizeOfBits<ElementSrc>::value;
 
-    // Methods
-    // ...Other logic
-    AscendC::Nd2NzParams intriParams;
+        // Methods
+        // ...Other logic
+        AscendC::Nd2NzParams intriParams;
 
-    intriParams.ndNum = ndNum;
-    intriParams.nValue = nValue;
-    intriParams.dValue = dValue;
-    // Two fp4 elements packed as one of b8 type for movement
-    if constexpr (AscendC::Std::is_one_of_v<typename TensorSrc::Element, float4_e2m1x2_t, float4_e1m2x2_t>) {
-        intriParams.dValue = CeilDiv(intriParams.dValue, 2);
+        intriParams.ndNum = ndNum;
+        intriParams.nValue = nValue;
+        intriParams.dValue = dValue;
+        // Two fp4 elements packed as one of b8 type for movement
+        if constexpr (AscendC::Std::is_one_of_v<typename TensorSrc::Element, float4_e2m1x2_t, float4_e1m2x2_t>) {
+            intriParams.dValue = CeilDiv(intriParams.dValue, 2);
+        }
+        intriParams.srcNdMatrixStride = srcNdMatrixStride;
+        intriParams.srcDValue = srcDValue;
+        if constexpr (AscendC::Std::is_one_of_v<typename TensorSrc::Element, float4_e2m1x2_t, float4_e1m2x2_t>) {
+            intriParams.srcDValue = CeilDiv(intriParams.srcDValue, 2);
+        }
+        intriParams.dstNzC0Stride = dstOuterStrideCol / ELE_NUM_PER_C0;
+        intriParams.dstNzNStride = dstInnerStrideRow / ELE_NUM_PER_C0;
+        intriParams.dstNzMatrixStride = dstNzMatrixStride;
+        // ...Other logic
     }
-    intriParams.srcNdMatrixStride = srcNdMatrixStride;
-    intriParams.srcDValue = srcDValue;
-    if constexpr (AscendC::Std::is_one_of_v<typename TensorSrc::Element, float4_e2m1x2_t, float4_e1m2x2_t>) {
-        intriParams.srcDValue = CeilDiv(intriParams.srcDValue, 2);
-    }
-    intriParams.dstNzC0Stride = dstOuterStrideCol / ELE_NUM_PER_C0;
-    intriParams.dstNzNStride = dstInnerStrideRow / ELE_NUM_PER_C0;
-    intriParams.dstNzMatrixStride = dstNzMatrixStride;
-    // ...Other logic
-}
-```
+    ```
 
 3. Specialized TileCopyTla for MxScale movement (see the MxScale section above)
 
@@ -248,68 +249,68 @@ struct TileCopyTla<
 
 1. Added Coord descriptions: At the instruction level, L1 now supports the ability to describe a tensor using coordinates. Taking L1ToL0A as an example: With Coord, the actual memory address is represented by BuiltinTensor + Coord. As shown below, the BuiltinTensor (dataptr) of both the large and small matrices points to the same address, with the offset determined by the difference in their Coord values.
 
-![](<../../assets/images/CATLASS new version capability introduction-image-2.png>)
+    ![](<../../assets/images/CATLASS new version capability introduction-image-2.png>)
 
-| Parameter          | Description (Using an M × K Matrix as an Example)                                                                         |
-| -------------- | -------------------------------------------------------------------------------------- |
-| mStartPosition | Start position along the M axis of the source matrix, in units of 16 elements                                                            |
-| kStartPosition | Start position along the K axis of the source matrix, in units of 32 bytes                                                                   |
-| mStep          | Movement length along the M axis of the source matrix, in units of 16 elements. Value range: mStep ∈ [0, 255]                                        |
-| kStep          | Movement length along the K axis of the source matrix, in units of 32 bytes. Value range: nStep ∈ [0, 255]                                               |
-| srcStride      | Interval between the start address of the current fractal and the next fractal in the K direction of the source matrix, in units of 512 bytes                                                  |
-| dstStride      | Interval between the start address of the current fractal and the next fractal in the K direction of the destination matrix, in units of 512 bytes                                                 |
-| ifTranspose    | Whether to enable transposition for each fractal matrix. Defaults to `false`. When enabled, the source and destination operands support the b4, b8, b16, and b32 data types.|
+    | Parameter          | Description (Using an M × K Matrix as an Example)                                                                         |
+    | -------------- | -------------------------------------------------------------------------------------- |
+    | mStartPosition | Start position along the M axis of the source matrix, in units of 16 elements                                                            |
+    | kStartPosition | Start position along the K axis of the source matrix, in units of 32 bytes                                                                   |
+    | mStep          | Movement length along the M axis of the source matrix, in units of 16 elements. Value range: mStep ∈ [0, 255]                                        |
+    | kStep          | Movement length along the K axis of the source matrix, in units of 32 bytes. Value range: nStep ∈ [0, 255]                                               |
+    | srcStride      | Interval between the start address of the current fractal and the next fractal in the K direction of the source matrix, in units of 512 bytes                                                  |
+    | dstStride      | Interval between the start address of the current fractal and the next fractal in the K direction of the destination matrix, in units of 512 bytes                                                 |
+    | ifTranspose    | Whether to enable transposition for each fractal matrix. Defaults to `false`. When enabled, the source and destination operands support the b4, b8, b16, and b32 data types.|
 
-CATLASS adds Coord to the existing Tensor representation to indicate the relationship between the Tensor to be moved and the BuiltinTensor.
+    CATLASS adds Coord to the existing Tensor representation to indicate the relationship between the Tensor to be moved and the BuiltinTensor.
 
-```c++
-/// Partial specialization for CopyL1ToL0A, Ascend950, zN in and zN out.
-template <class ElementSrc, class ElementDst, class LayoutSrc, class LayoutDst, class CoordSrc, class CoordDst>
-struct TileCopyTla<
-    Arch::Ascend950,
-    tla::Tensor<AscendC::LocalTensor<ElementSrc>, LayoutSrc, CoordSrc, AscendC::TPosition::A1>,
-    tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, CoordDst, AscendC::TPosition::A2>,
-    std::enable_if_t<tla::detail::iszN<ElementSrc, LayoutSrc>::value && tla::detail::iszN<ElementDst, LayoutDst>::value>> {
-    static constexpr uint32_t ELE_NUM_PER_C0 = BytesToBits(BYTE_PER_C0) / SizeOfBits<ElementSrc>::value;
-    static constexpr uint32_t ELE_NUM_PER_FRACTAL = BytesToBits(BYTE_PER_FRACTAL) / SizeOfBits<ElementSrc>::value;
+    ```c++
+    /// Partial specialization for CopyL1ToL0A, Ascend950, zN in and zN out.
+    template <class ElementSrc, class ElementDst, class LayoutSrc, class LayoutDst, class CoordSrc, class CoordDst>
+    struct TileCopyTla<
+        Arch::Ascend950,
+        tla::Tensor<AscendC::LocalTensor<ElementSrc>, LayoutSrc, CoordSrc, AscendC::TPosition::A1>,
+        tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, CoordDst, AscendC::TPosition::A2>,
+        std::enable_if_t<tla::detail::iszN<ElementSrc, LayoutSrc>::value && tla::detail::iszN<ElementDst, LayoutDst>::value>> {
+        static constexpr uint32_t ELE_NUM_PER_C0 = BytesToBits(BYTE_PER_C0) / SizeOfBits<ElementSrc>::value;
+        static constexpr uint32_t ELE_NUM_PER_FRACTAL = BytesToBits(BYTE_PER_FRACTAL) / SizeOfBits<ElementSrc>::value;
 
-    // Methods
+        // Methods
 
-    CATLASS_DEVICE
-    TileCopyTla() {};
+        CATLASS_DEVICE
+        TileCopyTla() {};
 
-    template <class TensorDst, class TensorSrc>
-    CATLASS_DEVICE void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor)
-    {
-        static_assert(
-            tla::detail::iszN<typename TensorSrc::Element, typename TensorSrc::Layout>::value
-                && tla::detail::iszN<typename TensorDst::Element, typename TensorDst::Layout>::value
-                && TensorSrc::position == AscendC::TPosition::A1 && TensorDst::position == AscendC::TPosition::A2,
-            "The input parameters do not match. TensorSrc must be L1 and zN, while TensorDst must be L0A and zN"
-        );
+        template <class TensorDst, class TensorSrc>
+        CATLASS_DEVICE void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor)
+        {
+            static_assert(
+                tla::detail::iszN<typename TensorSrc::Element, typename TensorSrc::Layout>::value
+                    && tla::detail::iszN<typename TensorDst::Element, typename TensorDst::Layout>::value
+                    && TensorSrc::position == AscendC::TPosition::A1 && TensorDst::position == AscendC::TPosition::A2,
+                "The input parameters do not match. TensorSrc must be L1 and zN, while TensorDst must be L0A and zN"
+            );
 
-        const uint32_t dstOuterShapeRow = tla::get<0, 1>(dstTensor.shape());
-        const uint32_t dstOuterShapeCol = tla::get<1, 1>(dstTensor.shape());
-        const uint32_t srcOuterStrideCol = tla::get<1, 1>(srcTensor.stride());
-        const uint32_t dstOuterStrideCol = tla::get<1, 1>(dstTensor.stride());
-        auto srcCoord = srcTensor.coord();  // tla::Coord
+            const uint32_t dstOuterShapeRow = tla::get<0, 1>(dstTensor.shape());
+            const uint32_t dstOuterShapeCol = tla::get<1, 1>(dstTensor.shape());
+            const uint32_t srcOuterStrideCol = tla::get<1, 1>(srcTensor.stride());
+            const uint32_t dstOuterStrideCol = tla::get<1, 1>(dstTensor.stride());
+            auto srcCoord = srcTensor.coord();  // tla::Coord
 
-        AscendC::LoadData2DParamsV2 loadDataParams;
-        loadDataParams.mStartPosition = CeilDiv<C0_NUM_PER_FRACTAL>(tla::get<0>(srcCoord));
-        loadDataParams.kStartPosition = CeilDiv<ELE_NUM_PER_C0>(tla::get<1>(srcCoord));
-        loadDataParams.mStep = dstOuterShapeRow;
-        loadDataParams.kStep = dstOuterShapeCol;
-        loadDataParams.srcStride = CeilDiv<ELE_NUM_PER_FRACTAL>(srcOuterStrideCol);
-        loadDataParams.dstStride = CeilDiv<ELE_NUM_PER_FRACTAL>(dstOuterStrideCol);
-        loadDataParams.ifTranspose = false;
+            AscendC::LoadData2DParamsV2 loadDataParams;
+            loadDataParams.mStartPosition = CeilDiv<C0_NUM_PER_FRACTAL>(tla::get<0>(srcCoord));
+            loadDataParams.kStartPosition = CeilDiv<ELE_NUM_PER_C0>(tla::get<1>(srcCoord));
+            loadDataParams.mStep = dstOuterShapeRow;
+            loadDataParams.kStep = dstOuterShapeCol;
+            loadDataParams.srcStride = CeilDiv<ELE_NUM_PER_FRACTAL>(srcOuterStrideCol);
+            loadDataParams.dstStride = CeilDiv<ELE_NUM_PER_FRACTAL>(dstOuterStrideCol);
+            loadDataParams.ifTranspose = false;
 
-        auto dstOffset = dstTensor.layout()(dstTensor.coord());  // offset
-        AscendC::LoadData(dstTensor.data()[dstOffset],           // built-in tensor
-                          srcTensor.data(),                      // built-in tensor
-                          loadDataParams);                       // srcTensor.coord represented in params
+            auto dstOffset = dstTensor.layout()(dstTensor.coord());  // offset
+            AscendC::LoadData(dstTensor.data()[dstOffset],           // built-in tensor
+                            srcTensor.data(),                      // built-in tensor
+                            loadDataParams);                       // srcTensor.coord represented in params
+        }
     }
-}
-```
+    ```
 
 2. Specialized TileCopyTla for MxScale movement (see the MxScale section above)
 
@@ -317,31 +318,31 @@ struct TileCopyTla<
 
 1. Added support for L0CToUB data path: The instruction supports three modes for L0CToUB movement: single-destination, dual-destination M split, and dual-destination N split.
 
-| dualDstCtrl | Input| Dual-destination control<br>`2'b00`: single-destination mode. The entire matrix is written to the target UB configured by using the `subBlockId` parameter.<br>2'b01: dual-destination mode. The matrix is split along the M dimension, and `M / 2 * N` is written to AIV. M must be a multiple of 2. On-the-fly quantization is not supported.<br>`2'b10`: dual-destination mode. The matrix is split along the N dimension, and `M * N / 2` is written to AIV. N must be a multiple of 2. On-the-fly quantization is not supported.<br>`2'b11`: Reserved.|
-| ----------- | -- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| subBlockId  | Input| ID of the destination UB when the single-destination mode is enabled.                                                                                                                                                                      |
+    | dualDstCtrl | Input| Dual-destination control<br>`2'b00`: single-destination mode. The entire matrix is written to the target UB configured by using the `subBlockId` parameter.<br>2'b01: dual-destination mode. The matrix is split along the M dimension, and `M / 2 * N` is written to AIV. M must be a multiple of 2. On-the-fly quantization is not supported.<br>`2'b10`: dual-destination mode. The matrix is split along the N dimension, and `M * N / 2` is written to AIV. N must be a multiple of 2. On-the-fly quantization is not supported.<br>`2'b11`: Reserved.|
+    | ----------- | -- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+    | subBlockId  | Input| ID of the destination UB when the single-destination mode is enabled.                                                                                                                                                                      |
 
-CATLASS provides a corresponding adaptation:
+    CATLASS provides a corresponding adaptation:
 
-```java
-enum class L0CCopyToUbMode {
-    NO_SPLIT = 0,
-    SPLIT_M,
-    SPLIT_N,
-    RESERVED
-};
-template <
-    class ArchTag,
-    class TensorSrc,
-    class TensorDst,
-    ScaleGranularity DEQUANT_GRANULARITY = ScaleGranularity::NO_QUANT,
-    bool ReluEnable = false,
-    class L0CCopyMode, // New template parameter
-    class Enable = void>
-struct CopyL0CToUBTla {
-    // ....
+    ```java
+    enum class L0CCopyToUbMode {
+        NO_SPLIT = 0,
+        SPLIT_M,
+        SPLIT_N,
+        RESERVED
     };
-```
+    template <
+        class ArchTag,
+        class TensorSrc,
+        class TensorDst,
+        ScaleGranularity DEQUANT_GRANULARITY = ScaleGranularity::NO_QUANT,
+        bool ReluEnable = false,
+        class L0CCopyMode, // New template parameter
+        class Enable = void>
+    struct CopyL0CToUBTla {
+        // ....
+        };
+    ```
 
 2. Added CopyL0CToDst (optional): On the 950 platform, L0C can be moved to either GM or UB. To keep the TileCopy interface consistent, the corresponding tile encapsulation is designed as CopyL0CToDst. When calling a sample, the specific TileCopy implementation (CopyL0CToGm or CopyL0CToUB) is declared. The destination address space (GM or UB) is allocated at the kernel layer and passed to the corresponding BlockMmad.
 
@@ -630,7 +631,7 @@ TLA (Tensor Layout Abstraction), as a data structure in CATLASS, provides an enc
 - A tensor contains four template parameters: `BuiltinTensor`, `Layout`, `Coord` and `Position`.
   - `BuiltinTensor` is the underlying storage object itself, which is `GlobalTensor` or `LocalTensor` in AscendC.
   - `Layout` describes how logical coordinates map to memory and how the logical valid range is expressed. It includes `shape`, `stride`, and `origin_shape`.
-  - `Position` is a position tag in Ascend C, such as `Arch::PositionGM{}` and `Arch::PositionL1{}`. It distinguishes which level of storage (GM, L1, L0, etc.) the data resides in.
+- `Position` is a position tag in AscendC, such as `Arch::PositionGM{}` and `Arch::PositionL1{}`. It distinguishes which level of storage (GM, L1, L0, etc.) the data resides in.
   - `Coord` represents the address offset of the tensor relative to the original representation, with the offset in units of elements. The newly added Coord adapts to the on-chip movement interface of the 950 platform, supports different computation levels, and can be adapted to previous generations of implementations.
 
 Starting from the 950 platform, **all new samples in CATLASS are implemented based on TLA**.

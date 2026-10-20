@@ -15,6 +15,7 @@ Before locating the issue, determine which category the current precision issue 
 **Symptoms**: The NPU output differs significantly from the golden result. Almost all elements do not match, or the output shows obvious anomalous patterns (all zeros, all NaN, all Inf, random garbage, etc.).
 
 **Common causes**:
+
 - Computation starts before data movement completes (missing pipeline synchronization).
 - Input data is not passed correctly (memory copy error, address offset error).
 - Fundamental logic errors exist in the sample (incorrect formula, dimension swapped).
@@ -27,6 +28,7 @@ Before locating the issue, determine which category the current precision issue 
 **Symptoms**: Most elements pass the comparison, only a few exceed the error tolerance, or the overall error is large but the numerical trend is correct (e.g., the output and the golden result are within the same order of magnitude).
 
 **Common causes**:
+
 - Accumulated rounding errors from low-precision data types (FP16/BF16)
 - Intermediate computations not using higher-precision accumulation
 - Numeric overflow (max. FP16 just reaching 65504)
@@ -115,7 +117,9 @@ First, a critical distinction: **Most CATLASS samples do not have an independent
 | Dynamic Matmul| ✅ Yes| `102_dynamic_optimized_matmul` (`DoTiling` + `SelectKernel`), `103_dynamic_optimized_quant_matmul_per_token_basic`| DoTiling → SelectKernel → Launch |
 
 > **Takeaways**
+
 > - **For samples without tiling** (the majority), precision investigation goes directly to component binary search (Section 3.3). No need to consider tiling issues.
+
 > - **For samples with tiling** (FA/MLA/dynamic Matmul), first determine whether the issue is related to tiling or the kernel, and then proceed to component binary search.
 
 ### CATLASS Template-based Layered Architecture
@@ -158,7 +162,7 @@ Block layer:
 
 ### Binary Search Strategy
 
-#### Step 1 (only for FA/MLA/dynamic samples): Distinguish tiling vs. kernel issues.
+#### Step 1 (only for FA/MLA/dynamic samples): Distinguish tiling vs. kernel issues
 
 Perform this step only if the sample includes an explicit tiling stage (see classification in Section 3.1):
 
@@ -167,7 +171,7 @@ Perform this step only if the sample includes an explicit tiling stage (see clas
 
 For samples without tiling, go directly to Step 2.
 
-#### Step 2: Perform block-level binary search (BlockMmad vs. BlockEpilogue).
+#### Step 2: Perform block-level binary search (BlockMmad vs. BlockEpilogue)
 
 This is the core step for CATLASS precision issue locating. Split the kernel into two block components and validate them separately.
 
@@ -195,7 +199,7 @@ using BlockEpilogue = Epilogue::Block::BlockEpilogue<
 
 Replace the current BlockMmad with a proven correct BlockMmad (e.g., `Gemm::Block::BlockMmad` extracted from `00_basic_matmul`). If precision recovers, the issue is in BlockMmad; otherwise, the issue is in BlockEpilogue.
 
-#### Step 3: Perform tile-level binary search (inside the faulty block).
+#### Step 3: Perform tile-level binary search (inside the faulty block)
 
 After locating the specific block, further perform binary search on its internal tile components:
 
@@ -372,6 +376,7 @@ The following are precision pitfalls that occur repeatedly in CATLASS developmen
 **Cause**: CATLASS uses pipelines to parallelize data movement and computation, using `SetFlag`/`WaitFlag` to control synchronization between pipelines. For example, after DataCopy moves data from GM to L1, it notifies the compute unit via `SetFlag<MTE2_MTE1>` that data is ready. The compute unit waits for the movement to complete via `WaitFlag<MTE2_MTE1>` before reading L1 data. If `SetFlag` or `WaitFlag` is missing, the compute unit may start reading before data movement completes, resulting in uninitialized or stale data.
 
 **Troubleshooting**:
+
 - Check whether the corresponding `SetFlag` operation (such as `SetFlag<MTE2_MTE1>`) exists after DataCopy completes.
 - Check whether the corresponding `WaitFlag` operation (such as `WaitFlag<MTE2_MTE1>`) exists before MMAD computation.
 - Check the L0 pipeline: Check whether `SetFlag<MTE1_M>` is set after DataCopy moves data from L1 to L0, and whether `WaitFlag<MTE1_M>` has been set before MMAD reads L0.
@@ -385,6 +390,7 @@ The following are precision pitfalls that occur repeatedly in CATLASS developmen
 **Cause**: DataCopy has a minimum movement granularity requirement (typically 16B or 32B aligned). When the data size does not meet the requirement, DataCopy may move extra data (reading out-of-bounds data) or miss part of the data.
 
 **Troubleshooting**:
+
 - Check whether DataCopyPad (with padding) is used for non-aligned scenarios.
 - Check whether masks are correctly used in tail block processing to limit the valid data range.
 
@@ -393,11 +399,13 @@ The following are precision pitfalls that occur repeatedly in CATLASS developmen
 **Symptom**: Inf or excessively large values appear in the output.
 
 **Cause:**
+
 - FP16 maximum is approximately 65504, and BF16 maximum is approximately 3.39e38.
 - The accumulated sum in matrix multiplication increases as the K dimension grows and can easily exceed the FP16 range.
 - Intermediate computations (e.g., squaring, exponentiation) overflow even more easily.
 
 **Troubleshooting**:
+
 - Estimate the maximum possible values of intermediate results.
 - Scale down the input data.
 - Use FP32 as the intermediate accumulation type.
@@ -409,6 +417,7 @@ The following are precision pitfalls that occur repeatedly in CATLASS developmen
 **Cause**: If BlockMmad uses FP16 or BF16 as the accumulator type (instead of FP32), each accumulation introduces rounding error. The larger K, the more severe the error accumulation.
 
 **Troubleshooting**:
+
 - Ensure that the `ElementC` template parameter of BlockMmad is `float` (FP32 accumulation).
 - If FP32 accumulation is already in use but the issue persists, check the L0 C tiling strategy (l0CStages).
 
@@ -419,6 +428,7 @@ The following are precision pitfalls that occur repeatedly in CATLASS developmen
 **Cause**: The epilogue in quantized Matmul includes operations such as scale multiplication and dequantization. A formula error (e.g., missing a scale factor, incorrect multiplication order) leads to systematic bias.
 
 **Troubleshooting**:
+
 - Manually derive the complete computation formula for the epilogue.
 - Compare with the golden computation formula item by item.
 - Validate the formula using simple data (e.g., all inputs = 1.0, all scales = 1.0).
@@ -430,6 +440,7 @@ The following are precision pitfalls that occur repeatedly in CATLASS developmen
 **Cause**: RowMajor and ColumnMajor determine the data format in memory. If the assumed layout in the sample is inconsistent with the actual data layout, incorrect data will be read or written.
 
 **Troubleshooting**:
+
 - Ensure that LayoutA, LayoutB, and LayoutC are consistent in the golden function and the sample.
 - Check the LayoutTag template parameters of DataCopy.
 
@@ -492,6 +503,7 @@ Level 5: Binary search inside computation logic
 ```
 
 **Binary Search Principles**:
+
 - Change only one variable at a time to keep a clear track of the change outcomes.
 - Preferentially replace with the simplest implementation (such as identity epilogue or simple DataCopy).
 - Clearly state your assumption before each modification, and verify the assumption after the modification.
@@ -501,6 +513,7 @@ Level 5: Binary search inside computation logic
 When binary search cannot locate the issue, use the comparison method as a fallback.
 
 **Procedure**:
+
 1. Find a reference sample with similar functionality and normal precision (e.g., `00_basic_matmul`).
 2. Look for the differences module by module from the top layer to the low layer:
    - Device layer: template parameters of DeviceGemm
@@ -556,28 +569,33 @@ The `CompareData` function of CATLASS dynamically adjusts rtol based on `compute
 When debugging precision issues each time, check the following items one by one:
 
 **Before debugging**:
+
 - [ ] Read [Precision Analysis Basics](./precision_analysis_basics.md) to understand precision comparison methods.
 - [ ] Fix a minimal reproducible case (minimum shape, fixed data).
 - [ ] Clear build cache (`rm -rf build/ $HOME/atc_data/kernel_cache/`).
 - [ ] Confirm that the modified binary has been executed.
 
 **Issue classification**:
+
 - [ ] Determine whether it's a complete miscalculation or a precision error.
 - [ ] Observe the distribution pattern of error elements.
 
 **Golden function validation**:
+
 - [ ] The correct golden function is selected (ComputeMatmul vs. ComputeGemm, etc.).
 - [ ] The golden function uses higher-precision computation (ElementGolden = float).
 - [ ] The layout parameters are consistent with those in the sample.
 - [ ] The input data passed to the golden function is identical to the data copied to the NPU.
 
 **Common pitfalls**:
+
 - [ ] Pipeline synchronization issues (EnQue/DeQue after DataCopy?)
 - [ ] DataCopy alignment issues (DataCopyPad used for small shapes?)
 - [ ] GlobalTensor.SetValue issues
 - [ ] Numerical overflow (FP16 max ≈ 65504)
 
 **Modular binary search**:
+
 - [ ] Try replacing tiling parameters (for samples with tiling).
 - [ ] Try block-level binary search (BlockMmad vs. BlockEpilogue).
 - [ ] Try tile-level binary search (locate the specific tile inside the faulty block).

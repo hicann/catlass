@@ -30,7 +30,7 @@ For the basic multi-core K-splitting solution, refer to [this guide](../102_dyna
 
 The computation on the AIV core is divided into two parts: 1. After the multi-core K-splitting matrix multiplication, there is a ReduceAdd accumulation along the K axis; 2. Dequantization of the matrix multiplication result `In Plan A`, AIC performs matrix multiplication, AIV performs dequantization, and then performs accumulation. `In Plan B`, AIC performs matrix multiplication, AIV performs accumulation, and then performs dequantization. For scenarios where each core has multiple rounds of basic block computations, `Plan A` can benefit from overlapping computation with CV. If each core only performs one round of basic block computation, `Plan B` requires less dequantization computation.
 
-## Performancem Benefits
+## Performance Benefits
 
 Compared with the 12_quant_matmul operator, the optimization lies in achieving load balancing through K-splitting when the C matrix is small. The disadvantage is that dequantization is handled separately at the end, without CV fusion hiding, and adds the ReduceAdd operation on the AI core for accumulation along the K direction.
 

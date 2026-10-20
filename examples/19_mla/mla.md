@@ -37,7 +37,7 @@ MLATiling::GetMLATilingParam(mlaInfo, blockDim, (uint32_t *)tilingHost);
 
 - 采用FlashAttention的四阶段计算流程，对于输入的Q, QRope, K, KRope进行切块后运算。
 - 对输入序列长度`kvSeqlen`按照`blockSize`为单位进行切块，每次Attention运算的基块为四个block，使能提前下发一个基块的QK Mmad与softmax，让不同基块的CUBE与VECTOR阶段互相掩盖。
-- 由于基块大小的放大，该Kernel的PV Mmad阶段的搬出数据量降低，减少了搬出带宽占用，相应的，由于硬件buffer大小限制，取消了K的常驻。
+- 由于基块大小的放大，该Kernel的PV Mmad阶段的搬出数据量降低，减少了搬出带宽占用，相应地，由于硬件buffer大小限制，取消了K的常驻。
 
 在本算子中，使用了Block和Tile层级组件来组装Kernel，具体步骤为：
 

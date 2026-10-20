@@ -1,6 +1,6 @@
 # Unshared FA 推理系列模板设计
 
-本系列模板面向 **Unshared（非共享 KV）FlashAttention 推理场景**：每个 attention head 的 KV 有效序列长度各不相同（如 Multi-LoRA / 独立上下文场景），因此 softmax 阶段需要按 head 构造独立的 mask，且 KV 序列较短、可一次性处理完，无需在线 rescale 累积输出 O。
+本系列模板面向 **Unshared（非共享 KV）Flash Attention 推理场景**：每个 attention head 的 KV 有效序列长度各不相同（如 Multi-LoRA / 独立上下文场景），因此 softmax 阶段需要按 head 构造独立的 mask，且 KV 序列较短、可一次性处理完，无需在线 rescale 累积输出 O。
 
 系列包含以下模板：
 

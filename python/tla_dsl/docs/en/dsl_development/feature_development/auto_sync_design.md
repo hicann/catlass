@@ -12,7 +12,6 @@ TLA DSL provides experimental automatic synchronization through `@tla.kernel(aut
 
 `v0` only handles intra-core synchronization among the pipelines within a single AIC or AIV. It does not generate Cube/Vector inter-core synchronization, nor the synchronization inside a VF in Vector core programming.
 
-
 ## User Interface and Usage Constraints
 
 ### How to Enable

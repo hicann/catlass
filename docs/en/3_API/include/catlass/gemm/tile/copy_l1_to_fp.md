@@ -6,7 +6,7 @@
 
 ## Function
 
-`CopyL1ToFP` is a template that moves data (typically auxiliary information such as quantization Scale) from L1 (Local Memory, referred to as A1 Buffer) to FP (FixPipe Buffer, referred to as C2PIPE2GM). This movement writes the data directly toGlobal Memory (GM) via the FixPipe channel.
+`CopyL1ToFP` is a template that moves data (typically auxiliary information such as quantization Scale) from L1 (Local Memory, referred to as A1 Buffer) to FP (FixPipe Buffer, referred to as C2PIPE2GM). This movement writes the data directly to Global Memory (GM) via the FixPipe channel.
 
 FixPipe is a special data path in the Atlas A2 architecture. It allows the direct movement of computation results or auxiliary data from the core to external storage (GM), bypassing the conventional L0C → GM path. It is commonly used for Scale data write-back in per-token/per-channel dequantization scenarios.
 

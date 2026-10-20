@@ -20,9 +20,6 @@ FMHA Backward面向 Ascend 950，采用 packed TND 布局，支持 `fp16`、`bf1
 
 所有 Block 共享同一 `Arch::Resource` 的 L1/L0A/L0B/L0C 物理资源。
 
-
-
-
 ## 三、原型设计
 
 ### 输入输出张量
@@ -37,9 +34,7 @@ FMHA Backward面向 Ascend 950，采用 packed TND 布局，支持 `fp16`、`bf1
 
 边界寻址：`cu_seqlens_q / cu_seqlens_kv` 前缀和——第 b 个序列 token 行区间 = [cu_seqlens[b], cu_seqlens[b+1])；
 
-
 约束：dtype ∈ {half, bf16}；D ∈ {64,128,192,256}；qHeads/kvHeads ∈ {1/1, 8/1, 16/1}；mask ∈ {无, causal}；
-
 
 ## 四、计算流程
 
@@ -80,7 +75,6 @@ for 每个 batch b:
 
 - 负载均衡：每个 (b,n,s2o) 权重 = 有效 S1o 块数（causal 三角），贪心切分 `target = totalValid / coreNum`；
 
-
 ## 六、MASK 与 GQA
 
 causal 三角由 device 块内生成，不读 GM、不跨块保存。块分类：`AllValid` 整块有效不生成 mask；Boundary 只写无效列；AllValid 整块零开销不生成 mask；AllInvalid 跳过整块。
@@ -92,6 +86,3 @@ GQA：dQ 按 qHead 独立写 workspace；dK/dV 同 kvHead 的多 qHead 部分和
 主 kernel 中 mm3/4/5 的 L0C 结果以 FixPipe 原子模式（`SetAtomicAdd<float>`）直接累加到 workspace 对应区。
 
 主 kernel 完成后 host launch Post kernel：读 fp32 workspace → 按 kvHead 归约 GQA 各 qHead 部分和 → dQ/dK 乘 scale → cast fp16/bf16 → 按原始 cu_seqlens 写 unpadded GM 布局。后续优化过程考虑使用fixpipe随路量化，避免额外的 cast 操作。
-
-
-

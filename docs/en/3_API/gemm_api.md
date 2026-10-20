@@ -100,7 +100,7 @@ In the SPMD programming model of the Ascend NPU, a Block represents a process, w
 - MMAD instructions on tile-granularity data residing in the L0 Buffer
 - Synchronization operations: Managing coordination across multiple cores as well as between different hardware pipelines within a single core to ensure asynchronous data dependencies are met.
 
-A Block utilizes the `TileMma` and `TileCopy` APIs (detailed below) to perform tile-granularity data transfers and MMAD computations.
+A Block utilizes the `TileMmad` and `TileCopy` APIs (detailed below) to perform tile-granularity data transfers and MMAD computations.
 
 Different hardware pipelines within a block (such as MTE1, MTE2, or FixPipe) provide specialized capabilities. These pipelines must share data and synchronize access to shared data. For example, after MTE2 copies data from GM to the L1 Buffer, it must notify MTE1 that the input data is ready. The `Kernel::` layer handles the orchestration by invoking the `Block::` layer interfaces, while the `Block::` layer itself manages the independent computation of individual matrix C blocks.
 

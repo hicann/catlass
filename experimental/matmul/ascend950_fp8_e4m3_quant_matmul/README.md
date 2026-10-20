@@ -10,6 +10,7 @@
 - 默认布局为 A `RowMajor`、B `RowMajor`，与 `gen_data.py` 生成的数据一致。
 
 ## 代码组织
+
 ```text
 experimental
 └── matmul
@@ -22,9 +23,11 @@ experimental
 ```
 
 ## 使用示例
+
 - 获取代码之后编译相应的算子可执行文件，可参考 [quickstart](../../../docs/zh/1_Practice/01_quick_start.md#编译执行)。本用例为 Ascend950（3510）算子，编译时需加 `-DCATLASS_ARCH=3510`。
 - 执行算子
-```
+
+```text
 # 编译指定用例
 bash scripts/build.sh ascend950_fp8_e4m3_quant_matmul -DCATLASS_ARCH=3510
 # 生成测试样例（在 examples/ascend950_fp8_e4m3_quant_matmul/data 下生成 input/ 与 golden/）
@@ -37,8 +40,10 @@ cd output/bin
 # 可执行文件名 |矩阵m轴|n轴|k轴|Device ID
 # Device ID 可选，默认为 0
 ```
+
 执行结果如下，说明精度比对成功。
-```
+
+```text
 Compare success.
 ```
 

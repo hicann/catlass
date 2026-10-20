@@ -1,4 +1,4 @@
-# Mxfp8 FlashAttention Infer Example Readme
+# Mxfp8 Flash Attention Infer Example Readme
 
 > **注意**：本样例位于 `experimental/` 目录下，如需编译运行，请先将样例目录拷贝至 `examples/` 下，并在 `examples/CMakeLists.txt` 中添加样例名称 `ascend950_fp8_mx_flash_attention_infer`。
 

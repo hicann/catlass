@@ -25,7 +25,7 @@ lit -sv csrc/mlir/build/tests/lit
 
 ## e2e test：端到端验证
 
-- 该测试额外依赖NPU环境，并且需要安装`torch` / `torch-npu`。
+- 该测试额外依赖NPU环境，并且需要安装`torch` / `torch_npu`。
 
 ```bash
 cd /path/to/catlass/python/tla_dsl

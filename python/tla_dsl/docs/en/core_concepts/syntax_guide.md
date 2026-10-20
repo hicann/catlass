@@ -325,6 +325,7 @@ def struct_arg_kernel(tiling: TilingData, out: tla.Tensor) -> None:
 ```
 
 **Usage scope**:
+
 - Create an instance on the host side and pass it as a kernel argument, fields should be numeric and tensor
 - Create an instance on the kernel side
 

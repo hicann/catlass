@@ -6,7 +6,7 @@
 
 ## 功能说明
 
-`TileCopyFAQTla` 是 TLA 风格的 FlashAttention LoadQ 数据搬运模板。用于将多矩阵（multi-matrix）数据从 GM 搬运到 L1 并转换为 zN 分形格式，服务于 FlashAttention 的 Q 矩阵预加载阶段。源数据为 3D（ndNum × nValue × dValue），通过 `Nd2NzParams` 一次性转换为 zN 格式。
+`TileCopyFAQTla` 是 TLA 风格的 Flash Attention LoadQ 数据搬运模板。用于将多矩阵（multi-matrix）数据从 GM 搬运到 L1 并转换为 zN 分形格式，服务于 FlashAttention 的 Q 矩阵预加载阶段。源数据为 3D（ndNum × nValue × dValue），通过 `Nd2NzParams` 一次性转换为 zN 格式。
 
 > **限制**：该模板仅支持 AtlasA2 架构（`CATLASS_ARCH == 2201`），Ascend950 不支持。
 

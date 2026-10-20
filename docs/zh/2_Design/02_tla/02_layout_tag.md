@@ -17,7 +17,7 @@
 | `nN`                 | 分形内列优先、分形间列优先 | 4    |
 | `PaddingRowMajor`    | 带填充的行优先分块布局     | 4    |
 | `PaddingColumnMajor` | 带填充的列优先分块布局     | 4    |
-| `NDC1HWC0`           | 5 维卷积张量布局           | 5    |
+| `NDC1HWC0`           | 6 维卷积张量布局           | 6    |
 | `KDC1KHKWN1N0C0`     | 4 维卷积权重布局           | 4    |
 
 所有 LayoutTag 的代码位于 [`include/catlass/layout/matrix.hpp`](../../../../include/catlass/layout/matrix.hpp)、[`vector.hpp`](../../../../include/catlass/layout/vector.hpp) 和 [`tensor.hpp`](../../../../include/catlass/layout/tensor.hpp)，统一由 [`include/catlass/layout/layout.hpp`](../../../../include/catlass/layout/layout.hpp) 聚合引用。
@@ -381,7 +381,7 @@ nZ:  分形间行优先 → 先遍历完第0行的所有分形块(F00,F01,F02)�
 
 卷积场景的专用高维布局，定义在 `matrix.hpp` 末尾：
 
-- `NDC1HWC0`（RANK=6）：用于卷积输入特征图，维度为 `(N, D, C1, H, W, C0)`。
+- `NDC1HWC0`（RANK=5）：用于卷积输入特征图，维度为 `(N, D, C1, H, W, C0)`。
 - `KDC1KHKWN1N0C0`（RANK=4）：用于卷积权重，维度为 `(Kd*C1*Kh*Kw, N1, N0, C0)`。
 
 ## 实际使用示例

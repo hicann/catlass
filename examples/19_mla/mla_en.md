@@ -29,13 +29,13 @@ This operator provides two distinct Kernel implementations:
 
 [mla_kernel.cpp](./mla_kernel.cpp) has the following features:
 
-- Implements the classic four-stage FlashAttention execution pipeline, tiling the input Q, QRope, K, and KRope tensors before computation.
+- Implements the classic four-stage Flash Attention execution pipeline, tiling the input Q, QRope, K, and KRope tensors before computation.
 - Tiles the input sequence length `kvSeqlen` using `blockSize` as the fundamental unit. Each Attention calculation cycle operates on a single block as its base unit. It enables pre-issuing the QK MMAD and softmax operations for a base block, allowing the CUBE and VECTOR execution stages of adjacent base blocks to overlap and hide latency.
 - For the QK and PV matrix multiplications within the same base unit, since K and V share the same data segment, K is kept resident in the L1 buffer. This optimization significantly reduces inbound data transfer bandwidth.
 
 [mla_kernel_tp1_spec.cpp](./mla_kernel_tp1_spec.cpp) has the following features:
 
-- Implements the classic four-stage FlashAttention execution pipeline, tiling the input Q, QRope, K, and KRope tensors before computation.
+- Implements the classic four-stage Flash Attention execution pipeline, tiling the input Q, QRope, K, and KRope tensors before computation.
 - Tiles the input sequence length `kvSeqlen` using `blockSize` as the fundamental unit. Each Attention calculation cycle operates on four blocks as its base unit. It enables pre-issuing the QK MMAD and softmax operations for a base block, allowing the CUBE and VECTOR execution stages of adjacent base blocks to overlap and hide latency.
 - By scaling up the base unit size, this kernel substantially decreases the outbound data volume during the PV MMAD stage, lowering outbound bandwidth consumption. Conversely, due to hardware buffer capacity limitations, K residency in L1 is disabled in this mode.
 

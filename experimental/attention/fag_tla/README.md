@@ -5,7 +5,7 @@
 
 ## 功能说明
 
-本样例实现 FlashAttention 反向算子（FlashAttentionScoreGrad），完成注意力反向传播的
+本样例实现 Flash Attention 反向算子（FlashAttentionScoreGrad），完成注意力反向传播的
 梯度计算：
 
 ```text

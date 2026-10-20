@@ -115,7 +115,7 @@ def vector_op(mem_in: tla.Tensor, mem_out: tla.Tensor) -> None:
 | [**`interleave_op.py`**](interleave_op.py) | 交错运算示例，基于两路输入分别产出交错后的两路输出。 |
 | [**`load_dintlv_op.py`**](load_dintlv_op.py) |双目的交织加载示例，单次加载拆出偶数/奇数两路寄存器。 |
 | [**`load_us_b8_op.py`**](load_us_b8_op.py) | 上采样加载示例，将 i8 元素上采样至 VL 寄存器（仅 i8）。 |
-| [**`load_mask_dist.py`**](load_mask_dist.py) | `MaskLoadParams`：`ds`/`us` × `--mask-dtype i8|i16|i32` → `tla.where`。 |
+| [**`load_mask_dist.py`**](load_mask_dist.py) | `MaskLoadParams`：`ds`/`us` × `--mask-dtype i8\|i16\|i32` → `tla.where`. |
 | [**`load_store_mask.py`**](load_store_mask.py) | 掩码搬运往返示例，掩码 UB 与伴随向量同 dtype；另含 u8 GM↔UB（含 128..255）。 |
 | [**`store_pack.py`**](store_pack.py) | 压缩存储示例，取得低半有效数位做紧凑存储。 |
 | [**`reduction_ops.py`**](reduction_ops.py) | `tla.reduce` 归约示例，支持 `add`/`max`/`min` 三种模式，覆盖对齐与非对齐场景。 |
@@ -266,6 +266,7 @@ first mismatch=None
   - `multi_binary.py`：仅支持 4 字节 dtype（`i32`/`f32`，64 lane）；固定 7 块恰好覆盖 400 元素，不随 shape 泛化。
 
 - 执行示例：
+
   ```bash
   # 在本仓 python/tla_dsl 目录下执行
   cd python/tla_dsl
@@ -312,6 +313,7 @@ first mismatch=None
   - 输出 4 个（非 `masked_unary` 时其余用 sentinel 补齐）。
 
 - 执行示例：
+
   ```bash
   # 在本仓 python/tla_dsl 目录下执行
   cd python/tla_dsl
@@ -355,6 +357,7 @@ first mismatch=None
   - `shift_op.py`：源为 signed `i8`/`i16`/`i32`；移位量须非负；右移为算术右移。
 
 - 执行示例：
+
   ```bash
   # 在本仓 python/tla_dsl 目录下执行
   cd python/tla_dsl
@@ -418,6 +421,7 @@ first mismatch=None
     硬件路径为 `plds(uint32_t*)`，故绝对下限亦为 4B；正式契约以表中模式约束为准。
 
 - 执行示例：
+
   ```bash
   # 在本仓 python/tla_dsl 目录下执行
   cd python/tla_dsl
@@ -440,6 +444,7 @@ first mismatch=None
   python examples/end_to_end/vector_ops/load_mask_dist.py ds --run --mask-dtype i32 --device 0
   python examples/end_to_end/vector_ops/load_mask_dist.py us --run --mask-dtype i16 --device 0
     ```
+
 ### 类型转换
 
 - 文件位置：
@@ -473,6 +478,7 @@ first mismatch=None
   - 整数舍入（trunc/floor）在浮点→整数转换上可观测；`sat_mode=UNKNOWN` 被放在浮点→浮点转换上以避免影响数值。
 
 - 执行示例：
+
   ```bash
   # 在本仓 python/tla_dsl 目录下执行
   cd python/tla_dsl
@@ -503,6 +509,7 @@ first mismatch=None
   - `arange_op.py`：无 GM 输入（`input_count=0`）；输出 1 个；支持 batch。
 
 - 执行示例：
+
   ```bash
   # 在本仓 python/tla_dsl 目录下执行
   cd python/tla_dsl
@@ -534,6 +541,7 @@ first mismatch=None
     | `interleave_op.py` | i8, i16, i32, f16, f32, bf16 |
 
 - 执行示例：
+
   ```bash
   # 在本仓 python/tla_dsl 目录下执行
   cd python/tla_dsl
@@ -571,6 +579,7 @@ first mismatch=None
   - `store_pack.py`：输入 i32/i16，输出对应 i16/i8；固定 256 元素。
 
 - 执行示例：
+
   ```bash
   # 在本仓 python/tla_dsl 目录下执行
   cd python/tla_dsl
@@ -618,6 +627,7 @@ first mismatch=None
   - `register_control_flow.py`：shape 必须恰好一个物理向量寄存器（f32 下为 64 元素）。
 
 - 执行示例：
+
   ```bash
   # 在本仓 python/tla_dsl 目录下执行
   cd python/tla_dsl
@@ -652,6 +662,7 @@ first mismatch=None
   - `load_and_store_scalar_after_reduction.py`：dtype 固定 f32，无位置 op、无 `--run`，唯一参数 `--device`；固定写入索引 7（`vec.func` 内）与 8（`vector` 内）。
 
 - 执行示例：
+
   ```bash
   # 在本仓 python/tla_dsl 目录下执行
   cd python/tla_dsl
@@ -686,6 +697,7 @@ first mismatch=None
   - `histograms_op.py`：必须 `--run`；`--mode frequency|accumulate|frequency_into|all`（默认 `all`）；固定 `SRC_ELE=256`、`DST_ELE=128`；默认 `--device 0`。
 
 - 执行示例：
+
   ```bash
   # 在本仓 python/tla_dsl 目录下执行
   cd python/tla_dsl
@@ -727,6 +739,7 @@ first mismatch=None
   - 掩码未命中的 lane（`vm[40:]` / `sm[40:]`）不写入，保持初始设定值 `-999.0`，故 golden 校验只比较前 `MASK_LANES` 个元素。
 
 - 执行示例：
+
   ```bash
   # 在本仓 python/tla_dsl 目录下执行
   cd python/tla_dsl

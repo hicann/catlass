@@ -34,6 +34,7 @@ struct TileVmad;
 | Atlas A2| `ColumnMajor` | `Duplicate` → scalar shuffle → per-column `Axpy` → `Cast` → `Add`| float version synchronization|
 
 **RowMajor implementation process:**
+
 1. `Duplicate` initializes the accumulator buffer temp to zero.
 2. Blocked `MulAddDst` computes `A[i:*n] * X[i:*n]` and accumulates the results into temp.
 3. `WholeReduceSum` reduces temp into a column vector.
@@ -41,6 +42,7 @@ struct TileVmad;
 5. `Add` accumulates the final result into Y.
 
 **ColumnMajor implementation process:**
+
 1. `Duplicate` initializes temp to zero.
 2. `SetFlag and WaitFlag` are used to load the scalar values from vector X into scalar registers.
 3. Per-column `Axpy` updates `temp += A[:,i] * pix[i]` for each column.

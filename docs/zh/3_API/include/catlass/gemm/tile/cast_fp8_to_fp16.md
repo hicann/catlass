@@ -6,7 +6,7 @@
 
 ## 功能说明
 
-`TileCastFp8ToFp16Dequant` 模板负责将 FP8（`int8_t` 存储）量化数据反量化（dequant）并转换为 FP16（`half`），结果直接写回 GM。常用于 A 矩阵（weight）的 Prologue 阶段，在计算前完成数据解量化。
+`TileCastFp8ToFp16Dequant` 模板负责将 FP8（`int8_t` 存储）量化数据反量化（dequant）并转换为 FP16（`half`），结果直接写回 GM。常用于 A 矩阵（weight）的 Prologue 阶段，在计算前完成数据反量化。
 
 **流水线**：GM(fp8) → UB → Dequant(fp8→fp16) → UB → GM(fp16)，使用双缓冲（BUFFER_NUM=2）和 4 个 EventId 实现 MTE2/V/MTE3 三级流水并发。
 

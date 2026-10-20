@@ -25,7 +25,7 @@ lit -sv csrc/mlir/build/tests/lit
 
 ## e2e test: End-to-End Verification
 
-- This test additionally depends on an NPU environment and requires `torch` / `torch-npu` to be installed.
+- This test additionally depends on an NPU environment and requires `torch` / `torch_npu` to be installed.
 
 ```bash
 cd /path/to/catlass/python/tla_dsl

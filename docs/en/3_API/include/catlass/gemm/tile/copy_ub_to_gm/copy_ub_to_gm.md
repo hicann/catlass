@@ -31,6 +31,7 @@ struct CopyUb2Gm {
 | Atlas A2| RowMajor → RowMajor | `AscendC::DataCopyPad` | Row-by-row copy, with the number of rows determined by `shape(0)` and the row length determined by `shape(1)`|
 
 Stride calculation:
+
 - `srcStride = (layoutSrc.stride(0) - shape(1)) / ELE_NUM_PER_C0`
 - `dstStride = (layoutDst.stride(0) - shape(1)) * sizeof(Element)`
 

@@ -643,7 +643,7 @@ TLA(Tensor Layout Abstraction)作为CATLASS的一种数据结构，提供了对�
 提供Tile块粒度的切分语义，隐藏尾块处理，提升编程易用性，语义类似local\_tile。主要接口及其功能如下：
 
 - MakeTensor：接受shape/coord等信息，构造tla::Tensor。创建的是逻辑视图，本身不执行数据搬运
-- MakeTensorLike：接受like\_tensor作为输入，方便不同储存层级间构造tla::Tensor。该接口是把一块已有存储绑定成“与参考 Tensor 逻辑尺寸一致”的新视图，本身不执行数据搬运
+- MakeTensorLike：接受like\_tensor作为输入，方便不同存储层级间构造tla::Tensor。该接口是把一块已有存储绑定成“与参考 Tensor 逻辑尺寸一致”的新视图，本身不执行数据搬运
 - GetTile：获取当前tile块信息，以元素个数为单位偏移
 - TileView：获取当前tile块信息，以tile块个数为单位偏移
 
@@ -916,7 +916,7 @@ using EVG = Epilogue::Fusion::TreeVisitor<
 >;
 ```
 
-TopoligicalVisitor示例代码如下
+TopologicalVisitor示例代码如下
 
 ```c++
 // 节点顺序：

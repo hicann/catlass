@@ -2,7 +2,6 @@
 
 本目录下样例演示 **CATLASS DSL** 下基础向量加法的计算。
 
-
 ## 功能说明
 
 向量加法算子实现两个一维向量的逐元素加法，计算公式为：
@@ -40,7 +39,6 @@ $$
 | `i16` | 128 | 整数 | 精确匹配 |
 | `i32` | 64 | 整数 | 精确匹配 |
 
-
 ## 使用示例
 
 要运行本路径下的样例，请参考[快速开始](../../../docs/zh/quick_start.md)一节的有关内容。
@@ -67,7 +65,6 @@ basic_vadd.py [-h] [--device DEVICE] [--n N]
 | `--use-atomic-add` | `False` | 切换到原子加同步（执行 `basic_vadd_atomic_add`）。 |
 
 > `--use-mutex`、`--use-mutex-with`、`--use-atomic-add` 三者互斥。
-
 
 ### 执行示例
 

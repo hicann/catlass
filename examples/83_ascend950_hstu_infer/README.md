@@ -6,7 +6,7 @@
 
 与标准 Attention 不同，HSTU 不做 softmax 归一化，而是对 QK^T 结果做带缩放的 SiLU 激活，计算公式如下：
 
-```
+```text
 S = Q · K^T                         // Cube 侧 MMAD，fp32 累加
 P = siluScale · S · sigmoid(S)      // Vector 侧逐元素 SiLU（可选 causal mask）
 O = P · V                           // Cube 侧 MMAD
@@ -35,10 +35,10 @@ O = P · V                           // Cube 侧 MMAD
 | `batch` | Attr | 标量 | int | batch 数量 |
 | `qSeqlen` | Attr | 标量 | int | 最大 Q 序列长度 |
 | `kvSeqlen` | Attr | 标量 | int | 最大 KV 序列长度 |
-| `numHeads` | Attr | 标量 | int | Q 注意力头数 |
-| `kvHeads` | Attr | 标量 | int | KV 注意力头数 |
+| `numHeads` | Attr | 标量 | int | Q 头数 |
+| `kvHeads` | Attr | 标量 | int | KV 头数 |
 | `embeddingSize` | Attr | 标量 | int | 头维度 headDim |
-| `isVariedLen` | Attr | 标量 | int / bool | 变长模式：`0`：定长；`1`：随机变长 |
+| `isVariedLen` | Attr | 标量 | int / bool | 变长序列标志：`0`：定长；`1`：随机变长 |
 | `siluScale` | Attr | 标量 | float | SiLU 缩放系数 |
 | `layout` | Attr | 标量 | string | Q/O 布局：`NTD` 或 `TND`；分页时 KV 自动切换为 `NHD` |
 | `dtype` | Attr | 标量 | string | 固定为 `half`（当前样例仅以 `half` 实例化） |
@@ -85,12 +85,13 @@ const uint32_t pvL0TileK = 64;
 | `batch` | batch 数量 | `≥ 1` | `1` ~ `16` |
 | `qSeqlen` | 每 batch 最大 Q 序列长度 | `≥ 1`；变长时各 batch 独立取值 | `1` ~ `16384` |
 | `kvSeqlen` | 每 batch 最大 KV 序列长度 | 需满足 `kvSeqlen ≥ qSeqlen` | `1` ~ `16384` |
-| `block_size`（`pagedBlockSize`） | Paged KV Cache 分块大小 | 非分页为 `0`；分页固定 `128` | `128` |
+| `block_size`（`pagedBlockSize`） | Paged KV Cache 的 block 大小 | 非分页为 `0`；分页固定 `128` | `128` |
 | `mask_type`（`maskType`） | 掩码模式 | `0`（无 mask）或 `1`（causal 乘法掩码） | `0` / `1` |
 | `silu_scale`（`siluScale`） | SiLU 缩放系数 | 计算无溢出的实数（`P = silu_scale · S · sigmoid(S)`） | `0.1` |
 | `is_varied_len`（`isVariedLen`） | 变长序列标志 | `0`：定长；`1`：随机变长 | `0` / `1` |
 
 推荐范围：
+
 - `Q`/`K`/`V` 张量的数值范围推荐在 `[-1, 1]`以内，避免过大的动态范围致使绝对误差超阈值上限
 
 ## 使用示例
@@ -101,38 +102,39 @@ const uint32_t pvL0TileK = 64;
 
 1. 数据生成脚本（[`gen_data.py`](./gen_data.py)）参数
 
-```bash
-python gen_data.py batch qSeqlen kvSeqlen numHeads kvHeads embeddingSize isVariedLen siluScale layout str_dtype  mask_type paged_block_size data_path
-```
-上述命令行参数具体说明如下：
+    ```bash
+    python gen_data.py batch qSeqlen kvSeqlen numHeads kvHeads embeddingSize isVariedLen siluScale layout str_dtype  mask_type paged_block_size data_path
+    ```
 
-| 序号 | 参数 | 说明 |
-| --- | --- | --- |
-| 1 | batch | batch 数 |
-| 2 | q_seqlen | 每 batch 最大 Q 序列长度 |
-| 3 | kv_seqlen | 每 batch 最大 KV 序列长度 |
-| 4 | num_head | Q 头数 |
-| 5 | kv_heads | KV 头数 |
-| 6 | embedding_size | 头维度（headDim） |
-| 7 | is_varied_len | 0：定长；1：随机变长（kv_seq >= q_seq） |
-| 8 | silu_scale | SiLU 缩放系数 |
-| 9 | layout | `NTD` 或 `TND` |
-| 10 | str_dtype | `half` 或 `bf16` |
-| 11 | mask_type | 0：无 mask；1：causal mask |
-| 12 | paged_block_size | 0：非分页；>0：Paged KV Cache 的 block 大小 |
-| 13 | data_path | 数据输出目录 |
+    上述命令行参数具体说明如下：
 
-执行该脚本后，在数据输出目录下会生成如下文件：
+    | 序号 | 参数 | 说明 |
+    | --- | --- | --- |
+    | 1 | batch | batch 数 |
+    | 2 | q_seqlen | 每 batch 最大 Q 序列长度 |
+    | 3 | kv_seqlen | 每 batch 最大 KV 序列长度 |
+    | 4 | num_head | Q 头数 |
+    | 5 | kv_heads | KV 头数 |
+    | 6 | embedding_size | 头维度（headDim） |
+    | 7 | is_varied_len | 0：定长；1：随机变长（kv_seq >= q_seq） |
+    | 8 | silu_scale | SiLU 缩放系数 |
+    | 9 | layout | `NTD` 或 `TND` |
+    | 10 | str_dtype | `half` 或 `bf16` |
+    | 11 | mask_type | 0：无 mask；1：causal mask |
+    | 12 | paged_block_size | 0：非分页；>0：Paged KV Cache 的 block 大小 |
+    | 13 | data_path | 数据输出目录 |
 
-| 文件 | 数据类型 | Shape | 说明 |
-| --- | --- | --- | --- |
-| `q.bin` | half | `[totalQTokens, numHeads, headDim]`（TND）或 `[numHeads, totalQTokens, headDim]`（NTD） | Query |
-| k.bin / v.bin | half | 非分页：`[totalKvTokens, kvHeads, headDim]`（TND/NTD 转置关系同上）；分页：`[numBlocks, pagedBlockSize, kvHeads, headDim]` | Key / Value |
-| q_seqlen.bin | int64 | `[batch + 1]` | Q 序列长度前缀和（cu_seqlen） |
-| kv_seqlen.bin | int64 | `[batch + 1]` | KV 序列长度前缀和（cu_seqlen） |
-| q_ntokens.bin / kv_ntokens.bin | int32 | `[1]` | Q / KV 总 token 数 |
-| block_table.bin | uint32 | `[batch, maxNumBlocks]` | 分页 KV 的逻辑 block 到物理 block 映射（仅分页模式） |
-| golden.bin | fp32 | 同 q.bin | 参考输出，用于精度比对 |
+    执行该脚本后，在数据输出目录下会生成如下文件：
+
+    | 文件 | 数据类型 | Shape | 说明 |
+    | --- | --- | --- | --- |
+    | `q.bin` | half | `[totalQTokens, numHeads, headDim]`（TND）或 `[numHeads, totalQTokens, headDim]`（NTD） | Query |
+    | k.bin / v.bin | half | 非分页：`[totalKvTokens, kvHeads, headDim]`（TND/NTD 转置关系同上）；分页：`[numBlocks, pagedBlockSize, kvHeads, headDim]` | Key / Value |
+    | q_seqlen.bin | int64 | `[batch + 1]` | Q 序列长度前缀和（cu_seqlen） |
+    | kv_seqlen.bin | int64 | `[batch + 1]` | KV 序列长度前缀和（cu_seqlen） |
+    | q_ntokens.bin / kv_ntokens.bin | int32 | `[1]` | Q / KV 总 token 数 |
+    | block_table.bin | uint32 | `[batch, maxNumBlocks]` | 分页 KV 的逻辑 block 到物理 block 映射（仅分页模式） |
+    | golden.bin | fp32 | 同 q.bin | 参考输出，用于精度比对 |
 
 2. 可执行文件参数
 
@@ -141,6 +143,7 @@ python gen_data.py batch qSeqlen kvSeqlen numHeads kvHeads embeddingSize isVarie
        [--dtype DTYPE] [--layout LAYOUT] [--datapath DATA_PATH] [--device DEVICE_ID]
        [--mask MASK_TYPE] [--paged_block_size PAGED_BLOCK_SIZE]
 ```
+
 上述命令行参数具体说明如下：
 
 | 参数 | 说明 |
@@ -160,17 +163,17 @@ python gen_data.py batch qSeqlen kvSeqlen numHeads kvHeads embeddingSize isVarie
 
 1. 进入项目根目录，编译样例代码生成相应的算子可执行文件。
 
-```bash
-bash scripts/build.sh -DCATLASS_ARCH=3510 83_ascend950_hstu_infer
-```
+    ```bash
+    bash scripts/build.sh -DCATLASS_ARCH=3510 83_ascend950_hstu_infer
+    ```
 
 2. 执行 `gen_data.py` 生成测试样例，执行后会在指定路径下生成 `data/` 目录，包含算子输入数据和用于精度验证的 golden 数据（见后续脚本 `gen_data()` 部分）。
 
-3. 切换到可执行文件的编译目录 `output/bin`，执行编译后的算子样例（见后续脚本 ` run_kernel()` 部分）。
+3. 切换到可执行文件的编译目录 `output/bin`，执行编译后的算子样例（见后续脚本 `run_kernel()` 部分）。
 
 4. 执行结果如下，说明精度比对成功：
 
-```
+```text
 Compare success.
 ```
 
@@ -237,7 +240,7 @@ run_kernel
 
 ### 总体流程
 
-```
+```text
                  GM (q / k / v)
                       │
         ┌─────────────┴──────────────┐

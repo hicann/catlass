@@ -93,18 +93,22 @@ First load the simulator `lib` directory in the CANN toolkit into `LD_LIBRARY_PA
 ```bash
 export LD_LIBRARY_PATH=/usr/local/Ascend/ascend-toolkit/latest/tools/simulator/Ascendxxxyy/lib:$LD_LIBRARY_PATH
 ```
+
 * ⚠ Notes:
   * Ascendxxxyy mentioned in the command above is a version placeholder, which can actually be obtained by running the following command (*the expected output is the concrete SoC version name*):
+
     ```bash
     python3 -c "import acl; print(acl.get_soc_name())"
     ```
 
   * For example, when the output shows Ascendxxxyy, the correct form of the command above is:
+
     ```bash
     export LD_LIBRARY_PATH=/usr/local/Ascend/ascend-toolkit/latest/tools/simulator/Ascendxxxyy/lib:$LD_LIBRARY_PATH
     ```
 
 Next, run the following command (taking the basic_mixed operator as an example below):
+
 ```bash
 msprof op simulator --soc-version=Ascendxxxyy --core-id=0 --kernel-name=basic_mixed python3 ./examples/end_to_end/basic_mixed/basic_mixed.py
 ```

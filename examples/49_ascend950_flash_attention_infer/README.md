@@ -1,4 +1,4 @@
-# FlashAttention Infer Example Readme
+# Flash Attention Infer Example Readme
 
 ## 代码组织
 

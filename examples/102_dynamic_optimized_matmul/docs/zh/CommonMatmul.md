@@ -102,7 +102,7 @@ enum class PaddingTag {
 
   ![image-20251209193549117](https://raw.gitcode.com/weixin_42818618/picture0/raw/main/image-20251209193549117.png)
 
-  PADDING_ND只是简单把Stride方向填充对齐到512B对齐，例如图中的512 x 511的shape，Stride为511，经过PADDING_ND后Stride变为512，对齐到了512B（对于half类型，也就是要求Stride为256倍数）。
+  PADDING_ND只是简单把Stride方向填充对齐到512B，例如图中的512 x 511的shape，Stride为511，经过PADDING_ND后Stride变为512，对齐到了512B（对于half类型，也就是要求Stride为256倍数）。
 
 - PADDING_BLOCK_ND
 
@@ -119,7 +119,7 @@ PADDING_NZ直接将RowMajor的矩阵转换为zN的格式（如果是ColumnMajor�
 PADDING_NZ有两种实现，分别用于不同的场景：
 
 - 矩阵的Stride方向（矩阵的内轴）较大的时候，AIV一次读取16行数据（repeat读取，虽然repeat的stride非对齐，但是每次repeat读取的数据量大，非对齐对带宽影响不大），在UB上通过Copy指令将数据重排为zN，然后写出到workspace。
-- 矩阵的Stride方向（矩阵的内轴）较小的时候（一般是小于96），如果按第一种方案读取数据，AIV的读取效率也很低。这时候将非对齐的矩阵数据连续读取到UB，采用[TransDataTo5HD](https://www.hiascend.com/document/detail/zh/canncommercial/83RC1/API/ascendcopapi/atlasascendc_api_07_0200.html)指令经过两次转置操作完成数据的Padding，同时顺带完成ND数据转NZ。
+- 矩阵的Stride方向（矩阵的内轴）较小的时候（一般是小于96），如果按第一种方案读取数据，AIV的读取效率也很低。这时候将非对齐的矩阵数据连续读取到UB，采用[TransDataTo5HD](https://www.hiascend.com/document/detail/zh/canncommercial/83RC1/API/ascendcopapi/atlasascendc_api_07_0200.html)指令经过两次转置操作完成数据的Padding，同时完成ND数据转NZ。
 
 由于PADDING_NZ有较优的总体性能，所以泛化Matmul中实际采用的是PADDING_NZ，至于其他两种Padding方式，在某些特定的Shape上可能有比PADDING_NZ更好的性能，可以多尝试进行调优。
 

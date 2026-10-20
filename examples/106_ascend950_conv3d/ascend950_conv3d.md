@@ -43,7 +43,7 @@ Weight GM (NCDHW)  --MTE2/Dn2Nz--> BL1 --MTE1--------> L0B
 
 ## 1. A/B 矩阵驻留
 
-A 代表 feature map，B 代表 weight。在卷积中，有较多的数据需要进行重复计算。启用驻留，则会极大的减少MTE2的搬运开销，是影响计算性能的重要因素。Host 侧会评估四种 L1 状态：
+A 代表 feature map，B 代表 weight。在卷积中，有较多的数据需要进行重复计算。启用驻留，则会极大地减少MTE2的搬运开销，是影响计算性能的重要因素。Host 侧会评估四种 L1 状态：
 
 | 驻留状态 | 含义 | 主要收益 |
 |---|---|---|
@@ -117,6 +117,7 @@ N-first：单核块间计算时，当前 M/AL1 块保持不变，先遍历多个
 ## 6.动态Tiling
 
 CANN基线aclnnConvolution的Tiling如下：
+
 ```text
 输入 shape 和属性
         │

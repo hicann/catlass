@@ -19,7 +19,7 @@
 
 ## 使用示例
 
-- 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/zh/1_Practice/01_quick_start.md#编译执行)，本用例为 Ascend950（3510）算子，编译时需加 `-DCATLASS_ARCH=3510`
+- 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/zh/1_Practice/01_quick_start.md#编译执行)，本用例为 Ascend 950（3510）算子，编译时需加 `-DCATLASS_ARCH=3510`
 - 执行算子
 
 ```bash
@@ -48,7 +48,7 @@ Compare success.
 
 ## 使用说明
 
-1、 `gen_data.py`的输入支持trans_a和trans_b，但53_ascend950_fp8_mx_matmul可执行文件不支持，仅仅是trans_a为0及trans_b为1的example示例。
+1、 `gen_data.py`的输入支持trans_a和trans_b，但53_ascend950_fp8_mx_matmul可执行文件不支持，仅仅是trans_a为0及trans_b为1的示例。
 
 若要对应转置情况请修改example示例中的layout，因为layout隐式表征转置状态，即layout::RowMajor表示不转置，layout::ColumnMajor表示转置。
 
@@ -72,7 +72,7 @@ MxScaleA、MxScaleB支持数据类型为float8_e8m0
 当B为RowMajor时，MxScaleB的shape为（ceil(k/64), n, 2）
 当B为ColumnMajor时，MxScaleB的shape为（n, ceil(k/64), 2）
 
-3、 MxMatmul默认使用的DispatchPolicy MxMmad支持以下几个模板参数：
+3、 MxMatmul默认使用的DispatchPolicy MmadMx支持以下几个模板参数：
 
 | 模板参数         | 默认值 | 参数说明                                         |
 | ---------------- | ------ | ------------------------------------------------ |

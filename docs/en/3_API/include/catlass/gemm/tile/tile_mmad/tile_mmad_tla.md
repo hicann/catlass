@@ -9,6 +9,7 @@
 `TileMmadTla` is the TLA-style version of [TileMmad](./tile_mmad.md). It uses `AscendC::Mmad` to perform `C += A * B`. All operands are wrapped via `tla::Tensor`. Dimensions are automatically extracted through `l0ATensor.data()` and `.layout().originShape()`.
 
 The following four calling modes are supported:
+
 1. Standard matrix multiply-accumulate (without bias)
 2. Matrix multiply-accumulate with bias
 3. L0 batch MMAD (batch-style matrix multiply-accumulate across multiple batches)
@@ -94,6 +95,7 @@ void operator()(
 ```
 
 Dimension inference:
+
 - `m = tla::get<0>(l0CTensor.layout().originShape())`
 - `n = tla::get<1>(l0CTensor.layout().originShape())`
 - `k = tla::get<1>(l0ATensor.layout().originShape())`

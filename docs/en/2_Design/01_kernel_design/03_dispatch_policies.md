@@ -25,7 +25,7 @@ struct MmadAtlasA2Pingpong {
 };
 ```
 
-Currently, the examples that use this DispatchPolicy are `00_basic_matmul`, `01_batched_matmul`, `03_matmul_add`, `04_padding_matmul`, and `09_split_matmul`.
+Currently, the examples that use this DispatchPolicy are `00_basic_matmul`, `01_batched_matmul`, `03_matmul_add`, `04_padding_matmul`, and `09_splitk_matmul`.
 
 ## MmadAtlasA2Preload
 

@@ -176,7 +176,7 @@ golden::ComputeMatmul(options.problemShape, hostA, layoutA, hostB, layoutB, host
 | `ComputeBatchedMatmul`     | 批量矩阵乘                                |
 | `ComputeGroupedMatmul`     | 分组矩阵乘                                |
 | `ComputeGroupGemm`         | 分组通用矩阵乘                            |
-| `ComputeMatmulElemWiseAdd` | 矩阵乘后Element-Wise加                    |
+| `ComputeMatmulElemWiseAdd` | 矩阵乘后Elementwise加                    |
 
 上述标杆函数若不满足业务场景需要，开发者也可自行增加新的标杆函数。
 

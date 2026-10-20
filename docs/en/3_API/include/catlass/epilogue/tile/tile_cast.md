@@ -6,7 +6,7 @@
 
 ## Function
 
-`TileCast` implements type conversion in the epilogue stage, converting the source data types in Unified Buffer to destination data types. It performs element-level type conversion using Ascend C's `Cast` instruction, applicable to scenarios such as floating-point quantization and dequantization.
+`TileCast` implements type conversion in the epilogue stage, converting the source data types in Unified Buffer to destination data types. It performs element-level type conversion using AscendC's `Cast` instruction, applicable to scenarios such as floating-point quantization and dequantization.
 
 - Applicability: all architectures (no architecture specialization)
 - Style: non-TLA, directly operating on `AscendC::LocalTensor`

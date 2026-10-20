@@ -47,9 +47,9 @@ Add the code for printing to the code segment to debug.
 
 1. Following [Quick Start](../01_quick_start.md), enable the tool's build switch `--enable_print` to enable the device-side printing feature.
 
-```bash
-bash scripts/build.sh --enable_print 09_splitk_matmul
-```
+    ```bash
+    bash scripts/build.sh --enable_print 09_splitk_matmul
+    ```
 
 2. Switch to the `output/bin` directory where the executable file is built and execute the operator sample program.
 

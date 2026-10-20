@@ -9,6 +9,7 @@
 `CopyL1ToL0B` is a template responsible for moving tile blocks of matrix B from L1 (Local Memory, also referred to as the B1 Buffer) to L0B (the B2 Buffer). It supports conversion between multiple data layouts.
 
 Depending on the source and destination layouts, the template selects an appropriate hardware data movement instruction.
+
 - **zZ → nZ**: transposed copy (Transpose B) with `ifTranspose = true`. For float data, the `LoadDataWithTranspose` instruction is used.
 - **zN → nZ**: transposed copy. For int8_t data, the `LoadDataWithTranspose` instruction is used. For float data, the `LoadData3D and SetFmatrix` instructions are used.
 - **nZ → nZ**: non-transposed copy (direct copy), with `ifTranspose = false`

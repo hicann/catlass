@@ -1,6 +1,6 @@
 # Design of the Unshared FA Inference Template Series
 
-This template series targets the **Unshared (non-shared KV) FlashAttention inference scenario**: the effective KV sequence length of each attention head differs (for example, in Multi-LoRA / independent-context scenarios). Therefore, the softmax stage must build an independent mask per head, the KV sequence is short and can be processed in one pass, and there is no need to accumulate the output O with online rescaling.
+This template series targets the **Unshared (non-shared KV) Flash Attention inference scenario**: the effective KV sequence length of each attention head differs (for example, in Multi-LoRA / independent-context scenarios). Therefore, the softmax stage must build an independent mask per head, the KV sequence is short and can be processed in one pass, and there is no need to accumulate the output O with online rescaling.
 
 The series contains the following templates:
 
@@ -164,7 +164,7 @@ Because the KV sequence is processed in one pass, this template **does not perfo
 
 ## Ascend950 Specialization
 
-`EpilogueAscend950FAUnsharedSoftmax` directly inherits the AtlasA2 implementation (the Ascend C vector APIs are compatible):
+`EpilogueAscend950FAUnsharedSoftmax` directly inherits the AtlasA2 implementation (the AscendC vector APIs are compatible):
 
 ```cpp
 template <class OutputType_, class InputType_, class MaskType_>

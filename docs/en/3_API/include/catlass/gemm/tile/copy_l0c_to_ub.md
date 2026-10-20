@@ -54,6 +54,7 @@ void operator()(
 ```
 
 Static constraints:
+
 - `TensorDst::Layout` is `RowMajor`.
 - `TensorSrc::position == CO1`
 - `TensorDst::position == VECCALC`

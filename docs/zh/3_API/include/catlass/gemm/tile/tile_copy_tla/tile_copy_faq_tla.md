@@ -6,7 +6,7 @@
 
 ## 功能说明
 
-`TileCopyFAQTla` 是 FlashAttention LoadQ 专用的 TLA 搬运模板，完成 GM（RowMajor）→ L1（zN）的多矩阵 DataCopy。搬运过程中 DataCopy 内部完成 ND→NZ 的 layout 转换。
+`TileCopyFAQTla` 是 Flash Attention LoadQ 专用的 TLA 搬运模板，完成 GM（RowMajor）→ L1（zN）的多矩阵 DataCopy。搬运过程中 DataCopy 内部完成 ND→NZ 的 layout 转换。
 
 适用场景：FlashAttention Q 矩阵加载。与通用 `TileCopyTla` 的区别在于固定转换路径 ND→NZ。
 

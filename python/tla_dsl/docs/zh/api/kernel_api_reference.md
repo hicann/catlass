@@ -870,6 +870,7 @@ with tla.cube():
 Cube fixpipe 通路：从 L0C 拷到 GM/L1/UB。
 fixpipe 支持随路 quant 与 relu；quant 模式支持 `NO_QUANT`、`PER_TENSOR`、`PER_CHANNEL`。
 规则：
+
 - 链路为 (l0c acc) → quant（可选）→ relu（可选）→ 写出到 dst。
 - `NO_QUANT` 含纯数据类型转换，如 `f32`→`f16`、`f32`→`bf16`。
 - 目的为 UB 时额外有 `split_mode`：nosplit（`NO_SPLIT_VEC_0`、`NO_SPLIT_VEC_1`）与

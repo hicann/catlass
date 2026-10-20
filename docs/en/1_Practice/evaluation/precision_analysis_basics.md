@@ -89,7 +89,7 @@ CATLASS also provides more refined error metrics, `ErrorMetrics`, to evaluate th
 | --- | --- | --- |
 | MARE | Max Absolute Relative Error | Maximum absolute relative error ratio (NPU / CPU)|
 | MERE | Mean Absolute Relative Error | Mean absolute relative error ratio (NPU / CPU)|
-| RMSE | Root Mean Squared Error | Root mean squared error ratio (NPU / CPU)|
+| RMSE | Root Mean Square Error | Root mean square error ratio (NPU / CPU)|
 
 These metrics compare the NPU output and the CPU output against the higher-precision golden output, and calculate the error ratios between them. If the ratios are within the threshold (default: MARE ≤ 5, MERE ≤ 1.5, RMSE ≤ 1.5), the precision is considered acceptable. This determines whether the NPU computation precision is on par with the same-precision CPU computation.
 
@@ -176,7 +176,7 @@ In addition to `ComputeMatmul`, the golden module also provides other golden fun
 | `ComputeBatchedMatmul` | Batch matrix multiplication|
 | `ComputeGroupedMatmul` | Grouped matrix multiplication|
 | `ComputeGroupGemm` | Grouped general matrix multiplication|
-| `ComputeMatmulElemWiseAdd` | Matrix multiplication followed by element-wise addition|
+| `ComputeMatmulElemWiseAdd` | Matrix multiplication followed by Elementwise addition|
 
 If the above golden functions do not meet the requirements of a specific need, you can also add new golden functions.
 

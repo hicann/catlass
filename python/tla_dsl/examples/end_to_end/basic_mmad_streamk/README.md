@@ -14,7 +14,6 @@ $$
 
 StreamK 通过将 K 维度的计算分摊到多个核上以均衡负载：normal tile 直接完成全 K 计算并写回 GM C；尾轮 tile 由多个 AIC 分担 K 切片计算，结果写入 workspace，再由配对的 AIV 做 ReduceAdd 归约写回 GM C。
 
-
 ## 代码组织
 
 ```plain
@@ -38,7 +37,6 @@ StreamK 通过将 K 维度的计算分摊到多个核上以均衡负载：normal
 | bf16 | bf16 | f32 |
 | bf16 | bf16 | bf16 |
 | f32 | f32 | f32 |
-
 
 ## 使用示例
 

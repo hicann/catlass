@@ -43,7 +43,7 @@
 
   - `L0A_STAGES * FmapL0ASize <= L0A_SIZE`, 其中`FmapL1ASize`具体为`Ho * Wo * max(L0K, kh * kw * C0) * sizeof(ElementFmap)`，`L0K`为`L0TileShape`下的Tiling常量, `L0A_SIZE`等于64K（Atlas A2/A3系列产品）
   - `L0B_STAGES * FilterL0BSize <= L0B_SIZE`, 其中`FilterL0BSize`具体为`max(L0K, kh * kw * C0) * CoutL0 * sizeof(ElementFilter)`，`L0K`为`L0TileShape`下的Tiling常量, `CoutL0`是`L0N`对齐到`C0`的大小，`L0B_SIZE`也等于64K（Atlas A2/A3系列产品）
-  - `Ho * Wo * Cout * sizeof(ElementOut) <= L0C_SIZE`, 其中`L0C_SIZE`等于128K（Atlas A2/A3系列产品），`Ho`, `Wo`, `Cout`均为`FilterL1TileShape`中的Tiling常量。
+  - `Ho * Wo * Cout * sizeof(ElementOutput) <= L0C_SIZE`, 其中`L0C_SIZE`等于128K（Atlas A2/A3系列产品），`Ho`, `Wo`, `Cout`均为`FilterL1TileShape`中的Tiling常量。
   （样例中ElementFmap，ElementFilter和ElementOutput为fp16类型）
 
 ## 使用示例

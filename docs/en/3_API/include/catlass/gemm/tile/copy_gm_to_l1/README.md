@@ -24,7 +24,7 @@ The module provides two sets of APIs: a **non-TLA style** (directly operating on
 | [TileCopyTla](./tile_copy_tla.md)| TLA| Atlas A2/Ascend 950| TLA-style GM → L1 movement, simplified calling through `tla::Tensor` encapsulation|
 | [TileCopyTlaExt](./tile_copy_tla_ext.md)| TLA| Atlas A2| TLA extended movement, supporting partial movement of `ActualShape` and padding layout|
 | [TileCopySparseTla](./tile_copy_sparse_tla.md) | TLA | Atlas A2| Sparse GEMM GM → L1 movement, supporting RowMajor/ColumnMajor/zN/nZ → zN/nZ|
-| [TileCopyFAQTla](./tile_copy_faq_tla.md) | TLA| Atlas A2| FlashAttention LoadQ movement, supporting three-dimensional multi-matrix GM → L1 zN conversion|
+| [TileCopyFAQTla](./tile_copy_faq_tla.md) | TLA| Atlas A2| Flash Attention LoadQ movement, supporting three-dimensional multi-matrix GM → L1 zN conversion|
 
 ## Applicable Hardware Models
 

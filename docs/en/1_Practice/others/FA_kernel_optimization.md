@@ -2,7 +2,7 @@
 
 ## Before We Start
 
-This document mainly explains how to perform performance analysis and tuning of the FlashAttention Infer (FAI) sample in `examples/49_ascend950_flash_attention_infer`, starting from the operator structure and source implementation. This document analyzes FAI sample tuning from the following perspectives:
+This document mainly explains how to perform performance analysis and tuning of the Flash Attention Infer (FAI) sample in `examples/49_ascend950_flash_attention_infer`, starting from the operator structure and source implementation. This document analyzes FAI sample tuning from the following perspectives:
 
 - Where the main performance bottlenecks of the FAI sample may come from.
 - Which parameters are compile-time template parameters, and which parameters come from tiling or runtime inputs.

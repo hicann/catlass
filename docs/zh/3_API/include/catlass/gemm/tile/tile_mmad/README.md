@@ -68,5 +68,5 @@ mmadOp(l0cTensor, l0aTensor, l0bTensor);  // 自动提取 m/n/k
 | 传统 blockMmad 组装                       | `TileMmad`                       |
 | TLA 风格 kernel（PackedTileCopyTla 配合） | `TileMmadTla`（模式 1 或 4）     |
 | 需要 Bias 累加                            | `TileMmadTla`（模式 2）          |
-| FlashAttention L0 Batch                   | `TileMmadTla`（模式 3）          |
+| Flash Attention L0 Batch                   | `TileMmadTla`（模式 3）          |
 | 追求代码简洁                              | `TileMmadTla`（模式 4 自动提取） |

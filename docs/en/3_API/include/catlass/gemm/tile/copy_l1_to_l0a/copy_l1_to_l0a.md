@@ -9,6 +9,7 @@
 `CopyL1ToL0A` is a template responsible for moving tile blocks of matrix A from L1 (Local Memory, also referred to as the A1 Buffer) to L0A (the A2 Buffer). It supports conversion between multiple data layouts.
 
 Depending on the source and destination layouts, the template selects an appropriate hardware data movement instruction.
+
 - **zN → zZ**: Nd transposed copy (`ifTranspose = false`)
 - **nZ → zZ**: transposed copy (Transpose A) with `ifTranspose = true`. For int8_t data, the `LoadDataWithTranspose` instruction is used.
 - **NDC1HWC0 → zZ**: convolution-specific path using `LoadData3Dv2`

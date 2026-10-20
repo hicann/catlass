@@ -45,7 +45,7 @@ docker run                          \
     -it ascend-catlass-dsl:9.1.0-950-ubuntu22.04-py3.12 bash
 ```
 
-若您使用的是基于Ascend950系列芯片的超节点设备，例如[Atlas 950 SuperPoD 液冷超节点](https://www.hiascend.com/hardware/cluster?tag=950)或[Atlas 850E 风冷超节点](https://www.hiascend.com/hardware/cluster?tag=850e)，可能需要额外挂载灵渠总线相关的设备：
+若您使用的是基于Ascend950系列芯片的超节点设备，例如[Atlas 950 SuperPoD 液冷超节点](https://www.hiascend.com/hardware/cluster?tag=950)或[Atlas 850E 风冷超节点](https://www.hiascend.com/hardware/cluster?tag=850e)，可能需要额外挂载灵衢总线相关的设备：
 
 ```diff
 docker run                          \

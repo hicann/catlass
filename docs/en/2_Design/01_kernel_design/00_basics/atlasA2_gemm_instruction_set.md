@@ -465,7 +465,7 @@ As shown in the right figure of Figure 8, if mmadParams.n=CeilAlign(n, FractalSh
 
 Similar to the above scenario, when the input data type is float and the A matrix is ColumnMajor, the actual alignment requirement of the K axis is also inconsistent with the default alignment requirement of the MMad instruction, but the solution in this scenario differs from the above: the mmadParams.kDirectionAlign parameter must be introduced separately.
 
-According to the formula of matrix multiplication, the K axis is the common dimension of the A/B matrices. In this case, if mmadParams.k=CeilAlign(k, fractalSh2ape\[1]\*fractalNum) is set as in the above scenario, the value of every element of the C matrix will be affected by the extra invalid data read in, and it is also not possible to discard the invalid data at the move-out stage by setting fixpipeParams parameters.
+According to the formula of matrix multiplication, the K axis is the common dimension of the A/B matrices. In this case, if mmadParams.k=CeilAlign(k, fractalShape\[1]\*fractalNum) is set as in the above scenario, the value of every element of the C matrix will be affected by the extra invalid data read in, and it is also not possible to discard the invalid data at the move-out stage by setting fixpipeParams parameters.
 
 As shown in Figure 9, mmadParams.kDirectionAlign takes effect only when the input data type is float. When the A matrix is ColumnMajor, kDirectionAlign is set to true; then the A matrix on L0A is 16-aligned along K, and the matrix computation unit skips the padded invalid data when reading from L0A. In other scenarios this parameter takes its default value false, and the A matrix on L0A is 8-aligned along K.
 

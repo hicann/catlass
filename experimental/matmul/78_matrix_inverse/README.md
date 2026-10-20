@@ -50,9 +50,9 @@ MatrixInverse所涉及的关键模板参数如下:
 
 1. 编译样例代码，并编译生成相应的算子可执行文件。
 
-```bash
-bash scripts/build.sh 78_matrix_inverse
-```
+    ```bash
+    bash scripts/build.sh 78_matrix_inverse
+    ```
 
 2. 切换到可执行文件的编译目录`output/bin`下，执行算子样例程序。测试样例数据随机生成（对角占优矩阵），尺寸从命令行输入。
 

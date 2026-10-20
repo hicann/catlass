@@ -16,6 +16,7 @@
   $$
 
   shared KV 只取 shared_kv_lens[b] 个有效 token，上式省略分页映射。支持 MHA、MQA、GQA，不额外施加 attention mask。
+
 - 样例支持产品型号：Atlas A2/A3系列产品（`CATLASS_ARCH=2201`），至少两个 Cube 核。
 
 | cacheMode | shared KV | unshared KV | 索引方式 |
@@ -76,7 +77,6 @@ PyTorch 接口的 query/output shape 为 `(B*R,H,D)`；mode 0 的 unshared KV �
 
 推荐场景的参数范围与样例支持范围相同；这里不承诺特定 shape 的性能优势。不适用于多 Query token 的 prefill、任意 attention mask、head dim 非 128 或 decode 容量超过 256 的调用。
 
-
 ## 使用示例
 
 ### 命令行参数说明
@@ -106,23 +106,23 @@ PyTorch 接口的 query/output shape 为 `(B*R,H,D)`；mode 0 的 unshared KV �
 
 1. 加载环境并编译样例。
 
-```bash
-source /usr/local/Ascend/cann/set_env.sh  # 按实际 CANN 安装路径调整
-bash scripts/build.sh 78_x_attention -DCATLASS_ARCH=2201
-```
+    ```bash
+    source /usr/local/Ascend/cann/set_env.sh  # 按实际 CANN 安装路径调整
+    bash scripts/build.sh 78_x_attention -DCATLASS_ARCH=2201
+    ```
 
 2. 生成输入数据和参考结果。
 
-```bash
-python3 examples/78_x_attention/gen_data.py 1 4 512 8 2 128 32 16 0 half
-```
+    ```bash
+    python3 examples/78_x_attention/gen_data.py 1 4 512 8 2 128 32 16 0 half
+    ```
 
 3. 切换到 output/bin 并执行相同参数。
 
-```bash
-cd output/bin
-./78_x_attention 1 4 512 8 2 128 32 16 0 --dtype half --device 0
-```
+    ```bash
+    cd output/bin
+    ./78_x_attention 1 4 512 8 2 128 32 16 0 --dtype half --device 0
+    ```
 
 4. 输出如下表示精度验证通过：
 

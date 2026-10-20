@@ -40,6 +40,7 @@ void operator()(
 ```
 
 Execution process:
+
 1. `SetMaskCount()` → `SetVectorMask<Element, COUNTER>(len)` Set mask.
 2. `Muls<Element, false>(dst, src, scalar, MASK_PLACEHOLDER, 1, {} )`
 3. `SetMaskNorm()` → `ResetMask()` Restore the mask.

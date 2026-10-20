@@ -36,8 +36,6 @@ struct CopyL1ToBT {
 | Atlas A2| VectorLayout | VectorLayout | A1 → C2 | 1D vector copy using `AscendC::DataCopy`; block size based on `BYTE_PER_C2`|
 | Ascend 950| VectorLayout | VectorLayout | A1 → C2 | 1D vector copy using `AscendC::DataCopy`; block size based on `BYTE_PER_C0`; automatic alignment for B32 data types|
 
-
-
 ## APIs
 
 ```cpp

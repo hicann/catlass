@@ -45,6 +45,7 @@ struct PaddingPackedTileCopyTla;
 ## Padding Logic
 
 When `IS_PADDING_A = true`:
+
 ```cpp
 using LayoutPaddingTagA = std::conditional_t<
     std::is_same_v<LayoutTagA, layout::RowMajor>,

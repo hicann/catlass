@@ -93,18 +93,22 @@ msprof op --application="python examples/end_to_end/basic_mixed/basic_mixed.py"
 ```bash
 export LD_LIBRARY_PATH=/usr/local/Ascend/ascend-toolkit/latest/tools/simulator/Ascendxxxyy/lib:$LD_LIBRARY_PATH
 ```
+
 * ⚠ 注意事项:
   * 上述命令中提到的 Ascendxxxyy 为版本占位符，实际可通过执行以下命令获取（*预期输出为具体的 SoC 版本名称*）：
+
     ```bash
     python3 -c "import acl; print(acl.get_soc_name())"
     ```
 
   * 例如，当输出显示 Ascendxxxyy 时，上述指令正确写法为：
+
     ```bash
     export LD_LIBRARY_PATH=/usr/local/Ascend/ascend-toolkit/latest/tools/simulator/Ascendxxxyy/lib:$LD_LIBRARY_PATH
     ```
 
 接下来执行下面这条命令（以下以basic_mixed算子为例）：
+
 ```bash
 msprof op simulator --soc-version=Ascendxxxyy --core-id=0 --kernel-name=basic_mixed python3 ./examples/end_to_end/basic_mixed/basic_mixed.py
 ```

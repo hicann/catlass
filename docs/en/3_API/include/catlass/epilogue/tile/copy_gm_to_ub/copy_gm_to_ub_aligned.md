@@ -46,6 +46,7 @@ void operator()(
 | `layoutSrc` | RowMajor layout of the source global memory|
 
 Internally, the optimal movement policy is automatically selected based on stride and dimension.
+
 - No stride and no stride on the destination: directly `DataCopy(dst, src, rows * cols)`
 - Small stride (< 65,536) and cols/blk < 65,536: block `DataCopy` with `DataCopyParams`
 - Large stride: row-wise `DataCopy`

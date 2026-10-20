@@ -68,5 +68,5 @@ mmadOp(l0cTensor, l0aTensor, l0bTensor);  // Automatically extract m/n/k.
 | Traditional blockMmad assembly| `TileMmad` |
 | TLA-style kernel (used with PackedTileCopyTla)| `TileMmadTla` (mode 1 or 4)|
 | Bias accumulation required| `TileMmadTla` (mode 2)|
-| FlashAttention L0 Batch | `TileMmadTla` (mode 3)|
+| Flash Attention L0 Batch | `TileMmadTla` (mode 3)|
 | Simple code| `TileMmadTla` (mode 4, automatic extraction)|

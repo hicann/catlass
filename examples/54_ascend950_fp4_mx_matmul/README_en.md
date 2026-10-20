@@ -62,6 +62,7 @@ The corresponding relationship is shown in the following table:
 | 1       | 1       | layout::ColumnMajor | layout::ColumnMajor |
 
 This example completes MX quantized matrix multiplication:
+
 - C = (MxScaleA x A) * (MxScaleB x B) + Bias
 - A and B support the float4_e1m2 or float4_e2m1 data type.
 - MxScaleA and MxScaleB support the float8_e8m0 data type.

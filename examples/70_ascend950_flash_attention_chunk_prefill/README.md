@@ -12,6 +12,7 @@
   $$
 
   其中 $Q$ 是形如 `(batch*qSeqlen, numHeads, qkHeadSize)` 的查询矩阵，$K$、$V$ 为分页 KV cache，形如 `(numBlocks, kvHeads, blockSize, headDim)`，$d$ 为 `qkHeadSize`，$M$ 为底对齐的 causal 掩码（仅支持 mask 场景，`maskType` 固定为 1，不支持无掩码）；GQA 场景下 `numHeads` 为 `kvHeads` 的正整数倍。
+
 - 支持产品型号：Ascend 950PR&950DT系列产品
 
 ## 样例参数说明
@@ -50,6 +51,7 @@
 | kvlayout支持PAGE_ND/PAGE_NZ |   cacheLayout="nd"/"nz"    |
 
 推荐范围：
+
 - 序列长度满足 `1 ≤ qSeqlen ≤ kvSeqlen ≤ 16384`。上限依据：单 case 数据量 `batch*qSeqlen*numHeads*qkHeadSize + batch*ceil(kvSeqlen/blockSize)*blockSize*kvHeads*(qkHeadSize+vHeadSize)` 随 seqlen 线性放大，kernel 中间 workspace（qkOut/smOnline/pvOut/Update）同步膨胀，seqlen 再增加单case数据量即到GB 级，易 OOM（aclError：207001）。
 - `batch` 满足 `1 ≤ batch ≤ 16`：kernel 无硬上限，但与 seqlen/heads 共享同一条数据量公式，开大 batch 需等比缩小 seqlen 或 numHeads。
 - 头数满足 `1 ≤ kvHeads ≤ numHeads ≤ 8` 且 `numHeads % kvHeads == 0`：除整除关系外无其它硬约束，heads 放大等价于放大 Q 数据量。
@@ -66,6 +68,7 @@
 python gen_data.py [batch] [qSeqlen] [kvSeqlen] [numHeads] [kvHeads] [qkHeadSize] [vHeadSize] [isVariedLen] [dtype] [numBlocks] [innerPrec] [blockSize] [cacheLayout]
 ./70_ascend950_flash_attention_chunk_prefill [batch] [qSeqlen] [kvSeqlen] [numHeads] [kvHeads] [qkHeadSize] [vHeadSize] [isVariedLen] [numBlocks] [blockSize] [--dtype DTYPE] [--cache_layout CACHE_LAYOUT] [--device DEVICE_ID]
 ```
+
 上述命令行参数具体说明如下：
 
 | 参数 | 默认值 | 参数说明 |

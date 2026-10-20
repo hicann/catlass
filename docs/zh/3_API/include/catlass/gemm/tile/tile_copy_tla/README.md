@@ -12,7 +12,7 @@
 
 | 模板                                                   | 分发方式       | 适用硬件            | 说明                           |
 | :----------------------------------------------------- | :------------- | :------------------ | :----------------------------- |
-| [TileCopyTla](./tile_copy_tla.md)                      | SFINAE trait   | AtlasA2 + Ascend950 | 核心 TLA 搬运，自动匹配 layout |
+| [TileCopyTla](./tile_copy_tla.md)                      | SFINAE trait   | Atlas A2 + Ascend 950 | 核心 TLA 搬运，自动匹配 layout |
 | [TileCopyTlaExt](./tile_copy_tla_ext.md)               | 显式 LayoutTag | AtlasA2             | 扩展版，支持 Padding layout    |
 | [TileCopySparseTla](./tile_copy_sparse_tla.md)         | SFINAE trait   | AtlasA2             | 稀疏 GEMM 搬运                 |
 | [CopyL1ToL0BSparseTla](./copy_l1_to_l0b_sparse_tla.md) | SFINAE trait   | AtlasA2             | 稀疏 B L1→L0B（带 index）      |
@@ -53,7 +53,7 @@ tile_copy_tla.hpp
 | L1→L0A/L0B 搬运                            | `TileCopyTla`                                |
 | GM 源为 PaddingRowMajor/PaddingColumnMajor | `TileCopyTlaExt`                             |
 | 稀疏 GEMM                                  | `TileCopySparseTla` + `CopyL1ToL0BSparseTla` |
-| FlashAttention Q 加载                      | `TileCopyFAQTla`                             |
+| Flash Attention Q 加载                      | `TileCopyFAQTla`                             |
 
 ## 调用示例
 

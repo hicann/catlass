@@ -159,7 +159,7 @@ Empirical testing reveals the following patterns:
 
 - Generally, when a matrix layout is misaligned, padding is necessary to recover the degraded read bandwidth. However, if that misaligned matrix is only read once without data reuse throughout the Matmul computation, it should not be padded.
 - If the stride length of the matrix is less than 64 bytes, the on-the-fly ND2NZ hardware conversion units suffer extreme bandwidth degradation. In this case, padding must be applied, even if the matrix exhibits no data reuse.
-- If the matrix dimensions are too small, that is, rows and columns fall below specific thresholds), padding is counterproductive. Small matrices can reside completely within the L1 cache to eliminate redundant reads, and the thin padding gains cannot amortize the overhead.
+- If the matrix dimensions are too small, (that is, rows and columns fall below specific thresholds), padding is counterproductive. Small matrices can reside completely within the L1 cache to eliminate redundant reads, and the thin padding gains cannot amortize the overhead.
 - When matrix reuse is low and the stride length is already 256-byte aligned, bypassing the padding operation yields better performance.
 
 Because defining fixed thresholds across diverse shapes is brittle, a rigid heuristic strategy cannot maximize performance. Instead, the padding process must be modeled mathematically.

@@ -40,6 +40,7 @@ void operator()(
 ```
 
 Static constraints:
+
 - `TensorSrc::position == VECCALC`, and `TensorSrc::Layout` is RowMajor.
 - `TensorDst::position == GM`, and `TensorDst::Layout` is RowMajor.
 

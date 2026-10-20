@@ -84,7 +84,7 @@
 ### CATLASS 1.6.0
 
 - 关键特性
-  - 全面支持 **Ascend950**，新增全套 [Tile层组件](https://gitcode.com/cann/catlass/tree/v1.6.0/include/catlass/gemm/tile/ascend950)（文档见[Gemm/Tile类模板概述](https://gitcode.com/cann/catlass/blob/v1.6.0/docs/zh/3_API/include/catlass/gemm/tile/README.md)），兼容 Atlas A2/A3，并新增对 **AtlasA2/AtlasA3** 及 **Ascend950** 架构下Gemm类全量Tile层组件的[**单元测试**](https://gitcode.com/cann/catlass/blob/v1.6.0/tests/unittest/catlass/gemm/tile/README.md)
+  - 全面支持 **Ascend950**，新增全套 [Tile层组件](https://gitcode.com/cann/catlass/tree/v1.6.0/include/catlass/gemm/tile/ascend950)（文档见[Gemm/Tile类模板概述](https://gitcode.com/cann/catlass/blob/v1.6.0/docs/zh/3_API/include/catlass/gemm/tile/README.md)），兼容 Atlas A2/A3，并新增对 **Atlas A2/Atlas A3** 及 **Ascend950** 架构下Gemm类全量Tile层组件的[**单元测试**](https://gitcode.com/cann/catlass/blob/v1.6.0/tests/unittest/catlass/gemm/tile/README.md)
   - 新增 [**MXFP8 / MXFP4 量化模板体系**](https://gitcode.com/cann/catlass/blob/v1.6.0/examples/53_ascend950_fp8_mx_matmul/README.md)，基于Ascend950架构支持 MXFP8/MXFP4 量化矩阵乘、A8W4 MX矩阵乘等样例
   - 新增 [**基于Mutex 同步原语的 BlockMmad**](https://gitcode.com/cann/catlass/blob/v1.6.0/include/catlass/gemm/block/block_mmad_pingpong_mutex_tla.hpp)，提供更简化的block组件代码实现
   - 新增 [**EVG 声明式后处理框架**](https://gitcode.com/cann/catlass/blob/v1.6.0/examples/64_ascend950_matmul_evg/README.md)，支持以声明式方式描述 Epilogue 后处理逻辑
@@ -108,7 +108,7 @@
   - [Ascend950 Conv2d](https://gitcode.com/cann/catlass/blob/v1.6.0/examples/56_ascend950_basic_conv2d_tla/README.md)
   - [AtlasA2 Quant Matmul 多核切K](https://gitcode.com/cann/catlass/blob/v1.6.0/examples/52_quant_multi_core_splitk_matmul_tla/README.md)
 - 工具支持
-  - 新增 [算子级测试框架（optest）](https://gitcode.com/cann/catlass/blob/v1.6.0/tests/optest/README.md)，支持 JIT 与 Prebuilt 两种模式，使用弱符号机制统一 prebuilt kernel 加载，并完成 63 个存量及新增样例的 torch_catlass 测试接口接入，覆盖 Matmul、GroupedMatmul、FlashAttention等算子类型
+  - 新增 [算子级测试框架（optest）](https://gitcode.com/cann/catlass/blob/v1.6.0/tests/optest/README.md)，支持 JIT 与 Prebuilt 两种模式，使用弱符号机制统一 prebuilt kernel 加载，并完成 63 个存量及新增样例的 torch_catlass 测试接口接入，覆盖 Matmul、GroupedMatmul、Flash Attention等算子类型
   - [msTuner 工具增强](https://gitcode.com/cann/catlass/blob/v1.6.0/tools/tuner/README.md)：支持 -xasc 编译及 Ascend950 架构寻优
   - 新增 [Agent Skill 开发工具](https://gitcode.com/cann/catlass/tree/v1.6.0/.agents)，当前具备支持生成样例torch接口、生成样例optest交付件等场景的自动化功能
   - 新增 CI/构建辅助设施：pre-commit 脚本、依赖描述文件等

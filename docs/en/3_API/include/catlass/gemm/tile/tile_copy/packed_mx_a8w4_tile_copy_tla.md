@@ -9,6 +9,7 @@
 `PackedMxA8W4TileCopyTla` is derived from [PackedTileCopyTla](./packed_tile_copy_tla.md) and manages both MX Scale data movement and the movement of the A8W4 quantized B matrix. It is an extended variant of [PackedMxTileCopyTla](./packed_mx_tile_copy_tla.md) for the A8W4 (INT4 weight) scenario.
 
 Key features:
+
 - Matrix A is in FP8 format (`ElementA_`) and is transferred with MX Scale.
 - Matrix B undergoes a type transformation: it starts as INT4 (represented by `ElementPrologueB_`, the type before the Prologue) and is converted to INT8 (represented by `ElementB_`, the type after the Prologue).
 - `CopyL1ToL0B` is **overridden** to adapt to the B data type after the Prologue.

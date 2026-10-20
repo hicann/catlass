@@ -1,4 +1,4 @@
-# Matmul Silu Example Readme
+# MatmulSilu Example Readme
 
 ## Code Organization
 
