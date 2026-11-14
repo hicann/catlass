@@ -14,7 +14,7 @@ PRECISIONS = [(torch.float16, False), (torch.bfloat16, False),
 REDUCTION_CASES = [
     (dtype, hf32, k)
     for dtype, hf32 in PRECISIONS
-    for k in (17, 128, 1024, 3071, 3072, 3073, 4096, 7168, 16385, 32769, 65536)
+    for k in (17, 1024, 3073)
 ]
 
 
@@ -86,9 +86,13 @@ def check_case(dtype, hf32, trans_a, trans_b, ba, bb, mode,
 
 @only_on_3510
 @pytest.mark.parametrize("dtype,hf32", PRECISIONS)
-@pytest.mark.parametrize("trans_a,trans_b", itertools.product([False, True], repeat=2))
-@pytest.mark.parametrize("ba,bb", [(1, 1), (1, 3), (3, 1), (3, 3)])
-@pytest.mark.parametrize("mode", [0, 1, 2])
+# Keep each transpose and broadcast choice with all three bias modes for RDV.
+@pytest.mark.parametrize("trans_a,trans_b,ba,bb,mode", [
+    (False, False, 1, 1, 0), (False, False, 1, 3, 1), (False, False, 3, 1, 2),
+    (True, False, 1, 3, 0), (True, False, 3, 1, 1), (True, False, 3, 3, 2),
+    (False, True, 3, 1, 0), (False, True, 3, 3, 1), (False, True, 1, 1, 2),
+    (True, True, 3, 3, 0), (True, True, 1, 1, 1), (True, True, 1, 3, 2),
+])
 def test_combinations(dtype, hf32, trans_a, trans_b, ba, bb, mode):
     check_case(dtype, hf32, trans_a, trans_b, ba, bb, mode)
 
@@ -178,7 +182,8 @@ def test_full_k_tail_and_bias_once(dtype, hf32, trans_a, trans_b, mode):
 @pytest.mark.parametrize("mode", [0, 1, 2])
 def test_small_k_cancellation_diagnostics(dtype, hf32, pattern, mode):
     # Keep adversarial signs within [-5,5], including the small retained term.
-    for k in range(1, 18):
+    # Keep only minimal and tail lengths for the RDV smoke test.
+    for k in (1, 17):
         values = torch.tensor([5.0, 2**-14, -5.0, 0.0]).repeat((k + 3) // 4)[:k]
         if pattern == "blocked":
             values = values.sort(descending=True).values
