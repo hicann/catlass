@@ -28,6 +28,7 @@
 | `matmul_sigmoid.py` | D = Sigmoid(A×B) |
 | `matmul_silu.py` | D = Silu(A×B) |
 | `matmul_tanh.py` | D = Tanh(A×B) |
+| `quant_matmul_gelu.py` | D = Gelu(scale · (A×B))，A/B 为 int8 |
 
 ## 样例参数说明
 
@@ -38,6 +39,7 @@
 | `X` | Input | `(m,n)` | `float16/float32` | `matmul_add.py` / `matmul_add_ub.py` 的加法输入，layout 为 `RowMajor`，数据类型与输出 `D` 一致 |
 | `bias` | Input | `(1,n)` | `float16/float32` | `matmul_bias.py` 的偏置，沿 m 轴广播，数据类型与输出 `D` 一致 |
 | `alpha` | 常量 | 标量 | `float32` | `matmul_leaky_relu.py` 的负半轴斜率，默认 `0.1` |
+| `quant_scale` | Input | 标量 | `float32` | `quant_matmul_gelu.py` 的 per-tensor 反量化系数，在 Vector 上与 int32 累加结果相乘 |
 | `kScale` / `kCubicCoef` | 常量 | 标量 | `float32` | `matmul_gelu.py` 的 GELU 系数，取 `1.59576912` 与 `0.044715`，与 `examples/common/golden/matmul.hpp` 中 `Gelu` 一致 |
 | `D` | Output | `(m,n)` | `float16/float32` | 融合计算结果，layout 仅支持 `RowMajor` |
 
@@ -47,6 +49,7 @@
 
 - 矩阵的 M/N/K 轴不超过 122880。
 - `A`/`B` 均为 `float32` 类型时，建议 `K` 小于 3072 以避免绝对误差超上限。
+- `quant_matmul_gelu.py` 的 `A`、`B` 为 `int8`。样例输入取 `[-8, 8)`。`K <= 2048` 时，`127 * 127 * K` 小于 `2^31`，int32 累加不溢出。
 
 ## 代码组织
 
@@ -60,6 +63,7 @@
 ├── matmul_sigmoid.py
 ├── matmul_silu.py
 ├── matmul_tanh.py
+├── quant_matmul_gelu.py
 └── README.md
 ```
 
@@ -73,6 +77,7 @@
 | [**`matmul_sigmoid.py`**](matmul_sigmoid.py) | 实现 `D = Sigmoid(A@B)` 计算功能。 |
 | [**`matmul_silu.py`**](matmul_silu.py) | 实现 `D = Silu(A@B)` 计算功能。 |
 | [**`matmul_tanh.py`**](matmul_tanh.py) | 实现 `D = Tanh(A@B)` 计算功能。 |
+| [**`quant_matmul_gelu.py`**](quant_matmul_gelu.py) | 实现 `D = Gelu(quant_scale · (A@B))`。`A`、`B` 为 `int8`，Cube 累加为 `int32` 并写入 workspace，Vector 乘 `quant_scale` 后再做 tanh 近似 GELU。 |
 
 ## 约束说明
 
@@ -82,6 +87,7 @@
 |------|-------------------|---------|
 | add, bias, gelu, leaky_relu, sigmoid, silu | f16 / bf16 / f32 | f16 或 f32 |
 | add_ub, tanh | f16 / bf16 / f32 | f32 |
+| quant_matmul_gelu | i8 | f16 或 f32 |
 
 ## 使用示例
 
