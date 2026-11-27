@@ -258,6 +258,11 @@ def qli_scores(
         tla.pipe_barrier(tla.pipes.ALL)
 
     with tla.vector():
+        tla.arch.set_ctrl(
+            tla.params.CTRLValue(
+                saturation_strategy=tla.params.OverrideStrategy.USE_API
+            )
+        )
         sub = tla.arch.sub_block_idx()
         # Both slots start free, matching the first two AIC waits.
         for prime_slot in (0, 1):
