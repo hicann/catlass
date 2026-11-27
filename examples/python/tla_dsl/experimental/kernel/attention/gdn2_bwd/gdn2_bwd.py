@@ -114,7 +114,7 @@ def gm_view_t(x, offset, rows, cols, pitch):
 CAST_ROUND = tla.params.CastParams(
     sat_mode=tla.params.SatMode.NOSAT, round_mode=tla.params.RoundMode.CAST_ROUND
 )
-PLAIN_CAST = tla.params.CastParams()
+PLAIN_CAST = tla.params.CastParams(round_mode=tla.params.RoundMode.CAST_ROUND)
 UNPACK16 = tla.params.NormalLoadParams(load_dist=tla.params.LoadDist.DIST_UNPACK_B16)
 PACK16 = tla.params.NormalStoreParams(store_dist=tla.params.StoreDist.DIST_PACK_B32)
 HF32_OFF = tla.params.HF32Mode.HF32_DISABLE
@@ -2463,7 +2463,6 @@ def reduce_kernel(
                             all63 = tla.create_mask(
                                 pattern=tla.mask.ALL, dtype=tla.Float32
                             )
-                            one63 = tla.update_mask(1, dtype=tla.Float32)[0]
                             for rr_L1536 in tla.range(32):
                                 acc2 = (
                                     sub(th63, rr_L1536, 0, 1, 64).load()
@@ -2482,7 +2481,6 @@ def reduce_kernel(
                                 ).store(
                                     sc63,
                                     params=tla.params.UnalignStoreParams(),
-                                    mask=one63,
                                 )
                     with tla.vec.func(mode="simd"):
                         # order the unaligned lane stores above against this load
