@@ -115,7 +115,8 @@ def reduce_mean_kernel(
                                         src.to(
                                             tla.Float32,
                                             tla.params.CastParams(
-                                                reg_slot=tla.params.RegSlot.ZERO
+                                                reg_slot=tla.params.RegSlot.ZERO,
+                                                round_mode=tla.params.RoundMode.CAST_ROUND,
                                             ),
                                         ),
                                         zero,
@@ -128,7 +129,8 @@ def reduce_mean_kernel(
                                         src.to(
                                             tla.Float32,
                                             tla.params.CastParams(
-                                                reg_slot=tla.params.RegSlot.ONE
+                                                reg_slot=tla.params.RegSlot.ONE,
+                                                round_mode=tla.params.RoundMode.CAST_ROUND,
                                             ),
                                         ),
                                         zero,
@@ -151,7 +153,8 @@ def reduce_mean_kernel(
                                 total.to(
                                     dtype,
                                     tla.params.CastParams(
-                                        reg_slot=tla.params.RegSlot.ZERO
+                                        reg_slot=tla.params.RegSlot.ZERO,
+                                        round_mode=tla.params.RoundMode.CAST_ROUND,
                                     ),
                                 )
                             )
@@ -198,7 +201,8 @@ def reduce_mean_kernel(
                                     src2.to(
                                         tla.Float32,
                                         tla.params.CastParams(
-                                            reg_slot=tla.params.RegSlot.ZERO
+                                            reg_slot=tla.params.RegSlot.ZERO,
+                                            round_mode=tla.params.RoundMode.CAST_ROUND,
                                         ),
                                     ),
                                     zero2,
@@ -211,7 +215,8 @@ def reduce_mean_kernel(
                                     src2.to(
                                         tla.Float32,
                                         tla.params.CastParams(
-                                            reg_slot=tla.params.RegSlot.ONE
+                                            reg_slot=tla.params.RegSlot.ONE,
+                                            round_mode=tla.params.RoundMode.CAST_ROUND,
                                         ),
                                     ),
                                     zero2,
@@ -226,7 +231,10 @@ def reduce_mean_kernel(
                         z_tail_ub.store(
                             total2.to(
                                 dtype,
-                                tla.params.CastParams(reg_slot=tla.params.RegSlot.ZERO),
+                                tla.params.CastParams(
+                                    reg_slot=tla.params.RegSlot.ZERO,
+                                    round_mode=tla.params.RoundMode.CAST_ROUND,
+                                ),
                             )
                         )
                     else:
@@ -326,7 +334,8 @@ def reduce_mean_kernel(
                                             src.to(
                                                 tla.Float32,
                                                 tla.params.CastParams(
-                                                    reg_slot=tla.params.RegSlot.ZERO
+                                                    reg_slot=tla.params.RegSlot.ZERO,
+                                                    round_mode=tla.params.RoundMode.CAST_ROUND,
                                                 ),
                                             ),
                                             zero,
@@ -339,7 +348,8 @@ def reduce_mean_kernel(
                                             src.to(
                                                 tla.Float32,
                                                 tla.params.CastParams(
-                                                    reg_slot=tla.params.RegSlot.ONE
+                                                    reg_slot=tla.params.RegSlot.ONE,
+                                                    round_mode=tla.params.RoundMode.CAST_ROUND,
                                                 ),
                                             ),
                                             zero,
@@ -381,7 +391,8 @@ def reduce_mean_kernel(
                                         src2.to(
                                             tla.Float32,
                                             tla.params.CastParams(
-                                                reg_slot=tla.params.RegSlot.ZERO
+                                                reg_slot=tla.params.RegSlot.ZERO,
+                                                round_mode=tla.params.RoundMode.CAST_ROUND,
                                             ),
                                         ),
                                         zero2,
@@ -394,7 +405,8 @@ def reduce_mean_kernel(
                                         src2.to(
                                             tla.Float32,
                                             tla.params.CastParams(
-                                                reg_slot=tla.params.RegSlot.ONE
+                                                reg_slot=tla.params.RegSlot.ONE,
+                                                round_mode=tla.params.RoundMode.CAST_ROUND,
                                             ),
                                         ),
                                         zero2,
@@ -417,11 +429,17 @@ def reduce_mean_kernel(
                         if tla.const_expr(is_lowp):
                             ze = tla.mul(acc_ub.load(), inv).to(
                                 dtype,
-                                tla.params.CastParams(reg_slot=tla.params.RegSlot.ZERO),
+                                tla.params.CastParams(
+                                    reg_slot=tla.params.RegSlot.ZERO,
+                                    round_mode=tla.params.RoundMode.CAST_ROUND,
+                                ),
                             )
                             zo = tla.mul(acc_o_ub.load(), inv).to(
                                 dtype,
-                                tla.params.CastParams(reg_slot=tla.params.RegSlot.ONE),
+                                tla.params.CastParams(
+                                    reg_slot=tla.params.RegSlot.ONE,
+                                    round_mode=tla.params.RoundMode.CAST_ROUND,
+                                ),
                             )
                             z_ub.store(tla.add(ze, zo))
                         else:
