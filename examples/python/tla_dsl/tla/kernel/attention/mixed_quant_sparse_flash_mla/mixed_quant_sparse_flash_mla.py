@@ -561,7 +561,9 @@ def _cast_slot(slot):
 
 
 def _widen_slot(slot):
-    return tla.params.CastParams(reg_slot=slot)
+    return tla.params.CastParams(
+        reg_slot=slot, round_mode=tla.params.RoundMode.CAST_ROUND
+    )
 
 
 def _emit_group(ub_s, ub_o, row, group, val, preg, output_mask, cast_pack, pack_store):
