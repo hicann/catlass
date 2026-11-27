@@ -2384,6 +2384,11 @@ def process_vec1(
     c0 = 0
     c1 = 1
     with tla.vector():
+        tla.arch.set_ctrl(
+            tla.params.CTRLValue(
+                saturation_strategy=tla.params.OverrideStrategy.USE_API
+            )
+        )
         sub = tla.arch.sub_block_idx()
         ub_s = _ub_s(bufs, rows, slot_s)
         ub_p = _ub_p(bufs, rows)
@@ -5131,6 +5136,11 @@ def bmm2_data_copy_out(
 ):
     c0 = 0
     with tla.vector():
+        tla.arch.set_ctrl(
+            tla.params.CTRLValue(
+                saturation_strategy=tla.params.OverrideStrategy.USE_API
+            )
+        )
         sub = tla.arch.sub_block_idx()
         if fresh_from_cube:
             tla.cross_core_wait_flag(sync.o_ready, tla.pipes.VECTOR, aiv_id=0)
