@@ -114,7 +114,9 @@ def gm_view_t(x, offset, rows, cols, pitch):
 CAST_ROUND = tla.params.CastParams(
     sat_mode=tla.params.SatMode.NOSAT, round_mode=tla.params.RoundMode.CAST_ROUND
 )
-PLAIN_CAST = tla.params.CastParams(round_mode=tla.params.RoundMode.CAST_ROUND)
+PLAIN_CAST = tla.params.CastParams(
+    sat_mode=tla.params.SatMode.UNKNOWN, round_mode=tla.params.RoundMode.CAST_NONE
+)
 UNPACK16 = tla.params.NormalLoadParams(load_dist=tla.params.LoadDist.DIST_UNPACK_B16)
 PACK16 = tla.params.NormalStoreParams(store_dist=tla.params.StoreDist.DIST_PACK_B32)
 HF32_OFF = tla.params.HF32Mode.HF32_DISABLE
