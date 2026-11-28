@@ -97,7 +97,7 @@ Compare success.
 
 ---
 
-In the current example, the right-hand matrix uses the NZ layout format (that is, `LayoutB is layout::zN`, for details, see [layout.hpp](../../include/catlass/layout/layout.hpp)). To change the target format to `layout::nZ`, adjust `example/38_w4a4_matmul/w4a4_matmul.cppp` as follows:
+In the current example, the right-hand matrix uses the NZ layout format (that is, `LayoutB is layout::zN`, for details, see [layout.hpp](../../include/catlass/layout/layout.hpp)). To change the target format to `layout::nZ`, adjust `examples/38_w4a4_matmul_per_token_per_channel_dequant/w4a4_matmul_per_token_per_channel_dequant.cpp` as follows:
 
 ```diff
 - using LayoutB = layout::zN;

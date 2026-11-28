@@ -97,7 +97,7 @@ Compare success.
 
 ---
 
-当前样例右矩阵采用NZ排布（即`LayoutB`为`layout::zN`，详见[`layout.hpp`](../../include/catlass/layout/layout.hpp)），如需修改为`layout::nZ`格式，请对`example/38_w4a4_matmul/w4a4_matmul.cpp`做调整：
+当前样例右矩阵采用NZ排布（即`LayoutB`为`layout::zN`，详见[`layout.hpp`](../../include/catlass/layout/layout.hpp)），如需修改为`layout::nZ`格式，请对`examples/38_w4a4_matmul_per_token_per_channel_dequant/w4a4_matmul_per_token_per_channel_dequant.cpp`做调整：
 
 ```diff
 - using LayoutB = layout::zN;

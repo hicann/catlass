@@ -1479,14 +1479,34 @@ class _Tensor(TensorABC):
                 y_ub.store(y_reg, tla.params.UnalignStoreParams())
                 y_ub.store(y_reg, tla.params.NormalStoreParams(
                     store_dist=tla.params.StoreDist.DIST_FIRST_ELEMENT_B16))
-                # fp32_reg: 64 FP32 lanes; fp8_ub: 64 Float8E4M3FN elements.
-                # fp8_ub starts at a 32-byte-aligned address.
-                fp8_reg = fp32_reg.to(tla.Float8E4M3FN, tla.params.CastParams(
-                    round_mode=tla.params.RoundMode.CAST_RINT,
-                    sat_mode=tla.params.SatMode.SAT,
-                    reg_slot=tla.params.RegSlot.ZERO))
-                fp8_ub.store(fp8_reg, tla.params.NormalStoreParams(
-                    store_dist=tla.params.StoreDist.DIST_PACK4_B32))
+            ```
+
+            In the packed FP8 example, `fp32_ub` holds 64 `Float32` elements.
+            `fp8_ub` holds 64 `Float8E4M3FN` elements at a 32-byte-aligned
+            address. `USE_API` lets the cast apply `SatMode.SAT`.
+
+            ```python
+            with tla.vector():
+                tla.arch.set_ctrl(
+                    tla.params.CTRLValue(
+                        saturation_strategy=tla.params.OverrideStrategy.USE_API
+                    )
+                )
+                with tla.vec.func(mode="simd"):
+                    fp8_reg = fp32_ub.load().to(
+                        tla.Float8E4M3FN,
+                        tla.params.CastParams(
+                            round_mode=tla.params.RoundMode.CAST_RINT,
+                            sat_mode=tla.params.SatMode.SAT,
+                            reg_slot=tla.params.RegSlot.ZERO,
+                        ),
+                    )
+                    fp8_ub.store(
+                        fp8_reg,
+                        tla.params.NormalStoreParams(
+                            store_dist=tla.params.StoreDist.DIST_PACK4_B32
+                        ),
+                    )
             ```
 
             - Single-vector aligned `POST_MODE_UPDATE` supports NORM, PACK and
@@ -2153,32 +2173,23 @@ class _Tensor(TensorABC):
         )
 
         elem_type = parent.element_mlir_type()
+        is_bool = (
+            mlir_ir.IntegerType.isinstance(elem_type)
+            and mlir_ir.IntegerType(elem_type).width == 1
+        )
+        dtype = Bool if is_bool else Numeric.from_mlir_type(elem_type)
         # Per-thread element access inside a SIMT region is its own op: it is
         # lowered against the outlined vector function's memref parameter rather
         # than through the general descriptor view.
-        emit_load = (
-            _tla_ops_gen.simt_load
-            if _runtime._in_simt_vec_func()
-            else _tla_ops_gen.scalar_load
-        )
-        result = emit_load(
-            elem_type,
-            source_value,
-            index_values,
-            loc=loc,
-        )
+        in_simt = _runtime._in_simt_vec_func()
+        emit_load = _tla_ops_gen.simt_load if in_simt else _tla_ops_gen.scalar_load
+        result = emit_load(elem_type, source_value, index_values, loc=loc)
         if str(result.type) != str(elem_type):
             raise TlaLoweringError(
                 f"tla scalar element load result type mismatch: expected {elem_type}, "
                 f"got {result.type}"
             )
-        # Bool / i1 loads: Bool Numeric (``if tensor[i]`` via coerce).
-        if mlir_ir.IntegerType.isinstance(elem_type):
-            int_ty = mlir_ir.IntegerType(elem_type)
-            if int_ty.width == 1:
-                return Bool(result)
-        dtype = Numeric.from_mlir_type(elem_type)
-        if _runtime._in_simt_vec_func() and dtype.is_integer and not dtype.signed:
+        if in_simt and dtype.is_integer and not dtype.signed and not is_bool:
             result = mlir_ir.Operation.create(
                 "builtin.unrealized_conversion_cast",
                 operands=[result],

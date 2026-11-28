@@ -29,7 +29,7 @@ enum class ScaleGranularity
 
 template <
     class ArchTag, class ElementSrc, class ElementDst,
-    ScaleGranularity DEQUANT_GRANULARITY = ScaleGranularity::NO_QUANT>
+    ScaleGranularity DEQUANT_GRANULARITY = ScaleGranularity::NO_QUANT, class Enable = void>
 struct CopyL0CToDstQuantMode {
     static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported copy l0c to dst quant mode, can not find the specialization.");
 };
@@ -156,13 +156,17 @@ struct CopyL0CToDstQuantMode<Arch::Ascend950, float, float, ScaleGranularity::PE
 };
 
 // CopyL0CToDst quant float to fp8_e4m3fn / hifloat8 (Ascend 950 Fixpipe)
-template <>
-struct CopyL0CToDstQuantMode<Arch::Ascend950, float, fp8_e4m3fn_t, ScaleGranularity::PER_TENSOR> {
+template <class ElementDst>
+struct CopyL0CToDstQuantMode<
+    Arch::Ascend950, float, ElementDst, ScaleGranularity::PER_TENSOR,
+    std::enable_if_t<std::is_same_v<ElementDst, fp8_e4m3fn_t> && !std::is_same_v<ElementDst, uint8_t>>> {
     static constexpr auto VALUE = QuantMode_t::QF322FP8_PRE;
 };
 
-template <>
-struct CopyL0CToDstQuantMode<Arch::Ascend950, float, fp8_e4m3fn_t, ScaleGranularity::PER_CHANNEL> {
+template <class ElementDst>
+struct CopyL0CToDstQuantMode<
+    Arch::Ascend950, float, ElementDst, ScaleGranularity::PER_CHANNEL,
+    std::enable_if_t<std::is_same_v<ElementDst, fp8_e4m3fn_t> && !std::is_same_v<ElementDst, uint8_t>>> {
     static constexpr auto VALUE = QuantMode_t::VQF322FP8_PRE;
 };
 

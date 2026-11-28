@@ -547,8 +547,8 @@ class TestFlashAttentionInfer():
     @classmethod
     def check_attr(cls, batch: int, q_seqlen: int, kv_seqlen: int, num_blocks: int, block_size: int):
         if q_seqlen > kv_seqlen:
-            logging("[ERROR] q_seqlen cannot exceed kv_seqlen.")
-            sys.exit()
+            logging.error("[ERROR] q_seqlen cannot exceed kv_seqlen.")
+            sys.exit(1)
 
     @classmethod
     def group_matmul(cls, head, kv_head, left, right):
@@ -874,12 +874,12 @@ if __name__ == "__main__":
     elif str_dtype == "bf16":
         dtype = bfloat16
     else:
-        logging("[ERROR] dtype must be half or bf16")
-        sys.exit()
+        logging.error("[ERROR] dtype must be half or bf16")
+        sys.exit(1)
     
     if use_p_scale != 0 and use_p_scale != 1:
-        logging("[ERROR] p_scale_type must be 0 or 1")
-        sys.exit()
+        logging.error("[ERROR] p_scale_type must be 0 or 1")
+        sys.exit(1)
 
     q_seqlen_list, kv_seqlen_list = gen_seqlen(q_seqlen, kv_seqlen, is_varied_len, batch)
     

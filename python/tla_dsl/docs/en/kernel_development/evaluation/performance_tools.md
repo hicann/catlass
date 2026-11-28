@@ -161,7 +161,7 @@ msprof --application="python examples/python/tla_dsl/tla/kernel/matmul/basic_mix
 | --- | --- | --- |
 | `-h`, `--help` | Show help information and exit | `msprof -h` |
 | `--application` | Scenario-related; pass the binary executable program or execution script and its parameters as a parameter. | `msprof --application="python examples/python/tla_dsl/tla/kernel/matmul/basic_mixed/basic_mixed.py"` |
-| `--output=<path>` | Optional parameter, the storage path for the collected performance data. | `msprof --output=/home/projects/output /home/projects/main`
+| `--output=<path>` | Optional parameter, the storage path for the collected performance data. | `msprof --output=/home/projects/output /home/projects/main` |
 
 For more parameters, see [msprof collection commands](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/latest/devaids/Profiling/atlasprofiling_16_0010.html)
 

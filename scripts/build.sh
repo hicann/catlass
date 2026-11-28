@@ -59,7 +59,7 @@ function show_help() {
     echo "  torch_library     Build Torch library"
     echo "  mstuner_catlass   Build msTuner for CATLASS. Use it with -DCATLASS_LIBRARY_KERNELS=<kernel_name>"
     echo "  <other>           Other specific targets, e.g. 00_basic_matmul"
-    echo -e "\n{BLUE}Test targets:${NC}"
+    echo -e "\n${BLUE}Test targets:${NC}"
     echo "  test_self_contained_includes  Test for self contained includes"
 }
 

@@ -201,6 +201,10 @@ int main(int argc, const char** argv)
     if (options.Parse(argc, argv) != 0) {
         return -1;
     }
+    if (options.problemShape.m() != 1) {
+        std::cerr << "only supports m = 1, got " << options.problemShape.m() << std::endl;
+        return -1;
+    }
     Run(options);
     return 0;
 }

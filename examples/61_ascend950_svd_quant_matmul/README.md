@@ -67,7 +67,8 @@ SvdQuant更多细节参考[SvdQuant论文](https://arxiv.org/abs/2411.05007)
 
 | shape | 约束                                                                    |
 | ----- | ----------------------------------------------------------------------- |
-| m,n,k | 无限制                                                                  |
+| m,n   | 无限制                                                                  |
+| k     | 必须为64的正整数倍，即 `k > 0` 且 `k % 64 == 0` |
 | r     | 典型值16/32/64，算子实现要求 r<=BlockMmad1::L1_TILE_N, 现有配置即r<=128 |
 | qmax  | 取值范围[6.0, 12.0], 典型值 8.0                                         |
 
@@ -79,7 +80,7 @@ SvdQuant更多细节参考[SvdQuant论文](https://arxiv.org/abs/2411.05007)
 | Svd1        | fp16/bf16       | (k, r)    | ColumnMajor | 类型和 X 相同，公式中的L1                                |
 | Svd2        | fp16/bf16       | (r, n)    | ColumnMajor | 类型和 X 相同，公式中的L2                                |
 | W           | float4_e2m1x2_t | (k, n)    | ColumnMajor | 公式中的残差R量化后的fp4                                 |
-| MxScaleW    | float8_e8m0_t   | (k/32, n) | ColumnMajor | 公式中的残差R量化后的scale                               |
+| MxScaleW    | float8_e8m0_t   | (⌈k/32⌉, n) | ColumnMajor | 公式中的残差R量化后的scale                               |
 | qmax        | float           | (1,)      |             | scalar, 在kernel内部转换为fp16/bf16，和 X 相同           |
 | SmoothScale | fp16/bf16       | (k,)      | RowMajor    | 可选输入，类型和 X 相同，传入算子的实际是(1/smoothScale) |
 | Bias        | float           | (n,)      | RowMajor    | 可选输入，取决于量化前网络层是否有bias                   |
@@ -92,7 +93,9 @@ SvdQuant更多细节参考[SvdQuant论文](https://arxiv.org/abs/2411.05007)
 | -------- | --------------- | --------- | -------- | ------------- |
 | C1       | fp16/bf16       | (m, r)    | RowMajor | 类型和 X 相同 |
 | QuantX   | float4_e2m1x2_t | (m, k)    | RowMajor |               |
-| MxScaleX | float8_e8m0_t   | (m, k/32) | RowMajor |               |
+| MxScaleX | float8_e8m0_t   | (m, ⌈k/32⌉) | RowMajor |               |
+
+`MxScaleW` 和 `MxScaleX` 的 shape 表示逻辑 scale 组数。实际存储将 K 方向的组数向上补齐为偶数：`s = 2 * ceil(ceil(k / 32) / 2)`，分别分配 `s * n` 和 `m * s` 个 `float8_e8m0_t` 元素。
 
 - 样例中输出为：
 

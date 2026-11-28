@@ -363,8 +363,8 @@ if __name__ == "__main__":
     elif str_dtype == "bf16":
         dtype = bfloat16
     else:
-        logging("[ERROR] dtype must be half or bf16")
-        sys.exit()
+        logging.error("[ERROR] dtype must be half or bf16")
+        sys.exit(1)
 
     q_seqlen_list, kv_seqlen_list = gen_seqlen(
         q_seqlen, kv_seqlen, is_varied_len, batch

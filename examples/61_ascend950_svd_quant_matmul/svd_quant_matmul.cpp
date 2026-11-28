@@ -69,7 +69,12 @@ struct SvdQuantOptions {
 
         problemShape.m() = std::atoi(argv[static_cast<uint32_t>(ArgsIndex::M_INDEX)]);
         problemShape.n() = std::atoi(argv[static_cast<uint32_t>(ArgsIndex::N_INDEX)]);
-        problemShape.k() = std::atoi(argv[static_cast<uint32_t>(ArgsIndex::K_INDEX)]);
+        int k = std::atoi(argv[static_cast<uint32_t>(ArgsIndex::K_INDEX)]);
+        if (k <= 0 || k % 64 != 0) {
+            std::cerr << "k must be a positive multiple of 64, got " << k << std::endl;
+            return -1;
+        }
+        problemShape.k() = static_cast<uint32_t>(k);
         problemRank = std::atoi(argv[static_cast<uint32_t>(ArgsIndex::R_INDEX)]);
         if (argc == static_cast<uint32_t>(ArgsIndex::ARGS_MAX)) {
             deviceId = std::atoi(argv[static_cast<uint32_t>(ArgsIndex::DEVICE_ID_INDEX)]);
@@ -106,7 +111,7 @@ struct TilingTag2Config<SvdQuantTilingTag::Small> {
 };
 
 template <SvdQuantTilingTag TilingTag>
-static void Run(const Options& options)
+static int Run(const Options& options)
 {
     using InDType = half;
     using OutDType = half;
@@ -345,7 +350,8 @@ static void Run(const Options& options)
 
     // Element-wise comparison: rtol depends on K (accumulation dimension)
     std::vector<uint64_t> errorIndices = golden::CompareData(hostY, hostCpu, k);
-    if (errorIndices.empty() || errorMetrics.passed) {
+    bool passed = errorIndices.empty() || errorMetrics.passed;
+    if (passed) {
         std::cout << "Compare success." << std::endl;
     } else {
         std::cerr << "Compare failed. Error count: " << errorIndices.size() << std::endl;
@@ -374,6 +380,7 @@ static void Run(const Options& options)
     ACL_CHECK(aclrtDestroyStream(stream));
     ACL_CHECK(aclrtResetDevice(options.deviceId));
     ACL_CHECK(aclFinalize());
+    return passed ? 0 : 1;
 }
 
 int main(int argc, const char** argv)
@@ -388,9 +395,8 @@ int main(int argc, const char** argv)
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
 
     if (blocks < aicCoreNum) {
-        Run<SvdQuantTilingTag::Small>(options);
+        return Run<SvdQuantTilingTag::Small>(options);
     } else {
-        Run<SvdQuantTilingTag::Common>(options);
+        return Run<SvdQuantTilingTag::Common>(options);
     }
-    return 0;
 }

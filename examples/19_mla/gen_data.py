@@ -64,37 +64,37 @@ class TestPagedMLAttention:
     ):
         # 检查列表长度是否与 batch size 匹配
         if len(q_seqlen_list) != batch or len(k_seqlen_list) != batch:
-            logging(
+            logging.error(
                 "[ERROR] The length of q_seqlen_list and k_seqlen_list must be equal to batch size."
             )
-            sys.exit()
+            sys.exit(1)
 
         # 检查缓存大小是否足够
         if sum(k_seqlen_list) > num_blocks * block_size:
-            logging(
+            logging.error(
                 "[ERROR] the number of K and V tokens is too big to fit in the paged cache."
             )
-            sys.exit()
+            sys.exit(1)
 
         if block_size != 128:
-            logging("[ERROR] blockSize != 128 is not supported.")
-            sys.exit()
+            logging.error("[ERROR] blockSize != 128 is not supported.")
+            sys.exit(1)
 
         # 检查每个 q_seqlen 是否在有效范围内 [1, 4]
         for q_seqlen in q_seqlen_list:
             if q_seqlen > 4 or q_seqlen < 1:
-                logging(
+                logging.error(
                     f"[ERROR] q_seqlen value {q_seqlen} is not in the valid range of [1, 4]."
                 )
-                sys.exit()
+                sys.exit(1)
 
         # 检查每个 kv_seqlen 是否在有效范围内 [128, 16384]
         for kv_seqlen in k_seqlen_list:
             if kv_seqlen > 16384 or kv_seqlen < 128:
-                logging(
+                logging.error(
                     f"[ERROR] kv_seqlen value {kv_seqlen} is not in the valid range of [128, 16384]."
                 )
-                sys.exit()
+                sys.exit(1)
 
     @classmethod
     def group_matmul(cls, head, kv_head, left, right, compute_dtype=np.float32):
@@ -646,8 +646,8 @@ if __name__ == "__main__":
     elif str_dtype == "bf16":
         dtype = bfloat16
     else:
-        logging("[ERROR] dtype must be half or bf16")
-        sys.exit()
+        logging.error("[ERROR] dtype must be half or bf16")
+        sys.exit(1)
 
     testObj = TestPagedMLAttention()
 

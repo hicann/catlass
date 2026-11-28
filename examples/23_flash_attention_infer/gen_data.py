@@ -77,8 +77,8 @@ class TestFlashAttentionInfer:
         cls, batch: int, q_seqlen: int, kv_seqlen: int, num_blocks: int, block_size: int
     ):
         if q_seqlen > kv_seqlen:
-            logging("[ERROR] q_seqlen cannot exceed kv_seqlen.")
-            sys.exit()
+            logging.error("[ERROR] q_seqlen cannot exceed kv_seqlen.")
+            sys.exit(1)
 
     @classmethod
     def group_matmul(cls, head, kv_head, left, right):
@@ -591,8 +591,8 @@ if __name__ == "__main__":
     elif str_dtype == "bf16":
         dtype = bfloat16
     else:
-        logging("[ERROR] dtype must be half or bf16")
-        sys.exit()
+        logging.error("[ERROR] dtype must be half or bf16")
+        sys.exit(1)
 
     kv_dtype = int(sys.argv[10])
     layout_dtype = 1

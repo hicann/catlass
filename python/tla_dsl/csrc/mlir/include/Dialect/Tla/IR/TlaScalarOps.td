@@ -6,7 +6,7 @@
 // valid in a tla.cube region, in a tla.vec.func in either mode, and in the
 // plain kernel body.
 //
-// Lowered by TlaLowerScalarAccessPass (load/store) and TlaLowerScalarOpsPass
+// Lowered by TlaLowerScalarAccessPass (load/store and storage bytes) and TlaLowerScalarOpsPass
 // (round cast, uint64 bit queries).
 //
 // Included by Dialect/Tla/IR/Tla.td, the file mlir-tblgen is run on.
@@ -41,6 +41,18 @@ def Tla_ScalarStoreOp : Tla_Op<"scalar_store", [MemoryEffects<[MemWrite]>]> {
   let assemblyFormat = [{
     $dest `[` $indices `]` `,` $value attr-dict `:` type($dest) `,` type($value)
   }];
+}
+
+def Tla_ScalarStorageByteOp : Tla_Op<"scalar_storage_byte", [Pure]> {
+  let summary = "Read the byte encoding of a HiF8 or packed FP4 scalar";
+  let description = [{
+    Expose the complete encoding of a typed scalar as ``i8``. Scalar access
+    lowering replaces this operation with the converted scalar value.
+  }];
+  let arguments = (ins AnyTypeOf<[Tla_HiFloat8Type, Tla_Float4E1M2x2Type,
+                                  Tla_Float4E2M1x2Type]>:$source);
+  let results = (outs I8:$result);
+  let assemblyFormat = "$source attr-dict `:` type($source) `->` type($result)";
 }
 
 def Tla_ScalarRoundCastOp : Tla_Op<"scalar_round_cast", [Pure]> {

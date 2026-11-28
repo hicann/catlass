@@ -2,8 +2,11 @@
 #include "PassesCommon.h"
 #include "PassesInternal.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/Func/Transforms/FuncConversions.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/SCF/Transforms/Patterns.h"
 
 namespace tla {
 namespace {
@@ -69,9 +72,81 @@ static FailureOr<Value> materializeScalarView(
         .getResult();
 }
 
-// Placement: after tla-lower-tensor-desc, before vector/cube outlining. Every
-// tensor-semantic scalar operation consumes a materialized descriptor; raw ABI
-// memrefs are never accepted by tla.scalar_load/store.
+struct LowerScalarLoad : OpConversionPattern<::tla::ScalarLoadOp> {
+    LowerScalarLoad(TypeConverter& converter, MLIRContext* context, llvm::DenseMap<Value, Value>& baseMemrefCache)
+        : OpConversionPattern(converter, context), baseMemrefCache(baseMemrefCache)
+    {}
+
+    LogicalResult matchAndRewrite(
+        ::tla::ScalarLoadOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override
+    {
+        auto rawInfo = parseTensorInfo(adaptor.getSource().getType());
+        if (failed(rawInfo) || adaptor.getIndices().size() != rawInfo->shape.size())
+            return op.emitOpError("index count must match logical tensor rank");
+
+        FailureOr<Value> view = materializeScalarView(rewriter, op, adaptor.getSource(), baseMemrefCache);
+        if (failed(view))
+            return failure();
+        Type elementType = cast<MemRefType>((*view).getType()).getElementType();
+        if (elementType != getTypeConverter()->convertType(op.getResult().getType()))
+            return op.emitOpError("unexpected scalar storage type ") << elementType;
+
+        Value loaded = rewriter.create<mlir::memref::LoadOp>(op.getLoc(), *view, adaptor.getIndices());
+        rewriter.replaceOp(op, loaded);
+        return success();
+    }
+
+private:
+    llvm::DenseMap<Value, Value>& baseMemrefCache;
+};
+
+struct LowerScalarStore : OpConversionPattern<::tla::ScalarStoreOp> {
+    LowerScalarStore(TypeConverter& converter, MLIRContext* context, llvm::DenseMap<Value, Value>& baseMemrefCache)
+        : OpConversionPattern(converter, context), baseMemrefCache(baseMemrefCache)
+    {}
+
+    LogicalResult matchAndRewrite(
+        ::tla::ScalarStoreOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override
+    {
+        auto rawInfo = parseTensorInfo(adaptor.getDest().getType());
+        if (failed(rawInfo) || adaptor.getIndices().size() != rawInfo->shape.size())
+            return op.emitOpError("index count must match logical tensor rank");
+
+        FailureOr<Value> view = materializeScalarView(rewriter, op, adaptor.getDest(), baseMemrefCache);
+        if (failed(view))
+            return failure();
+        rewriter.replaceOpWithNewOp<mlir::memref::StoreOp>(op, adaptor.getValue(), *view, adaptor.getIndices());
+        return success();
+    }
+
+private:
+    llvm::DenseMap<Value, Value>& baseMemrefCache;
+};
+
+struct LowerScalarStorageByte : OpConversionPattern<::tla::ScalarStorageByteOp> {
+    using OpConversionPattern::OpConversionPattern;
+
+    LogicalResult matchAndRewrite(
+        ::tla::ScalarStorageByteOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override
+    {
+        rewriter.replaceOp(op, adaptor.getSource());
+        return success();
+    }
+};
+
+struct LowerFullScalarOperand : OpConversionPattern<::tla::FullOp> {
+    using OpConversionPattern::OpConversionPattern;
+
+    LogicalResult matchAndRewrite(
+        ::tla::FullOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override
+    {
+        rewriter.modifyOpInPlace(op, [&] { op->setOperands(adaptor.getOperands()); });
+        return success();
+    }
+};
+
+// Placement: after tla-lower-tensor-desc, before vector/cube outlining. The
+// same conversion changes scalar accesses and their control-flow carriers.
 class TlaLowerScalarAccessPass : public PassWrapper<TlaLowerScalarAccessPass, OperationPass<ModuleOp>> {
 public:
     MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TlaLowerScalarAccessPass)
@@ -86,64 +161,43 @@ public:
     }
     StringRef getDescription() const override
     {
-        return "Lower descriptor-based GM and UB scalar tensor accesses to memref.load/store.";
+        return "Lower descriptor-based scalar accesses and carry encoded scalars as storage bytes.";
     }
 
     void getDependentDialects(DialectRegistry& registry) const override
     {
         registry.insert<
-            arith::ArithDialect, func::FuncDialect, mlir::memref::MemRefDialect, ::tla::TlaDialect,
-            hivm::HIVMDialect>();
+            arith::ArithDialect, cf::ControlFlowDialect, func::FuncDialect, hivm::HIVMDialect,
+            mlir::memref::MemRefDialect, scf::SCFDialect, ::tla::TlaDialect>();
     }
 
     void runOnOperation() override
     {
+        MLIRContext* context = &getContext();
+        TypeConverter converter;
+        converter.addConversion([context](Type type) { return storageElementType(context, type); });
+
         llvm::DenseMap<Value, Value> baseMemrefCache;
-        if (failed(lowerScalarLoads(getOperation(), baseMemrefCache)) ||
-            failed(lowerScalarStores(getOperation(), baseMemrefCache)))
+        RewritePatternSet patterns(context);
+        patterns.add<LowerScalarLoad, LowerScalarStore>(converter, context, baseMemrefCache);
+        patterns.add<LowerScalarStorageByte, LowerFullScalarOperand>(converter, context);
+        populateFunctionOpInterfaceTypeConversionPattern<func::FuncOp>(patterns, converter);
+        populateCallOpTypeConversionPattern(patterns, converter);
+        populateBranchOpInterfaceTypeConversionPattern(patterns, converter);
+        populateReturnOpTypeConversionPattern(patterns, converter);
+
+        ConversionTarget target(*context);
+        target.addIllegalOp<::tla::ScalarLoadOp, ::tla::ScalarStoreOp, ::tla::ScalarStorageByteOp>();
+        scf::populateSCFStructuralTypeConversionsAndLegality(converter, patterns, target);
+        target.addDynamicallyLegalOp<func::FuncOp>([&](func::FuncOp op) {
+            return converter.isSignatureLegal(op.getFunctionType()) && converter.isLegal(&op.getBody());
+        });
+        target.addDynamicallyLegalOp<func::CallOp>(
+            [&](func::CallOp op) { return converter.isSignatureLegal(op.getCalleeType()); });
+        target.markUnknownOpDynamicallyLegal([&](Operation* op) { return converter.isLegal(op); });
+
+        if (failed(applyPartialConversion(getOperation(), target, std::move(patterns))))
             signalPassFailure();
-    }
-
-private:
-    static LogicalResult lowerScalarLoads(ModuleOp module, llvm::DenseMap<Value, Value>& baseMemrefCache)
-    {
-        SmallVector<::tla::ScalarLoadOp, 16> ops;
-        module.walk([&](::tla::ScalarLoadOp op) { ops.push_back(op); });
-        for (::tla::ScalarLoadOp op : ops) {
-            SmallVector<Value, 2> indices(op.getIndices().begin(), op.getIndices().end());
-            auto rawInfo = parseTensorInfo(op.getSource().getType());
-            if (failed(rawInfo) || indices.size() != rawInfo->shape.size())
-                return op.emitError("scalar_load index count must match logical tensor rank"), failure();
-
-            OpBuilder builder(op);
-            FailureOr<Value> view = materializeScalarView(builder, op.getOperation(), op.getSource(), baseMemrefCache);
-            if (failed(view))
-                return failure();
-            Value loaded = builder.create<mlir::memref::LoadOp>(op.getLoc(), *view, indices);
-            op.getResult().replaceAllUsesWith(loaded);
-            op.erase();
-        }
-        return success();
-    }
-
-    static LogicalResult lowerScalarStores(ModuleOp module, llvm::DenseMap<Value, Value>& baseMemrefCache)
-    {
-        SmallVector<::tla::ScalarStoreOp, 16> ops;
-        module.walk([&](::tla::ScalarStoreOp op) { ops.push_back(op); });
-        for (::tla::ScalarStoreOp op : ops) {
-            SmallVector<Value, 2> indices(op.getIndices().begin(), op.getIndices().end());
-            auto rawInfo = parseTensorInfo(op.getDest().getType());
-            if (failed(rawInfo) || indices.size() != rawInfo->shape.size())
-                return op.emitError("scalar_store index count must match logical tensor rank"), failure();
-
-            OpBuilder builder(op);
-            FailureOr<Value> view = materializeScalarView(builder, op.getOperation(), op.getDest(), baseMemrefCache);
-            if (failed(view))
-                return failure();
-            builder.create<mlir::memref::StoreOp>(op.getLoc(), op.getValue(), *view, indices);
-            op.erase();
-        }
-        return success();
     }
 };
 
