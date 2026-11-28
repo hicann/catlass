@@ -104,10 +104,11 @@ Constraints:
 - For device scalars outside SIMT regions, `Float32` to `BFloat16`
   always rounds to nearest, ties to even. Every NaN maps to
   `0x7FFF`, discarding its sign and payload. `BFloat16` to `Float32`
-  preserves the sign, exponent, and fraction bits.
+  preserves the sign, exponent, and fraction bits. Compile-time
+  casts between these types use the same bit rules.
 - Outside SIMT regions, device casts from `HiFloat8`,
-  `Float4E1M2x2`, or `Float4E2M1x2` to `Float32` require a scalar
-  read with `tensor[i]`. Other device sources raise `TypeError`.
+  `Float4E1M2x2`, or `Float4E2M1x2` to `Float32` accept scalars
+  selected by a runtime branch or carried through a loop.
   A packed FP4 cast decodes the low 4 bits of the byte. The high
   4 bits hold the second FP4 value and are skipped.
 - These five conversions require `round_mode=None`.

@@ -10,7 +10,7 @@ from catlass._mlir.dialects import tla as _tla_ops_gen  # type: ignore[import-no
 from .. import _tla_type_bridge
 from .. import runtime as _runtime
 from ..base_dsl.op import dsl_user_op
-from ..base_dsl.typing import Bool, Numeric, _BYTE_ENCODED_SCALAR_DTYPES
+from ..base_dsl.typing import Bool, Numeric
 from ..params import LoadDist, LoadParams, PostMode, StoreDist, StoreParams
 from .typing import Tensor as TensorABC
 
@@ -2182,19 +2182,8 @@ class _Tensor(TensorABC):
         # lowered against the outlined vector function's memref parameter rather
         # than through the general descriptor view.
         in_simt = _runtime._in_simt_vec_func()
-        if in_simt:
-            result = _tla_ops_gen.simt_load(
-                elem_type, source_value, index_values, loc=loc
-            )
-        else:
-            storage_type = (
-                mlir_ir.IntegerType.get_signless(8)
-                if dtype in _BYTE_ENCODED_SCALAR_DTYPES
-                else None
-            )
-            result = _tla_ops_gen.ScalarLoadOp(
-                elem_type, storage_type, source_value, index_values, loc=loc
-            ).result
+        emit_load = _tla_ops_gen.simt_load if in_simt else _tla_ops_gen.scalar_load
+        result = emit_load(elem_type, source_value, index_values, loc=loc)
         if str(result.type) != str(elem_type):
             raise TlaLoweringError(
                 f"tla scalar element load result type mismatch: expected {elem_type}, "

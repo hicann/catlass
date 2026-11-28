@@ -6,7 +6,7 @@
 // valid in a tla.cube region, in a tla.vec.func in either mode, and in the
 // plain kernel body.
 //
-// Lowered by TlaLowerScalarAccessPass (load/store) and TlaLowerScalarOpsPass
+// Lowered by TlaLowerScalarAccessPass (load/store and storage bytes) and TlaLowerScalarOpsPass
 // (round cast, uint64 bit queries).
 //
 // Included by Dialect/Tla/IR/Tla.td, the file mlir-tblgen is run on.
@@ -19,14 +19,12 @@ def Tla_ScalarLoadOp : Tla_Op<"scalar_load", [MemoryEffects<[MemRead]>]> {
     tensor view; its coordinate is applied while the descriptor is materialized
     as a memref. GM and UB support logical rank 1 or 2. UB accesses must be
     nested inside ``tla.vector`` and may also be nested inside ``tla.vec.func``.
-    For HiF8 and packed FP4, the optional ``i8`` result exposes the storage byte
-    from the same read for scalar decoding.
   }];
   let arguments = (ins Tla_TensorType:$source, Variadic<Index>:$indices);
-  let results = (outs AnyType:$result, Optional<I8>:$storage);
+  let results = (outs AnyType:$result);
   let hasVerifier = 1;
   let assemblyFormat = [{
-    $source `[` $indices `]` attr-dict `:` type($source) `->` type($result) (`,` type($storage)^)?
+    $source `[` $indices `]` attr-dict `:` type($source) `->` type($result)
   }];
 }
 
@@ -43,6 +41,18 @@ def Tla_ScalarStoreOp : Tla_Op<"scalar_store", [MemoryEffects<[MemWrite]>]> {
   let assemblyFormat = [{
     $dest `[` $indices `]` `,` $value attr-dict `:` type($dest) `,` type($value)
   }];
+}
+
+def Tla_ScalarStorageByteOp : Tla_Op<"scalar_storage_byte", [Pure]> {
+  let summary = "Read the byte encoding of a HiF8 or packed FP4 scalar";
+  let description = [{
+    Expose the complete encoding of a typed scalar as ``i8``. Scalar access
+    lowering replaces this operation with the converted scalar value.
+  }];
+  let arguments = (ins AnyTypeOf<[Tla_HiFloat8Type, Tla_Float4E1M2x2Type,
+                                  Tla_Float4E2M1x2Type]>:$source);
+  let results = (outs I8:$result);
+  let assemblyFormat = "$source attr-dict `:` type($source) `->` type($result)";
 }
 
 def Tla_ScalarRoundCastOp : Tla_Op<"scalar_round_cast", [Pure]> {

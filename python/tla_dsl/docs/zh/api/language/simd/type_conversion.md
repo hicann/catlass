@@ -48,12 +48,16 @@ Do not regenerate this file from a glossary.
 
 ### 舍入模式
 
-`round_mode` 使用 `RoundMode` 中的值，默认为 `CAST_NONE`。下表的舍入规则适用于目标类型范围内的有限值。
+`round_mode` 使用 `RoundMode` 中的值。以下舍入规则适用于目标类型范围内的有限值。
+
+#### `CAST_RINT` 的中点取偶规则
 
 | 浮点转换 | 舍入到什么值 | `CAST_RINT` 在中点怎么取偶 |
 | --- | --- | --- |
 | 同类型（`Float16`、`BFloat16` 或 `Float32`） | 舍入到整数值，结果仍用原浮点类型表示。 | 选偶数。以 `Float32` → `Float32` 为例，`2.5` 得到 `2.0`，`3.5` 得到 `4.0`。 |
 | 不同精度（需要舍入时） | 舍入到目标浮点类型能精确表示的值。 | 选二进制尾数末位为 `0` 的值。以 `Float32` → `Float16` 为例，`256.375` 刚好在相邻的 `Float16` 值 `256.25` 和 `256.5` 中间。它们的二进制尾数分别以 `01` 和 `10` 结尾，所以得到 `256.5`。 |
+
+#### 各舍入模式的含义
 
 | 模式 | 怎么舍入 |
 | --- | --- |
@@ -68,12 +72,13 @@ Do not regenerate this file from a glossary.
 
 ### `CAST_NONE` 的默认行为
 
-| 转换方向 | 省略 `round_mode` 或设为 `CAST_NONE` 时 |
+省略 `round_mode` 时，`CastParams` 使用 `CAST_NONE`，具体行为取决于转换方向。
+
+| 转换方向 | `CAST_NONE` 的默认行为 |
 | --- | --- |
 | 支持 `CAST_RINT` 的转换 | 按 `CAST_RINT` 舍入，同类型浮点转换也会取整。 |
-| `Float16`、`Float32` → `HiFloat8` | 使用 `CAST_ROUND`。 |
-| `Float8E4M3FN` → `Float16`、`BFloat16`<br>`Float8E5M2` → `BFloat16`<br>`UInt8` → `Float32` | API 参数用 `CAST_NONE`。最后一条指令用 `CAST_RINT`，可精确转换输入的有限值。 |
-| 其他仅允许 `CAST_NONE` 的方向 | `CAST_NONE` 是占位值，转换按固定规则执行。 |
+| `Float16`、`Float32` → `HiFloat8` | 按 `CAST_ROUND` 舍入。 |
+| 仅允许 `CAST_NONE` 的转换 | `CAST_NONE` 是占位值，转换按固定规则执行。 |
 
 ### 饱和模式
 

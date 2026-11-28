@@ -47,13 +47,17 @@ Convert the elements of a `VectorSSA` to `dst_type` and return a
 
 ### Rounding modes
 
-The `round_mode` parameter takes a `RoundMode` value and defaults to `CAST_NONE`.
+The `round_mode` parameter takes a `RoundMode` value.
 These rounding rules apply to finite values within the destination type's range.
+
+#### Ties to even with `CAST_RINT`
 
 | Floating-point conversion | Values to round to | `CAST_RINT` at a midpoint |
 | --- | --- | --- |
 | Same type (`Float16`, `BFloat16`, or `Float32`) | Round to an integer value and keep the original floating-point type. | Choose the even integer. For `Float32` → `Float32`, `2.5` becomes `2.0` and `3.5` becomes `4.0`. |
 | Different precisions when rounding is needed | Round to a value that the destination floating-point type can represent. | Choose the value whose binary significand ends in `0`. For `Float32` → `Float16`, `256.375` is exactly halfway between adjacent `Float16` values `256.25` and `256.5`. Their binary significands end in `01` and `10`, so the result is `256.5`. |
+
+#### Rounding mode definitions
 
 | Mode | How it rounds |
 | --- | --- |
@@ -68,12 +72,14 @@ These rounding rules apply to finite values within the destination type's range.
 
 ### Default rounding with `CAST_NONE`
 
-| Conversion | Rounding when `round_mode` is omitted or set to `CAST_NONE` |
+When `round_mode` is omitted, `CastParams` uses `CAST_NONE`.
+Its behavior depends on the conversion direction.
+
+| Conversion | Default behavior of `CAST_NONE` |
 | --- | --- |
 | Conversions that support `CAST_RINT` | Uses `CAST_RINT`, including for rounding to an integer value in the same floating-point type. |
 | `Float16`, `Float32` → `HiFloat8` | Uses `CAST_ROUND`. |
-| `Float8E4M3FN` → `Float16`, `BFloat16`<br>`Float8E5M2` → `BFloat16`<br>`UInt8` → `Float32` | Set the API parameter to `CAST_NONE`. The last instruction uses `CAST_RINT` and converts finite input values exactly. |
-| Other directions that allow only `CAST_NONE` | Use `CAST_NONE` as a placeholder. The conversion follows a fixed rule. |
+| Conversions that allow only `CAST_NONE` | Use `CAST_NONE` as a placeholder. The conversion follows a fixed rule. |
 
 ### Saturation modes
 

@@ -502,6 +502,30 @@ def _emit_scalar_cast(cast_name, src, dst_ty, loc):
     ).results[0]
 
 
+def _round_f32_encoding_to_bf16(bits: int) -> int:
+    return ((bits + 0x7FFF + ((bits >> 16) & 1)) >> 16) & 0xFFFF
+
+
+def _is_bf16_f32_cast(src_ty: type[Numeric], dst_ty: type[Numeric]) -> bool:
+    return (src_ty is Float32 and dst_ty is BFloat16) or (
+        src_ty is BFloat16 and dst_ty is Float32
+    )
+
+
+def _fold_bf16_cast(source: Float, dtype: type[Float]) -> float:
+    source_bits = type(source)._host_bits(float(source.value))
+    if dtype is BFloat16:
+        bits = (
+            0x7FFF
+            if (source_bits & 0x7FFFFFFF) > 0x7F800000
+            else _round_f32_encoding_to_bf16(source_bits)
+        )
+        return struct.unpack("f", struct.pack("I", bits << 16))[0]
+    if source_bits == 0x7FA0:
+        return dtype.signaling_nan
+    return struct.unpack("f", struct.pack("I", source_bits << 16))[0]
+
+
 def _round_f32_to_bf16_bits(source, loc):
     from catlass._mlir.dialects import arith
 
@@ -1116,7 +1140,10 @@ class Numeric(metaclass=NumericMeta, is_abstract=True):
             if type(value) is cls:
                 value = value.value
             elif isinstance(value.value, (bool, int, float)):
-                value = float(value.value) if cls.is_float else int(value.value)
+                if _is_bf16_f32_cast(type(value), cls):
+                    value = _fold_bf16_cast(value, cls)
+                else:
+                    value = float(value.value) if cls.is_float else int(value.value)
             else:
                 converted = value.to(cls, loc=loc)
                 self.value = converted.value
@@ -1294,10 +1321,11 @@ class Numeric(metaclass=NumericMeta, is_abstract=True):
             - For device scalars outside SIMT regions, `Float32` to `BFloat16`
               always rounds to nearest, ties to even. Every NaN maps to
               `0x7FFF`, discarding its sign and payload. `BFloat16` to `Float32`
-              preserves the sign, exponent, and fraction bits.
+              preserves the sign, exponent, and fraction bits. Compile-time
+              casts between these types use the same bit rules.
             - Outside SIMT regions, device casts from `HiFloat8`,
-              `Float4E1M2x2`, or `Float4E2M1x2` to `Float32` require a scalar
-              read with `tensor[i]`. Other device sources raise `TypeError`.
+              `Float4E1M2x2`, or `Float4E2M1x2` to `Float32` accept scalars
+              selected by a runtime branch or carried through a loop.
               A packed FP4 cast decodes the low 4 bits of the byte. The high
               4 bits hold the second FP4 value and are skipped.
             - These five conversions require `round_mode=None`.
@@ -1348,7 +1376,7 @@ class Numeric(metaclass=NumericMeta, is_abstract=True):
                 "Numeric.to does not support f64 (storage-only Float64); "
                 f"got {src_ty.__name__} -> {dtype.__name__}"
             )
-        # Host: construct target (Python cast in __init__). SSA: emit arith ops.
+        bf16_cast = _is_bf16_f32_cast(src_ty, dtype)
         if isinstance(self.value, (bool, int, float)):
             if round_mode is not None and type(self).is_float:
                 # Fold with the SAME rounding the instruction would apply, so a
@@ -1364,26 +1392,17 @@ class Numeric(metaclass=NumericMeta, is_abstract=True):
         dst_ty = _scalar_mlir_type(dtype)
         if str(src.type) == str(dst_ty):
             return dtype(src)
-        if (src_ty is Float32 and dtype is BFloat16) or (
-            dtype is Float32
-            and (src_ty is BFloat16 or src_ty in _BYTE_ENCODED_SCALAR_DTYPES)
-        ):
+        if bf16_cast or (dtype is Float32 and src_ty in _BYTE_ENCODED_SCALAR_DTYPES):
             from ..runtime import _in_simt_vec_func
 
             if not _in_simt_vec_func():
                 if src_ty in _BYTE_ENCODED_SCALAR_DTYPES:
-                    from catlass._mlir.dialects.tla import ScalarLoadOp
-
-                    owner = src.owner
-                    load = (
-                        owner.opview if isinstance(owner, mlir_ir.Operation) else None
-                    )
-                    storage = load.storage if isinstance(load, ScalarLoadOp) else None
-                    if storage is None:
-                        raise TypeError(
-                            f"{src_ty.__name__} to Float32 requires a scalar tensor load"
-                        )
-                    src = storage
+                    src = mlir_ir.Operation.create(
+                        "tla.scalar_storage_byte",
+                        operands=[src],
+                        results=[mlir_ir.IntegerType.get_signless(8)],
+                        loc=loc,
+                    ).results[0]
                 return dtype(_emit_low_precision_scalar_cast(src, src_ty, dst_ty, loc))
         if src_ty.is_integer and dtype.is_integer:
             if dtype.width == src_ty.width:
@@ -1891,11 +1910,15 @@ class BFloat16(
 ):
     @staticmethod
     def _encode_host_bits(value: float) -> int:
-        bits = int(np.float32(value).view(np.uint32))
-        # Round-to-nearest-even when truncating f32 → bf16 (not plain >> 16).
-        if (bits & 0x7F800000) != 0x7F800000:
-            bits = (bits + 0x00007FFF + ((bits >> 16) & 1)) & 0xFFFFFFFF
-        return int(np.uint16(bits >> 16))
+        bits = Float32._encode_host_bits(value)
+        if (bits & 0x7F800000) == 0x7F800000:
+            return bits >> 16
+        if (bits & 0xFFFF) == 0x8000:
+            # A rounded f32 midpoint can hide which side the Python float came from.
+            midpoint = struct.unpack("f", struct.pack("I", bits))[0]
+            if value != midpoint:
+                return (bits >> 16) + int(abs(value) > abs(midpoint))
+        return _round_f32_encoding_to_bf16(bits)
 
 
 class Float32(Float, metaclass=FloatMeta, width=32, dtype="f32", mlir_type=_mlir_f32):
