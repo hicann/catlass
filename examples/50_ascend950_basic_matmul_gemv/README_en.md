@@ -26,6 +26,10 @@
 
 ## Usage Scope
 
+Constraint:
+
+- `m` must be `1`. This example supports only a single-row input vector, not a multi-row input matrix.
+
 Recommended range:
 
 - `k ≤ 7168`
