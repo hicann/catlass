@@ -65,9 +65,13 @@ _CAST_ODD = tla.params.CastParams(
     sat_mode=tla.params.SatMode.NOSAT,
     round_mode=tla.params.RoundMode.CAST_ROUND,
 )
-_CAST_WIDEN_EVEN = tla.params.CastParams(round_mode=tla.params.RoundMode.CAST_ROUND)
+_CAST_WIDEN_EVEN = tla.params.CastParams(
+    sat_mode=tla.params.SatMode.UNKNOWN, round_mode=tla.params.RoundMode.CAST_NONE
+)
 _CAST_WIDEN_ODD = tla.params.CastParams(
-    reg_slot=tla.params.RegSlot.ONE, round_mode=tla.params.RoundMode.CAST_ROUND
+    reg_slot=tla.params.RegSlot.ONE,
+    sat_mode=tla.params.SatMode.UNKNOWN,
+    round_mode=tla.params.RoundMode.CAST_NONE,
 )
 _LOAD_UNPACK16 = tla.params.NormalLoadParams(
     load_dist=tla.params.LoadDist.DIST_UNPACK_B16
