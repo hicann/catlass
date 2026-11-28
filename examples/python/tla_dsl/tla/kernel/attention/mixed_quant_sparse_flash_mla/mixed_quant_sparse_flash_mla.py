@@ -562,7 +562,9 @@ def _cast_slot(slot):
 
 def _widen_slot(slot):
     return tla.params.CastParams(
-        reg_slot=slot, round_mode=tla.params.RoundMode.CAST_ROUND
+        reg_slot=slot,
+        sat_mode=tla.params.SatMode.UNKNOWN,
+        round_mode=tla.params.RoundMode.CAST_NONE,
     )
 
 
