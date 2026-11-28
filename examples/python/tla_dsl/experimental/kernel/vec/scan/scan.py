@@ -51,8 +51,10 @@ from catlass.tla.runtime import _Tensor, from_dlpack
 
 VL_ELE = 64  # fp32 vector length (256 B / 4 B)
 UB_BYTES = 262144  # per-AIV UB capacity, used to size the row pipeline
-# lane 索引 int32 -> fp32 为精确转换；显式 CAST_ROUND 保持 v2.2.1 的默认行为。
+# lane 索引 int32 -> fp32 为精确转换，没有饱和选项，必须显式 SatMode.UNKNOWN；
+# 显式 CAST_ROUND 保持 v2.2.1 的默认行为。
 _CAST_NONE = tla.params.CastParams(
+    sat_mode=tla.params.SatMode.UNKNOWN,
     round_mode=tla.params.RoundMode.CAST_ROUND,
 )
 
