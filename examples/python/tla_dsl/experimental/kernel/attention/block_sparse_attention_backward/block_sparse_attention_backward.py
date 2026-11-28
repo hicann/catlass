@@ -390,6 +390,11 @@ def block_sparse_attention_backward_kernel(
                 mtx_qdo.lock(pipe=tla.pipes.MTE1)
 
             with tla.vector():
+                tla.arch.set_ctrl(
+                    tla.params.CTRLValue(
+                        saturation_strategy=tla.params.OverrideStrategy.USE_API
+                    )
+                )
                 vec_idx = tla.arch.sub_block_idx()
                 q_first_half = (q_size + c1) // 2
                 q_sub = q_first_half if vec_idx == c0 else q_size - q_first_half
@@ -712,6 +717,11 @@ def block_sparse_attention_backward_kernel(
                     # Keep P in FP32 vector registers through dS; quantize
                     # each Cube operand once to the native input dtype.
                     with tla.vector():
+                        tla.arch.set_ctrl(
+                            tla.params.CTRLValue(
+                                saturation_strategy=tla.params.OverrideStrategy.USE_API
+                            )
+                        )
                         vec_idx = tla.arch.sub_block_idx()
                         if vec_idx == c0:
                             if cv_slot == c0:
@@ -1817,6 +1827,11 @@ def block_sparse_attention_backward_kernel(
                 tla.cross_core_set_flag(dq_out_ready, tla.pipes.FIX, aiv_id=1)
 
             with tla.vector():
+                tla.arch.set_ctrl(
+                    tla.params.CTRLValue(
+                        saturation_strategy=tla.params.OverrideStrategy.USE_API
+                    )
+                )
                 dq_vec_idx = tla.arch.sub_block_idx()
                 if dq_vec_idx == c0:
                     tla.cross_core_wait_flag(dq_out_ready, tla.pipes.VECTOR, aiv_id=0)
@@ -1916,6 +1931,11 @@ def block_sparse_attention_backward_kernel(
         tla.cross_core_set_flag(gradient_ready_1, tla.pipes.FIX, aiv_id=1)
 
     with tla.vector():
+        tla.arch.set_ctrl(
+            tla.params.CTRLValue(
+                saturation_strategy=tla.params.OverrideStrategy.USE_API
+            )
+        )
         final_vec_idx = tla.arch.sub_block_idx()
         if final_vec_idx == c0:
             tla.cross_core_wait_flag(pds_free_0, tla.pipes.MTE3, aiv_id=0)
