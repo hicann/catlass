@@ -2457,6 +2457,11 @@ def _rescale_stage(
     c0 = 0
     c1 = 1
     with tla.vector():
+        tla.arch.set_ctrl(
+            tla.params.CTRLValue(
+                saturation_strategy=tla.params.OverrideStrategy.USE_API
+            )
+        )
         oShapeColDe = tla.as_numeric(ctx.embed_)
         gm_o = tla.make_tensor(
             attentionOut.ptr + task.qBOffset + task.qHeadIdx * ctx.qNOffset,
@@ -3445,6 +3450,11 @@ def _softmax_wrap_nomask(
     c0 = 0
     c1 = 1
     with tla.vector():
+        tla.arch.set_ctrl(
+            tla.params.CTRLValue(
+                saturation_strategy=tla.params.OverrideStrategy.USE_API
+            )
+        )
         subBlockIdx = tla.arch.sub_block_idx()
         subIdxEff = subBlockIdx  # 原始索引：m=1 时 sub1 走 m==c0 守卫分支，不做重复计算
         mCopyOffset = (rowNum + 1) // 2
@@ -3608,6 +3618,11 @@ def _softmax_wrap_mask(
     c0 = 0
     c1 = 1
     with tla.vector():
+        tla.arch.set_ctrl(
+            tla.params.CTRLValue(
+                saturation_strategy=tla.params.OverrideStrategy.USE_API
+            )
+        )
         subBlockIdx = tla.arch.sub_block_idx()
         subIdxEff = subBlockIdx  # 原始索引：m=1 时 sub1 走 m==c0 守卫分支，不做重复计算
         mCopyOffset = (rowNum + 1) // 2
