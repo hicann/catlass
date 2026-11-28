@@ -220,6 +220,8 @@ def gen_data_matrix16_fp4_e2m1(matrix: torch.Tensor, axis: int, trans: int, is_n
 
 def generate_svd_quant_matmul_data(args):
     m, n, k, r = args.m, args.n, args.k, args.r
+    if k <= 0 or k % 64 != 0:
+        raise ValueError(f"k must be a positive multiple of 64, got {k}")
     qmax = args.qmax
     dtype16 = torch.float16 if args.dtype == "float16" else "bfloat16"
 
@@ -298,6 +300,8 @@ if __name__ == "__main__":
     parser.add_argument('r', type=int)
 
     args = parser.parse_args()
+    if args.k <= 0 or args.k % 64 != 0:
+        parser.error(f"k must be a positive multiple of 64, got {args.k}")
 
     data = generate_svd_quant_matmul_data(args)
     save_path = f"{_SCRIPT_DIR}/data/"
